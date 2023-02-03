@@ -3,6 +3,7 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include <iostream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -111,6 +112,18 @@ void int_to_hex(char* output, int64_t output_len, uint64_t int_val);
 void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
                          const int32_t* indices, const uint8_t* null_bitmap);
 array_info* str_to_dict_str_array(array_info* str_arr);
+int64_t re_escape_length_kind1(char* pattern, int64_t length);
+int64_t re_escape_length_kind2(char* pattern, int64_t length);
+int64_t re_escape_length_kind4(char* pattern, int64_t length);
+int64_t re_escape_length(char* pattern, int64_t length, int32_t kind);
+void re_escape_with_output_kind1(char* pattern, int64_t length,
+                                 char* out_pattern);
+void re_escape_with_output_kind2(char* pattern, int64_t length,
+                                 char* out_pattern);
+void re_escape_with_output_kind4(char* pattern, int64_t length,
+                                 char* out_pattern);
+void re_escape_with_output(char* pattern, int64_t length, char* out_pattern,
+                           int32_t kind);
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject* m;
@@ -224,6 +237,10 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&box_dict_str_array)));
     PyObject_SetAttrString(m, "str_to_dict_str_array",
                            PyLong_FromVoidPtr((void*)(&str_to_dict_str_array)));
+    PyObject_SetAttrString(m, "re_escape_length",
+                           PyLong_FromVoidPtr((void*)(&re_escape_length)));
+    PyObject_SetAttrString(m, "re_escape_with_output",
+                           PyLong_FromVoidPtr((void*)(&re_escape_with_output)));
     PyObject_SetAttrString(m, "get_stats_alloc",
                            PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
     PyObject_SetAttrString(m, "get_stats_free",
@@ -1069,4 +1086,187 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
                           arr_len, -1, -1, NULL, NULL, NULL,
                           indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
                           0, 0, false, false, false, values_arr, indices_arr);
+}
+
+// Inspired by the Cpython implementation
+// https://github.com/python/cpython/blob/89442e18e1e17c0eb0eb06e5da489e1cb2d4219d/Lib/re/__init__.py#L251
+// However Numba doesn't support translate so we implement an optimized kernel
+// for the dictionary. This set is _special_chars_map from Cpython but we always
+// map to `\\` so we don't need a dict
+static const std::set<char> escapes{
+    '(', ')',  '[', ']', '{', '}', '?', '*',  '+',  '-',  '|',  '^',
+    '$', '\\', '.', '&', '~', '#', ' ', '\t', '\n', '\r', '\v', '\f'};
+
+/**
+ * @brief Get the string length of a 1 byte width string escaped by
+ * re.escape.
+ *
+ * @param pattern The input pattern to escape
+ * @param length The number of elements in the string.
+ * @return int64_t Length of the escaped string.
+ */
+int64_t re_escape_length_kind1(char* pattern, int64_t length) {
+    int64_t num_escapes = 0;
+    for (int i = 0; i < length; i++) {
+        // Count the number of escapes.
+        num_escapes += int(escapes.contains(pattern[i]));
+    }
+    return length + num_escapes;
+}
+
+/**
+ * @brief Get the string length of a 2 byte width string escaped by
+ * re.escape. Note the number of bytes = 2 * length.
+ *
+ * @param pattern The input pattern to escape
+ * @param length The number of elements in the string.
+ * @return int64_t Length of the escaped string. This is not the number
+ * of bytes.
+ */
+int64_t re_escape_length_kind2(char* pattern, int64_t length) {
+    int64_t num_escapes = 0;
+    for (int i = 0; i < length; i++) {
+        int16_t char_val = *((int16_t*)(pattern) + i);
+        // All the escaped characters fit in 1 byte.
+        if (char_val < 0xff) {
+            num_escapes += int(escapes.contains(pattern[i]));
+        }
+    }
+    return length + num_escapes;
+}
+
+/**
+ * @brief Get the string length of a 4 byte width string escaped by
+ * re.escape. Note the number of bytes = 4 * length.
+ *
+ * @param pattern The input pattern to escape
+ * @param length The number of elements in the string.
+ * @return int64_t Length of the escaped string. This is not the number
+ * of bytes.
+ */
+int64_t re_escape_length_kind4(char* pattern, int64_t length) {
+    int64_t num_escapes = 0;
+    for (int i = 0; i < length; i++) {
+        int32_t char_val = *((int32_t*)(pattern) + i);
+        // All the escaped characters fit in 1 byte.
+        if (char_val < 0xff) {
+            // Count the number of escapes.
+            num_escapes += int(escapes.contains(pattern[i]));
+        }
+    }
+    return length + num_escapes;
+}
+
+/**
+ * @brief Get the string length of a string escaped by
+ * re.escape. Note this is not the number of bytes!
+ *
+ * @param pattern The input pattern to escape
+ * @param length The number of elements in the string.
+ * @param kind The number of bytes per element in pattern.
+ * @return int64_t Length of the escaped string. This is not the number
+ * of bytes.
+ */
+int64_t re_escape_length(char* pattern, int64_t length, int32_t kind) {
+    if (kind == PyUnicode_1BYTE_KIND) {
+        return re_escape_length_kind1(pattern, length);
+    } else if (kind == PyUnicode_2BYTE_KIND) {
+        return re_escape_length_kind2(pattern, length);
+    } else {
+        return re_escape_length_kind4(pattern, length);
+    }
+}
+
+/**
+ * @brief Perform re.escape on pattern and store the output in
+ * out_pattern. This is written for 1 byte per element strings.
+ *
+ * @param pattern The input pattern to escape.
+ * @param length The number of elements in the input string.
+ * @param[out] out_pattern The character array to store output characters.
+ * It is already allocated with the correct length.
+ */
+void re_escape_with_output_kind1(char* pattern, int64_t length,
+                                 char* out_pattern) {
+    int j = 0;
+    for (int i = 0; i < length; i++) {
+        if (escapes.contains(pattern[i])) {
+            out_pattern[j++] = '\\';
+        }
+        out_pattern[j++] = pattern[i];
+    }
+}
+
+/**
+ * @brief Perform re.escape on pattern and store the output in
+ * out_pattern. This is written for 2 byte per element strings.
+ *
+ * @param pattern The input pattern to escape.
+ * @param length The number of elements in the input string. Note this is
+ * not the number of bytes.
+ * @param[out] out_pattern The character array to store output characters.
+ * It is already allocated with the correct length.
+ */
+void re_escape_with_output_kind2(char* pattern, int64_t length,
+                                 char* out_pattern) {
+    int j = 0;
+    int16_t* in_cast = ((int16_t*)pattern);
+    int16_t* out_cast = ((int16_t*)out_pattern);
+    for (int i = 0; i < length; i++) {
+        int16_t in_val = in_cast[i];
+        // All the escaped characters fit in 1 byte.
+        if (in_val < 0xff && escapes.contains(in_val)) {
+            // \ is 0x5C
+            out_cast[j++] = 0x5C;
+        }
+        out_cast[j++] = in_val;
+    }
+}
+
+/**
+ * @brief Perform re.escape on pattern and store the output in
+ * out_pattern. This is written for 4 byte per element strings.
+ *
+ * @param pattern The input pattern to escape.
+ * @param length The number of elements in the input string. Note this is
+ * not the number of bytes.
+ * @param[out] out_pattern The character array to store output characters.
+ * It is already allocated with the correct length.
+ */
+void re_escape_with_output_kind4(char* pattern, int64_t length,
+                                 char* out_pattern) {
+    int j = 0;
+    int32_t* in_cast = ((int32_t*)pattern);
+    int32_t* out_cast = ((int32_t*)out_pattern);
+    for (int i = 0; i < length; i++) {
+        int32_t in_val = in_cast[i];
+        // All the escaped characters fit in 1 byte.
+        if (in_val < 0xff && escapes.contains(in_val)) {
+            // \ is 0x5C
+            out_cast[j++] = 0x5C;
+        }
+        out_cast[j++] = in_val;
+    }
+}
+
+/**
+ * @brief Perform re.escape on pattern and store the output in
+ * out_pattern.
+ *
+ * @param pattern The input pattern to escape.
+ * @param length The number of elements in the input string. Note this is
+ * not the number of bytes.
+ * @param[out] out_pattern The character array to store output characters.
+ * It is already allocated with the correct length.
+ * @param kind The number of bytes per element in pattern and out_pattern.
+ */
+void re_escape_with_output(char* pattern, int64_t length, char* out_pattern,
+                           int32_t kind) {
+    if (kind == PyUnicode_1BYTE_KIND) {
+        re_escape_with_output_kind1(pattern, length, out_pattern);
+    } else if (kind == PyUnicode_2BYTE_KIND) {
+        re_escape_with_output_kind2(pattern, length, out_pattern);
+    } else {
+        re_escape_with_output_kind4(pattern, length, out_pattern);
+    }
 }

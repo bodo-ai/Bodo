@@ -48,6 +48,8 @@ ll.add_symbol("del_str", hstr_ext.del_str)
 ll.add_symbol("unicode_to_utf8", hstr_ext.unicode_to_utf8)
 ll.add_symbol("memcmp", hstr_ext.memcmp)
 ll.add_symbol("int_to_hex", hstr_ext.int_to_hex)
+ll.add_symbol("re_escape_length", hstr_ext.re_escape_length)
+ll.add_symbol("re_escape_with_output", hstr_ext.re_escape_with_output)
 
 
 string_type = types.unicode_type
@@ -153,6 +155,93 @@ def unicode_to_utf8_and_len(typingctx, str_typ):
         return out_tup._getvalue()
 
     return ret_typ(string_type), codegen
+
+
+@intrinsic
+def re_escape_len(typingctx, str_typ):
+    """Intrinsic to call into a C++ function that determines the length
+    of the output string when calling re.escape.
+
+    Args:
+        typingctx (TypingContext): TypingContext required by the calling convention.
+        in_str_typ (unicode_type): Input string that will be escaped
+
+    Returns:
+        types.int64: The number of elements in the output string.
+    """
+    assert types.unliteral(str_typ) == string_type, "str_typ must be a string"
+
+    def codegen(context, builder, sig, args):
+        (str_in,) = args
+        str_struct = cgutils.create_struct_proxy(string_type)(
+            context, builder, value=str_in
+        )
+
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(32),
+            ],
+        )
+        fn_escape_length = cgutils.get_or_insert_function(
+            builder.module, fnty, name="re_escape_length"
+        )
+        new_length = builder.call(
+            fn_escape_length, [str_struct.data, str_struct.length, str_struct.kind]
+        )
+        return new_length
+
+    return types.int64(string_type), codegen
+
+
+@intrinsic
+def re_escape_with_output(typingctx, in_str_typ, out_str_typ):
+    """Intrinsic to call into a C++ function that implements
+    re.escape. The output data is written to the buffer allocated
+    in out_str
+
+    Args:
+        typingctx (TypingContext): TypingContext required by the calling convention.
+        in_str_typ (unicode_type): Input string to escape
+        out_str_typ (unicode_type): Output string used to store the result.
+    """
+    assert types.unliteral(in_str_typ) == string_type, "str_typ must be a string"
+    assert types.unliteral(out_str_typ) == string_type, "str_typ must be a string"
+
+    def codegen(context, builder, sig, args):
+        (in_str, out_str) = args
+        in_str_struct = cgutils.create_struct_proxy(string_type)(
+            context, builder, value=in_str
+        )
+        out_str_struct = cgutils.create_struct_proxy(string_type)(
+            context, builder, value=out_str
+        )
+
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+            ],
+        )
+        fn_re_escape_with_output = cgutils.get_or_insert_function(
+            builder.module, fnty, name="re_escape_with_output"
+        )
+        builder.call(
+            fn_re_escape_with_output,
+            [
+                in_str_struct.data,
+                in_str_struct.length,
+                out_str_struct.data,
+                in_str_struct.kind,
+            ],
+        )
+
+    return types.void(string_type, string_type), codegen
 
 
 def unicode_to_utf8(s):  # pragma: no cover
