@@ -103,6 +103,29 @@ public class ConversionCodeGen {
   }
 
   /**
+   * Handles codegen for Snowflake TO_DOUBLE function.
+   *
+   * @param operandsInfo List of operands
+   * @param fnName Name of the function (TO_DOUBLE or TRY_TO_DOUBLE)
+   * @return RexVisitorInfo for the TO_DOUBLE function
+   */
+  public static RexNodeVisitorInfo generateToDoubleFnCode(
+      List<RexNodeVisitorInfo> operandsInfo, String fnName) {
+    if (operandsInfo.size() > 1) {
+      throw new BodoSQLCodegenException(
+          "Error, format string for " + fnName + " not yet supported");
+    }
+    String name = fnName + "(" + operandsInfo.get(0).getName() + ")";
+    String exprCode =
+        "bodo.libs.bodosql_array_kernels."
+            + fnName.toLowerCase()
+            + "("
+            + operandsInfo.get(0).getExprCode()
+            + ", None)";
+    return new RexNodeVisitorInfo(name, exprCode);
+  }
+
+  /**
    * Handles codegen for Snowflake TO_CHAR function.
    *
    * @param operandsInfo List of operands

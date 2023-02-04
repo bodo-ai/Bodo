@@ -412,3 +412,263 @@ def test_datetime_to_char(memory_leak_check):
         check_names=False,
         expected_output=expected_output,
     )
+
+
+valid_double_params = [
+    pytest.param(
+        pd.DataFrame(
+            {
+                "a": [
+                    ".1",
+                    ".1e5",
+                    ".1e+5",
+                    ".1e-5",
+                    "15",
+                    "15E09",
+                    "0.",
+                    "1.34",
+                    "1.34e-7",
+                    "+.1",
+                    "+.37E4",
+                    "-28",
+                    "-90e0",
+                    "+2.64",
+                    "-2.64e-07",
+                    "123.456e+010",
+                    "nan",
+                    "NaN",
+                    "-nAn",
+                    "inf",
+                    "INF",
+                    "iNf",
+                    "-Inf",
+                    "-InFiNiTy",
+                    "+Infinity",
+                ]
+            }
+        ),
+        id="valid_to_double_strings",
+    ),
+    pytest.param(
+        pd.DataFrame({"a": pd.Series([1, 0, 2, 0, None, -2, -400], dtype="Int64")}),
+        id="valid_to_double_ints",
+    ),
+    pytest.param(
+        pd.DataFrame({"a": [1.1, 0.0, None, 0.1, 0, -2, -400, np.inf, np.nan]}),
+        id="valid_to_double_floats",
+    ),
+]
+
+invalid_double_params = [
+    pytest.param(
+        pd.DataFrame(
+            {
+                "a": pd.Series(
+                    [
+                        "baked beans",
+                        "nane",
+                        ".",
+                        "+",
+                        "-.",
+                        "2e",
+                        "2e-",
+                        "123.4.56",
+                        "4-7",
+                        "12-",
+                        "",
+                    ]
+                )
+            }
+        ),
+        id="invalid_to_double_strings",
+    ),
+]
+
+
+@pytest.fixture(params=valid_double_params)
+def to_double_valid_test_dfs(request):
+    return request.param
+
+
+@pytest.fixture(params=invalid_double_params)
+def to_double_invalid_test_dfs(request):
+    return request.param
+
+
+@pytest.fixture(params=valid_double_params + invalid_double_params)
+def to_double_all_test_dfs(request):
+    return request.param
+
+
+def to_double_equiv(arr):
+    def _conv_to_double(x):
+        """Converts an array of values to double"""
+        if pd.isna(x):
+            return np.nan
+        try:
+            return np.float64(x)
+        except:
+            return np.nan
+
+    return arr.apply(_conv_to_double)
+
+
+def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_check):
+    df = to_double_valid_test_dfs
+    query = f"SELECT TO_DOUBLE(a) FROM table1"
+    ctx = {"table1": df}
+    arr = df[df.columns[0]]
+    py_output = pd.DataFrame({"a": to_double_equiv(arr).astype("float64")})
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        expected_output=py_output,
+    )
+
+
+def test_to_double_invalid_cols(spark_info, to_double_invalid_test_dfs):
+    df = to_double_invalid_test_dfs
+    query = f"SELECT TO_DOUBLE(a) FROM table1"
+    ctx = {"table1": df}
+    arr = df[df.columns[0]]
+    bc = bodosql.BodoSQLContext(ctx)
+    is_str = arr.apply(type).eq(str).any()
+    if is_str:
+        with pytest.raises(
+            ValueError, match="string must be a valid numeric expression"
+        ):
+            bc.sql(query)
+    else:
+        with pytest.raises(
+            ValueError, match="value must be a valid numeric expression"
+        ):
+            bc.sql(query)
+
+
+def test_to_double_scalars(spark_info, memory_leak_check):
+    df = pd.DataFrame(
+        {
+            "a": [
+                ".1",
+                ".1e5",
+                ".1e+5",
+                ".1e-5",
+                "15",
+                "15E09",
+                "1.34",
+                "1.34e-7",
+                "+.1",
+                "+.37E4",
+                "-28",
+                "-90e0",
+                "+2.64",
+                "-2.64e-07",
+            ]
+            * 3,
+            "b": [
+                1.1,
+                0.0,
+                1.0,
+                0.1,
+                0,
+                -2,
+                -400,
+                1.1,
+                0.0,
+                1.0,
+                0.1,
+                0,
+                np.nan,
+                np.inf,
+            ]
+            * 3,
+            "c": np.tile([0, 1], 21),
+        }
+    )
+    ctx = {"table1": df}
+    query = "SELECT CASE WHEN TO_DOUBLE(c) = 1.0 THEN TO_DOUBLE(a) ELSE TO_DOUBLE(b) END FROM table1"
+    py_output = to_double_equiv(df["a"]).where(
+        df["c"].astype(bool), to_double_equiv(df["b"])
+    )
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        expected_output=pd.DataFrame({"a": py_output}),
+    )
+
+
+def test_try_to_double_cols(spark_info, to_double_all_test_dfs, memory_leak_check):
+    df = to_double_all_test_dfs
+    query = f"SELECT TRY_TO_DOUBLE(a) FROM table1"
+    ctx = {"table1": df}
+    arr = df[df.columns[0]]
+    py_output = pd.DataFrame({"a": to_double_equiv(arr)})
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        expected_output=py_output,
+    )
+
+
+def test_try_to_double_scalars(spark_info):
+    df = pd.DataFrame(
+        {
+            "a": [
+                ".1",
+                ".1e5",
+                ".1e+5",
+                ".1e-5",
+                "15",
+                "15E09",
+                "1.34",
+                "1.34e-7",
+                "+.1",
+                "+.37E4",
+                "-28",
+                "-90e0",
+                "+2.64",
+                "-2.64e-07",
+            ]
+            * 3,
+            "b": [
+                1.1,
+                0.0,
+                1.0,
+                0.1,
+                0,
+                -2,
+                -400,
+                1.1,
+                0.0,
+                1.0,
+                0.1,
+                0,
+                np.nan,
+                np.inf,
+            ]
+            * 3,
+            "c": np.tile([0, 1], 21),
+        }
+    )
+    ctx = {"table1": df}
+    query = "SELECT CASE WHEN TRY_TO_DOUBLE(c) = 1.0 THEN TRY_TO_DOUBLE(a) ELSE TRY_TO_DOUBLE(b) END FROM table1"
+    py_output = to_double_equiv(df["a"]).where(
+        df["c"].astype(bool), to_double_equiv(df["b"])
+    )
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        expected_output=pd.DataFrame({"a": py_output}),
+    )

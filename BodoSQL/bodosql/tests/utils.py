@@ -1,12 +1,11 @@
 """
 Infrastructure used to test correctness.
 """
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import os
 import re
 from decimal import Decimal
 from enum import Enum
-
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
 from typing import Any, Dict, List, Optional
 
 import bodosql

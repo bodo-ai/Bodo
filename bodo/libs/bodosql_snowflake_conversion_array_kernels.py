@@ -20,30 +20,28 @@ from bodo.utils.typing import (
 )
 
 
-@numba.generated_jit(nopython=True)
-def try_to_boolean(arr):
-    """Handles cases where TO_BOOLEAN receives optional arguments and forwards
-    to the appropriate version of the real implementation"""
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument("bodo.libs.bodosql_array_kernels.to_boolean", ["arr"], 0)
+def make_to_boolean(_try):
+    """Generate utility functions to unopt TO_BOOLEAN arguments"""
 
-    def impl(arr):
-        return to_boolean_util(arr, numba.literally(True))
+    @numba.generated_jit(nopython=True)
+    def func(arr):
+        """Handles cases where TO_BOOLEAN receives optional arguments and forwards
+        to the appropriate version of the real implementation"""
+        if isinstance(arr, types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.to_boolean", ["arr"], 0
+            )
 
-    return impl
+        def impl(arr):  # pragma: no cover
+            return to_boolean_util(arr, numba.literally(_try))
+
+        return impl
+
+    return func
 
 
-@numba.generated_jit(nopython=True)
-def to_boolean(arr):
-    """Handles cases where TO_BOOLEAN receives optional arguments and forwards
-    to the appropriate version of the real implementation"""
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument("bodo.libs.bodosql_array_kernels.to_boolean", ["arr"], 0)
-
-    def impl(arr):
-        return to_boolean_util(arr, numba.literally(False))
-
-    return impl
+try_to_boolean = make_to_boolean(True)
+to_boolean = make_to_boolean(False)
 
 
 @numba.generated_jit(nopython=True)
@@ -158,7 +156,7 @@ def to_date(conversionVal, optionalConversionFormatString):
 def to_char(arr):
     """Handles cases where TO_CHAR receives optional arguments and forwards
     to the appropriate version of the real implementation"""
-    if isinstance(arr, types.optional):
+    if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument("bodo.libs.bodosql_array_kernels.to_char", ["arr"], 0)
 
     def impl(arr):  # pragma: no cover
@@ -184,7 +182,7 @@ def to_char_util(arr):
     arg_types = [arr]
     propagate_null = [True]
 
-    # TODO [BE-2744]: support binary data for to_char
+    # TODO [BE-3744]: support binary data for to_char
     if is_valid_binary_arg(arr):
         # currently only support hex encoding
         scalar_text = "with bodo.objmode(r=bodo.string_type):\n"
@@ -266,6 +264,167 @@ def to_char_util(arr):
         propagate_null,
         scalar_text,
         out_dtype,
+    )
+
+
+def make_to_double(_try):
+    """Generate utility functions to unopt TO_DOUBLE arguments"""
+
+    @numba.generated_jit(nopython=True)
+    def func(val, optional_format_string):
+        """Handles cases where TO_DOUBLE receives optional arguments and forwards
+        to the appropriate version of the real implementation"""
+        args = [val, optional_format_string]
+        for i in range(2):
+            if isinstance(val, types.optional):  # pragma: no cover
+                return unopt_argument(
+                    "bodo.libs.bodosql_array_kernels.to_double",
+                    ["val", "optional_format_string"],
+                    i,
+                )
+
+        def impl(val, optional_format_string):  # pragma: no cover
+            return to_double_util(val, optional_format_string, numba.literally(_try))
+
+        return impl
+
+    return func
+
+
+try_to_double = make_to_double(True)
+to_double = make_to_double(False)
+
+
+@register_jitable
+def is_string_numeric(expr):  # pragma: no cover
+    """Determines whether a string represents a valid Snowflake numeric,
+    following the spec [+-][digits][.digits][e[+-]digits]
+    Reference: https://docs.snowflake.com/en/sql-reference/data-types-numeric.html#numeric-constants
+
+    Args
+        expr (str): String to validate
+
+    Returns True iff expr is a valid numeric constant
+    """
+    if len(expr) == 0:
+        return False
+    i = 0
+
+    # [+-]
+    if i < len(expr) and (expr[i] == "+" or expr[i] == "-"):
+        i += 1
+
+    # Early exit for special cases
+    if expr[i:].lower() in ("nan", "inf", "infinity"):
+        return True
+
+    # [digits]
+    has_digits = False
+    while i < len(expr) and expr[i].isdigit():
+        has_digits = True
+        i += 1
+
+    # [.digits]
+    if i < len(expr) and expr[i] == ".":
+        i += 1
+    while i < len(expr) and expr[i].isdigit():
+        has_digits = True
+        i += 1
+
+    if not has_digits:
+        return False
+
+    # [e[+-]digits]
+    if i < len(expr) and (expr[i] == "e" or expr[i] == "E"):
+        i += 1
+
+        if i < len(expr) and (expr[i] == "+" or expr[i] == "-"):
+            i += 1
+
+        has_digits = False
+        while i < len(expr) and expr[i].isdigit():
+            has_digits = True
+            i += 1
+
+        if not has_digits:
+            return False
+
+    return i == len(expr)
+
+
+@numba.generated_jit(nopython=True)
+def to_double_util(val, optional_format_string, _try=False):
+    """A dedicated kernel for the SQL function TO_DOUBLE which takes in a
+    number (or column) and converts it to float64.
+
+
+    Args:
+        val (numerical array/series/scalar): the number(s) being operated on
+        optional_format_string (string array/series/scalar): format string. Only valid if arr is a string
+        _try (bool): whether to return NULL (iff true) on error or raise an exception
+
+    Returns:
+        double series/scalar: the double value of the number(s) with the
+        specified null handling rules
+    """
+    verify_string_numeric_arg(val, "TO_DOUBLE and TRY_TO_DOUBLE", "val")
+    verify_string_arg(
+        optional_format_string, "TO_DOUBLE and TRY_TO_DOUBLE", "optional_format_string"
+    )
+    is_string = is_valid_string_arg(val)
+    is_float = is_valid_float_arg(val)
+    is_int = is_valid_int_arg(val)
+    _try = get_overload_const_bool(_try)
+
+    if _try:  # pragma: no cover
+        on_fail = "bodo.libs.array_kernels.setna(res, i)\n"
+    else:
+        if is_string:
+            err_msg = "string must be a valid numeric expression"
+        else:  # pragma: no cover
+            err_msg = "value must be a valid numeric expression"
+        on_fail = (
+            f"""raise ValueError("invalid value for double conversion: {err_msg}")"""
+        )
+
+    # Format string not supported
+    if not is_overload_none(optional_format_string):  # pragma: no cover
+        raise raise_bodo_error(
+            f"Internal error: Format string not supported for TO_DOUBLE / TRY_TO_DOUBLE"
+        )
+    elif is_string:
+        scalar_text = "if is_string_numeric(arg0):\n"
+        scalar_text += f"  res[i] = np.float64(arg0)\n"
+        scalar_text += f"else:\n"
+        scalar_text += f"  {on_fail}\n"
+    elif is_float:  # pragma: no cover
+        scalar_text = f"res[i] = arg0\n"
+    elif is_int:  # pragma: no cover
+        scalar_text = f"res[i] = np.float64(arg0)\n"
+    else:  # pragma: no cover
+        raise raise_bodo_error(
+            f"Internal error: unsupported type passed to to_double_util for argument val: {val}"
+        )
+
+    arg_names = ["val", "optional_format_string", "_try"]
+    arg_types = [val, optional_format_string, _try]
+    propagate_null = [True, False, False]
+
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
+    else:  # pragma: no cover
+        out_dtype = types.Array(bodo.float64, 1, "C")
+
+    extra_globals = {
+        "is_string_numeric": is_string_numeric,
+    }
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals=extra_globals,
     )
 
 

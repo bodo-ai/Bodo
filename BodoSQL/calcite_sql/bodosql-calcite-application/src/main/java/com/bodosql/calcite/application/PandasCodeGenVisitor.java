@@ -2352,6 +2352,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "TO_CHAR":
           case "TO_VARCHAR":
             return generateToCharFnCode(operandsInfo, fnName);
+          case "TO_DOUBLE":
+          case "TRY_TO_DOUBLE":
+            return generateToDoubleFnCode(operandsInfo, fnName);
           case "ASINH":
           case "ACOSH":
           case "ATANH":
