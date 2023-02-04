@@ -206,11 +206,53 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction TO_DOUBLE =
+      new SqlFunction(
+          "TO_DOUBLE",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.DOUBLE_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // For conversion to double, snowflake allows a string, numeric, or variant expr.
+          // If the first argument is string, an optional format string is allowed as a second
+          // argument.
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC, OperandTypes.STRING_STRING),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction TRY_TO_DOUBLE =
+      new SqlFunction(
+          "TRY_TO_DOUBLE",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.DOUBLE_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // For conversion to double, snowflake allows a string, numeric, or variant expr.
+          // If the first argument is string, an optional format string is allowed as a second
+          // argument.
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC, OperandTypes.STRING_STRING),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlOperator INFIX_CAST = SqlLibraryOperators.INFIX_CAST;
 
   private List<SqlOperator> functionList =
       Arrays.asList(
-          TO_BOOLEAN, TO_DATE, TRY_TO_BOOLEAN, TRY_TO_DATE, TO_CHAR, TO_VARCHAR, INFIX_CAST);
+          TO_BOOLEAN,
+          TO_CHAR,
+          TO_DATE,
+          TO_DOUBLE,
+          TO_VARCHAR,
+          TRY_TO_BOOLEAN,
+          TRY_TO_DATE,
+          TRY_TO_DOUBLE,
+          INFIX_CAST);
 
   @Override
   public void lookupOperatorOverloads(

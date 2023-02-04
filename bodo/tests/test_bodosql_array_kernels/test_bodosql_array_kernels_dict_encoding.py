@@ -329,6 +329,27 @@ def test_dict_other_string_kernels(args):
             ),
             id="position_scalar_vector_vector",
         ),
+        pytest.param(
+            (
+                "to_double",
+                (
+                    pa.array(
+                        [
+                            "0.5",
+                            "7e-5",
+                            None,
+                            "-1.",
+                            None,
+                            "Inf",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                ),
+                pd.array([0.5, 7e-5, None, -1.0, None, np.inf] * 2, dtype="Float64"),
+            ),
+            id="to_double",
+        ),
     ],
 )
 def test_dict_str2int(args):
@@ -353,6 +374,9 @@ def test_dict_str2int(args):
     def impl6(s, t, n):
         return bodo.libs.bodosql_array_kernels.position(s, t, n)
 
+    def impl7(s):
+        return bodo.libs.bodosql_array_kernels.to_double(s, None)
+
     func, args, answer = args
     impl = {
         "rtrimmed_length": impl0,
@@ -362,6 +386,7 @@ def test_dict_str2int(args):
         "strcmp": impl4,
         "ord_ascii": impl5,
         "position": impl6,
+        "to_double": impl7,
     }[func]
     check_func(
         impl,
