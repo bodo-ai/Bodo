@@ -10,6 +10,7 @@ from numba.core import types
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.re_ext import init_const_pattern
 
 
 def posix_to_re(pattern):
@@ -251,10 +252,19 @@ def regexp_count_util(arr, pattern, position, flags):
     else:
         prefix_code += "if position <= 0: raise ValueError('REGEXP_COUNT requires a positive position')\n"
 
+    extra_globals = None
     if converted_pattern == "":
         scalar_text += "res[i] = 0"
     else:
-        prefix_code += f"r = re.compile({repr(converted_pattern)}, {flag_bitvector})"
+        # Generate the compile at compile time to avoid an extra objmode
+        # step at runtime.
+        extra_globals = {
+            "non_const_r": re.compile(converted_pattern, flag_bitvector),
+            "init_const_pattern": init_const_pattern,
+        }
+        prefix_code += (
+            f"r = init_const_pattern(non_const_r, {repr(converted_pattern)})\n"
+        )
         scalar_text += "res[i] = len(r.findall(arg0[arg2-1:]))"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
@@ -266,6 +276,7 @@ def regexp_count_util(arr, pattern, position, flags):
         scalar_text,
         out_dtype,
         prefix_code=prefix_code,
+        extra_globals=extra_globals,
     )
 
 
@@ -338,10 +349,13 @@ def regexp_instr_util(arr, pattern, position, occurrence, option, flags, group):
         else:
             prefix_code += f"if not (1 <= group <= {n_groups}): raise ValueError('REGEXP_INSTR requires a valid group number')\n"
 
+    extra_globals = None
     if converted_pattern == "":
         scalar_text += "res[i] = 0"
     else:
-        prefix_code += f"r = re.compile({repr(converted_pattern)}, {flag_bitvector})"
+        # Generate the compile at compile time to avoid an extra objmode
+        # step at runtime.
+        extra_globals = {"r": re.compile(converted_pattern, flag_bitvector)}
         scalar_text += "arg0 = arg0[arg2-1:]\n"
         scalar_text += "res[i] = 0\n"
         scalar_text += "offset = arg2\n"
@@ -369,6 +383,7 @@ def regexp_instr_util(arr, pattern, position, occurrence, option, flags, group):
         scalar_text,
         out_dtype,
         prefix_code=prefix_code,
+        extra_globals=extra_globals,
     )
 
 
@@ -398,11 +413,13 @@ def regexp_like_util(arr, pattern, flags):
     converted_pattern = posix_to_re(pattern_str)
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
     flag_bitvector = make_flag_bitvector(flag_str)
+    extra_globals = None
     if converted_pattern == "":
-        prefix_code = None
         scalar_text = "res[i] = len(arg0) == 0"
     else:
-        prefix_code = f"r = re.compile({repr(converted_pattern)}, {flag_bitvector})"
+        # Generate the compile at compile time to avoid an extra objmode
+        # step at runtime.
+        extra_globals = {"r": re.compile(converted_pattern, flag_bitvector)}
         scalar_text = "if r.fullmatch(arg0) is None:\n"
         scalar_text += "   res[i] = False\n"
         scalar_text += "else:\n"
@@ -416,7 +433,7 @@ def regexp_like_util(arr, pattern, flags):
         propagate_null,
         scalar_text,
         out_dtype,
-        prefix_code=prefix_code,
+        extra_globals=extra_globals,
     )
 
 
@@ -472,10 +489,13 @@ def regexp_replace_util(arr, pattern, replacement, position, occurrence, flags):
     else:
         prefix_code += "if occurrence < 0: raise ValueError('REGEXP_REPLACE requires a non-negative occurrence')\n"
 
+    extra_globals = None
     if converted_pattern == "":
         scalar_text += "res[i] = arg0"
     else:
-        prefix_code += f"r = re.compile({repr(converted_pattern)}, {flag_bitvector})"
+        # Generate the compile at compile time to avoid an extra objmode
+        # step at runtime.
+        extra_globals = {"r": re.compile(converted_pattern, flag_bitvector)}
         scalar_text += "result = arg0[:arg3-1]\n"
         scalar_text += "arg0 = arg0[arg3-1:]\n"
         # If replacing everything, just use re.sub()
@@ -507,6 +527,10 @@ def regexp_replace_util(arr, pattern, replacement, position, occurrence, flags):
         scalar_text,
         out_dtype,
         prefix_code=prefix_code,
+        # Several different values could be replaced with the same output
+        # pattern, so there could be duplicates.
+        may_cause_duplicate_dict_array_values=True,
+        extra_globals=extra_globals,
     )
 
 
@@ -571,10 +595,20 @@ def regexp_substr_util(arr, pattern, position, occurrence, flags, group):
         else:
             prefix_code += f"if not (1 <= group <= {n_groups}): raise ValueError('REGEXP_SUBSTR requires a valid group number')\n"
 
+    extra_globals = None
     if converted_pattern == "":
         scalar_text += "bodo.libs.array_kernels.setna(res, i)"
     else:
-        prefix_code += f"r = re.compile({repr(converted_pattern)}, {flag_bitvector})"
+        # Generate the compile at compile time to avoid an extra objmode
+        # step at runtime.
+        extra_globals = {
+            "non_const_r": re.compile(converted_pattern, flag_bitvector),
+            "init_const_pattern": init_const_pattern,
+        }
+        prefix_code += (
+            f"r = init_const_pattern(non_const_r, {repr(converted_pattern)})\n"
+        )
+
         if "e" in flag_str:
             scalar_text += "matches = r.findall(arg0[arg2-1:])\n"
             scalar_text += f"if len(matches) < arg3:\n"
@@ -604,5 +638,8 @@ def regexp_substr_util(arr, pattern, position, occurrence, flags, group):
         propagate_null,
         scalar_text,
         out_dtype,
+        # Substrings of unique strings can lead to collisions
+        may_cause_duplicate_dict_array_values=True,
         prefix_code=prefix_code,
+        extra_globals=extra_globals,
     )
