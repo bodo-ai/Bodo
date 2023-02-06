@@ -207,6 +207,40 @@ def add_interval_nanoseconds(amount, start_dt):  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True)
+def construct_timestamp(
+    year, month, day, hour, minute, second, nanosecond, time_zone
+):  # pragma: no cover
+    """Handles cases where DATE_FROM_PARTS/TIMESTAMP_FROM_PARTS receives optional
+    arguments and forwards to the appropriate version of the real implementation"""
+    args = [year, month, day, hour, minute, second, nanosecond, time_zone]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.construct_timestamp",
+                [
+                    "year",
+                    "month",
+                    "day",
+                    "hour",
+                    "minute",
+                    "second",
+                    "nanosecond",
+                    "time_zone",
+                ],
+                i,
+            )
+
+    def impl(
+        year, month, day, hour, minute, second, nanosecond, time_zone
+    ):  # pragma: no cover
+        return construct_timestamp_util(
+            year, month, day, hour, minute, second, nanosecond, time_zone
+        )
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def dayname(arr):  # pragma: no cover
     """Handles cases where DAYNAME receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -1332,6 +1366,105 @@ def overload_date_trunc_util(date_or_time_part, ts_arg):
         out_dtype,
         extra_globals={"tz_literal": tz_literal},
     )
+
+
+@numba.generated_jit(nopython=True)
+def construct_timestamp_util(
+    year, month, day, hour, minute, second, nanosecond, time_zone
+):
+    """A dedicated kernel for building a timestamp from the components
+
+    Args:
+        year (int array/series/scalar): the year of the new timestamp
+        month (int array/series/scalar): the month of the new timestamp
+        day (int array/series/scalar): the day of the new timestamp
+        hour (int array/series/scalar): the hour of the new timestamp
+        minute (int array/series/scalar): the minute of the new timestamp
+        second (int array/series/scalar): the second of the new timestamp
+        nanosecond (int array/series/scalar): the nanosecond of the new timestamp
+        time_zone (optional string literal): the time zone of the new timestamp
+
+    Returns:
+        timestamp array/scalar: the timestamp with the components specified above,
+        with the timezone as specified.
+
+    Note: this function allows cases where the arguments are outside of the "normal"
+    ranges, for example:
+
+    construct_timestamp_util(2000, 0, 100, 0, 0, 0, 0, None) returns the 100th day
+    of the year 2000.
+
+    construct_timestamp_util(2015, 7, 4, 12, 150, 0, 0, None) returns 2:30 pm on
+    July 4th, 2015.
+    """
+
+    verify_int_arg(year, "construct_timestamp", "year")
+    verify_int_arg(month, "construct_timestamp", "month")
+    verify_int_arg(day, "construct_timestamp", "day")
+    verify_int_arg(hour, "construct_timestamp", "hour")
+    verify_int_arg(minute, "construct_timestamp", "minute")
+    verify_int_arg(second, "construct_timestamp", "second")
+    verify_int_arg(nanosecond, "construct_timestamp", "nanosecond")
+
+    arg_names = [
+        "year",
+        "month",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "nanosecond",
+        "time_zone",
+    ]
+    arg_types = [year, month, day, hour, minute, second, nanosecond, time_zone]
+    propagate_null = [True] * 7 + [False]
+
+    args = [year, month, day, hour, minute, second, nanosecond, time_zone]
+    if any(arg == bodo.none for arg in args):
+        tz = None
+        localize_str = ""
+    elif is_overload_constant_str(time_zone):
+        tz = get_overload_const_str(time_zone)
+        # Need to use localize after calculating the regular timestamp
+        # since daylight savings jumps are not meant to be considered when
+        # constructing the timestamp. E.g. year=2000, hour= 24*50 hours should
+        # output April 10 at midnight, instead of 1am.
+        localize_str = f".tz_localize('{tz}')"
+    else:
+        raise_bodo_error(
+            "construct_timestamp: time_zone argument must be a scalar string literal or None"
+        )
+
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if tz is None
+        and (
+            bodo.utils.utils.is_array_typ(year, True)
+            or bodo.utils.utils.is_array_typ(month, True)
+            or bodo.utils.utils.is_array_typ(day, True)
+            or bodo.utils.utils.is_array_typ(hour, True)
+            or bodo.utils.utils.is_array_typ(minute, True)
+            or bodo.utils.utils.is_array_typ(second, True)
+            or bodo.utils.utils.is_array_typ(nanosecond, True)
+        )
+        else ""
+    )
+
+    # Handle the overflow from months into years directly, then handle all remaining
+    # unit arguments by constructing a timedelta (which will take care of the
+    # overflow of the remaining units) and adding it to the year/month value
+    scalar_text = "months, month_overflow = 1 + ((arg1 - 1) % 12), (arg1 - 1) // 12\n"
+    scalar_text += "ts = pd.Timestamp(year=arg0+month_overflow, month=months, day=1)\n"
+    scalar_text += "ts = ts + pd.Timedelta(days=arg2-1, hours=arg3, minutes=arg4, seconds=arg5) + pd.Timedelta(arg6)\n"
+    scalar_text += f"res[i] = {unbox_str}(ts{localize_str})"
+
+    if tz is None:
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    else:
+        out_dtype = bodo.DatetimeArrayType(tz)
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)

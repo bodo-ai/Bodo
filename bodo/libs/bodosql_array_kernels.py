@@ -71,6 +71,7 @@ broadcasted_fixed_arg_functions = {
     "change_event",
     "char",
     "cond",
+    "construct_timestamp",
     "contains",
     "conv",
     "cos",
