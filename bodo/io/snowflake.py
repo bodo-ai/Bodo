@@ -1045,9 +1045,7 @@ def create_table_handle_exists(
     # dataframe columns to make sure we create the table with its columns
     # in order.
     ev_create_table = tracing.Event("create_table", is_parallel=False)
-    create_table_columns = ", ".join(
-        [f'"{c}" {sf_schema[c]}' for c in sf_schema.keys()]
-    )
+    create_table_columns = ", ".join([f"{c} {sf_schema[c]}" for c in sf_schema.keys()])
     create_table_sql = (
         f"{create_table_cmd} {location} ({create_table_columns}) "
         f"/* Python:bodo.io.snowflake.create_table_if_not_exists() */"
@@ -1080,7 +1078,7 @@ def execute_copy_into(
     """
     ev = tracing.Event("execute_copy_into", is_parallel=False)
 
-    columns = ",".join([f'"{c}"' for c in sf_schema.keys()])
+    columns = ",".join([f"{c}" for c in sf_schema.keys()])
 
     # In Snowflake, all parquet data is stored in a single column, $1,
     # so we must select columns explicitly
