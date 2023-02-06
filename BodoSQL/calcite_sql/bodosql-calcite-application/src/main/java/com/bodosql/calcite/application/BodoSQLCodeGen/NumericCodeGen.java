@@ -194,4 +194,30 @@ public class NumericCodeGen {
     }
     return new RexNodeVisitorInfo(nameStrBuilder.toString(), exprStrBuilder.toString());
   }
+
+  /**
+   * Helper function that handles the codegen for TO_NUMBER/TO_NUMERIC/TO_DECIMAL function
+   *
+   * @param arg1Info The VisitorInfo for the first argument.
+   * @return the rexNodeVisitorInfo for the function call
+   */
+  public static RexNodeVisitorInfo generateToNumberCode(RexNodeVisitorInfo arg1Info, String fnName) {
+    String name = fnName + "(" + arg1Info.getName() + ")";
+    String outputExpr =
+        "bodo.libs.bodosql_array_kernels.to_number(" + arg1Info.getExprCode() + ")";
+    return new RexNodeVisitorInfo(name, outputExpr);
+  }
+
+  /**
+   * Helper function that handles the codegen for TRY_TO_NUMBER/TRY_TO_NUMERIC/TRY_TO_DECIMAL function
+   *
+   * @param arg1Info The VisitorInfo for the first argument.
+   * @return the rexNodeVisitorInfo for the function call
+   */
+  public static RexNodeVisitorInfo generateTryToNumberCode(RexNodeVisitorInfo arg1Info, String fnName) {
+    String name = fnName + "(" + arg1Info.getName() + ")";
+    String outputExpr =
+        "bodo.libs.bodosql_array_kernels.try_to_number(" + arg1Info.getExprCode() + ")";
+    return new RexNodeVisitorInfo(name, outputExpr);
+  }
 }

@@ -2528,6 +2528,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 fnOperation.getOperands().get(0).getType().getSqlTypeName(),
                 operandsInfo.get(0),
                 fnName);
+          case "TO_NUMBER":
+          case "TO_NUMERIC":
+          case "TO_DECIMAL":
+            return generateToNumberCode(operandsInfo.get(0), fnName);
+          case "TRY_TO_NUMBER":
+          case "TRY_TO_NUMERIC":
+          case "TRY_TO_DECIMAL":
+            return generateTryToNumberCode(operandsInfo.get(0), fnName);
           case "TIMEFROMPARTS":
           case "TIME_FROM_PARTS":
             return generateTimeFromPartsCode(
