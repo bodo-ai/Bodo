@@ -259,61 +259,77 @@ public class DatetimeFnCodeGen {
   }
 
   /**
-   * Helper function that handles the codegen for snowflake SQL's TIME_FROM_PARTS
+   * Helper function that handles the codegen for DATE_FROM_PARTS, TIME_FROM_PARTS,
+   * TIMESTAMP_FROM_PARTS and all of their variants/aliases
    *
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateTimeFromPartsCode(
-      String fnName,
-      RexNodeVisitorInfo arg1Info,
-      RexNodeVisitorInfo arg2Info,
-      RexNodeVisitorInfo arg3Info,
-      RexNodeVisitorInfo arg4Info) {
-    String name;
-    String outputExpression;
+  public static RexNodeVisitorInfo generateDateTimeTypeFromPartsCode(
+      String fnName, List<RexNodeVisitorInfo> operandsInfo, String tzStr) {
+    StringBuilder name = new StringBuilder();
+    StringBuilder code = new StringBuilder();
 
-    if (arg4Info == null) {
-      name =
-          fnName
-              + "("
-              + arg1Info.getName()
-              + ", "
-              + arg2Info.getName()
-              + ", "
-              + arg3Info.getName()
-              + ")";
-      outputExpression =
-          "bodo.libs.bodosql_array_kernels.time_from_parts_util("
-              + arg1Info.getExprCode()
-              + ", "
-              + arg2Info.getExprCode()
-              + ", "
-              + arg3Info.getExprCode()
-              + ", 0)";
-    } else {
-      name =
-          fnName
-              + "("
-              + arg1Info.getName()
-              + ", "
-              + arg2Info.getName()
-              + ", "
-              + arg3Info.getName()
-              + ", "
-              + arg4Info.getName()
-              + ")";
-      outputExpression =
-          "bodo.libs.bodosql_array_kernels.time_from_parts_util("
-              + arg1Info.getExprCode()
-              + ", "
-              + arg2Info.getExprCode()
-              + ", "
-              + arg3Info.getExprCode()
-              + ", "
-              + arg4Info.getExprCode()
-              + ")";
+    boolean time_mode = false;
+    boolean date_mode = false;
+    boolean timestamp_mode = false;
+
+    int numArgs = operandsInfo.size();
+
+    switch (fnName) {
+      case "TIME_FROM_PARTS":
+        time_mode = true;
+        break;
+      case "DATE_FROM_PARTS":
+      case "DATEFROMPARTS":
+        date_mode = true;
+        break;
+      default:
+        timestamp_mode = true;
     }
 
-    return new RexNodeVisitorInfo(name, outputExpression);
+    name.append(fnName).append("(");
+    code.append("bodo.libs.bodosql_array_kernels.");
+
+    if (time_mode) {
+      code.append("time_from_parts");
+    } else if (date_mode || timestamp_mode) {
+      code.append("construct_timestamp");
+    }
+
+    code.append("(");
+
+    for (int i = 0; i < numArgs; i++) {
+      if (i != 0) {
+        name.append(", ");
+        code.append(", ");
+      }
+      name.append(operandsInfo.get(i).getName());
+      code.append(operandsInfo.get(i).getExprCode());
+    }
+
+    // For time, add the nanosecond argument if necessary
+    if (time_mode && numArgs == 3) {
+      name.append(", 0");
+      code.append(", 0");
+    }
+    // For date, fill in all the arguments only used for timestamp
+    if (date_mode) {
+      code.append(", 0, 0, 0, 0, None");
+    }
+    // For timestamp, fill in the nanosecond argument if necessary
+    if (timestamp_mode && numArgs < 7) {
+      name.append(", 0");
+      code.append(", 0");
+    }
+    // For timestamp, fill in the time_zone argument if necessary
+    if (timestamp_mode && numArgs < 8) {
+      name.append(", ").append(tzStr);
+      code.append(", ").append(tzStr);
+    }
+
+    name.append(")");
+    code.append(")");
+
+    return new RexNodeVisitorInfo(name.toString(), code.toString());
   }
 }
