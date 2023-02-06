@@ -48,7 +48,7 @@ def indent_block(text, indentation):
         so that the first line has the indentation specified, with a trailing
         newline character. If the input stringis None, an empty string is returned instead.
     """
-    if text is None:
+    if not text:
         return ""
     first_line = text.splitlines()[0]
     i = len(first_line) - len(first_line.lstrip())
@@ -341,7 +341,7 @@ def gen_vectorized(
 
         # If prefix_code was provided, embed it before the loop
         # (unless the output is all-null)
-        if prefix_code is not None and not out_null:
+        if prefix_code and not out_null:
             func_text += indent_block(prefix_code, 3)
 
         # If creating a dictionary encoded output from scratch, embed the text

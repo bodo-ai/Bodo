@@ -514,20 +514,45 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
     out_dtype = bodo.boolean_array
     extra_globals = {
         "convert_sql_pattern": convert_sql_pattern_to_python_runtime,
+        # Dictionary encoding optimized function.
+        "convert_sql_pattern_dict_encoding": convert_sql_pattern_to_python_runtime_dict_encoding,
     }
     prefix_code = None
     scalar_text = ""
+    use_dict_encoding = not is_overload_none(arr) and (
+        (
+            pattern == bodo.dict_str_arr_type
+            and types.unliteral(escape) == types.unicode_type
+        )
+        or (
+            types.unliteral(pattern) == types.unicode_type
+            and escape == bodo.dict_str_arr_type
+        )
+    )
+    prefix_code = ""
+    if use_dict_encoding:
+        # If we are using dictionary encoding we convert the patterns before the for loop
+        prefix_code += "(python_pattern_arr, requires_regex_arr, must_match_start_arr, must_match_end_arr, match_anything_arr) = convert_sql_pattern_dict_encoding(pattern, escape, case_insensitive)\n"
+        # We will access these outputs using the indices array.
+        if pattern == bodo.dict_str_arr_type:
+            prefix_code += "indices_arr = pattern._indices\n"
+        else:
+            prefix_code += "indices_arr = escape._indices\n"
     if is_case_insensitive and not is_overload_none(arr):
         if not bodo.utils.utils.is_array_typ(arr, True):
             # If the output is an array, but the first argument is a scalar we need to convert
             # it to lower case do it once before the loop to avoid overhead on each iteration.
-            prefix_code = "arr = arr.lower()"
+            prefix_code += "arr = arr.lower()"
         else:
             # lower each element instead.
             scalar_text += "arg0 = arg0.lower()\n"
     # Convert the pattern on each iteration since it may change.
     # XXX Consider moving to a helper function to keep the IR smaller?
-    scalar_text += "(python_pattern, requires_regex, must_match_start, must_match_end, match_anything) = convert_sql_pattern(arg1, arg2, case_insensitive)\n"
+    if use_dict_encoding:
+        scalar_text += "index = indices_arr[i]\n"
+        scalar_text += "(python_pattern, requires_regex, must_match_start, must_match_end, match_anything) = python_pattern_arr[index], requires_regex_arr[index], must_match_start_arr[index], must_match_end_arr[index], match_anything_arr[index]\n"
+    else:
+        scalar_text += "(python_pattern, requires_regex, must_match_start, must_match_end, match_anything) = convert_sql_pattern(arg1, arg2, case_insensitive)\n"
     scalar_text += "if match_anything:\n"
     scalar_text += "  res[i] = True\n"
     scalar_text += "elif requires_regex:\n"
@@ -549,6 +574,9 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
         out_dtype,
         prefix_code=prefix_code,
         extra_globals=extra_globals,
+        # Manually support dictionary encoding in this implementation
+        # to ensure we are more flexible.
+        support_dict_encoding=False,
     )
 
 
@@ -635,3 +663,77 @@ def overload_like_kernel_scalar_pattern_util(arr, pattern, escape, case_insensit
         prefix_code=prefix_code,
         extra_globals=extra_globals,
     )
+
+
+def convert_sql_pattern_to_python_runtime_dict_encoding(
+    pattern, escape, case_insensitive
+):  # pragma: no cover
+    pass
+
+
+@overload(convert_sql_pattern_to_python_runtime_dict_encoding)
+def overload_convert_sql_pattern_to_python_runtime_dict_encoding(
+    pattern, escape, case_insensitive
+):  # pragma: no cover
+    """Implementation for convert_sql_pattern_to_python_runtime that enables leveraging
+    dictionary encoding to both reduce memory usage and improve performance.
+    convert_sql_pattern_to_python_runtime seems to be particularly slow in the array pattern
+    case based on experimentation in the query.
+
+    Args:
+        pattern (Union[types.unicode_type | bodo.dict_str_arr_type]): The pattern to convert. This is either
+            a scalar or a dictionary encoded array. If this is an array escape must be a scalar.
+        escape (Union[types.unicode_type | bodo.dict_str_arr_type]): The escape character. This is either
+            a scalar or a dictionary encoded array. If this is an array pattern must be a scalar.
+        case_insensitive (types.boolean): Is the conversion case insensitive.
+
+    Returns: Tuple[bodo.string_array, types.Array(types.boolean, 1, "C"), types.Array(types.boolean, 1, "C"), types.Array(types.boolean, 1, "C"), types.Array(types.boolean, 1, "C")]
+    """
+    if pattern == bodo.dict_str_arr_type:
+        assert (
+            types.unliteral(escape) == types.unicode_type
+        ), "escape must be a scalar if pattern is a dictionary encoded array"
+        dict_input = "pattern"
+        call_inputs = "dict_arr[i], escape, case_insensitive"
+    else:
+        assert (
+            escape == bodo.dict_str_arr_type
+        ), "At least one of pattern or escape must be a dictionary encoded array"
+        assert (
+            types.unliteral(pattern) == types.unicode_type
+        ), "pattern must be a scalar if escape is a dictionary encoded array"
+        dict_input = "escape"
+        call_inputs = "pattern, dict_arr[i], case_insensitive"
+    func_text = f"""def impl(pattern, escape, case_insensitive):
+        # Fetch the actual dictionary.
+        dict_arr = {dict_input}._data
+        n = len(dict_arr)
+        # Allocate the output arrays.
+        python_pattern_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+        # Note we don't care about NA values here since we won't fetch these elements.
+        requires_regex = np.empty(n, np.bool_)
+        must_match_start = np.empty(n, np.bool_)
+        must_match_end = np.empty(n, np.bool_)
+        match_anything = np.empty(n, np.bool_)
+        for i in range(n):
+            if not bodo.libs.array_kernels.isna(dict_arr, i):
+                # Convert the pattern.
+                python_pattern_arr[i], requires_regex[i], must_match_start[i], must_match_end[i], match_anything[i] = convert_sql_pattern_to_python_runtime(
+                    {call_inputs}
+                )
+            else:
+                # Ensure we don't have any issues due to skipping NA values for strings. All others
+                # won't matter.
+                python_pattern_arr[i] = ""
+        return (python_pattern_arr, requires_regex, must_match_start, must_match_end, match_anything)"""
+    local_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "np": np,
+            "convert_sql_pattern_to_python_runtime": convert_sql_pattern_to_python_runtime,
+        },
+        local_vars,
+    )
+    return local_vars["impl"]
