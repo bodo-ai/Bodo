@@ -55,7 +55,7 @@ def time_from_parts_util(hour, minute, second, nanosecond):  # pragma: no cover
     arg_names = ["hour", "minute", "second", "nanosecond"]
     arg_types = [hour, minute, second, nanosecond]
     propagate_null = [True] * 4
-    scalar_text = "res[i] = bodo.Time(arg0, arg1, arg2, arg3)"
+    scalar_text = "res[i] = bodo.Time(arg0, arg1, arg2, nanosecond=arg3, precision=9)"
 
     out_dtype = bodo.TimeArrayType(9)
 
