@@ -859,3 +859,104 @@ def overload_cast_str_to_tz_aware_util(arr, tz):
         scalar_text,
         out_dtype,
     )
+
+
+@numba.generated_jit(nopython=True)
+def to_number(expr):  # pragma: no cover
+    """Handle TO_NUMBER and it's variants."""
+    if isinstance(expr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_snowflake_conversion_array_kernels.to_number_util",
+            ["expr"],
+            None,
+        )
+
+    def impl(expr):  # pragma: no cover
+        return to_number_util(expr, numba.literally(False))
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def try_to_number(expr):  # pragma: no cover
+    """Handle TRY_TO_NUMBER and it's variants."""
+    if isinstance(expr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_snowflake_conversion_array_kernels.to_number_util",
+            ["expr"],
+            None,
+        )
+
+    def impl(expr):  # pragma: no cover
+        return to_number_util(expr, numba.literally(True))
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def _is_string_numeric(expr):  # pragma: no cover
+    """Check if a string is numeric."""
+
+    def impl(expr):
+        if len(expr) == 0:
+            return False
+
+        if expr[0] == "-":
+            expr = expr[1:]
+
+        if expr.count(".") > 1:
+            return False
+
+        expr = expr.replace(".", "")
+
+        if len(expr) == 0:
+            return False
+
+        if not expr.isdigit():
+            return False
+
+        return True
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def to_number_util(expr, _try=False):  # pragma: no cover
+    """Equivalent to the SQL [TRY] TO_NUMBER/TO_NUMERIC/TO_DECIMAL function.
+    With the default args, this converts the input to a 64-bit integer.
+    TODO: support non-default `scale` arg, which could result in float.
+
+    Args:
+        expr (numeric or string series/scalar): the number/string to convert to a number of type int64
+
+    Returns:
+        numeric series/scalar: the converted number
+    """
+    arg_names = ["expr", "_try"]
+    arg_types = [expr, _try]
+    propagate_null = [True]
+
+    is_string = is_valid_string_arg(expr)
+    if not is_string:
+        verify_int_float_arg(expr, "TO_NUMBER", "expr")
+
+    _try = get_overload_const_bool(_try)
+
+    out_dtype = bodo.IntegerArrayType(types.int64)
+
+    if is_string:
+        scalar_text = (
+            "if bodo.libs.bodosql_snowflake_conversion_array_kernels._is_string_numeric(arg0):\n"
+            "  res[i] = np.int64(np.float64(arg0))\n"
+            "else:\n"
+        )
+        if _try:
+            scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+        else:
+            scalar_text += (
+                "  raise ValueError('unable to convert string literal to number')\n"
+            )
+    else:
+        scalar_text = "res[i] = np.int64(arg0)"
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)

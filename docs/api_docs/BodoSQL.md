@@ -1285,6 +1285,47 @@ Bodo SQL Currently supports the following Numeric Functions:
 
     Returns `NULL` if either input is `NULL`, otherwise `Y`
 
+
+#### TO_NUMBER
+-   `TO_NUMBER(EXPR)`
+
+    Converts an input expression to a fixed-point number. For `NULL` input,
+    the output is `NULL`.
+
+
+#### TO_NUMERIC
+-   `TO_NUMERIC(EXPR)`
+
+    Equivalent to `TO_NUMBER(EXPR)`
+
+
+#### TO_DECIMAL
+-   `TO_DECIMAL(EXPR)`
+
+    Equivalent to `TO_NUMBER(EXPR)`
+
+
+#### TRY_TO_NUMBER
+-   `TRY_TO_NUMBER(EXPR)`
+
+    A special version of `TO_NUMBER` that performs
+    the same operation (i.e. converts an input expression to a fixed-point
+    number), but with error-handling support (i.e. if the conversion cannot be
+    performed, it returns a NULL value instead of raising an error).
+
+
+#### TRY_TO_NUMERIC
+-   `TRY_TO_NUMERIC(EXPR)`
+
+    Equivalent to `TRY_TO_NUMBER(EXPR)`
+
+
+#### TRY_TO_DECIMAL
+-   `TRY_TO_DECIMAL(EXPR)`
+
+    Equivalent to `TRY_TO_NUMBER(EXPR)`
+
+
 ### Aggregation Functions
 
 Bodo SQL Currently supports the following Aggregation Functions on
