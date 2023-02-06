@@ -139,7 +139,7 @@ time_from_parts_in_outs = pytest.mark.parametrize(
         ),
         pytest.param(
             "1, 2, 3, 4",
-            bodo.Time(1, 2, 3, 4, precision=9),
+            bodo.Time(1, 2, 3, nanosecond=4, precision=9),
             id="scalar_ns",
         ),
     ],
@@ -191,7 +191,7 @@ def test_time_from_parts(fn_name, wrap_case, args, value, memory_leak_check):
         ),
         pytest.param(
             "0, 0, 0, -1",
-            bodo.Time(23, 59, 59, 999999999, precision=9),
+            bodo.Time(23, 59, 59, nanosecond=999999999, precision=9),
             id="scalar_ns_negative",
         ),
     ],
@@ -212,7 +212,9 @@ def test_time_from_parts_outside_range(args, value, memory_leak_check):
             pd.Series([2] * 15),
             pd.Series([3] * 15),
             pd.Series(list(range(15))),
-            pd.Series([bodo.Time(1, 2, 3, i, precision=9) for i in range(15)]),
+            pd.Series(
+                [bodo.Time(1, 2, 3, nanosecond=i, precision=9) for i in range(15)]
+            ),
             id="time_from_parts_vector",
             marks=pytest.mark.slow,
         ),
@@ -221,7 +223,10 @@ def test_time_from_parts_outside_range(args, value, memory_leak_check):
             pd.Series([2] * 14 + [None], dtype="Int64"),
             pd.Series([3] * 14 + [None], dtype="Int64"),
             pd.Series(list(range(14)) + [None], dtype="Int64"),
-            pd.Series([bodo.Time(1, 2, 3, i, precision=9) for i in range(14)] + [None]),
+            pd.Series(
+                [bodo.Time(1, 2, 3, nanosecond=i, precision=9) for i in range(14)]
+                + [None]
+            ),
             id="time_from_parts_vector_nulls",
         ),
     ],
