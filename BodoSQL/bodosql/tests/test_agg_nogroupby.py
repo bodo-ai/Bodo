@@ -751,15 +751,17 @@ def test_single_value_error():
         }
     )
 
-    with pytest.raises(ValueError, match=r"Expected single value in column"):
-        check_query(
-            query,
-            {"t1": df1, "t2": df2},
-            None,
-            check_names=False,
-            check_dtype=False,
-            # ensure_single_value() makes input replicated, causing error for dist arg
-            only_jit_seq=True,
-            # dummy output to avoid Spark errors
-            expected_output=1,
-        )
+    # only run on np=1 since check_query turns off seq run on np>1
+    if bodo.get_size() == 1:
+        with pytest.raises(ValueError, match=r"Expected single value in column"):
+            check_query(
+                query,
+                {"t1": df1, "t2": df2},
+                None,
+                check_names=False,
+                check_dtype=False,
+                # ensure_single_value() makes input replicated, causing error for dist arg
+                only_jit_seq=True,
+                # dummy output to avoid Spark errors
+                expected_output=1,
+            )
