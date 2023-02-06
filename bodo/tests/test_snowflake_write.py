@@ -781,7 +781,7 @@ def test_to_sql_table_name(table_names):
 
     @bodo.jit
     def read_impl(conn_str, table_name):
-        output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+        output_df = pd.read_sql(f"select a from {table_name}", conn_str)
         return output_df
 
     # Note: Bodo makes column names all lowercase internally
