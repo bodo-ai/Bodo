@@ -79,26 +79,26 @@ stages:
 
 # Pip Packages. Usually disabled for Nightly Runs
 # But useful to have when testing all Pip Builds
-- stage: Build_Bodo_Binary_Pip
-  displayName: 'Build Bodo Binary for Pip'
-  dependsOn: []
-  condition: or(eq('${{ parameters.BUILD_PIP }}', 'true'), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'))
-  jobs:
-  - template: buildscripts/azure/azure-build-binary-linux-pip.yml
-    parameters:
-      name: Linux_pip
-      vmImage: ubuntu-latest
-      platformBuild: false
+# - stage: Build_Bodo_Binary_Pip
+#   displayName: 'Build Bodo Binary for Pip'
+#   dependsOn: []
+#   condition: or(eq('${{ parameters.BUILD_PIP }}', 'true'), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'))
+#   jobs:
+#   - template: buildscripts/azure/azure-build-binary-linux-pip.yml
+#     parameters:
+#       name: Linux_pip
+#       vmImage: ubuntu-latest
+#       platformBuild: false
 #  - template: buildscripts/azure/azure-build-binary-windows-pip.yml
 #    parameters:
 #      name: Windows_pip
 #      vmImage: windows-2019
 #      platformBuild: false
-  - template: buildscripts/azure/azure-build-binary-macos-x86-pip.yml
-    parameters:
-      name: macOS_x86_pip
-      vmImage: macOS-latest
-      platformBuild: false
+  # - template: buildscripts/azure/azure-build-binary-macos-x86-pip.yml
+  #   parameters:
+  #     name: macOS_x86_pip
+  #     vmImage: macOS-latest
+  #     platformBuild: false
 
 # Note: It is difficult to enforce the exact version of bodo to use for the build, outside of
 # modifying the build recipe. Therefore, if we update BodoSQL's build process to require a specific version
