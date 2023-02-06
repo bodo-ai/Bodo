@@ -1680,6 +1680,110 @@ def test_date_sub_date_unit(datetime_part_strings, memory_leak_check):
     )
 
 
+@pytest.fixture(params=["scalar", "vector", "null"])
+def construct_timestamp_data(request):
+    if request.param == "null":
+        return 2015, None, None, None, 100, 0, None, None
+    if request.param == "scalar":
+        return (2018, -1, 600, 30, -30, 15, 0, "2019-06-24 05:30:15")
+    year = pd.Series([2025, 2020, 2022, 2020, 2027, 2020], dtype=pd.Int64Dtype())
+    month = pd.Series([7, None, 1, 53, -6, 0], dtype=pd.Int64Dtype())
+    day = pd.Series([4, 12, 100, 0, 20, 0], dtype=pd.Int64Dtype())
+    hour = pd.Series([0, None, 0, 12, 2882, 1], dtype=pd.Int64Dtype())
+    minute = pd.Series([0, 0, 0, 45, 5, 2], dtype=pd.Int64Dtype())
+    second = pd.Series([0, None, 0, 59, 0, 3], dtype=pd.Int64Dtype())
+    nanosecond = pd.Series([0, 13, 0, 1234, 68719476736, 0], dtype=pd.Int64Dtype())
+    answer = pd.Series(
+        [
+            "2025-7-4",
+            None,
+            "2022-4-10",
+            "2024-4-30 12:45:59.000001234",
+            "2026-10-18 02:06:08.719476736",
+            "2019-11-30 01:02:03",
+        ]
+    )
+    return year, month, day, hour, minute, second, nanosecond, answer
+
+
+@pytest.mark.parametrize(
+    "has_time_zone",
+    [
+        pytest.param(False, id="tz_naive"),
+        pytest.param(True, id="tz_aware"),
+    ],
+)
+def test_construct_timestamp(
+    construct_timestamp_data, has_time_zone, memory_leak_check
+):
+    """
+    Tests construct_timestamp with array and scalar data, with and without timezones.
+    """
+
+    def impl_naive(year, month, day, hour, minute, second, nanosecond):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.construct_timestamp(
+                year, month, day, hour, minute, second, nanosecond, None
+            )
+        )
+
+    def impl_aware(year, month, day, hour, minute, second, nanosecond):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.construct_timestamp(
+                year, month, day, hour, minute, second, nanosecond, "US/Eastern"
+            )
+        )
+
+    if has_time_zone:
+        impl = impl_aware
+    else:
+        impl = impl_naive
+
+    (
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        second,
+        nanosecond,
+        answer,
+    ) = construct_timestamp_data
+    args = (year, month, day, hour, minute, second, nanosecond)
+    if not any(isinstance(arg, pd.Series) for arg in args):
+        if has_time_zone:
+            impl = lambda year, month, day, hour, minute, second, nanosecond: bodo.libs.bodosql_array_kernels.construct_timestamp(
+                year,
+                month,
+                day,
+                hour,
+                minute,
+                second,
+                nanosecond,
+                numba.literally("US/Eastern"),
+            )
+        else:
+            impl = lambda year, month, day, hour, minute, second, nanosecond: bodo.libs.bodosql_array_kernels.construct_timestamp(
+                year, month, day, hour, minute, second, nanosecond, None
+            )
+
+    tz = "US/Eastern" if has_time_zone else None
+
+    def construct_tz_scalar_fn(arg0, arg1):
+        if pd.isna(arg0):
+            return None
+        else:
+            return pd.Timestamp(arg0).tz_localize(arg1)
+
+    check_func(
+        impl,
+        args,
+        py_output=vectorized_sol((answer, tz), construct_tz_scalar_fn, None),
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 def test_add_interval_optional(memory_leak_check):
     def impl(tz_naive_ts, tz_aware_ts, int_val, flag0, flag1):
         arg0 = tz_naive_ts if flag0 else None
