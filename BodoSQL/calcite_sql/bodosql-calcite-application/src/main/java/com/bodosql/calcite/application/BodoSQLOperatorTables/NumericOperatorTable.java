@@ -310,6 +310,61 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           ReturnTypes.DOUBLE_NULLABLE,
           OperandTypes.NUMERIC);
 
+  // TODO: Add support for `precision` and `scale` arguments
+  public static final SqlFunction TO_NUMBER =
+    new SqlFunction(
+      "TO_NUMBER",
+      SqlKind.OTHER_FUNCTION,
+      ReturnTypes.BIGINT_NULLABLE,
+      null,
+      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+      SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction TO_NUMERIC =
+    new SqlFunction(
+      "TO_NUMERIC",
+      SqlKind.OTHER_FUNCTION,
+      ReturnTypes.BIGINT_NULLABLE,
+      null,
+      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+      SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction TO_DECIMAL =
+    new SqlFunction(
+      "TO_DECIMAL",
+      SqlKind.OTHER_FUNCTION,
+      ReturnTypes.BIGINT_NULLABLE,
+      null,
+      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+      SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction TRY_TO_NUMBER =
+    new SqlFunction(
+      "TRY_TO_NUMBER",
+      SqlKind.OTHER_FUNCTION,
+      ReturnTypes.BIGINT_NULLABLE,
+      null,
+      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+      SqlFunctionCategory.NUMERIC);
+  
+  public static final SqlFunction TRY_TO_NUMERIC =
+    new SqlFunction(
+      "TRY_TO_NUMERIC",
+      SqlKind.OTHER_FUNCTION,
+      ReturnTypes.BIGINT_NULLABLE,
+      null,
+      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+      SqlFunctionCategory.NUMERIC);
+  
+  public static final SqlFunction TRY_TO_DECIMAL =
+    new SqlFunction(
+      "TRY_TO_DECIMAL",
+      SqlKind.OTHER_FUNCTION,
+      ReturnTypes.BIGINT_NULLABLE,
+      null,
+      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+      SqlFunctionCategory.NUMERIC);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           ACOSH,
@@ -341,7 +396,13 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           GREATEST,
           LEAST,
           VARIANCE_POP,
-          VARIANCE_SAMP);
+          VARIANCE_SAMP,
+          TO_NUMBER,
+          TO_NUMERIC,
+          TO_DECIMAL,
+          TRY_TO_NUMBER,
+          TRY_TO_NUMERIC,
+          TRY_TO_DECIMAL);
 
   @Override
   public void lookupOperatorOverloads(

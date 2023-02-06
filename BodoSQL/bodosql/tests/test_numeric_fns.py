@@ -4,10 +4,13 @@ Test that various numeric builtin functions are properly supported in BODOSQL
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 
+import bodosql
 import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
+
+import bodo
 
 
 @pytest.fixture(
@@ -653,6 +656,126 @@ def test_div0_scalars(spark_info):
         check_names=False,
         sort_output=False,
     )
+
+
+@pytest.mark.parametrize(
+    "fn_name",
+    [
+        "TO_NUMBER",
+        pytest.param("TO_NUMERIC", marks=pytest.mark.slow),
+        pytest.param("TO_DECIMAL", marks=pytest.mark.slow),
+        "TRY_TO_NUMBER",
+        pytest.param("TRY_TO_NUMERIC", marks=pytest.mark.slow),
+        pytest.param("TRY_TO_DECIMAL", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "value, expected_output",
+    [
+        pytest.param("1", 1, id="int"),
+        pytest.param("1.0", 1, id="float"),
+        pytest.param("'1.23456789'", 1, id="str"),
+        pytest.param("NULL", None, id="null"),
+    ],
+)
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        False,
+        True,
+    ],
+)
+def test_to_number_scalar(fn_name, value, expected_output, use_case):
+    if use_case and value != "NULL":
+        query = f"SELECT (CASE WHEN {fn_name}({value}) > 0 THEN 1 ELSE 0 END) as A"
+    else:
+        query = f"SELECT {fn_name}({value}) as A"
+    ctx = {}
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=pd.DataFrame({"A": [expected_output]}),
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "fn_name",
+    [
+        "TO_NUMBER",
+        pytest.param("TO_NUMERIC", marks=pytest.mark.slow),
+        pytest.param("TO_DECIMAL", marks=pytest.mark.slow),
+        "TRY_TO_NUMBER",
+        pytest.param("TRY_TO_NUMERIC", marks=pytest.mark.slow),
+        pytest.param("TRY_TO_DECIMAL", marks=pytest.mark.slow),
+    ],
+)
+def test_to_number_columns(fn_name):
+    query = (
+        f"SELECT {fn_name}(A) as A, {fn_name}(B) as B, {fn_name}(C) as C FROM table1"
+    )
+
+    df = pd.DataFrame(
+        {
+            "A": [str(i) for i in range(30)],
+            "B": [i for i in range(30)],
+            "C": [float(i) for i in range(30)],
+        }
+    )
+
+    ctx = {"table1": df}
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=df.astype("int64"),
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "fn_name",
+    [
+        "TO_NUMBER",
+        pytest.param("TO_NUMERIC", marks=pytest.mark.slow),
+        pytest.param("TO_DECIMAL", marks=pytest.mark.slow),
+        "TRY_TO_NUMBER",
+        pytest.param("TRY_TO_NUMERIC", marks=pytest.mark.slow),
+        pytest.param("TRY_TO_DECIMAL", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "invalid_str",
+    [
+        "NOT A NUMBER",
+        pytest.param("1.0.0", marks=pytest.mark.slow),
+        pytest.param("1-000", marks=pytest.mark.slow),
+        pytest.param(".", marks=pytest.mark.slow),
+        pytest.param("-1.23-", marks=pytest.mark.slow),
+        pytest.param("--1.23", marks=pytest.mark.slow),
+    ],
+)
+def test_to_number_invalid(fn_name, invalid_str):
+    query = f"SELECT {fn_name}('{invalid_str}') as A"
+    ctx = {}
+    if "TRY" in fn_name:
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"A": [None]}),
+            check_dtype=False,
+        )
+    else:
+        with pytest.raises(ValueError, match="unable to convert string literal"):
+            bc = bodosql.BodoSQLContext()
+
+            @bodo.jit
+            def impl(bc):
+                return bc.sql(query)
+
+            impl(bc)
 
 
 @pytest.fixture(
