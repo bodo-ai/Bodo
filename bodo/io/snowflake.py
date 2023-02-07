@@ -50,7 +50,7 @@ SF_READ_DICT_ENCODE_CRITERION = 0.5
 # How long the dictionary encoding probe query should run for in the worst case.
 # This is to guard against increasing compilation time prohibitively in case there are
 # issues with Snowflake, the data, etc.
-SF_READ_DICT_ENCODING_PROBE_TIMEOUT = 5
+SF_READ_DICT_ENCODING_PROBE_TIMEOUT = 10
 
 # Default behavior if the query to determine dictionary encoding times out.
 # This is false by default since dict encoding is an optimization, and in cases where
@@ -444,6 +444,7 @@ def get_schema_from_metadata(
     cursor: "SnowflakeCursor",
     sql_query: str,
     is_select_query: bool,
+    is_table_input: bool,
 ) -> Tuple[List[pa.Field], List, List[int], List[pa.DataType]]:  # pragma: no cover
     """
     Determine the Arrow schema and Bodo types of the query output
@@ -469,7 +470,8 @@ def get_schema_from_metadata(
     # Get Snowflake Metadata for Query
     # Use it to determine the general / broad Snowflake types
     # The actual Arrow result may use smaller types for columns (initially int64, use int8)
-    query_field_metadata = cursor.describe(sql_query)
+    desc_query = f"select * from {sql_query}" if is_table_input else sql_query
+    query_field_metadata = cursor.describe(desc_query)
     # Session Timezone, should be populated by the describe operation
     tz: str = cursor._timezone  # type: ignore
 
@@ -541,10 +543,133 @@ def get_schema_from_metadata(
     return arrow_fields, col_types, unsupported_columns, unsupported_arrow_types
 
 
+def _get_table_row_count(cursor, table_name):
+    """get total number of rows for a Snowflake table
+
+    Args:
+        cursor (SnowflakeCursor): Snowflake connector connection cursor object
+        table_name (str): table name
+
+    Returns:
+        optional(int): number of rows or None if failed
+    """
+    count_res = execute_query(
+        cursor,
+        f"select count(*) from {table_name}",
+        timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT,
+    )
+    if count_res is None:
+        return None
+
+    total_rows = count_res.fetchall()[0][0]
+    return total_rows
+
+
+def _detect_column_dict_encoding(
+    sql_query,
+    query_args,
+    string_col_ind,
+    undetermined_str_cols,
+    cursor,
+    col_types,
+    is_table_input,
+):
+    """Detects Snowflake columns that need to be dictionary-encoded using a query that
+    gets approximate data cardinalities.
+
+    Args:
+        sql_query (str): read query or Snowflake table name
+        query_args (list(str)): probe query arguments, e.g. ['approx_count_distinct(A)',
+            'approx_count_distinct(B)']
+        string_col_ind (list(int)): index of string columns in col_types
+        undetermined_str_cols (iterable(str)): column names of string columns that need
+            dict-encoding probe (not manually specified)
+        cursor (SnowflakeCursor): Snowflake connector connection cursor object
+        col_types (list(types.Type)): read data types to update with dict-encoding info
+        is_table_input (bool): read query is a table name
+
+    Returns:
+        Optional[Tuple[int, List[str]]]: debug info if the probe query timed out
+    """
+
+    # Determine if the string columns are dictionary encoded
+    dict_encode_timeout_info: Optional[Tuple[int, List[str]]] = None
+
+    # the limit on the number of rows total to read for the probe
+    probe_limit = max(SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT // len(query_args), 1)
+
+    # use system sampling if input is a table
+    if (
+        is_table_input
+        and (total_rows := _get_table_row_count(cursor, sql_query)) is not None
+    ):
+        sample_percentage = (
+            0 if total_rows <= probe_limit else probe_limit / total_rows * 100
+        )
+        sample_call = (
+            f"SAMPLE SYSTEM ({sample_percentage})" if sample_percentage else ""
+        )
+        predict_cardinality_call = (
+            f"select count(*),{', '.join(query_args)} from {sql_query} {sample_call}"
+        )
+        if bodo.user_logging.get_verbose_level() >= 2:
+            encoding_msg = "Using Snowflake system sampling for dictionary-encoding detection:\nQuery: %s\n"
+            bodo.user_logging.log_message(
+                "Dictionary Encoding",
+                encoding_msg,
+                predict_cardinality_call,
+            )
+    else:
+
+        # construct the prediction query script for the string columns
+        # in which we sample 1 percent of the data
+        # upper bound limits the total amount of sampling that will occur
+        # to prevent a hang/timeout
+        predict_cardinality_call = (
+            f"select count(*),{', '.join(query_args)}"
+            f"from ( select * from ({sql_query}) limit {probe_limit} ) SAMPLE (1)"
+        )
+
+    prediction_query = execute_query(
+        cursor,
+        predict_cardinality_call,
+        timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT,
+    )
+
+    if prediction_query is None:  # pragma: no cover
+        # It is hard to get Snowflake to consistently
+        # and deterministically time out, so this branch
+        # isn't tested in the unit tests.
+        dict_encode_timeout_info = (probe_limit, list(undetermined_str_cols))
+
+        if SF_READ_DICT_ENCODING_IF_TIMEOUT:
+            for i in string_col_ind:
+                col_types[i] = dict_str_arr_type
+
+    else:
+        cardinality_data: pa.Table = prediction_query.fetch_arrow_all()  # type: ignore
+        # calculate the level of uniqueness for each string column
+        total_rows = cardinality_data[0][0].as_py()
+        uniqueness = [
+            cardinality_data[i][0].as_py() / max(total_rows, 1)
+            for i in range(1, len(query_args) + 1)
+        ]
+        # filter the string col indices based on the criterion
+        col_inds_to_convert = filter(
+            lambda x: x[0] <= SF_READ_DICT_ENCODE_CRITERION,
+            zip(uniqueness, string_col_ind),
+        )
+        for _, ind in col_inds_to_convert:
+            col_types[ind] = dict_str_arr_type
+
+    return dict_encode_timeout_info
+
+
 def get_schema(
     conn_str: str,
     sql_query: str,
     is_select_query: bool,
+    is_table_input: bool,
     _bodo_read_as_dict: Optional[List[str]],
 ):  # pragma: no cover
     conn = snowflake_connect(conn_str)
@@ -555,7 +680,7 @@ def get_schema(
         col_types,
         unsupported_columns,
         unsupported_arrow_types,
-    ) = get_schema_from_metadata(cursor, sql_query, is_select_query)
+    ) = get_schema_from_metadata(cursor, sql_query, is_select_query, is_table_input)
 
     str_as_dict_cols = _bodo_read_as_dict if _bodo_read_as_dict else []
     str_col_name_to_ind = {}
@@ -596,49 +721,15 @@ def get_schema(
     dict_encode_timeout_info: Optional[Tuple[int, List[str]]] = None
 
     if len(query_args) != 0 and SF_READ_AUTO_DICT_ENCODE_ENABLED:
-        # the limit on the number of rows total to read for the probe
-        probe_limit = max(SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT // len(query_args), 1)
-
-        # construct the prediction query script for the string columns
-        # in which we sample 1 percent of the data
-        # upper bound limits the total amount of sampling that will occur
-        # to prevent a hang/timeout
-        predict_cardinality_call = (
-            f"select count(*),{', '.join(query_args)}"
-            f"from ( select * from ({sql_query}) limit {probe_limit} ) SAMPLE (1)"
-        )
-
-        prediction_query = execute_query(
+        dict_encode_timeout_info = _detect_column_dict_encoding(
+            sql_query,
+            query_args,
+            string_col_ind,
+            undetermined_str_cols,
             cursor,
-            predict_cardinality_call,
-            timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT,
+            col_types,
+            is_table_input,
         )
-
-        if prediction_query is None:  # pragma: no cover
-            # It is hard to get Snowflake to consistently
-            # and deterministically time out, so this branch
-            # isn't tested in the unit tests.
-            dict_encode_timeout_info = (probe_limit, list(undetermined_str_cols))
-
-            if SF_READ_DICT_ENCODING_IF_TIMEOUT:
-                for i in string_col_ind:
-                    col_types[i] = dict_str_arr_type
-
-        else:
-            cardinality_data: pa.Table = prediction_query.fetch_arrow_all()  # type: ignore
-            # calculate the level of uniqueness for each string column
-            total_rows = cardinality_data[0][0].as_py()
-            uniqueness = [
-                cardinality_data[i][0].as_py() / max(total_rows, 1)
-                for i in range(1, len(query_args) + 1)
-            ]
-            # filter the string col indices based on the criterion
-            col_inds_to_convert = filter(
-                lambda x: x[0] <= SF_READ_DICT_ENCODE_CRITERION,
-                zip(uniqueness, string_col_ind),
-            )
-            for _, ind in col_inds_to_convert:
-                col_types[ind] = dict_str_arr_type
 
     # Ensure column name case matches Pandas/sqlalchemy. See:
     # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
