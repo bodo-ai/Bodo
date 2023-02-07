@@ -106,6 +106,14 @@ def dist_IR_contains(f_ir, *args):
     return sum([(s in f_ir_text) for s in args])
 
 
+def dist_IR_count(f_ir, func_name):
+    """count how many times the string 'func_name' is in function IR 'f_ir'"""
+    with io.StringIO() as str_io:
+        f_ir.dump(str_io)
+        f_ir_text = str_io.getvalue()
+    return f_ir_text.count(func_name)
+
+
 @bodo.jit
 def get_rank():
     return bodo.libs.distributed_api.get_rank()

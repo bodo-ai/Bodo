@@ -2772,6 +2772,66 @@ class SeriesPass:
                     args,
                 )
 
+        # Fuse consequtive calls to concat_ws
+        if fdef == ("concat_ws", "bodo.libs.bodosql_array_kernels"):
+            args = rhs.args
+            sep_typ = self.typemap[args[1].name]
+            if is_overload_constant_str(sep_typ):
+                # We can only fuse concat calls if we are certain that the separator
+                # is the same.
+                sep = get_overload_const_str(sep_typ)
+                # Extract the tuple list to check for any repeat calls to
+                tup_list = guard(find_build_tuple, self.func_ir, rhs.args[0].name)
+                new_tup_list = []
+                # We use an indicator variable instead of the size because concat with a single
+                # argument is legal and we still want to optimize out those calls.
+                is_fused = False
+                if tup_list is not None:
+                    for tup_var in tup_list:
+                        # Check each variable for an input to concat_ws. Note that we don't do
+                        # multiple levels of nesting because we assume these will be fused in
+                        # prior steps.
+                        tup_var_def = guard(get_definition, self.func_ir, tup_var)
+                        func_call = guard(
+                            find_callname, self.func_ir, tup_var_def, self.typemap
+                        )
+                        if (
+                            func_call
+                            == ("concat_ws", "bodo.libs.bodosql_array_kernels")
+                            and is_overload_constant_str(
+                                self.typemap[tup_var_def.args[1].name]
+                            )
+                            and get_overload_const_str(
+                                self.typemap[tup_var_def.args[1].name]
+                            )
+                            == sep
+                        ):
+                            # The separator is the same so we can fuse this call directly.
+                            nested_tup_list = guard(
+                                find_build_tuple, self.func_ir, tup_var_def.args[0].name
+                            )
+                            if nested_tup_list is None:
+                                # If we can't find the tuple don't fuse the input.
+                                new_tup_list.append(tup_var)
+                            else:
+                                is_fused = True
+                                new_tup_list.extend(nested_tup_list)
+                        else:
+                            new_tup_list.append(tup_var)
+                if is_fused:
+                    # If we are fusing generate a new function call.
+                    replace_vars = ", ".join(
+                        f"tup_var{i}" for i in range(len(new_tup_list))
+                    )
+                    total_vars = tuple(new_tup_list + [rhs.args[1]])
+                    return replace_func(
+                        self,
+                        eval(
+                            f"lambda {replace_vars}, sep: bodo.libs.bodosql_array_kernels.concat_ws(({replace_vars},), sep)"
+                        ),
+                        total_vars,
+                    )
+
         # inline SparkDataFrame.select() here since inline_closurecall() cannot handle
         # stararg yet. TODO: support
         if (
