@@ -123,6 +123,7 @@ ll.add_symbol(
 ll.add_symbol("get_groupby_labels", array_ext.get_groupby_labels)
 ll.add_symbol("array_isin", array_ext.array_isin)
 ll.add_symbol("get_search_regex", array_ext.get_search_regex)
+ll.add_symbol("get_replace_regex", array_ext.get_replace_regex)
 ll.add_symbol("array_info_getitem", array_ext.array_info_getitem)
 ll.add_symbol("array_info_getdata1", array_ext.array_info_getdata1)
 
@@ -2858,6 +2859,13 @@ _get_search_regex = types.ExternalFunction(
     ),
 )
 
+_get_replace_regex = types.ExternalFunction(
+    "get_replace_regex",
+    # params: in array, pattern, replacement
+    # Output: out array
+    array_info_type(array_info_type, types.voidptr, types.voidptr),
+)
+
 
 @numba.njit(no_cpython_wrapper=True)
 def get_search_regex(in_arr, case, match, pat, out_arr):  # pragma: no cover
@@ -2871,6 +2879,14 @@ def get_search_regex(in_arr, case, match, pat, out_arr):  # pragma: no cover
         out_arr_info,
     )
     check_and_propagate_cpp_exception()
+
+
+@numba.njit(no_cpython_wrapper=True)
+def get_replace_regex(in_arr, pattern_typ, replace_typ):  # pragma: no cover
+    in_arr_info = array_to_info(in_arr)
+    out_arr_info = _get_replace_regex(in_arr_info, pattern_typ, replace_typ)
+    check_and_propagate_cpp_exception()
+    return info_to_array(out_arr_info, in_arr)
 
 
 def _gen_row_access_intrinsic(col_array_typ, c_ind):

@@ -118,4 +118,20 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
 void get_search_regex(array_info* in_arr, const bool case_sensitive,
                       const bool match_beginning, char const* const pat,
                       array_info* out_arr);
+
+/**
+ * @brief C++ implementation of re.sub to replace each element in in_arr with
+ * the replacement string based on the regex pattern. This is supported for both
+ * dictionary encoded array and regular string arrays. This is implemented via
+ * boost::xpressive::regex_replace
+ *
+ * @param in_arr The input array of string needed replacement.
+ * @param pat A utf-8 encoded regex pattern.
+ * @param replacement A utf-8 encoded replacement string to insert based on the
+ * pattern.
+ * @return array_info* A output array with the replaced values. This is either
+ * dictionary encoded or regular string array depending on the input array.
+ */
+array_info* get_replace_regex(array_info* in_arr, char const* const pat,
+                              char const* replacement);
 #endif  // _ARRAY_OPERATIONS_H_INCLUDED
