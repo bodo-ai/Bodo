@@ -1879,6 +1879,7 @@ class TypingTransforms:
         # handle case with calls like df["A"].astype(int) > 2
         if is_call(var_def):
             fdef = find_callname(func_ir, var_def)
+            require(fdef is not None)
             # calling pd.to_datetime() on a string column is possible since pyarrow
             # matches the data types before filter comparison (in this case, calls
             # pd.Timestamp on partition's string value)
@@ -1927,10 +1928,9 @@ class TypingTransforms:
                 )
                 return (col_name, "coalesce", args[1])
 
-            if fdef == ("lower", "bodo.libs.bodosql_array_kernels") or fdef == (
-                "upper",
-                "bodo.libs.bodosql_array_kernels",
-            ):
+            if fdef[1] == "bodo.libs.bodosql_array_kernels":
+                # We currently only support 1 argument functions
+                require(fdef[0] in ("lower", "upper", "length"))
                 require((len(var_def.args) == 1) and not var_def.kws)
                 arg0 = var_def.args[0]
                 # arg[0] must be an array

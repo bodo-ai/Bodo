@@ -1438,3 +1438,43 @@ def test_multiple_loads_filter_pushdown(datapath, memory_leak_check):
 
     generate_code = bc.convert_to_pandas(test_query)
     assert generate_code.count("pd.read_parquet") == 2, "Expected 2 read parquet calls"
+
+
+def test_pq_length_filter_pushdown(datapath, memory_leak_check):
+    """
+    Tests that queries with all aliases of LENGTH work with
+    filter pushdown.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    filename = datapath("tpch-test-data/parquet/lineitem.parquet")
+    read_df = pd.read_parquet(filename)
+    expected_output = read_df[read_df.L_SHIPMODE.str.len() == 4][["L_LINENUMBER"]]
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    for func_name in ("CHAR_LENGTH", "LENGTH", "LEN", "CHARACTER_LENGTH"):
+        test_query = f"""
+            select L_LINENUMBER from table1 t1
+            WHERE {func_name}(t1.L_SHIPMODE) = 4
+        """
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, test_query),
+                py_output=expected_output,
+                is_out_distributed=False,
+                reset_index=True,
+                sort_output=True,
+                # Pandas output is non-nullable
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "Filter pushdown successfully performed.")
+            check_logger_msg(stream, "Columns loaded ['L_LINENUMBER']")
