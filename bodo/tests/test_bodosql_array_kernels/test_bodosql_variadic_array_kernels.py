@@ -8,7 +8,12 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
-from bodo.tests.utils import check_func, find_nested_dispatcher_and_args
+from bodo.tests.utils import (
+    SeriesOptTestPipeline,
+    check_func,
+    dist_IR_count,
+    find_nested_dispatcher_and_args,
+)
 
 
 def coalesce_expected_output(args):
@@ -828,3 +833,82 @@ def test_option_concat_ws(memory_leak_check):
                     pd.StringDtype(),
                 )
                 check_func(impl, args, py_output=concat_ws_answer, check_dtype=False)
+
+
+def test_concat_ws_fusion(memory_leak_check):
+    """
+    Tests that multiple calls to concat_ws with the same constant separator are
+    fused into a single call in Series Pass.
+    """
+
+    def impl1(arr):
+        return bodo.libs.bodosql_array_kernels.concat_ws(
+            (
+                bodo.libs.bodosql_array_kernels.concat_ws(
+                    (
+                        bodo.libs.bodosql_array_kernels.concat_ws(
+                            (
+                                bodo.libs.bodosql_array_kernels.concat_ws(
+                                    ("%", " "), ""
+                                ),
+                                arr,
+                            ),
+                            "",
+                        ),
+                        " ",
+                    ),
+                    "",
+                ),
+                "%",
+            ),
+            "",
+        )
+
+    def impl2(arr):
+        return bodo.libs.bodosql_array_kernels.concat_ws(
+            (
+                bodo.libs.bodosql_array_kernels.concat_ws(
+                    (
+                        bodo.libs.bodosql_array_kernels.concat_ws(
+                            (
+                                bodo.libs.bodosql_array_kernels.concat_ws(
+                                    ("%", " "), ""
+                                ),
+                                arr,
+                            ),
+                            # This should prevent fusion
+                            "/",
+                        ),
+                        " ",
+                    ),
+                    "",
+                ),
+                "%",
+            ),
+            "",
+        )
+
+    arr = pd.Series(
+        ["abc", "b", None, "abc", None, "b", "cde", "Y432^23", "R3qr32&&", "4342*"] * 10
+    ).values
+    expected_output1 = (
+        pd.Series(arr).map(lambda x: None if pd.isna(x) else f"% {x} %").values
+    )
+    expected_output2 = (
+        pd.Series(arr).map(lambda x: None if pd.isna(x) else f"% /{x} %").values
+    )
+    # First check correctness
+    check_func(impl1, (arr,), py_output=expected_output1, check_dtype=False)
+    check_func(impl2, (arr,), py_output=expected_output2, check_dtype=False)
+    # Now check for fusion.
+    bodo_func1 = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func1(arr)
+    f_ir = bodo_func1.overloads[bodo_func1.signatures[0]].metadata["preserved_ir"]
+    concat_ws_calls = dist_IR_count(f_ir, "concat_ws")
+    assert concat_ws_calls == 1, f"Expected 1 concat_ws call, got {concat_ws_calls}"
+    # Only partial fusion should be possible because of different separators
+    bodo_func2 = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl2)
+    bodo_func2(arr)
+    f_ir = bodo_func2.overloads[bodo_func2.signatures[0]].metadata["preserved_ir"]
+    concat_ws_calls = dist_IR_count(f_ir, "concat_ws")
+    assert concat_ws_calls == 3, f"Expected 3 concat_ws call, got {concat_ws_calls}"
