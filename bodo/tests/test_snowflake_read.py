@@ -595,6 +595,38 @@ def test_snowflake_dict_encoding_enabled(memory_leak_check, enable_dict_encoding
         )
 
 
+def test_snowflake_bodo_read_as_dict(memory_leak_check):
+    """
+    Test Snowflake system sampling for dictionary-encoding detection
+    """
+
+    @bodo.jit
+    def impl(conn):
+        df2 = pd.read_sql(
+            "LINEITEM", conn, _bodo_read_date_as_dt64=True, _bodo_is_table_input=True
+        )
+        df1 = df2.loc[
+            :,
+            [
+                "l_shipmode",
+            ],
+        ].head(100)
+        return df1
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1000"
+    conn = get_snowflake_connection_string(db, schema)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    with set_logging_stream(logger, 2):
+        impl(conn)
+        check_logger_msg(
+            stream, "Using Snowflake system sampling for dictionary-encoding detection"
+        )
+        check_logger_msg(stream, "Columns ['l_shipmode'] using dictionary encoding")
+
+
 def test_snowflake_nonascii(memory_leak_check):
     def impl(query, conn):
         df = pd.read_sql(query, conn)

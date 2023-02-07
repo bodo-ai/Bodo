@@ -510,7 +510,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     // see BE-4238
     // TODO[BE-2954]: support a proper date type and remove this flag
     return String.format(
-        "pd.read_sql('select * from %s', '%s', _bodo_read_date_as_dt64=True)",
+        "pd.read_sql('%s', '%s', _bodo_read_date_as_dt64=True, _bodo_is_table_input=True)",
         tableName, generatePythonConnStr(schemaName));
   }
 

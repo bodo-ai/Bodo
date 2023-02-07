@@ -910,6 +910,16 @@ class UntypedPass:
             rhs.loc,
             default=False,
         )
+        # TODO[BE-4362]: detect table input automatically
+        _bodo_is_table_input = self._get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            10e6,
+            "_bodo_is_table_input",
+            rhs.loc,
+            default=False,
+        )
         # coerce_float = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
         # )
@@ -939,6 +949,7 @@ class UntypedPass:
             "index_col",
             "_bodo_read_as_dict",
             "_bodo_read_date_as_dt64",
+            "_bodo_is_table_input",
         )
 
         unsupported_args = set(kws.keys()) - set(supported_args)
@@ -960,7 +971,13 @@ class UntypedPass:
             has_side_effects,
             pyarrow_table_schema,
         ) = _get_sql_types_arr_colnames(
-            sql_const, con_const, _bodo_read_as_dict, lhs, rhs.loc, self._is_independent
+            sql_const,
+            con_const,
+            _bodo_read_as_dict,
+            lhs,
+            rhs.loc,
+            _bodo_is_table_input,
+            self._is_independent,
         )
 
         # Collect the columns where we cast dates to datetime64[ns] during the read.
@@ -3121,7 +3138,13 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
 
 
 def _get_sql_types_arr_colnames(
-    sql_const, con_const, _bodo_read_as_dict, lhs, loc, is_independent: bool
+    sql_const,
+    con_const,
+    _bodo_read_as_dict,
+    lhs,
+    loc,
+    is_table_input,
+    is_independent: bool,
 ):
     """
     Wrapper function to determine the db_type, column names,
@@ -3155,7 +3178,9 @@ def _get_sql_types_arr_colnames(
     # Postgresql: SELECT and SHOW only.
     # Declare what Bodo supports.  Users may run them to explore their database
     supported_sql_queries = ("SELECT", "SHOW", "DESCRIBE", "DESC", "DELETE")
-    sql_word = sql_const.lstrip().split(maxsplit=1)[0].upper()
+    sql_word = (
+        "SELECT" if is_table_input else sql_const.lstrip().split(maxsplit=1)[0].upper()
+    )
     if sql_word not in supported_sql_queries:
         raise BodoError(f"{sql_word} query is not supported.\n")
     elif sql_word == "SELECT":
@@ -3183,6 +3208,7 @@ def _get_sql_types_arr_colnames(
         sql_word,
         _bodo_read_as_dict,
         loc,
+        is_table_input,
         is_independent,
     )
     dtypes = df_type.data
@@ -3221,6 +3247,7 @@ def _get_sql_df_type_from_db(
     sql_word,
     _bodo_read_as_dict,
     loc,
+    is_table_input: bool,
     is_independent: bool,
 ):
     """access the database to find df type for read_sql() output.
@@ -3277,6 +3304,7 @@ def _get_sql_df_type_from_db(
                     con_const,
                     sql_const,
                     is_select_query,
+                    is_table_input,
                     _bodo_read_as_dict,
                 )
 
