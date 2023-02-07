@@ -349,12 +349,14 @@ def compute_df_types(df_list, is_bodo_type):
                     )
                 else:
                     type_info = bodo.transforms.untyped_pass._get_sql_types_arr_colnames(
-                        f"select * from {file_path}",
+                        f"{file_path}",
                         const_conn_str,
                         # _bodo_read_as_dict
                         None,
                         ir.Var(None, "dummy_var", ir.Loc("dummy_loc", -1)),
                         ir.Loc("dummy_loc", -1),
+                        # is_table_input
+                        True,
                         False,
                     )
                     # Future proof against additional return values that are unused
