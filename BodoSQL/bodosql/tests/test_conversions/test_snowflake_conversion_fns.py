@@ -414,101 +414,6 @@ def test_datetime_to_char(memory_leak_check):
     )
 
 
-@pytest.fixture(
-    params=[
-        pytest.param(
-            (
-                pd.Series(
-                    ["68656c6c6f", "416C70686162657420536F7570", None, "01", "AbCdEf"]
-                ),
-                pd.Series(
-                    [
-                        b"hello",
-                        b"Alphabet Soup",
-                        None,
-                        b"\x01",
-                        b"\xab\xcd\xef",
-                    ]
-                ),
-            ),
-            id="hex_strings",
-        ),
-        pytest.param(
-            (
-                pd.Series([b"123", b"alpha beta", None, b"soup", b"7Fff"]),
-                pd.Series([b"123", b"alpha beta", None, b"soup", b"7Fff"]),
-            ),
-            id="binary_copy",
-        ),
-    ]
-)
-def binary_cast_data(request):
-    return request.param
-
-
-# TODO ([BE-4344]): implement and test to_binary with other formats
-@pytest.mark.parametrize(
-    "calculation",
-    [
-        pytest.param("TO_BINARY(S)", id="to_binary-no_case"),
-        pytest.param(
-            "TRY_TO_BINARY(S)", id="try-to_binary-no_case", marks=pytest.mark.slow
-        ),
-        pytest.param(
-            "CASE WHEN LENGTH(S) > 0 THEN TO_BINARY(S) END",
-            id="to_binary-with_case",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            "CASE WHEN LENGTH(S) > 0 THEN TRY_TO_BINARY(S) END",
-            id="try_to_binary-with_case",
-        ),
-    ],
-)
-def test_to_binary(calculation, binary_cast_data, memory_leak_check):
-    data, answer = binary_cast_data
-    query = f"SELECT {calculation} AS B FROM table1"
-    ctx = {"table1": pd.DataFrame({"S": data})}
-    expected_output = pd.DataFrame({"B": answer})
-    check_query(
-        query,
-        ctx,
-        None,
-        check_dtype=False,
-        convert_columns_bytearray=["B"],
-        expected_output=expected_output,
-    )
-
-
-def test_try_to_binary_invalid(memory_leak_check):
-    """Verifies that TRY_TO_BINARY outputs NULL on malformed cases
-    (non-hex characters or odd number of characters)"""
-    query = f"SELECT TRY_TO_BINARY(S) AS B FROM table1"
-    data = pd.Series(["AB", "ABC", "ABCD", "ABCDE", "GHI", "10", "101", "10 A"])
-    answer = pd.Series([b"\xAB", None, b"\xAB\xCD", None, None, b"\x10", None, None])
-    ctx = {"table1": pd.DataFrame({"S": data})}
-    expected_output = pd.DataFrame({"B": answer})
-    check_query(
-        query,
-        ctx,
-        None,
-        check_dtype=False,
-        convert_columns_bytearray=["B"],
-        expected_output=expected_output,
-    )
-
-
-def test_to_binary_error():
-    """Verifies that TO_BINARY raises an exception on malformed cases
-    (non-hex characters or odd number of characters)"""
-    query = f"SELECT TO_BINARY(S) FROM table1"
-    data = pd.Series(["AB", "ABC", "ABCD", "ABCDE", "GHI", "10", "101", "10 A"])
-    ctx = {"table1": pd.DataFrame({"S": data})}
-    with pytest.raises(ValueError):
-        bc = bodosql.BodoSQLContext(ctx)
-        bc.sql(query)
-
-
 valid_double_params = [
     pytest.param(
         pd.DataFrame(
@@ -553,7 +458,6 @@ valid_double_params = [
         id="valid_to_double_floats",
     ),
 ]
-
 
 invalid_double_params = [
     pytest.param(

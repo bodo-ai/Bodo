@@ -166,29 +166,6 @@ public class ConversionCodeGen {
   }
 
   /**
-   * Handles codegen for Snowflake TO_BINARY and TRY_TO_BINARY function.
-   *
-   * @param operandsInfo List of operands
-   * @param @param fnName Name of the function (TO_BINARY or TRY_TO_BINARY)
-   * @return RexVisitorInfo for the TO_BINARY or TRY_TO_BINARY function
-   */
-  public static RexNodeVisitorInfo generateToBinaryFnCode(
-      List<RexNodeVisitorInfo> operandsInfo, String fnName) {
-    if (operandsInfo.size() > 1) {
-      throw new BodoSQLCodegenException(
-          fnName.toLowerCase() + ": format argument not yet supported");
-    }
-    String name = fnName + "(" + operandsInfo.get(0).getName() + ")";
-    String exprCode =
-        "bodo.libs.bodosql_array_kernels."
-            + fnName.toLowerCase()
-            + "("
-            + operandsInfo.get(0).getExprCode()
-            + ")";
-    return new RexNodeVisitorInfo(name, exprCode);
-  }
-
-  /**
    * Does the codegen for MySQL TIMESTAMP function
    *
    * @param datetimeStr the datetime string to convert to a Timestamp
