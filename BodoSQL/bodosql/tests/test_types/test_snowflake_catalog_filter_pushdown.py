@@ -1688,3 +1688,47 @@ def test_snowflake_not_like_regex_pushdown(
                 stream, "Filter pushdown successfully performed. Moving filter step:"
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_length_filter_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that queries with all aliases of LENGTH work with
+    filter pushdown.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame({"A": ["AFewf", "bf", None, "cool", "alter"] * 10})
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "length_pushdown_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        expected_output = py_output[py_output.a.str.len() == 4]
+        # equality test
+        for func_name in ("CHAR_LENGTH", "LENGTH", "LEN", "CHARACTER_LENGTH"):
+            query = f"Select a from {table_name} where {func_name}(A) = 4"
+            stream = io.StringIO()
+            logger = create_string_io_logger(stream)
+            with set_logging_stream(logger, 1):
+                check_func(
+                    impl,
+                    (bc, query),
+                    py_output=expected_output,
+                    reset_index=True,
+                    sort_output=True,
+                )
+                check_logger_msg(
+                    stream,
+                    "Filter pushdown successfully performed. Moving filter step:",
+                )
+                check_logger_msg(stream, "Columns loaded ['a']")

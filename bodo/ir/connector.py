@@ -574,6 +574,8 @@ def _get_filter_column_arrow_expr(col_val, filter_map):
         return f"pa.compute.utf8_lower({filter})"
     elif column_compute_func == "upper":
         return f"pa.compute.utf8_upper({filter})"
+    elif column_compute_func == "length":
+        return f"pa.compute.utf8_length({filter})"
 
 
 def generate_arrow_filters(
@@ -770,7 +772,10 @@ def _get_filter_column_type(col_val, col_types, orig_colname_map):
     if isinstance(col_val, str):
         return col_types[orig_colname_map[col_val]]
 
-    get_filter_predicate_compute_func(col_val)
+    func_name = get_filter_predicate_compute_func(col_val)
+    if func_name == "length":
+        # Length converts the column type to integer.
+        return bodo.IntegerArrayType(types.int64)
     return _get_filter_column_type(col_val[0], col_types, orig_colname_map)
 
 

@@ -1504,7 +1504,7 @@ def get_filter_predicate_compute_func(col_val):
         isinstance(col_val, tuple) and len(col_val) == 3
     ), f"Filter must maintain the structure Tuple[str, str, Var]. Invalid filter: {col_val}"
 
-    supported_compute_funcs = ["coalesce", "lower", "upper"]
+    supported_compute_funcs = ["coalesce", "lower", "upper", "length"]
 
     compute_func = col_val[1]
 
