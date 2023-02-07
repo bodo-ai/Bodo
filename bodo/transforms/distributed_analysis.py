@@ -1719,6 +1719,10 @@ class DistributedAnalysis:
             array_dists[rhs.args[0].name] = new_dist
             array_dists[rhs.args[3].name] = new_dist
             return
+        if fdef == ("get_replace_regex", "bodo.libs.array"):
+            # out_arr and in_arr should have the same distribution
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
 
         if fdef == ("rolling_fixed", "bodo.hiframes.rolling"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)

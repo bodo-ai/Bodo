@@ -981,3 +981,29 @@ def test_regexp_error(func, args, in_series):
 
     with pytest.raises(ValueError):
         check_func(impl, args)
+
+
+def test_regexp_replace_optimized(memory_leak_check):
+    """
+    Tests regexp_replace for a couple inputs that take the optimized path
+    in C++.
+    """
+
+    def impl(arr, replacement):
+        return bodo.libs.bodosql_array_kernels.regexp_replace(
+            arr, "[^\-a-zA-Z0-9 ]+", replacement, 1, 0, ""
+        )
+
+    arr = pd.Series(["ajg", "&b", "^c", "%d", "e//>", "f", None, "g", "h", None]).values
+    # Test the known max size path.
+    replacement1 = " "
+    expected_output1 = pd.Series(
+        ["ajg", " b", " c", " d", "e ", "f", None, "g", "h", None]
+    ).values
+    check_func(impl, (arr, replacement1), py_output=expected_output1, check_dtype=False)
+    # Test the unknown max size path
+    replacement2 = "start"
+    expected_output2 = pd.Series(
+        ["ajg", "startb", "startc", "startd", "estart", "f", None, "g", "h", None]
+    ).values
+    check_func(impl, (arr, replacement2), py_output=expected_output2, check_dtype=False)

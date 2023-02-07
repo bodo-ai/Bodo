@@ -1662,6 +1662,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&array_isin)));
     PyObject_SetAttrString(m, "get_search_regex",
                            PyLong_FromVoidPtr((void*)(&get_search_regex)));
+    PyObject_SetAttrString(m, "get_replace_regex",
+                           PyLong_FromVoidPtr((void*)(&get_replace_regex)));
     // Only uses C which cannot throw exceptions, so typical exception
     // handling is not required
     PyObject_SetAttrString(
