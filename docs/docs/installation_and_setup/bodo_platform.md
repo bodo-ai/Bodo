@@ -464,6 +464,13 @@ does not support notebook files larger than 16MB in size.
 To reduce file size don't print large sections of text and clear output
 cells by clicking `Edit` > `Clear All Outputs` in the notebook interface.
 
+### Account Locked Error
+
+![Account-Locked-Error](../platform2-screenshots/account_locked.png#center)
+
+When you login to the platform, if you get an account locked error with message `User is locked out. To unlock user, please contact your administrators`,
+this means that your account has been dormant (no login in more than 90 days). Please [contact us](https://bodo.ai/contact/){target="blank"} to unlock your account.
+
 For AWS troubleshooting, refer to this [guide](bodo_platform_aws.md).
 
 For Azure troubleshooting, refer to this [guide](bodo_platform_azure.md).
