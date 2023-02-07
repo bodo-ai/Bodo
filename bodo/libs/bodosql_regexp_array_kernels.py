@@ -9,8 +9,10 @@ import numba
 from numba.core import types
 
 import bodo
+from bodo.libs.array import get_replace_regex
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.libs.re_ext import init_const_pattern
+from bodo.utils.typing import get_overload_const_int, is_overload_constant_int
 
 
 def posix_to_re(pattern):
@@ -477,6 +479,33 @@ def regexp_replace_util(arr, pattern, replacement, position, occurrence, flags):
     converted_pattern = posix_to_re(pattern_str)
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
     flag_bitvector = make_flag_bitvector(flag_str)
+    # Take an optimized path if the user has only provided the array, pattern,
+    # and replacement and its possible to handle the regex entirely in C++.
+    # TODO: We should be able to support additional arguments inside position
+    # and occurrence without being constant.
+    if (
+        bodo.utils.utils.is_array_typ(arr, True)
+        and not bodo.hiframes.series_str_impl.is_regex_unsupported(converted_pattern)
+        and (
+            not bodo.utils.utils.is_array_typ(replacement, True)
+            and not is_overload_none(replacement)
+        )
+        and is_overload_constant_int(position)
+        and get_overload_const_int(position) == 1
+        and is_overload_constant_int(occurrence)
+        and get_overload_const_int(occurrence) == 0
+        and flag_bitvector == 0
+    ):
+        # Optimized implementation just calls into C++ and has it handle the entire array.
+        def impl(
+            arr, pattern, replacement, position, occurrence, flags
+        ):  # pragma: no cover
+            utf8_pattern = bodo.libs.str_ext.unicode_to_utf8(pattern)
+            utf8_replacement = bodo.libs.str_ext.unicode_to_utf8(replacement)
+            out_arr = get_replace_regex(arr, utf8_pattern, utf8_replacement)
+            return out_arr
+
+        return impl
 
     prefix_code = "\n"
     scalar_text = ""
