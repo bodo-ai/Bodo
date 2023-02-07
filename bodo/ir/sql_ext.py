@@ -295,10 +295,8 @@ def _get_sql_column_str(p0, converted_colnames, filter_map):  # pragma: no cover
                 else p0[2]
             )
             return f"coalesce({col_name}, {scalar_val})"
-        elif sql_op == "lower":
-            return f"lower({col_name})"
-        elif sql_op == "upper":
-            return f"upper({col_name})"
+        elif sql_op in ("lower", "upper", "length"):
+            return f"{sql_op}({col_name})"
         else:
             raise BodoError(
                 f"SQL Function {col_name} is not supported for filter pushdown!"
