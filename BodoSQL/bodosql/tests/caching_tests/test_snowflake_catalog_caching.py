@@ -12,10 +12,10 @@ import bodosql
 from bodo.tests.caching_tests.caching_tests_common import (  # noqa
     fn_distribution,
 )
-from bodo.tests.utils import check_caching, pytest_snowflake
+from bodo.tests.utils import check_caching, pytest_mark_snowflake
 
 
-@pytest_snowflake
+@pytest_mark_snowflake
 def test_snowflake_catalog_caching(fn_distribution, is_cached):
     def impl(bc):
         return bc.sql("SELECT r_name FROM TPCH_SF1.REGION ORDER BY r_name")
