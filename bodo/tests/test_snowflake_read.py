@@ -613,6 +613,22 @@ def test_snowflake_bodo_read_as_dict(memory_leak_check):
         ].head(100)
         return df1
 
+    @bodo.jit
+    def impl2(conn):
+        df2 = pd.read_sql(
+            "LINEITEM_100_VIEW",
+            conn,
+            _bodo_read_date_as_dt64=True,
+            _bodo_is_table_input=True,
+        )
+        df1 = df2.loc[
+            :,
+            [
+                "l_shipmode",
+            ],
+        ].head(100)
+        return df1
+
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1000"
     conn = get_snowflake_connection_string(db, schema)
@@ -622,6 +638,18 @@ def test_snowflake_bodo_read_as_dict(memory_leak_check):
     with set_logging_stream(logger, 2):
         impl(conn)
         check_logger_msg(
+            stream, "Using Snowflake system sampling for dictionary-encoding detection"
+        )
+        check_logger_msg(stream, "Columns ['l_shipmode'] using dictionary encoding")
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        impl2(conn)
+        check_logger_no_msg(
             stream, "Using Snowflake system sampling for dictionary-encoding detection"
         )
         check_logger_msg(stream, "Columns ['l_shipmode'] using dictionary encoding")

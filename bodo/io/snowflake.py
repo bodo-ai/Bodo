@@ -544,7 +544,8 @@ def get_schema_from_metadata(
 
 
 def _get_table_row_count(cursor, table_name):
-    """get total number of rows for a Snowflake table
+    """get total number of rows for a Snowflake table. Returns None if input is not a
+    table or probe query failed.
 
     Args:
         cursor (SnowflakeCursor): Snowflake connector connection cursor object
@@ -553,6 +554,21 @@ def _get_table_row_count(cursor, table_name):
     Returns:
         optional(int): number of rows or None if failed
     """
+
+    # make sure table_name is an actual table and not a view since system sampling
+    # doesn't work on views
+    check_res = execute_query(
+        cursor,
+        f"show tables like '{table_name}'",
+        timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT,
+    )
+    if check_res is None:
+        return None
+
+    # empty output means view
+    if not check_res.fetchall():
+        return None
+
     count_res = execute_query(
         cursor,
         f"select count(*) from {table_name}",
