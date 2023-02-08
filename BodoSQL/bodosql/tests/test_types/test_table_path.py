@@ -20,7 +20,7 @@ from bodo.tests.utils import (
     TypeInferenceTestPipeline,
     check_func,
     get_snowflake_connection_string,
-    pytest_snowflake,
+    pytest_mark_snowflake,
 )
 
 
@@ -152,7 +152,7 @@ def test_table_path_pq_bodosqlContext_jit(
     check_func(impl, (filename,), py_output=py_output)
 
 
-@pytest_snowflake
+@pytest_mark_snowflake
 def test_table_path_sql_bodosqlContext_python(memory_leak_check):
     def impl(table_name, conn_str):
         bc = bodosql.BodoSQLContext(
@@ -185,7 +185,7 @@ def test_table_path_sql_bodosqlContext_python(memory_leak_check):
     )
 
 
-@pytest_snowflake
+@pytest_mark_snowflake
 def test_table_path_sql_bodosqlContext_jit(memory_leak_check):
     def impl(table_name):
         bc = bodosql.BodoSQLContext(
