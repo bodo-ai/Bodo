@@ -8,7 +8,7 @@ import bodo
 from bodo.tests.utils import (
     check_caching,
     get_snowflake_connection_string,
-    pytest_snowflake,
+    pytest_mark_snowflake,
     sql_user_pass_and_hostname,
 )
 
@@ -180,7 +180,7 @@ def test_cache_sql_hardcoded_aws(fn_distribution, is_cached, memory_leak_check):
     check_caching(test_impl_hardcoded, (), is_cached, fn_distribution)
 
 
-@pytest_snowflake
+@pytest_mark_snowflake
 def test_cache_sql_snowflake(fn_distribution, is_cached, memory_leak_check):
     """
     Tests that caching works on Snowflake queries

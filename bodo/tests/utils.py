@@ -2361,11 +2361,27 @@ def nanoseconds_to_other_time_units(val, unit_str):
     else:
         return val
 
+def compose_decos(decos):
+    def composition(func):
+        for deco in reversed(decos):
+            func = deco(func)
+        return func
+    return composition
 
-pytest_snowflake = pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
-)(
+# This is for use as a decorator for a single test function.
+# (@pytest_mark_snowflake)
+pytest_mark_snowflake = compose_decos((
+    pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"),
     pytest.mark.flaky(
         rerun_filter=lambda err, *args: "HTTP 503: Service Unavailable" in str(err)
     )
-)
+))
+
+# This is for marking an entire test file
+# (pytestmark = pytest_snowflake)
+pytest_snowflake = [
+    pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"),
+    pytest.mark.flaky(
+        rerun_filter=lambda err, *args: "HTTP 503: Service Unavailable" in str(err)
+    )
+]
