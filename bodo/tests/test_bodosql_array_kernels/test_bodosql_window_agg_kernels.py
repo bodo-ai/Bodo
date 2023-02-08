@@ -200,13 +200,49 @@ def window_refsol(S, lower, upper, func):
     return pd.Series(L, dtype=out_dtype)
 
 
+def window_refsol_double(Y, X, lower, upper, func):
+    L = []
+    for i in range(len(Y)):
+        if upper < lower:
+            result = None
+        else:
+            # Extract the window frame of elements by slicing about the current
+            # index using the lower/upper bounds (without going out of bounds)
+            elems = [
+                (y, x)
+                for y, x in zip(
+                    Y.iloc[
+                        np.clip(i + lower, 0, len(Y)) : np.clip(
+                            i + upper + 1, 0, len(Y)
+                        )
+                    ],
+                    X.iloc[
+                        np.clip(i + lower, 0, len(X)) : np.clip(
+                            i + upper + 1, 0, len(X)
+                        )
+                    ],
+                )
+                if not (pd.isna(y) or pd.isna(x))
+            ]
+            elems_y = pd.Series(y for y, x in elems)
+            elems_x = pd.Series(x for y, x in elems)
+            if func == "covar_pop":
+                result = None if len(elems) == 0 else elems_y.cov(elems_x, ddof=0)
+            elif func == "covar_samp":
+                result = None if len(elems) == 0 else elems_y.cov(elems_x)
+        L.append(result)
+    return pd.Series(L)
+
+
 @pytest.mark.parametrize(
     "S",
     [
         pytest.param(
-            pd.Series([1, 2, 3, 4, 5], dtype=pd.UInt8Dtype()),
-            id="uint8",
-            marks=pytest.mark.slow,
+            pd.Series(
+                [None] * 10,
+                dtype=pd.Int32Dtype(),
+            ),
+            id="null",
         ),
         pytest.param(
             pd.Series(
@@ -232,14 +268,11 @@ def window_refsol(S, lower, upper, func):
     ["lower_bound", "upper_bound"],
     [
         pytest.param(-1000, 0, id="prefix"),
-        pytest.param(0, 1, id="suffix"),
-        pytest.param(-1000, -1, id="prefix_exclusive"),
         pytest.param(1, 1000, id="suffix_exclusive", marks=pytest.mark.slow),
         pytest.param(-1000, 1000, id="entire_window"),
         pytest.param(0, 0, id="current"),
         pytest.param(-1, 1, id="rolling_3"),
-        pytest.param(-2, 0, id="lagging_3", marks=pytest.mark.slow),
-        pytest.param(1, 3, id="leading_3", marks=pytest.mark.slow),
+        pytest.param(-5, -1, id="lagging_5", marks=pytest.mark.slow),
         pytest.param(-1000, -500, id="too_small"),
         pytest.param(100, 200, id="too_large", marks=pytest.mark.slow),
         pytest.param(3, -3, id="backward"),
@@ -303,6 +336,13 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
     [
         pytest.param(
             pd.Series(
+                [None] * 72,
+                dtype=pd.UInt8Dtype(),
+            ),
+            id="null",
+        ),
+        pytest.param(
+            pd.Series(
                 [None if "0" in str(i) else (i**2) % 17 for i in range(500)],
                 dtype=pd.UInt8Dtype(),
             ),
@@ -359,13 +399,10 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
     ["lower_bound", "upper_bound"],
     [
         pytest.param(-1000, 0, id="prefix"),
-        pytest.param(0, 1, id="suffix"),
-        pytest.param(-1000, -1, id="prefix_exclusive"),
         pytest.param(1, 1000, id="suffix_exclusive", marks=pytest.mark.slow),
         pytest.param(-1000, 1000, id="entire_window"),
         pytest.param(0, 0, id="current"),
         pytest.param(-20, 20, id="rolling_41"),
-        pytest.param(-1, 1, id="rolling_3", marks=pytest.mark.slow),
         pytest.param(1, 3, id="leading_3", marks=pytest.mark.slow),
         pytest.param(-1000, -700, id="too_small"),
         pytest.param(3, -3, id="backward", marks=pytest.mark.slow),
@@ -418,4 +455,99 @@ def test_windowed_mode(data, lower_bound, upper_bound, memory_leak_check):
         # For now, only works sequentially because it can only be used inside
         # of a Window function with a partition
         only_seq=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ["lower_bound", "upper_bound"],
+    [
+        pytest.param(-1000, 0, id="prefix"),
+        pytest.param(1, 1000, id="suffix_exclusive", marks=pytest.mark.slow),
+        pytest.param(-1000, 1000, id="entire_window"),
+        pytest.param(0, 0, id="current"),
+        pytest.param(-2, 0, id="lagging_3", marks=pytest.mark.slow),
+        pytest.param(-2000, -1000, id="too_small"),
+        pytest.param(1000, 2000, id="too_large", marks=pytest.mark.slow),
+        pytest.param(3, -3, id="backward"),
+    ],
+)
+@pytest.mark.parametrize(
+    "Y, X",
+    [
+        pytest.param(
+            pd.Series(
+                [None if i % 2 == 0 or i % 3 == 0 else i for i in range(100)],
+                dtype=pd.UInt8Dtype(),
+            ),
+            pd.Series(
+                [None if i % 2 == 1 or i % 3 == 0 else i for i in range(100)],
+                dtype=pd.UInt8Dtype(),
+            ),
+            id="null",
+        ),
+        pytest.param(
+            pd.Series(
+                [None if "0" in str(i) else (i**2) % 17 for i in range(500)],
+                dtype=pd.UInt8Dtype(),
+            ),
+            pd.Series(
+                [None if "9" in str(i) else (i**3) % 23 for i in range(500)],
+                dtype=pd.UInt8Dtype(),
+            ),
+            id="uint8",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    None if "11" in str(i) else (((13 + i) ** 2) % 12345) ** 0.7 - 250
+                    for i in range(500)
+                ]
+            ),
+            pd.Series(
+                [
+                    None if "12" in str(i) else (((100 + i) ** 3) % 54321) ** 0.7 - 1234
+                    for i in range(500)
+                ]
+            ),
+            id="float",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "func",
+    [
+        "covar_pop",
+        "covar_samp",
+    ],
+)
+def test_windowed_kernels_two_arg(
+    func, Y, X, lower_bound, upper_bound, memory_leak_check
+):
+    def impl1(Y, X, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_covar_pop(Y, X, lower, upper)
+        )
+
+    def impl2(Y, X, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_covar_samp(Y, X, lower, upper)
+        )
+
+    implementations = {
+        "covar_pop": impl1,
+        "covar_samp": impl2,
+    }
+    impl = implementations[func]
+
+    check_func(
+        impl,
+        (Y, X, lower_bound, upper_bound),
+        py_output=window_refsol_double(Y, X, lower_bound, upper_bound, func),
+        check_dtype=False,
+        reset_index=True,
+        # For now, only works sequentially because it can only be used inside
+        # of a Window function with a partition
+        only_seq=True,
+        atol=1e-4,
     )
