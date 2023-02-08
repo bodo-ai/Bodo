@@ -1201,12 +1201,13 @@ def vectorized_sol(args, scalar_fn, dtype, manual_coercion=False):
 
 def gen_windowed(
     calculate_block,
-    constant_block,
     out_dtype,
+    constant_block=None,
     setup_block=None,
     enter_block=None,
     exit_block=None,
     empty_block=None,
+    num_args=1,
 ):
     """Creates an impl for a window frame function that accumulates some value
     as elements enter and exit a window that starts/ends some number of indices
@@ -1218,12 +1219,12 @@ def gen_windowed(
     window functions currently only work on partitioned data.
 
     Args:
-        constant_block (string): what should happen if the output value will
-        always be the same due to the window size being so big. If None,
-        this means that there is no such case.
         calculate_block (string): how should the current array value be
         calculated in terms of the up-to-date accumulators
         out_dtype (dtype): what is the dtype of the output data.
+        constant_block (optional): what should happen if the output value will
+        always be the same due to the window size being so big. If None,
+        this means that there is no such case.
         setup_block (string, optional): what should happen to initialize the
         accumulators
         enter_block (string, optional): what should happen when a non-null
@@ -1232,6 +1233,9 @@ def gen_windowed(
         element exits the window
         empty_block (string, optional): what should happen if the entire window
         frame is null. If None, calls setna. Defaults to None.
+        num_args (integer, optional): how many arguments the function takes in.
+        The default is 1. Only 1 or 2 arguments supported. If 1, the input is
+        called S. If 2, the inputs are called (Y, X)
 
     Returns:
         function: a window function that takes in a Series, lower bound,
@@ -1240,13 +1244,17 @@ def gen_windowed(
         starting from each index.
 
     Usage notes:
-        - When writing enter_block/exit_block, the variable "elem" is used to
-          denote the current value entering/exiting the array. You may assume
-          that this value is not null.
+        - When writing enter_block/exit_block/calculate_block, the variable "elemi" is used to
+          denote the current value entering/exiting the ith array. You may assume
+          that this value is not null. E.g. if there are 2 inputs, the values
+          are called elem0 and elem1.
         - The variable "in_window "is used to denote the length of the window
           frame that is not out of bounds, excluding nulls.
         - When writing calculate_block, store the final answer as "res[i] = ..."
         - When writing constant_block, store the value answer as "constant_value = ..."
+        - The original variables can be acccessed as S (if 1 argument), or Y and X
+          (if 2 arguments).
+        - After being coerced to arrays, they can be accessed as arr0, arr1, etc.
 
     The generated code will look as follows:
 
@@ -1277,7 +1285,7 @@ def gen_windowed(
             for i in range(min(max(0, exiting), n), min(max(0, entering + 1), n)):
                 if not bodo.libs.array_kernels.isna(arr, i):
                     in_window += 1
-                    elem = arr[i]
+                    elem0 = arr0[i]
                     << INSERT ENTER_BLOCK HERE >>
             # Loop over each entry and update the number of elements
             # in the window & the current sum
@@ -1287,13 +1295,14 @@ def gen_windowed(
                 if in_window == 0:
                     << INSERT EMPTY_BLOCK HERE >>
                 else:
+                    elem0 = arr0[i]
                     << INSERT CALCULATE_BLOCK HERE >>
                 # If the old end of the window is in bounds and non-null,
                 # remove it
                 if 0 <= exiting < n:
                     if not bodo.libs.array_kernels.isna(arr, exiting):
                     in_window -= 1
-                    elem = arr[exiting]
+                    elem0 = arr0[exiting]
                     << INSERT EXIT_BLOCK HERE >>
                 # Move the start/end of the window forward 1 step
                 exiting += 1
@@ -1303,117 +1312,103 @@ def gen_windowed(
                 if 0 <= entering < n:
                     if not bodo.libs.array_kernels.isna(arr, entering):
                     in_window += 1
-                    elem = arr[entering]
+                    elem0 = arr0[entering]
                     << INSERT ENTER_BLOCK HERE >>
         return res
     """
-    # Calculate the indentation of the calculate_block so that it can be removed
-    calculate_lines = calculate_block.splitlines()
-    calculate_indentation = len(calculate_lines[0]) - len(calculate_lines[0].lstrip())
-
-    if constant_block != None:
-        # Calculate the indentation of the constant_block so that it can be removed
-        constant_lines = constant_block.splitlines()
-        constant_indentation = len(constant_lines[0]) - len(constant_lines[0].lstrip())
-
-    if setup_block != None:
-        # Calculate the indentation of the setup_block so that it can be removed
-        setup_lines = setup_block.splitlines()
-        setup_indentation = len(setup_lines[0]) - len(setup_lines[0].lstrip())
-
-    if enter_block != None:
-        # Calculate the indentation of the enter_block so that it can be removed
-        enter_lines = enter_block.splitlines()
-        enter_indentation = len(enter_lines[0]) - len(enter_lines[0].lstrip())
-
-    if exit_block != None:
-        # Calculate the indentation of the exit_block so that it can be removed
-        exit_lines = exit_block.splitlines()
-        exit_indentation = len(exit_lines[0]) - len(exit_lines[0].lstrip())
-
-    # Calculate the indentation of the empty_block so that it can be removed
-    if empty_block == None:
+    if empty_block is None:
         empty_block = "bodo.libs.array_kernels.setna(res, i)"
-    empty_lines = empty_block.splitlines()
-    empty_indentation = len(empty_lines[0]) - len(empty_lines[0].lstrip())
 
-    func_text = "def impl(S, lower_bound, upper_bound):\n"
-    func_text += "   n = len(S)\n"
-    func_text += "   arr = bodo.utils.conversion.coerce_to_array(S)\n"
+    if num_args not in (1, 2):
+        raise_bodo_error(
+            f"Unsupported numbber of arguments for sliding window kernel: {num_args}"
+        )
+    if num_args == 1:
+        var_names = ["S"]
+    else:
+        var_names = ["Y", "X"]
+
+    # Define a function that takes in an index name and generates code to detect
+    # whether any of the input arrays at that index is null
+    any_arr_is_null = lambda idx: " or ".join(
+        [f"bodo.libs.array_kernels.isna(arr{i}, {idx})" for i in range(num_args)]
+    )
+
+    # Declare the function and set up the variables based on how many arguments there are
+    func_text = f"def impl({', '.join(var_names)}, lower_bound, upper_bound):\n"
+    func_text += f"   n = len({var_names[0]})\n"
+    for i in range(num_args):
+        func_text += (
+            f"   arr{i} = bodo.utils.conversion.coerce_to_array({var_names[i]})\n"
+        )
+
+    # Initialize the output array
     func_text += "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
+
+    # If the bounds are invalid, fill everything with null
     func_text += "   if upper_bound < lower_bound:\n"
     func_text += "      for i in range(n):\n"
     func_text += "         bodo.libs.array_kernels.setna(res, i)\n"
-    if constant_block != None:
+
+    # If a constant block is provided, check to see if the bounds will the entire
+    # window to have the same value
+    if constant_block is not None:
         func_text += "   elif lower_bound <= -n+1 and n-1 <= upper_bound:\n"
-        func_text += "      if S.count() == 0:\n"
-        func_text += "         for i in range(n):\n"
-        func_text += (
-            "\n".join([" " * 12 + line[empty_indentation:] for line in empty_lines])
-            + "\n"
-        )
-        func_text += "      else:\n"
-        func_text += (
-            "\n".join(
-                [" " * 9 + line[constant_indentation:] for line in constant_lines]
-            )
-            + "\n"
-        )
-        func_text += "         for i in range(n):\n"
-        func_text += "            res[i] = constant_value\n"
+        if empty_block is not None:
+            func_text += "      has_non_null = False\n"
+            func_text += "      for i in range(n):\n"
+            func_text += f"         if not ({any_arr_is_null('i')}):\n"
+            func_text += "            has_non_null = True\n"
+            func_text += "            break\n"
+            func_text += "      if not has_non_null:\n"
+            func_text += "         for i in range(n):\n"
+            func_text += indent_block(empty_block, 12)
+            func_text += "      else:\n"
+        func_text += indent_block(constant_block, 9)
+        func_text += "         res[:] = constant_value\n"
+
+    # Otherwise, set up the sliding window calculation
     func_text += "   else:\n"
     func_text += "      exiting = lower_bound\n"
     func_text += "      entering = upper_bound\n"
     func_text += "      in_window = 0\n"
-    if setup_block != None:
-        func_text += (
-            "\n".join([" " * 6 + line[setup_indentation:] for line in setup_lines])
-            + "\n"
-        )
+    func_text += indent_block(setup_block, 6)
     func_text += (
         "      for i in range(min(max(0, exiting), n), min(max(0, entering + 1), n)):\n"
     )
-    func_text += "         if not bodo.libs.array_kernels.isna(arr, i):\n"
+    func_text += f"         if not ({any_arr_is_null('i')}):\n"
     func_text += "            in_window += 1\n"
-    if enter_block != None:
+    if enter_block is not None:
         if "elem" in enter_block:
-            func_text += "            elem = arr[i]\n"
-        func_text += (
-            "\n".join([" " * 12 + line[enter_indentation:] for line in enter_lines])
-            + "\n"
-        )
+            for i in range(num_args):
+                func_text += f"            elem{i} = arr{i}[i]\n"
+        func_text += indent_block(enter_block, 12)
     func_text += "      for i in range(n):\n"
     func_text += "         if in_window == 0:\n"
-    func_text += (
-        "\n".join([" " * 12 + line[empty_indentation:] for line in empty_lines]) + "\n"
-    )
+    func_text += indent_block(empty_block, 12)
     func_text += "         else:\n"
-    func_text += (
-        "\n".join([" " * 12 + line[calculate_indentation:] for line in calculate_lines])
-        + "\n"
-    )
+    if "elem" in calculate_block:
+        for i in range(num_args):
+            func_text += f"            elem{i} = arr{i}[i]\n"
+    func_text += indent_block(calculate_block, 12)
     func_text += "         if 0 <= exiting < n:\n"
-    func_text += "            if not bodo.libs.array_kernels.isna(arr, exiting):\n"
+    func_text += f"            if not ({any_arr_is_null('exiting')}):\n"
     func_text += "               in_window -= 1\n"
-    if exit_block != None:
+    if exit_block is not None:
         if "elem" in exit_block:
-            func_text += "               elem = arr[exiting]\n"
-        func_text += (
-            "\n".join([" " * 15 + line[exit_indentation:] for line in exit_lines])
-            + "\n"
-        )
+            for i in range(num_args):
+                func_text += f"               elem{i} = arr{i}[exiting]\n"
+        func_text += indent_block(exit_block, 15)
     func_text += "         exiting += 1\n"
     func_text += "         entering += 1\n"
     func_text += "         if 0 <= entering < n:\n"
-    func_text += "            if not bodo.libs.array_kernels.isna(arr, entering):\n"
+    func_text += f"            if not ({any_arr_is_null('entering')}):\n"
     func_text += "               in_window += 1\n"
-    if enter_block != None:
+    if enter_block is not None:
         if "elem" in enter_block:
-            func_text += "               elem = arr[entering]\n"
-        func_text += (
-            "\n".join([" " * 15 + line[enter_indentation:] for line in enter_lines])
-            + "\n"
-        )
+            for i in range(num_args):
+                func_text += f"               elem{i} = arr{i}[entering]\n"
+        func_text += indent_block(enter_block, 15)
     func_text += "   return res"
 
     loc_vars = {}

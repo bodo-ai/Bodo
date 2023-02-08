@@ -139,20 +139,23 @@ def windowed_sum(S, lower_bound, upper_bound):
     calculate_block = "res[i] = total"
     constant_block = "constant_value = S.sum()"
     setup_block = "total = 0"
-    enter_block = "total += elem"
-    exit_block = "total -= elem"
+    enter_block = "total += elem0"
+    exit_block = "total -= elem0"
 
     if isinstance(S.dtype, types.Integer):
         out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
     elif bodo.libs.float_arr_ext._use_nullable_float:
         out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
     else:
-        out_dtype = types.Array(bodo.float64, 1, "C")
+        if bodo.libs.float_arr_ext._use_nullable_float:
+            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+        else:
+            out_dtype = types.Array(bodo.float64, 1, "C")
 
     return gen_windowed(
         calculate_block,
-        constant_block,
         out_dtype,
+        constant_block=constant_block,
         setup_block=setup_block,
         enter_block=enter_block,
         exit_block=exit_block,
@@ -171,8 +174,8 @@ def windowed_count(S, lower_bound, upper_bound):
 
     return gen_windowed(
         calculate_block,
-        constant_block,
         out_dtype,
+        constant_block=constant_block,
         empty_block=empty_block,
     )
 
@@ -185,15 +188,18 @@ def windowed_avg(S, lower_bound, upper_bound):
 
     calculate_block = "res[i] = total / in_window"
     constant_block = "constant_value = S.mean()"
-    out_dtype = types.Array(bodo.float64, 1, "C")
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    else:
+        out_dtype = types.Array(bodo.float64, 1, "C")
     setup_block = "total = 0"
-    enter_block = "total += elem"
-    exit_block = "total -= elem"
+    enter_block = "total += elem0"
+    exit_block = "total -= elem0"
 
     return gen_windowed(
         calculate_block,
-        constant_block,
         out_dtype,
+        constant_block=constant_block,
         setup_block=setup_block,
         enter_block=enter_block,
         exit_block=exit_block,
@@ -206,17 +212,20 @@ def windowed_median(S, lower_bound, upper_bound):
     if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
         raise_bodo_error("Input must be an array type")
 
-    calculate_block = "res[i] = np.median(arr2)"
+    calculate_block = "res[i] = np.median(vals)"
     constant_block = "constant_value = S.median()"
-    out_dtype = types.Array(bodo.float64, 1, "C")
-    setup_block = "arr2 = np.zeros(0, dtype=np.float64)"
-    enter_block = "arr2 = np.append(arr2, elem)"
-    exit_block = "arr2 = np.delete(arr2, np.argwhere(arr2 == elem)[0])"
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    else:
+        out_dtype = types.Array(bodo.float64, 1, "C")
+    setup_block = "vals = np.zeros(0, dtype=np.float64)"
+    enter_block = "vals = np.append(vals, elem0)"
+    exit_block = "vals = np.delete(vals, np.argwhere(vals == elem0)[0])"
 
     return gen_windowed(
         calculate_block,
-        constant_block,
         out_dtype,
+        constant_block=constant_block,
         setup_block=setup_block,
         enter_block=enter_block,
         exit_block=exit_block,
@@ -237,19 +246,19 @@ def windowed_mode(S, lower_bound, upper_bound):
     calculate_block += "   if counts[key] > bestCount:\n"
     calculate_block += "      bestVal, bestCount = key, counts[key]\n"
     calculate_block += "res[i] = bestVal"
-    constant_block = "counts = {arr[0]: 0}\n"
-    constant_block += "for i in range(len(S)):\n"
-    constant_block += "   if not bodo.libs.array_kernels.isna(arr, i):\n"
-    constant_block += "      counts[arr[i]] = counts.get(arr[i], 0) + 1\n"
+    constant_block = "counts = {arr0[0]: 0}\n"
+    constant_block += "for i in range(len(arr0)):\n"
+    constant_block += "   if not bodo.libs.array_kernels.isna(arr0, i):\n"
+    constant_block += "      counts[arr0[i]] = counts.get(arr0[i], 0) + 1\n"
     constant_block += calculate_block.replace("res[i]", "constant_value")
-    setup_block = "counts = {arr[0]: 0}"
-    enter_block = "counts[elem] = counts.get(elem, 0) + 1"
-    exit_block = "counts[elem] = counts.get(elem, 0) - 1"
+    setup_block = "counts = {arr0[0]: 0}"
+    enter_block = "counts[elem0] = counts.get(elem0, 0) + 1"
+    exit_block = "counts[elem0] = counts.get(elem0, 0) - 1"
 
     return gen_windowed(
         calculate_block,
-        constant_block,
         out_dtype,
+        constant_block=constant_block,
         setup_block=setup_block,
         enter_block=enter_block,
         exit_block=exit_block,
@@ -262,21 +271,106 @@ def windowed_ratio_to_report(S, lower_bound, upper_bound):
     if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
         raise_bodo_error("Input must be an array type")
 
-    calculate_block = "if total == 0 or bodo.libs.array_kernels.isna(arr, i):\n"
+    calculate_block = "if total == 0 or bodo.libs.array_kernels.isna(arr0, i):\n"
     calculate_block += "   bodo.libs.array_kernels.setna(res, i)\n"
     calculate_block += "else:\n"
-    calculate_block += "   res[i] = arr[i] / total"
-    constant_block = None
-    out_dtype = types.Array(bodo.float64, 1, "C")
+    calculate_block += "   res[i] = elem0 / total"
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    else:
+        out_dtype = types.Array(bodo.float64, 1, "C")
     setup_block = "total = 0"
-    enter_block = "total += elem"
-    exit_block = "total -= elem"
+    enter_block = "total += elem0"
+    exit_block = "total -= elem0"
 
     return gen_windowed(
         calculate_block,
-        constant_block,
         out_dtype,
         setup_block=setup_block,
         enter_block=enter_block,
         exit_block=exit_block,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def windowed_covar_pop(Y, X, lower_bound, upper_bound):
+    verify_int_float_arg(Y, "covar_pop", "Y")
+    verify_int_float_arg(X, "covar_pop", "X")
+    if not (
+        bodo.utils.utils.is_array_typ(Y, True)
+        and bodo.utils.utils.is_array_typ(X, True)
+    ):  # pragma: no cover
+        raise_bodo_error("Input must be an array type")
+
+    calculate_block = "if in_window == 0:\n"
+    calculate_block += "   bodo.libs.array_kernels.setna(res, i)\n"
+    calculate_block += "else:\n"
+    calculate_block += (
+        "   res[i] = (total_xy - (total_x * total_y) / in_window) / in_window"
+    )
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    else:
+        out_dtype = types.Array(bodo.float64, 1, "C")
+    setup_block = "total_x = 0\n"
+    setup_block += "total_y = 0\n"
+    setup_block += "total_xy = 0"
+    enter_block = "total_y += elem0\n"
+    enter_block += "total_x += elem1\n"
+    enter_block += "total_xy += elem0 * elem1\n"
+    exit_block = "total_y -= elem0\n"
+    exit_block += "total_x -= elem1\n"
+    exit_block += "total_xy -= elem0 * elem1\n"
+
+    return gen_windowed(
+        calculate_block,
+        out_dtype,
+        setup_block=setup_block,
+        enter_block=enter_block,
+        exit_block=exit_block,
+        num_args=2,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def windowed_covar_samp(Y, X, lower_bound, upper_bound):
+    verify_int_float_arg(Y, "covar_samp", "Y")
+    verify_int_float_arg(X, "covar_samp", "X")
+    if not (
+        bodo.utils.utils.is_array_typ(Y, True)
+        and bodo.utils.utils.is_array_typ(X, True)
+    ):  # pragma: no cover
+        raise_bodo_error("Input must be an array type")
+
+    calculate_block = "if in_window <= 1:\n"
+    calculate_block += "   bodo.libs.array_kernels.setna(res, i)\n"
+    calculate_block += "else:\n"
+    calculate_block += (
+        "   res[i] = (total_xy - (total_x * total_y) / in_window) / (in_window - 1)\n"
+    )
+
+    setup_block = "total_x = 0\n"
+    setup_block += "total_y = 0\n"
+    setup_block += "total_xy = 0"
+
+    enter_block = "total_y += elem0\n"
+    enter_block += "total_x += elem1\n"
+    enter_block += "total_xy += elem0 * elem1\n"
+
+    exit_block = "total_y -= elem0\n"
+    exit_block += "total_x -= elem1\n"
+    exit_block += "total_xy -= elem0 * elem1\n"
+
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    else:
+        out_dtype = types.Array(bodo.float64, 1, "C")
+
+    return gen_windowed(
+        calculate_block,
+        out_dtype,
+        setup_block=setup_block,
+        enter_block=enter_block,
+        exit_block=exit_block,
+        num_args=2,
     )

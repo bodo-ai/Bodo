@@ -2568,7 +2568,6 @@ Currently BodoSQL supports the following Window functions:
 #### COUNT
 -   `COUNT(*)`
 
-    Compute the number of entries in a window.
     Compute the number of entries in a window, including `NULL`.
 
 #### SUM
@@ -2576,14 +2575,12 @@ Currently BodoSQL supports the following Window functions:
 
     Compute the sum over the window or `NULL` if the window is
     empty.
-    Compute the sum of non-null entries in the window.
 
 #### AVG
 -   `AVG(COLUMN_EXPRESSION)`
 
     Compute the average over the window or `NULL` if the window
     is empty.
-    Compute the average over the window.
 
 
 #### STDDEV
@@ -2591,56 +2588,63 @@ Currently BodoSQL supports the following Window functions:
 
     Compute the standard deviation for a sample over the
     window or `NULL` if the window is empty.
-    Compute the standard deviation for a sample over the window.
 
 #### STDDEV_POP
 -   `STDDEV_POP(COLUMN_EXPRESSION)`
 
     Compute the standard deviation for a population over the
     window or `NULL` if the window is empty.
-    Compute the standard deviation for a population over the window.
 
 #### VARIANCE
 -   `VARIANCE(COLUMN_EXPRESSION)`
 
     Compute the variance for a sample over the window or `NULL`
     if the window is empty.
-    Compute the variance for a sample over the window.
 
 #### VAR_POP
 -   `VAR_POP(COLUMN_EXPRESSION)`
 
     Compute the variance for a population over the window or
     `NULL` if the window is empty.
-    Compute the variance for a population over the window.
+
+
+#### COVAR_SAMP
+-   `#!sql COVAR_SAMP(Y, X)`
+
+    Compute the sample covariance over the window of both inputs, or `NULL` if 
+    the window is empty.
+
+
+#### COVAR_POP
+-   `#!sql COVAR_POP(Y, X)`
+
+    Compute the population covariance over the window of both inputs, or `NULL` if 
+    the window is empty.
+
 
 #### MAX
 -   `MAX(COLUMN_EXPRESSION)`
 
-    Compute the maximum value over the window or NULL if the
+    Compute the maximum value over the window or `NULL` if the
     window is empty.
-    Compute the maximum value over the window.
 
 #### MIN
 -   `MIN(COLUMN_EXPRESSION)`
 
-    Compute the minimum value over the window or NULL if the
+    Compute the minimum value over the window or `NULL` if the
     window is empty.
-    Compute the minimum value over the window.
 
 #### COUNT
 
 -   `COUNT(COLUMN_EXPRESSION)`
 
-    Compute the number of non-NULL entries in a window.
-    Compute the number of non-NULL entries in a window, or zero if the window
+    Compute the number of non-`NULL` entries in a window, or zero if the window
     is empty.
 
 #### COUNT_IF
 
 -   `COUNT_IF(BOOLEAN_COLUMN_EXPRESSION)`
 
-    Compute the number of `true` entries in a boolean column.
     Compute the number of `true` entries in a boolean column, or zero if the window
     is empty.
 
@@ -2648,14 +2652,15 @@ Currently BodoSQL supports the following Window functions:
 #### MEDIAN
 -   `MEDIAN(COLUMN_EXPRESSION)`
 
-    Compute the median over the window.
+    Compute the median over the window, or `NULL` if the window is empty.
 
 
 #### MODE
 -   `MODE(COLUMN_EXPRESSION)`
 
-    Returns the most frequent element in the window. Note: In case of a tie,
-    BodoSQL will choose a value arbitrarily based on performance considerations.
+    Returns the most frequent element in the window, or `NULL` if the window is
+    empty. Note: In case of a tie, BodoSQL will choose a value arbitrarily based
+    on performance considerations.
 
 
 #### LEAD

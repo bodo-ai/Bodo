@@ -59,6 +59,44 @@ def test_numeric_window_functions(
     count_window_applies(pandas_code, window_frames[1], funcs)
 
 
+def test_two_arg_numeric_window_functions(
+    all_numeric_window_df,
+    window_frames,
+    spark_info,
+):
+    """Tests covariance functions with various combinations of window frames to
+    test correctness and fusion"""
+    combinations = [
+        ("COVAR_SAMP", "U8", "I64"),
+        ("COVAR_SAMP", "U8", "I64"),
+        ("COVAR_SAMP", "F64", "W3"),
+        ("COVAR_POP", "F64", "W3"),
+        ("COVAR_POP", "F64", "U8"),
+        ("COVAR_POP", "W3", "U8"),
+    ]
+    selects = []
+    for i in range(len(combinations)):
+        func, arg0, arg1 = combinations[i]
+        selects.append(
+            f"{func}({arg0}, {arg1}) OVER ({window_frames[0][i % len(window_frames[0])]}) AS c{i}"
+        )
+    query = f"SELECT W4, {', '.join(selects)} FROM table1"
+    pandas_code = check_query(
+        query,
+        all_numeric_window_df,
+        spark_info,
+        sort_output=True,
+        check_dtype=False,
+        check_names=False,
+        return_codegen=True,
+        only_jit_1DVar=True,
+    )["pandas_code"]
+
+    # Verify that fusion is working correctly. The term window_frames[1] refers
+    # to how many distinct groupby-apply calls are expected after fusion.
+    count_window_applies(pandas_code, window_frames[1], ["COVAR_SAMP", "COVAR_POP"])
+
+
 @pytest.mark.parametrize(
     "funcs",
     [

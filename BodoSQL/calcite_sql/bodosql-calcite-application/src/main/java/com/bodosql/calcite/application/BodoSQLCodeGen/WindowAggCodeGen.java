@@ -48,6 +48,9 @@ public class WindowAggCodeGen {
   // Which function names correspond to a kernel made with gen_windowed
   static List<String> windowOptimizedKernels = new ArrayList<String>();
 
+  // Same as windowOptimizedKernels but for 2-argument window functions
+  public static List<String> twoArgWindowOptimizedKernels = new ArrayList<String>();
+
   // A mapping of window function names to a single function that can be
   // used to directly compute the result of the window function of interest
   static HashMap<String, String> windowCodeExpressions = new HashMap<String, String>();
@@ -67,6 +70,10 @@ public class WindowAggCodeGen {
     windowOptimizedKernels.add("MODE");
     windowOptimizedKernels.add("RATIO_TO_REPORT");
 
+    // Window functions that have a two-argument sliding-window kernel
+    twoArgWindowOptimizedKernels.add("COVAR_SAMP");
+    twoArgWindowOptimizedKernels.add("COVAR_POP");
+
     // Window functions that have a dedicated kernel
     windowCodeExpressions.put("SUM", "windowed_sum");
     windowCodeExpressions.put("$SUM0", "windowed_sum");
@@ -75,6 +82,8 @@ public class WindowAggCodeGen {
     windowCodeExpressions.put("MEDIAN", "windowed_median");
     windowCodeExpressions.put("MODE", "windowed_mode");
     windowCodeExpressions.put("RATIO_TO_REPORT", "windowed_ratio_to_report");
+    windowCodeExpressions.put("COVAR_SAMP", "windowed_covar_samp");
+    windowCodeExpressions.put("COVAR_POP", "windowed_covar_pop");
     windowCodeExpressions.put("CONDITIONAL_CHANGE_EVENT", "change_event");
 
     // Window functions that are still implemented via taking slices in a loop
@@ -173,7 +182,7 @@ public class WindowAggCodeGen {
      *
      * argument_df = argument_df.lloc[:, ["AGG_OP_0", "AGG_OP_1", "ORIG_POSITION_COL", "ASC_COL_0"]]
      */
-    pruneColumns(funcText, argsListList, hasOrder, sortByCols);
+    pruneColumns(funcText, aggNames, argsListList, hasOrder, sortByCols);
 
     /* In the majority of cases (some exceptions like ROW NUMBER) we need to keep
      * track of the original index of the input dataframe. This is needed due to
@@ -439,18 +448,9 @@ public class WindowAggCodeGen {
           needsToRevertSort |= hasOrder;
           if (!windowCodeExpressions.containsKey(aggName)) {
             throw new BodoSQLCodegenException("Unrecognized window function: " + aggName);
-          } else if (argsList.size() != 1) {
-            throw new BodoSQLCodegenException(aggName + " requires exactly 1 input");
           }
           generateSimpleWindowFnCode(
-              funcText,
-              argsList,
-              windowCodeExpressions.get(aggName),
-              windowOptimizedKernels.contains(aggName),
-              lower,
-              upper,
-              colsToAddToOutputDf,
-              i);
+              funcText, argsList, aggName, lower, upper, colsToAddToOutputDf, i);
       }
     }
 
@@ -1170,8 +1170,8 @@ public class WindowAggCodeGen {
    *
    * @param funcText String buffer where the output closure's codegen is being stored
    * @param argsList List of all inputs to the current window function call
+   * @param fnName The name of the kernel. Must be in windowCodeExpressions.
    * @param kernelName What is the name of the kernel function
-   * @param is_window_optimized Is this a sliding-window kernel?
    * @param lowerBound String representation of the lower bound of the window frame
    * @param upperBound String representation of the upper bound of the window frame
    * @param arraysToSort List that the output array name should be added to
@@ -1180,18 +1180,25 @@ public class WindowAggCodeGen {
   private static void generateSimpleWindowFnCode(
       StringBuilder funcText,
       final List<WindowedAggregationArgument> argsList,
-      final String kernelName,
-      final Boolean is_window_optimized,
+      final String fnName,
       final String lowerBound,
       final String upperBound,
       final List<String> arraysToSort,
       final int i) {
 
-    assertWithErrMsg(argsList.size() == 1, kernelName.toUpperCase() + " requires 1 input");
-    assertWithErrMsg(
-        argsList.get(0).isDfCol(), kernelName.toUpperCase() + " requires a column input");
+    Boolean twoArgWindowOptimized = twoArgWindowOptimizedKernels.contains(fnName);
+    Boolean windowOptimized = twoArgWindowOptimized || windowOptimizedKernels.contains(fnName);
+    // This should be checked by the calling function
+    String kernelName = windowCodeExpressions.get(fnName);
 
-    String colName = argsList.get(0).getExprString();
+    if (twoArgWindowOptimized) {
+      if (argsList.size() != 2) {
+        throw new BodoSQLCodegenException(fnName + " requires 2 column inputs");
+      }
+    } else {
+      assertWithErrMsg(argsList.size() == 1, fnName + " requires 1 input");
+      assertWithErrMsg(argsList.get(0).isDfCol(), fnName + " requires a column input");
+    }
     String arrName = "arr" + String.valueOf(i);
 
     // Add the kernel call
@@ -1200,11 +1207,16 @@ public class WindowAggCodeGen {
         .append(arrName)
         .append(" = bodo.libs.bodosql_array_kernels.")
         .append(kernelName)
-        .append("(sorted_df[")
-        .append(makeQuoted(colName))
-        .append("]");
+        .append("(");
 
-    if (is_window_optimized) {
+    for (int j = 0; j < argsList.size(); j++) {
+      if (j != 0) {
+        funcText.append(", ");
+      }
+      funcText.append("sorted_df[").append(makeQuoted(argsList.get(j).getExprString())).append("]");
+    }
+
+    if (windowOptimized) {
       funcText.append(", ").append(lowerBound).append(", ").append(upperBound);
     }
 
@@ -1299,12 +1311,14 @@ public class WindowAggCodeGen {
    * Generates the code to prune the columnns of the input DataFrame
    *
    * @param funcText the string builder where we store the closure
+   * @param aggNames the list of function names
    * @param argsListList the list of arguments to each window function
    * @param hasOrder whether or not there is an ORDER BY clause
    * @param sortByCols the columns we need to sort by, as a string
    */
   public static void pruneColumns(
       final StringBuilder funcText,
+      final List<String> aggNames,
       final List<List<WindowedAggregationArgument>> argsListList,
       final boolean hasOrder,
       final String sortByCols) {
@@ -1320,10 +1334,16 @@ public class WindowAggCodeGen {
     // First, add the aggregation columns to the list of kept columns.
     for (int i = 0; i < argsListList.size(); i++) {
 
-      // if we have a column argument, it is always the 0-th argument
-      // TODO: update this when we support window functions where this is not the case
-      if (argsListList.get(i).size() > 0 && argsListList.get(i).get(0).isDfCol()) {
-        String colName = argsListList.get(i).get(0).getExprString();
+      // If we have a column argument, it is always the 0-th argument except for
+      // the functions in twoArgWindowOptimizedKernels
+      String colName;
+      if (twoArgWindowOptimizedKernels.contains(aggNames.get(i))) {
+        colName = argsListList.get(i).get(0).getExprString();
+        kept_cols.append(makeQuoted(colName)).append(", ");
+        colName = argsListList.get(i).get(1).getExprString();
+        kept_cols.append(makeQuoted(colName)).append(", ");
+      } else if (argsListList.get(i).size() > 0 && argsListList.get(i).get(0).isDfCol()) {
+        colName = argsListList.get(i).get(0).getExprString();
         kept_cols.append(makeQuoted(colName)).append(", ");
       }
     }

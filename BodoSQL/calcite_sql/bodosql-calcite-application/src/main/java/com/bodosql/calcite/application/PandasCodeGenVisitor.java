@@ -1745,6 +1745,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // right now, we expect exactly 2, 1 or 0 operands (count *). This will need to be extended in
     // the future
+    int cols_used = 0;
     for (int j = 0; j < aggOperations.size(); j++) {
       // Column name for the aggregation column, if needed (argument may be scalar literal)
 
@@ -1760,13 +1761,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
           RexNodeVisitorInfo curInfo =
               visitRexNode(
                   curAggOperation.getOperands().get(i), colNames, id, inputVar, false, ctx);
-          if (i == 0) {
+          if (i == 0 || WindowAggCodeGen.twoArgWindowOptimizedKernels.contains(names.get(j))) {
             // For the majority of aggregation functions, the first argument is the column on which
-            // we
-            // perform the aggregation.
-            // Therefore, we add into the projection, so it will be a part of the table
+            // we perform the aggregation. Therefore, we add into the projection, so it will be a
+            // part
+            // of the table. We also do this for the other columns of certain functions like
+            // COVAR_SAMP, which has two column inputs
             if (aggFns.get(j) != SqlKind.NTILE) {
-              String curAggColName = "AGG_OP_" + j;
+              String curAggColName = "AGG_OP_" + String.valueOf(cols_used);
+              cols_used += 1;
               childExprs.add(new RexNodeVisitorInfo(curAggColName, curInfo.getExprCode()));
               BodoSQLExprType.ExprType curExprType =
                   exprTypesMap.get(
