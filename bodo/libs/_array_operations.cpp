@@ -603,6 +603,8 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
  * @param step: integer specifying the work done
  *              2 corresponds to the first step of the operation where we
  * @param is_parallel: whether we run in parallel or not.
+ * @param drop_duplicates_dict: Do we need to ensure a dictionary has no
+ * duplicates?
  * @param hashes: the precomputed hashes to use for the hash table. If set to
  *                `nullptr` then the hashes are computed inside this function
  *                and deleted at the end. If passed they are not deleted.
@@ -614,6 +616,7 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
 table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
                                         int64_t keep, int step,
                                         bool is_parallel, bool dropna,
+                                        bool drop_duplicates_dict,
                                         uint32_t* hashes) {
     tracing::Event ev("drop_duplicates_table_inner", is_parallel);
     ev.add_attribute("table_nrows_before",
@@ -630,14 +633,16 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
         // If we are dropping duplicates dictionary encoding assumes
         // that the dictionary values are unique.
         if (key->arr_type == bodo_array_type::DICT) {
-            // If this is parallel it benefits us to gather the data
-            // as early as possible to remove any possible duplicates.
-            make_dictionary_global_and_unique(key, is_parallel);
+            if (drop_duplicates_dict) {
+                // Should we ensure that the dictionary values are unique?
+                // If this is just a local drop duplicates then we don't
+                // need to do this and can just do a best effort approach.
+                drop_duplicates_local_dictionary(key);
+            }
             key = key->info2;
         }
         key_arrs[iKey] = key;
     }
-
     uint32_t seed = SEED_HASH_CONTAINER;
     if (hashes == nullptr) {
         hashes = hash_keys(key_arrs, seed, is_parallel,
@@ -734,7 +739,7 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
  * ---It keeps only the non-null keys
  * ---It returns only the keys.
  *
- * As for the join, this relies on using hash keys for the partitionning.
+ * As for the join, this relies on using hash keys for the partitioning.
  * The computation is done locally.
  *
  * External function used are "RetrieveTable" and "TestEqual"
@@ -769,7 +774,7 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
     // drop_duplicates_keys_inner should have already removed any NA
     // values
     table_info* ret_table = drop_duplicates_table_inner(
-        shuf_table, num_keys, keep, 1, is_parallel, false);
+        shuf_table, num_keys, keep, 1, is_parallel, false, /*drop_duplicates_dict=*/true);
     delete_table(shuf_table);
 #ifdef DEBUG_DD
     std::cout << "OUTPUT : drop_duplicates_keys ret_table=\n";
@@ -803,16 +808,17 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
         // serial case
         if (!is_parallel) {
             return drop_duplicates_table_inner(in_table, num_keys, keep, 1,
-                                               is_parallel, dropna);
+                                               is_parallel, dropna, /*drop_duplicates_dict=*/true);
         }
         // parallel case
         // pre reduction of duplicates
         table_info* red_table;
-        if (drop_local_first)
+        if (drop_local_first) {
             red_table = drop_duplicates_table_inner(in_table, num_keys, keep, 2,
-                                                    is_parallel, dropna);
-        else
+                                                    is_parallel, dropna, /*drop_duplicates_dict=*/false);
+        } else {
             red_table = in_table;
+        }
         // shuffling of values
         table_info* shuf_table =
             shuffle_table(red_table, num_keys, is_parallel);
@@ -823,7 +829,7 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
         // drop_duplicates_table_inner should have already handled this
         if (drop_local_first) dropna = false;
         table_info* ret_table = drop_duplicates_table_inner(
-            shuf_table, num_keys, keep, 1, is_parallel, dropna);
+            shuf_table, num_keys, keep, 1, is_parallel, dropna, /*drop_duplicates_dict=*/true);
         delete_table(shuf_table);
         // returning table
         return ret_table;
@@ -1163,8 +1169,8 @@ array_info* get_replace_regex(array_info* in_arr, char const* const pat,
         repLen = repLen == 0 ? 1 : repLen;
         size_t num_chars = 0;
         if (repLen == 1) {
-            // If replacement is a single character (or empty string), we can use
-            // the faster path of just allocating the same size as the input
+            // If replacement is a single character (or empty string), we can
+            // use the faster path of just allocating the same size as the input
             // array. This is because we know that in the worst case (replacing
             // each character individually with the replacement) the output will
             // be the same size as the input.
