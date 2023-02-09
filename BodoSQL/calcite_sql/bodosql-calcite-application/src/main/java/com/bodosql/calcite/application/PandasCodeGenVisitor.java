@@ -36,6 +36,7 @@ import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
+import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
 import com.google.common.collect.Range;
@@ -68,7 +69,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private final Stack<List<String>> columnNamesStack = new Stack<>();
   /* Reserved column name for generating dummy columns. */
   // TODO: Add this to the docs as banned
-  private StringBuilder generatedCode = new StringBuilder();
+  private Module.Builder generatedCode = new Module.Builder();
   private int dfVarId = 1;
   private int colVarId = 1;
   private int groupByApplyFnId = 1;
@@ -260,7 +261,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     if (this.varGenStack.size() > 0) {
       this.generatedCode.append(String.format("  return %s\n", this.varGenStack.pop()));
     }
-    return this.generatedCode.toString();
+
+    Module m = this.generatedCode.toModule();
+    return m.emit(1);
   }
 
   /**
