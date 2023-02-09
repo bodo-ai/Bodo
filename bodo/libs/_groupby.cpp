@@ -6336,7 +6336,7 @@ class GroupbyPipeline {
                 // a later step. Setting dropna=True here removes NA
                 // from the keys, which we do not want
                 tmp2 = drop_duplicates_table_inner(tmp, tmp->ncols(), 0, 1,
-                                                   is_parallel, false,
+                                                   is_parallel, false, /*drop_duplicates_dict=*/true,
                                                    key_value_hashes);
                 delete tmp;
                 tmp = tmp2;
