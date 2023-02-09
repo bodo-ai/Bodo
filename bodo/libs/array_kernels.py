@@ -1496,7 +1496,6 @@ def concat_overload(arr_list):
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
         arr_list.dtype, ArrayItemArrayType
     ):
-        data_arr_type = arr_list.dtype.dtype
 
         def array_item_concat_impl(arr_list):  # pragma: no cover
             # preallocate the output
@@ -1722,9 +1721,14 @@ def concat_overload(arr_list):
                 num_strs = 0
                 num_chars = 0
                 num_elems = 0
+                # If all dictionaries were global they remain global.
+                has_global_dictionary = True
                 for A in arr_list:
                     data_arr = A._data
                     indices_arr = A._indices
+                    has_global_dictionary = (
+                        has_global_dictionary and A._has_global_dictionary
+                    )
                     num_elems += len(indices_arr)
                     num_strs += len(data_arr)
                     num_chars += bodo.libs.str_arr_ext.num_total_chars(data_arr)
@@ -1759,7 +1763,9 @@ def concat_overload(arr_list):
                     curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(data_arr)
                     curr_elem_ind += num_elems
 
-                out_arr = init_dict_arr(out_dict_arr, out_ind_arr, False, False)
+                out_arr = init_dict_arr(
+                    out_dict_arr, out_ind_arr, has_global_dictionary, False
+                )
                 # drop_duplicates_local_dictionary will drop any local duplicates,
                 # potentially remaping the indices.
                 unique_out_arr = drop_duplicates_local_dictionary(out_arr, False)
