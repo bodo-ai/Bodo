@@ -25,6 +25,7 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     check_func,
+    create_snowflake_table,
     get_snowflake_connection_string,
     pytest_snowflake,
 )
@@ -350,7 +351,7 @@ def test_snowflake_runtime_downcasting_timestamp_fail(mocker: "MockerFixture"):
         bodo.jit(impl)(query, conn)
 
 
-def test_snowflake_bodo_read_as_dict(memory_leak_check):
+def test_snowflake_bodo_read_as_dict_no_table(memory_leak_check):
     """
     Test reading string columns as dictionary-encoded from Snowflake
     """
@@ -426,101 +427,133 @@ def test_snowflake_bodo_read_as_dict(memory_leak_check):
     # l_comment could be specified by the user to be dictionary encoded
     # l_suppkey is not of type string and could not be dictionary encoded
     query = "SELECT l_shipmode, l_shipinstruct, l_comment, l_suppkey FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 3000"
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
 
-    with set_logging_stream(logger, 1):
-        test_impl0(query, conn)
-        check_logger_msg(
-            stream, "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding"
-        )
-    with set_logging_stream(logger, 1):
-        test_impl1(query, conn)
-        check_logger_msg(
-            stream, "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding"
-        )
+    # Avoid small table encoding
+    prev_small_table_threshold = bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD
+    bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD = 0
+    try:
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            test_impl0(query, conn)
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding",
+            )
 
-    with set_logging_stream(logger, 1):
-        test_impl2(query, conn)
-        check_logger_msg(
-            stream, "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding"
-        )
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            test_impl1(query, conn)
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding",
+            )
 
-    with set_logging_stream(logger, 1):
-        test_impl3(query, conn)
-        check_logger_msg(
-            stream,
-            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
-        )
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            test_impl2(query, conn)
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding",
+            )
 
-    with set_logging_stream(logger, 1):
-        test_impl4(query, conn)
-        check_logger_msg(
-            stream, "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding"
-        )
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            test_impl3(query, conn)
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+            )
 
-    with set_logging_stream(logger, 1):
-        test_impl5(query, conn)
-        check_logger_msg(
-            stream,
-            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
-        )
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            test_impl4(query, conn)
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding",
+            )
 
-    with set_logging_stream(logger, 1):
-        test_impl6(query, conn)
-        check_logger_msg(
-            stream,
-            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
-        )
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            test_impl5(query, conn)
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+            )
 
-    with set_logging_stream(logger, 1):
-        test_impl7(query, conn)
-        check_logger_msg(
-            stream,
-            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
-        )
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            test_impl6(query, conn)
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+            )
 
-    with set_logging_stream(logger, 1):
-        if bodo.get_rank() == 0:  # warning is thrown only on rank 0
-            with pytest.warns(
-                BodoWarning,
-                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'l_suppkey'}",
-            ):
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            test_impl7(query, conn)
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+            )
+
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+                with pytest.warns(
+                    BodoWarning,
+                    match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'l_suppkey'}",
+                ):
+                    test_impl8(query, conn)
+            else:
                 test_impl8(query, conn)
-        else:
-            test_impl8(query, conn)
-        # we combine the two tests because otherwise caching would cause problems for logger.stream.
-        check_logger_msg(
-            stream,
-            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
-        )
+            # we combine the two tests because otherwise caching would cause problems for logger.stream.
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+            )
 
-    with set_logging_stream(logger, 1):
-        if bodo.get_rank() == 0:
-            with pytest.warns(
-                BodoWarning,
-                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'l_suppkey'}",
-            ):
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            if bodo.get_rank() == 0:
+                with pytest.warns(
+                    BodoWarning,
+                    match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'l_suppkey'}",
+                ):
+                    test_impl9(query, conn)
+            else:
                 test_impl9(query, conn)
-        else:
-            test_impl9(query, conn)
-        check_logger_msg(
-            stream, "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding"
-        )
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding",
+            )
 
-    with set_logging_stream(logger, 1):
-        if bodo.get_rank() == 0:  # warning is thrown only on rank 0
-            with pytest.warns(
-                BodoWarning,
-                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'l_suppkey'}",
-            ):
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+                with pytest.warns(
+                    BodoWarning,
+                    match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'l_suppkey'}",
+                ):
+                    test_impl10(query, conn)
+            else:
                 test_impl10(query, conn)
-        else:
-            test_impl10(query, conn)
-        check_logger_msg(
-            stream,
-            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
-        )
+            check_logger_msg(
+                stream,
+                "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+            )
+    finally:
+        bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD = prev_small_table_threshold
 
 
 @pytest.mark.parametrize("enable_dict_encoding", [True, False])
@@ -554,6 +587,9 @@ def test_snowflake_dict_encoding_enabled(memory_leak_check, enable_dict_encoding
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
     )
     bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = enable_dict_encoding
+    # Avoid small table encoding when enable_dict_encoding
+    prev_small_table_threshold = bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD
+    bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD = 0
 
     try:
         if enable_dict_encoding:
@@ -593,6 +629,7 @@ def test_snowflake_dict_encoding_enabled(memory_leak_check, enable_dict_encoding
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
             orig_SF_READ_AUTO_DICT_ENCODE_ENABLED
         )
+        bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD = prev_small_table_threshold
 
 
 def test_snowflake_bodo_read_as_dict(memory_leak_check):
@@ -1260,7 +1297,9 @@ def test_snowflake_isin_pushdown(memory_leak_check):
     )
     # TODO: BE-3404: Support `pandas.Series.isin` for dictionary-encoded arrays
     prev_criterion = bodo.io.snowflake.SF_READ_DICT_ENCODE_CRITERION
+    prev_small_table_threshold = bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD
     bodo.io.snowflake.SF_READ_DICT_ENCODE_CRITERION = -1
+    bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD = 0
     try:
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
@@ -1296,6 +1335,7 @@ def test_snowflake_isin_pushdown(memory_leak_check):
             check_logger_msg(stream, "Filter pushdown successfully performed")
     finally:
         bodo.io.snowflake.SF_READ_DICT_ENCODE_CRITERION = prev_criterion
+        bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD = prev_small_table_threshold
 
 
 def test_snowflake_startswith_endswith_pushdown(memory_leak_check):
@@ -1640,3 +1680,30 @@ def test_read_sql_error_snowflake(memory_leak_check):
     conn = f"snowflake://unknown:wrong@{account}/{db}/{schema}?warehouse={warehouse}"
     with pytest.raises(RuntimeError, match="Error executing query"):
         bodo.jit(test_impl_credentials_err)(conn)
+
+
+def test_dict_encoded_small_table(memory_leak_check):
+    """Tests that reading small table, even with unique values
+    enables dictionary encoding.
+    """
+
+    def impl(query, conn_str):
+        return pd.read_sql(query, conn_str)
+
+    str_list = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+    assert (
+        len(str_list) <= bodo.io.snowflake.SF_SMALL_TABLE_THRESHOLD
+    ), "test_dict_encoded_small_table requires a small table input"
+    new_df = pd.DataFrame({"a": str_list})
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+    with create_snowflake_table(
+        new_df, "bodosql_catalog_write_test1", db, schema
+    ) as table_name:
+        query = f"select * from {table_name}"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(impl, (query, conn), py_output=new_df)
+            check_logger_msg(stream, f"Columns ['a'] using dictionary encoding")
