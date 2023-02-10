@@ -242,8 +242,9 @@ inline void fill_recv_data_inner(T* recv_buff, T* data, uint32_t* hashes,
  * deterministic.
  *
  * @param dict_array The dictionary array whose dictionary needs updating.
- * @param sort_dictionary_if_modified Should the dictionary be sorted if we need
- * to gather the data? Note: The output should not assume the data is sorted.
+ * @param sort_dictionary_if_modified Should the dictionary be sorted if we
+ * need to gather the data? Note: The output should not assume the data is
+ * sorted.
  */
 void drop_duplicates_local_dictionary(array_info* dict_array,
                                       bool sort_dictionary_if_modified = false);

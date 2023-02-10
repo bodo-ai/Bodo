@@ -554,12 +554,17 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                                         ->val_to_str(code);
                     } else if (part_col->arr_type == bodo_array_type::DICT) {
                         // check nullable bitmask and set string to empty
-                        // if nan
+                        // if nan. Since we called
+                        // `make_dictionary_global_and_unique` on all dict
+                        // encoded arrays, we can be sure that there's no nulls
+                        // in the dictionary of the dict-encoded arrays (since
+                        // `has_deduped_local_dictionary` means no nulls in the
+                        // dict)
                         bool isna = !GetBit(
                             (uint8_t *)part_col->info2->null_bitmask, i);
-                        if (isna)
+                        if (isna) {
                             value_str = "null";
-                        else {
+                        } else {
                             int32_t dict_ind =
                                 ((int32_t *)part_col->info2->data1)[i];
                             // get start_offset and end_offset of the string
@@ -601,8 +606,8 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             for (auto a : new_table->columns) incref_array(a);
             table_info *part_table =
                 RetrieveTable(new_table, p.rows, new_table->ncols());
-            // NOTE: we pass is_parallel=False because we already took care of
-            // is_parallel here
+            // NOTE: we pass is_parallel=False because we already took care
+            // of is_parallel here
             Bodo_Fs::FsEnum fs_type = filesystem_type(p.fpath.c_str());
             if (fs_type == Bodo_Fs::FsEnum::posix) {
                 // s3 and hdfs create parent directories automatically when
@@ -611,9 +616,9 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                 std::filesystem::create_directories(path.parent_path());
             }
             pq_write(p.fpath.c_str(), part_table, col_names_arr_no_partitions,
-                     nullptr, /*TODO*/ false, /*TODO*/ "", compression, false,
-                     false, -1, -1, -1, /*TODO*/ "", bucket_region,
-                     row_group_size, prefix,
+                     nullptr, /*write_index=*/false,
+                     /*metadata=*/"", compression, false, false, -1, -1, -1,
+                     /*idx_name=*/"", bucket_region, row_group_size, prefix,
                      false /* TODO: convert_timedelta_to_int64*/, tz,
                      false /* TODO: downcast_time_ns_to_us*/);
             delete_table_decref_arrays(part_table);

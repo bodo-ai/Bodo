@@ -3927,21 +3927,32 @@ def to_parquet_overload(
             # wrap the name with quotation mark to indicate it is a string
             pandas_metadata_str = pandas_metadata_str.replace('"%s"', "%s")
 
-    # convert dataframe columns to array_info
-    if not df.is_table_format:
-        data_args = ", ".join(
-            "array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}))".format(
-                i
-            )
-            for i in range(len(df.columns))
-        )
-
     func_text = "def df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _bodo_file_prefix='part-', _bodo_timestamp_tz=None, _is_parallel=False):\n"
+
+    # Why we are calling drop_duplicates_local_dictionary on all dict encoded arrays?
+    # Arrow doesn't support writing DictionaryArrays with nulls in the dictionary.
+    # In most cases, we shouldn't end up with nulls in the dictionary, but it might
+    # still happen in some array kernels.
+    # `has_deduped_local_dictionary` means there's no nulls in the dictionary.
+    # It might be false even when there aren't any nulls, but even in those cases,
+    # deduplicating locally shouldn't be very expensive.
+    # TODO [BE-4383] Handle dict encoded array deduplication for runtime columns case
+
     # put arrays in table_info
+    extra_globals = {}
     if df.is_table_format:
         func_text += "    py_table = get_dataframe_table(df)\n"
+        if not df.has_runtime_cols:
+            output_arr_typ = types.none
+            extra_globals.update({"output_arr_typ": output_arr_typ})
+            func_text += "    py_table = bodo.utils.table_utils.generate_mappable_table_func(py_table, 'bodo.libs.array_ops.drop_duplicates_local_dictionary_if_dict', output_arr_typ, False)\n"
         func_text += "    table = py_table_to_cpp_table(py_table, py_table_typ)\n"
     else:
+        for i in range(len(df.data)):
+            func_text += f"    arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
+            if df.data[i] == bodo.dict_str_arr_type:
+                func_text += f"    arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
+        data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += "    info_list = [{}]\n".format(data_args)
         func_text += "    table = arr_info_list_to_table(info_list)\n"
     if df.has_runtime_cols:
@@ -4092,30 +4103,33 @@ def to_parquet_overload(
                     "DataFrame.to_parquet(): parquet must have string column names"
                 )
         col_names_arr = pd.array(df.columns)
+
+    glbls = {
+        "np": np,
+        "bodo": bodo,
+        "unicode_to_utf8": unicode_to_utf8,
+        "array_to_info": array_to_info,
+        "arr_info_list_to_table": arr_info_list_to_table,
+        "str_arr_from_sequence": str_arr_from_sequence,
+        "parquet_write_table_cpp": parquet_write_table_cpp,
+        "parquet_write_table_partitioned_cpp": parquet_write_table_partitioned_cpp,
+        "index_to_array": index_to_array,
+        "delete_info_decref_array": delete_info_decref_array,
+        "delete_table_decref_arrays": delete_table_decref_arrays,
+        "col_names_arr": col_names_arr,
+        "py_table_to_cpp_table": py_table_to_cpp_table,
+        "py_table_typ": df.table_type,
+        "get_dataframe_table": get_dataframe_table,
+        "col_names_no_parts_arr": col_names_no_parts_arr,
+        "get_dataframe_column_names": get_dataframe_column_names,
+        "fix_arr_dtype": fix_arr_dtype,
+        "decode_if_dict_array": decode_if_dict_array,
+        "decode_if_dict_table": decode_if_dict_table,
+    }
+    glbls.update(extra_globals)
     exec(
         func_text,
-        {
-            "np": np,
-            "bodo": bodo,
-            "unicode_to_utf8": unicode_to_utf8,
-            "array_to_info": array_to_info,
-            "arr_info_list_to_table": arr_info_list_to_table,
-            "str_arr_from_sequence": str_arr_from_sequence,
-            "parquet_write_table_cpp": parquet_write_table_cpp,
-            "parquet_write_table_partitioned_cpp": parquet_write_table_partitioned_cpp,
-            "index_to_array": index_to_array,
-            "delete_info_decref_array": delete_info_decref_array,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
-            "col_names_arr": col_names_arr,
-            "py_table_to_cpp_table": py_table_to_cpp_table,
-            "py_table_typ": df.table_type,
-            "get_dataframe_table": get_dataframe_table,
-            "col_names_no_parts_arr": col_names_no_parts_arr,
-            "get_dataframe_column_names": get_dataframe_column_names,
-            "fix_arr_dtype": fix_arr_dtype,
-            "decode_if_dict_array": decode_if_dict_array,
-            "decode_if_dict_table": decode_if_dict_table,
-        },
+        glbls,
         loc_vars,
     )
     df_to_parquet = loc_vars["df_to_parquet"]
@@ -4317,6 +4331,8 @@ def to_sql_overload(
     from bodo.io.parquet_pio import parquet_write_table_cpp
     from bodo.io.snowflake import snowflake_connector_cursor_python_type  # noqa
 
+    extra_globals = {}
+
     # Pandas raises a ValueError if columns aren't strings.
     # Similarly if columns aren't strings we have a segfault in C++.
     for col in df.columns:
@@ -4357,13 +4373,23 @@ def to_sql_overload(
 
     if df.is_table_format:
         func_text += f"        py_table = get_dataframe_table(df)\n"
-        func_text += f"        table = py_table_to_cpp_table(py_table, py_table_typ)\n"
+        if not df.has_runtime_cols:
+            output_arr_typ = types.none
+            extra_globals.update({"output_arr_typ": output_arr_typ})
+            # Call drop_duplicates_local_dictionary on all dict-encoded arrays.
+            # See note in `to_parquet_overload` (Why we are calling drop_duplicates_local_dictionary
+            # on all dict encoded arrays?) for why this is important.
+            func_text += "        py_table = bodo.utils.table_utils.generate_mappable_table_func(py_table, 'bodo.libs.array_ops.drop_duplicates_local_dictionary_if_dict', output_arr_typ, False)\n"
+        func_text += "        table = py_table_to_cpp_table(py_table, py_table_typ)\n"
     else:
-        # convert dataframe columns to array_info
-        data_args = ", ".join(
-            f"array_to_info(get_dataframe_data(df, {i}))"
-            for i in range(len(df.columns))
-        )
+        for i in range(len(df.data)):
+            func_text += f"        arr{i} = get_dataframe_data(df, {i})\n"
+            # Call drop_duplicates_local_dictionary on all dict-encoded arrays.
+            # See note in `to_parquet_overload` (Why we are calling drop_duplicates_local_dictionary
+            # on all dict encoded arrays?) for why this is important.
+            if df.data[i] == bodo.dict_str_arr_type:
+                func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
+        data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"        info_list = [{data_args}]\n"
         func_text += f"        table = arr_info_list_to_table(info_list)\n"
 
@@ -4461,6 +4487,33 @@ def to_sql_overload(
         "            chunksize = max(1, (len(df) + nsplits - 1) // nsplits)\n"
         "            ev_estimate_chunksize.finalize()\n"
     )
+
+    extra_globals.update(
+        {
+            "__col_name_meta_value_df_to_sql": ColNamesMetaType(df.columns),
+        }
+    )
+    # Call drop_duplicates_local_dictionary on all dict-encoded arrays.
+    # See note in `to_parquet_overload` (Why we are calling drop_duplicates_local_dictionary
+    # on all dict encoded arrays?) for why this is important.
+    if df.is_table_format:
+        if not df.has_runtime_cols:
+            output_arr_typ = types.none
+            extra_globals.update(
+                {
+                    "output_arr_typ": output_arr_typ,
+                }
+            )
+            func_text += "        table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)\n"
+            func_text += "        table = bodo.utils.table_utils.generate_mappable_table_func(table, 'bodo.libs.array_ops.drop_duplicates_local_dictionary_if_dict', output_arr_typ, False)\n"
+            func_text += "        df = bodo.hiframes.pd_dataframe_ext.init_dataframe((table,), df.index, __col_name_meta_value_df_to_sql)\n"
+    else:
+        for i in range(len(df.data)):
+            func_text += f"        arr{i} = get_dataframe_data(df, {i})\n"
+            if df.data[i] == bodo.dict_str_arr_type:
+                func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
+        data_args = ", ".join([f"arr{i}" for i in range(len(df.data))])
+        func_text += f"        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), df.index, __col_name_meta_value_df_to_sql)\n"
 
     # In C++: Upload dataframe chunks on each rank to internal stage.
     # Compute column names and other required info for parquet_write_table_cpp
@@ -4665,6 +4718,7 @@ def to_sql_overload(
             "warnings": warnings,
         }
     )
+    glbls.update(extra_globals)
     exec(func_text, glbls, loc_vars)
     _impl = loc_vars["df_to_sql"]
     return _impl
