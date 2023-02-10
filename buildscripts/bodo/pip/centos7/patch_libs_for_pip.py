@@ -1,8 +1,8 @@
 import os
+import re
+import shutil
 import subprocess
 from subprocess import check_call, check_output
-import shutil
-import re
 
 # See https://bodo.atlassian.net/wiki/spaces/DD/pages/946929672/Bodo+Linux+pip+package
 # for more information.

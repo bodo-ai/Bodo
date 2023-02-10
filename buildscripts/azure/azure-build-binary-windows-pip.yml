@@ -51,6 +51,6 @@ jobs:
         PYPI_TOKEN=`cat $HOME/pypi_secret_file | grep pypi.token | cut -f 2 -d' '`
         # save the PyPI username and password to ~/.pypirc for twine to pick it up
         echo -e "[pypi]\nusername = __token__ \npassword = ${PYPI_TOKEN}" > .pypirc
-        ./buildscripts/pip/centos7/generate_manylinux_wheels_win.sh
+        ./buildscripts/bodo/pip/centos7/generate_manylinux_wheels_win.sh
       fi
     displayName: 'Build and publish pip wheel'

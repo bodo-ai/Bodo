@@ -49,7 +49,7 @@ done
 # https://bodo.atlassian.net/wiki/spaces/DD/pages/946929672/Bodo+Linux+pip+package
 # for more information
 export PYBIN=/opt/python/cp39-cp39/bin  # patch_libs_for_pip.py looks for $PYBIN
-$PYBIN/python buildscripts/pip/centos7/patch_libs_for_pip.py
+$PYBIN/python buildscripts/bodo/pip/centos7/patch_libs_for_pip.py
 
 # upload with twine to PyPI
 cp .pypirc ~/.pypirc
