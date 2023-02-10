@@ -1261,10 +1261,13 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
 
     if (arr1->info1 == arr2->info1) return;  // dictionaries are the same
 
+    // Note we insert the dictionaries in order (arr1 then arr2). Since we have
+    // ensured there are no duplicates this means that only the indices in arr2
+    // can change and the entire dictionary in arr1 will be in the unified dict.
+
     const size_t arr1_dictionary_len = static_cast<size_t>(arr1->info1->length);
     const size_t arr2_dictionary_len = static_cast<size_t>(arr2->info1->length);
-    // these vectors will be used to map old indices to new ones
-    std::vector<dict_indices_t> arr1_index_map(arr1_dictionary_len);
+    // this vector will be used to map old indices to new ones
     std::vector<dict_indices_t> arr2_index_map(arr2_dictionary_len);
 
     const uint32_t hash_seed = SEED_HASH_JOIN;
@@ -1289,26 +1292,22 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     dict_value_to_unified_index.reserve(
         std::max(arr1_dictionary_len, arr2_dictionary_len));
 
-    // this vector stores indices of the strings (in arr1 and arr2) that will be
-    // part of the unified dictionary. index values greater than
-    // arr1_dictionary_len correspond to arr2 (for these we substract
-    // arr1_dictionary_len to get the index value)
-    std::vector<size_t> unique_strs;
-    unique_strs.reserve(std::max(arr1_dictionary_len, arr2_dictionary_len));
-
-    dict_indices_t next_index = 1;
-    int64_t n_chars = 0;
+    // this vector stores indices of the strings in arr2 that will be
+    // part of the unified dictionary. All of array 1's strings will always
+    // be part of the unified dictionary.
+    std::vector<size_t> arr2_unique_strs;
+    arr2_unique_strs.reserve(arr2_dictionary_len);
 
     offset_t const* const arr1_str_offsets = (offset_t*)arr1->info1->data2;
+    int64_t n_chars = arr1_str_offsets[arr1_dictionary_len];
+
+    dict_indices_t next_index = 1;
     for (size_t i = 0; i < arr1_dictionary_len; i++) {
+        // TODO: Move into the constructor
+        // Set the first n elements in the hash map, each of which is
+        // always unique.
         dict_indices_t& index = dict_value_to_unified_index[i];
-        if (index == 0) {
-            // found new string
-            index = next_index++;
-            n_chars += (arr1_str_offsets[i + 1] - arr1_str_offsets[i]);
-            unique_strs.emplace_back(i);
-        }
-        arr1_index_map[i] = index - 1;
+        index = next_index++;
     }
 
     offset_t const* const arr2_str_offsets = (offset_t*)arr2->info1->data2;
@@ -1319,11 +1318,11 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
             // found new string
             index = next_index++;
             n_chars += (arr2_str_offsets[i + 1] - arr2_str_offsets[i]);
-            unique_strs.emplace_back(i + arr1_dictionary_len);
+            arr2_unique_strs.emplace_back(i);
         }
         arr2_index_map[i] = index - 1;
     }
-    int64_t n_strings = unique_strs.size();
+    int64_t n_strings = arr1_dictionary_len + arr2_unique_strs.size();
     dict_value_to_unified_index.clear();
     dict_value_to_unified_index.reserve(0);  // try to force dealloc of hashmap
     delete[] arr1_hashes;
@@ -1331,26 +1330,23 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
 
     array_info* new_dict = alloc_string_array(n_strings, n_chars, 0);
     offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2;
-    offset_t cur_offset = 0;
-    int64_t cur_str = 0;
-    offset_t str_len;
-    for (auto i : unique_strs) {
-        if (i < arr1_dictionary_len) {
-            str_len = arr1_str_offsets[i + 1] - arr1_str_offsets[i];
-            memcpy(new_dict->data1 + cur_offset,
-                   arr1->info1->data1 + arr1_str_offsets[i], str_len);
-        } else {
-            str_len = arr2_str_offsets[i - arr1_dictionary_len + 1] -
-                      arr2_str_offsets[i - arr1_dictionary_len];
-            memcpy(
-                new_dict->data1 + cur_offset,
-                arr2->info1->data1 + arr2_str_offsets[i - arr1_dictionary_len],
-                str_len);
-        }
-        new_dict_str_offsets[cur_str++] = cur_offset;
+
+    // Initialize the offset and string index to the end of arr1's dictionary
+    offset_t cur_offset = arr1_str_offsets[arr1_dictionary_len];
+    int64_t cur_offset_idx = arr1_dictionary_len + 1;
+
+    // copy offsets from arr1 into new_dict_str_offsets
+    memcpy(new_dict_str_offsets, arr1_str_offsets,
+           cur_offset_idx * sizeof(offset_t));
+    // copy strings from arr1 into new_dict
+    memcpy(new_dict->data1, arr1->info1->data1, cur_offset);
+    for (auto i : arr2_unique_strs) {
+        offset_t str_len = arr2_str_offsets[i + 1] - arr2_str_offsets[i];
+        memcpy(new_dict->data1 + cur_offset,
+               arr2->info1->data1 + arr2_str_offsets[i], str_len);
         cur_offset += str_len;
+        new_dict_str_offsets[cur_offset_idx++] = cur_offset;
     }
-    new_dict_str_offsets[n_strings] = n_chars;
 
     // replace old dictionaries with new one
     delete_info_decref_array(arr1->info1);
@@ -1359,26 +1355,9 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     arr2->info1 = new_dict;
     incref_array(new_dict);
 
-    // convert old indices to new ones
+    // convert old indices to new ones for arr2
 
-    bool inplace = (arr1->info2->meminfo->refct == 1);
-    if (!inplace) {
-        array_info* indices = copy_array(arr1->info2);
-        delete_info_decref_array(arr1->info2);
-        arr1->info2 = indices;
-        arr1->null_bitmask = indices->null_bitmask;
-    }
-
-    uint8_t* null_bitmask1 = (uint8_t*)arr1->null_bitmask;
-
-    for (size_t i = 0; i < arr1->info2->length; i++) {
-        if (GetBit(null_bitmask1, i)) {
-            dict_indices_t& index = arr1->info2->at<dict_indices_t>(i);
-            index = arr1_index_map[index];
-        }
-    }
-
-    inplace = (arr2->info2->meminfo->refct == 1);
+    bool inplace = (arr2->info2->meminfo->refct == 1);
     if (!inplace) {
         array_info* indices = copy_array(arr2->info2);
         delete_info_decref_array(arr2->info2);
