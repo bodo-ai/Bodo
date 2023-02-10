@@ -70,7 +70,7 @@ done
 # Need to update the library paths. See patch_libs_for_pip.py and
 # https://bodo.atlassian.net/wiki/spaces/DD/pages/951058433/macOS+pip+package
 # for more information
-python3 buildscripts/pip/macos-x86/patch_libs_for_pip.py
+python3 buildscripts/bodo/pip/macos-x86/patch_libs_for_pip.py
 
 
 # upload with twine to PyPI

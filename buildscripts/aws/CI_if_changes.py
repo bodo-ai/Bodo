@@ -16,8 +16,9 @@ def run_commands(commands):
 
 
 def run_ci():
-    """Function that returns if CI should be skipped based upon the differences
-    between this branch in develop. This needs to be called in each stage of CI.
+    """
+    Function that returns if CI should run based upon the differences
+    between this branch and develop. This needs to be called in each stage of CI.
     """
     res = subprocess.run(["git", "diff", "--name-only", "develop"], capture_output=True)
     files = res.stdout.decode("utf-8").strip().split("\n")
@@ -25,7 +26,14 @@ def run_ci():
         if filename.startswith("bodo/docs"):
             continue
         if (
+            # We should run BodoSQL CI if there's been changes in Bodo
+            # or in the BodoSQL sub module
             "/" not in filename
+            # BodoSQL changes
+            or filename.startswith("BodoSQL/bodosql/")
+            or filename.startswith("BodoSQL/buildscripts/")
+            or filename.startswith("BodoSQL/calcite_sql/")
+            # Bodo and/or Iceberg changes
             or filename.startswith("aws_scripts/")
             or filename.startswith("bodo/")
             or (

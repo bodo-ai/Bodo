@@ -3,7 +3,7 @@ package:
   version: {{ BODO_VERSION }}
 
 source:
-   path: ../..
+   path: ../../..
 
 build:
   number: {{ GIT_DESCRIBE_NUMBER|int }}

@@ -95,10 +95,10 @@ jobs:
       cp `cygpath -u $CONDA_PREFIX`/Library/bin/libssl-*-x64.dll bodo/libs
       cp `cygpath -u $CONDA_PREFIX`/Library/bin/libcrypto-*-x64.dll bodo/libs
       if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
-        cd buildscripts/bodo-numba-dev-conda-recipe/
+        cd buildscripts/bodo/bodo-numba-dev-conda-recipe/
         echo "Using Numba-Dev Conda Recipe"
       else
-        cd buildscripts/bodo-conda-recipe/
+        cd buildscripts/bodo/bodo-conda-recipe/
       fi
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)

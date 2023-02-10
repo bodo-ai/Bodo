@@ -20,22 +20,20 @@ phases:
   install:
     commands:
       - echo Merging with Develop
-      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/aws/merge_with_develop.sh
+      - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/merge_with_develop.sh
       - echo Entered the Install Phase ...
-      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/setup_conda.sh
+      - ./buildscripts/aws/CI_if_changes.sh buildscripts/setup_conda.sh
       - ./buildscripts/aws/export_env.sh
 
   build:
     commands:
-      - echo Entered the Build Phase...
-      # BodoSQL version of this also builds Bodo and iceberg
-      - ./buildscripts/bodosql/aws/CI_if_changes.sh ./buildscripts/build.sh
+      - ./buildscripts/aws/CI_if_changes.sh ./buildscripts/build.sh
 
   post_build:
     commands:
       - echo Entered the post-build phase...
       - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/run_unittests.sh
-      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/bodosql/test.sh
+      - ./buildscripts/aws/CI_if_changes.sh buildscripts/bodosql/test.sh
 
 artifacts:
   files:

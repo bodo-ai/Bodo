@@ -110,7 +110,7 @@ jobs:
       set -x
 
       mamba install -y "conda-forge-ci-setup=3" -c conda-forge
-      setup_conda_rc ./ ./buildscripts/bodo-m1-conda-recipe ./buildscripts/bodo-m1-conda-recipe/release_conda_build_config.yaml
+      setup_conda_rc ./ ./buildscripts/bodo/bodo-m1-conda-recipe ./buildscripts/bodo/bodo-m1-conda-recipe/release_conda_build_config.yaml
       /usr/bin/sudo mangle_homebrew
       /usr/bin/sudo -k
       
@@ -123,8 +123,8 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/mambaforge/bin:$PATH
       source activate bodo_build
-
       set -x
+
       mkdir env
       mamba env export | tee env/environment.yml
       mamba list --explicit > env/package-list.txt
@@ -157,9 +157,9 @@ jobs:
 
       # macOS_ARM
       if [[ "$unamestr" == 'Darwin' ]] && [[ "${{ parameters.buildARM }}" == "true" ]]; then
-        cd buildscripts/bodo-m1-conda-recipe/
+        cd buildscripts/bodo/bodo-m1-conda-recipe/
       else
-        cd buildscripts/bodo-conda-recipe/
+        cd buildscripts/bodo/bodo-conda-recipe/
       fi
 
       if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
