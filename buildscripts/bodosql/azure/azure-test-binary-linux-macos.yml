@@ -31,7 +31,7 @@ jobs:
       unamestr=`uname`
       uname_mach_str=`uname -m`
       if [[ "$unamestr" == 'Darwin' ]] && [[ "$uname_mach_str" == "x86_64" ]]; then
-        buildscripts/bodosql/setup_osx_sdk.sh
+        buildscripts/setup_osx_sdk.sh
       fi
     displayName: 'Setup OSX SDK'
 

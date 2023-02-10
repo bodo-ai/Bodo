@@ -61,6 +61,6 @@ jobs:
         echo -e "[pypi]\nusername = __token__ \npassword = ${PYPI_TOKEN}" > .pypirc
 
         # Generate the wheels
-        ./buildscripts/pip/macos-x86/generate_macos_wheels.sh
+        ./buildscripts/bodo/pip/macos-x86/generate_macos_wheels.sh
       fi
     displayName: 'Build and publish pip wheel'
