@@ -1207,6 +1207,8 @@ static void get_group_info_loop(T& key_to_group,
                                 const bool key_drop_nulls, const int64_t nrows,
                                 bool is_parallel) {
     tracing::Event ev("get_group_info_loop", is_parallel);
+    std::vector<int64_t>& group_to_first_row = grp_info.group_to_first_row;
+    std::vector<int64_t>& row_to_group = grp_info.row_to_group;
     // Start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values recorded in grp_info go from
     // 0 to num_groups - 1)
@@ -1223,9 +1225,9 @@ static void get_group_info_loop(T& key_to_group,
     if (group == 0) {                                                       \
         group = next_group++; /* this updates the value in the map without  \
                                  another lookup */                          \
-        grp_info.group_to_first_row.emplace_back(i);                        \
+        group_to_first_row.emplace_back(i);                                 \
     }                                                                       \
-    grp_info.row_to_group[i] = group - 1
+    row_to_group[i] = group - 1
 
     if (!key_drop_nulls) {
         for (int64_t i = 0; i < nrows; i++) {
@@ -1234,7 +1236,7 @@ static void get_group_info_loop(T& key_to_group,
     } else {
         for (int64_t i = 0; i < nrows; i++) {
             if (does_row_has_nulls(key_cols, i)) {
-                grp_info.row_to_group[i] = -1;
+                row_to_group[i] = -1;
                 continue;
             }
             MAIN_LOOP_BODY;
@@ -6335,9 +6337,9 @@ class GroupbyPipeline {
                 // Set dropna to false because skipna is handled at
                 // a later step. Setting dropna=True here removes NA
                 // from the keys, which we do not want
-                tmp2 = drop_duplicates_table_inner(tmp, tmp->ncols(), 0, 1,
-                                                   is_parallel, false, /*drop_duplicates_dict=*/true,
-                                                   key_value_hashes);
+                tmp2 = drop_duplicates_table_inner(
+                    tmp, tmp->ncols(), 0, 1, is_parallel, false,
+                    /*drop_duplicates_dict=*/true, key_value_hashes);
                 delete tmp;
                 tmp = tmp2;
             }
