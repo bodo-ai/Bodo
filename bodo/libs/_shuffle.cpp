@@ -491,6 +491,9 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
  * @brief Updates a dictionary array to drop any duplicates from its dictionary.
  * If we gather_global_dict then we first unify the dictionaries on all ranks
  * to become consistent.
+ * We also drop the nulls in the dictionary. The null bit
+ * of the elements in the indices array that were pointing to nulls in the
+ * dictionary, are set to false to indicate null instead.
  *
  * @param dict_array Dictionary array to update.
  * @param gather_global_dict Should we gather the dictionaries across all ranks?
@@ -516,10 +519,11 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     // need to keep it around until the end of the conversion (decref later
     // in this function)
     incref_array(local_dictionary);
-    // TODO dropna? are there NAs in dictionary and how should they be
-    // handled
+
+    // We always want to drop the NAs from the dictionary itself. We will
+    // handle the indices pointing to the null during the re-assignment.
     table_info* dist_dictionary_table = drop_duplicates_table(
-        in_dictionary_table, gather_global_dict, 1, 0, false, false);
+        in_dictionary_table, gather_global_dict, 1, 0, /*dropna=*/true, false);
     delete in_dictionary_table;  // no array decref because
                                  // drop_duplicates_table stole the
                                  // reference
@@ -594,7 +598,9 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     dict_indices_t next_index = 1;
     for (size_t i = 0; i < global_dict_len; i++) {
         dict_indices_t& index = dict_value_to_global_index[i];
-        if (index == 0) index = next_index++;
+        if (index == 0) {
+            index = next_index++;
+        }
     }
 
     std::vector<dict_indices_t> local_to_global_index(local_dict_len);
@@ -607,7 +613,6 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     dict_value_to_global_index.reserve(0);  // try to force dealloc of hashmap
     delete[] hashes_local_dict;
     delete[] hashes_global_dict;
-    // decref_array(local_dictionary);
     delete_info_decref_array(local_dictionary);
 
     // --------------
@@ -628,7 +633,16 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     for (size_t i = 0; i < dict_array->info2->length; i++) {
         if (GetBit(null_bitmask, i)) {
             dict_indices_t& index = dict_array->info2->at<dict_indices_t>(i);
-            index = local_to_global_index[index];
+            if (local_to_global_index[index] < 0) {
+                // This has to be an NA since all values in local dictionary
+                // (except NA) _must_ be in the global/deduplicated dictionary,
+                // and therefore have an index >= 0.
+                SetBitTo(null_bitmask, i, false);
+                // Set index to 0 to avoid any indexing issues later on.
+                index = 0;
+            } else {
+                index = local_to_global_index[index];
+            }
         }
     }
 }

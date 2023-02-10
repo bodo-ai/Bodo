@@ -2,6 +2,7 @@
 import os
 import random
 import shutil
+import traceback
 from decimal import Decimal
 
 import numba
@@ -777,6 +778,85 @@ def test_tz_to_parquet(memory_leak_check):
             shutil.rmtree(output_filename)
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), "Output doesn't match Pandas data"
+
+
+def test_to_pq_nulls_in_dict(memory_leak_check):
+    """
+    Test that parquet write works even when there are nulls in
+    the dictionary of a dictionary encoded array. Arrow doesn't
+    support this, so we drop the NAs from all dictionaries ourselves
+    before the write step.
+    See [BE-4331](https://bodo.atlassian.net/browse/BE-4331)
+    for more context.
+    We also explicitly test the table-format case since the codegen
+    for it is slightly different.
+    """
+    S = pa.DictionaryArray.from_arrays(
+        np.array([0, 2, 1, 0, 1, 3, 0, 1, 3, 3, 2, 0], dtype=np.int32),
+        pd.Series(["B", None, "A", None]),
+    )
+    A = np.arange(12)
+
+    def test_output(func, S, A, part_cols, py_output):
+        with ensure_clean2("test_to_pq_nulls_in_dict.pq"):
+            func(_get_dist_arg(S), _get_dist_arg(A), part_cols)
+            bodo.barrier()
+            passed = 1
+            if bodo.get_rank() == 0:
+                try:
+                    df = pd.read_parquet("test_to_pq_nulls_in_dict.pq")
+                    if part_cols:
+                        for col in part_cols:
+                            df[col] = df[col].astype(py_output[col].dtype)
+                            if col == "S":
+                                df[col][df[col] == "null"] = None
+                        # Need to re-arrange the column order since partition columns are put at the end after reading
+                        df = df[list(py_output.columns)]
+                    passed = _test_equal_guard(
+                        df, py_output, sort_output=True, reset_index=True
+                    )
+                except Exception as e:
+                    print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                    passed = 0
+            n_passed = reduce_sum(passed)
+            assert n_passed == bodo.get_size()
+
+    @bodo.jit(distributed=["S", "A"])
+    def impl(S, A, part_cols):
+        S = pd.Series(S)
+        df = pd.DataFrame({"S": S, "A": A})
+        df.to_parquet("test_to_pq_nulls_in_dict.pq", partition_cols=part_cols)
+        return df
+
+    @bodo.jit(distributed=["S", "A"])
+    def impl_table_format(S, A, part_cols):
+        S = pd.Series(S)
+        df = pd.DataFrame({"S": S, "A": A})
+        # Force dataframe to use table format
+        df = bodo.hiframes.pd_dataframe_ext._tuple_to_table_format_decoded(df)
+        df.to_parquet("test_to_pq_nulls_in_dict.pq", partition_cols=part_cols)
+        return df
+
+    # Regular write
+    py_output = pd.DataFrame({"S": S, "A": A})
+    test_output(impl, S, A, None, py_output)
+    test_output(impl_table_format, S, A, None, py_output)
+
+    # Test that partitioned write works as well
+
+    # Partition on the dict-encoded column
+    test_output(impl, S, A, ["S"], py_output)
+    test_output(impl_table_format, S, A, ["S"], py_output)
+
+    # Partition on the non-dict-encoded column
+    test_output(impl, S, A, ["A"], py_output)
+    test_output(impl_table_format, S, A, ["A"], py_output)
+
+    # Use the same dict-encoded array for both columns and
+    # partition on one of it (should catch any refcount bugs)
+    py_output = pd.DataFrame({"S": S, "A": S})
+    test_output(impl, S, S, ["S"], py_output)
+    test_output(impl_table_format, S, S, ["S"], py_output)
 
 
 # ---------------------------- Test Error Checking ---------------------------- #
