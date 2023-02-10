@@ -1,25 +1,24 @@
-Bodo SQL {#bodosql}
+BodoSQL {#bodosql}
 ========
 
-Bodo SQL provides high performance and scalable SQL query execution
+BodoSQL provides high performance and scalable SQL query execution
 using Bodo's HPC capabilities and optimizations. It also provides
 native Python/SQL integration as well as SQL to Pandas conversion for
-the first time. BodoSQL is in early stages and its capabilities are
-expanding rapidly.
+the first time.
 
 ## Getting Started
 
 ### Installation
 
-Bodo SQL is currently in Beta. Install it using:
+Install BodoSQL using:
 
 ```shell
 conda install bodosql -c bodo.ai -c conda-forge
 ```
 
-### Using Bodo SQL
+### Using BodoSQL
 
-The example below demonstrates using Bodo SQL in Python programs. It
+The example below demonstrates using BodoSQL in Python programs. It
 loads data into a dataframe, runs a SQL query on the data, and runs
 Python/Pandas code on query results:
 
@@ -59,7 +58,7 @@ df = pd.DataFrame({
 df.to_parquet("my_data.pq")
 ```
 
-To run the example, save it in a file called `example.py` and run it using mpiexec, e.g.:
+To run the example, save it in a file called `example.py` and run it using `mpiexec`, e.g.:
 
 ```console
 mpiexec -n 8 python example.py
@@ -67,8 +66,8 @@ mpiexec -n 8 python example.py
 
 ## Aliasing
 
-In all but the most trivial cases, Bodo SQL generates internal names to
-avoid conflicts in the intermediate dataframes. By default, Bodo SQL
+In all but the most trivial cases, BodoSQL generates internal names to
+avoid conflicts in the intermediate dataframes. By default, BodoSQL
 does not rename the columns for the final output of a query using a
 consistent approach. For example the query:
 
@@ -84,26 +83,26 @@ bc.sql("SELECT SUM(A) as sum_col FROM table1 WHERE B > 4")
 ```
 
 !!! note
-     BodoSQL supports using aliases generated in `SELECT` inside
-    `GROUP BY` and `HAVING` in the same query, but you cannot do so with
-    `WHERE`.
+     BodoSQL supports using aliases generated in `#!sql SELECT` inside
+    `#!sql GROUP BY` and `#!sql HAVING` in the same query, but you cannot do so with
+    `#!sql WHERE`.
 
 ## Supported Operations
 
 We currently support the following SQL query statements and clauses with
-Bodo SQL, and are continuously adding support towards completeness. Note
-that Bodo SQL ignores casing of keywords, and column and table names,
+BodoSQL, and are continuously adding support towards completeness. Note
+that BodoSQL ignores casing of keywords, and column and table names,
 except for the final output column name. Therefore,
-`select a from table1` is treated the same as `SELECT A FROM Table1`,
+`#!sql select a from table1` is treated the same as `#!sql SELECT A FROM Table1`,
 except for the names of the final output columns (`a` vs `A`).
 
 ### SELECT
 
-The `SELECT` statement is used to select data in the form of
-columns. The data returned from Bodo SQL is stored in a dataframe.
+The `#!sql SELECT` statement is used to select data in the form of
+columns. The data returned from BodoSQL is stored in a dataframe.
 
 ```sql
-SELECT <COLUMN_NAMESFROM <TABLE_NAME>
+SELECT <COLUMN_NAMES> FROM <TABLE_NAME>
 ```
 
 For Instance:
@@ -146,14 +145,14 @@ SELECT A FROM customers
 
 ### SELECT DISTINCT
 
-The `SELECT DISTINCT` statement is used to return only distinct
+The `#!sql SELECT DISTINCT` statement is used to return only distinct
 (different) values:
 
 ```sql
-SELECT DISTINCT <COLUMN_NAMESFROM <TABLE_NAME>
+SELECT DISTINCT <COLUMN_NAMES> FROM <TABLE_NAME>
 ```
 
-`DISTINCT` can be used in a SELECT statement or inside an
+`#!sql DISTINCT` can be used in a SELECT statement or inside an
 aggregate function. For example:
 
 ```sql
@@ -195,11 +194,11 @@ num_payment_types
 
 ### WHERE
 
-The `WHERE` clause on columns can be used to filter records that
+The `#!sql WHERE` clause on columns can be used to filter records that
 satisfy specific conditions:
 
 ```sql
-SELECT <COLUMN_NAMESFROM <TABLE_NAMEWHERE <CONDITION>
+SELECT <COLUMN_NAMES> FROM <TABLE_NAME> WHERE <CONDITION>
 ```
 
 For Example:
@@ -234,16 +233,16 @@ SELECT A FROM table1 WHERE B > 4
 
 ### ORDER BY
 
-The `ORDER BY` keyword sorts the resulting dataframe in ascending
-or descending order, with NULL values either at the start or end
+The `#!sql ORDER BY` keyword sorts the resulting dataframe in ascending
+or descending order, with `NULL` values either at the start or end
 of the column. By default, it sorts the records in ascending order
 with null values at the end. For descending order and nulls at the
-front, the `DESC` and `NULLS FIRST` keywords can be used:
+front, the `#!sql DESC` and `#!sql NULLS FIRST` keywords can be used:
 
 ```sql
 SELECT <COLUMN_NAMES>
 FROM <TABLE_NAME>
-ORDER BY <ORDERED_COLUMN_NAMES[ASC|DESC] [NULLS FIRST|LAST]
+ORDER BY <ORDERED_COLUMN_NAMES> [ASC|DESC] [NULLS FIRST|LAST]
 ```
 
 For Example:
@@ -286,14 +285,14 @@ SELECT A, B FROM table1 ORDER BY B, A DESC NULLS FIRST
 
 ### LIMIT
 
-Bodo SQL supports the `LIMIT` keyword to select a limited number
+BodoSQL supports the `#!sql LIMIT` keyword to select a limited number
 of rows. This keyword can optionally include an offset:
 
 ```sql
 SELECT <COLUMN_NAMES>
 FROM <TABLE_NAME>
 WHERE <CONDITION>
-LIMIT <LIMIT_NUMBEROFFSET <OFFSET_NUMBER>
+LIMIT <LIMIT_NUMBER> OFFSET <OFFSET_NUMBER>
 ```
 For Example:
 
@@ -354,13 +353,13 @@ SELECT B FROM table2 LIMIT 3, 8
 
 ### NOT IN
 
-The `IN` determines if a value can be chosen a list of options.
-Currently we support lists of literals or columns with matching
+The `#!sql IN` determines if a value can be chosen a list of options.
+Currently, we support lists of literals or columns with matching
 types:
 ```sql
 SELECT <COLUMN_NAMES>
 FROM <TABLE_NAME>
-WHERE <COLUMN_NAMEIN (<val1>, <val2>, ... <valN>)
+WHERE <COLUMN_NAME> IN (<val1>, <val2>, ... <valN>)
 ```
 For example:
 ```sql
@@ -402,13 +401,13 @@ SELECT A FROM table1 WHERE A IN (5, 10, 15, 20, 25)
 
 ### NOT BETWEEN
 
-The `BETWEEN` operator selects values within a given range. The
-values can be numbers, text, or datetimes. The `BETWEEN` operator
+The `#!sql BETWEEN` operator selects values within a given range. The
+values can be numbers, text, or datetimes. The `#!sql BETWEEN` operator
 is inclusive: begin and end values are included:
 ```sql
 SELECT <COLUMN_NAMES>
 FROM <TABLE_NAME>
-WHERE <COLUMN_NAMEBETWEEN <VALUE1AND <VALUE2>
+WHERE <COLUMN_NAME> BETWEEN <VALUE1> AND <VALUE2>
 ```
 For example:
 ```sql
@@ -454,7 +453,7 @@ SELECT A FROM table1 WHERE A BETWEEN 10 AND 100
 
 ### CAST
 
-THE `CAST` operator converts an input from one type to another. In
+THE `#!sql CAST` operator converts an input from one type to another. In
 many cases casts are created implicitly, but this operator can be
 used to force a type conversion.
 
@@ -485,17 +484,17 @@ the Python types for each type keyword:
 |`TIMESTAMP`                       |`DATE`                           | Truncates to date but is still Timestamp type. This may change in the future. |
 
 !!! note
-    CAST correctness can often not be determined at compile time.
+    `#!sql CAST` correctness can often not be determined at compile time.
     Users are responsible for ensuring that conversion is possible
-    (e.g. `CAST(str_col as INTEGER)`).
+    (e.g. `#!sql CAST(str_col as INTEGER)`).
 
 ### ::
 
-Infix cast operator. Equivalent to cast, but the format is `value::Typename`
+Infix cast operator. Equivalent to cast, but the format is `#!sql value::Typename`
 
 ### JOIN
 
-A `JOIN` clause is used to combine rows from two or more tables,
+A `#!sql JOIN` clause is used to combine rows from two or more tables,
 based on a related column between them:
 ```sql
 SELECT <COLUMN_NAMES>
@@ -509,13 +508,13 @@ SELECT table1.A, table1.B FROM table1 JOIN table2 on table1.A = table2.C
 ```
 Here are the different types of the joins in SQL:
 
--   `(INNER) JOIN`: returns records that have matching values in
+-   `#!sql (INNER) JOIN`: returns records that have matching values in
 both tables
--   `LEFT (OUTER) JOIN`: returns all records from the left table,
+-   `#!sql LEFT (OUTER) JOIN`: returns all records from the left table,
 and the matched records from the right table
--   `RIGHT (OUTER) JOIN`: returns all records from the right
+-   `#!sql RIGHT (OUTER) JOIN`: returns all records from the right
 table, and the matched records from the left table
--   `FULL (OUTER) JOIN`: returns all records when there is a match
+-   `#!sql FULL (OUTER) JOIN`: returns all records when there is a match
 in either left or right table
 
 ***Example Usage***
@@ -582,13 +581,13 @@ SELECT table1.A, table1.B FROM table1 NATURAL JOIN table2
 ```
 Here are the different types of the joins in SQL:
 
--   `(INNER) JOIN`: returns records that have matching values in
+-   `#!sql (INNER) JOIN`: returns records that have matching values in
 both tables
--   `LEFT (OUTER) JOIN`: returns all records from the left table,
+-   `#!sql LEFT (OUTER) JOIN`: returns all records from the left table,
 and the matched records from the right table
--   `RIGHT (OUTER) JOIN`: returns all records from the right
+-   `#!sql RIGHT (OUTER) JOIN`: returns all records from the right
 table, and the matched records from the left table
--   `FULL (OUTER) JOIN`: returns all records when there is a match
+-   `#!sql FULL (OUTER) JOIN`: returns all records when there is a match
 in either left or right table
 
 ***Example Usage***
@@ -640,25 +639,25 @@ in either left or right table
 
 ### UNION
 
-The UNION operator is used to combine the result-set of two SELECT
+The `#!sql UNION` operator is used to combine the result-set of two `#!sql SELECT`
 statements:
 ```sql
-SELECT <COLUMN_NAMESFROM <TABLE1>
+SELECT <COLUMN_NAMES> FROM <TABLE1>
 UNION
-SELECT <COLUMN_NAMESFROM <TABLE2>
+SELECT <COLUMN_NAMES> FROM <TABLE2>
 ```
-Each SELECT statement within the UNION clause must have the same
+Each `#!sql SELECT` statement within the `#!sql UNION` clause must have the same
 number of columns. The columns must also have similar data types.
-The output of the UNION is the set of rows which are present in
-either of the input SELECT statements.
+The output of the `#!sql UNION` is the set of rows which are present in
+either of the input `#!sql SELECT` statements.
 
-The UNION operator selects only the distinct values from the
-inputs by default. To allow duplicate values, use UNION ALL:
+The `#!sql UNION` operator selects only the distinct values from the
+inputs by default. To allow duplicate values, use `#!sql UNION ALL`:
 
 ```sql
-SELECT <COLUMN_NAMESFROM <TABLE1>
+SELECT <COLUMN_NAMES> FROM <TABLE1>
 UNION ALL
-SELECT <COLUMN_NAMESFROM <TABLE2>
+SELECT <COLUMN_NAMES> FROM <TABLE2>
 ```
 
 ***Example Usage***
@@ -707,32 +706,32 @@ SELECT <COLUMN_NAMESFROM <TABLE2>
 
 ### INTERSECT
 
-The INTERSECT operator is used to calculate the intersection of
-two SELECT statements:
+The `#!sql INTERSECT` operator is used to calculate the intersection of
+two `#!sql SELECT` statements:
 
 ```sql
-SELECT <COLUMN_NAMESFROM <TABLE1>
+SELECT <COLUMN_NAMES> FROM <TABLE1>
 INTERSECT
-SELECT <COLUMN_NAMESFROM <TABLE2>
+SELECT <COLUMN_NAMES> FROM <TABLE2>
 ```
 
-Each SELECT statement within the INTERSECT clause must have the
+Each `#!sql SELECT` statement within the `#!sql INTERSECT` clause must have the
 same number of columns. The columns must also have similar data
-types. The output of the INTERSECT is the set of rows which are
-present in both of the input SELECT statements. The INTERSECT
+types. The output of the `#!sql INTERSECT` is the set of rows which are
+present in both of the input SELECT statements. The `#!sql INTERSECT`
 operator selects only the distinct values from the inputs.
 
 ### GROUP BY
 
-The `GROUP BY` statement groups rows that have the same values
+The `#!sql GROUP BY` statement groups rows that have the same values
 into summary rows, like "find the number of customers in each
-country". The `GROUP BY` statement is often used with aggregate
+country". The `#!sql GROUP BY` statement is often used with aggregate
 functions to group the result-set by one or more columns:
 ```sql
 SELECT <COLUMN_NAMES>
 FROM <TABLE_NAME>
 WHERE <CONDITION>
-GROUP BY <GROUP_EXPRESION>
+GROUP BY <GROUP_EXPRESSION>
 ORDER BY <COLUMN_NAMES>
 ```
 
@@ -740,7 +739,7 @@ For example:
 ```sql
 SELECT MAX(A) FROM table1 GROUP BY B
 ```
-`GROUP BY` statements also referring to columns by alias or
+`#!sql GROUP BY` statements also referring to columns by alias or
 column number:
 ```sql
 SELECT MAX(A), B - 1 as val FROM table1 GROUP BY val
@@ -748,8 +747,8 @@ SELECT MAX(A), B FROM table1 GROUP BY 2
 ```
 
 BodoSQL supports several subclauses that enable grouping by multiple different
-sets of columns in the same `SELECT` statment. `GROUPING SETS` is the first. It is
-equivalent to performing a group by for each specified set (seting each column not
+sets of columns in the same `#!sql SELECT` statement. `#!sql GROUPING SETS` is the first. It is
+equivalent to performing a group by for each specified set (setting each column not
 present in the grouping set to null), and unioning the results. For example:
 
 ```sql
@@ -773,7 +772,7 @@ UNION
     The above example is not valid BodoSQL code, as we do not support null literals.
     It is used only to show the null filling behavior.
 
-`CUBE` is equivalent to grouping by all possible permutations of the specified set.
+`#!sql CUBE` is equivalent to grouping by all possible permutations of the specified set.
 For example:
 
 ```sql
@@ -786,7 +785,7 @@ Is equivalent to
 SELECT MAX(A), B, C FROM table1 GROUP BY GROUPING SETS ((B, C), (B), (C), ())
 ```
 
-`ROLLUP` is equivalent to grouping by n + 1 grouping sets, where each set is constructed by dropping the rightmost element from the previous set, until no elements remain in the grouping set. For example:
+`#!sql ROLLUP` is equivalent to grouping by n + 1 grouping sets, where each set is constructed by dropping the rightmost element from the previous set, until no elements remain in the grouping set. For example:
 
 ```sql
 SELECT MAX(A), B, C FROM table1 GROUP BY ROLLUP(B, C, D)
@@ -798,7 +797,7 @@ Is equivalent to
 SELECT MAX(A), B, C FROM table1 GROUP BY GROUPING SETS ((B, C, D), (B, C), (B), ())
 ```
 
-`CUBE` and `ROLLUP` can be nested into a `GROUPING SETS` clause. For example:
+`#!sql CUBE` and `#!sql ROLLUP` can be nested into a `#!sql GROUPING SETS` clause. For example:
 
 ```sql
 SELECT MAX(A), B, C GROUP BY GROUPING SETS (ROLLUP(B, C, D), CUBE(B, C), (A))
@@ -812,9 +811,10 @@ SELECT MAX(A), B, C GROUP BY GROUPING SETS ((B, C, D), (B, C), (B), (), (B, C), 
 
 ### HAVING
 
-The `HAVING` clause is used for filtering with `GROUP BY`.
-`HAVING` applies the filter after generating the groups, whereas
-`WHERE` applies the filter before generating any groups:
+The `#!sql HAVING` clause is used for filtering with `#!sql GROUP BY`.
+`#!sql HAVING` applies the filter after generating the groups, whereas
+`#!sql WHERE` applies the filter before generating any groups:
+
 ```sql
 SELECT column_name(s)
 FROM table_name
@@ -822,19 +822,20 @@ WHERE condition
 GROUP BY column_name(s)
 HAVING condition
 ```
+
 For example:
 ```sql
 SELECT MAX(A) FROM table1 GROUP BY B HAVING C < 0
 ```
-`HAVING` statements also referring to columns by aliases used in
-the `GROUP BY`:
+`#!sql HAVING` statements also referring to columns by aliases used in
+the `#!sql GROUP BY`:
 ```sql
 SELECT MAX(A), B - 1 as val FROM table1 GROUP BY val HAVING val 5
 ```
 
 ### QUALIFY
 
-`QUALIFY` is similar to `HAVING`, except it applies filters after computing the results of at least one window function. `QUALIFY` is used after using `WHERE` and `HAVING`.
+`#!sql QUALIFY` is similar to `#!sql HAVING`, except it applies filters after computing the results of at least one window function. `#!sql QUALIFY` is used after using `#!sql WHERE` and `#!sql HAVING`.
 
 For example:
 
@@ -861,7 +862,7 @@ WHERE window_output > 1
 
 ### CASE
 
-The `CASE` statement goes through conditions and returns a value
+The `#!sql CASE` statement goes through conditions and returns a value
 when the first condition is met:
 ```sql
 SELECT CASE WHEN cond1 THEN value1 WHEN cond2 THEN value2 ... ELSE valueN END
@@ -873,7 +874,7 @@ SELECT (CASE WHEN A 1 THEN A ELSE B END) as mycol FROM table1
 If the types of the possible return values are different, BodoSQL
 will attempt to cast them all to a common type, which is currently
 undefined behavior. The last else clause can optionally be
-excluded, in which case, the CASE statement will return null if
+excluded, in which case, the `#!sql CASE` statement will return null if
 none of the conditions are met. For example:
 ```sql
 SELECT (CASE WHEN A < 0 THEN 0 END) as mycol FROM table1
@@ -885,19 +886,19 @@ SELECT (CASE WHEN A < 0 THEN 0 ELSE NULL END) as mycol FROM table1
 
 ### LIKE
 
-The `LIKE` clause is used to filter the strings in a column to
+The `#!sql LIKE` clause is used to filter the strings in a column to
 those that match a pattern:
 ```sql
 SELECT column_name(s) FROM table_name WHERE column LIKE pattern
 ```
-In the pattern we support the wildcards `%` and `_`. For example:
+In the pattern we support the wildcards `#!sql %` and `#!sql _`. For example:
 ```sql
 SELECT A FROM table1 WHERE B LIKE '%py'
 ```
 
 ### GREATEST
 
-The `GREATEST` clause is used to return the largest value from a
+The `#!sql GREATEST` clause is used to return the largest value from a
 list of columns:
 ```sql
 SELECT GREATEST(col1, col2, ..., colN) FROM table_name
@@ -909,7 +910,7 @@ SELECT GREATEST(A, B, C) FROM table1
 
 ### LEAST
 
-The `LEAST` clause is used to return the smallest value from a
+The `#!sql LEAST` clause is used to return the smallest value from a
 list of columns:
 ```sql
 SELECT LEAST(col1, col2, ..., colN) FROM table_name
@@ -921,7 +922,7 @@ SELECT LEAST(A, B, C) FROM table1
 
 ### PIVOT
 
-The `PIVOT` clause is used to transpose specific data rows in one
+The `#!sql PIVOT` clause is used to transpose specific data rows in one
 or more columns into a set of columns in a new DataFrame:
 ```sql
 SELECT col1, ..., colN FROM table_name PIVOT (
@@ -929,7 +930,7 @@ SELECT col1, ..., colN FROM table_name PIVOT (
     FOR pivotVar IN (ROW_VALUE_1 as row_alias_1, ..., ROW_VALUE_N as row_alias_N)
 )
 ```
-`PIVOT` produces a new column for each pair of pivotVar and
+`#!sql PIVOT` produces a new column for each pair of pivotVar and
 aggregation functions.
 
 For example:
@@ -939,8 +940,8 @@ SELECT single_sum_a, single_avg_c, triple_sum_a, triple_avg_c FROM table1 PIVOT 
     FOR A IN (1 as single, 3 as triple)
 )
 ```
-Here `single_sum_a` will contain sum(A) where `A = 1`,
-single_avg_c will contain AVG(C) where `A = 1` etc.
+Here `#!sql single_sum_a` will contain sum(A) where `#!sql A = 1`,
+single_avg_c will contain AVG(C) where `#!sql A = 1` etc.
 
 If you explicitly specify other columns as the output, those
 columns will be used to group the pivot columns. For example:
@@ -961,7 +962,7 @@ SELECT * FROM table1 PIVOT (
 
 ### WITH
 
-The `WITH` clause can be used to name subqueries:
+The `#!sql WITH` clause can be used to name sub-queries:
 ```sql
 WITH sub_table AS (SELECT column_name(s) FROM table_name)
 SELECT column_name(s) FROM sub_table
@@ -978,7 +979,7 @@ SQL aliases are used to give a table, or a column in a table, a
 temporary name:
 
 ```sql
-SELECT <COLUMN_NAMEAS <ALIAS>
+SELECT <COLUMN_NAME> AS <ALIAS>
 FROM <TABLE_NAME>
 ```
 
@@ -993,7 +994,7 @@ queries to ensure all column names are predictable.
 ### Operators
 
 #### Arithmetic
--   Bodo SQL currently supports the following arithmetic
+-   BodoSQL currently supports the following arithmetic
     operators:
 
     -   `+` (addition)
@@ -1003,7 +1004,7 @@ queries to ensure all column names are predictable.
     -   `%` (modulo)
 
 #### Comparison
--   Bodo SQL currently supports the following comparison
+-   BodoSQL currently supports the following comparison
     operators:
 
     -   `=` (equal to)
@@ -1016,14 +1017,14 @@ queries to ensure all column names are predictable.
     -   `<=>` (equal to or both inputs are null)
 
 #### Logical
--   Bodo SQL currently supports the following logical operators:
+-   BodoSQL currently supports the following logical operators:
 
-    -   `AND`
-    -   `OR`
-    -   `NOT`
+    -   `#!sql AND`
+    -   `#!sql OR`
+    -   `#!sql NOT`
 
 #### String
--   Bodo SQL currently supports the following string operators:
+-   BodoSQL currently supports the following string operators:
 
     -   `||` (string concatenation)
 
@@ -1037,116 +1038,119 @@ example using MOD:
 SELECT MOD(12.2, A) FROM table1
 ```
 
-Bodo SQL Currently supports the following Numeric Functions:
+BodoSQL Currently supports the following Numeric Functions:
 
 #### ABS
--   `ABS(n)`
+-   `#!sql ABS(n)`
 
     Returns the absolute value of n
 
 #### COS
--   `COS(n)`
+-   `#!sql COS(n)`
 
     Calculates the Cosine of n
 
 #### SIN
--   `SIN(n)`
+-   `#!sql SIN(n)`
 
     Calculates the Sine of n
 
 #### TAN
--   `TAN(n)`
+-   `#!sql TAN(n)`
 
     Calculates the Tangent of n
 
+
+#### COTAN
+-   `#!sql COTAN(X)`
+
+    Calculates the Cotangent of `X`
+
+
 #### ACOS
--   `ACOS(n)`
+-   `#!sql ACOS(n)`
 
     Calculates the Arccosine of n
 
 #### ASIN
--   `ASIN(n)`
+-   `#!sql AIN(n)`
 
     Calculates the Arcsine of n
 
 #### ATAN
--   `ATAN(n)`
+-   `#!sql ATAN(n)`
 
     Calculates the Arctangent of n
 
 #### ATAN2
--   `ATAN2(A, B)`
+-   `#!sql ATAN2(A, B)`
 
     Calculates the Arctangent of `A` divided by `B`
 
-#### COTAN
--   `COTAN(X)`
-
-    Calculates the Cotangent of `X`
 
 #### CEIL
--   `CEIL(X)`
+-   `#!sql CEIL(X)`
 
     Converts X to an integer, rounding towards positive
     infinity
 
 #### CEILING
--   `CEILING(X)`
+-   `#!sql CEILING(X)`
 
-    Equivalent to CEIL
+    Equivalent to `#!sql CEIL`
 
 #### FLOOR
--   `FLOOR(X)`
+-   `#!sql FLOOR(X)`
 
     Converts X to an integer, rounding towards negative infinity
 
 #### DEGREES
--   `DEGREES(X)`
+-   `#!sql DEGREES(X)`
 
     Converts a value in radians to the corresponding value in
     degrees
 
 #### RADIANS
--   `RADIANS(X)`
+-   `#!sql RADIANS(X)`
 
     Converts a value in radians to the corresponding value in
     degrees
 
 #### LOG10
--   `LOG10(X)`
+-   `#!sql LOG10(X)`
 
     Computes Log base 10 of x. Returns NaN for negative inputs,
     and -inf for 0 inputs.
 
 #### LOG
--   `LOG(X)`
+-   `#!sql LOG(X)`
 
-    Equivalent to LOG10(x)
+    Equivalent to `#!sql LOG10(x)`
 
 #### LOG10
--   `LOG10(X)`
+-   `#!sql LOG10(X)`
 
-    Computes Log base 2 of x. Returns NaN for negative inputs,
-    and -inf for 0 inputs.
+    Computes Log base 2 of x. Returns `NaN` for negative inputs,
+    and `#!sql -inf` for 0 inputs.
 
 #### LN
--   `LN(X)`
+-   `#!sql LN(X)`
 
-    Computes the natural log of x. Returns NaN for negative
-    inputs, and -inf for 0 inputs.
+    Computes the natural log of x. Returns `NaN` for negative
+    inputs, and `#!sql -inf` for 0 inputs.
 
 #### MOD
--   `MOD(A,B)`
+-   `#!sql MOD(A,B)`
 
-    Computes A modulo B (behavior analogous to the C library function `fmod`). Returns NaN if B is 0 or if A is inf.
+    Computes A modulo B (behavior analogous to the C library function `fmod`). Returns `NaN` if B is 0 or if A is inf.
 
 #### CONV
--   `CONV(X, current_base, new_base)`
+-   `#!sql CONV(X, current_base, new_base)`
 
-    `CONV` takes a string representation of an integer value,
+    `#!sql CONV` takes a string representation of an integer value,
     it's current_base, and the base to convert that argument
-    to. `CONV` returns a new string, that represents the value in
-    the new base. `CONV` is only supported for converting to/from
+    to. `#!sql CONV` returns a new string, that represents the value in
+    the new base. `#!sql CONV` is only supported for converting to/from
     base 2, 8, 10, and 16.
 
     For example:
@@ -1157,79 +1161,80 @@ Bodo SQL Currently supports the following Numeric Functions:
     CONV('FA', 16, 10) =='250'
     ```
 #### SQRT
--   `SQRT(X)`
+-   `#!sql SQRT(X)`
 
-    Computes the square root of x. Returns NaN for negative
-    inputs, and -inf for 0 inputs.
+    Computes the square root of x. Returns `NaN` for negative
+    inputs, and `#!sql -inf` for 0 inputs.
 
 #### PI
--   `PI()`
+-   `#!sql PI()`
 
-    Returns the value of PI
+    Returns the value of `#!sql PI`
 
 #### POW, POWER
--   `POW(A, B), POWER(A, B)`
+-   `#!sql POW(A, B), POWER(A, B)`
 
-    Returns A to the power of B. Returns NaN if A is negative,
-    and B is a float. POW(0,0) is 1
+    Returns A to the power of B. Returns `NaN` if A is negative,
+    and B is a float. `#!sql POW(0,0)` is 1
 
 #### EXP
--   `EXP(X)`
+-   `#!sql EXP(X)`
 
     Returns e to the power of X
 
 #### SIGN
--   `SIGN(X)`
+-   `#!sql SIGN(X)`
 
-    Returns 1 if X 0, -1 if X < 0, and 0 if X = 0
+    Returns 1 if X > 0, -1 if X < 0, and 0 if X = 0
 
 #### ROUND
--   `ROUND(X, num_decimal_places)`
+-   `#!sql ROUND(X, num_decimal_places)`
 
     Rounds X to the specified number of decimal places
 
 #### TRUNCATE
--   `TRUNCATE(X, num_decimal_places)`
+-   `#!sql TRUNCATE(X, num_decimal_places)`
 
-    Equivalent to `ROUND(X, num_decimal_places)`
+    Equivalent to `#!sql ROUND(X, num_decimal_places)`
 
 
 #### BITAND
--   `BITAND(A, B)`
+-   `#!sql BITAND(A, B)`
 
     Returns the bitwise-and of its inputs.
 
 
 #### BITOR
--   `BITOR(A, B)`
+-   `#!sql BITOR(A, B)`
 
     Returns the bitwise-or of its inputs.
 
 
 #### BITXOR
--   `BITOR(A, B)`
+-   `#!sql BITOR(A, B)`
 
     Returns the bitwise-xor of its inputs.
 
 
 #### BITNOT
--   `BITNOT(A)`
+-   `#!sql BITNOT(A)`
 
     Returns the bitwise-negation of its input.
 
 
 
 #### BITSHIFTLEFT
--   `BITSHIFTLEFT(A, B)`
+-   `#!sql BITSHIFTLEFT(A, B)`
 
     Returns the bitwise-leftshift of its inputs.
-    Note: the output is always of type int64.
-    Undefined behavior when B is negative or
-    too large.
+    
+    !!! note
+        - The output is always of type int64.
+        - Undefined behavior when B is negative or too large.
 
 
 #### BITSHIFTRIGHT
--   `BITSHIFTRIHGT(A, B)`
+-   `#!sql BITSHIFTRIGHT(A, B)`
 
     Returns the bitwise-rightshift of its inputs.
     Undefined behavior when B is negative or
@@ -1237,7 +1242,7 @@ Bodo SQL Currently supports the following Numeric Functions:
 
 
 #### GETBIT
--   `GETBIT(A, B)`
+-   `#!sql GETBIT(A, B)`
 
     Returns the bit of A corresponding to location B,
     where 0 is the rightmost bit. Undefined behavior when
@@ -1245,7 +1250,7 @@ Bodo SQL Currently supports the following Numeric Functions:
 
 
 #### BOOLAND
--   `BOOLAND(A, B)`
+-   `#!sql BOOLAND(A, B)`
 
     Returns true when `A` and `B` are both non-null non-zero.
     Returns false when one of the arguments is zero and the
@@ -1253,103 +1258,146 @@ Bodo SQL Currently supports the following Numeric Functions:
 
 
 #### BOOLOR
--   `BOOLOR(A, B)`
+-   `#!sql BOOLOR(A, B)`
 
     Returns true if either `A` or `B` is non-null and non-zero.
     Returns false if both `A` and `B` are zero. Returns `NULL` otherwise.
 
 
 #### BOOLXOR
--   `BOOLXOR(A, B)`
+-   `#!sql BOOLXOR(A, B)`
 
     Returns true if one of `A` and `B` is zero and the other is non-zero.
     Returns false if `A` and `B` are both zero or both non-zero. Returns
-    `NULL` if either `A` or `B` is NULL.
+    `NULL` if either `A` or `B` is `NULL`.
 
 
 #### BOOLNOT
--   `BOOLNOT(A)`
+-   `#!sql BOOLNOT(A)`
 
     Returns true if `A` is zero. Returns false if `A` is non-zero. Returns
     `NULL` if `A` is `NULL`.
 
 
 #### REGR_VALX
--   `REGR_VALX(Y, X)`
+-   `#!sql REGR_VALX(Y, X)`
 
     Returns `NULL` if either input is `NULL`, otherwise `X`
 
 
 #### REGR_VALY
--   `REGR_VALY(Y, X)`
+-   `#!sql REGR_VALY(Y, X)`
 
     Returns `NULL` if either input is `NULL`, otherwise `Y`
 
+
+#### TO_NUMBER
+-   `#!sql TO_NUMBER(EXPR)`
+
+    Converts an input expression to a fixed-point number. For `NULL` input,
+    the output is `NULL`.
+
+
+#### TO_NUMERIC
+-   `#!sql TO_NUMERIC(EXPR)`
+
+    Equivalent to `#!sql TO_NUMBER(EXPR)`
+
+
+#### TO_DECIMAL
+-   `#!sql TO_DECIMAL(EXPR)`
+
+    Equivalent to `#!sql TO_NUMBER(EXPR)`
+
+
+#### TRY_TO_NUMBER
+-   `#!sql TRY_TO_NUMBER(EXPR)`
+
+    A special version of `#!sql TO_NUMBER` that performs
+    the same operation (i.e. converts an input expression to a fixed-point
+    number), but with error-handling support (i.e. if the conversion cannot be
+    performed, it returns a `NULL` value instead of raising an error).
+
+
+#### TRY_TO_NUMERIC
+-   `#!sql TRY_TO_NUMERIC(EXPR)`
+
+    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`
+
+
+#### TRY_TO_DECIMAL
+-   `#!sql TRY_TO_DECIMAL(EXPR)`
+
+    Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`
+
+
 ### Aggregation Functions
 
-Bodo SQL Currently supports the following Aggregation Functions on
+BodoSQL Currently supports the following Aggregation Functions on
 all types:
 
 
 #### COUNT
--   `COUNT`
+-   `#!sql COUNT`
 
     Count the number of elements in a column or group.
 
 
 #### ANY_VALUE
--   `ANY_VALUE`
+-   `#!sql ANY_VALUE`
 
-    Select an arbitrary value. Note: currently BodoSQL always selects the first value,
-    but this is subject to change at any time.
+    Select an arbitrary value. 
+    
+    !!! note
+        Currently, BodoSQL always selects the first value, but this is subject to change at any time.
 
 
-In addition, Bodo SQL also supports the following functions on
+In addition, BodoSQL also supports the following functions on
 numeric types
 
 
 #### AVG
--   `AVG`
+-   `#!sql AVG`
 
     Compute the mean for a column.
 
 #### MAX
--   `MAX`
+-   `#!sql MAX`
 
     Compute the max value for a column.
 
 #### MIN
--   `MIN`
+-   `#!sql MIN`
 
     Compute the min value for a column.
 
 #### STDDEV
--   `STDDEV`
+-   `#!sql STDDEV`
 
     Compute the standard deviation for a column with N - 1
     degrees of freedom.
 
 #### STDDEV_SAMP
--   `STDDEV_SAMP`
+-   `#!sql STDDEV_SAMP`
 
     Compute the standard deviation for a column with N - 1
     degrees of freedom.
 
 #### STDDEV_POP
--   `STDDEV_POP`
+-   `#!sql STDDEV_POP`
 
     Compute the standard deviation for a column with N degrees
     of freedom.
 
 #### SUM
--   `SUM`
+-   `#!sql SUM`
 
     Compute the sum for a column.
 
 #### COUNT_IF
--   `COUNT_IF`
+-   `#!sql COUNT_IF`
 
-    Compute the total number of occurrences of `true` in a column
+    Compute the total number of occurrences of `#!sql true` in a column
     of booleans. For example:
 
     ```sql
@@ -1359,31 +1407,31 @@ numeric types
     Is equivalent to
     ```sql
     SELECT SUM(CASE WHEN A THEN 1 ELSE 0 END) FROM table1
-    ```
+    `#!sql ``
 
 #### VARIANCE
--   `VARIANCE`
+-   `#!sql VARIANCE`
 
     Compute the variance for a column with N - 1 degrees of
     freedom.
 
 #### VAR_SAMP
--   `VAR_SAMP`
+-   `#!sql VAR_SAMP`
 
     Compute the variance for a column with N - 1 degrees of
     freedom.
 
 #### VAR_POP
--   `VAR_POP`
+-   `#!sql VAR_POP`
 
     Compute the variance for a column with N degrees of freedom.
 
 #### BOOLOR_AGG
--   `BOOLOR_AGG`
+-   `#!sql BOOLOR_AGG`
 
     Compute the logical OR of the boolean value of every input
     in a group. This is supported for numeric and boolean types.
-    Currently this requires a GROUP BY clause.
+    Currently, this requires a `#!sql GROUP BY` clause.
 
 All aggregate functions have the syntax:
 
@@ -1405,16 +1453,37 @@ SELECT COUNT(Distinct A) FROM table1
 
 ### Timestamp Functions
 
-Bodo SQL currently supports the following Timestamp functions:
+BodoSQL currently supports the following Timestamp functions:
 
 #### DATEDIFF
--   `DATEDIFF(timestamp_val1, timestamp_val2)`
+-   `#!sql DATEDIFF(timestamp_val1, timestamp_val2)`
 
     Computes the difference in days between two Timestamp
-    values
+    values (timestamp_val1 - timestamp_val2)
+
+
+-   `#!sql DATEDIFF(unit, timestamp_val1, timestamp_val2)`
+
+    Computes the difference between two Timestamp
+    values (timestamp_val2 - timestamp_val1) in terms of unit
+
+    Allows the following units, with the specified
+    abbreviations as string literals:
+
+    -   YEAR: `year`, `years`, `yr`, `yrs`, `y`, `yy`, `yyy`, `yyyy`
+    -   QUARTER: `quarter`, `quarters`, `q`, `qtr`, `qtrs`
+    -   MONTH: `month`, `months`, `mm`, `mon`, `mons`
+    -   WEEK: `week`, `weeks`, `weekofyear`, `w`, `wk`, `woy`, `wy`
+    -   DAY: `day`, `days`, `dayofmonth`, `d`, `dd`
+    -   HOUR: `hour`, `hours`, `hrs`, `h`, `hr`, `hrs`
+    -   MINUTE: `minute`, `minutes`, `m`, `mi`, `min`, `mins`
+    -   SECOND: `second`, `seconds`, `s`, `sec`, `secs`
+    -   MILLISECOND: `millisecond`, `milliseconds`, `ms`, `msecs`
+    -   MICROSECOND: `microsecond`, `microseconds`, `us`, `usec`
+    -   NANOSECOND: `nanosecond`, `nanoseconds`, `nanosec`, `nsec`, `nsecs`, `nsecond`, `ns`, `nanonsecs`
 
 #### STR_TO_DATE
--   `STR_TO_DATE(str_val, literal_format_string)`
+-   `#!sql STR_TO_DATE(str_val, literal_format_string)`
 
     Converts a string value to a Timestamp value given a
     literal format string. If a year, month, and day value is
@@ -1432,33 +1501,33 @@ Bodo SQL currently supports the following Timestamp functions:
     ```
 
 #### DATE_FORMAT
--   `DATE_FORMAT(timestamp_val, literal_format_string)`
+-   `#!sql DATE_FORMAT(timestamp_val, literal_format_string)`
 
     Converts a timestamp value to a String value given a
     scalar format string.
 
     Recognized formatting characters:
 
-    -   `%i` Minutes, zero padded (00 to 59)
-    -   `%M` Full month name (January to December)
-    -   `%r` Time in format in the format (hh\:mm\:ss AM/PM)
-    -   `%s` Seconds, zero padded (00 to 59)
-    -   `%T` Time in format in the format (hh\:mm\:ss)
-    -   `%T` Time in format in the format (hh\:mm\:ss)
-    -   `%u` week of year, where monday is the first day of the week(00 to 53)
-    -   `%a` Abbreviated weekday name (sun-sat)
-    -   `%b` Abbreviated month name (jan-dec)
-    -   `%f` Microseconds, left padded with 0's, (000000 to 999999)
-    -   `%H` Hour, zero padded (00 to 23)
-    -   `%j` Day Of Year, left padded with 0's (001 to 366)
-    -   `%m` Month number (00 to 12)
-    -   `%p` AM or PM, depending on the time of day
-    -   `%d` Day of month, zero padded (01 to 31)
-    -   `%Y` Year as a 4 digit value
-    -   `%y` Year as a 2 digit value, zero padded (00 to 99)
-    -   `%U` Week of year where sunday is the first day of the week
+    -   `#!sql %i` Minutes, zero padded (00 to 59)
+    -   `#!sql %M` Full month name (January to December)
+    -   `#!sql %r` Time in format in the format (hh\:mm\:ss AM/PM)
+    -   `#!sql %s` Seconds, zero padded (00 to 59)
+    -   `#!sql %T` Time in format in the format (hh\:mm\:ss)
+    -   `#!sql %T` Time in format in the format (hh\:mm\:ss)
+    -   `#!sql %u` week of year, where monday is the first day of the week(00 to 53)
+    -   `#!sql %a` Abbreviated weekday name (sun-sat)
+    -   `#!sql %b` Abbreviated month name (jan-dec)
+    -   `#!sql %f` Microseconds, left padded with 0's, (000000 to 999999)
+    -   `#!sql %H` Hour, zero padded (00 to 23)
+    -   `#!sql %j` Day Of Year, left padded with 0's (001 to 366)
+    -   `#!sql %m` Month number (00 to 12)
+    -   `#!sql %p` AM or PM, depending on the time of day
+    -   `#!sql %d` Day of month, zero padded (01 to 31)
+    -   `#!sql %Y` Year as a 4 digit value
+    -   `#!sql %y` Year as a 2 digit value, zero padded (00 to 99)
+    -   `#!sql %U` Week of year, where Sunday is the first day of the week
         (00 to 53)
-    -   `%S` Seconds, zero padded (00 to 59)
+    -   `#!sql %S` Seconds, zero padded (00 to 59)
 
     For example:
 
@@ -1468,10 +1537,10 @@ Bodo SQL currently supports the following Timestamp functions:
     ```
 
 #### DATEADD
--   `DATEADD(unit, amount, timestamp_val)`
+-   `#!sql DATEADD(unit, amount, timestamp_val)`
 
     Computes a timestamp column by adding the amount of the specified unit
-    to the timestamp val. For example, `DATEADD('day', 3, T)` adds 3 days to
+    to the timestamp val. For example, `#!sql DATEADD('day', 3, T)` adds 3 days to
     column `T`. Allows the following units, with the specified
     abbreviations as string literals:
 
@@ -1489,38 +1558,39 @@ Bodo SQL currently supports the following Timestamp functions:
 
     Supported with timezone-aware data.
 
--   `DATEADD(timestamp_val, amount)`
+-   `#!sql DATEADD(timestamp_val, amount)`
 
-    Equivalent to `DATEADD('day', amount, timestamp_val)`
+    Equivalent to `#!sql DATEADD('day', amount, timestamp_val)`
 
 
 #### TIMEADD
--   `TIMEADD(unit, amount, timestamp_val)`
+-   `#!sql TIMEADD(unit, amount, timestamp_val)`
 
-    Equivalent to `DATEADD`.
+    Equivalent to `#!sql DATEADD`.
 
 
 #### DATE_ADD
--   `DATE_ADD(timestamp_val, interval)`
+-   `#!sql DATE_ADD(timestamp_val, interval)`
 
     Computes a timestamp column by adding an interval column/scalar to a
     timestamp value. If the first argument is a string representation of a
     timestamp, Bodo will cast the value to a timestamp.
 
 
--   `DATE_ADD(timestamp_val, amount)`
+-   `#!sql DATE_ADD(timestamp_val, amount)`
 
-    Equivalent to `DATE_ADD('day', amount, timestamp_val)`
+    Equivalent to `#!sql DATE_ADD('day', amount, timestamp_val)`
+
 
 #### DATE_SUB
--   `DATE_SUB(timestamp_val, interval)`
+-   `#!sql DATE_SUB(timestamp_val, interval)`
 
     Computes a timestamp column by subtracting an interval column/scalar
     to a timestamp value. If the first argument is a string representation
     of a timestamp, Bodo will cast the value to a timestamp.
 
 #### DATE_TRUNC
--   `DATE_TRUNC(str_literal, timestamp_val)`
+-   `#!sql DATE_TRUNC(str_literal, timestamp_val)`
 
     Truncates a timestamp to the provided str_literal field.
     str_literal must be a compile time constant and one of:
@@ -1536,43 +1606,43 @@ Bodo SQL currently supports the following Timestamp functions:
     -   "NANOSECOND"
 
 #### NOW
--   `NOW()`
+-   `#!sql NOW()`
 
     Computes a timestamp equal to the current time in the session's timezone.
-    By default the current timezone is UTC and it can be updated as a parameter
+    By default, the current timezone is UTC, and it can be updated as a parameter
     when using the Snowflake Catalog.
 
-#### LOCALTIMESTAMP
--   `LOCALTIMESTAMP()`
 
-    Equivalent to `NOW`
+#### LOCALTIMESTAMP
+-   `#!sql LOCALTIMESTAMP()`
+
+    Equivalent to `#!sql NOW`
 
 
 #### CURRENT_TIMESTAMP
--   `CURRENT_TIMESTAMP()`
+-   `#!sql CURRENT_TIMESTAMP()`
 
-    Equivalent to `NOW`
-
+    Equivalent to `#!sql NOW`
 
 #### CURDATE
--   `CURDATE()`
+-   `#!sql CURDATE()`
 
     Computes a timestamp equal to the current system time, excluding the
     time information
 
 #### CURRENT_DATE
--   `CURRENT_DATE()`
+-   `#!sql CURRENT_DATE()`
 
-    Equivalent to `CURDATE`
-
+    Equivalent to `#!sql CURDATE`
 
 #### GETDATE
--   `GETDATE()`
+-   `#!sql GETDATE()`
 
-    Equivalent to `CURDATE`
+    Equivalent to `#!sql CURDATE`
+
 
 #### EXTRACT
--   `EXTRACT(TimeUnit from timestamp_val)`
+-   `#!sql EXTRACT(TimeUnit from timestamp_val)`
 
     Extracts the specified TimeUnit from the supplied date.
 
@@ -1589,13 +1659,13 @@ Bodo SQL currently supports the following Timestamp functions:
     -   `QUARTER`
     -   `YEAR`
 
-    TimeUnits are not case sensitive.
+    TimeUnits are not case-sensitive.
 
 
 #### DATE_PART
--   `DATE_PART(unit, timestamp_val)`
+-   `#!sql DATE_PART(unit, timestamp_val)`
 
-    Equivalent to `EXTRACT(unit FROM timestamp_val)` with the following unit
+    Equivalent to `#!sql EXTRACT(unit FROM timestamp_val)` with the following unit
     string literals:
     -   YEAR: `year`, `years`, `yr`, `yrs`, `y`, `yy`, `yyy`, `yyyy`
     -   QUARTER: `quarter`, `quarters`, `q`, `qtr`, `qtrs`
@@ -1611,133 +1681,140 @@ Bodo SQL currently supports the following Timestamp functions:
     Supported with timezone-aware data.
 
 #### MICROSECOND
--   `MICROSECOND(timestamp_val)`
+-   `#!sql MICROSECOND(timestamp_val)`
 
-    Equivalent to `EXTRACT(MICROSECOND from timestamp_val)`
+    Equivalent to `#!sql EXTRACT(MICROSECOND from timestamp_val)`
 
 #### SECOND
--   `SECOND(timestamp_val)`
+-   `#!sql SECOND(timestamp_val)`
 
-    Equivalent to `EXTRACT(SECOND from timestamp_val)`
+    Equivalent to `#!sql EXTRACT(SECOND from timestamp_val)`
 
 #### MINUTE
--   `MINUTE(timestamp_val)`
+-   `#!sql MINUTE(timestamp_val)`
 
-    Equivalent to `EXTRACT(MINUTE from timestamp_val)`
+    Equivalent to `#!sql EXTRACT(MINUTE from timestamp_val)`
 
 #### HOUR
--   `HOUR(timestamp_val)`
+-   `#!sql HOUR(timestamp_val)`
 
-    Equivalent to `EXTRACT(HOUR from timestamp_val)`
+    Equivalent to `#!sql EXTRACT(HOUR from timestamp_val)`
 
 #### WEEK
--   `WEEK(timestamp_val)`
+-   `#!sql WEEK(timestamp_val)`
 
-    Equivalent to `EXTRACT(WEEK from timestamp_val)`
+    Equivalent to `#!sql EXTRACT(WEEK from timestamp_val)`
 
 #### WEEKOFYEAR
--   `WEEKOFYEAR(timestamp_val)`
+-   `#!sql WEEKOFYEAR(timestamp_val)`
 
-    Equivalent to `EXTRACT(WEEK from timestamp_val)`
+    Equivalent to `#!sql EXTRACT(WEEK from timestamp_val)`
 
 #### MONTH
--   `MONTH(timestamp_val)`
+-   `#!sql MONTH(timestamp_val)`
 
-    Equivalent to `EXTRACT(MONTH from timestamp_val)`
+    Equivalent to `#!sql EXTRACT(MONTH from timestamp_val)`
 
 #### QUARTER
--   `QUARTER(timestamp_val)`
+-   `#!sql QUARTER(timestamp_val)`
 
-    Equivalent to `EXTRACT(QUARTER from timestamp_val)`
+    Equivalent to `#!sql EXTRACT(QUARTER from timestamp_val)`
 
 #### YEAR
--   `YEAR(timestamp_val)`
+-   `#!sql YEAR(timestamp_val)`
 
-    Equivalent to `EXTRACT(YEAR from timestamp_val)`
+    Equivalent to `#!sql EXTRACT(YEAR from timestamp_val)`
 
 #### WEEKISO
--   `WEEKISO(timestamp_val)`
+-   `#!sql WEEKISO(timestamp_val)`
 
     Computes the ISO week for the provided timestamp value.
 
 #### YEAROFWEEKISO
--   `YEAROFWEEKISO(timestamp_val)`
+-   `#!sql YEAROFWEEKISO(timestamp_val)`
 
     Computes the ISO year for the provided timestamp value.
 
 #### MAKEDATE
--   `MAKEDATE(integer_years_val, integer_days_val)`
+-   `#!sql MAKEDATE(integer_years_val, integer_days_val)`
 
     Computes a timestamp value that is the specified number of days after
     the specified year.
 
 #### DAYNAME
--   `DAYNAME(timestamp_val)`
+-   `#!sql DAYNAME(timestamp_val)`
 
     Computes the string name of the day of the timestamp value.
 
 #### MONTHNAME
--   `MONTHNAME(timestamp_val)`
+-   `#!sql MONTHNAME(timestamp_val)`
+
+    Computes the string name of the month of the timestamp value.
+
+#### MONTH_NAME
+-   `#!sql MONTH_NAME(timestamp_val)`
 
     Computes the string name of the month of the timestamp value.
 
 #### TO_DAYS
--   `TO_DAYS(timestamp_val)`
+-   `#!sql TO_DAYS(timestamp_val)`
 
     Computes the difference in days between the input timestamp, and year
     0 of the Gregorian calendar
 
 #### TO_SECONDS
--   `TO_SECONDS(timestamp_val)`
+-   `#!sql TO_SECONDS(timestamp_val)`
 
     Computes the number of seconds since year 0 of the Gregorian calendar
 
 #### FROM_DAYS
--   `FROM_DAYS(n)`
+-   `#!sql FROM_DAYS(n)`
 
     Returns a timestamp values that is n days after year 0 of the
     Gregorian calendar
 
 #### UNIX_TIMESTAMP
--   `UNIX_TIMESTAMP()`
+-   `#!sql UNIX_TIMESTAMP()`
 
     Computes the number of seconds since the unix epoch
 
 #### FROM_UNIXTIME
--   `FROM_UNIXTIME(n)`
+-   `#!sql FROM_UNIXTIME(n)`
 
     Returns a Timestamp value that is n seconds after the unix epoch
 
 #### ADDDATE
--   `ADDDATE(timestamp_val, interval)`
+-   `#!sql ADDDATE(timestamp_val, interval)`
 
-    Same as `DATE_ADD`
+    Same as `#!sql DATE_ADD`
 
 #### SUBDATE
--   `SUBDATE(timestamp_val, interval)`
+-   `#!sql SUBDATE(timestamp_val, interval)`
 
-    Same as `DATE_SUB`
+    Same as `#!sql DATE_SUB`
 
 #### TIMESTAMPDIFF
--   `TIMESTAMPDIFF(unit, timestamp_val1, timestamp_val2)`
+-   `#!sql TIMESTAMPDIFF(unit, timestamp_val1, timestamp_val2)`
 
     Returns the amount of time that has passed since `timestamp_val1` until
     `timestamp_val2` in terms of the unit specified, ignoring all smaller units.
     E.g., December 31 of 2020 and January 1 of 2021 count as 1 year apart.
-    Note: for all units larger than `NANOSECOND`, the output type is `INTEGER`
-    instead of `BIGINT`, so any difference values that cannot be stored as
-    signed 32-bit integers might not be returned correct.
+    
+    !!! note
+        For all units larger than `#!sql NANOSECOND`, the output type is `#!sql INTEGER`
+        instead of `#!sql BIGINT`, so any difference values that cannot be stored as
+        signed 32-bit integers might not be returned correct.
 
 #### WEEKDAY
--   `WEEKDAY(timestamp_val)`
+-   `#!sql WEEKDAY(timestamp_val)`
 
     Returns the weekday number for timestamp_val.
 
     !!! note
-        Monday = 0, Sunday=6
+        `Monday = 0`, `Sunday=6`
 
 #### YEARWEEK
--   `YEARWEEK(timestamp_val)`
+-   `#!sql YEARWEEK(timestamp_val)`
 
     Returns the year and week number for the provided timestamp_val
     concatenated as a single number. For example:
@@ -1747,82 +1824,105 @@ Bodo SQL currently supports the following Timestamp functions:
     ```
 
 #### LAST_DAY
--   `LAST_DAY(timestamp_val)`
+-   `#!sql LAST_DAY(timestamp_val)`
 
     Given a timestamp value, returns a timestamp value that is the last
     day in the same month as timestamp_val.
 
 #### UTC_TIMESTAMP
--   `UTC_TIMESTAMP()`
+-   `#!sql UTC_TIMESTAMP()`
 
     Returns the current UTC date and time as a timestamp value.
 
 #### UTC_DATE
--   `UTC_DATE()`
+-   `#!sql UTC_DATE()`
 
     Returns the current UTC date as a Timestamp value.
 
 #### TO_DATE
--   `TO_DATE(col_expr)`
+-   `#!sql TO_DATE(col_expr)`
 
     Casts the col_expr to a timestamp column truncated to the date
     portion. Supported for Integers, Strings, and Datetime types.
     For information on valid for conversion, see: https://docs.snowflake.com/en/sql-reference/functions/to_date.html.
-    Raises an error if suplied an invalid expression.
+    Raises an error if supplied an invalid expression.
 
 #### TRY_TO_DATE
--   `TRY_TO_DATE(col_expr)`
+-   `#!sql TRY_TO_DATE(col_expr)`
 
-    See TO_DATE. The only difference is that TRY_TO_DATE will return NULL upon encountering an invalid expression
-    NULL instead of raising an error. We recommend using this function for converting to date.
+    See `#!sql TO_DATE`. The only difference is that `#!TRY_TO_DATE` will return `NULL` upon encountering an invalid expression
+    `NULL` instead of raising an error. We recommend using this function for converting to date.
+
+#### TIME_FROM_PARTS
+-   `#!sql TIME_FROM_PARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
+
+    Creates a time from individual numeric components. Usually,
+    `integer_hour_val` is in the 0-23 range, `integer_minute_val` is in the 0-59
+    range, `integer_second_val` is in the 0-59 range, and
+    `integer_nanoseconds_val` (if provided) is a 9-digit integer.
+    ```sql
+    TIMEFROMPARTS(12, 34, 56, 987654321)
+    12:34:56.987654321
+    ```
+
+#### TIMEFROMPARTS
+-   `#!sql TIMEFROMPARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
+
+    See TIME_FROM_PARTS.
+    
+    ```sql
+    TIMEFROMPARTS(12, 34, 56, 987654321)
+    12:34:56.987654321
+    ```
+    
 
 ###  String Functions
 
-Bodo SQL currently supports the following string functions:
+BodoSQL currently supports the following string functions:
 
 #### LOWER
--   `LOWER(str)`
+-   `#!sql LOWER(str)`
 
     Converts the string scalar/column to lower case.
 
 #### LCASE
--   `LCASE(str)`
+-   `#!sql LCASE(str)`
 
-    Same as `LOWER`.
+    Same as `#!sql LOWER`.
 
 #### UPPER
--   `UPPER(str)`
+-   `#!sql UPPER(str)`
 
     Converts the string scalar/column to upper case.
 
 #### UCASE
--   `UCASE(str)`
+-   `#!sql UCASE(str)`
 
-    Same as `UPPER`.
+    Same as `#!sql UPPER`.
 
 #### CONCAT
--   `CONCAT(str_0, str_1, ...)`
+-   `#!sql CONCAT(str_0, str_1, ...)`
 
     Concatenates the strings together. Requires at least two
     arguments.
 
 #### CONCAT_WS
--   `CONCAT_WS(str_separator, str_0, str_1, ...)`
+-   `#!sql CONCAT_WS(str_separator, str_0, str_1, ...)`
 
     Concatenates the strings together, with the specified
     separator. Requires at least three arguments
 
 #### SUBSTRING
--   `SUBSTRING(str, start_index, len)`
+-   `#!sql SUBSTRING(str, start_index, len)`
 
     Takes a substring of the specified string, starting at the
     specified index, of the specified length. `start_index = 1`
     specifies the first character of the string, `start_index =
     -1` specifies the last character of the string. `start_index
     = 0` causes the function to return empty string. If
-    `start_index` is positive and greater then the length of the
+    `start_index` is positive and greater than the length of the
     string, returns an empty string. If `start_index` is
-    negative, and has an absolute value greater then the
+    negative, and has an absolute value greater than the
     length of the string, the behavior is equivalent to
     `start_index = 1`.
 
@@ -1835,33 +1935,33 @@ Bodo SQL currently supports the following string functions:
     SUBSTRING('hello world', 0, 10) ==''
     ```
 #### MID
--   `MID(str, start_index, len)`
+-   `#!sql MID(str, start_index, len)`
 
-    Equivalent to `SUBSTRING`
+    Equivalent to `#!sql SUBSTRING`
 
 #### SUBSTR
--   `SUBSTR(str, start_index, len)`
+-   `#!sql SUBSTR(str, start_index, len)`
 
-    Equivalent to `SUBSTRING`
+    Equivalent to `#!sql SUBSTRING`
 
 #### LEFT
--   `LEFT(str, n)`
+-   `#!sql LEFT(str, n)`
 
     Takes a substring of the specified string consisting of
     the leftmost n characters
 
 #### RIGHT
--   `RIGHT(str, n)`
+-   `#!sql RIGHT(str, n)`
 
     Takes a substring of the specified string consisting of
     the rightmost n characters
 
 #### REPEAT
--   `REPEAT(str, len)`
+-   `#!sql REPEAT(str, len)`
 
     Extends the specified string to the specified length by
     repeating the string. Will truncate the string If the
-    string's length is less then the len argument
+    string's length is less than the len argument
 
     For example:
 
@@ -1872,62 +1972,57 @@ Bodo SQL currently supports the following string functions:
 
 
 #### STRCMP
--   `STRCMP(str1, str2)`
+-   `#!sql STRCMP(str1, str2)`
 
     Compares the two strings lexicographically. If `str1 > str2`,
     return 1. If `str1 < str2`, returns -1. If `str1 == str2`,
     returns 0.
 
 #### REVERSE
--   `REVERSE(str)`
+-   `#!sql REVERSE(str)`
 
     Returns the reversed string.
 
 #### ORD
--   `ORD(str)`
+-   `#!sql ORD(str)`
 
     Returns the integer value of the unicode representation of
     the first character of the input string. returns 0 when
     passed the empty string
 
 #### CHAR
--   `CHAR(int)`
+-   `#!sql CHAR(int)`
 
     Returns the character of the corresponding unicode value.
     Currently only supported for ASCII characters (0 to 127,
     inclusive)
 
 #### SPACE
--   `SPACE(int)`
+-   `#!sql SPACE(int)`
 
     Returns a string containing the specified number of
     spaces.
 
 #### LTRIM
--   `LTRIM(str)`
+-   `#!sql LTRIM(str)`
 
     Returns the input string, will remove all spaces from the
-    left of the string.
+    left of the string
 
 #### RTRIM
--   `RTRIM(str)`
+-   `#!sql RTRIM(str)`
 
     Returns the input string, will remove all spaces from the
-    right of the string.
-
-#### RTRIMMED_LENGTH
--   `RTRIMMED_LENGTH(str)`
-
-    Equivalent to `LENGTH(RTRIM(STR))`.
+    right of the string
 
 #### TRIM
--   `TRIM(str)`
+-   `#!sql TRIM(str)`
 
     Returns the input string, will remove all spaces from the
-    left and right of the string.
+    left and right of the string
 
 #### SUBSTRING_INDEX
--   `SUBSTRING_INDEX(str, delimiter_str, n)`
+-   `#!sql SUBSTRING_INDEX(str, delimiter_str, n)`
 
     Returns a substring of the input string, which contains
     all characters that occur before n occurrences of the
@@ -1945,11 +2040,11 @@ Bodo SQL currently supports the following string functions:
 
 
 #### LPAD
--   `LPAD(string, len, padstring)`
+-   `#!sql LPAD(string, len, padstring)`
 
     Extends the input string to the specified length, by
     appending copies of the padstring to the left of the
-    string. If the input string's length is less then the len
+    string. If the input string's length is less than the len
     argument, it will truncate the input string.
 
     For example:
@@ -1959,11 +2054,11 @@ Bodo SQL currently supports the following string functions:
     ```
 
 #### RPAD
--   `RPAD(string, len, padstring)`
+-   `#!sql RPAD(string, len, padstring)`
 
     Extends the input string to the specified length, by
     appending copies of the padstring to the right of the
-    string. If the input string's length is less then the len
+    string. If the input string's length is less than the len
     argument, it will truncate the input string.
 
     For example:
@@ -1974,7 +2069,7 @@ Bodo SQL currently supports the following string functions:
 
 
 #### REPLACE
--   `REPLACE(base_string, substring_to_remove, string_to_substitute)`
+-   `#!sql REPLACE(base_string, substring_to_remove, string_to_substitute)`
 
     Replaces all occurrences of the specified substring with
     the substitute string.
@@ -1986,13 +2081,13 @@ Bodo SQL currently supports the following string functions:
 
 
 #### LENGTH
--   `LENGTH(string)`
+-   `#!sql LENGTH(string)`
 
     Returns the number of characters in the given string.
 
 
 #### EDITDISTANCE
--   `EDITDISTANCE(string0, string1[, max_distance])`
+-   `#!sql EDITDISTANCE(string0, string1[, max_distance])`
 
     Returns the minimum edit distance between string0 and string1
     according to Levenshtein distance. Optionally accepts a third
@@ -2003,68 +2098,74 @@ Bodo SQL currently supports the following string functions:
 
 
 #### SPLIT_PART
--   `SPLIT_PART(source, delimeter, part)`
+-   `#!sql SPLIT_PART(source, delimiter, part)`
 
     Returns the substring of the source between certain occurrence of
-    the delimeter string, the occurrence being specified by the part.
+    the delimiter string, the occurrence being specified by the part.
     I.e. if part=1, returns the substring before the first occurrence,
     and if part=2, returns the substring between the first and second
-    occurrence. Zero is treated like 1. Negative indicies are allowed.
-    If the delimeter is empty, the source is treated like a single token.
+    occurrence. Zero is treated like 1. Negative indices are allowed.
+    If the delimiter is empty, the source is treated like a single token.
     If the part is out of bounds, '' is returned.
 
 
 #### STRTOK
--   `STRTOK(source[, delimeter[, part]])`
+-   `#!sql STRTOK(source[, delimiter[, part]])`
 
     Tokenizes the source string by occurrences of any character in the
-    delimeter string and returns the occurrence specified by the part.
+    delimiter string and returns the occurrence specified by the part.
     I.e. if part=1, returns the substring before the first occurrence,
     and if part=2, returns the substring between the first and second
     occurrence. Zero and negative indices are not allowed. Empty tokens
     are always skipped in favor of the next non-empty token. In any
     case where the only possible output is '', the output is `NULL`.
-    The delimeter is optional and defaults to ' '. The part is optional
+    The delimiter is optional and defaults to ' '. The part is optional
     and defaults to 1.
 
 
 #### POSITION
--   `POSITION(str1, str2)`
+-   `#!sql POSITION(str1, str2)`
 
     Returns the 1-indexed location where `str1` first occurs in `str2`, or 0 if
-    there is no occurrences of `str1` in `str2`. Note: does not currently support
-    alternate syntax `POSITION(str1, str2)`, or binary data.
+    there is no occurrences of `str1` in `str2`. 
+
+    !!! note 
+        BodoSQL oes not currently support alternate syntax `#!sql POSITION(str1, str2)`, or binary data.
 
 
 #### CHARINDEX
--   `CHARINDEX(str1, str2[, start_position])`
+-   `#!sql CHARINDEX(str1, str2[, start_position])`
 
-    Equiavelnt to `POSITION(str1, str2)` when 2 arguments are provided. When the
+    Equivalent to `#!sql POSITION(str1, str2)` when 2 arguments are provided. When the
     optional third argument is provided, it only starts searching at that index.
-    Note: not currently supported on binary data.
+    
+    !!! note 
+        Not currently supported on binary data.
 
 
 #### STARTSWITH
--   `STARTSWITH(str1, str2)`
+-   `#!sql STARTSWITH(str1, str2)`
 
-    Returns whether or not `str2` is a prefix of `str1`.
+    Returns whether `str2` is a prefix of `str1`.
 
 
 #### ENDSWITH
--   `ENDSWITH(str1, str2)`
+-   `#!sql ENDSWITH(str1, str2)`
 
-    Returns whether or not `str2` is a suffix of `str1`.
+    Returns whether `str2` is a suffix of `str1`.
 
 
 #### INSERT
--   `INSERT(str1, pos, len, str2)`
+-   `#!sql INSERT(str1, pos, len, str2)`
 
     Inserts `str2` into `str1` at position `pos` (1-indexed), replacing
     the first `len` characters after `pos` in the process. If `len` is zero,
     inserts `str2` into `str1` without deleting any characters. If `pos` is one,
     prepends `str2` to `str1`. If `pos` is larger than the length of `str1`, appends
-    `str2` to `str1. Note: behavior when `pos` or `len` are negative is not well
-    defined at this time.
+    `str2` to `str1`. 
+
+    !!! note
+        Behavior when `pos` or `len` are negative is not well-defined at this time.
 
 
 ###  Regex Functions
@@ -2097,16 +2198,16 @@ The key points and major deviations are noted below:
 
 * Currently, BodoSQL requires the pattern argument and the flag argument (if provided) to be string literals as opposed to columns or expressions.
 
-* Currently, extra backslashes may be required to escape certain characters if they have meaning in Python. The amount of backslashes required to properly escape a character depends on the useage.
+* Currently, extra backslashes may be required to escape certain characters if they have meaning in Python. The amount of backslashes required to properly escape a character depends on the usage.
 
 * All matches are non-overlapping.
 
-* If any of the numeric arguments are zero or negative, or the `group_num` argument is out of bounds, an error is raised. The only exception is `REGEXP_REPLACE`, which allows its occurrence argument to be zero.
+* If any of the numeric arguments are zero or negative, or the `group_num` argument is out of bounds, an error is raised. The only exception is `#!sql REGEXP_REPLACE`, which allows its occurrence argument to be zero.
 
 BodoSQL currently supports the following regex functions:
 
 #### REGEXP_LIKE
--   `REGEXP_LIKE(str, pattern[, flag])`
+-   `#!sql REGEXP_LIKE(str, pattern[, flag])`
 
     Returns `true` if the entire string matches with the pattern.
     If `flag` is not provided, `''` is used.
@@ -2122,14 +2223,14 @@ BodoSQL currently supports the following regex functions:
     SELECT REGEXP_LIKE(A, 'a[a-z]{3}z')
     ```
 
-    - 3 arguments: Returns `true` if `A` starts with the letters `'THE'` (case-insenstive).
+    - 3 arguments: Returns `true` if `A` starts with the letters `'THE'` (case-insensitive).
     ```sql
     SELECT REGEXP_LIKE(A, 'THE.*', 'i')
     ```
 
 
 #### REGEXP_COUNT
--   `REGEXP_COUNT(str, pattern[, position[, flag]])`
+-   `#!sql REGEXP_COUNT(str, pattern[, position[, flag]])`
 
     Returns the number of times the string contains matches
     to the pattern, starting at the location specified
@@ -2152,7 +2253,7 @@ BodoSQL currently supports the following regex functions:
     SELECT REGEXP_COUNT(A, '\d', 6)
     ```
 
-    - 4 arguments: Returns the number of times that a substring occurrs in `A` that contains two
+    - 4 arguments: Returns the number of times that a substring occurs in `A` that contains two
     ones with any character (including newlines) in between.
     ```sql
     SELECT REGEXP_COUNT(A, '1.1', 1, 's')
@@ -2160,9 +2261,9 @@ BodoSQL currently supports the following regex functions:
 
 
 #### REGEXP_REPLACE
--   `REGEXP_REPLACE(str, pattern[, replacement[, position[, occurrence[, flag]]]])`
+-   `#!sql REGEXP_REPLACE(str, pattern[, replacement[, position[, occurrence[, flag]]]])`
 
-    Returns the a version of the inputted string where each
+    Returns the version of the inputted string where each
     match to the pattern is replaced by the replacement string,
     starting at the location specified by the `position` argument
     (with 1-indexing). The occurrence argument specifies which
@@ -2174,8 +2275,9 @@ BodoSQL currently supports the following regex functions:
     If there are an insufficient number of matches, or the pattern is empty,
     the original string is returned.
 
-    Note: backreferences in the replacement pattern are supported,
-    but may require additional backslashes to work correctly.
+    !!! note
+        back-references in the replacement pattern are supported,
+        but may require additional backslashes to work correctly.
 
     For example:
 
@@ -2208,7 +2310,7 @@ BodoSQL currently supports the following regex functions:
 
 
 #### REGEXP_SUBSTR
--   `REGEXP_SUBSTR(str, pattern[, position[, occurrence[, flag[, group_num]]]])`
+-   `#!sql REGEXP_SUBSTR(str, pattern[, position[, occurrence[, flag[, group_num]]]])`
 
     Returns the substring of the original string that caused a
     match with the pattern, starting at the location specified
@@ -2256,7 +2358,7 @@ BodoSQL currently supports the following regex functions:
 
 
 #### REGEXP_INSTR
--   `REGEXP_INSTR(str, pattern[, position[, occurrence[, option[, flag[, group_num]]]]])`
+-   `#!sql REGEXP_INSTR(str, pattern[, position[, occurrence[, option[, flag[, group_num]]]]])`
 
     Returns the location within the original string that caused a
     match with the pattern, starting at the location specified
@@ -2316,36 +2418,33 @@ BodoSQL currently supports the following regex functions:
 BodoSQL currently supports the following JSON functions:
 
 #### JSON_EXTRACT_PATH_TEXT
--   `JSON_EXTRACT_PATH_TEXT(data, path)`
+-   `#!sql JSON_EXTRACT_PATH_TEXT(data, path)`
 
     Parses the string `data` as if it were JSON data, then extracts values from
     within (possibly multiple times if the data is nested) using the string `path`.
 
     Obeys the following specification: https://docs.snowflake.com/en/sql-reference/functions/json_extract_path_text.html
 
-    Note: cases where the data or path are malformed/erroneus often result in
-    an exception being raised, but sometimes return `NULL` instead. Which occurs
-    may vary for the same type of error depending on where in the string it occurs.
-
 
 ###   Control Flow Functions
 
 #### DECODE
--   `DECODE(Arg0, Arg1, Arg2, ...)`
+-   `#!sql DECODE(Arg0, Arg1, Arg2, ...)`
 
     When `Arg0` is `Arg1`, outputs `Arg2`. When `Arg0` is `Arg3`,
     outputs `Arg4`. Repeats until it runs out of pairs of arguments.
     At this point, if there is one remaining argument, this is used
-    as a default value. If not, then the output is NULL. Note: treats
-    NULL as a literal value that can be matched on.
+    as a default value. If not, then the output is `NULL`. 
+
+    !!! note 
+        Treats `NULL` as a literal value that can be matched on.
 
     Therefore, the following:
 
     ```sql
     DECODE(A, NULL, 0, 'x', 1, 'y', 2, 'z', 3, -1)
     ```
-
-
+    
     Is logically equivalent to:
 
     ```sql
@@ -2357,14 +2456,14 @@ BodoSQL currently supports the following JSON functions:
     ```
 
 #### EQUAL_NULL
--   `EQUAL_NULL(A, B)`
+-   `#!sql EQUAL_NULL(A, B)`
 
     Returns true if A and B are both `NULL`, or both non-null and
     equal to each other.
 
 
 #### IF
--   `IF(Cond, TrueValue, FalseValue)`
+-   `#!sql IF(Cond, TrueValue, FalseValue)`
 
     Returns `TrueValue` if cond is true, and `FalseValue` if cond is
     false. Logically equivalent to:
@@ -2375,57 +2474,57 @@ BodoSQL currently supports the following JSON functions:
 
 
 #### IFF
--   `IFF(Cond, TrueValue, FalseValue)`
+-   `#!sql IFF(Cond, TrueValue, FalseValue)`
 
-    Equivalent to `IF`
+    Equivalent to `#!sql IF`
 
 
 #### IFNULL
--   `IFNULL(Arg0, Arg1)`
+-   `#!sql IFNULL(Arg0, Arg1)`
 
     Returns `Arg1` if `Arg0` is `null`, and otherwise returns `Arg1`. If
-    arguments do not have the same type, Bodo SQL will attempt
+    arguments do not have the same type, BodoSQL will attempt
     to cast them all to a common type, which is currently
     undefined behavior.
 
 #### ZEROIFNULL
--   `ZEROIFNULL(Arg0, Arg1)`
+-   `#!sql ZEROIFNULL(Arg0, Arg1)`
 
-    Equivalent to `IFNULL(Arg0, 0)`
+    Equivalent to `#!sql IFNULL(Arg0, 0)`
 
 
 #### NVL
--   `NVL(Arg0, Arg1)`
+-   `#!sql NVL(Arg0, Arg1)`
 
-    Equivalent to `IFNULL`
+    Equivalent to `#!sql IFNULL`
 
 
 #### NVL2
--   `NVL2(Arg0, Arg1, Arg2)`
+-   `#!sql NVL2(Arg0, Arg1, Arg2)`
 
-    Equivalent to `NVL(NVL(Arg0, Arg1), Arg2)`
+    Equivalent to `#!sql NVL(NVL(Arg0, Arg1), Arg2)`
 
 
 #### NULLIF
--   `NULLIF(Arg0, Arg1)`
+-   `#!sql NULLIF(Arg0, Arg1)`
 
     Returns `null` if the `Arg0` evaluates to true, and otherwise
     returns `Arg1`
 
 
 #### NULLIFZERO
--   `NULLIFZERO(Arg0)`
+-   `#!sql NULLIFZERO(Arg0)`
 
-    Equivalent to `NULLIF(Arg0, 0)`
+    Equivalent to `#!sql NULLIF(Arg0, 0)`
 
 
 #### COALESCE
--   `COALESCE(A, B, C, ...)`
+-   `#!sql COALESCE(A, B, C, ...)`
 
-    Returns the first non NULL argument, or NULL if no non NULL
+    Returns the first non-`NULL` argument, or `NULL` if no non-`NULL`
     argument is found. Requires at least two arguments. If
-    Arguments do not have the same type, Bodo SQL will attempt
-    to cast them to a common dtype, which is currently
+    Arguments do not have the same type, BodoSQL will attempt
+    to cast them to a common data type, which is currently
     undefined behavior.
 
 
@@ -2438,14 +2537,13 @@ following syntax:
 ```sql
 SELECT WINDOW_FN(ARG1, ..., ARGN) OVER (PARTITION BY PARTITION_COLUMN_1, ..., PARTITION_COLUMN_N ORDER BY SORT_COLUMN_1, ..., SORT_COLUMN_N ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>) FROM table_name
 ```
-The `ROWS BETWEEN ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>`
+The `#!sql ROWS BETWEEN ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>`
 section is used to specify the window over which to compute the
-function. A bound can can come before the current row, using
-`PRECEDING` or after the current row, using
-`FOLLOWING`. The bounds can be relative (i.e.
-`N PRECEDING` or `N FOLLOWING`), where `N` is a positive integer,
-or they can be absolute (i.e. `UNBOUNDED PRECEDING` or
-`UNBOUNDED FOLLOWING`).
+function. A bound can can come before the current row, using `#!sql PRECEDING` or after the current row, using
+`#!sql FOLLOWING`. The bounds can be relative (i.e.
+`#!sql N PRECEDING` or `#!sql N FOLLOWING`), where `N` is a positive integer,
+or they can be absolute (i.e. `#!sql UNBOUNDED PRECEDING` or
+`#!sql UNBOUNDED FOLLOWING`).
 
 For example:
 
@@ -2461,113 +2559,114 @@ SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING A
 ```
 This query computes the cumulative sum over a row and all of its preceding rows.
 
-Note: for most window functions, BodoSQL returns `NULL` if the specified window frame
-is empty or all `NULL`. Exceptions to this behavior are noted.
+!!! note
+    For most window functions, BodoSQL returns `NULL` if the specified window frame
+    is empty or all `NULL`. Exceptions to this behavior are noted.
 
 Window functions perform a series of steps as followed:
 
-1.  Partition the data by `PARTITION_COLUMN`. This is effectively a groupby operation on `PARTITION_COLUMN`.
-2.  Sort each group as specified by the `ORDER BY` clause.
+1.  Partition the data by `#!sql PARTITION_COLUMN`. This is effectively a groupby operation on `#!sql PARTITION_COLUMN`.
+2.  Sort each group as specified by the `#!sql ORDER BY` clause.
 3.  Perform the calculation over the specified window, i.e. the newly ordered subset of data.
 4.  Shuffle the data back to the original ordering.
 
-For BodoSQL, `PARTITION BY` is required, but
-`ORDER BY` is optional for most functions and
-`ROWS BETWEEN` is optional for all of them. If
-`ROWS BETWEEN` is not specified then it defaults to either
-computing the result over the entire window (if no `ORDER BY`
-clause is specified) or to using the window `UNBOUNDED PRECEDING TO CURRENT ROW`
-(if there is an `ORDER BY` clause).
-Note: `RANGE BETWEEN` is not currently supported.
-Currently BodoSQL supports the following Window functions:
-
+For BodoSQL, `#!sql PARTITION BY` is required, but
+`#!sql ORDER BY` is optional for most functions and
+`#!sql ROWS BETWEEN` is optional for all of them. If
+`#!sql ROWS BETWEEN` is not specified then it defaults to either
+computing the result over the entire window (if no `#!sql ORDER BY`
+clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURRENT ROW`
+(if there is an `#!sql ORDER BY` clause).
+!!! note
+    `#!sql RANGE BETWEEN` is not currently supported.
+    Currently, BodoSQL supports the following Window functions:
 
 #### COUNT
--   `COUNT(*)`
+-   `#!sql COUNT(*)`
 
     Compute the number of entries in a window, including `NULL`.
 
 #### SUM
--   `SUM(COLUMN_EXPRESSION)`
+-   `#!sql SUM(COLUMN_EXPRESSION)`
 
     Compute the sum over the window or `NULL` if the window is
     empty.
 
 #### AVG
--   `AVG(COLUMN_EXPRESSION)`
+-   `#!sql AVG(COLUMN_EXPRESSION)`
 
     Compute the average over the window or `NULL` if the window
     is empty.
 
 
 #### STDDEV
--   `STDDEV(COLUMN_EXPRESSION)`
+-   `#!sql STDDEV(COLUMN_EXPRESSION)`
 
     Compute the standard deviation for a sample over the
     window or `NULL` if the window is empty.
 
 #### STDDEV_POP
--   `STDDEV_POP(COLUMN_EXPRESSION)`
+-   `#!sql STDDEV_POP(COLUMN_EXPRESSION)`
 
     Compute the standard deviation for a population over the
     window or `NULL` if the window is empty.
 
 #### VARIANCE
--   `VARIANCE(COLUMN_EXPRESSION)`
+-   `#!sql VARIANCE(COLUMN_EXPRESSION)`
 
     Compute the variance for a sample over the window or `NULL`
     if the window is empty.
 
 #### VAR_POP
--   `VAR_POP(COLUMN_EXPRESSION)`
+-   `#!sql VAR_POP(COLUMN_EXPRESSION)`
 
     Compute the variance for a population over the window or
     `NULL` if the window is empty.
 
 
 #### COVAR_SAMP
--   `COVAR_SAMP(Y, X)`
+-   `#!sql COVAR_SAMP(Y, X)`
 
     Compute the sample covariance over the window of both inputs, or `NULL` if 
-    the window is empty. Compute the variance for a population over the window.
+    the window is empty.
 
 
 #### COVAR_POP
--   `COVAR_POP(Y, X)`
+-   `#!sql COVAR_POP(Y, X)`
 
     Compute the population covariance over the window of both inputs, or `NULL` if 
-    the window is empty. Compute the variance for a population over the window.
+    the window is empty.
 
 
 #### MAX
--   `MAX(COLUMN_EXPRESSION)`
+-   `#!sql MAX(COLUMN_EXPRESSION)`
 
     Compute the maximum value over the window or `NULL` if the
     window is empty.
 
 #### MIN
--   `MIN(COLUMN_EXPRESSION)`
+-   `#!sql MIN(COLUMN_EXPRESSION)`
 
     Compute the minimum value over the window or `NULL` if the
     window is empty.
 
 #### COUNT
 
--   `COUNT(COLUMN_EXPRESSION)`
+-   `#!sql COUNT(COLUMN_EXPRESSION)`
 
     Compute the number of non-`NULL` entries in a window, or zero if the window
     is empty.
 
 #### COUNT_IF
 
--   `COUNT_IF(BOOLEAN_COLUMN_EXPRESSION)`
+-   `#!sql COUNT_IF(BOOLEAN_COLUMN_EXPRESSION)`
 
     Compute the number of `true` entries in a boolean column, or zero if the window
     is empty.
 
 
 #### MEDIAN
--   `MEDIAN(COLUMN_EXPRESSION)`
+-   `#!sql MEDIAN(COLUMN_EXPRESSION)`
 
     Compute the median over the window, or `NULL` if the window is empty.
 
@@ -2576,12 +2675,15 @@ Currently BodoSQL supports the following Window functions:
 -   `MODE(COLUMN_EXPRESSION)`
 
     Returns the most frequent element in the window, or `NULL` if the window is
-    empty. Note: In case of a tie, BodoSQL will choose a value arbitrarily based
-    on performance considerations.
+    empty.
+
+    !!! note 
+        In case of a tie, BodoSQL will choose a value arbitrarily based on performance considerations.
+
 
 
 #### LEAD
--   `LEAD(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
+-   `#!sql LEAD(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
 
     Returns the row that follows the current row by N. If N
     is not specified, defaults to 1. If FILL_VALUE is not
@@ -2589,51 +2691,63 @@ Currently BodoSQL supports the following Window functions:
     there are fewer than N rows the follow the current row in
     the window, it returns FILL_VALUE. N must be a literal
     non-negative integer if specified. FILL_VALUE must be a
-    scalar if specified. Note: at this time Bodo does not
-    support the `IGNORE NULLS` keyword.
+    scalar if specified. 
 
-    This function cannot be used with `ROWS BETWEEN`.
+    !!!note
+        - At this time Bodo does not support the `#!sql IGNORE NULLS` keyword.
+        - This function cannot be used with `#!sql ROWS BETWEEN`.
 
 #### LAG
--   `LAG(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
+-   `#!sql LAG(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
 
     Returns the row that precedes the current row by N. If N
     is not specified, defaults to 1. If FILL_VALUE is not
     specified, defaults to `NULL`. If
-    there are fewer than N rows the precede the current row in
+    there are fewer than N rows that precede the current row in
     the window, it returns FILL_VALUE. N must be a literal
     non-negative integer if specified. FILL_VALUE must be a
-    scalar if specified. Note: at this time Bodo does not
-    support the `IGNORE NULLS` keyword.
+    scalar if specified. 
 
-    This function cannot be used with `ROWS BETWEEN`.
+    !!! note 
+        - At this time BodoSQL does not support the `#!sql IGNORE NULLS` keyword.
+        - This function cannot be used with `#!sql ROWS BETWEEN`.
 
 #### FIRST_VALUE
--   `FIRST_VALUE(COLUMN_EXPRESSION)`
+-   `#!sql FIRST_VALUE(COLUMN_EXPRESSION)`
 
+    Select the first value in the window or `NULL` if the window
+    is empty.
     Select the first value in the window.
 
 #### LAST_VALUE
--   `LAST_VALUE(COLUMN_EXPRESSION)`
+-   `#!sql LAST_VALUE(COLUMN_EXPRESSION)`
 
+    Select the last value in the window or `NULL` if the window
+    is empty.
     Select the last value in the window.
 
 #### NTH_VALUE
--   `NTH_VALUE(COLUMN_EXPRESSION, N)`
+-   `#!sql NTH_VALUE(COLUMN_EXPRESSION, N)`
 
+    Select the Nth value in the window (1-indexed) or `NULL` if
+    the window is empty. If N is greater or than the window
+    size, this returns `NULL`.
     Select the Nth value in the window (1-indexed). If N is greater or than the
     window size, this returns `NULL`.
 
 
 #### ANY_VALUE
--   `ANY_VALUE(COLUMN_EXPRESSION)`
+-   `#!sql ANY_VALUE(COLUMN_EXPRESSION)`
 
-    Select an arbitrary value in the window. Note: currently BodoSQL always
-    selects the first value, but this is subject to change at any time.
+    Select an arbitrary value in the window or `NULL` if the window
+    is empty. 
+
+    !!! note 
+        Currently, BodoSQL always selects the first value, but this is subject to change at any time.
 
 
 #### NTILE
--   `NTILE(N)`
+-   `#!sql NTILE(N)`
 
     Divides the partitioned groups into N buckets based on
     ordering. For example if N=3 and there are 30 rows in a
@@ -2646,67 +2760,68 @@ Currently BodoSQL supports the following Window functions:
     next 6 are assigned 2, the next 5 are assigned 3, and
     the last 5 are assigned 4.
 
+
 #### RANK
--   `RANK()`
+-   `#!sql RANK()`
 
     Compute the rank of each row based on the value(s) in the row relative to all value(s) within the partition.
     The rank begins with 1 and increments by one for each succeeding value. Duplicate value(s) will produce
-    the same rank, producing gaps in the rank (compare with `DENSE_RANK`). `ORDER BY` is required for this function.
+    the same rank, producing gaps in the rank (compare with `#!sql DENSE_RANK`). `#!sql ORDER BY` is required for this function.
 
 
 #### DENSE_RANK
--   `DENSE_RANK()`
+-   `#!sql DENSE_RANK()`
 
     Compute the rank of each row based on the value(s) in the row relative to all value(s) within the partition
-    without producing gaps in the rank (compare with `RANK`). The rank begins with 1 and increments by one for each succeeding value.
-    Rows with the same value(s) produce the same rank. `ORDER BY` is required for this function.
+    without producing gaps in the rank (compare with `#!sql RANK`). The rank begins with 1 and increments by one for each succeeding value.
+    Rows with the same value(s) produce the same rank. `#!sql ORDER BY` is required for this function.
 
 !!!note
-    To compare `RANK` and `DENSE_RANK`, on input array `['a', 'b', 'b', 'c']`, `RANK` will output `[1, 2, 2, 4]` while `DENSE_RANK` outputs `[1, 2, 2, 3]`.
+    To compare `#!sql RANK` and `#!sql DENSE_RANK`, on input array `['a', 'b', 'b', 'c']`, `#!sql RANK` will output `[1, 2, 2, 4]` while `#!sql DENSE_RANK` outputs `[1, 2, 2, 3]`.
 
 #### PERCENT_RANK
--   `PERCENT_RANK()`
+-   `#!sql PERCENT_RANK()`
 
     Compute the percentage ranking of the value(s) in each row based on the value(s) relative to all value(s)
-    within the window partition. Ranking calcuated using `RANK()` divided by the number of rows in the window
-    partition minus one. Paritions with one row have `PERCENT_RANK()` of 0. `ORDER BY` is required for this function.
+    within the window partition. Ranking calculated using `#!sql RANK()` divided by the number of rows in the window
+    partition minus one. Partitions with one row have `#!sql PERCENT_RANK()` of 0. `#!sql ORDER BY` is required for this function.
 
 
 #### CUME_DIST
--   `CUME_DIST()`
+-   `#!sql CUME_DIST()`
 
     Compute the cumulative distribution of the value(s) in each row based on the value(s) relative to all value(s)
-    within the window partition. `ORDER BY` is required for this function.
+    within the window partition. `#!sql ORDER BY` is required for this function.
 
 
 #### ROW_NUMBER
--   `ROW_NUMBER()`
+-   `#!sql ROW_NUMBER()`
 
     Compute an increasing row number (starting at 1) for each
-    row. This function cannot be used with `ROWS BETWEEN`.
+    row. This function cannot be used with `#!sql ROWS BETWEEN`.
 
 
 #### CONDITIONAL_TRUE_EVENT
--   `CONDITIONAL_TRUE_EVENT(BOOLEAN_COLUMN_EXPRESSION)`
+-   `#!sql CONDITIONAL_TRUE_EVENT(BOOLEAN_COLUMN_EXPRESSION)`
 
     Computes a counter within each partition that starts at zero and increases by 1 each
-    time the boolean column's value is `true`. `ORDER BY` is required for this function.
+    time the boolean column's value is `true`. `#!sql ORDER BY` is required for this function.
 
 
 #### CONDITIONAL_CHANGE_EVENT
--   `CONDITIONAL_CHANGE_EVENT(COLUMN_EXPRESSION)`
+-   `#!sql CONDITIONAL_CHANGE_EVENT(COLUMN_EXPRESSION)`
 
     Computes a counter within each partition that starts at zero and increases by 1 each
     time the value inside the window changes. `NULL` does not count as a new/changed value.
-    `ORDER BY` is required for this function.
+    `#!sql ORDER BY` is required for this function.
 
 
 #### RATIO_TO_REPORT
--   `RATIO_TO_REPORT(COLUMN_EXPRESSION)`
+-   `#!sql RATIO_TO_REPORT(COLUMN_EXPRESSION)`
 
     Returns an element in the window frame divided by the sum of all elements in the
-    same window frame, or NULL if the window frame has a sum of zero. For example,
-    if calculating `RATIO_TO_REPORT` on `[2, 5, NULL, 10, 3]` where the window
+    same window frame, or `NULL` if the window frame has a sum of zero. For example,
+    if calculating `#!sql RATIO_TO_REPORT` on `[2, 5, NULL, 10, 3]` where the window
     is the entire partition, the answer is `[0.1, 0.25, NULL, 0.5, 0.15]`.
 
 
@@ -2715,7 +2830,7 @@ Currently BodoSQL supports the following Window functions:
 BodoSQL currently supports the following casting/conversion functions:
 
 #### TO_BOOLEAN
--  `TO_BOOLEAN(COLUMN_EXPRESSION)`
+-  `#!sql TO_BOOLEAN(COLUMN_EXPRESSION)`
 
     Casts the input to a boolean value. If the input is a string, it will be cast to `true` if it is
     `'true'`, `'t'`, `'yes'`, `'y'`, `'1'`, cast to `false` if it is `'false'`, `'f'`, `'no'`, `'n'`, `'0'`,
@@ -2761,9 +2876,9 @@ BodoSQL currently supports the following casting/conversion functions:
     BodoSQL will read `NaN`s as `NULL` and thus will not produce errors on `NaN` input.
 
 #### TRY_TO_BOOLEAN
--  `TRY_TO_BOOLEAN(COLUMN_EXPRESSION)`
+-  `#!sql TRY_TO_BOOLEAN(COLUMN_EXPRESSION)`
 
-    This is similar to `TO_BOOLEAN` except that it will return `NULL` instead of throwing an error invalid inputs.
+    This is similar to `#!sql TO_BOOLEAN` except that it will return `NULL` instead of throwing an error invalid inputs.
 
     _Example:_
 
@@ -2793,7 +2908,7 @@ BodoSQL currently supports the following casting/conversion functions:
 
 
 #### TO_CHAR
--  `TO_CHAR(COLUMN_EXPRESSION)`
+-  `#!sql TO_CHAR(COLUMN_EXPRESSION)`
 
     Casts the input to a string value. If the input is a boolean, it will be cast to `'true'` if it is `true` and `'false'` if it is `false`. If the input is `NULL`, the output will be `NULL`.
 
@@ -2824,9 +2939,48 @@ BodoSQL currently supports the following casting/conversion functions:
     ```
 
 #### TO_VARCHAR
--  `TO_VARCHAR(COLUMN_EXPRESSION)`
+-  `#!sql TO_VARCHAR(COLUMN_EXPRESSION)`
 
-    Alias for `TO_CHAR`.
+    Alias for `#!sql TO_CHAR`.
+
+#### TO_DOUBLE
+-  `#!sql TO_DOUBLE(COLUMN_EXPRESSION)`
+
+    Converts a numeric or string expression to a double-precision floating-point number.
+    For `NULL` input, the result is `NULL`.
+    Fixed-point numbers are converted to floating point; the conversion cannot
+    fail, but might result in loss of precision.
+    Strings are converted as decimal or integer numbers. Scientific notation
+    and special values (nan, inf, infinity) are accepted, case insensitive.
+
+    _Example:_
+
+    We are given `table1` with columns `a` and `b`
+    ```python
+    table1 = pd.DataFrame({
+        'a': [1, 0, 2],
+        'b': ['3.7', '-2.2e-1', 'nan'],
+    })
+    ```
+    upon query
+    ```sql
+    SELECT
+        TO_DOUBLE(a) AS a,
+        TO_DOUBLE(b) AS b,
+    FROM table1;
+    ```
+    we will get the following output:
+    ```
+           a      b
+    0    1.0    3.7
+    1    0.0  -0.22
+    2    2.0   <NA>
+    ```
+
+#### TRY_TO_DOUBLE
+-  `#!sql TRY_TO_DOUBLE(COLUMN_EXPRESSION)`
+
+    This is similar to `#!sql TO_DOUBLE` except that it will return `NULL` instead of throwing an error invalid inputs.
 
 ## Supported DataFrame Data Types
 
@@ -2872,12 +3026,12 @@ operation to a nullable, signed version of the type.
 
 BodoSQL supports the following literal types:
 
--   `boolean_literal`
--   `datetime_literal`
--   `float_literal`
--   `integer_literal`
--   `interval_literal`
--   `string_literal`
+-   `#!sql boolean_literal`
+-   `#!sql datetime_literal`
+-   `#!sql float_literal`
+-   `#!sql integer_literal`
+-   `#!sql interval_literal`
+-   `#!sql string_literal`
 
 ### Boolean Literal {#boolean_literal}
 
@@ -2887,7 +3041,7 @@ BodoSQL supports the following literal types:
 TRUE | FALSE
 ```
 
-Boolean literals are case insensitive.
+Boolean literals are case-insensitive.
 
 ### Datetime Literal {#datetime_literal}
 
@@ -2929,11 +3083,11 @@ INTERVAL integer_literal interval_type
 Where integer_literal is a valid integer literal and interval type is
 one of:
 
-```
+```sql
 DAY[S] | HOUR[S] | MINUTE[S] | SECOND[S]
 ```
 
-In addition we also have limited support for `YEAR[S]` and `MONTH[S]`.
+In addition, we also have limited support for `#!sql YEAR[S]` and `#!sql MONTH[S]`.
 These literals cannot be stored in columns and currently are only
 supported for operations involving add and sub.
 
@@ -2947,20 +3101,6 @@ supported for operations involving add and sub.
 
 Where char is a character literal in a Python string.
 
-## NULL Semantics
-
-Bodo SQL converts SQL queries to Pandas code that executes inside Bodo.
-As a result, NULL behavior aligns with Pandas and may be slightly
-different than other SQL systems. This is currently an area of active
-development to ensure compatibility with other SQL systems.
-
-Most operators with a `NULL` input return `NULL`. However, there a couple
-notable places where Bodo SQL may not match other SQL systems:
-
--   Bodo SQL treats `NaN` the same as `NULL`
--   Is (NOT) False and Is (NOT) True return `NULL` when used on a null
-    expression
--   AND will return `NULL` if any of the inputs is `NULL`
 
 ## BodoSQL Caching & Parameterized Queries {#bodosql_named_params}
 
@@ -3175,8 +3315,9 @@ def f(bc):
 
     A new `BodoSQLContext` that retains the tables and catalogs from the old `BodoSQLContext` and inserts the new table specified.
 
-    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
-    e.g. `bc = bc.add_or_replace_view("t1", table)`
+    !!! note
+        This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+        e.g. `bc = bc.add_or_replace_view("t1", table)`
 
 
 
@@ -3195,8 +3336,9 @@ def f(bc):
 
     A new `BodoSQLContext` that retains the tables and catalogs from the old `BodoSQLContext` minus the table specified.
 
-    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
-    e.g. `bc = bc.remove_view("t1")`
+    !!! note
+        This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+        e.g. `bc = bc.remove_view("t1")`
 
 
 
@@ -3214,8 +3356,9 @@ def f(bc):
 
     A new `BodoSQLContext` that retains tables from the old `BodoSQLContext` but replaces the old catalog with the new catalog specified.
 
-    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
-    e.g. `bc = bc.add_or_replace_catalog(catalog)`
+    !!! note
+        This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+        e.g. `bc = bc.add_or_replace_catalog(catalog)`
 
 
 
@@ -3228,8 +3371,9 @@ def f(bc):
 
     A new `BodoSQLContext` that retains tables from the old `BodoSQLContext` but removes the old catalog.
 
-    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
-    e.g. `bc = bc.remove_catalog()`
+    !!!note
+        This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+        e.g. `bc = bc.remove_catalog()`
 
 
 ## TablePath API
@@ -3323,12 +3467,12 @@ For example:
 SELECT A from __bodolocal__.table1
 ```
 
-Currently BodoSQL supports catalogs Snowflake, but support other data storage systems will be added in future releases.
+Currently, BodoSQL supports catalogs Snowflake, but support for other data storage systems will be added in future releases.
 
 ### SnowflakeCatalog
 
 The Snowflake Catalog offers an interface for users to connect their Snowflake accounts to use with BodoSQL.
-With a Snowflake Catalog, users only have to specify their Snowflake connection once, and can access any tables of interest in their Snowflake account. Currently the Snowflake Catalog is defined to
+With a Snowflake Catalog, users only have to specify their Snowflake connection once, and can access any tables of interest in their Snowflake account. Currently, the Snowflake Catalog is defined to
 use a single `DATABASE` (e.g. `USE DATABASE`)  at a time, as shown below.
 
 ```py
@@ -3407,6 +3551,6 @@ Internally, Bodo uses the following connections to Snowflake:
 
 The `SnowflakeCatalog` currently supports the following types of SQL queries:
 
-  * SELECT
-  * INSERT INTO
-  * DELETE
+  * `#!sql SELECT`
+  * `#!sql INSERT INTO`
+  * `#!sql DELETE`

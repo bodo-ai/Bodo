@@ -196,7 +196,7 @@ nav:
               - sklearn.svm: api_docs/ml/sklearn/svm.md
           - XGBoost: api_docs/ml/xgboost.md
       - Miscellaneous Supported Python API: api_docs/miscellaneous.md
-      - BodoSQL(Beta):
+      - BodoSQL:
         - API: api_docs/BodoSQL.md
         - Errors: api_docs/bodosqlerrors.md
   - Performance and Diagnostics:
