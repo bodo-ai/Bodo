@@ -1,15 +1,32 @@
 #!/bin/bash
-
-set -exo pipefail
+set -eo pipefail
 
 # Deactivate env in case this was called by another file that
-# activated the env
-source deactivate || true
+# activated the env. This only happens on AWS and causes errors
+# on Azure with MacOS
+if [[ "$CI_SOURCE" == "AWS" ]]; then
+    source deactivate || true
+fi
 export PATH=$HOME/mambaforge/bin:$PATH
-source activate $CONDA_ENV
-export BODO_VERSION=` python -c "import versioneer; print(versioneer.get_version())"`
 
-# Build Bodo
+set +x
+source activate $CONDA_ENV
+set -x
+
+# bodo install
 python setup.py develop --no-ccache
-# TODO: fix regular install
-# python setup.py build install
+
+# NOTE: we need to cd into the directory before building,
+# as the run leaves behind a .egg-info in the working directory,
+# and if we have multiple of these in the same directory,
+# we can run into conda issues.
+cd iceberg
+# bodo iceberg install
+python setup.py develop
+cd ..
+
+
+# bodosql install
+cd BodoSQL
+python setup.py develop
+cd ..
