@@ -11,6 +11,7 @@
 1. Navigate to the folder with the environment lock file: `cd Bodo/buildscripts/envs`
 1. Create a DEV environment from the lock file: `psh conda-lock install --mamba -n DEV conda-lock.yml`
 1. Activate the environment: `conda activate DEV`
+1. Remove `mpi` and `mpich` on all nodes for the DEV environment. `psh conda remove mpi mpich --force --yes`
 1. Navigate to base folder of Bodo repo: `cd ~/Bodo`
 1. Build Bodo: `psh python setup.py develop`
 1. Build BodoSQL: `cd BodoSQL && psh python setup.py develop && cd ..`
@@ -40,6 +41,8 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 
 1. Run jobs, but be aware that anything you're doing on the node does not count as activity, so auto-shutdown might be invoked if you don't have a notebook connected.
    On AWS workspaces, running `update_hostfile` from the terminal should update the activity timer.
+
+1. Ensure that you are using efa. This can be done by executing: `I_MPI_DEBUG=4 px python -u -c "import bodo; print(bodo.__version__)"` and checking that `libfabric provider: efa` appears at the start of the logs.
 
 1. You can use the `BodoSQLWrapper.py` script to execute a SQL query from a `.sql` file directly:
    `px python -u BodoSQLWrapper.py -c snowflake_creds.json -f query.sql -p query_pandas.py -w <BODO_WH> -d <BODO_DB> -o bodo_out.pq 2>&1 | tee logs-$(date '+%Y-%m-%d-%H:%M:%S').txt`.
