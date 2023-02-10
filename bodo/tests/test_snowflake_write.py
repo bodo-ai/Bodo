@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from mpi4py import MPI
 
@@ -1384,3 +1385,79 @@ def test_to_sql_schema_warning(memory_leak_check):
             bodo.jit(impl)(df, tablename, conn)
     else:
         bodo.jit(impl)(df, tablename, conn)
+
+
+def test_to_sql_snowflake_nulls_in_dict(memory_leak_check):
+    """
+    Test that Snowflake write works even when there are nulls in
+    the dictionary of a dictionary encoded array. Arrow doesn't
+    support this, so we drop the NAs from all dictionaries ourselves
+    before the write step.
+    See [BE-4331](https://bodo.atlassian.net/browse/BE-4331)
+    for more context.
+    We also explicitly test the table-format case since the codegen
+    for it is slightly different.
+    """
+    S = pa.DictionaryArray.from_arrays(
+        np.array([0, 2, 1, 0, 1, 3, 0, 1, 3, 3, 2, 0, 2, 3, 1] * 2, dtype=np.int32),
+        pd.Series(["B", None, "A", None]),
+    )
+    A = np.arange(30)
+
+    @bodo.jit(distributed=["S", "A"])
+    def impl(S, A, table_name, conn):
+        S = pd.Series(S)
+        df = pd.DataFrame({"S": S, "A": A})
+        # Set a small chunksize to force each rank to write multiple files and
+        # hence test that there's no refcount issues due to the slicing.
+        df.to_sql(table_name, conn, if_exists="replace", index=False, chunksize=4)
+        return df
+
+    @bodo.jit(distributed=["S", "A"])
+    def impl_table_format(S, A, table_name, conn):
+        S = pd.Series(S)
+        df = pd.DataFrame({"S": S, "A": A})
+        # Set a small chunksize to force each rank to write multiple files and
+        # hence test that there's no refcount issues due to the slicing.
+        # Force dataframe to use table format.
+        df = bodo.hiframes.pd_dataframe_ext._tuple_to_table_format_decoded(df)
+        df.to_sql(table_name, conn, if_exists="replace", index=False, chunksize=4)
+        return df
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    def test_impl(impl, S, A):
+        with ensure_clean_snowflake_table(conn) as name:
+            py_output = pd.DataFrame({"s": S, "a": A})
+            impl(_get_dist_arg(S), _get_dist_arg(A), name, conn)
+
+            bodo.barrier()
+            passed = 1
+            if bodo.get_rank() == 0:
+                try:
+                    output_df = pd.read_sql(f"select * from {name}", conn)
+                    # Row order isn't defined, so sort the data.
+                    output_cols = output_df.columns.to_list()
+                    output_df = output_df.sort_values(output_cols).reset_index(
+                        drop=True
+                    )
+                    py_cols = py_output.columns.to_list()
+                    py_output = py_output.sort_values(py_cols).reset_index(drop=True)
+                    pd.testing.assert_frame_equal(
+                        output_df, py_output, check_dtype=False, check_column_type=False
+                    )
+                except Exception as e:
+                    print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                    passed = 0
+
+            n_passed = reduce_sum(passed)
+            assert n_passed == bodo.get_size()
+            bodo.barrier()
+
+    test_impl(impl, S, A)
+    test_impl(impl_table_format, S, A)
+    # Use the same dict-encoded array for both columns (should catch any refcount bugs)
+    test_impl(impl, S, S)
+    test_impl(impl_table_format, S, S)

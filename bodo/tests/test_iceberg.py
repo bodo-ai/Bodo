@@ -12,6 +12,7 @@ import bodo_iceberg_connector
 import mmh3
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pyspark.sql.types as spark_types
 import pytest
 import pytz
@@ -3036,3 +3037,141 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
 
     passed = comm.bcast(passed)
     assert passed, "Bodo read output doesn't match expected output"
+
+
+def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
+    """
+    Test that Iceberg write works even when there are nulls in
+    the dictionary of a dictionary encoded array. Arrow doesn't
+    support this, so we drop the NAs from all dictionaries ourselves
+    before the write step.
+    See [BE-4331](https://bodo.atlassian.net/browse/BE-4331)
+    for more context.
+    We also explicitly test the table-format case since the codegen
+    for it is slightly different.
+    """
+
+    S = pa.DictionaryArray.from_arrays(
+        np.array([0, 2, 1, 0, 1, 3, 0, 1, 3, 3, 2, 0], dtype=np.int32),
+        pd.Series(["B", None, "A", None]),
+    )
+    A = np.arange(12)
+    empty_df = pd.DataFrame({"S": [], "A": []})
+    sql_schema = [("S", "string", True), ("A", "long", False)]
+    spark = None
+    if bodo.get_rank() == 0:
+        spark = get_spark()
+
+    db_schema, warehouse_loc = iceberg_database
+
+    @bodo.jit(distributed=["S", "A"])
+    def impl(S, A, table_name, conn, db_schema, if_exists="replace"):
+        S = pd.Series(S)
+        df = pd.DataFrame({"S": S, "A": A})
+        df.to_sql(table_name, conn, db_schema, if_exists=if_exists)
+        return df
+
+    @bodo.jit(distributed=["S", "A"])
+    def impl_table_format(S, A, table_name, conn, db_schema, if_exists="replace"):
+        S = pd.Series(S)
+        df = pd.DataFrame({"S": S, "A": A})
+        # Force dataframe to use table format
+        df = bodo.hiframes.pd_dataframe_ext._tuple_to_table_format_decoded(df)
+        df.to_sql(table_name, conn, db_schema, if_exists=if_exists)
+        return df
+
+    def test_output(impl, S, A, table_name, if_exists="replace"):
+        conn = iceberg_table_conn(
+            table_name, db_schema, warehouse_loc, check_exists=False
+        )
+
+        # Write the data
+        impl(_get_dist_arg(S), _get_dist_arg(A), table_name, conn, db_schema, if_exists)
+        bodo.barrier()
+
+        # Read back
+        exp_df = pd.DataFrame({"S": S, "A": A})
+        bodo_read_out = bodo.jit()(
+            lambda: pd.read_sql_table(table_name, conn, db_schema)
+        )()
+        bodo_read_out = _gather_output(bodo_read_out)
+        bodo.barrier()
+
+        # Check correctness
+        passed = 1
+        if bodo.get_rank() == 0:
+            passed = _test_equal_guard(
+                exp_df,
+                bodo_read_out,
+                sort_output=True,
+                reset_index=True,
+                check_dtype=False,
+            )
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size()
+
+    # Test regular write
+    table_name = "test_iceberg_write_nulls_in_dict_table"
+    test_output(impl, S, A, table_name)
+    test_output(impl_table_format, S, A, f"{table_name}_table_format")
+
+    # Test append to a table with partition on S (dict-encoded column)
+    table_name = "test_iceberg_write_nulls_in_dict_table_part_S"
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            empty_df,
+            sql_schema,
+            table_name,
+            spark,
+            [PartitionField("S", "truncate", 3)],
+        )
+    test_output(impl, S, A, table_name, "append")
+
+    table_name = "test_iceberg_write_nulls_in_dict_table_part_S_table_format"
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            empty_df,
+            sql_schema,
+            table_name,
+            spark,
+            [PartitionField("S", "truncate", 3)],
+        )
+    test_output(impl_table_format, S, A, table_name, "append")
+
+    # Test append to a table with partition on A (non dict-encoded column)
+    table_name = "test_iceberg_write_nulls_in_dict_table_part_A"
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            empty_df,
+            sql_schema,
+            table_name,
+            spark,
+            [PartitionField("A", "bucket", 4)],
+        )
+    test_output(impl, S, A, table_name, "append")
+
+    table_name = "test_iceberg_write_nulls_in_dict_table_part_A_table_format"
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            empty_df,
+            sql_schema,
+            table_name,
+            spark,
+            [PartitionField("A", "bucket", 4)],
+        )
+    test_output(impl_table_format, S, A, table_name, "append")
+
+    # Use the same dict-encoded array for both columns and
+    # partition on one of it (should catch any refcount bugs)
+    sql_schema = [("S", "string", True), ("A", "string", True)]
+
+    table_name = "test_iceberg_write_nulls_in_dict_table_part_SS"
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            empty_df,
+            sql_schema,
+            table_name,
+            spark,
+            [PartitionField("A", "bucket", 4)],
+        )
+    test_output(impl, S, S, table_name, "append")

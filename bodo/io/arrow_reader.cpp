@@ -707,10 +707,14 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         }
         out_offsets[total_distinct_strings] =
             static_cast<offset_t>(total_distinct_chars);
+        // We set _has_deduped_local_dictionary=true since we constructed the
+        // dictionary ourselves and made sure not to put nulls in the
+        // dictionary.
         out_array = new array_info(
             bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1,
             -1, NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL,
-            NULL, 0, 0, 0, false, false, false, dict_arr, indices_arr);
+            NULL, 0, 0, 0, false, /*_has_deduped_local_dictionary=*/true, false,
+            dict_arr, indices_arr);
         return out_array;
     }
 

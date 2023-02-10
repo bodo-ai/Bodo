@@ -152,6 +152,23 @@ def overload_array_op_isna(arr):
     return impl
 
 
+def drop_duplicates_local_dictionary_if_dict(arr):  # pragma: no cover
+    """
+    Used with bodo.utils.table_utils.generate_mappable_table_func to
+    drop duplicates (and NAs) from dictionaries of all dictionary-encoded
+    arrays in a dataframe using table-format.
+    """
+
+
+@overload(drop_duplicates_local_dictionary_if_dict)
+def overload_drop_duplicates_local_dictionary_if_dict(arr):
+    if arr == bodo.dict_str_arr_type:
+        return lambda arr: bodo.libs.array.drop_duplicates_local_dictionary(
+            arr, False
+        )  # lambda: no cover
+    return lambda arr: arr  # lambda: no cover
+
+
 def array_op_count(arr):  # pragma: no cover
     # Create an overload for manual inlining in Series pass.
     pass
