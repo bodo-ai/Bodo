@@ -3,7 +3,13 @@ set -exo pipefail
 
 # Load the env first because credstash is installed on conda
 export PATH=$HOME/mambaforge/bin:$PATH
-export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+
+# Deactivate env in case this was called by another file that
+# activated the env. This only happens on AWS and causes errors
+# on Azure with MacOS
+if [[ "$CI_SOURCE" == "AWS" ]]; then
+    source deactivate || true
+fi
 
 set +x
 source activate $CONDA_ENV
@@ -11,9 +17,6 @@ set -x
 
 USERNAME=`credstash -r us-east-2 get artifactory.ci.username`
 TOKEN=`credstash -r us-east-2 get artifactory.ci.token`
-
-# ------ Install Bodo -----------
-mamba install -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/bodo-binary -c conda-forge bodo=$BODO_VERSION
 
 # ------ Export environment variables for Snowflake tests -----
 export SF_USERNAME=`credstash -r us-east-2 get snowflake.bodopartner.ue1.username`
@@ -24,7 +27,7 @@ export SF_AZURE_USERNAME=`credstash -r us-east-2 get snowflake.kl02615.east-us-2
 export SF_AZURE_PASSWORD=`credstash -r us-east-2 get snowflake.kl02615.east-us-2.azure.password`
 export SF_AZURE_ACCOUNT=`credstash -r us-east-2 get snowflake.kl02615.east-us-2.azure.account`
 
-# Setup Hadoop (and Arrow) environment variables
+# ------ Setup Hadoop (and Arrow) environment variables ------
 export HADOOP_HOME=/opt/hadoop-3.3.2
 export HADOOP_INSTALL=$HADOOP_HOME
 export HADOOP_MAPRED_HOME=$HADOOP_HOME

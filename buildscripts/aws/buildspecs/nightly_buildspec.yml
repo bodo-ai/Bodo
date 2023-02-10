@@ -1,34 +1,32 @@
 version: 0.2
 
 # Link to reference documentation: https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html
-
-# running on an instance of specs: 145 GB memory, 72 vCPUs
+# Running on an instance of specs: 145 GB memory, 72 vCPUs
 
 env:
   shell: /bin/bash
   git-credential-helper: true
   variables:
-      CONDA_ENV: "BodoCodeBuild"
-      RUNTIME: "yes"
-      PYTHON_VERSION: 3.10
+    CONDA_ENV: "BodoCodeBuild"
+    RUNTIME: "yes"
+    PYTHON_VERSION: 3.10
+    CI_SOURCE: AWS
 
 phases:
-    install:
-        commands:
-        - buildscripts/setup_conda.sh
-        - buildscripts/aws/export_env.sh
+  install:
+    commands:
+      - buildscripts/setup_conda.sh
+      - buildscripts/aws/export_env.sh
 
-    build:
-        commands:
-        - buildscripts/aws/build_obfuscated.sh
+  build:
+    commands:
+      - buildscripts/build.sh
+      - buildscripts/install_azurefs_sas_token_provider.sh
 
-    post_build:
-        commands:
-        - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
-        - buildscripts/aws/publish_binary.sh
-        - buildscripts/install_iceberg_connector.sh
-        - buildscripts/install_azurefs_sas_token_provider.sh
-        - buildscripts/aws/run_nightly_tests.sh
+  post_build:
+    commands:
+      - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
+      - buildscripts/aws/run_nightly_tests.sh
 
 artifacts:
   files:
