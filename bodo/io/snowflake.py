@@ -59,6 +59,16 @@ SF_READ_DICT_ENCODING_PROBE_TIMEOUT = 10
 # manually.
 SF_READ_DICT_ENCODING_IF_TIMEOUT = False
 
+# The maximum number of rows a table can contain to be defined
+# as a small table. This is used to determine whether to use
+# dictionary encoding by default for all string columns. The
+# justification for this is that small tables are either small,
+# so the additional overhead of dictionary encoding is negligible,
+# or their columns will be increased in size via a JOIN operation,
+# so dictionary encoding will then be necessary as the values will
+# be repeated.
+SF_SMALL_TABLE_THRESHOLD = 100_000
+
 # Maximum number of rows to read from Snowflake in the probe query
 # This is calculated as # of string columns * # of rows
 # The default 100M should take a negligible amount of time.
@@ -543,7 +553,7 @@ def get_schema_from_metadata(
     return arrow_fields, col_types, unsupported_columns, unsupported_arrow_types
 
 
-def _get_table_row_count(cursor, table_name):
+def _get_table_row_count(cursor, table_name, is_table):
     """get total number of rows for a Snowflake table. Returns None if input is not a
     table or probe query failed.
 
@@ -554,24 +564,9 @@ def _get_table_row_count(cursor, table_name):
     Returns:
         optional(int): number of rows or None if failed
     """
-
-    # make sure table_name is an actual table and not a view since system sampling
-    # doesn't work on views
-    check_res = execute_query(
-        cursor,
-        f"show tables like '{table_name}'",
-        timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT,
-    )
-    if check_res is None:
-        return None
-
-    # empty output means view
-    if not check_res.fetchall():
-        return None
-
     count_res = execute_query(
         cursor,
-        f"select count(*) from {table_name}",
+        f"select count(*) from ({table_name})",
         timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT,
     )
     if count_res is None:
@@ -614,11 +609,31 @@ def _detect_column_dict_encoding(
     # the limit on the number of rows total to read for the probe
     probe_limit = max(SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT // len(query_args), 1)
 
+    # Always read the total rows in case we have a view. In the query is complex
+    # this may time out.
+    total_rows = _get_table_row_count(cursor, sql_query, is_table_input)
+
+    if total_rows is not None and total_rows <= SF_SMALL_TABLE_THRESHOLD:
+        # If we have a small table
+        for i in string_col_ind:
+            col_types[i] = dict_str_arr_type
+        return dict_encode_timeout_info
+
+    # make sure table_name is an actual table and not a view since system sampling
+    # doesn't work on views
+    is_view = not is_table_input
+    if is_table_input and total_rows is not None:
+        check_res = execute_query(
+            cursor,
+            f"show tables like '{sql_query}'",
+            timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT,
+        )
+        if check_res is None or not check_res.fetchall():
+            # empty output means view
+            is_view = True
+
     # use system sampling if input is a table
-    if (
-        is_table_input
-        and (total_rows := _get_table_row_count(cursor, sql_query)) is not None
-    ):
+    if is_table_input and not is_view and total_rows is not None:
         sample_percentage = (
             0 if total_rows <= probe_limit else probe_limit / total_rows * 100
         )
@@ -641,9 +656,10 @@ def _detect_column_dict_encoding(
         # in which we sample 1 percent of the data
         # upper bound limits the total amount of sampling that will occur
         # to prevent a hang/timeout
+        subquery = sql_query if is_table_input else f"({sql_query})"
         predict_cardinality_call = (
             f"select count(*),{', '.join(query_args)}"
-            f"from ( select * from ({sql_query}) limit {probe_limit} ) SAMPLE (1)"
+            f"from ( select * from {subquery} limit {probe_limit} ) SAMPLE (1)"
         )
 
     prediction_query = execute_query(
