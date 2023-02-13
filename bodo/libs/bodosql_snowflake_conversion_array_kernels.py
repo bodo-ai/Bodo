@@ -489,6 +489,36 @@ _install_timestamp_cast_overloads()
 
 
 @numba.generated_jit(nopython=True)
+def to_binary(arr):
+    """Handles cases where TO_BINARY receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.to_binary_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return to_binary_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def try_to_binary(arr):
+    """Handles cases where TRY_TO_BINARY receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.try_to_binary_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return try_to_binary_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def to_char(arr):
     """Handles cases where TO_CHAR receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -1042,6 +1072,65 @@ def overload_cast_str_to_tz_aware_util(arr, tz):
         scalar_text,
         out_dtype,
     )
+
+
+def to_binary_util(arr):  # pragma: no cover
+    pass
+
+
+def try_to_binary_util(arr):  # pragma: no cover
+    pass
+
+
+# TODO ([BE-4344]): implement and test to_binary with other formats
+def create_to_binary_util_overload(fn_name, error_on_fail):
+    def impl(arr):  # pragma: no cover
+        verify_string_binary_arg(fn_name, arr, "arr")
+        if error_on_fail:
+            fail_str = 'raise ValueError("invalid value for binary (HEX) conversion")'
+        else:
+            fail_str = "bodo.libs.array_kernels.setna(res, i)"
+        if is_valid_string_arg(arr):
+            # If the input is string data, make sure there are an even number of characters
+            # and all of them are hex characters
+            scalar_text = "failed = len(arg0) % 2 != 0\n"
+            scalar_text += "if not failed:\n"
+            scalar_text += "  for char in arg0:\n"
+            scalar_text += "    if char not in '0123456789ABCDEFabcdef':\n"
+            scalar_text += "      failed = True\n"
+            scalar_text += "      break\n"
+            scalar_text += "if failed:\n"
+            scalar_text += f"  {fail_str}\n"
+            scalar_text += "else:\n"
+            scalar_text += "   res[i] = bodo.libs.binary_arr_ext.bytes_fromhex(arg0)"
+        else:
+            # If the input is binary data, just copy it directly
+            scalar_text = "res[i] = arg0"
+        arg_names = ["arr"]
+        arg_types = [arr]
+        propagate_null = [True]
+        out_dtype = bodo.binary_array_type
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+        )
+
+    return impl
+
+
+def _install_to_binary_funcs():
+    funcs = [
+        ("to_binary", to_binary_util, True),
+        ("try_to_binary", try_to_binary_util, False),
+    ]
+    for fn_name, func, error_on_fail in funcs:
+        overload(func)(create_to_binary_util_overload(fn_name, error_on_fail))
+
+
+_install_to_binary_funcs()
 
 
 @numba.generated_jit(nopython=True)
