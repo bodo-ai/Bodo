@@ -6,6 +6,8 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import java.util.List;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 public class ConversionCodeGen {
   /**
@@ -69,37 +71,78 @@ public class ConversionCodeGen {
   }
 
   /**
-   * Handles codegen for Snowflake TRY_TO_DATE function.
+   * Handles codegen for Snowflake TO_DATE/TRY_TO_DATE function.
    *
    * @param operandsInfo List of operands
-   * @return RexVisitorInfo for the TRY_TO_DATE function
+   * @param fnName The name of the function
+   * @return RexVisitorInfo for the TO_DATE/TRY_TO_DATE function
    */
-  public static RexNodeVisitorInfo generateTryToDateFnCode(List<RexNodeVisitorInfo> operandsInfo) {
-    if (operandsInfo.size() > 1) {
-      throw new BodoSQLCodegenException("Error, format string for TRY_TO_DATE not yet supported");
+  public static RexNodeVisitorInfo generateToDateFnCode(
+      List<RexNodeVisitorInfo> operandsInfo, String fnName) {
+    if (operandsInfo.size() == 2) {
+      throw new BodoSQLCodegenException(
+          "Error, " + fnName + " with two arguments not yet supported");
     }
-    String name = "TRY_TO_DATE(" + operandsInfo.get(0).getName() + ")";
-    String exprCode =
-        "bodo.libs.bodosql_array_kernels.try_to_date("
-            + operandsInfo.get(0).getExprCode()
-            + ", None)";
-    return new RexNodeVisitorInfo(name, exprCode);
+    StringBuilder name = new StringBuilder();
+    StringBuilder exprCode = new StringBuilder();
+
+    name.append(fnName).append("(").append(operandsInfo.get(0).getName()).append(")");
+
+    exprCode
+        .append("bodo.libs.bodosql_array_kernels.")
+        .append(fnName.toLowerCase())
+        .append("(")
+        .append(operandsInfo.get(0).getExprCode())
+        .append(", None)");
+    return new RexNodeVisitorInfo(name.toString(), exprCode.toString());
   }
 
   /**
-   * Handles codegen for Snowflake TO_DATE function.
+   * Handles codegen for Snowflake TO_TIMESTAMP/TRY_TO_TIMESTAMP function.
    *
    * @param operandsInfo List of operands
-   * @return RexVisitorInfo for the TO_DATE function
+   * @param operandsTypeInfo List of type information about the operands
+   * @param tzStr String representing the timezone of the output data
+   * @param fnName The name of the function being called
+   * @return RexVisitorInfo for the TO_TIMESTAMP/TRY_TO_TIMESTAMP function
    */
-  public static RexNodeVisitorInfo generateToDateFnCode(List<RexNodeVisitorInfo> operandsInfo) {
-    if (operandsInfo.size() > 1) {
-      throw new BodoSQLCodegenException("Error, format string for TO_DATE not yet supported");
+  public static RexNodeVisitorInfo generateToTimestampFnCode(
+      List<RexNodeVisitorInfo> operandsInfo,
+      List<RexNode> operandsTypeInfo,
+      String tzStr,
+      String fnName) {
+    String scaleStr = "0";
+    if (operandsInfo.size() == 2) {
+      if (SqlTypeName.INT_TYPES.contains(operandsTypeInfo.get(1).getType().getSqlTypeName())) {
+        scaleStr = operandsInfo.get(1).getExprCode();
+      } else {
+        throw new BodoSQLCodegenException(
+            "Error, format string for " + fnName + " not yet supported");
+      }
     }
-    String name = "TO_DATE(" + operandsInfo.get(0).getName() + ")";
-    String exprCode =
-        "bodo.libs.bodosql_array_kernels.to_date(" + operandsInfo.get(0).getExprCode() + ", None)";
-    return new RexNodeVisitorInfo(name, exprCode);
+    StringBuilder name = new StringBuilder();
+    StringBuilder exprCode = new StringBuilder();
+
+    String kernelName;
+    if (fnName.startsWith("TRY_")) {
+      kernelName = "try_to_timestamp";
+    } else {
+      kernelName = "to_timestamp";
+    }
+
+    name.append(fnName).append("(").append(operandsInfo.get(0).getName()).append(")");
+
+    exprCode
+        .append("bodo.libs.bodosql_array_kernels.")
+        .append(kernelName)
+        .append("(")
+        .append(operandsInfo.get(0).getExprCode())
+        .append(", None, ")
+        .append(tzStr)
+        .append(", ")
+        .append(scaleStr)
+        .append(")");
+    return new RexNodeVisitorInfo(name.toString(), exprCode.toString());
   }
 
   /**

@@ -220,7 +220,7 @@ def test_parse_json(arg):
             return "{" + ",".join(elems) + "}"
         return repr(elem)
 
-    # Recieves a string, uses Python's JSON module to parse it, then converts
+    # receives a string, uses Python's JSON module to parse it, then converts
     # it to use the same format as Bodo's parse_json util
     def parse_json_scalar_fn(arg):
         if pd.isna(arg) or len(arg.strip()) == 0:

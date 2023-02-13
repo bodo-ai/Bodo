@@ -40,59 +40,6 @@ def test_fn(request):
     return request.param
 
 
-def to_date_gen_case_query(fn_call):
-    return f"SELECT CASE WHEN {test_fn}(A) < DATE '2013-01-03' THEN {test_fn}(A) ELSE {test_fn}(A) END from table1"
-
-
-def test_to_date_ints(spark_info, basic_df, test_fn, memory_leak_check):
-    """tests to_date on integer values"""
-    query = f"SELECT {test_fn}(A) from table1"
-
-    basic_null_df = make_tables_nullable(basic_df)
-
-    expected_output = pd.DataFrame(
-        {
-            "foo": basic_null_df["table1"]["A"].apply(
-                lambda val: scalar_to_date_equiv_fn(val)
-            )
-        }
-    )
-    check_query(
-        query,
-        basic_null_df,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        expected_output=expected_output,
-    )
-
-
-def test_to_date_ints_case(spark_info, basic_df, test_fn, memory_leak_check):
-    """tests to_date on integer values in a case statment"""
-    query = f"SELECT CASE WHEN {test_fn}(A) < DATE '2013-01-03' THEN {test_fn}(A) ELSE {test_fn}(A) END from table1"
-
-    basic_null_df = make_tables_nullable(basic_df)
-
-    expected_output = pd.DataFrame(
-        {
-            "foo": basic_null_df["table1"]["A"].apply(
-                lambda val: scalar_to_date_equiv_fn(val)
-                if scalar_to_date_equiv_fn(val)
-                < pd.Timestamp("2013-01-03").to_datetime64()
-                else None
-            )
-        }
-    )
-    check_query(
-        query,
-        basic_null_df,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        expected_output=expected_output,
-    )
-
-
 def test_to_date_valid_strings(spark_info, dt_fn_dataframe, test_fn, memory_leak_check):
     """tests to_date on valid string values"""
     query = f"SELECT {test_fn}(datetime_strings) from table1"
@@ -230,7 +177,13 @@ def test_to_date_tz_aware(memory_leak_check):
     )
     ctx = {"table1": df}
     query = f"SELECT TO_DATE(timestamps) as timestamps from table1"
-    expected_output = pd.DataFrame({"timestamps": df["timestamps"].dt.normalize()})
+    expected_output = pd.DataFrame(
+        {
+            "timestamps": df["timestamps"]
+            .dt.normalize()
+            .apply(lambda t: t.tz_localize(None))
+        }
+    )
 
     check_query(
         query,
@@ -252,7 +205,9 @@ def test_to_date_tz_aware_case(memory_leak_check):
     )
     ctx = {"table1": df}
     query = f"SELECT CASE WHEN B THEN TO_DATE(timestamps) END as timestamps from table1"
-    to_date_series = df["timestamps"].dt.normalize()
+    to_date_series = (
+        df["timestamps"].dt.normalize().apply(lambda t: t.tz_localize(None))
+    )
     to_date_series[~df.B] = None
     expected_output = pd.DataFrame({"timestamps": to_date_series})
 
@@ -264,8 +219,7 @@ def test_to_date_tz_aware_case(memory_leak_check):
     )
 
 
-@pytest.mark.tz_aware
-def test_tz_aware_try_to_date(tz_aware_df, memory_leak_check):
+def test_try_to_date_tz_strings(tz_aware_df, memory_leak_check):
     """tests try_to_date on valid and invalid datetime values"""
 
     # Construct input dataframe of both valid and invalid datetime strings
@@ -349,7 +303,333 @@ def test_to_date_format_string_err(dt_fn_dataframe, test_fn, memory_leak_check):
     """
 
     query = f"SELECT {test_fn}(datetime_strings, 'foo') from table1"
-    msg = f"Error, format string for {test_fn} not yet supported"
+    msg = f"Error, {test_fn} with two arguments not yet supported"
     with pytest.raises(Exception, match=msg):
         bc = bodosql.BodoSQLContext(dt_fn_dataframe)
         bc.sql(query)
+
+
+_to_timestamp_string_data = [
+    pytest.param(
+        (
+            pd.Series(
+                [
+                    "2019-1-1",
+                    None,
+                    "2020-4-25 5:30:00",
+                    "2021-08-1 9:25:01.150",
+                    "2022-12-30 20:59:59.99999",
+                ]
+            ),
+            pd.Series(
+                [
+                    "2019-1-1",
+                    None,
+                    "2020-4-25 5:30:00",
+                    "2021-8-1 9:25:01.150",
+                    "2022-12-30 20:59:59.99999",
+                ]
+            ),
+            None,
+        ),
+        id="string",
+    ),
+    pytest.param(
+        (
+            pd.Series(
+                [
+                    # Seconds
+                    "1",
+                    "1000",
+                    "1000000",
+                    "1000000000",
+                    "-123456789",
+                    # Milliseconds
+                    "31536000000",
+                    "1000000000000",
+                    "-31536000000",
+                    None,
+                    # Microseconds
+                    "31536000000000",
+                    "1000000000000000",
+                    "-1234567891234567",
+                    None,
+                    # Nanoseconds
+                    "31536000000000000",
+                    "1000000000000000000",
+                    "-123456789123456789",
+                    None,
+                ]
+            ),
+            pd.Series(
+                [
+                    # Seconds
+                    "1970-01-01 00:00:01",
+                    "1970-01-01 00:16:40",
+                    "1970-01-12 13:46:40",
+                    "2001-09-09 01:46:40",
+                    "1966-02-02 02:26:51",
+                    # Milliseconds
+                    "1971-01-01",
+                    "2001-09-09 01:46:40",
+                    "1969-01-01",
+                    None,
+                    # Microseconds
+                    "1971-01-01",
+                    "2001-09-09 01:46:40",
+                    "1930-11-18 00:28:28.765433",
+                    None,
+                    # Nanoseconds
+                    "1971-01-01",
+                    "2001-09-09 01:46:40",
+                    "1966-02-02 02:26:50.876543211",
+                    None,
+                ]
+            ),
+            None,
+        ),
+        id="numeric_string",
+    ),
+]
+
+_to_timestamp_timestamp_data = [
+    pytest.param(
+        (
+            pd.Series(
+                [
+                    pd.Timestamp("2018-10-1"),
+                    None,
+                    pd.Timestamp("2023-3-1 12:30:00"),
+                    None,
+                    pd.Timestamp("2025-7-4 9:00:13.250999"),
+                ]
+            ),
+            pd.Series(
+                [
+                    "2018-10-1",
+                    None,
+                    "2023-3-1 12:30:00",
+                    None,
+                    "2025-7-4 9:00:13.250999",
+                ]
+            ),
+            None,
+        ),
+        id="naive_timestamp",
+    ),
+    pytest.param(
+        (
+            pd.Series(
+                [
+                    pd.Timestamp("2018-10-1", tz="Australia/Sydney"),
+                    None,
+                    pd.Timestamp("2023-3-1 12:30:00", tz="Australia/Sydney"),
+                    None,
+                    pd.Timestamp("2025-7-4 9:00:13.250999", tz="Australia/Sydney"),
+                ]
+            ),
+            pd.Series(
+                [
+                    "2018-10-1",
+                    None,
+                    "2023-3-1 12:30:00",
+                    None,
+                    "2025-7-4 9:00:13.250999",
+                ]
+            ),
+            "Australia/Sydney",
+        ),
+        id="tz_timestamp",
+    ),
+]
+
+
+@pytest.fixture(params=_to_timestamp_timestamp_data + _to_timestamp_string_data)
+def to_timestamp_non_numeric_data(request):
+    """Arguments for TO_TIMESTAMP. Each argument is accompanied by the expected
+    output timestamps in string format, and a string indicating the timezone
+    of the input data (or None if naive). This fixture only covers the non-numeric
+    input types because the numerics will have their answer vary depending
+    on the scale provided."""
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param("TO_TIMESTAMP"),
+        pytest.param("TO_TIMESTAMP_NTZ"),
+        pytest.param("TO_TIMESTAMP_LTZ"),
+        pytest.param("TO_TIMESTAMP_TZ"),
+        pytest.param("TRY_TO_TIMESTAMP", marks=pytest.mark.slow),
+        pytest.param("TRY_TO_TIMESTAMP_NTZ", marks=pytest.mark.slow),
+        pytest.param("TRY_TO_TIMESTAMP_LTZ", marks=pytest.mark.slow),
+        pytest.param("TRY_TO_TIMESTAMP_TZ", marks=pytest.mark.slow),
+    ]
+)
+def to_timestamp_fn(request):
+    return request.param
+
+
+def test_to_timestamp_non_numeric(
+    to_timestamp_fn, to_timestamp_non_numeric_data, local_tz, memory_leak_check
+):
+    use_case = to_timestamp_fn in {
+        "TO_TIMESTAMP_NTZ",
+        "TO_TIMESTAMP_TZ",
+        "TRY_TO_TIMESTAMP",
+        "TRY_TO_TIMESTAMP_LTZ",
+    }
+    data, answer, old_tz = to_timestamp_non_numeric_data
+    if to_timestamp_fn.endswith("_LTZ"):
+        tz = local_tz
+    elif to_timestamp_fn.endswith("_TZ"):
+        if old_tz is None:
+            tz = local_tz
+        else:
+            tz = old_tz
+    else:
+        tz = None
+    if use_case:
+        query = (
+            f"SELECT CASE WHEN b THEN NULL ELSE {to_timestamp_fn}(t) END FROM table1"
+        )
+    else:
+        query = f"SELECT {to_timestamp_fn}(t) FROM table1"
+    ctx = {
+        "table1": pd.DataFrame({"t": data, "b": [i % 5 == 4 for i in range(len(data))]})
+    }
+    expected_output = pd.DataFrame(
+        {0: pd.Series([None if s is None else pd.Timestamp(s, tz=tz) for s in answer])}
+    )
+    if use_case:
+        expected_output[0][ctx["table1"]["b"]] = None
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_names=False,
+        only_jit_1DVar=True,
+    )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        0,
+                        None,
+                        2048,
+                        1073741824,
+                        -536870912,
+                    ],
+                    dtype=pd.Int64Dtype(),
+                ),
+                pd.Series(
+                    [
+                        "1970-1-1",
+                        None,
+                        "1970-1-1 00:34:08",
+                        "2004-01-10 13:37:04",
+                        "1952-12-27 05:11:28",
+                    ]
+                ),
+                "",
+            ),
+            id="integers-no_scale",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        123456789,
+                        None,
+                        12,
+                        205891132094649,
+                        -68630377364883,
+                    ],
+                    dtype=pd.Int64Dtype(),
+                ),
+                pd.Series(
+                    [
+                        "1970-01-01 00:02:03.456789",
+                        None,
+                        "1970-01 00:00:00.000012",
+                        "1976-07-10 23:58:52.094649",
+                        "1967-10-29 16:00:22.635117",
+                    ]
+                ),
+                ", 6",
+            ),
+            id="integers-microsecond_scale",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        15.411,
+                        None,
+                        1234567890123.456789012,
+                        314159265.3589793,
+                        -98123456789.01234,
+                    ]
+                ),
+                pd.Series(
+                    [
+                        "1970-01-01 00:00:00.015411",
+                        None,
+                        "2009-02-13 23:31:30.123456768",
+                        "1970-01-04 15:15:59.265358979",
+                        "1966-11-22 07:29:03.210987648",
+                    ]
+                ),
+                ", 3",
+            ),
+            id="floats-millisecond_scale",
+        ),
+    ]
+)
+def to_timestamp_numeric_data(request):
+    """Same as to_timestamp_non_numeric_data except for numeric arguments.
+    Instead of providing an old timezone, if there is one, provides
+    the string to use for the scale (e.g. '' for no scale, ', 9' for ns,
+    etc.)"""
+    return request.param
+
+
+def test_to_timestamp_numeric(
+    to_timestamp_fn, to_timestamp_numeric_data, local_tz, memory_leak_check
+):
+    use_case = to_timestamp_fn in {
+        "TO_TIMESTAMP",
+        "TO_TIMESTAMP_LTZ",
+        "TRY_TO_TIMESTAMP_NTZ",
+        "TRY_TO_TIMESTAMP_TZ",
+    }
+    data, answer, scale_str = to_timestamp_numeric_data
+    if to_timestamp_fn.endswith("_LTZ") or to_timestamp_fn.endswith("_TZ"):
+        tz = local_tz
+    else:
+        tz = None
+    if use_case:
+        query = f"SELECT CASE WHEN b THEN NULL ELSE {to_timestamp_fn}(t{scale_str}) END FROM table1"
+    else:
+        query = f"SELECT {to_timestamp_fn}(t{scale_str}) FROM table1"
+    ctx = {
+        "table1": pd.DataFrame({"t": data, "b": [i % 5 == 2 for i in range(len(data))]})
+    }
+    expected_output = pd.DataFrame(
+        {0: pd.Series([None if s is None else pd.Timestamp(s, tz=tz) for s in answer])}
+    )
+    if use_case:
+        expected_output[0][ctx["table1"]["b"]] = None
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_names=False,
+        only_jit_1DVar=True,
+    )

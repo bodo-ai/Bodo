@@ -29,7 +29,7 @@ def char(arr):
 
 @numba.generated_jit(nopython=True)
 def contains(arr, pattern):
-    """Handles cases where CONTAINS recieves optional arguments and forwards
+    """Handles cases where CONTAINS receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, pattern]
     for i in range(2):
@@ -128,7 +128,7 @@ def endswith(source, suffix):
 
 @numba.generated_jit(nopython=True)
 def format(arr, places):
-    """Handles cases where FORMAT recieves optional arguments and forwards
+    """Handles cases where FORMAT receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, places]
     for i in range(2):
@@ -145,7 +145,7 @@ def format(arr, places):
 
 @numba.generated_jit(nopython=True)
 def initcap(arr, delim):
-    """Handles cases where INITCAP recieves optional arguments and forwards
+    """Handles cases where INITCAP receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, delim]
     for i in range(2):
@@ -183,7 +183,7 @@ def insert(source, pos, length, inject):
 
 @numba.generated_jit(nopython=True)
 def instr(arr, target):
-    """Handles cases where INSTR recieves optional arguments and forwards
+    """Handles cases where INSTR receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, target]
     for i in range(2):
@@ -205,7 +205,7 @@ def left(arr, n_chars):  # pragma: no cover
 
 @overload(left)
 def overload_left(arr, n_chars):
-    """Handles cases where LEFT recieves optional arguments and forwards
+    """Handles cases where LEFT receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, n_chars]
     for i in range(2):
@@ -227,7 +227,7 @@ def lpad(arr, length, padstr):  # pragma: no cover
 
 @overload(lpad)
 def overload_lpad(arr, length, padstr):
-    """Handles cases where LPAD recieves optional arguments and forwards
+    """Handles cases where LPAD receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, length, padstr]
     for i in range(3):
@@ -334,7 +334,7 @@ def right(arr, n_chars):  # pragma: no cover
 
 @overload(right)
 def overload_right(arr, n_chars):
-    """Handles cases where RIGHT recieves optional arguments and forwards
+    """Handles cases where RIGHT receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, n_chars]
     for i in range(2):
@@ -356,7 +356,7 @@ def rpad(arr, length, padstr):  # pragma: no cover
 
 @overload(rpad)
 def overload_rpad(arr, length, padstr):
-    """Handles cases where RPAD recieves optional arguments and forwards
+    """Handles cases where RPAD receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [arr, length, padstr]
     for i in range(3):
@@ -475,7 +475,7 @@ def strtok(source, delim, part):
 
 @numba.generated_jit(nopython=True)
 def substring(arr, start, length):
-    """Handles cases where SUBSTRING recieves optional arguments and forwards
+    """Handles cases where SUBSTRING receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, start, length]
     for i in range(3):
@@ -494,7 +494,7 @@ def substring(arr, start, length):
 
 @numba.generated_jit(nopython=True)
 def substring_index(arr, delimiter, occurrences):
-    """Handles cases where SUBSTRING_INDEX recieves optional arguments and forwards
+    """Handles cases where SUBSTRING_INDEX receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, delimiter, occurrences]
     for i in range(3):
@@ -513,7 +513,7 @@ def substring_index(arr, delimiter, occurrences):
 
 @numba.generated_jit(nopython=True)
 def translate(arr, source, target):
-    """Handles cases where TRANSLATE recieves optional arguments and forwards
+    """Handles cases where TRANSLATE receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, source, target]
     for i in range(3):
@@ -1663,7 +1663,7 @@ def rtrim_util(arr):  # pragma: no cover
 
 def create_one_arg_str_fn_overload(fn_name):
     def overload_func(arr):
-        """Handles cases where this one argument string function recieves optional
+        """Handles cases where this one argument string function receives optional
         arguments and forwards to the appropriate version of the real implementation"""
         if isinstance(arr, types.optional):  # pragma: no cover
             return unopt_argument(

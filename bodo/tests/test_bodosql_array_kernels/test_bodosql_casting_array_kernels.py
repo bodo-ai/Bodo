@@ -573,44 +573,6 @@ def test_cast_char_times(time_arrays, memory_leak_check):
     )
 
 
-def test_cast_dt64(dt_arrays, memory_leak_check):
-    args = dt_arrays
-
-    def impl(arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.cast_timestamp(arr))
-
-    # avoid pd.Series() conversion for scalar output
-    if isinstance(args[0], (int, float, str)):
-        impl = lambda arr: bodo.libs.bodosql_array_kernels.cast_timestamp(arr)
-
-    # Simulates casting to float64 on a single row
-    def to_dt64_scalar_fn(x):
-        if pd.isna(x):
-            return None
-        if isinstance(x, (int, float)):
-            # Snowflake uses the number of milliseconds in a year (31536000000) as the base value
-            # assume whether the input is intended to be seconds, milliseconds, etc.
-            if x < 31536000000:
-                return pd.Timestamp(x, unit="s")
-            elif x < 31536000000000:
-                return pd.Timestamp(x, unit="ms")
-            elif x < 31536000000000000:
-                return pd.Timestamp(x, unit="us")
-            else:
-                return pd.Timestamp(x)
-        else:
-            return pd.Timestamp(x)
-
-    answer = vectorized_sol(args, to_dt64_scalar_fn, None)
-    check_func(
-        impl,
-        args,
-        py_output=answer,
-        check_dtype=False,
-        reset_index=True,
-    )
-
-
 @pytest.mark.parametrize(
     "args",
     [
@@ -930,48 +892,18 @@ def test_cast_char_opt(memory_leak_check):
                     )
 
 
-def test_cast_timestamp_opt(memory_leak_check):
-    def impl(a, b, flag0, flag1):
-        arg0 = a if flag0 else None
-        arg1 = b if flag1 else None
-        return (
-            bodo.libs.bodosql_array_kernels.cast_timestamp(arg0),
-            bodo.libs.bodosql_array_kernels.cast_timestamp(arg1),
-        )
-
-    for flag0 in [True, False]:
-        for flag1 in [True, False]:
-            answer = (
-                pd.Timestamp("2020-01-01") if flag0 else None,
-                pd.Timestamp(1231231231, unit="s") if flag1 else None,
-            )
-            check_func(
-                impl,
-                ("2020-01-01", 1231231231, flag0, flag1),
-                py_output=answer,
-            )
-
-
 def test_cast_date_opt(memory_leak_check):
-    def impl(a, b, flag0, flag1):
-        arg0 = a if flag0 else None
-        arg1 = b if flag1 else None
-        return (
-            bodo.libs.bodosql_array_kernels.cast_date(arg0),
-            bodo.libs.bodosql_array_kernels.cast_date(arg1),
-        )
+    def impl(a, flag):
+        arg0 = a if flag else None
+        return bodo.libs.bodosql_array_kernels.cast_date(arg0)
 
-    for flag0 in [True, False]:
-        for flag1 in [True, False]:
-            answer = (
-                pd.Timestamp("2020-01-01").normalize() if flag0 else None,
-                pd.Timestamp(1231231231, unit="s").normalize() if flag1 else None,
-            )
-            check_func(
-                impl,
-                ("2020-01-01", 1231231231, flag0, flag1),
-                py_output=answer,
-            )
+    for flag in [True, False]:
+        answer = pd.Timestamp("2020-01-01").normalize() if flag else None
+        check_func(
+            impl,
+            ("2020-01-01", flag),
+            py_output=answer,
+        )
 
 
 def test_cast_tz_naive_to_tz_aware_opt(memory_leak_check):

@@ -15,6 +15,7 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_bool,
     is_literal_type,
+    is_overload_constant_str,
     is_overload_none,
     raise_bodo_error,
 )
@@ -112,44 +113,379 @@ def to_boolean_util(arr, _try=False):
     )
 
 
-@numba.generated_jit(nopython=True)
-def try_to_date(conversionVal, optionalConversionFormatString):
+def to_date(conversionVal, format_str):  # pragma: no cover
+    return
 
-    args = [conversionVal, optionalConversionFormatString]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
-            return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.try_to_date",
-                ["conversionVal", "optionalConversionFormatString"],
-                i,
+
+def try_to_date(conversionVal, format_str):  # pragma: no cover
+    return
+
+
+def to_timestamp(conversionVal, format_str, time_zone, scale):  # pragma: no cover
+    return
+
+
+def to_date_util(conversionVal, format_str):  # pragma: no cover
+    return
+
+
+def try_to_date_util(conversionVal, format_str):  # pragma: no cover
+    return
+
+
+def create_date_cast_util(func, error_on_fail):
+    """Creates an overload for a dedicated kernel for TO_DATE/TRY_TO_DATE
+    Takes in 2 arguments: the name of the kernel being created and whether it should
+    have an error when it has a failure (as opposed to outputting null),
+
+    Returns an overload that accepts 2 arguments: the value to be converted
+    (a series or scalar of mulitiple possible types), and an optional format string
+    for cases where the input is a string.
+
+    The full specification is noted here:
+    https://docs.snowflake.com/en/sql-reference/functions/to_date.html
+    """
+    if error_on_fail:
+        error_str = "raise ValueError('Invalid input while converting to date value')"
+    else:
+        error_str = "bodo.libs.array_kernels.setna(res, i)"
+
+    def overload_impl(conversionVal, format_str):
+        verify_string_arg(format_str, func, "format_str")
+
+        # When returning a scalar we return a pd.Timestamp type.
+        is_out_arr = bodo.utils.utils.is_array_typ(
+            conversionVal, True
+        ) or bodo.utils.utils.is_array_typ(format_str, True)
+        unbox_str = "unbox_if_tz_naive_timestamp" if is_out_arr else ""
+
+        # If the format string is specified, then arg0 must be a string
+        if not is_overload_none(format_str):
+            verify_string_arg(conversionVal, func, "conversionVal")
+            scalar_text = (
+                "py_format_str = convert_sql_date_format_str_to_py_format(arg1)\n"
+            )
+            scalar_text += "was_successful, tmp_val = pd_to_datetime_error_checked(arg0, format=py_format_str)\n"
+            scalar_text += "if not was_successful:\n"
+            scalar_text += f"  {error_str}\n"
+            scalar_text += "else:\n"
+            scalar_text += f"  res[i] = {unbox_str}(tmp_val.normalize())\n"
+
+        # NOTE: gen_vectorized will automatically map this function over the values dictionary
+        # of a dict encoded string array instead of decoding it whenever possible
+        elif is_valid_string_arg(conversionVal):
+            """
+            If no format string is specified, attempt to parse the string according to these date formats:
+            https://docs.snowflake.com/en/user-guide/date-time-input-output.html#date-formats. All of the examples listed are
+            handled by pd.to_datetime() in Bodo jit code.
+
+            It will also check if the string is convertable to int, IE '12345' or '-4321'"""
+
+            # Conversion needs to be done incase arg0 is unichr array
+            scalar_text = "arg0 = str(arg0)\n"
+            scalar_text += "if (arg0.isnumeric() or (len(arg0) > 1 and arg0[0] == '-' and arg0[1:].isnumeric())):\n"
+            scalar_text += f"   res[i] = {unbox_str}(number_to_datetime(np.int64(arg0)).normalize())\n"
+
+            scalar_text += "else:\n"
+            scalar_text += (
+                "   was_successful, tmp_val = pd_to_datetime_error_checked(arg0)\n"
+            )
+            scalar_text += "   if not was_successful:\n"
+            scalar_text += f"      {error_str}\n"
+            scalar_text += "   else:\n"
+            scalar_text += f"      res[i] = {unbox_str}(tmp_val.normalize())\n"
+
+        # If a tz-aware timestamp, construct a tz-naive timestamp with the same date
+        elif is_valid_tz_aware_datetime_arg(conversionVal):
+            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day))\n"
+
+        # If a non-tz timestamp/datetime, round it down to the nearest day
+        elif is_valid_datetime_or_date_arg(
+            conversionVal
+        ) or is_valid_tz_naive_datetime_arg(conversionVal):
+            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).normalize())\n"
+
+        else:  # pragma: no cover
+            raise raise_bodo_error(
+                f"Internal error: unsupported type passed to to_date_util for argument conversionVal: {conversionVal}"
             )
 
-    def impl(conversionVal, optionalConversionFormatString):  # pragma: no cover
-        return to_date_util(
-            conversionVal, optionalConversionFormatString, numba.literally(False)
+        arg_names = ["conversionVal", "format_str"]
+        arg_types = [conversionVal, format_str]
+        propagate_null = [True, False]
+
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+
+        extra_globals = {
+            "pd_to_datetime_error_checked": pd_to_datetime_error_checked,
+            "number_to_datetime": number_to_datetime,
+            "convert_sql_date_format_str_to_py_format": convert_sql_date_format_str_to_py_format,
+            "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
+        }
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+            extra_globals=extra_globals,
         )
 
-    return impl
+    return overload_impl
 
 
-@numba.generated_jit(nopython=True)
-def to_date(conversionVal, optionalConversionFormatString):
+def create_date_cast_func(func_name):
+    """Takes in a function name (either TO_DATE or TRY_TO_DATE) and generates
+    the wrapper function for the corresponding kernel.
+    """
 
-    args = [conversionVal, optionalConversionFormatString]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
-            return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.to_date",
-                ["conversionVal", "optionalConversionFormatString"],
-                i,
+    def overload_func(conversionVal, format_str):
+        """Handles cases where func_name receives an optional argument and forwards
+        to the appropriate version of the real implementation"""
+        args = [conversionVal, format_str]
+        for i in range(len(args)):
+            if isinstance(args[i], types.optional):  # pragma: no cover
+                return unopt_argument(
+                    f"bodo.libs.bodosql_array_kernels.{func_name.lower()}_util",
+                    ["conversionVal", "format_str"],
+                    i,
+                )
+
+        func_text = "def impl(conversionVal, format_str):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name.lower()}_util(conversionVal, format_str)"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+
+        return loc_vars["impl"]
+
+    return overload_func
+
+
+def _install_date_cast_overloads():
+    date_cast_fns = [
+        ("TO_DATE", to_date, to_date_util, True),
+        ("TRY_TO_DATE", try_to_date, try_to_date_util, False),
+    ]
+    for func_name, func, util_func, error_on_fail in date_cast_fns:
+        overload(func)(create_date_cast_func(func_name))
+        overload(util_func)(create_date_cast_util(func_name, error_on_fail))
+
+
+_install_date_cast_overloads()
+
+
+def try_to_timestamp(conversionVal, format_str, time_zone, scale):  # pragma: no cover
+    return
+
+
+def to_timestamp_util(conversionVal, format_str, time_zone, scale):  # pragma: no cover
+    return
+
+
+def try_to_timestamp_util(
+    conversionVal, format_str, time_zone, scale
+):  # pragma: no cover
+    return
+
+
+def create_timestamp_cast_util(func, error_on_fail):
+    """Creates an overload for a dedicated kernel for one of the timestamp
+    casting functions:
+
+    - TO_TIMESTAMP
+    - TRY_TO_TIMESTAMP
+    - TO_TIMESTAMP_TZ
+    - TRY_TO_TIMESTAMP_TZ
+    - TO_TIMESTAMP_LTZ
+    - TRY_TO_TIMESTAMP_LTZ
+    - TO_TIMESTAMP_NTZ
+    - TRY_TO_TIMESTAMP_NTZ
+
+    Takes in 4 arguments: the name of the kernel being created, whether it should
+    have an error when it has a failure (as opposed to outputting null),
+    whether it should keep the time or truncate it (e.g. TO_DATE returns a datetime
+    type that is truncated to midnight), and the scale if the argument is numeric
+    (i.e. 0 = seconds, 3 = milliseconds, 6 = microseconds, 9 = nanoseconds)
+
+    Returns an overload that accepts 3 arguments: the value to be converted
+    (a series or scalar of mulitiple possible types), and two literals.
+    The first is a format string for cases where the input is a string. The second
+    is a time zone for the output data.
+
+    The full specification is noted here:
+    https://docs.snowflake.com/en/sql-reference/functions/to_timestamp.html
+    """
+    if error_on_fail:
+        error_str = "raise ValueError('Invalid input while converting to date value')"
+    else:
+        error_str = "bodo.libs.array_kernels.setna(res, i)"
+
+    def overload_impl(conversionVal, format_str, time_zone, scale):
+        verify_string_arg(format_str, func, "format_str")
+
+        # The scale must be a constant scalar, per Snowflake
+        if not isinstance(scale, types.Integer):
+            raise_bodo_error(
+                f"{func}: scale argument must be a scalar integer between 0 and 9"
             )
 
-    def impl(conversionVal, optionalConversionFormatString):  # pragma: no cover
-        return to_date_util(
-            conversionVal, optionalConversionFormatString, numba.literally(True)
+        prefix_code = "if not (0 <= scale <= 9):\n"
+        prefix_code += f"   raise ValueError('{func}: scale must be between 0 and 9')\n"
+
+        # Infer the correct way to adjust the timezones of the Timestamps calculated
+        # based on the timezone of the current data (if there is any), and the target timezone.
+        current_tz = get_tz_if_exists(conversionVal)
+        if current_tz is None:
+            time_zone = get_literal_value(time_zone)
+            if is_overload_constant_str(time_zone):
+                # NTZ -> TZ
+                localize_str = f".tz_localize('{time_zone}')"
+            elif is_overload_none(time_zone):
+                # NTZ -> NTZ
+                localize_str = ""
+                time_zone = None
+            else:
+                raise_bodo_error("time_zone argument must be a scalar string or None")
+        else:
+            if is_overload_constant_str(time_zone):
+                time_zone = get_literal_value(time_zone)
+                if time_zone == current_tz:
+                    # TZ -> Same TZ
+                    localize_str = ""
+                else:
+                    # TZ -> Different TZ
+                    localize_str = f".tz_localize(None).tz_localize('{time_zone}')"
+            elif is_overload_none(time_zone):
+                # TZ -> NTZ
+                localize_str = f".tz_localize(None)"
+                time_zone = None
+            else:
+                raise_bodo_error("time_zone argument must be a scalar string or None")
+
+        is_out_arr = bodo.utils.utils.is_array_typ(
+            conversionVal, True
+        ) or bodo.utils.utils.is_array_typ(format_str, True)
+
+        # When returning a scalar we return a pd.Timestamp type.
+        unbox_str = "unbox_if_tz_naive_timestamp" if is_out_arr else ""
+
+        # If the format string is specified, then arg0 must be string
+        if not is_overload_none(format_str):
+            verify_string_arg(conversionVal, func, "conversionVal")
+            scalar_text = (
+                "py_format_str = convert_sql_date_format_str_to_py_format(arg1)\n"
+            )
+            scalar_text += "was_successful, tmp_val = pd_to_datetime_error_checked(arg0, format=py_format_str)\n"
+            scalar_text += "if not was_successful:\n"
+            scalar_text += f"  {error_str}\n"
+            scalar_text += "else:\n"
+            scalar_text += f"  res[i] = {unbox_str}(tmp_val{localize_str})\n"
+
+        # NOTE: gen_vectorized will automatically map this function over the values dictionary
+        # of a dict encoded string array instead of decoding it whenever possible
+        elif is_valid_string_arg(conversionVal):
+            """
+            If no format string is specified, attempt to parse the string according to these date formats:
+            https://docs.snowflake.com/en/user-guide/date-time-input-output.html#date-formats. All of the examples listed are
+            handled by pd.to_datetime() in Bodo jit code.
+
+            It will also check if the string is convertable to int, IE '12345' or '-4321'"""
+
+            # Conversion needs to be done incase arg0 is unichr array
+            scalar_text = "arg0 = str(arg0)\n"
+            scalar_text += "if (arg0.isnumeric() or (len(arg0) > 1 and arg0[0] == '-' and arg0[1:].isnumeric())):\n"
+            scalar_text += f"   res[i] = {unbox_str}(number_to_datetime(np.int64(arg0)){localize_str})\n"
+
+            scalar_text += "else:\n"
+            scalar_text += (
+                "   was_successful, tmp_val = pd_to_datetime_error_checked(arg0)\n"
+            )
+            scalar_text += "   if not was_successful:\n"
+            scalar_text += f"      {error_str}\n"
+            scalar_text += "   else:\n"
+            scalar_text += f"      res[i] = {unbox_str}(tmp_val{localize_str})\n"
+
+        elif is_valid_int_arg(conversionVal):
+            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0 * (10 ** (9 - arg3))){localize_str})\n"
+
+        elif is_valid_float_arg(conversionVal):
+            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0 * (10 ** (9 - arg3))){localize_str})\n"
+
+        elif is_valid_datetime_or_date_arg(conversionVal):
+            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0){localize_str})\n"
+
+        elif is_valid_tz_aware_datetime_arg(conversionVal):
+            scalar_text = f"res[i] = {unbox_str}(arg0{localize_str})\n"
+
+        else:  # pragma: no cover
+            raise raise_bodo_error(
+                f"Internal error: unsupported type passed to to_timestamp_util for argument conversionVal: {conversionVal}"
+            )
+
+        arg_names = ["conversionVal", "format_str", "time_zone", "scale"]
+        arg_types = [conversionVal, format_str, time_zone, scale]
+        propagate_null = [True, False, False, False]
+
+        # Determine the output dtype. If a timezone is provided then we have a
+        # tz-aware output. Otherwise we output datetime64ns.
+        if time_zone is not None:
+            out_dtype = bodo.DatetimeArrayType(time_zone)
+        else:
+            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+
+        extra_globals = {
+            "pd_to_datetime_error_checked": pd_to_datetime_error_checked,
+            "number_to_datetime": number_to_datetime,
+            "convert_sql_date_format_str_to_py_format": convert_sql_date_format_str_to_py_format,
+            "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
+        }
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+            prefix_code=prefix_code,
+            extra_globals=extra_globals,
         )
 
-    return impl
+    return overload_impl
+
+
+def create_timestamp_cast_func(func_name):
+    def overload_func(conversionVal, format_str, time_zone, scale):
+        """Handles cases where func_name receives an optional argument and forwards
+        to the appropriate version of the real implementation"""
+        args = [conversionVal, format_str, time_zone, scale]
+        for i in range(len(args)):
+            if isinstance(args[i], types.optional):  # pragma: no cover
+                return unopt_argument(
+                    f"bodo.libs.bodosql_array_kernels.{func_name.lower()}_util",
+                    ["conversionVal", "format_str", "time_zone", "scale"],
+                    i,
+                )
+
+        func_text = "def impl(conversionVal, format_str, time_zone, scale):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name.lower()}_util(conversionVal, format_str, time_zone, scale)"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+
+        return loc_vars["impl"]
+
+    return overload_func
+
+
+def _install_timestamp_cast_overloads():
+    timestamp_cast_fns = [
+        ("TO_TIMESTAMP", to_timestamp, to_timestamp_util, True),
+        ("TRY_TO_TIMESTAMP", try_to_timestamp, try_to_timestamp_util, False),
+    ]
+    for func_name, func, util_func, error_on_fail in timestamp_cast_fns:
+        overload(func)(create_timestamp_cast_func(func_name))
+        overload(util_func)(create_timestamp_cast_util(func_name, error_on_fail))
+
+
+_install_timestamp_cast_overloads()
 
 
 @numba.generated_jit(nopython=True)
@@ -430,73 +766,45 @@ def to_double_util(val, optional_format_string, _try=False):
 
 @register_jitable
 def convert_sql_date_format_str_to_py_format(val):  # pragma: no cover
-    """Helper fn for the TO_DATE fns. This fn takes a format string in SQL syntax, and converts it to
-    the python syntax.
+    """Helper fn for the TO_DATE/TO_TIMESTAMP fns. This fn takes a format string
+    in SQL syntax, and converts it to the python syntax.
     SQL syntax reference: https://docs.snowflake.com/en/sql-reference/functions-conversion.html#label-date-time-format-conversion
     Python syntax reference: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior
     """
 
     # TODO: https://bodo.atlassian.net/browse/BE-3614
     raise RuntimeError(
-        "Converting to date values with format strings not currently supported"
+        "Converting to date/timestamp values with format strings not currently supported"
     )
 
 
 @numba.generated_jit(nopython=True)
-def int_to_datetime(val):
-    """Helper fn for the snowflake TO_DATE fns. For this fns, argument is integer.
+def number_to_datetime(val):
+    """Helper fn for the snowflake TO_DATE fns. For this fns, argument is integer or float.
 
-    If the format of the input parameter is a string that contains an integer:
-    After the string is converted to an integer (if needed), the integer is treated as a number of seconds, milliseconds, microseconds, or nanoseconds after the start of the Unix epoch (1970-01-01 00:00:00.000000000 UTC).
-    If the integer is less than 31536000000 (the number of milliseconds in a year), then the value is treated as a number of seconds.
+    If the format of the input parameter is a string that contains an number:
+    After the string is converted to an number (if needed), the number is treated as a number of seconds, milliseconds, microseconds, or nanoseconds after the start of the Unix epoch (1970-01-01 00:00:00.000000000 UTC).
+    If the number is less than 31536000000 (the number of milliseconds in a year), then the value is treated as a number of seconds.
     If the value is greater than or equal to 31536000000 and less than 31536000000000, then the value is treated as milliseconds.
     If the value is greater than or equal to 31536000000000 and less than 31536000000000000, then the value is treated as microseconds.
     If the value is greater than or equal to 31536000000000000, then the value is treated as nanoseconds.
 
     See https://docs.snowflake.com/en/sql-reference/functions/to_date.html#usage-notes
 
-    This function does NOT floor the resulting datetime (relies on calling fn to do so if needed)
+    This function does NOT floor the resulting datetime (relies on calling fn to do so if needed).
+
+    Note, for negatives, the absolute value is taken when choosing the unit.
     """
 
     def impl(val):  # pragma: no cover
-        if val < 31536000000:
+        if abs(val) < 31536000000:
             retval = pd.to_datetime(val, unit="s")
-        elif val < 31536000000000:
+        elif abs(val) < 31536000000000:
             retval = pd.to_datetime(val, unit="ms")
-        elif val < 31536000000000000:
+        elif abs(val) < 31536000000000000:
             retval = pd.to_datetime(val, unit="us")
         else:
             retval = pd.to_datetime(val, unit="ns")
-        return retval
-
-    return impl
-
-
-@numba.generated_jit(nopython=True)
-def float_to_datetime(val):
-    """Helper fn for the snowflake TO_DATE fns. For this fns, argument is integer.
-
-    If the format of the input parameter is a string that contains an integer:
-    After the string is converted to an integer (if needed), the integer is treated as a number of seconds, milliseconds, microseconds, or nanoseconds after the start of the Unix epoch (1970-01-01 00:00:00.000000000 UTC).
-    If the integer is less than 31536000000 (the number of milliseconds in a year), then the value is treated as a number of seconds.
-    If the value is greater than or equal to 31536000000 and less than 31536000000000, then the value is treated as milliseconds.
-    If the value is greater than or equal to 31536000000000 and less than 31536000000000000, then the value is treated as microseconds.
-    If the value is greater than or equal to 31536000000000000, then the value is treated as nanoseconds.
-
-    See https://docs.snowflake.com/en/sql-reference/functions/to_date.html#usage-notes
-
-    This function does NOT floor the resulting datetime (relies on calling fn to do so if needed)
-    """
-
-    def impl(val):  # pragma: no cover
-        if val < 31536000000:
-            retval = pd.Timestamp(val, unit="s")
-        elif val < 31536000000000:
-            retval = pd.Timestamp(val, unit="ms")
-        elif val < 31536000000000000:
-            retval = pd.Timestamp(val, unit="us")
-        else:
-            retval = pd.Timestamp(val, unit="ns")
         return retval
 
     return impl
@@ -520,23 +828,34 @@ def pd_to_datetime_error_checked(
     the success flag evaluates to True, then the paired value is the correctly parsed timestamp, otherwise  the paired value is a dummy timestamp.
     """
     # Manual check for invalid date strings to match behavior of Snowflake
-    # since Pandas accepts dates like the following: "2020", "2020-01"
+    # since Pandas accepts dates in more formats. The legal patterns for
+    # the date component in Snowflake:
+    # YYYY/MM/DD
+    # YYYY-MM-DD
+    # YYYY-M-DD
+    # YYYY-M-D
+    # YYYY-MM-D
     if val is not None:
-        # account for case where val is a timestamp
-        val_arg0 = val.split(" ")[0]
+        # account for case where val has a time component by finding everything
+        # before the first character that is not a digit/dash/slash
+        split_index = 0
+        for i in range(len(val)):
+            if not (val[i].isdigit() or val[i] in "/-"):
+                break
+            split_index += 1
+        date_comp = val[:split_index]
 
-        # Check the number of characters to prevent those invalid cases
-        # YYYY/MM/DD, YYYY-MM-DD, etc. all have exactly 10 characters
-        # With timestamp information, they have even greater.
-        if len(val_arg0) < 10:
-            return (False, None)
-        else:
-            # Check that the number of "/", and "-" are either 0 or 2
-            slash_flag = val_arg0.count("/") in [0, 2]
-            dash_flag = val_arg0.count("-") in [0, 2]
-
-            if not (slash_flag and dash_flag):
+        # The legal range is 8, 9 or 10 characters
+        if len(date_comp) == 8 or len(date_comp) == 9:
+            # 8/9 characters: must be YYYY-M-D, YYYY-M-DD or YYYY-M-DD
+            if date_comp.count("-") != 2:
                 return (False, None)
+        elif len(date_comp) == 10:
+            # 10 characters: must be YYYY-MM-DD or YYYY/MM/DD
+            if ~((date_comp.count("/") == 2) ^ (date_comp.count("-") == 2)):
+                return (False, None)
+        else:
+            return (False, None)
 
     with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
@@ -561,142 +880,6 @@ def pd_to_datetime_error_checked(
             ret_val = tmp
 
     return (success_flag, ret_val)
-
-
-@numba.generated_jit(nopython=True)
-def to_date_util(
-    conversionVal, optionalConversionFormatString, errorOnFail, _keep_time=False
-):
-    """A dedicated kernel for the SQL function DATE, TO_DATE and TRY_TO_DATE which attempts
-    to convert arg0 into a date value. Arg0 can be string, integer, or a datetime type. If
-    arg0 is a string, can optionally accept an arg1
-    string value used for parsing. As we don't support proper date types in bodosql, these
-    functions return floored dt64 values. ErrorOnFail is a boolean literal, which determines if
-    the fn returns null, or errors when attempting conversion (the difference between TO_DATE
-    and TRY_TO_DATE).
-
-    Args:
-        conversionVal (string, datetime/timestamp value, or integer array/series/scalar): the value to be converted to date
-        optionalConversionFormatString (string array/series/scalar): format string. Only valid if arg0 is string
-        errorOnFail (boolean literal): The null/error handling behavior. True for TO_DATE, which errors on failure
-        False for TRY_TO_DATE, which instead returns null.
-
-    Returns:
-        datetime series/scalar: the converted date values
-    """
-    errorOnFail = get_overload_const_bool(errorOnFail)
-    _keep_time = get_overload_const_bool(_keep_time)
-
-    if errorOnFail:
-        errorString = "raise ValueError('Invalid input while converting to date value')"
-    else:
-        errorString = "bodo.libs.array_kernels.setna(res, i)"
-
-    if _keep_time:
-        floor_str = ""
-    else:
-        floor_str = ".normalize()"
-
-    verify_string_arg(
-        optionalConversionFormatString,
-        "TO_DATE and TRY_TO_DATE",
-        "optionalConversionFormatString",
-    )
-
-    is_out_arr = bodo.utils.utils.is_array_typ(
-        conversionVal, True
-    ) or bodo.utils.utils.is_array_typ(optionalConversionFormatString, True)
-
-    # When returning a scalar we return a pd.Timestamp type.
-    unbox_str = "unbox_if_tz_naive_timestamp" if is_out_arr else ""
-
-    # If the format string is specified, then arg0 must be string
-    if not is_overload_none(optionalConversionFormatString):
-        verify_string_arg(
-            conversionVal, "TO_DATE and TRY_TO_DATE", "optionalConversionFormatString"
-        )
-        scalar_text = "py_format_str = convert_sql_date_format_str_to_py_format(arg1)\n"
-        scalar_text += "was_successful, tmp_val = pd_to_datetime_error_checked(arg0, format=py_format_str)\n"
-        scalar_text += "if not was_successful:\n"
-        scalar_text += f"  {errorString}\n"
-        scalar_text += "else:\n"
-        scalar_text += f"  res[i] = {unbox_str}(tmp_val{floor_str})\n"
-
-    # NOTE: gen_vectorized will automatically map this function over the values dictionary
-    # of a dict encoded string array instead of decoding it whenever possible
-    elif is_valid_string_arg(conversionVal):
-        """
-        If no format string is specified, snowflake will use attempt to parse the string according to these date formats:
-        https://docs.snowflake.com/en/user-guide/date-time-input-output.html#date-formats. All of the examples listed are
-        handled by pd.to_datetime() in Bodo jit code.
-
-        It will also check if the string is convertable to int, IE '12345' or '-4321'"""
-
-        # Conversion needs to be done incase arg0 is unichr array
-        scalar_text = "arg0 = str(arg0)\n"
-        scalar_text += "if (arg0.isnumeric() or (len(arg0) > 1 and arg0[0] == '-' and arg0[1:].isnumeric())):\n"
-        scalar_text += (
-            f"   res[i] = {unbox_str}(int_to_datetime(np.int64(arg0)){floor_str})\n"
-        )
-
-        scalar_text += "else:\n"
-        scalar_text += (
-            "   was_successful, tmp_val = pd_to_datetime_error_checked(arg0)\n"
-        )
-        scalar_text += "   if not was_successful:\n"
-        scalar_text += f"      {errorString}\n"
-        scalar_text += "   else:\n"
-        scalar_text += f"      res[i] = {unbox_str}(tmp_val{floor_str})\n"
-
-    elif is_valid_int_arg(conversionVal):
-        scalar_text = f"res[i] = {unbox_str}(int_to_datetime(arg0){floor_str})\n"
-
-    elif is_valid_float_arg(conversionVal):
-        scalar_text = f"res[i] = {unbox_str}(float_to_datetime(arg0){floor_str})\n"
-
-    elif is_valid_datetime_or_date_arg(conversionVal):
-        scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0){floor_str})\n"
-    elif is_valid_tz_aware_datetime_arg(conversionVal):
-        scalar_text = f"res[i] = arg0{floor_str}\n"
-    else:
-        raise raise_bodo_error(
-            f"Internal error: unsupported type passed to to_date_util for argument conversionVal: {conversionVal}"
-        )
-
-    arg_names = [
-        "conversionVal",
-        "optionalConversionFormatString",
-        "errorOnFail",
-        "_keep_time",
-    ]
-    arg_types = [conversionVal, optionalConversionFormatString, errorOnFail, _keep_time]
-    propagate_null = [True, False, False, False]
-
-    # Determine the output dtype. If the input is a tz-aware Timestamp
-    # then we have a tz-aware output. Otherwise we output datetime64ns.
-    if isinstance(conversionVal, bodo.DatetimeArrayType) or (
-        isinstance(conversionVal, bodo.PandasTimestampType)
-        and conversionVal.tz is not None
-    ):
-        out_dtype = bodo.DatetimeArrayType(conversionVal.tz)
-    else:
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
-
-    extra_globals = {
-        "pd_to_datetime_error_checked": pd_to_datetime_error_checked,
-        "int_to_datetime": int_to_datetime,
-        "float_to_datetime": float_to_datetime,
-        "convert_sql_date_format_str_to_py_format": convert_sql_date_format_str_to_py_format,
-        "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
-    }
-    return gen_vectorized(
-        arg_names,
-        arg_types,
-        propagate_null,
-        scalar_text,
-        out_dtype,
-        extra_globals=extra_globals,
-    )
 
 
 def cast_tz_naive_to_tz_aware(arr, tz):  # pragma: no cover
