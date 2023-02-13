@@ -262,7 +262,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.generatedCode.append(String.format("  return %s\n", this.varGenStack.pop()));
     }
 
-    Module m = this.generatedCode.toModule();
+    Module m = this.generatedCode.build();
     return m.emit(1);
   }
 
