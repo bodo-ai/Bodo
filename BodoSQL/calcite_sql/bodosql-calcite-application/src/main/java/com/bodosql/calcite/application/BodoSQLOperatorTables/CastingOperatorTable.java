@@ -47,6 +47,38 @@ public class CastingOperatorTable implements SqlOperatorTable {
     return instance;
   }
 
+  public static final SqlFunction TO_BINARY =
+      new SqlFunction(
+          "TO_BINARY",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          opBinding -> opBinding.getTypeFactory().createSqlType(SqlTypeName.VARBINARY),
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // The input can be a string or binary
+          OperandTypes.STRING,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction TRY_TO_BINARY =
+      new SqlFunction(
+          "TRY_TO_BINARY",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          opBinding -> opBinding.getTypeFactory().createSqlType(SqlTypeName.VARBINARY),
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // The input can be a string or binary
+          OperandTypes.STRING,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   // TODO: make all of these actually coerce to cast, so that Calcite can properly typecheck it at
   // compile
   // time as of right now, we do this check in our code.
@@ -334,6 +366,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
   private List<SqlOperator> functionList =
       Arrays.asList(
           INFIX_CAST,
+          TO_BINARY,
           TO_BOOLEAN,
           TO_CHAR,
           TO_DATE,
@@ -343,6 +376,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           TO_TIMESTAMP_NTZ,
           TO_TIMESTAMP_TZ,
           TO_VARCHAR,
+          TRY_TO_BINARY,
           TRY_TO_BOOLEAN,
           TRY_TO_DATE,
           TRY_TO_DOUBLE,

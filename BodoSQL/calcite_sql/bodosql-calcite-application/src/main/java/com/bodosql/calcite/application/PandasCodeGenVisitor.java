@@ -2201,8 +2201,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
         return generatePosition(operandsInfo);
       case OTHER:
       case OTHER_FUNCTION:
-        /* If sqlKind = other function, the only recourse is to match on the name of the function. */
         String tzStr;
+        /* If sqlKind = other function, the only recourse is to match on the name of the function. */
         switch (fnName) {
           case "WIDTH_BUCKET":
             {
@@ -2369,6 +2369,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "TRY_TO_BOOLEAN":
           case "TO_BOOLEAN":
             return generateToBooleanFnCode(operandsInfo, fnName);
+          case "TRY_TO_BINARY":
+          case "TO_BINARY":
+            return generateToBinaryFnCode(operandsInfo, fnName);
           case "TO_CHAR":
           case "TO_VARCHAR":
             return generateToCharFnCode(operandsInfo, fnName);
@@ -2548,6 +2551,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 fnOperation.getOperands().get(0).getType().getSqlTypeName(),
                 operandsInfo.get(0),
                 fnName);
+          case "DATE_FROM_PARTS":
+          case "DATEFROMPARTS":
+          case "TIMEFROMPARTS":
+          case "TIME_FROM_PARTS":
+          case "TIMESTAMP_FROM_PARTS":
+          case "TIMESTAMPFROMPARTS":
+          case "TIMESTAMP_NTZ_FROM_PARTS":
+          case "TIMESTAMPNTZFROMPARTS":
+          case "TIMESTAMP_LTZ_FROM_PARTS":
+          case "TIMESTAMPLTZFROMPARTS":
+          case "TIMESTAMP_TZ_FROM_PARTS":
+          case "TIMESTAMPTZFROMPARTS":
+            tzStr = "None";
+            if (fnOperation.getType() instanceof TZAwareSqlType) {
+              tzStr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getPyZone();
+            }
+            return generateDateTimeTypeFromPartsCode(fnName, operandsInfo, tzStr);
           case "TO_NUMBER":
           case "TO_NUMERIC":
           case "TO_DECIMAL":
@@ -2556,14 +2576,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "TRY_TO_NUMERIC":
           case "TRY_TO_DECIMAL":
             return generateTryToNumberCode(operandsInfo.get(0), fnName);
-          case "TIMEFROMPARTS":
-          case "TIME_FROM_PARTS":
-            return generateTimeFromPartsCode(
-                fnName,
-                operandsInfo.get(0),
-                operandsInfo.get(1),
-                operandsInfo.get(2),
-                operandsInfo.size() == 4 ? operandsInfo.get(3) : null);
           case "UNIX_TIMESTAMP":
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":

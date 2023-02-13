@@ -44,6 +44,24 @@ to_time_util = make_time_to_time_util("TO_TIME")
 
 
 @numba.generated_jit(nopython=True)
+def time_from_parts(hour, minute, second, nanosecond):
+
+    args = [hour, minute, second, nanosecond]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.time_from_arts",
+                ["hour", "minute", "second", "nanosecond"],
+                i,
+            )
+
+    def impl(hour, minute, second, nanosecond):  # pragma: no cover
+        return time_from_parts_util(hour, minute, second, nanosecond)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def time_from_parts_util(hour, minute, second, nanosecond):  # pragma: no cover
     """Kernel for `TIMEFROMPARTS` and `TIME_FROM_PARTS`"""
 
