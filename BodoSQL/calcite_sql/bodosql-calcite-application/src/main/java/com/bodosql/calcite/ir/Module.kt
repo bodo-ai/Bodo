@@ -10,7 +10,7 @@ class Module(private val main: List<Op>) {
      * Emits the code for the module.
      * @return Emitted code for the full module.
      */
-    fun emit(level: Int = 1): String {
+    fun emit(level: Int = 0): String {
         val doc = Doc(level = level)
         for (item in main) {
             item.emit(doc)
@@ -41,13 +41,21 @@ class Module(private val main: List<Op>) {
          *
          * @param
          */
-        fun append(code: String): Op.Code {
-            val op = Op.Code(code)
-            this.code.add(op)
-            return op
+        fun append(code: String): Builder {
+            // If the last operation is an Op.Code,
+            // append directly to that.
+            val op = this.code.lastOrNull()
+            if (op != null && op is Op.Code) {
+                op.append(code)
+                return this
+            }
+
+            // Otherwise, create a new Op.Code.
+            this.code.add(Op.Code(code))
+            return this
         }
 
-        fun append(code: StringBuilder): Op.Code {
+        fun append(code: StringBuilder): Builder {
             return append(code.toString())
         }
 
@@ -55,7 +63,7 @@ class Module(private val main: List<Op>) {
          * Construct a module from the built code.
          * @return The built module.
          */
-        fun toModule(): Module {
+        fun build(): Module {
             return Module(code.toList())
         }
     }
