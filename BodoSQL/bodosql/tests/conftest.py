@@ -1016,6 +1016,15 @@ def numeric_values(request):
 
 
 @pytest.fixture
+def local_tz():
+    """Returns the local timezone as a string"""
+
+    # BodoSQL uses UTC without the Snowflake catalog and doesn't have an API to
+    # set it locally.
+    return "UTC"
+
+
+@pytest.fixture
 def tz_aware_df():
     # Transition to Daylight Savings
     # "1D2H37T48S" --> 1 day, 2 hours, 37 minutes, 48 seconds

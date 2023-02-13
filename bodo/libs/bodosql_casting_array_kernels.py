@@ -139,9 +139,9 @@ def create_cast_func_overload(func_name):
         elif func_name == "char":
             func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_char_util(arr)\n"
         elif func_name == "date":
-            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_date_util(arr, None, numba.literally(True), numba.literally(False))\n"
+            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_date_util(arr, None)\n"
         elif func_name == "timestamp":
-            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_date_util(arr, None, numba.literally(False), numba.literally(True))\n"
+            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_timestamp_util(arr, None, None, 0)\n"
         else:
             func_text += (
                 f"  return bodo.libs.bodosql_array_kernels.cast_{func_name}_util(arr)"
