@@ -19,6 +19,21 @@ public class CastingOperatorTable implements SqlOperatorTable {
 
   private static @Nullable CastingOperatorTable instance;
 
+  // For conversion to timestamp, snowflake allows the input to be a string,
+  // datetime/timestamp expr, or integer/float. If the argument is string, an
+  // optional format string is allowed as a second argument. If the argument
+  // is a number, an optional scale integer is allowed as a second argument.
+  static final SqlOperandTypeChecker toTimestampAcceptedArguments =
+      OperandTypes.or(
+          OperandTypes.CHARACTER,
+          OperandTypes.DATETIME,
+          OperandTypes.DATE,
+          OperandTypes.TIMESTAMP,
+          OperandTypes.NUMERIC,
+          OperandTypes.sequence(
+              "TO_TIMESTAMP(CHARACTER, CHARACTER)", OperandTypes.CHARACTER, OperandTypes.CHARACTER),
+          OperandTypes.NUMERIC_INTEGER);
+
   /** Returns the operator table, creating it if necessary. */
   public static synchronized CastingOperatorTable instance() {
     CastingOperatorTable instance = CastingOperatorTable.instance;
@@ -113,16 +128,57 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction TO_DATE =
+      new SqlFunction(
+          "TO_DATE",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.DATE,
+          null,
+          // For conversion to date, snowflake allows a string, datetime, or integer.
+          // If the first argument is string, an optional format string is allowed
+          // as a second argument.
+          OperandTypes.or(
+              OperandTypes.or(
+                  OperandTypes.STRING,
+                  OperandTypes.DATETIME,
+                  OperandTypes.DATE,
+                  OperandTypes.TIMESTAMP,
+                  OperandTypes.INTEGER),
+              OperandTypes.STRING_STRING),
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TRY_TO_DATE =
+      new SqlFunction(
+          "TRY_TO_DATE",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.DATE,
+          null,
+          // For conversion to date, snowflake allows a string, datetime, or integer.
+          // If the first argument is string, an optional format string is allowed
+          // as a second argument.
+          OperandTypes.or(
+              OperandTypes.or(
+                  OperandTypes.STRING,
+                  OperandTypes.DATETIME,
+                  OperandTypes.DATE,
+                  OperandTypes.TIMESTAMP,
+                  OperandTypes.INTEGER),
+              OperandTypes.STRING_STRING),
+          SqlFunctionCategory.TIMEDATE);
+
   /**
-   * Generate the return type for TO_DATE and TRY_TO_DATE
+   * Generate the return type for TO_TIMESTAMP_TZ, TRY_TO_TIMESTAMP_TZ, TO_TIMESTAMP_LTZ and
+   * TRY_TO_TIMESTAMP_LTZ
    *
    * @param binding The Operand inputs
-   * @param runtimeFailureIsNull Can a runtime failure cause a null output? True for TRY_TO_DATE and
-   *     false for TO_DATE (because it raises an exception instead).
+   * @param runtimeFailureIsNull Can a runtime failure cause a null output? True for
+   *     TRY_TO_TIMESTAMP and false for TO_TIMESTAMP (because it raises an exception instead).
+   * @param keepTimezone If True input has a timezone, keep it in the output. True for _TZ and false
+   *     for _LTZ, since _LTZ always overrides with the local time zone
    * @return The function's return type.
    */
-  public static RelDataType toDateReturnType(
-      SqlOperatorBinding binding, boolean runtimeFailureIsNull) {
+  public static RelDataType toTimestampTZReturnType(
+      SqlOperatorBinding binding, boolean runtimeFailureIsNull, boolean keepTimezone) {
     List<RelDataType> operandTypes = binding.collectOperandTypes();
     // Determine if the output is nullable.
     boolean nullable = isOutputNullableCompile(operandTypes);
@@ -131,15 +187,15 @@ public class CastingOperatorTable implements SqlOperatorTable {
     // Determine output type based on arg0
     RelDataType arg0 = operandTypes.get(0);
     RelDataType returnType;
-    if (arg0 instanceof TZAwareSqlType) {
+    boolean isTzAware = (arg0 instanceof TZAwareSqlType);
+    if (keepTimezone && isTzAware) {
       // If the input is tzAware the output is as well.
       returnType = arg0;
     } else {
-      // Otherwise we output a tzNaive Timestamp.
-      // TODO: FIXME once we have proper date support.
-      // The output should actually always be a date type.
-      https: // docs.snowflake.com/en/sql-reference/functions/to_date.html
-      returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+      // Otherwise we output a timezone-aware Timestamp with the local timestamp.
+      returnType =
+          typeFactory.createTZAwareSqlType(
+              binding.getTypeFactory().getTypeSystem().getDefaultTZInfo());
       if (runtimeFailureIsNull) {
         // Note this path includes arguments for 0 that can fail at runtime.
         // If this runtimeFailureIsNull is set then failed conversions make
@@ -148,62 +204,95 @@ public class CastingOperatorTable implements SqlOperatorTable {
         // make the output nullable.
         SqlTypeName typeName = arg0.getSqlTypeName();
         boolean conversionCantFail =
-            typeName.equals(SqlTypeName.TIMESTAMP) || typeName.equals(SqlTypeName.DATE);
-        nullable = nullable || conversionCantFail;
+            typeName.equals(SqlTypeName.TIMESTAMP)
+                || typeName.equals(SqlTypeName.DATE)
+                || isTzAware;
+        nullable = nullable || (!conversionCantFail);
       }
     }
     return typeFactory.createTypeWithNullability(returnType, nullable);
   }
 
-  public static final SqlFunction TO_DATE =
+  // TO_TIMESTAMP defaults to _NTZ unless the session parameter (which isn't
+  // supported yet) says otherwise.
+  public static final SqlFunction TO_TIMESTAMP =
       new SqlFunction(
-          "TO_DATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
+          "TO_TIMESTAMP",
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          opBinding -> toDateReturnType(opBinding, false),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          ReturnTypes.TIMESTAMP,
           null,
-          // For conversion to date, snowflake allows a single string, datetime expr, or integer. If
-          // the
-          // first argument is string, an optional format string is allowed as a second argument.
-          OperandTypes.or(
-              OperandTypes.or(
-                  OperandTypes.STRING,
-                  OperandTypes.DATETIME,
-                  OperandTypes.DATE,
-                  OperandTypes.TIMESTAMP,
-                  OperandTypes.INTEGER),
-              OperandTypes.STRING_STRING),
-          // What group of functions does this fall into?
+          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction TRY_TO_DATE =
+  public static final SqlFunction TRY_TO_TIMESTAMP =
       new SqlFunction(
-          "TRY_TO_DATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
+          "TRY_TO_TIMESTAMP",
           SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          opBinding -> toDateReturnType(opBinding, true),
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          ReturnTypes.TIMESTAMP,
           null,
-          // For conversion to date, snowflake allows a single string, datetime/timestamp expr, or
-          // integer.
-          // If the
-          // first argument is string, an optional format string is allowed as a second argument.
-          OperandTypes.or(
-              OperandTypes.or(
-                  OperandTypes.STRING,
-                  OperandTypes.DATETIME,
-                  OperandTypes.DATE,
-                  OperandTypes.TIMESTAMP,
-                  OperandTypes.INTEGER),
-              OperandTypes.STRING_STRING),
-          // What group of functions does this fall into?
+          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          toTimestampAcceptedArguments,
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TO_TIMESTAMP_NTZ =
+      new SqlFunction(
+          "TO_TIMESTAMP_NTZ",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.TIMESTAMP,
+          null,
+          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          toTimestampAcceptedArguments,
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TRY_TO_TIMESTAMP_NTZ =
+      new SqlFunction(
+          "TRY_TO_TIMESTAMP_NTZ",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.TIMESTAMP,
+          null,
+          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          toTimestampAcceptedArguments,
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TO_TIMESTAMP_LTZ =
+      new SqlFunction(
+          "TO_TIMESTAMP_LTZ",
+          SqlKind.OTHER_FUNCTION,
+          opBinding -> toTimestampTZReturnType(opBinding, false, false),
+          null,
+          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          toTimestampAcceptedArguments,
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TRY_TO_TIMESTAMP_LTZ =
+      new SqlFunction(
+          "TRY_TO_TIMESTAMP_LTZ",
+          SqlKind.OTHER_FUNCTION,
+          opBinding -> toTimestampTZReturnType(opBinding, true, false),
+          null,
+          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          toTimestampAcceptedArguments,
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TO_TIMESTAMP_TZ =
+      new SqlFunction(
+          "TO_TIMESTAMP_TZ",
+          SqlKind.OTHER_FUNCTION,
+          opBinding -> toTimestampTZReturnType(opBinding, false, true),
+          null,
+          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          toTimestampAcceptedArguments,
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TRY_TO_TIMESTAMP_TZ =
+      new SqlFunction(
+          "TRY_TO_TIMESTAMP_TZ",
+          SqlKind.OTHER_FUNCTION,
+          opBinding -> toTimestampTZReturnType(opBinding, true, true),
+          null,
+          // Use the accepted operand types for all TO_TIMESTAMP functions variant
+          toTimestampAcceptedArguments,
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TO_DOUBLE =
@@ -244,15 +333,23 @@ public class CastingOperatorTable implements SqlOperatorTable {
 
   private List<SqlOperator> functionList =
       Arrays.asList(
+          INFIX_CAST,
           TO_BOOLEAN,
           TO_CHAR,
           TO_DATE,
           TO_DOUBLE,
+          TO_TIMESTAMP,
+          TO_TIMESTAMP_LTZ,
+          TO_TIMESTAMP_NTZ,
+          TO_TIMESTAMP_TZ,
           TO_VARCHAR,
           TRY_TO_BOOLEAN,
           TRY_TO_DATE,
           TRY_TO_DOUBLE,
-          INFIX_CAST);
+          TRY_TO_TIMESTAMP,
+          TRY_TO_TIMESTAMP_LTZ,
+          TRY_TO_TIMESTAMP_NTZ,
+          TRY_TO_TIMESTAMP_TZ);
 
   @Override
   public void lookupOperatorOverloads(

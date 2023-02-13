@@ -223,7 +223,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * global. This is currently only used for lowering metaDataType's and array types.
    *
    * @return string variable name, which will be lowered as a global with a value equal to the
-   *     suplied expression
+   *     supplied expression
    */
   public String lowerAsGlobal(String expression) {
     String global_var_name = "global_" + this.globalVarId++;
@@ -2202,6 +2202,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       case OTHER:
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
+        String tzStr;
         switch (fnName) {
           case "WIDTH_BUCKET":
             {
@@ -2349,9 +2350,22 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DATE":
             return generateDateFnCode(operandsInfo.get(0).getExprCode());
           case "TO_DATE":
-            return generateToDateFnCode(operandsInfo);
           case "TRY_TO_DATE":
-            return generateTryToDateFnCode(operandsInfo);
+            return generateToDateFnCode(operandsInfo, fnName);
+          case "TO_TIMESTAMP":
+          case "TO_TIMESTAMP_NTZ":
+          case "TO_TIMESTAMP_LTZ":
+          case "TO_TIMESTAMP_TZ":
+          case "TRY_TO_TIMESTAMP":
+          case "TRY_TO_TIMESTAMP_NTZ":
+          case "TRY_TO_TIMESTAMP_LTZ":
+          case "TRY_TO_TIMESTAMP_TZ":
+            tzStr = "None";
+            if (fnOperation.getType() instanceof TZAwareSqlType) {
+              tzStr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getPyZone();
+            }
+            return generateToTimestampFnCode(
+                operandsInfo, fnOperation.getOperands(), tzStr, fnName);
           case "TRY_TO_BOOLEAN":
           case "TO_BOOLEAN":
             return generateToBooleanFnCode(operandsInfo, fnName);

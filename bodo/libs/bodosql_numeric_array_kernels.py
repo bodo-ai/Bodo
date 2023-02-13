@@ -275,7 +275,7 @@ def create_numeric_func_overload(func_name):
         func_name = func_name.lower()
 
         def overload_func(arr):
-            """Handles cases where func_name recieves an optional argument and forwards
+            """Handles cases where func_name receives an optional argument and forwards
             to the appropriate version of the real implementation"""
             if isinstance(arr, types.optional):
                 return unopt_argument(
@@ -295,7 +295,7 @@ def create_numeric_func_overload(func_name):
         func_name = func_name.lower()
 
         def overload_func(arr0, arr1):
-            """Handles cases where func_name recieves an optional argument and forwards
+            """Handles cases where func_name receives an optional argument and forwards
             to the appropriate version of the real implementation"""
             args = [arr0, arr1]
             for i in range(2):

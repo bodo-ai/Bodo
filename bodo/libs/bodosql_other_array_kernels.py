@@ -332,7 +332,7 @@ def boolnot_util(A):
 
 @numba.generated_jit(nopython=True)
 def nullif(arr0, arr1):
-    """Handles cases where NULLIF recieves optional arguments and forwards
+    """Handles cases where NULLIF receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr0, arr1]
     for i in range(2):

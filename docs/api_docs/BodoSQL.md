@@ -1839,20 +1839,6 @@ BodoSQL currently supports the following Timestamp functions:
 
     Returns the current UTC date as a Timestamp value.
 
-#### TO_DATE
--   `#!sql TO_DATE(col_expr)`
-
-    Casts the col_expr to a timestamp column truncated to the date
-    portion. Supported for Integers, Strings, and Datetime types.
-    For information on valid for conversion, see: https://docs.snowflake.com/en/sql-reference/functions/to_date.html.
-    Raises an error if supplied an invalid expression.
-
-
-#### TRY_TO_DATE
--   `#!sql TRY_TO_DATE(col_expr)`
-
-    See `#!sql TO_DATE`. The only difference is that `#!TRY_TO_DATE` will return `NULL` upon encountering an invalid expression
-    `NULL` instead of raising an error. We recommend using this function for converting to date.
 
 #### TIME_FROM_PARTS
 -   `#!sql TIME_FROM_PARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`

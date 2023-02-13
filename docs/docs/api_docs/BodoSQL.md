@@ -1839,19 +1839,6 @@ BodoSQL currently supports the following Timestamp functions:
 
     Returns the current UTC date as a Timestamp value.
 
-#### TO_DATE
--   `#!sql TO_DATE(col_expr)`
-
-    Casts the col_expr to a timestamp column truncated to the date
-    portion. Supported for Integers, Strings, and Datetime types.
-    For information on valid for conversion, see: https://docs.snowflake.com/en/sql-reference/functions/to_date.html.
-    Raises an error if supplied an invalid expression.
-
-#### TRY_TO_DATE
--   `#!sql TRY_TO_DATE(col_expr)`
-
-    See `#!sql TO_DATE`. The only difference is that `#!TRY_TO_DATE` will return `NULL` upon encountering an invalid expression
-    `NULL` instead of raising an error. We recommend using this function for converting to date.
 
 #### TIME_FROM_PARTS
 -   `#!sql TIME_FROM_PARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
@@ -1874,7 +1861,7 @@ BodoSQL currently supports the following Timestamp functions:
     TIMEFROMPARTS(12, 34, 56, 987654321)
     12:34:56.987654321
     ```
-    
+
 
 ###  String Functions
 
@@ -2981,6 +2968,81 @@ BodoSQL currently supports the following casting/conversion functions:
 -  `#!sql TRY_TO_DOUBLE(COLUMN_EXPRESSION)`
 
     This is similar to `#!sql TO_DOUBLE` except that it will return `NULL` instead of throwing an error invalid inputs.
+
+
+#### TRY_TO_DATE
+-   `TRY_TO_DATE(col_expr)`
+
+    See `TO_DATE`. The only difference is that `TRY_TO_DATE` will return `NULL` upon encountering an invalid expression
+    instead of raising an error. We recommend using this function for converting to date.
+
+
+#### TO_TIMESTAMP
+-   `TO_TIMESTAMP(col_expr)`
+
+    Casts the col_expr to a timestamp column truncated to the date
+    portion. Supported for Integers, Floats, Strings, and Datetime types.
+    For information on valid for conversion, see: https://docs.snowflake.com/en/sql-reference/functions/to_timestamp.html.
+    Raises an error if supplied an invalid expression.
+
+-   `TO_TIMESTAMP(col_expr, scale)`
+
+    Integer inputs can optionally accept an integer literal as a second argument
+    specifying the magnitude of the input. The integer can be from 0 (the default,
+    meaning seconds) to 9 (meaning nanoseconds).
+
+#### TRY_TO_TIMESTAMP
+-   `TRY_TO_TIMESTAMP(col_expr)`
+
+    See `TO_TIMESTAMP`. The only difference is that `TRY_TO_TIMESTAMP` will return `NULL` upon encountering an invalid expression
+    instead of raising an error. We recommend using this function for converting to Timestamp.
+    Has the same 2-argument options as `TO_TIMESTAMP`.
+
+
+#### TO_TIMESTAMP_NTZ
+-   `TO_TIMESTAMP_NTZ(col_expr)`
+
+    Alias for `TO_TIMESTAMP`. Has the same 2-argument options as `TO_TIMESTAMP`.
+
+
+#### TRY_TO_TIMESTAMP_NTZ
+-   `TRY_TO_TIMESTAMP_NTZ(col_expr)`
+
+    Alias for `TRY_TO_TIMESTAMP`. Has the same 2-argument options as `TRY_TO_TIMESTAMP`.
+
+
+#### TO_TIMESTAMP_LTZ
+-   `TO_TIMESTAMP_LTZ(col_expr)`
+
+    See `TO_TIMESTAMP`. The only difference is that `TO_TIMESTAMP_LTZ` will always return
+    a timestamp with the local time zone whereas `TO_TIMESTAMP` will output timezone-naive
+    data. By default the local timezone is UTC and it can be updated as a parameter
+    when using the Snowflake Catalog. Has the same 2-argument options as `TO_TIMESTAMP`.
+
+
+#### TRY_TO_TIMESTAMP_LTZ
+-   `TRY_TO_TIMESTAMP_LTZ(col_expr)`
+
+    See `TO_TIMESTAMP_LTZ`. The only difference is that `TO_TIMESTAMP_LTZ` will return `NULL` upon encountering an invalid expression
+    instead of raising an error. We recommend using this function for converting to Timestamp.
+    Has the same 2-argument options as `TO_TIMESTAMP`.
+
+
+#### TO_TIMESTAMP_TZ
+-   `TO_TIMESTAMP_TZ(col_expr)`
+
+    See `TO_TIMESTAMP_LTZ`. The only difference is that if input is already timezone-aware data,
+    then `TO_TIMESTAMP_TZ` will preserve its current timezone instead of replacing it.
+    Has the same 2-argument options as `TO_TIMESTAMP`.
+
+
+#### TRY_TO_TIMESTAMP_TZ
+-   `TRY_TO_TIMESTAMP_TZ(col_expr)`
+
+    See `TO_TIMESTAMP_TZ`. The only difference is that `TO_TIMESTAMP_TZ` will return `NULL` upon encountering an invalid expression
+    instead of raising an error. We recommend using this function for converting to Timestamp.
+    Has the same 2-argument options as `TO_TIMESTAMP`.
+
 
 ## Supported DataFrame Data Types
 

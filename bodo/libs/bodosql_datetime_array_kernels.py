@@ -1056,7 +1056,7 @@ def get_iso_weeks_between_years(year0, year1):  # pragma: no cover
 
 def create_dt_diff_fn_overload(unit):  # pragma: no cover
     def overload_func(arr0, arr1):
-        """Handles cases where this dt difference function recieves optional
+        """Handles cases where this dt difference function receives optional
         arguments and forwards to the appropriate version of the real implementation"""
         args = [arr0, arr1]
         for i in range(len(args)):

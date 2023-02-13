@@ -36,35 +36,8 @@ def valid_to_date_strings(request):
 
 @pytest.fixture(
     params=[
-        pytest.param((0,), id="int_0"),
-        pytest.param((1,), id="int_1"),
-        pytest.param((-1,), id="int_neg_1"),
-        pytest.param((92036,), id="int_92036"),
-        pytest.param((-1232,), id="int_neg_1232"),
-        pytest.param((31536000000,), id="int_31536000000"),
-        pytest.param(
-            (31535999999,),
-            id="int_31535999999",
-            marks=pytest.mark.skip(
-                "Timestamp doesn't have sufficient range (max is ~9223372036 seconds)"
-            ),
-        ),
-        pytest.param((31536000000000,), id="int_31536000000000"),
-        pytest.param(
-            (31535999999999,),
-            id="int_31535999999999",
-            marks=pytest.mark.skip(
-                "Timestamp doesn't have sufficient range (max is ~9223372036 * 10^3 ms)"
-            ),
-        ),
-        pytest.param((31536000000000000,), id="int_31536000000000000"),
-        pytest.param(
-            (31535999999999999,),
-            id="int_31535999999999999",
-            marks=pytest.mark.skip(
-                "Timestamp doesn't have sufficient range (max is ~9223372036 * 10^6 us)"
-            ),
-        ),
+        pytest.param((0,), id="scalar_0"),
+        pytest.param((pd.Series([1, -1, 92036, -1232, 3153600000]),), id="vector_data"),
         pytest.param((pd.Series(np.arange(100)),), id="nonnull_int_array"),
         pytest.param(
             (pd.Series([-23, 3, 94421, 0, None] * 4, dtype=pd.Int64Dtype()),),
@@ -73,6 +46,36 @@ def valid_to_date_strings(request):
     ]
 )
 def valid_to_date_ints(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param((0,), id="scalar_0"),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        1,
+                        -1,
+                        92036,
+                        -1232,
+                        31536000000,
+                        31536000000000,
+                        31536000000000000,
+                    ]
+                ),
+            ),
+            id="vector_data",
+        ),
+        pytest.param((pd.Series(np.arange(100)),), id="nonnull_int_array"),
+        pytest.param(
+            (pd.Series([-23, 3, 94421, 0, None] * 4, dtype=pd.Int64Dtype()),),
+            id="null_int_array",
+        ),
+    ]
+)
+def valid_to_date_integers_for_strings(request):
     return request.param
 
 
@@ -105,15 +108,13 @@ def valid_to_date_strings_with_format_str(request):
 
 @pytest.fixture(
     params=[
-        (pd.Timestamp(0),),
-        (pd.Timestamp("2019-02-14 04:00:01"),),
         pytest.param(
             (
                 pd.Series(
                     pd.date_range(start="1/2/2013", end="1/3/2013", periods=113)
                 ).astype("datetime64[ns]"),
             ),
-            id="non_null_dt_series_1",
+            id="non_null_dt_series",
         ),
         pytest.param(
             (
@@ -128,26 +129,11 @@ def valid_to_date_strings_with_format_str(request):
                     * 4
                 ).astype("datetime64[ns]"),
             ),
-            id="nullable_dt_series_1",
+            id="nullable_dt_series",
         ),
         pytest.param(
-            (pd.Series(pd.date_range(start="1/2/2013", end="3/13/2021", periods=12)),),
-            id="non_null_dt_series_2",
-        ),
-        pytest.param(
-            (
-                pd.Series(
-                    [
-                        pd.Timestamp("4/2/2003"),
-                        None,
-                        pd.Timestamp("4/2/2007"),
-                        pd.Timestamp("4/2/2003"),
-                        None,
-                    ]
-                    * 4
-                ),
-            ),
-            id="nullable_dt_series_2",
+            (pd.Series(pd.date_range("2018", "2025", periods=13, tz="US/Pacific")),),
+            id="tz_series",
         ),
     ]
 )
@@ -162,12 +148,15 @@ def test_try(request):
     return request.param
 
 
-def scalar_to_date_equiv_fn(val, formatstr=None):
-    """wrapper fn that converts timestamp to np dt64 if needed"""
-    return scalar_to_date_equiv_fn_inner(val, formatstr=None)
+def scalar_to_date_equiv_fn(val, formatstr=None, tz=None, scale=0):
+    """wrapper fn that handles timezones conversions"""
+    result = scalar_to_date_equiv_fn_inner(val, formatstr, scale)
+    if result is None:
+        return None
+    return result.tz_localize(None).tz_localize(tz)
 
 
-def scalar_to_date_equiv_fn_inner(val, formatstr=None):
+def scalar_to_date_equiv_fn_inner(val, formatstr=None, scale=0):
     """equivalent to TO_DATE for scalar value and formatstring"""
     if pd.isna(val):
         return None
@@ -183,51 +172,21 @@ def scalar_to_date_equiv_fn_inner(val, formatstr=None):
             return None
     elif isinstance(val, str):
         if val.isnumeric() or (len(val) > 1 and val[0] == "-" and val[1:].isnumeric()):
-            return int_to_datetime(np.int64(val)).floor(freq="D")
+            return number_to_datetime(np.int64(val)).floor(freq="D")
         else:
             tmp_val = pd.to_datetime(val, errors="coerce").floor(freq="D")
             if not pd.isna(tmp_val):
                 return tmp_val
             else:
                 return None
-    elif isinstance(val, (int, np.integer)):
-        return int_to_datetime(val).floor(freq="D")
+    elif isinstance(val, (int, np.integer, float)):
+        return pd.Timestamp(val * (10 ** (9 - scale))).floor(freq="D")
     else:
         tmp_val = pd.to_datetime(val).floor(freq="D")
         if not pd.isna(tmp_val):
             return tmp_val
         else:
             return None
-
-
-def test_to_date_valid_ints(valid_to_date_ints, test_try, memory_leak_check):
-    def to_date_impl(val):
-        return bodo.libs.bodosql_array_kernels.to_date(val, None)
-
-    def try_to_date_impl(val):
-        return bodo.libs.bodosql_array_kernels.try_to_date(val, None)
-
-    to_date_sol = vectorized_sol(valid_to_date_ints, scalar_to_date_equiv_fn, None)
-
-    if isinstance(to_date_sol, pd.Series):
-        to_date_sol = to_date_sol.to_numpy()
-
-    if test_try:
-        check_func(
-            try_to_date_impl,
-            valid_to_date_ints,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-        )
-    else:
-        check_func(
-            to_date_impl,
-            valid_to_date_ints,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-        )
 
 
 @pytest.mark.parametrize(
@@ -275,14 +234,16 @@ def test_to_date_valid_strings(
         )
 
 
-def test_to_date_valid_digit_strings(valid_to_date_ints, test_try, memory_leak_check):
+def test_to_date_valid_digit_strings(
+    valid_to_date_integers_for_strings, test_try, memory_leak_check
+):
 
-    if isinstance(valid_to_date_ints[0], int):
-        valid_digit_strs = (str(valid_to_date_ints[0]),)
+    if isinstance(valid_to_date_integers_for_strings[0], int):
+        valid_digit_strs = (str(valid_to_date_integers_for_strings[0]),)
     else:
-        tmp_val = valid_to_date_ints[0].astype(str)
+        tmp_val = valid_to_date_integers_for_strings[0].astype(str)
         # Cast to str doesn't preserve null values, so need to re-add them
-        tmp_val[pd.isna(valid_to_date_ints[0])] = None
+        tmp_val[pd.isna(valid_to_date_integers_for_strings[0])] = None
         valid_digit_strs = (tmp_val,)
 
     def to_date_impl(val):
@@ -316,15 +277,12 @@ def test_to_date_valid_digit_strings(valid_to_date_ints, test_try, memory_leak_c
 
 def test_to_date_valid_datetime_types(to_date_td_vals, test_try, memory_leak_check):
     def to_date_impl(val):
-        return bodo.libs.bodosql_array_kernels.to_date(val, None)
+        return pd.Series(bodo.libs.bodosql_array_kernels.to_date(val, None))
 
     def try_to_date_impl(val):
-        return bodo.libs.bodosql_array_kernels.try_to_date(val, None)
+        return pd.Series(bodo.libs.bodosql_array_kernels.try_to_date(val, None))
 
     to_date_sol = vectorized_sol(to_date_td_vals, scalar_to_date_equiv_fn, None)
-
-    if isinstance(to_date_sol, pd.Series):
-        to_date_sol = to_date_sol.to_numpy()
 
     if test_try:
         check_func(
@@ -351,10 +309,10 @@ def test_to_date_valid_strings_with_format(
     valid_to_date_strings_with_format_str, test_try, memory_leak_check
 ):
     def to_date_impl(val, format):
-        return bodo.libs.bodosql_array_kernels.to_date(val, None)
+        return bodo.libs.bodosql_array_kernels.to_date(val, format)
 
     def try_to_date_impl(val, format):
-        return bodo.libs.bodosql_array_kernels.try_to_date(val, None)
+        return bodo.libs.bodosql_array_kernels.try_to_date(val, format)
 
     to_date_sol = vectorized_sol(
         valid_to_date_strings_with_format_str, scalar_to_date_equiv_fn, None
@@ -412,19 +370,17 @@ def test_invalid_to_date_args(invalid_to_date_args, test_try):
 
 @pytest.mark.slow
 def test_to_dates_option(memory_leak_check):
-    def impl(A, B, flag0, flag1):
-        arg0 = A if flag0 else None
-        arg1 = B if flag1 else None
+    def impl(A, flag):
+        arg0 = A if flag else None
         return (
-            bodo.libs.bodosql_array_kernels.to_date(arg0, arg1),
-            bodo.libs.bodosql_array_kernels.try_to_date(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.to_date(arg0, None),
+            bodo.libs.bodosql_array_kernels.try_to_date(arg0, None),
         )
 
     # TODO: change this to test the format str for non-None values once
     # it's supported. (https://bodo.atlassian.net/browse/BE-3614)
-    for flag0 in [True, False]:
-        for flag1 in [False]:
-            fn_output = pd.Timestamp("2022-02-18") if flag0 else None
+    for flag in [True, False]:
+        fn_output = pd.Timestamp("2022-02-18") if flag else None
 
-            answer = (fn_output, fn_output)
-            check_func(impl, ("2022-02-18", "TODO", flag0, flag1), py_output=answer)
+        answer = (fn_output, fn_output)
+        check_func(impl, ("2022-02-18", flag), py_output=answer)
