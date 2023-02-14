@@ -1354,8 +1354,8 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
                     bool check_for_null_keys, bool key_dropna,
                     bool is_parallel) {
     tracing::Event ev("get_group_info", is_parallel);
-    if (tables.size() == 0) {
-        throw std::runtime_error("get_group_info: tables is empty");
+    if (tables.size() != 1) {
+        throw std::runtime_error("get_group_info: expected 1 table input");
     }
     table_info* table = tables[0];
     ev.add_attribute("input_table_nrows", static_cast<size_t>(table->nrows()));
@@ -1372,21 +1372,79 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
     const int64_t n_keys = table->num_keys;
 
     HashLookupIn32bitTable hash_fct{hashes};
-    KeyEqualLookupIn32bitTable equal_fct{n_keys, table};
+
+    // use faster specialized implementation for common 2 key cases
+    if (n_keys == 2) {
+        array_info* arr1 = table->columns[0];
+        array_info* arr2 = table->columns[1];
+        bodo_array_type::arr_type_enum arr_type1 = arr1->arr_type;
+        Bodo_CTypes::CTypeEnum dtype1 = arr1->dtype;
+        bodo_array_type::arr_type_enum arr_type2 = arr2->arr_type;
+        Bodo_CTypes::CTypeEnum dtype2 = arr2->dtype;
+
+        // macro to reduce code duplication
+#ifndef GROUPBY_INFO_IMPL_2_KEYS
+#define GROUPBY_INFO_IMPL_2_KEYS(ARRAY_TYPE1, DTYPE1, ARRAY_TYPE2, DTYPE2) \
+    if (arr_type1 == ARRAY_TYPE1 && dtype1 == DTYPE1 &&                    \
+        arr_type2 == ARRAY_TYPE2 && dtype2 == DTYPE2) {                    \
+        using KeyType = KeysEqualComparatorTwoKeys<ARRAY_TYPE1, DTYPE1,    \
+                                                   ARRAY_TYPE2, DTYPE2>;   \
+        KeyType equal_fct{arr1, arr2};                                     \
+        using rh_flat_t =                                                  \
+            UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable,  \
+                                KeyType>;                                  \
+        rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);           \
+        get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table,     \
+                            key_cols, hashes, nunique_hashes,              \
+                            check_for_null_keys, key_dropna,               \
+                            UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);   \
+        return;                                                            \
+    }
+#endif
+
+        // int32/(int32, int64, datetime)
+        GROUPBY_INFO_IMPL_2_KEYS(
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32,
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32);
+        GROUPBY_INFO_IMPL_2_KEYS(
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32,
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT64);
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                 Bodo_CTypes::INT32, bodo_array_type::NUMPY,
+                                 Bodo_CTypes::DATETIME);
+        // int64/(int32, int64, datetime)
+        GROUPBY_INFO_IMPL_2_KEYS(
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT64,
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32);
+        GROUPBY_INFO_IMPL_2_KEYS(
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT64,
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT64);
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                 Bodo_CTypes::INT64, bodo_array_type::NUMPY,
+                                 Bodo_CTypes::DATETIME);
+        // datetime/(int32, int64, datetime)
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                                 bodo_array_type::NULLABLE_INT_BOOL,
+                                 Bodo_CTypes::INT32);
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                                 bodo_array_type::NULLABLE_INT_BOOL,
+                                 Bodo_CTypes::INT64);
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                                 bodo_array_type::NUMPY, Bodo_CTypes::DATETIME);
+
+#undef GROUPBY_INFO_IMPL_2_KEYS
+    }
+
+    // general implementation with generic key comparator class
+    KeysEqualComparator equal_fct{n_keys, table};
 
     using rh_flat_t =
-        robin_hood::unordered_flat_map<int64_t, int64_t, HashLookupIn32bitTable,
-                                       KeyEqualLookupIn32bitTable>;
+        UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable,
+                            KeysEqualComparator>;
     rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);
     get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table, key_cols,
                         hashes, nunique_hashes, check_for_null_keys, key_dropna,
                         UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);
-
-    if (tables.size() > 1) {
-        // This case is not currently used
-        throw std::runtime_error(
-            "get_group_info not implemented for multiple tables");
-    }
 }
 
 template <typename T>
@@ -1522,8 +1580,8 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
 
     const bool check_for_null_keys = true;
     using rh_flat_t =
-        robin_hood::unordered_flat_map<int64_t, int64_t, HashLookupIn32bitTable,
-                                       KeyEqualLookupIn32bitTable>;
+        UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable,
+                            KeyEqualLookupIn32bitTable>;
     rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);
     return get_groupby_labels_impl(
         key_to_group_rh_flat, ev, out_labels, sort_idx, table, key_cols, hashes,

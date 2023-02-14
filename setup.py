@@ -345,6 +345,7 @@ ext_arr = Extension(
     ],
     depends=[
         "bodo/libs/_array_utils.h",
+        "bodo/libs/_array_hash.h",
         "bodo/libs/_decimal_ext.h",
         "bodo/libs/_decimal_ext.cpp",
         "bodo/libs/_bodo_common.h",
@@ -499,6 +500,7 @@ ext_parquet = Extension(
         "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_bodo_to_arrow.h",
         "bodo/libs/_bodo_to_arrow.cpp",
+        "bodo/libs/_array_hash.h",
         "bodo/libs/_decimal_ext.h",
         "bodo/io/_fs_io.h",
         "bodo/io/arrow_reader.h",
