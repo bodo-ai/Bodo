@@ -215,9 +215,10 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr, F f,
     uint64_t siztype = numpy_item_size[dtype];
     std::vector<char> vectNaN = RetrieveNaNentry(dtype);
     char* in_data1 = in_arr->data1;
-    // use nullable int/float array if dtype is integer/float and
+    // use nullable int/float/bool array if dtype is integer/float/bool and
     // use_nullable_arr is specified
-    if (use_nullable_arr && (is_integer(dtype) || is_float(dtype))) {
+    if (use_nullable_arr &&
+        (is_integer(dtype) || is_float(dtype) || dtype == Bodo_CTypes::_BOOL)) {
         out_arr = alloc_array(nRowOut, -1, -1,
                               bodo_array_type::NULLABLE_INT_BOOL, dtype, 0, 0);
         char* out_data1 = out_arr->data1;
@@ -544,8 +545,8 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
 
 array_info* RetrieveArray_TwoColumns(
     array_info* const& arr1, array_info* const& arr2,
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
-    int const& ChoiceColumn, bool const& use_nullable_arr) {
+    std::vector<int64_t> const& short_write_idxs,
+    std::vector<int64_t> const& long_write_idxs) {
     if ((arr1 != nullptr) && (arr2 != nullptr) &&
         (arr1->arr_type == bodo_array_type::DICT) &&
         (arr2->arr_type == bodo_array_type::DICT) &&
@@ -554,7 +555,7 @@ array_info* RetrieveArray_TwoColumns(
             "RetrieveArray_TwoColumns: don't know if arrays have unified "
             "dictionary");
     }
-    size_t nRowOut = ListPairWrite.size();
+    size_t nRowOut = long_write_idxs.size();
     array_info* out_arr = NULL;
     /* The function for computing the returning values
      * In the output is the column index to use and the row index to use.
@@ -564,22 +565,15 @@ array_info* RetrieveArray_TwoColumns(
      * @return the pair (column,row) to be used.
      */
     auto get_iRow =
-        [&](size_t const& iRowIn) -> std::pair<array_info*, std::ptrdiff_t> {
-        std::pair<std::ptrdiff_t, std::ptrdiff_t> pairLRcolumn =
-            ListPairWrite[iRowIn];
-        if (ChoiceColumn == 0) return {arr1, pairLRcolumn.first};
-        if (ChoiceColumn == 1) return {arr2, pairLRcolumn.second};
-        if (pairLRcolumn.first != -1) return {arr1, pairLRcolumn.first};
-        return {arr2, pairLRcolumn.second};
+        [&](size_t const& iRowIn) -> std::pair<array_info*, int64_t> {
+        int64_t short_val = short_write_idxs[iRowIn];
+        if (short_val != -1) return {arr1, short_val};
+        return {arr2, long_write_idxs[iRowIn]};
     };
     // eshift is the in_table index used for the determination
     // of arr_type and dtype of the returned column.
-    array_info* ref_column = nullptr;
-    if (ChoiceColumn == 0) ref_column = arr1;
-    if (ChoiceColumn == 1) ref_column = arr2;
-    if (ChoiceColumn == 2) ref_column = arr1;
-    bodo_array_type::arr_type_enum arr_type = ref_column->arr_type;
-    Bodo_CTypes::CTypeEnum dtype = ref_column->dtype;
+    bodo_array_type::arr_type_enum arr_type = arr1->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = arr1->dtype;
     if (arr_type == bodo_array_type::LIST_STRING) {
         // In the first case of STRING, we have to deal with offsets first so we
         // need one first loop to determine the needed length. In the second
@@ -590,7 +584,7 @@ array_info* RetrieveArray_TwoColumns(
         int64_t tot_size_index = 0;
         int64_t tot_size_data = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
+            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             offset_t size_index = 0;
             offset_t size_data = 0;
             if (ArrRow.second >= 0) {
@@ -617,7 +611,7 @@ array_info* RetrieveArray_TwoColumns(
         offset_t* out_data_offsets = (offset_t*)out_arr->data2;
         out_data_offsets[0] = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
+            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             offset_t size_index = ListSizes_index[iRow];
             offset_t size_data = ListSizes_data[iRow];
             out_index_offsets[iRow] = pos_index;
@@ -661,7 +655,7 @@ array_info* RetrieveArray_TwoColumns(
         int64_t n_chars = 0;
         std::vector<offset_t> ListSizes(nRowOut);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
+            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             offset_t size = 0;
             if (ArrRow.second >= 0) {
                 offset_t* in_offsets = (offset_t*)ArrRow.first->data2;
@@ -676,7 +670,7 @@ array_info* RetrieveArray_TwoColumns(
         offset_t pos = 0;
         offset_t* out_offsets = (offset_t*)out_arr->data2;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
+            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             offset_t size = ListSizes[iRow];
             out_offsets[iRow] = pos;
             bool bit = false;
@@ -696,15 +690,14 @@ array_info* RetrieveArray_TwoColumns(
     }
     if (arr_type == bodo_array_type::DICT) {
         // TODO refactor? this is mostly the same logic as NULLABLE_INT_BOOL
-        // if (is_parallel && !ref_column->has_global_dictionary)
+        // if (is_parallel && !arr1->has_global_dictionary)
         //    throw std::runtime_error("RetrieveArray_TwoColumns: reference
         //    column doesn't have a global dictionary");
-        array_info* out_indices =
-            alloc_array(nRowOut, -1, -1, ref_column->info2->arr_type,
-                        ref_column->info2->dtype, 0, 0);
-        uint64_t siztype = numpy_item_size[ref_column->info2->dtype];
+        array_info* out_indices = alloc_array(
+            nRowOut, -1, -1, arr1->info2->arr_type, arr1->info2->dtype, 0, 0);
+        uint64_t siztype = numpy_item_size[arr1->info2->dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
+            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             bool bit = false;
             char* out_ptr = out_indices->data1 + siztype * iRow;
             if (ArrRow.second >= 0) {
@@ -720,12 +713,12 @@ array_info* RetrieveArray_TwoColumns(
             out_indices->set_null_bit(iRow, bit);
         }
         out_arr = new array_info(
-            bodo_array_type::DICT, ref_column->dtype, out_indices->length, -1,
-            -1, NULL, NULL, NULL, out_indices->null_bitmask, NULL, NULL, NULL,
-            NULL, 0, 0, 0, ref_column->has_global_dictionary,
-            ref_column->has_deduped_local_dictionary,
-            ref_column->has_sorted_dictionary, ref_column->info1, out_indices);
-        incref_array(ref_column->info1);
+            bodo_array_type::DICT, arr1->dtype, out_indices->length, -1, -1,
+            NULL, NULL, NULL, out_indices->null_bitmask, NULL, NULL, NULL, NULL,
+            0, 0, 0, arr1->has_global_dictionary,
+            arr1->has_deduped_local_dictionary, arr1->has_sorted_dictionary,
+            arr1->info1, out_indices);
+        incref_array(arr1->info1);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // In the case of NULLABLE array, we do a single loop for
@@ -737,7 +730,7 @@ array_info* RetrieveArray_TwoColumns(
         out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
         uint64_t siztype = numpy_item_size[dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
+            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             bool bit = false;
             if (ArrRow.second >= 0) {
                 array_info* e_col = ArrRow.first;
@@ -755,10 +748,10 @@ array_info* RetrieveArray_TwoColumns(
         uint64_t siztype = numpy_item_size[dtype];
         std::vector<char> vectNaN =
             RetrieveNaNentry(dtype);  // returns a -1 for integer values.
-        int64_t num_categories = ref_column->num_categories;
+        int64_t num_categories = arr1->num_categories;
         out_arr = alloc_categorical(nRowOut, dtype, num_categories);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
+            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             //
             char* out_ptr = out_arr->data1 + siztype * iRow;
             char* in_ptr;
@@ -779,48 +772,29 @@ array_info* RetrieveArray_TwoColumns(
         // ---unsigned integer: value 0
         // ---floating point: std::nan as here both notions match.
         uint64_t siztype = numpy_item_size[dtype];
-        if (!use_nullable_arr) {
-            std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-            out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
-            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-                std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
-                //
-                char* out_ptr = out_arr->data1 + siztype * iRow;
-                char* in_ptr;
-                if (ArrRow.second >= 0)
-                    in_ptr = ArrRow.first->data1 + siztype * ArrRow.second;
-                else
-                    in_ptr = vectNaN.data();
-                memcpy(out_ptr, in_ptr, siztype);
-            }
-        } else {
-            bodo_array_type::arr_type_enum arr_type_o =
-                bodo_array_type::NULLABLE_INT_BOOL;
-            out_arr = alloc_array(nRowOut, -1, -1, arr_type_o, dtype, 0, 0);
-            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-                std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
-                //
-                bool bit = false;
-                if (ArrRow.second >= 0) {
-                    char* out_ptr = out_arr->data1 + siztype * iRow;
-                    char* in_ptr =
-                        ArrRow.first->data1 + siztype * ArrRow.second;
-                    memcpy(out_ptr, in_ptr, siztype);
-                    bit = true;
-                }
-                out_arr->set_null_bit(iRow, bit);
-            }
+        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+            //
+            char* out_ptr = out_arr->data1 + siztype * iRow;
+            char* in_ptr;
+            if (ArrRow.second >= 0)
+                in_ptr = ArrRow.first->data1 + siztype * ArrRow.second;
+            else
+                in_ptr = vectNaN.data();
+            memcpy(out_ptr, in_ptr, siztype);
         }
     }
     if (arr_type == bodo_array_type::ARROW) {
         // Arrow builder for output array. builds it dynamically (buffer
         // sizes are not known in advance)
         std::unique_ptr<arrow::ArrayBuilder> builder;
-        std::shared_ptr<arrow::Array> in_arr_typ = ref_column->array;
+        std::shared_ptr<arrow::Array> in_arr_typ = arr1->array;
         (void)arrow::MakeBuilder(arrow::default_memory_pool(),
                                  in_arr_typ->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
+            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             if (ArrRow.second >= 0) {
                 // non-null value for output
                 std::shared_ptr<arrow::Array> in_arr = ArrRow.first->array;

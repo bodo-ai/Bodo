@@ -402,8 +402,8 @@ table_info* hash_join_table(
         // the array_infos, which handle general types, and one with just data1
         // as a fast path for accessing numeric data. These include both keys
         // and data columns as either can be used in the cond_func.
-        std::vector<array_info*> left_table_infos = work_left_table->columns;
-        std::vector<array_info*> right_table_infos = work_right_table->columns;
+        std::vector<array_info*>& left_table_infos = work_left_table->columns;
+        std::vector<array_info*>& right_table_infos = work_right_table->columns;
         std::vector<void*> col_ptrs_left(n_tot_left);
         std::vector<void*> col_ptrs_right(n_tot_right);
         // Vectors for null bitmaps for fast null checking from the cfunc
@@ -632,11 +632,14 @@ table_info* hash_join_table(
         joinHashFcts::SecondLevelKeyEqualHashJoinTable second_level_equal_fct{
             short_table, short_data_key_cols, short_data_key_n_cols};
 
-        // ListPairWrite is the table used for the output
-        // It precises the index used for the writing of the output table.
-        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+        // short_write_idxs and long_write_idxs are used for the output.
+        // It precises the index used for the writing of the output table
+        // from the short and long table.
+        std::vector<int64_t> short_write_idxs;
+        std::vector<int64_t> long_write_idxs;
         // [BE-1078]: how much should we reserve?
-        ListPairWrite.reserve(long_table_rows);
+        short_write_idxs.reserve(long_table_rows);
+        long_write_idxs.reserve(long_table_rows);
         ev_alloc_map.finalize();
 
         // If we will need to perform a reduction on long table matches,
@@ -719,7 +722,7 @@ table_info* hash_join_table(
             size_t n_bytes = (groups.size() + 7) >> 3;
             std::vector<uint8_t> V_short_map(n_bytes, 0);
             // We now iterate over all entries of the long table in order to get
-            // the entries in the ListPairWrite.
+            // the entries in the short_write_idxs and long_write_idxs.
 
             // TODO: Refactor code paths into helper functions.
             if (uses_cond_func) {
@@ -734,7 +737,8 @@ table_info* hash_join_table(
                             if (long_miss_needs_reduction) {
                                 SetBitTo(V_long_map.data(), i_long, false);
                             } else {
-                                ListPairWrite.emplace_back(-1, i_long);
+                                short_write_idxs.emplace_back(-1);
+                                long_write_idxs.emplace_back(i_long);
                             }
                         }
                     } else {
@@ -777,7 +781,8 @@ table_info* hash_join_table(
                                 for (size_t idx = 0; idx < group.size();
                                      idx++) {
                                     size_t j_short = group[idx];
-                                    ListPairWrite.emplace_back(j_short, i_long);
+                                    short_write_idxs.emplace_back(j_short);
+                                    long_write_idxs.emplace_back(i_long);
                                 }
                             }
                         }
@@ -786,7 +791,8 @@ table_info* hash_join_table(
                             if (long_miss_needs_reduction) {
                                 SetBitTo(V_long_map.data(), i_long, false);
                             } else {
-                                ListPairWrite.emplace_back(-1, i_long);
+                                short_write_idxs.emplace_back(-1);
+                                long_write_idxs.emplace_back(i_long);
                             }
                         }
                     }
@@ -800,7 +806,8 @@ table_info* hash_join_table(
                             if (long_miss_needs_reduction) {
                                 SetBitTo(V_long_map.data(), i_long, false);
                             } else {
-                                ListPairWrite.emplace_back(-1, i_long);
+                                short_write_idxs.emplace_back(-1);
+                                long_write_idxs.emplace_back(i_long);
                             }
                         }
                     } else {
@@ -812,7 +819,8 @@ table_info* hash_join_table(
                         SetBitTo(V_short_map.data(), pos, true);
                         for (size_t idx = 0; idx < group.size(); idx++) {
                             size_t j_short = group[idx];
-                            ListPairWrite.emplace_back(j_short, i_long);
+                            short_write_idxs.emplace_back(j_short);
+                            long_write_idxs.emplace_back(i_long);
                         }
                     }
                 }
@@ -836,11 +844,14 @@ table_info* hash_join_table(
                         // replicated, we dispatch it by rank.
                         if (short_miss_needs_reduction) {
                             int node = pos_short_disp % n_pes;
-                            if (node == myrank)
-                                ListPairWrite.emplace_back(j_short, -1);
+                            if (node == myrank) {
+                                short_write_idxs.emplace_back(j_short);
+                                long_write_idxs.emplace_back(-1);
+                            }
                             pos_short_disp++;
                         } else {
-                            ListPairWrite.emplace_back(j_short, -1);
+                            short_write_idxs.emplace_back(j_short);
+                            long_write_idxs.emplace_back(-1);
                         }
                     }
                 }
@@ -915,7 +926,7 @@ table_info* hash_join_table(
             //
 
             // We now iterate over all entries of the long table in order to get
-            // the entries in the ListPairWrite.
+            // the entries in short_write_idxs and long_write_idxs.
 
             // TODO: Refactor code paths into helper functions.
             if (uses_cond_func) {
@@ -930,7 +941,8 @@ table_info* hash_join_table(
                             if (long_miss_needs_reduction) {
                                 SetBitTo(V_long_map.data(), i_long, false);
                             } else {
-                                ListPairWrite.emplace_back(-1, i_long);
+                                short_write_idxs.emplace_back(-1);
+                                long_write_idxs.emplace_back(i_long);
                             }
                         }
                     } else {
@@ -971,7 +983,8 @@ table_info* hash_join_table(
                                 for (size_t idx = 0; idx < group.size();
                                      idx++) {
                                     size_t j_short = group[idx];
-                                    ListPairWrite.emplace_back(j_short, i_long);
+                                    short_write_idxs.emplace_back(j_short);
+                                    long_write_idxs.emplace_back(i_long);
                                 }
                             }
                         }
@@ -980,7 +993,8 @@ table_info* hash_join_table(
                             if (long_miss_needs_reduction) {
                                 SetBitTo(V_long_map.data(), i_long, false);
                             } else {
-                                ListPairWrite.emplace_back(-1, i_long);
+                                short_write_idxs.emplace_back(-1);
+                                long_write_idxs.emplace_back(i_long);
                             }
                         }
                     }
@@ -995,7 +1009,8 @@ table_info* hash_join_table(
                             if (long_miss_needs_reduction) {
                                 SetBitTo(V_long_map.data(), i_long, false);
                             } else {
-                                ListPairWrite.emplace_back(-1, i_long);
+                                short_write_idxs.emplace_back(-1);
+                                long_write_idxs.emplace_back(i_long);
                             }
                         }
                     } else {
@@ -1004,7 +1019,8 @@ table_info* hash_join_table(
                         // used or not by the long table.
                         std::vector<size_t>& group = groups[iter->second - 1];
                         for (auto& j_short : group) {
-                            ListPairWrite.emplace_back(j_short, i_long);
+                            short_write_idxs.emplace_back(j_short);
+                            long_write_idxs.emplace_back(i_long);
                         }
                     }
                 }
@@ -1043,16 +1059,19 @@ table_info* hash_join_table(
                 // distributed output.
                 if (!bit) {
                     int node = pos % n_pes;
-                    if (node == myrank) ListPairWrite.emplace_back(-1, i_long);
+                    if (node == myrank) {
+                        short_write_idxs.emplace_back(-1);
+                        long_write_idxs.emplace_back(i_long);
+                    }
                     pos++;
                 }
             }
         }
-        ev_tuples.add_attribute("output_nrows", ListPairWrite.size());
+        ev_tuples.add_attribute("output_nrows", long_write_idxs.size());
         ev_tuples.finalize();
-        // TODO if we are tight on memory for the next phase and ListPairWrite
-        // capacity is much greater than its size, we could do a realloc+resize
-        // here
+        // TODO if we are tight on memory for the next phase and
+        // short_write_idxs/long_write_idxs capacity is much greater than its
+        // size, we could do a realloc+resize here
         std::vector<array_info*> out_arrs;
         // Computing the last time at which a column is used.
         // This is for the call to decref_array.
@@ -1112,7 +1131,7 @@ table_info* hash_join_table(
         }
         // Determine the number of rows in your local chunk of the output.
         // This is passed to Python in case all columns are dead.
-        uint64_t num_rows = ListPairWrite.size();
+        uint64_t num_rows = long_write_idxs.size();
         *num_rows_ptr = num_rows;
 
         // Construct the output tables. This merges the results in the left and
@@ -1125,15 +1144,14 @@ table_info* hash_join_table(
             tracing::Event ev_fill_optional("fill_extra_data_col",
                                             parallel_trace);
             size_t i = 0;
-            bool use_nullable_arr = false;
             array_info* left_arr = work_left_table->columns[i];
             array_info* right_arr = work_right_table->columns[i];
             if (ChoiceOpt == 0) {
                 out_arrs.push_back(RetrieveArray_TwoColumns(
-                    left_arr, right_arr, ListPairWrite, 2, use_nullable_arr));
+                    left_arr, right_arr, short_write_idxs, long_write_idxs));
             } else {
                 out_arrs.push_back(RetrieveArray_TwoColumns(
-                    right_arr, left_arr, ListPairWrite, 2, use_nullable_arr));
+                    right_arr, left_arr, short_write_idxs, long_write_idxs));
             }
             // After adding the optional collect decref the original values
             if (last_col_use_left[i] == 1) {
@@ -1158,15 +1176,14 @@ table_info* hash_join_table(
                 array_info* left_arr = work_left_table->columns[i];
                 array_info* right_arr = work_right_table->columns[i];
                 if (key_in_output[key_in_output_idx]) {
-                    bool use_nullable_arr = false;
                     if (ChoiceOpt == 0) {
                         out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                            left_arr, right_arr, ListPairWrite, 2,
-                            use_nullable_arr));
+                            left_arr, right_arr, short_write_idxs,
+                            long_write_idxs));
                     } else {
                         out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                            right_arr, left_arr, ListPairWrite, 2,
-                            use_nullable_arr));
+                            right_arr, left_arr, short_write_idxs,
+                            long_write_idxs));
                     }
                     idx++;
                 }
@@ -1188,15 +1205,12 @@ table_info* hash_join_table(
                 // possibility of additional NaN.
                 if (!check_key_in_output || key_in_output[key_in_output_idx]) {
                     bool use_nullable_arr = use_nullable_arr_type[idx];
-                    array_info* right_arr = nullptr;
                     if (ChoiceOpt == 0) {
-                        out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                            left_arr, right_arr, ListPairWrite, 0,
-                            use_nullable_arr));
+                        out_arrs.push_back(RetrieveArray_SingleColumn(
+                            left_arr, short_write_idxs, use_nullable_arr));
                     } else {
-                        out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                            right_arr, left_arr, ListPairWrite, 1,
-                            use_nullable_arr));
+                        out_arrs.push_back(RetrieveArray_SingleColumn(
+                            left_arr, long_write_idxs, use_nullable_arr));
                     }
                     idx++;
                 }
@@ -1227,15 +1241,12 @@ table_info* hash_join_table(
                     is_new_key || (right_cond_func_cols_set.contains(i));
                 if (!check_key_in_output || key_in_output[key_in_output_idx]) {
                     bool use_nullable_arr = use_nullable_arr_type[idx];
-                    array_info* left_arr = nullptr;
                     if (ChoiceOpt == 0) {
-                        out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                            left_arr, right_arr, ListPairWrite, 1,
-                            use_nullable_arr));
+                        out_arrs.push_back(RetrieveArray_SingleColumn(
+                            right_arr, long_write_idxs, use_nullable_arr));
                     } else {
-                        out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                            right_arr, left_arr, ListPairWrite, 0,
-                            use_nullable_arr));
+                        out_arrs.push_back(RetrieveArray_SingleColumn(
+                            right_arr, short_write_idxs, use_nullable_arr));
                     }
                     idx++;
                 }
@@ -1260,16 +1271,22 @@ table_info* hash_join_table(
             for (size_t rownum = 0; rownum < num_rows; rownum++) {
                 // Determine the source of each row. At most 1 value can be -1.
                 // Whichever value is -1, other table is the source of the row.
-                auto table_nulls = ListPairWrite[rownum];
-                // If the first is -1 if ChoiceOpt == 0, left is null (value is
-                // 1) if ChoiceOpt != 0, right is null (value is 0)
-                if (table_nulls.first == -1) {
-                    indicator_col->data1[rownum] = ChoiceOpt == 0;
-                    // If the first is -1 if ChoiceOpt != 0, left is null (value
-                    // is 1) if ChoiceOpt != 0, right is null (value is 0)
-                } else if (table_nulls.second == -1) {
-                    indicator_col->data1[rownum] = ChoiceOpt != 0;
-                    // If neither is -1 the output is both (2)
+                std::vector<int64_t>* left_write_idxs;
+                std::vector<int64_t>* right_write_idxs;
+                if (ChoiceOpt == 0) {
+                    left_write_idxs = &short_write_idxs;
+                    right_write_idxs = &long_write_idxs;
+                } else {
+                    left_write_idxs = &long_write_idxs;
+                    right_write_idxs = &short_write_idxs;
+                }
+                // Left is null
+                if ((*left_write_idxs)[rownum] == -1) {
+                    indicator_col->data1[rownum] = 1;
+                    // Right is null
+                } else if ((*right_write_idxs)[rownum] == -1) {
+                    indicator_col->data1[rownum] = 0;
+                    // Neither is null
                 } else {
                     indicator_col->data1[rownum] = 2;
                 }
@@ -1279,8 +1296,9 @@ table_info* hash_join_table(
 
         // TODO if we see significant tracing gap at the end of hash_join_table
         // or right after it, we need to trace the "freeing" portion of this
-        // function, and manually deallocate ListPairWrite, V_long_map, etc.
-        // to make sure deallocations are captured by the trace event
+        // function, and manually deallocate short_write_idxs, long_write_idxs,
+        // V_long_map, etc. to make sure deallocations are captured by the trace
+        // event
         if (free_work_left) {
             delete_table(work_left_table);
         }

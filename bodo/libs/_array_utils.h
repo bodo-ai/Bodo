@@ -140,17 +140,14 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
  *
  * @param arr1: the first column
  * @param arr2: the second column
- * @param ListPairWrite is the vector of list of pairs for the writing of the
- * output table
- * @param ChoiceColumn is the chosen option
- * @param map_integer_type is the choice of mapping the integer type from
- *    NUMPY to NULLABLE_INT_ARRAY if not available.
+ * @param short_write_idxs is the vector of indices in the short table
+ * @param long_write_idxs is the vector of indices in the long table
  * @return one column of the table output.
  */
 array_info* RetrieveArray_TwoColumns(
     array_info* const& arr1, array_info* const& arr2,
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
-    int const& ChoiceColumn, bool const& map_integer_type);
+    std::vector<int64_t> const& short_write_idxs,
+    std::vector<int64_t> const& long_write_idxs);
 
 /** This function returns the column with the rows with the rows given in
  * "ListIdx"
