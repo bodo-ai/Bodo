@@ -7,6 +7,137 @@
 #include "_join_hashing.h"
 #include "_shuffle.h"
 
+/**
+ * @brief handle dict-encoded columns of input tables to keys
+ * of equijoin. Dictionaries need to be global and unified since
+ * we use the indices to hash.
+ *
+ * @param left_table left input table to cross join
+ * @param right_table right input table to cross join
+ * @param left_parallel left table is parallel
+ * @param right_parallel right table is parallel
+ * @param n_keys number of keys
+ */
+void equi_join_keys_handle_dict_encoded(table_info* left_table,
+                                        table_info* right_table,
+                                        bool left_parallel, bool right_parallel,
+                                        size_t n_key) {
+    // Unify dictionaries of DICT key columns (required for key comparison)
+    // IMPORTANT: need to do this before computing the hashes
+    //
+    // This implementation of hashing dictionary encoded data is based on
+    // the values in the indices array. To do this, we make and enforce
+    // a few assumptions
+    //
+    // 1. Both arrays are dictionary encoded. This is enforced in join.py
+    // where determine_table_cast_map requires either both inputs to be
+    // dictionary encoded or neither.
+    //
+    // 2. Both arrays share the exact same dictionary. This occurs in
+    // unify_dictionaries.
+    //
+    // 3. The dictionary does not contain any duplicate values. This is
+    // enforced by drop_duplicates_local_dictionary. In particular,
+    // drop_duplicates_local_dictionary contains a drop duplicates step
+    // that ensures all values are unique. If the dictionary is not global
+    // then convert_local_dictionary_to_global will also drop duplicate and
+    // drop_duplicates_local_dictionary will be a no-op.
+    for (size_t i = 0; i < n_key; i++) {
+        array_info* arr1 = left_table->columns[i];
+        array_info* arr2 = right_table->columns[i];
+        if ((arr1->arr_type == bodo_array_type::DICT) &&
+            (arr2->arr_type == bodo_array_type::DICT)) {
+            make_dictionary_global_and_unique(arr1, left_parallel);
+            make_dictionary_global_and_unique(arr2, right_parallel);
+            unify_dictionaries(arr1, arr2, left_parallel, right_parallel);
+        }
+    }
+}
+
+/**
+ * @brief Insert column numbers that are used in the non-equality C funcs but
+ * not the equality function into the set of column numbers. Also, if the column
+ * is a dictionary, it makes the dictionary global.
+ *
+ * @param set The set of column numbers that are used in the non-equality C
+ * funcs.
+ * @param table The table that the column numbers are from.
+ * @param non_equi_func_col_nums The indices of the columns that are used in the
+ * non-equality C funcs.
+ * @param len_non_equi The length of non_equi_func_col_nums.
+ * @param is_parallel Is the table distributed?
+ * @param n_key The number of key columns. Indices below this will not be added
+ * to the set.
+ */
+void insert_non_equi_func_set(UNORD_SET_CONTAINER<int64_t>* set,
+                              table_info* table,
+                              uint64_t* non_equi_func_col_nums,
+                              uint64_t len_non_equi, bool is_parallel,
+                              size_t n_key) {
+    // Non-keys used in non-equality functions need global + unique dictionaries
+    // for consistent hashing, but no unifying is necessary.
+    for (size_t i = 0; i < len_non_equi; i++) {
+        uint64_t col_num = non_equi_func_col_nums[i];
+        // If a column is in both the non-equality C funcs and the regular
+        // equality check we don't include it in the set.
+        if (col_num >= n_key) {
+            array_info* arr = table->columns[col_num];
+            if (arr->arr_type == bodo_array_type::DICT) {
+                make_dictionary_global_and_unique(arr, is_parallel);
+            }
+            set->insert(col_num);
+        }
+    }
+}
+
+/**
+ * @brief Converts the arrays of unique column numbers that are used in the
+ * non-equality C funcs to sets. Also, if the column is a dictionary, it makes
+ * the dictionary global.
+ *
+ * @param left_table The left table.
+ * @param right_table The right table.
+ * @param left_non_equi_func_col_nums The array of unique column numbers that
+ * are used in the non-equality C funcs from the left table.
+ * @param len_left_non_equi The length of left_non_equi_func_col_nums.
+ * @param right_non_equi_func_col_nums The array of unique column numbers that
+ * are used in the non-equality C funcs from the right table.
+ * @param len_right_non_equi The length of right_non_equi_func_col_nums.
+ * @param left_parallel Is the left table distributed.
+ * @param right_parallel Is the right table distributed.
+ * @param n_key The number of key columns. These will not be processed in the
+ * non-equality functions.
+ * @return std::tuple<UNORD_SET_CONTAINER<int64_t>*,
+ * UNORD_SET_CONTAINER<int64_t>*> A tuple of pointers to the sets of column
+ * numbers that are used in the non-equality C funcs.
+ */
+std::tuple<UNORD_SET_CONTAINER<int64_t>*, UNORD_SET_CONTAINER<int64_t>*>
+create_non_equi_func_sets(table_info* left_table, table_info* right_table,
+                          uint64_t* left_non_equi_func_col_nums,
+                          uint64_t len_left_non_equi,
+                          uint64_t* right_non_equi_func_col_nums,
+                          uint64_t len_right_non_equi, bool left_parallel,
+                          bool right_parallel, size_t n_key) {
+    // Convert the left table.
+    UNORD_SET_CONTAINER<int64_t>* left_non_equi_func_col_num_set =
+        new UNORD_SET_CONTAINER<int64_t>();
+    left_non_equi_func_col_num_set->reserve(len_left_non_equi);
+    insert_non_equi_func_set(left_non_equi_func_col_num_set, left_table,
+                             left_non_equi_func_col_nums, len_left_non_equi,
+                             left_parallel, n_key);
+
+    // Convert the right table.
+    UNORD_SET_CONTAINER<int64_t>* right_non_equi_func_col_num_set =
+        new UNORD_SET_CONTAINER<int64_t>();
+    right_non_equi_func_col_num_set->reserve(len_right_non_equi);
+    insert_non_equi_func_set(right_non_equi_func_col_num_set, right_table,
+                             right_non_equi_func_col_nums, len_right_non_equi,
+                             right_parallel, n_key);
+
+    return std::make_tuple(left_non_equi_func_col_num_set,
+                           right_non_equi_func_col_num_set);
+}
+
 // An overview of the join design can be found on Confluence:
 // https://bodo.atlassian.net/wiki/spaces/B/pages/821624833/Join+Code+Design
 
@@ -30,24 +161,6 @@ table_info* hash_join_table(
     cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
     uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
     uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
-    // XXX Not sure if this is needed. has_global_dictionary
-    // should be set by the compiler automatically for
-    // replicated data
-    if (!left_parallel) {
-        for (array_info* a : left_table->columns) {
-            if (a->arr_type == bodo_array_type::DICT) {
-                a->has_global_dictionary = true;
-            }
-        }
-    }
-    if (!right_parallel) {
-        for (array_info* a : right_table->columns) {
-            if (a->arr_type == bodo_array_type::DICT) {
-                a->has_global_dictionary = true;
-            }
-        }
-    }
-
     // Does this join need an additional cond_func
     const bool uses_cond_func = cond_func != nullptr;
     try {
@@ -92,67 +205,16 @@ table_info* hash_join_table(
             ev.add_attribute("g_is_right", is_right);
             ev.add_attribute("g_extra_data_col", extra_data_col);
         }
-        // Unify dictionaries of DICT key columns (required for key comparison)
-        // IMPORTANT: need to do this before computing the hashes
-        //
-        // This implementation of hashing dictionary encoded data is based on
-        // the values in the indices array. To do this, we make and enforce
-        // a few assumptions
-        //
-        // 1. Both arrays are dictionary encoded. This is enforced in join.py
-        // where determine_table_cast_map requires either both inputs to be
-        // dictionary encoded or neither.
-        //
-        // 2. Both arrays share the exact same dictionary. This occurs in
-        // unify_dictionaries.
-        //
-        // 3. The dictionary does not contain any duplicate values. This is
-        // enforced by drop_duplicates_local_dictionary. In particular,
-        // drop_duplicates_local_dictionary contains a drop duplicates step
-        // that ensures all values are unique. If the dictionary is not global
-        // then convert_local_dictionary_to_global will also drop duplicate and
-        // drop_duplicates_local_dictionary will be a no-op.
-        for (size_t i = 0; i < n_key; i++) {
-            array_info* arr1 = left_table->columns[i];
-            array_info* arr2 = right_table->columns[i];
-            if ((arr1->arr_type == bodo_array_type::DICT) &&
-                (arr2->arr_type == bodo_array_type::DICT)) {
-                make_dictionary_global_and_unique(arr1, left_parallel);
-                make_dictionary_global_and_unique(arr2, right_parallel);
-                unify_dictionaries(arr1, arr2, left_parallel, right_parallel);
-            }
-        }
-        // Create sets for cond func columns. These columns act
-        // like key columns and are contained inside of key_in_output,
-        // so we need an efficient lookup.
-        UNORD_SET_CONTAINER<int64_t> left_cond_func_cols_set;
-        left_cond_func_cols_set.reserve(cond_func_left_column_len);
+        // Handle dict encoding
+        equi_join_keys_handle_dict_encoded(
+            left_table, right_table, left_parallel, right_parallel, n_key);
 
-        UNORD_SET_CONTAINER<int64_t> right_cond_func_cols_set;
-        right_cond_func_cols_set.reserve(cond_func_right_column_len);
-
-        // Non-keys used in cond_func need global + unique dictionaries
-        // for hashing, but no unifying is necessary.
-        for (size_t i = 0; i < cond_func_left_column_len; i++) {
-            uint64_t col_num = cond_func_left_columns[i];
-            if (col_num >= n_key) {
-                auto arr = left_table->columns[col_num];
-                if (arr->arr_type == bodo_array_type::DICT) {
-                    make_dictionary_global_and_unique(arr, left_parallel);
-                }
-                left_cond_func_cols_set.insert(col_num);
-            }
-        }
-        for (size_t i = 0; i < cond_func_right_column_len; i++) {
-            uint64_t col_num = cond_func_right_columns[i];
-            if (col_num >= n_key) {
-                auto arr = right_table->columns[col_num];
-                if (arr->arr_type == bodo_array_type::DICT) {
-                    make_dictionary_global_and_unique(arr, right_parallel);
-                }
-                right_cond_func_cols_set.insert(col_num);
-            }
-        }
+        auto [left_cond_func_cols_set, right_cond_func_cols_set] =
+            create_non_equi_func_sets(
+                left_table, right_table, cond_func_left_columns,
+                cond_func_left_column_len, cond_func_right_columns,
+                cond_func_right_column_len, left_parallel, right_parallel,
+                n_key);
 
         // Now deciding how we handle the parallelization of the tables
         // and doing the allgather/shuffle exchanges as needed.
@@ -215,12 +277,13 @@ table_info* hash_join_table(
             // We should tune this doing a more extensive study, see:
             // https://bodo.atlassian.net/browse/BE-1030
             float global_short_to_local_long_ratio_limit;
-            if (bloom_filter_supported())
+            if (bloom_filter_supported()) {
                 global_short_to_local_long_ratio_limit = 0.8;
-            else
+            } else {
                 // Since we can't rely on bloom filters to reduce the shuffle
                 // cost we give some more headroom to use broadcast join
                 global_short_to_local_long_ratio_limit = 2.0;
+            }
             if (left_total_memory < right_total_memory &&
                 left_total_memory < CritMemorySize &&
                 left_total_memory < (right_total_memory / double(n_pes) *
@@ -1198,7 +1261,7 @@ table_info* hash_join_table(
             } else {
                 // Check if a column may be eliminated from the output
                 bool check_key_in_output =
-                    (i < n_key) || (left_cond_func_cols_set.contains(i));
+                    (i < n_key) || (left_cond_func_cols_set->contains(i));
                 array_info* left_arr = work_left_table->columns[i];
                 // We are in data case or in the case of a key that is taken
                 // only from one side. Therefore we have to plan for the
@@ -1224,7 +1287,7 @@ table_info* hash_join_table(
             }
         }
         // Clear to free memory
-        left_cond_func_cols_set.clear();
+        delete left_cond_func_cols_set;
         ev_fill_left.finalize();
         tracing::Event ev_fill_right("fill_right", parallel_trace);
         // Inserting the right side of the table.
@@ -1238,7 +1301,7 @@ table_info* hash_join_table(
                 array_info* right_arr = work_right_table->columns[i];
                 // Check if a column may be eliminated from the output.
                 bool check_key_in_output =
-                    is_new_key || (right_cond_func_cols_set.contains(i));
+                    is_new_key || (right_cond_func_cols_set->contains(i));
                 if (!check_key_in_output || key_in_output[key_in_output_idx]) {
                     bool use_nullable_arr = use_nullable_arr_type[idx];
                     if (ChoiceOpt == 0) {
@@ -1260,7 +1323,7 @@ table_info* hash_join_table(
             }
         }
         // Clear to free memory
-        right_cond_func_cols_set.clear();
+        delete right_cond_func_cols_set;
         ev_fill_right.finalize();
         // Create indicator column if indicator=True
         if (indicator) {
@@ -1330,23 +1393,6 @@ table_info* hash_join_table(
 void cross_join_handle_dict_encoded(table_info* left_table,
                                     table_info* right_table, bool left_parallel,
                                     bool right_parallel) {
-    // Set has_global_dictionary for replicated data just in case.
-    // Should not be necessary since has_global_dictionary
-    // should be set by the compiler automatically for replicated data
-    if (!left_parallel) {
-        for (array_info* a : left_table->columns) {
-            if (a->arr_type == bodo_array_type::DICT) {
-                a->has_global_dictionary = true;
-            }
-        }
-    }
-    if (!right_parallel) {
-        for (array_info* a : right_table->columns) {
-            if (a->arr_type == bodo_array_type::DICT) {
-                a->has_global_dictionary = true;
-            }
-        }
-    }
     // make all dictionaries global (necessary for broadcast and potentially
     // other operations)
     for (array_info* a : left_table->columns) {
