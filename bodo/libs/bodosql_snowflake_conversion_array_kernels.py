@@ -17,6 +17,7 @@ from bodo.utils.typing import (
     is_literal_type,
     is_overload_constant_str,
     is_overload_none,
+    is_str_arr_type,
     raise_bodo_error,
 )
 
@@ -548,8 +549,11 @@ def to_char_util(arr):
     arg_types = [arr]
     propagate_null = [True]
 
+    if is_str_arr_type(arr):
+        # Strings are unchanged.
+        return lambda arr: arr  # pragma: no cover
     # TODO [BE-3744]: support binary data for to_char
-    if is_valid_binary_arg(arr):
+    elif is_valid_binary_arg(arr):
         # currently only support hex encoding
         scalar_text = "with bodo.objmode(r=bodo.string_type):\n"
         scalar_text += "  r = arg0.hex()\n"
