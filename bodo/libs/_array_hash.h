@@ -280,4 +280,318 @@ struct KeyEqualDict {
     array_info* local_dictionary;
 };
 
+// convert Array dtype to C type using a trait class
+// similar to:
+// https://github.com/rapidsai/cudf/blob/c4a1389bca6f2fd521bd5e768eda7407aa3e66b5/cpp/include/cudf/utilities/type_dispatcher.hpp#L141
+
+template <Bodo_CTypes::CTypeEnum T>
+struct dtype_to_type {
+    using type = void;
+};
+
+#ifndef DTYPE_TO_C_TYPE
+#define DTYPE_TO_C_TYPE(Type, Id) \
+    template <>                   \
+    struct dtype_to_type<Id> {    \
+        using type = Type;        \
+    };
+#endif
+
+DTYPE_TO_C_TYPE(int8_t, Bodo_CTypes::INT8)
+DTYPE_TO_C_TYPE(int16_t, Bodo_CTypes::INT16)
+DTYPE_TO_C_TYPE(int32_t, Bodo_CTypes::INT32)
+DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::INT64)
+DTYPE_TO_C_TYPE(uint8_t, Bodo_CTypes::UINT8)
+DTYPE_TO_C_TYPE(uint16_t, Bodo_CTypes::UINT16)
+DTYPE_TO_C_TYPE(uint32_t, Bodo_CTypes::UINT32)
+DTYPE_TO_C_TYPE(uint64_t, Bodo_CTypes::UINT64)
+DTYPE_TO_C_TYPE(float, Bodo_CTypes::FLOAT32)
+DTYPE_TO_C_TYPE(double, Bodo_CTypes::FLOAT64)
+DTYPE_TO_C_TYPE(bool, Bodo_CTypes::_BOOL)
+// NOTE: for functions that only need a C type with similar size (for copy,
+// equality, ...) but not the actual semantics (e.g. isna)
+DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATETIME)
+DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIMEDELTA)
+DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIME)
+// TODO[BE-2711]: update when we move to date32 type
+DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATE)
+DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::DECIMAL)
+DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
+
+// select dtypes that can have sentinel nulls
+template <Bodo_CTypes::CTypeEnum DType>
+concept NullSentinelDtype = ((DType == Bodo_CTypes::FLOAT32) ||
+                             (DType == Bodo_CTypes::FLOAT64) ||
+                             (DType == Bodo_CTypes::DATETIME) ||
+                             (DType == Bodo_CTypes::TIMEDELTA));
+
+/**
+ * @brief functor for comparing two elements of the same array.
+ * Treats two NA elements as equal (TODO: template NA behavior for more general
+ * use).
+ *
+ */
+class ElementComparator {
+   public:
+    // store data pointer to avoid extra struct access in performance critical
+    // code
+    ElementComparator(const array_info* arr_) noexcept
+        : arr{arr_},
+          data_ptr{arr_->data1},
+          null_bitmask{(uint8_t*)arr_->null_bitmask} {}
+
+    // Numpy arrays with nullable dtypes (float, datetime/timedelta)
+    template <bodo_array_type::arr_type_enum ArrType,
+              Bodo_CTypes::CTypeEnum DType>
+    requires(ArrType == bodo_array_type::NUMPY &&
+             NullSentinelDtype<DType>) constexpr bool
+    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        using T = typename dtype_to_type<DType>::type;
+        T* data = (T*)data_ptr;
+        T val1 = data[iRowA];
+        T val2 = data[iRowB];
+        bool isna1 = isnan_alltype<T, DType>(val1);
+        bool isna2 = isnan_alltype<T, DType>(val2);
+        return (isna1 && isna2) || (!isna1 && !isna2 && val1 == val2);
+    }
+
+    // Numpy arrays with non-nullable dtypes (integer, boolean)
+    template <bodo_array_type::arr_type_enum ArrType,
+              Bodo_CTypes::CTypeEnum DType>
+    requires(ArrType == bodo_array_type::NUMPY &&
+             !NullSentinelDtype<DType>) constexpr bool
+    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        using T = typename dtype_to_type<DType>::type;
+        T* data = (T*)data_ptr;
+        return data[iRowA] == data[iRowB];
+    }
+
+    // Nullable arrays
+    template <bodo_array_type::arr_type_enum ArrType,
+              Bodo_CTypes::CTypeEnum DType>
+    requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL) constexpr bool
+    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        using T = typename dtype_to_type<DType>::type;
+        T* data = (T*)data_ptr;
+        T val1 = data[iRowA];
+        T val2 = data[iRowB];
+        bool isna1 = !GetBit(null_bitmask, iRowA);
+        bool isna2 = !GetBit(null_bitmask, iRowB);
+        return (isna1 && isna2) || (!isna1 && !isna2 && val1 == val2);
+    }
+
+    // generic comparator, fall back to runtime type checks with TestEqualColumn
+    template <bodo_array_type::arr_type_enum ArrType,
+              Bodo_CTypes::CTypeEnum DType>
+    requires(ArrType != bodo_array_type::NUMPY &&
+             ArrType != bodo_array_type::NULLABLE_INT_BOOL) constexpr bool
+    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        return TestEqualColumn(arr, iRowA, arr, iRowB, true);
+    }
+
+   private:
+    const array_info* arr;
+    const char* data_ptr;
+    const uint8_t* null_bitmask;
+};
+
+/**
+ * @brief Key equality comparator class (for hash map use) that is specialized
+ * for two keys to make common cases faster (e.g. Int32/DATE, Int64/Int64).
+ *
+ * @tparam ArrType1 first array's type (e.g. bodo_array_type::NULLABLE_INT_BOOL)
+ * @tparam DType1 first array's dtype (e.g. Bodo_CTypes::INT32)
+ * @tparam ArrType2 second array's type (e.g. bodo_array_type::NUMPY)
+ * @tparam DType2 first array's dtype (e.g. Bodo_CTypes::DATE)
+ */
+template <
+    bodo_array_type::arr_type_enum ArrType1, Bodo_CTypes::CTypeEnum DType1,
+    bodo_array_type::arr_type_enum ArrType2, Bodo_CTypes::CTypeEnum DType2>
+class KeysEqualComparatorTwoKeys {
+   public:
+    KeysEqualComparatorTwoKeys(const array_info* arr1, const array_info* arr2)
+        : cmp1(arr1), cmp2(arr2) {}
+
+    constexpr bool operator()(const int64_t iRowA,
+                              const int64_t iRowB) const noexcept {
+        return (cmp1.template operator()<ArrType1, DType1>(iRowA, iRowB)) &&
+               (cmp2.template operator()<ArrType2, DType2>(iRowA, iRowB));
+    }
+
+   private:
+    const ElementComparator cmp1;
+    const ElementComparator cmp2;
+};
+
+/**
+ * @brief Invokes `operator()` template of input functor with type instantiation
+ * based on the specified arr_type and dtype. Similar to:
+ * https://github.com/rapidsai/cudf/blob/c4a1389bca6f2fd521bd5e768eda7407aa3e66b5/cpp/include/cudf/utilities/type_dispatcher.hpp#L440
+ *
+ * @tparam Functor functor with operator() to call
+ * @tparam Ts types of input arguments to operator()
+ * @param arr_type array type for type instantiation
+ * @param dtype dtype for type instantiation
+ * @param f input functor
+ * @param args arguments to pass to operator()
+ * @return constexpr decltype(auto) return type inferred from operator()
+ */
+template <typename Functor, typename... Ts>
+inline constexpr decltype(auto) type_dispatcher(
+    bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
+    Functor f, Ts&&... args) {
+#ifndef DISPATCH_CASE
+#define DISPATCH_CASE(ARRAY_TYPE, DTYPE)                 \
+    case DTYPE:                                          \
+        return f.template operator()<ARRAY_TYPE, DTYPE>( \
+            std::forward<Ts>(args)...);
+#endif
+
+    switch (arr_type) {
+        case bodo_array_type::NUMPY:
+            switch (dtype) {
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::_BOOL);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::INT8);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::UINT8);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::INT16);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::UINT16);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::INT32);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::UINT32);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::INT64);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::UINT64);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::FLOAT32);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::INT128);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::DECIMAL);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::DATE);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::TIME);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME);
+                DISPATCH_CASE(bodo_array_type::NUMPY, Bodo_CTypes::TIMEDELTA);
+                default:
+                    throw std::runtime_error("invalid dtype for Numpy arrays " +
+                                             std::to_string(dtype));
+            }
+        case bodo_array_type::NULLABLE_INT_BOOL:
+            switch (dtype) {
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::_BOOL);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::INT8);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::UINT8);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::INT16);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::UINT16);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::INT32);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::UINT32);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::INT64);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::UINT64);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::FLOAT32);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::FLOAT64);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::INT128);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::DECIMAL);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::DATE);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::TIME);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::DATETIME);
+                DISPATCH_CASE(bodo_array_type::NULLABLE_INT_BOOL,
+                              Bodo_CTypes::TIMEDELTA);
+                default:
+                    throw std::runtime_error(
+                        "invalid dtype for nullable arrays " +
+                        std::to_string(dtype));
+            }
+        case bodo_array_type::STRING:
+            switch (dtype) {
+                DISPATCH_CASE(bodo_array_type::STRING, Bodo_CTypes::STRING);
+                DISPATCH_CASE(bodo_array_type::STRING, Bodo_CTypes::BINARY);
+                default:
+                    throw std::runtime_error(
+                        "invalid dtype for string arrays " +
+                        std::to_string(dtype));
+            }
+        case bodo_array_type::DICT:
+            switch (dtype) {
+                DISPATCH_CASE(bodo_array_type::DICT, Bodo_CTypes::STRING);
+                default:
+                    throw std::runtime_error("invalid dtype for dict arrays " +
+                                             std::to_string(dtype));
+            }
+        case bodo_array_type::CATEGORICAL:
+            switch (dtype) {
+                // categorical index numbers are integers
+                DISPATCH_CASE(bodo_array_type::CATEGORICAL, Bodo_CTypes::INT8);
+                DISPATCH_CASE(bodo_array_type::CATEGORICAL, Bodo_CTypes::INT16);
+                DISPATCH_CASE(bodo_array_type::CATEGORICAL, Bodo_CTypes::INT32);
+                DISPATCH_CASE(bodo_array_type::CATEGORICAL, Bodo_CTypes::INT64);
+                default:
+                    throw std::runtime_error(
+                        "invalid dtype for categorical arrays " +
+                        std::to_string(dtype));
+            }
+        case bodo_array_type::LIST_STRING:
+            switch (dtype) {
+                DISPATCH_CASE(bodo_array_type::LIST_STRING,
+                              Bodo_CTypes::LIST_STRING);
+                default:
+                    throw std::runtime_error(
+                        "invalid dtype for list string arrays " +
+                        std::to_string(dtype));
+            }
+        case bodo_array_type::ARROW:
+            switch (dtype) {
+                // Arrow array stores a dummy int8 dtype
+                // https://github.com/Bodo-inc/Bodo/blob/7578641188b6630a5762ea150c03894736f77a8d/bodo/libs/_array.cpp#L254
+                DISPATCH_CASE(bodo_array_type::ARROW, Bodo_CTypes::INT8);
+                default:
+                    throw std::runtime_error("invalid dtype for Arrow arrays " +
+                                             std::to_string(dtype));
+            }
+        default:
+            throw std::runtime_error("invalid array type " +
+                                     std::to_string(arr_type));
+    }
+}
+#undef DISPATCH_CASE
+
+/**
+ * @brief General key equality comparator class for hash map use.
+ * Checks data types in runtime for each key column and calls ElementComparator.
+ * Specialized classes such as KeysEqualComparatorTwoKeys should be used instead
+ * whenever possible to avoid the runtime type check costs. Similar to:
+ * https://github.com/rapidsai/cudf/blob/c4a1389bca6f2fd521bd5e768eda7407aa3e66b5/cpp/include/cudf/table/experimental/row_operators.cuh#L1140
+ *
+ */
+class KeysEqualComparator {
+   public:
+    KeysEqualComparator(const int64_t n_keys, const table_info* table)
+        : n_keys{n_keys}, table{table} {}
+
+    constexpr bool operator()(const int64_t iRowA,
+                              const int64_t iRowB) const noexcept {
+        auto equal_elements = [=](array_info* arr) {
+            return type_dispatcher(arr->arr_type, arr->dtype,
+                                   ElementComparator{arr}, iRowA, iRowB);
+        };
+
+        return std::all_of(table->columns.begin(),
+                           table->columns.begin() + n_keys, equal_elements);
+    }
+
+   private:
+    const int64_t n_keys;
+    const table_info* table;
+};
+
 #endif  // _ARRAY_HASH_H_INCLUDED

@@ -209,8 +209,8 @@ table_info* RetrieveTable(table_info* const& in_table,
  * @param is_na_equal should na values be considered equal
  * @return True if they are equal and false otherwise.
  */
-bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
-                     int64_t pos2, bool is_na_equal);
+bool TestEqualColumn(const array_info* arr1, int64_t pos1,
+                     const array_info* arr2, int64_t pos2, bool is_na_equal);
 
 /* This function test if two rows of two arrow columns (which may or may not be
  * the same) are equal, greater or lower than the other.
@@ -370,24 +370,27 @@ inline bool isnan_categorical_ptr(int dtype, char* ptr) {
 }
 
 template <typename T, int dtype>
-inline typename std::enable_if<std::is_floating_point<T>::value, bool>::type
-isnan_alltype(T const& val) {
+constexpr inline
+    typename std::enable_if<std::is_floating_point<T>::value, bool>::type
+    isnan_alltype(T const& val) {
     return isnan(val);
 }
 
 template <typename T, int dtype>
-inline typename std::enable_if<!std::is_floating_point<T>::value &&
-                                   is_datetime_timedelta<dtype>::value,
-                               bool>::type
-isnan_alltype(T const& val) {
+constexpr inline
+    typename std::enable_if<!std::is_floating_point<T>::value &&
+                                is_datetime_timedelta<dtype>::value,
+                            bool>::type
+    isnan_alltype(T const& val) {
     return val == std::numeric_limits<T>::min();
 }
 
 template <typename T, int dtype>
-inline typename std::enable_if<!std::is_floating_point<T>::value &&
-                                   !is_datetime_timedelta<dtype>::value,
-                               bool>::type
-isnan_alltype(T const& val) {
+constexpr inline
+    typename std::enable_if<!std::is_floating_point<T>::value &&
+                                !is_datetime_timedelta<dtype>::value,
+                            bool>::type
+    isnan_alltype(T const& val) {
     return false;
 }
 
