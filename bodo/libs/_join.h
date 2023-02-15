@@ -63,14 +63,14 @@ typedef bool (*cond_expr_fn_t)(array_info** left_table,
  * func columns are included in the output table. The booleans first contain
  * all of the left table (keys then cond columns in order of the table) and
  * then the right table. Shared output keys are only stored for the left table.
- * @param vect_need_typechange : a vector specifying whether a column needs to
+ * @param use_nullable_arr_type : a vector specifying whether a column needs to
  * be changed or not. This usage is due to the need to support categorical
  * array.
- * @param is_left : whether we do an inner or outer merge on the left.
- * @param is_right : whether we do an inner or outer merge on the right.
+ * @param is_left_outer : whether we do an inner or outer merge on the left.
+ * @param is_right_outer : whether we do an inner or outer merge on the right.
  * @param is_join : whether the call is a join in Pandas or not (as opposed to
  * merge).
- * @param optional_col : When doing a merge on column and index, the key
+ * @param extra_data_col : When doing a merge on column and index, the key
  *    is put also in output, so we need one additional column in that case.
  * @param indicator: When doing a merge, if indicator=True outputs an additional
  *    Categorical column with name _merge that says if the data source is from
@@ -96,8 +96,8 @@ table_info* hash_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
     bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
-    int64_t* vect_need_typechange, bool is_left, bool is_right, bool is_join,
-    bool extra_data_col, bool indicator, bool is_na_equal,
+    int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
+    bool is_join, bool extra_data_col, bool indicator, bool is_na_equal,
     cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
     uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
     uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr);

@@ -164,96 +164,45 @@ create_non_equi_func_sets(table_info* left_table, table_info* right_table,
                            right_non_equi_func_col_num_set);
 }
 
-// An overview of the join design can be found on Confluence:
-// https://bodo.atlassian.net/wiki/spaces/B/pages/821624833/Join+Code+Design
+/**
+ * @brief Handles any required shuffle steps for the left and right table to
+ * generate local tables for computing the join. This code can either shuffle
+ * both tables if we need to do a hash join, broadcast one table if there is a
+ * small table to do a broadcast join or do nothing if there is already a
+ * replicated table (and do a broadcast join without requiring the broadcast).
+ * Optionally if we choose to do a hash join and at least
+ * one side of the table is an inner join we may use bloom filters to reduce the
+ * amount of data being shuffled.
+ *
+ * @param left_table The left input table.
+ * @param right_table The right input table.
+ * @param is_left_outer Is the join an outer join on the left side?
+ * @param is_right_outer Is the join an outer join on the right side?
+ * @param left_parallel Is the left table parallel?
+ * @param right_parallel Is the right table parallel?
+ * @param n_pes The total number of processes.
+ * @param n_key The total number of key columns in the equality function.
+ * @return std::tuple<table_info*, table_info *, bool, bool> A tuple of the new
+ * left and right tables after any shuffling and whether or not the left and
+ * right tables are replicated. A table will become replicated if we broadcast
+ * it.
+ */
+std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
+    table_info* left_table, table_info* right_table, bool is_left_outer,
+    bool is_right_outer, bool left_parallel, bool right_parallel, int64_t n_pes,
+    size_t n_key) {
+    // Create a tracing event for the shuffle.
+    tracing::Event ev("equi_join_table_shuffle",
+                      left_parallel || right_parallel);
 
-// There are several heuristic in this code:
-// ---We can use shuffle-join or broadcast-join. We have one constant for the
-// maximal
-//    size of the broadcasted table. It is set to 10 MB by default (same as
-//    Spark). Variable name "CritMemorySize".
-// ---For the join, we need to construct one hash map for the keys. If we take
-// the left
-//    table and is_left=T then we need to build a more complicated hash-map.
-//    Thus the size of the table is just one parameter in the choice. We put a
-//    factor of 6.0 in this choice. Variable is CritQuotientNrows.
-
-table_info* hash_join_table_inner(
-    table_info* left_table, table_info* right_table, bool left_parallel,
-    bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
-    int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
-    int64_t* use_nullable_arr_type, bool is_left, bool is_right, bool is_join,
-    bool extra_data_col, bool indicator, bool is_na_equal,
-    cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
-    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
-    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
-    // Does this join need an additional cond_func
-    const bool uses_cond_func = cond_func != nullptr;
-    bool parallel_trace = (left_parallel || right_parallel);
-    using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
-    tracing::Event ev("hash_join_table", parallel_trace);
-    // Reading the MPI settings
-    int n_pes, myrank;
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    // Doing checks and basic assignments.
-    size_t n_key = size_t(n_key_t);
-    size_t n_data_left = size_t(n_data_left_t);
-    size_t n_data_right = size_t(n_data_right_t);
-    size_t n_tot_left = n_key + n_data_left;
-    size_t n_tot_right = n_key + n_data_right;
-    // Check that the input is valid.
-    validate_equi_join_input(left_table, right_table, n_key, extra_data_col);
-
-    if (ev.is_tracing()) {
-        ev.add_attribute("in_left_table_nrows",
-                         static_cast<size_t>(left_table->nrows()));
-        ev.add_attribute("in_right_table_nrows",
-                         static_cast<size_t>(right_table->nrows()));
-        ev.add_attribute("g_left_parallel", left_parallel);
-        ev.add_attribute("g_right_parallel", right_parallel);
-        ev.add_attribute("g_n_key", n_key_t);
-        ev.add_attribute("g_n_data_cols_left", n_data_left_t);
-        ev.add_attribute("g_n_data_cols_right", n_data_right_t);
-        ev.add_attribute("g_is_left", is_left);
-        ev.add_attribute("g_is_right", is_right);
-        ev.add_attribute("g_extra_data_col", extra_data_col);
-    }
-    // Handle dict encoding
-    equi_join_keys_handle_dict_encoded(left_table, right_table, left_parallel,
-                                       right_parallel, n_key);
-
-    auto [left_cond_func_cols_set, right_cond_func_cols_set] =
-        create_non_equi_func_sets(
-            left_table, right_table, cond_func_left_columns,
-            cond_func_left_column_len, cond_func_right_columns,
-            cond_func_right_column_len, left_parallel, right_parallel, n_key);
-
-    // Now deciding how we handle the parallelization of the tables
-    // and doing the allgather/shuffle exchanges as needed.
-    // There are two possible algorithms:
-    // --- shuffle join where we shuffle both tables and then do the join.
-    // --- broadcast join where one table is small enough to be gathered and
-    //     broadcast to all nodes.
-    // Note that Spark has other join algorithms, e.g. sort-shuffle join.
-    //
-    // Relative complexity of each algorithms:
-    // ---Shuffle join requires shuffling which implies the use of
-    // MPI_alltoallv
-    //    and uses a lot of memory.
-    // ---Broadcast join requires one table to be gathered which may be
-    // advantageous
-    //    if one table is much smaller. Still making a table replicated
-    //    should give pause to users.
-    //
-    // Both algorithms require the construction of a hash map for the keys.
-    //
-    table_info *work_left_table, *work_right_table;
-    bool free_work_left = false, free_work_right = false;
+    // By default the work tables are the inputs.
+    table_info *work_left_table = left_table, *work_right_table = right_table;
     // Default replicated values are opposite of parallel. These
     // are updated if we broadcast a table.
     bool left_replicated = !left_parallel, right_replicated = !right_parallel;
 
+    // If either table is replicated we can just use work_left_table and
+    // work_right_table as a broadcast join.
     if (left_parallel && right_parallel) {
         // If both tables are parallel then we need to decide between
         // shuffle and broadcast join.
@@ -288,7 +237,7 @@ table_info* hash_join_table_inner(
         // sequential bottleneck)
         // We should tune this doing a more extensive study, see:
         // https://bodo.atlassian.net/browse/BE-1030
-        float global_short_to_local_long_ratio_limit;
+        double global_short_to_local_long_ratio_limit;
         if (bloom_filter_supported()) {
             global_short_to_local_long_ratio_limit = 0.8;
         } else {
@@ -300,35 +249,37 @@ table_info* hash_join_table_inner(
             left_total_memory < CritMemorySize &&
             left_total_memory < (right_total_memory / double(n_pes) *
                                  global_short_to_local_long_ratio_limit)) {
-            work_left_table =
-                gather_table(left_table, -1, all_gather, parallel_trace);
-            free_work_left = true;
-            work_right_table = right_table;
+            // Broadcast the left table
+            work_left_table = gather_table(left_table, -1, all_gather, true);
             left_replicated = true;
+            // Delete the left_table as it is no longer used.
+            delete_table(left_table);
         } else if (right_total_memory <= left_total_memory &&
                    right_total_memory < CritMemorySize &&
                    right_total_memory <
                        (left_total_memory / double(n_pes) *
                         global_short_to_local_long_ratio_limit)) {
-            work_left_table = left_table;
-            work_right_table =
-                gather_table(right_table, -1, all_gather, parallel_trace);
-            free_work_right = true;
+            // Broadcast the right table
+            work_right_table = gather_table(right_table, -1, all_gather, true);
             right_replicated = true;
+            // Delete the right_table as it is no longer used.
+            delete_table(right_table);
         } else {
+            using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
             // If the smaller table is larger than the threshold
             // we do a shuffle-join. To shuffle the tables we build
             // a hash table (ensuring that comparable
             // types hash to the same values).
 
-            // only do filters for inner join for now
+            // only do filters for the inner side of a join for now. Note
+            // is we have a left join we will generate the bloom filter
+            // potentially for the left side so we can filter the right side
+            // (which is the inner join).
             BloomFilter* bloom_left = nullptr;
             BloomFilter* bloom_right = nullptr;
             uint32_t* hashes_left = nullptr;
             uint32_t* hashes_right = nullptr;
-            if (bloom_filter_supported() && !is_left && !is_right) {
-                bool make_bloom_left = true;
-                bool make_bloom_right = true;
+            if (bloom_filter_supported()) {
                 hashes_left = coherent_hash_keys_table(
                     left_table, right_table, n_key, SEED_HASH_PARTITION, true);
                 hashes_right = coherent_hash_keys_table(
@@ -342,19 +293,24 @@ table_info* hash_join_table_inner(
                               MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
                 MPI_Allreduce(&right_table_nrows, &right_table_global_nrows, 1,
                               MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
+                static constexpr size_t MAX_BLOOM_SIZE = 100 * 1024 * 1024;
+                size_t left_cardinality = 0;
+                size_t right_cardinality = 0;
                 // Filter built from table A is used to filter table
                 // B. If A is much larger than B we don't make a filter
                 // from A because the cost of making the bloom filter will
                 // probably be larger than what we save from filtering B
                 // Also see https://bodo.atlassian.net/browse/BE-1321
                 // regarding tuning these values
-                if (left_table_global_nrows > (right_table_global_nrows * 10))
-                    make_bloom_left = false;
-                if (right_table_global_nrows > (left_table_global_nrows * 10))
-                    make_bloom_right = false;
-                static constexpr size_t MAX_BLOOM_SIZE = 100 * 1024 * 1024;
-                size_t left_cardinality = 0;
-                size_t right_cardinality = 0;
+                // Note: make_bloom_left depends on is_right_outer because the
+                // filter is used to filter the right table (and the converse
+                // for make_bloom_right).
+                bool make_bloom_left =
+                    !is_right_outer &&
+                    left_table_global_nrows <= (right_table_global_nrows * 10);
+                bool make_bloom_right =
+                    !is_left_outer &&
+                    right_table_global_nrows <= (left_table_global_nrows * 10);
                 // We are going to build global bloom filters, and we need
                 // to know how many unique elements we are inserting into
                 // each to set a bloom filter size that has good false
@@ -378,31 +334,29 @@ table_info* hash_join_table_inner(
                 // regarding tuning these values
                 if (make_bloom_left) {
                     left_cardinality = std::get<1>(get_nunique_hashes_global(
-                        hashes_left, left_table_nrows, parallel_trace));
+                        hashes_left, left_table_nrows, true));
                     size_t bloom_left_bytes =
                         bloom_size_bytes(left_cardinality);
-                    if ((bloom_left_bytes > MAX_BLOOM_SIZE) ||
-                        (bloom_left_bytes /
-                             (right_total_memory / double(n_pes)) >
-                         2.0))
-                        make_bloom_left = false;
+                    make_bloom_left = (bloom_left_bytes <= MAX_BLOOM_SIZE) &&
+                                      (bloom_left_bytes / (right_total_memory /
+                                                           double(n_pes)) <=
+                                       2.0);
                 }
                 if (make_bloom_right) {
                     right_cardinality = std::get<1>(get_nunique_hashes_global(
-                        hashes_right, right_table_nrows, parallel_trace));
+                        hashes_right, right_table_nrows, true));
                     size_t bloom_right_bytes =
                         bloom_size_bytes(right_cardinality);
-                    if ((bloom_right_bytes > MAX_BLOOM_SIZE) ||
-                        (bloom_right_bytes /
-                             (left_total_memory / double(n_pes)) >
-                         2.0))
-                        make_bloom_right = false;
+                    make_bloom_right = (bloom_right_bytes <= MAX_BLOOM_SIZE) &&
+                                       (bloom_right_bytes / (left_total_memory /
+                                                             double(n_pes)) <=
+                                        2.0);
                 }
                 ev.add_attribute("g_make_bloom_left", make_bloom_left);
                 ev.add_attribute("g_make_bloom_right", make_bloom_right);
 
                 if (make_bloom_left) {
-                    tracing::Event ev_bloom("make_bloom", parallel_trace);
+                    tracing::Event ev_bloom("make_bloom", true);
                     // A bloom filter is a set, and we need to know how
                     // many unique elements we are inserting so that the
                     // implementation chooses a buffer size that guarantees
@@ -423,7 +377,7 @@ table_info* hash_join_table_inner(
                     ev_bloom.add_attribute("which", "left");
                 }
                 if (make_bloom_right) {
-                    tracing::Event ev_bloom("make_bloom", parallel_trace);
+                    tracing::Event ev_bloom("make_bloom", true);
                     bloom_right = new BloomFilter(right_cardinality);
                     bloom_right->AddAll(hashes_right, 0, right_table_nrows);
                     bloom_right->union_reduction();
@@ -436,23 +390,121 @@ table_info* hash_join_table_inner(
                 }
             }
 
+            // Shuffle both the left and right tables.
             work_left_table = coherent_shuffle_table(
                 left_table, right_table, n_key, hashes_left, bloom_right);
             work_right_table = coherent_shuffle_table(
                 right_table, left_table, n_key, hashes_right, bloom_left);
-            free_work_left = true;
-            free_work_right = true;
-            if (hashes_left != nullptr) delete[] hashes_left;
-            if (hashes_right != nullptr) delete[] hashes_right;
-            if (bloom_left != nullptr) delete bloom_left;
-            if (bloom_right != nullptr) delete bloom_right;
+            // Delete left_table and right_table as they are no longer used.
+            delete_table(left_table);
+            delete_table(right_table);
+            if (hashes_left != nullptr) {
+                delete[] hashes_left;
+            }
+            if (hashes_right != nullptr) {
+                delete[] hashes_right;
+            }
+            if (bloom_left != nullptr) {
+                delete bloom_left;
+            }
+            if (bloom_right != nullptr) {
+                delete bloom_right;
+            }
         }
-    } else {
-        // If either table is already replicated then we
-        // always do a broadcast-join (without the broadcast)
-        work_left_table = left_table;
-        work_right_table = right_table;
     }
+    ev.finalize();
+    return std::make_tuple(work_left_table, work_right_table, left_replicated,
+                           right_replicated);
+}
+
+// An overview of the join design can be found on Confluence:
+// https://bodo.atlassian.net/wiki/spaces/B/pages/821624833/Join+Code+Design
+
+// There are several heuristic in this code:
+// ---We can use shuffle-join or broadcast-join. We have one constant for the
+// maximal
+//    size of the broadcasted table. It is set to 10 MB by default (same as
+//    Spark). Variable name "CritMemorySize".
+// ---For the join, we need to construct one hash map for the keys. If we take
+// the left
+//    table and is_left_outer=T then we need to build a more complicated
+//    hash-map. Thus the size of the table is just one parameter in the choice.
+//    We put a factor of 6.0 in this choice. Variable is CritQuotientNrows.
+
+table_info* hash_join_table_inner(
+    table_info* left_table, table_info* right_table, bool left_parallel,
+    bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
+    int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
+    int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
+    bool is_join, bool extra_data_col, bool indicator, bool is_na_equal,
+    cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
+    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
+    // Does this join need an additional cond_func
+    const bool uses_cond_func = cond_func != nullptr;
+    const bool parallel_trace = (left_parallel || right_parallel);
+    tracing::Event ev("hash_join_table", parallel_trace);
+    // Reading the MPI settings
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    // Doing checks and basic assignments.
+    size_t n_key = size_t(n_key_t);
+    size_t n_data_left = size_t(n_data_left_t);
+    size_t n_data_right = size_t(n_data_right_t);
+    size_t n_tot_left = n_key + n_data_left;
+    size_t n_tot_right = n_key + n_data_right;
+    // Check that the input is valid.
+    validate_equi_join_input(left_table, right_table, n_key, extra_data_col);
+
+    if (ev.is_tracing()) {
+        ev.add_attribute("in_left_table_nrows",
+                         static_cast<size_t>(left_table->nrows()));
+        ev.add_attribute("in_right_table_nrows",
+                         static_cast<size_t>(right_table->nrows()));
+        ev.add_attribute("g_left_parallel", left_parallel);
+        ev.add_attribute("g_right_parallel", right_parallel);
+        ev.add_attribute("g_n_key", n_key_t);
+        ev.add_attribute("g_n_data_cols_left", n_data_left_t);
+        ev.add_attribute("g_n_data_cols_right", n_data_right_t);
+        ev.add_attribute("g_is_left", is_left_outer);
+        ev.add_attribute("g_is_right", is_right_outer);
+        ev.add_attribute("g_extra_data_col", extra_data_col);
+    }
+    // Handle dict encoding
+    equi_join_keys_handle_dict_encoded(left_table, right_table, left_parallel,
+                                       right_parallel, n_key);
+
+    auto [left_cond_func_cols_set, right_cond_func_cols_set] =
+        create_non_equi_func_sets(
+            left_table, right_table, cond_func_left_columns,
+            cond_func_left_column_len, cond_func_right_columns,
+            cond_func_right_column_len, left_parallel, right_parallel, n_key);
+
+    // Now deciding how we handle the parallelization of the tables
+    // and doing the allgather/shuffle exchanges as needed.
+    // There are two possible algorithms:
+    // --- shuffle join where we shuffle both tables and then do the join.
+    // --- broadcast join where one table is small enough to be gathered and
+    //     broadcast to all nodes.
+    // Note that Spark has other join algorithms, e.g. sort-shuffle join.
+    //
+    // Relative complexity of each algorithms:
+    // ---Shuffle join requires shuffling which implies the use of
+    // MPI_alltoallv
+    //    and uses a lot of memory.
+    // ---Broadcast join requires one table to be gathered which may be
+    // advantageous
+    //    if one table is much smaller. Still making a table replicated
+    //    should give pause to users.
+    //
+    // Both algorithms require the construction of a hash map for the keys.
+    //
+    auto [work_left_table, work_right_table, left_replicated,
+          right_replicated] =
+        equi_join_shuffle(left_table, right_table, is_left_outer,
+                          is_right_outer, left_parallel, right_parallel, n_pes,
+                          n_key);
     ev.add_attribute("g_left_replicated", left_replicated);
     ev.add_attribute("g_right_replicated", right_replicated);
 
@@ -518,28 +570,29 @@ table_info* hash_join_table_inner(
     int MethodChoice;  // 1: Populate the hash map with the table with fewer
                        // rows. 2: Populate the hash map with the table that
                        // uniquely
-                       //    requires an outer join (i.e. is_left/is_right).
-    if (is_left == is_right) {
+                       //    requires an outer join (i.e.
+                       //    is_left_outer/is_right_outer).
+    if (is_left_outer == is_right_outer) {
         // In that case we are doing either inner or full outer merge
         // the only relevant metric is table size.
         MethodChoice = 1;
     } else {
-        // In the case of is_left <> is_right we must decide if the size
-        // of the tables or the outer join property are more important.
-        // To do this, we set a threshhold K (CritQuotientNrows) and compare
-        // the size of the table. If either table is has K times more rows
-        // we will always make the smaller table the table that populates
-        // the hash map, regardless of if that table needs an outer join.
-        // If the ratio of rows is less than K, then populate the hash map
-        // with the table that doesn't require an outer join.
+        // In the case of is_left_outer <> is_right_outer we must decide if the
+        // size of the tables or the outer join property are more important. To
+        // do this, we set a threshhold K (CritQuotientNrows) and compare the
+        // size of the table. If either table is has K times more rows we will
+        // always make the smaller table the table that populates the hash map,
+        // regardless of if that table needs an outer join. If the ratio of rows
+        // is less than K, then populate the hash map with the table that
+        // doesn't require an outer join.
         //
         // TODO: Justify our threshhold of 1 table being 6x larger than
         // the other.
         double CritQuotientNrows = 6.0;
         if (quot2 < CritQuotientNrows && quot1 < CritQuotientNrows)
             // In that case the large table is not so large comparable to
-            // the short one This means that we can use the is_left /
-            // is_right for making the choice
+            // the short one This means that we can use the is_left_outer /
+            // is_right_outer for making the choice
             MethodChoice = 2;
         else
             // In that case one table is much larger than the other,
@@ -559,11 +612,11 @@ table_info* hash_join_table_inner(
             ChoiceOpt = 1;
         }
     } else {
-        // When is_left <> is_right
+        // When is_left_outer <> is_right_outer
         // and the tables are similarly sized
         // we take the table without the outer join.
         // to avoid tracking if a row has a match in the hash table.
-        if (is_right) {  // Thus is_left = false
+        if (is_right_outer) {  // Thus is_left_outer = false
             ChoiceOpt = 0;
         } else {
             ChoiceOpt = 1;
@@ -578,7 +631,7 @@ table_info* hash_join_table_inner(
     // are in the hash map.
     size_t short_table_rows, long_table_rows;  // the number of rows
     uint32_t *short_table_hashes, *long_table_hashes;
-    // This corresponds to is_left/is_right and determines
+    // This corresponds to is_left_outer/is_right_outer and determines
     // if the short/long tables are outer joins.
     bool short_table_outer, long_table_outer;
     table_info *short_table, *long_table;
@@ -589,8 +642,8 @@ table_info* hash_join_table_inner(
     if (ChoiceOpt == 0) {
         // short = left and long = right
         short_is_left = true;
-        short_table_outer = is_left;
-        long_table_outer = is_right;
+        short_table_outer = is_left_outer;
+        long_table_outer = is_right_outer;
         short_table = work_left_table;
         long_table = work_right_table;
         short_table_rows = n_rows_left;
@@ -602,8 +655,8 @@ table_info* hash_join_table_inner(
     } else {
         // short = right and long = left
         short_is_left = false;
-        short_table_outer = is_right;
-        long_table_outer = is_left;
+        short_table_outer = is_right_outer;
+        long_table_outer = is_left_outer;
         short_table = work_right_table;
         long_table = work_left_table;
         short_table_rows = n_rows_right;
@@ -614,7 +667,7 @@ table_info* hash_join_table_inner(
         long_replicated = left_replicated;
     }
     // If exactly one table is replicated and that table uses an outer
-    // join (i.e. is_left), we do not have enough information in one
+    // join (i.e. is_left_outer), we do not have enough information in one
     // rank to determine that a row has no matches. As a result,
     // these variables track if we will need to perform a reduction
     // or if a row has a match.
@@ -1279,7 +1332,7 @@ table_info* hash_join_table_inner(
             }
         }
     }
-    // Clear to free memory
+    // Delete to free memory
     delete left_cond_func_cols_set;
     ev_fill_left.finalize();
     tracing::Event ev_fill_right("fill_right", parallel_trace);
@@ -1315,7 +1368,7 @@ table_info* hash_join_table_inner(
             }
         }
     }
-    // Clear to free memory
+    // Delete to free memory
     delete right_cond_func_cols_set;
     ev_fill_right.finalize();
     // Create indicator column if indicator=True
@@ -1350,17 +1403,10 @@ table_info* hash_join_table_inner(
         out_arrs.emplace_back(indicator_col);
     }
 
-    // TODO if we see significant tracing gap at the end of hash_join_table
-    // or right after it, we need to trace the "freeing" portion of this
-    // function, and manually deallocate short_write_idxs, long_write_idxs,
-    // V_long_map, etc. to make sure deallocations are captured by the trace
-    // event
-    if (free_work_left) {
-        delete_table(work_left_table);
-    }
-    if (free_work_right) {
-        delete_table(work_right_table);
-    }
+    // Delete the inputs
+    delete_table(work_left_table);
+    delete_table(work_right_table);
+
     // Only return a table if there is at least 1
     // output column.
     if (out_arrs.size() > 0) {
@@ -1374,8 +1420,8 @@ table_info* hash_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
     bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
-    int64_t* use_nullable_arr_type, bool is_left, bool is_right, bool is_join,
-    bool extra_data_col, bool indicator, bool is_na_equal,
+    int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
+    bool is_join, bool extra_data_col, bool indicator, bool is_na_equal,
     cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
     uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
     uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
@@ -1383,10 +1429,10 @@ table_info* hash_join_table(
         return hash_join_table_inner(
             left_table, right_table, left_parallel, right_parallel, n_key_t,
             n_data_left_t, n_data_right_t, vect_same_key, key_in_output,
-            use_nullable_arr_type, is_left, is_right, is_join, extra_data_col,
-            indicator, is_na_equal, cond_func, cond_func_left_columns,
-            cond_func_left_column_len, cond_func_right_columns,
-            cond_func_right_column_len, num_rows_ptr);
+            use_nullable_arr_type, is_left_outer, is_right_outer, is_join,
+            extra_data_col, indicator, is_na_equal, cond_func,
+            cond_func_left_columns, cond_func_left_column_len,
+            cond_func_right_columns, cond_func_right_column_len, num_rows_ptr);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -1585,8 +1631,8 @@ table_info* create_out_table(
  *
  * @param left_table left input table
  * @param right_table right input table
- * @param is_left : whether we do an inner or outer merge on the left.
- * @param is_right : whether we do an inner or outer merge on the right.
+ * @param is_left_outer : whether we do an inner or outer merge on the left.
+ * @param is_right_outer : whether we do an inner or outer merge on the right.
  * @param cond_func function generated in Python to evaluate general join
  * conditions. It takes data pointers for left/right tables and row indices.
  * @param parallel_trace parallel flag to pass to tracing calls
@@ -1600,7 +1646,7 @@ table_info* create_out_table(
  * @return table_info* cross join output table
  */
 void cross_join_table_local(table_info* left_table, table_info* right_table,
-                            bool is_left, bool is_right,
+                            bool is_left_outer, bool is_right_outer,
                             cond_expr_fn_t cond_func, bool parallel_trace,
                             std::vector<int64_t>& left_idxs,
                             std::vector<int64_t>& right_idxs,
@@ -1656,10 +1702,10 @@ void cross_join_table_local(table_info* left_table, table_info* right_table,
                         if (match) {
                             left_idxs.emplace_back(i);
                             right_idxs.emplace_back(j);
-                            if (is_left) {
+                            if (is_left_outer) {
                                 SetBitTo(left_row_is_matched.data(), i, true);
                             }
-                            if (is_right) {
+                            if (is_right_outer) {
                                 SetBitTo(right_row_is_matched.data(), j, true);
                             }
                         }
@@ -1674,15 +1720,14 @@ void cross_join_table_local(table_info* left_table, table_info* right_table,
 // https://bodo.atlassian.net/l/cp/Av2ijf9A
 table_info* cross_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
-    bool right_parallel, bool is_left, bool is_right, bool* key_in_output,
-    int64_t* use_nullable_arr_type, cond_expr_fn_t cond_func,
-    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
-    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
-    uint64_t* num_rows_ptr) {
-    cross_join_handle_dict_encoded(left_table, right_table, left_parallel,
-                                   right_parallel);
-
+    bool right_parallel, bool is_left_outer, bool is_right_outer,
+    bool* key_in_output, int64_t* use_nullable_arr_type,
+    cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
+    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
     try {
+        cross_join_handle_dict_encoded(left_table, right_table, left_parallel,
+                                       right_parallel);
         bool parallel_trace = (left_parallel || right_parallel);
         tracing::Event ev("cross_join_table", parallel_trace);
         table_info* out_table;
@@ -1712,11 +1757,11 @@ table_info* cross_join_table(
             bool left_table_bcast = left_table_size < right_table_size;
             table_info* bcast_table = left_table;
             table_info* other_table = right_table;
-            size_t n_bytes_other = is_right ? (n_rows_right + 7) >> 3 : 0;
+            size_t n_bytes_other = is_right_outer ? (n_rows_right + 7) >> 3 : 0;
             if (!left_table_bcast) {
                 bcast_table = right_table;
                 other_table = left_table;
-                n_bytes_other = is_left ? (n_rows_left + 7) >> 3 : 0;
+                n_bytes_other = is_left_outer ? (n_rows_left + 7) >> 3 : 0;
             }
 
             // bcast_row_is_matched is reset in each iteration, but
@@ -1735,8 +1780,8 @@ table_info* cross_join_table(
                 table_info* bcast_table_chunk =
                     broadcast_table(bcast_table, bcast_table,
                                     bcast_table->ncols(), parallel_trace, p);
-                bool is_bcast_outer = (is_left && left_table_bcast) ||
-                                      (is_right && !left_table_bcast);
+                bool is_bcast_outer = (is_left_outer && left_table_bcast) ||
+                                      (is_right_outer && !left_table_bcast);
                 size_t n_bytes_bcast =
                     is_bcast_outer ? (bcast_table_chunk->nrows() + 7) >> 3 : 0;
                 bcast_row_is_matched.resize(n_bytes_bcast);
@@ -1750,22 +1795,22 @@ table_info* cross_join_table(
                 // cross_join_table_local decrefs
                 if (left_table_bcast) {
                     cross_join_table_local(
-                        bcast_table_chunk, other_table, is_left, is_right,
-                        cond_func, parallel_trace, left_idxs, right_idxs,
-                        bcast_row_is_matched, other_row_is_matched);
+                        bcast_table_chunk, other_table, is_left_outer,
+                        is_right_outer, cond_func, parallel_trace, left_idxs,
+                        right_idxs, bcast_row_is_matched, other_row_is_matched);
                 } else {
                     cross_join_table_local(
-                        other_table, bcast_table_chunk, is_left, is_right,
-                        cond_func, parallel_trace, left_idxs, right_idxs,
-                        other_row_is_matched, bcast_row_is_matched);
+                        other_table, bcast_table_chunk, is_left_outer,
+                        is_right_outer, cond_func, parallel_trace, left_idxs,
+                        right_idxs, other_row_is_matched, bcast_row_is_matched);
                 }
                 // handle bcast table's unmatched rows if outer
-                if (is_left && left_table_bcast) {
+                if (is_left_outer && left_table_bcast) {
                     add_unmatched_rows(bcast_row_is_matched,
                                        bcast_table_chunk->nrows(), left_idxs,
                                        right_idxs, true);
                 }
-                if (is_right && !left_table_bcast) {
+                if (is_right_outer && !left_table_bcast) {
                     add_unmatched_rows(bcast_row_is_matched,
                                        bcast_table_chunk->nrows(), right_idxs,
                                        left_idxs, true);
@@ -1788,7 +1833,7 @@ table_info* cross_join_table(
             }
 
             // handle non-bcast table's unmatched rows of if outer
-            if (is_left && !left_table_bcast) {
+            if (is_left_outer && !left_table_bcast) {
                 std::vector<int64_t> left_idxs;
                 std::vector<int64_t> right_idxs;
                 add_unmatched_rows(other_row_is_matched, left_table->nrows(),
@@ -1800,7 +1845,7 @@ table_info* cross_join_table(
                     cond_func_right_columns, cond_func_right_column_len, false);
                 out_table_chunks.emplace_back(out_table_chunk);
             }
-            if (is_right && left_table_bcast) {
+            if (is_right_outer && left_table_bcast) {
                 std::vector<int64_t> left_idxs;
                 std::vector<int64_t> right_idxs;
                 add_unmatched_rows(other_row_is_matched, right_table->nrows(),
@@ -1825,24 +1870,25 @@ table_info* cross_join_table(
             std::vector<int64_t> left_idxs;
             std::vector<int64_t> right_idxs;
 
-            size_t n_bytes_left = is_left ? (left_table->nrows() + 7) >> 3 : 0;
+            size_t n_bytes_left =
+                is_left_outer ? (left_table->nrows() + 7) >> 3 : 0;
             size_t n_bytes_right =
-                is_right ? (right_table->nrows() + 7) >> 3 : 0;
+                is_right_outer ? (right_table->nrows() + 7) >> 3 : 0;
             std::vector<uint8_t> left_row_is_matched(n_bytes_left, 0);
             std::vector<uint8_t> right_row_is_matched(n_bytes_right, 0);
 
-            cross_join_table_local(left_table, right_table, is_left, is_right,
-                                   cond_func, parallel_trace, left_idxs,
-                                   right_idxs, left_row_is_matched,
+            cross_join_table_local(left_table, right_table, is_left_outer,
+                                   is_right_outer, cond_func, parallel_trace,
+                                   left_idxs, right_idxs, left_row_is_matched,
                                    right_row_is_matched);
 
             // handle unmatched rows of if outer
-            if (is_left) {
+            if (is_left_outer) {
                 bool needs_reduction = !left_parallel && right_parallel;
                 add_unmatched_rows(left_row_is_matched, left_table->nrows(),
                                    left_idxs, right_idxs, needs_reduction);
             }
-            if (is_right) {
+            if (is_right_outer) {
                 bool needs_reduction = !right_parallel && left_parallel;
                 add_unmatched_rows(right_row_is_matched, right_table->nrows(),
                                    right_idxs, left_idxs, needs_reduction);
