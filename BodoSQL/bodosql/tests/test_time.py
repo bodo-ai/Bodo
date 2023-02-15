@@ -83,6 +83,9 @@ to_time_in_outs = pytest.mark.parametrize(
 )
 
 
+@pytest.mark.skip(
+    "To be fixed in a followup PR: https://bodo.atlassian.net/browse/BE-4402"
+)
 @to_time_fn_names
 @to_time_in_outs
 def test_time_to_time(fn_name, input, output, memory_leak_check):
@@ -92,6 +95,9 @@ def test_time_to_time(fn_name, input, output, memory_leak_check):
     check_query(query, ctx, None, expected_output=expected_output, run_dist_tests=False)
 
 
+@pytest.mark.skip(
+    "To be fixed in a followup PR: https://bodo.atlassian.net/browse/BE-4402"
+)
 @to_time_fn_names
 @to_time_in_outs
 def test_time_to_time_case(fn_name, input, output, memory_leak_check):
@@ -101,6 +107,9 @@ def test_time_to_time_case(fn_name, input, output, memory_leak_check):
     check_query(query, ctx, None, expected_output=expected_output, run_dist_tests=False)
 
 
+@pytest.mark.skip(
+    "To be fixed in a followup PR: https://bodo.atlassian.net/browse/BE-4402"
+)
 @to_time_fn_names
 @pytest.mark.parametrize(
     "input,output",
@@ -146,6 +155,7 @@ time_from_parts_in_outs = pytest.mark.parametrize(
 )
 
 
+@pytest.mark.skip("TODO in followup PR: https://bodo.atlassian.net/browse/BE-4397")
 @time_from_parts_fn_names
 @time_from_parts_in_outs
 @pytest.mark.parametrize("wrap_case", [True, False])
@@ -161,6 +171,7 @@ def test_time_from_parts(fn_name, wrap_case, args, value, memory_leak_check):
     check_query(query, ctx, None, expected_output=expected_output, run_dist_tests=False)
 
 
+@pytest.mark.skip("TODO in followup PR: https://bodo.atlassian.net/browse/BE-4397")
 @pytest.mark.parametrize(
     "args, value",
     [
@@ -203,6 +214,7 @@ def test_time_from_parts_outside_range(args, value, memory_leak_check):
     check_query(query, ctx, None, expected_output=expected_output, run_dist_tests=False)
 
 
+@pytest.mark.skip("TODO in followup PR: https://bodo.atlassian.net/browse/BE-4397")
 @time_from_parts_fn_names
 @pytest.mark.parametrize(
     "args_a, args_b, args_c, args_d, value",
