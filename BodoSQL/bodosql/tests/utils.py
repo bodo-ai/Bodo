@@ -221,7 +221,7 @@ def check_query(
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
-    # PR CI environment
+    # AWS PR CI environment
     if only_jit_1DVar is None and not (only_python or only_jit_1D or only_jit_seq):
         only_jit_1DVar = (
             os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
@@ -243,15 +243,18 @@ def check_query(
 
     n_pes = bodo.get_size()
 
-    if not numba.core.config.DEVELOPER_MODE:
-        # avoid running sequential tests on multi-process configs to save time
-        if n_pes > 1:
-            run_python = False
-            run_jit_seq = False
-        # Avoid running parallel tests on single-process configs to save time
-        elif n_pes == 1:
-            run_jit_1D = False
-            run_jit_1DVar = False
+    # avoid running sequential tests on multi-process configs to save time
+    # is_out_distributed=False may lead to avoiding parallel runs and seq run
+    # Ideally we would like to also restrict running parallel tests when we have a single rank,
+    # but this can lead to test coverage issues when running with BODO_TESTING_ONLY_RUN_1D_VAR
+    # on AWS PR CI, where we only run with a single rank
+    if (
+        n_pes > 1
+        and not numba.core.config.DEVELOPER_MODE
+        and is_out_distributed is not False
+    ):
+        run_jit_seq = False
+        run_python = False
 
     # If a user sets BODOSQL_TESTING_DEBUG, we print the
     # unoptimized plan, optimized plan, and the Pandas code

@@ -206,7 +206,7 @@ def check_func(
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
-    # PR CI environment
+    # AWS PR CI environment
     if only_1DVar is None and not (only_seq or only_1D):
         only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
 
@@ -232,6 +232,9 @@ def check_func(
     # avoid running sequential tests on multi-process configs to save time
     # is_out_distributed=False may lead to avoiding parallel runs and seq run is
     # necessary to capture the parallelism warning (see "w is not None" below)
+    # Ideally we would like to also restrict running parallel tests when we have a single rank,
+    # but this can lead to test coverage issues when running with BODO_TESTING_ONLY_RUN_1D_VAR
+    # on AWS PR CI, where we only run with just a single rank
     if (
         n_pes > 1
         and not numba.core.config.DEVELOPER_MODE
