@@ -318,6 +318,8 @@ DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATE)
 DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::DECIMAL)
 DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
 
+#define DICT_INDEX_C_TYPE int32_t
+
 // select dtypes that can have sentinel nulls
 template <Bodo_CTypes::CTypeEnum DType>
 concept NullSentinelDtype = ((DType == Bodo_CTypes::FLOAT32) ||
@@ -335,10 +337,16 @@ class ElementComparator {
    public:
     // store data pointer to avoid extra struct access in performance critical
     // code
-    ElementComparator(const array_info* arr_) noexcept
-        : arr{arr_},
-          data_ptr{arr_->data1},
-          null_bitmask{(uint8_t*)arr_->null_bitmask} {}
+    ElementComparator(const array_info* arr_) noexcept {
+        // store index data for dict-encoded arrays since index comparison is
+        // enough
+        if (arr_->arr_type == bodo_array_type::DICT) {
+            arr_ = arr_->info2;
+        }
+        arr = arr_;
+        data_ptr = arr_->data1;
+        null_bitmask = (uint8_t*)arr_->null_bitmask;
+    }
 
     // Numpy arrays with nullable dtypes (float, datetime/timedelta)
     template <bodo_array_type::arr_type_enum ArrType,
@@ -380,11 +388,26 @@ class ElementComparator {
         return (isna1 && isna2) || (!isna1 && !isna2 && val1 == val2);
     }
 
+    // Dict-encoded string arrays
+    template <bodo_array_type::arr_type_enum ArrType,
+              Bodo_CTypes::CTypeEnum DType>
+    requires(ArrType == bodo_array_type::DICT) constexpr bool operator()(
+        const int64_t iRowA, const int64_t iRowB) const {
+        using T = DICT_INDEX_C_TYPE;
+        T* data = (T*)data_ptr;
+        T val1 = data[iRowA];
+        T val2 = data[iRowB];
+        bool isna1 = !GetBit(null_bitmask, iRowA);
+        bool isna2 = !GetBit(null_bitmask, iRowB);
+        return (isna1 && isna2) || (!isna1 && !isna2 && val1 == val2);
+    }
+
     // generic comparator, fall back to runtime type checks with TestEqualColumn
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType>
     requires(ArrType != bodo_array_type::NUMPY &&
-             ArrType != bodo_array_type::NULLABLE_INT_BOOL) constexpr bool
+             ArrType != bodo_array_type::NULLABLE_INT_BOOL &&
+             ArrType != bodo_array_type::DICT) constexpr bool
     operator()(const int64_t iRowA, const int64_t iRowB) const {
         return TestEqualColumn(arr, iRowA, arr, iRowB, true);
     }
@@ -393,6 +416,27 @@ class ElementComparator {
     const array_info* arr;
     const char* data_ptr;
     const uint8_t* null_bitmask;
+};
+
+/**
+ * @brief Key equality comparator class (for hash map use) that is specialized
+ * for one key to make common cases faster (e.g. Int32, Int64, DATE, DICT).
+ *
+ * @tparam ArrType array's type (e.g. bodo_array_type::NULLABLE_INT_BOOL)
+ * @tparam DType array's dtype (e.g. Bodo_CTypes::INT32)
+ */
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+class KeysEqualComparatorOneKey {
+   public:
+    KeysEqualComparatorOneKey(const array_info* arr) : cmp(arr) {}
+
+    constexpr bool operator()(const int64_t iRowA,
+                              const int64_t iRowB) const noexcept {
+        return (cmp.template operator()<ArrType, DType>(iRowA, iRowB));
+    }
+
+   private:
+    const ElementComparator cmp;
 };
 
 /**
