@@ -165,7 +165,7 @@ def tuple_arr_getitem(arr, ind):
     # bool_arr_ind_getitem to ensure NAs are converted to False.
     if ind != bodo.boolean_array:
         # other getitem cases return an array, so just call getitem on underlying data array
-        def impl_arr(arr, ind):
+        def impl_arr(arr, ind):  # pragma: no cover
             return init_tuple_arr(arr._data[ind])
 
         return impl_arr
