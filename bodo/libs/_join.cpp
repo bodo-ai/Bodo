@@ -165,6 +165,95 @@ create_non_equi_func_sets(table_info* left_table, table_info* right_table,
 }
 
 /**
+ * @brief Insert the rows from the build table into the hash map in the case
+ * where there is a non-equality function.
+ *
+ * @param key_rows_map Hashmap mapping the relevant keys to the list of rows
+ * with the same key.
+ * @param second_level_hash_maps Hashmap mapping the relevant non-equality keys
+ * to the rows with the same key.
+ * @param second_level_hash_fct The hash function for the second level hashmap.
+ * @param second_level_equal_fct The equality function for the second level
+ * hashmap.
+ * @param groups A vector of rows considered equivalent. This is used to
+ * compress rows with the same columns used in the non-equality condition and
+ * the same keys.
+ * @param build_table_rows THe number of rows in the build table.
+ */
+void insert_build_table_equi_join_some_non_equality(
+    UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
+                        joinHashFcts::KeyEqualHashJoinTable>* key_rows_map,
+    std::vector<UNORD_MAP_CONTAINER<
+        size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
+        joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
+        second_level_hash_maps,
+    joinHashFcts::SecondLevelHashHashJoinTable second_level_hash_fct,
+    joinHashFcts::SecondLevelKeyEqualHashJoinTable second_level_equal_fct,
+    std::vector<std::vector<size_t>*>* groups, size_t build_table_rows) {
+    // If 'uses_cond_func' we have a separate insertion process. We
+    // place the condition before the loop to avoid overhead.
+    for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
+        // Check if the group already exists, if it doesn't this
+        // will insert a value.
+        size_t& first_level_group_id = (*key_rows_map)[i_build];
+        // first_level_group_id==0 means the equality condition
+        // doesn't have a match
+        if (first_level_group_id == 0) {
+            // Update the value of first_level_group_id stored in
+            // the hash map as well since its pass by reference.
+            first_level_group_id = second_level_hash_maps->size() + 1;
+            UNORD_MAP_CONTAINER<
+                size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
+                joinHashFcts::SecondLevelKeyEqualHashJoinTable>* group_map =
+                new UNORD_MAP_CONTAINER<
+                    size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
+                    joinHashFcts::SecondLevelKeyEqualHashJoinTable>(
+                    {}, second_level_hash_fct, second_level_equal_fct);
+            second_level_hash_maps->emplace_back(group_map);
+        }
+        auto group_map = (*second_level_hash_maps)[first_level_group_id - 1];
+        // Check if the group already exists, if it doesn't this
+        // will insert a value.
+        size_t& second_level_group_id = (*group_map)[i_build];
+        if (second_level_group_id == 0) {
+            // Update the value of group_id stored in the hash map
+            // as well since its pass by reference.
+            second_level_group_id = groups->size() + 1;
+            groups->emplace_back(new std::vector<size_t>());
+        }
+        (*groups)[second_level_group_id - 1]->emplace_back(i_build);
+    }
+}
+
+/**
+ * @brief Insert the rows from the build table into the hash map in the case
+ * where there is only an equality condition.
+ *
+ * @param key_rows_map Map from the set of keys to rows that share that key.
+ * @param groups The vector of groups of equivalent rows. This is done to
+ * compress rows with common keys.
+ * @param build_table_rows The number of rows in the build table.
+ */
+void insert_build_table_equi_join_all_equality(
+    UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
+                        joinHashFcts::KeyEqualHashJoinTable>* key_rows_map,
+    std::vector<std::vector<size_t>*>* groups, size_t build_table_rows) {
+    for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
+        // Check if the group already exists, if it doesn't this
+        // will insert a value.
+        size_t& group_id = (*key_rows_map)[i_build];
+        // group_id==0 means key doesn't exist in map
+        if (group_id == 0) {
+            // Update the value of group_id stored in the hash map
+            // as well since its pass by reference.
+            group_id = groups->size() + 1;
+            groups->emplace_back(new std::vector<size_t>());
+        }
+        (*groups)[group_id - 1]->emplace_back(i_build);
+    }
+}
+
+/**
  * @brief Handles any required shuffle steps for the left and right table to
  * generate local tables for computing the join. This code can either shuffle
  * both tables if we need to do a hash join, broadcast one table if there is a
@@ -502,6 +591,566 @@ bool select_build_table(int64_t n_rows_left, int64_t n_rows_right,
     return build_table_is_left;
 }
 
+/**
+ * @brief Template used to handle the case where a build table hit is found.
+ * If we have an outer join we need to update that the row found a match.
+ *
+ * @tparam build_table_outer Is the join an outer join?
+ */
+template <bool build_table_outer>
+struct handle_build_table_hit;
+
+/**
+ * @brief Specialization of handle_build_table_hit for the case where
+ * we have an outer join.
+ *
+ */
+template <>
+struct handle_build_table_hit<true> {
+    /**
+     * @brief Mark the current group as having found a match in the join.
+     *
+     * @param V_build_map: Bitmap for the build table with an outer join.
+     * @param pos Current group number for the build table.
+     */
+    static inline void apply(std::vector<uint8_t>& V_build_map, size_t pos) {
+        SetBitTo(V_build_map.data(), pos, true);
+    }
+};
+
+/**
+ * @brief Specialization of handle_build_table_hit for the case where we
+ * have an inner join.
+ *
+ */
+template <>
+struct handle_build_table_hit<false> {
+    /**
+     * @brief This function does nothing.
+     *
+     * @param V_build_map: Bitmap for the build table with an outer join.
+     * @param pos Current group number for the build table.
+     */
+    static inline void apply(std::vector<uint8_t>& V_build_map, size_t pos) {
+        // This function does nothing.
+    }
+};
+
+/**
+ * @brief Template used to handle the case where a probe table miss is found.
+ * Different behavior is selected depending on if we have an outer join and
+ * also if we did a broadcast join.
+ *
+ * @tparam probe_table_outer Is the join an outer join?
+ * @tparam is_outer_broadcast Is the outer join a broadcast join?
+ */
+template <bool probe_table_outer, bool is_outer_broadcast>
+struct handle_probe_table_miss;
+
+/**
+ * @brief Specialization of handle_probe_table_miss for the case where we
+ * do not have an outer join.
+ *
+ */
+template <>
+struct handle_probe_table_miss<false, false> {
+    /**
+     * @brief This function does nothing because we do not have an outer join.
+     *
+     * @param build_write_idxs The indices of the build table for an output.
+     * This is a parameter we will modify.
+     * @param probe_write_idxs The indices of the probe table for an output.
+     * This is a parameter we will modify.
+     * @param V_probe_map The bitmap holding if we found a match for the rows
+     * in the probe table.
+     * @param pos The current row number.
+     */
+    static inline void apply(std::vector<int64_t>& build_write_idxs,
+                             std::vector<int64_t>& probe_write_idxs,
+                             std::vector<uint8_t>& V_probe_map, size_t pos) {
+        // This function does nothing.
+    }
+};
+
+/**
+ * @brief Specialization of handle_probe_table_miss for the case where we
+ * have an outer join but not a broadcast join.
+ *
+ */
+template <>
+struct handle_probe_table_miss<true, false> {
+    /**
+     * @brief Mark the current row as not having found a match in the join
+     * by indices in the build and probe table outputs.
+     *
+     * @param build_write_idxs The indices of the build table for an output.
+     * This is a parameter we will modify.
+     * @param probe_write_idxs The indices of the probe table for an output.
+     * This is a parameter we will modify.
+     * @param V_probe_map The bitmap holding if we found a match for the rows
+     * in the probe table.
+     * @param pos The current row number.
+     */
+    static inline void apply(std::vector<int64_t>& build_write_idxs,
+                             std::vector<int64_t>& probe_write_idxs,
+                             std::vector<uint8_t>& V_probe_map, size_t pos) {
+        build_write_idxs.emplace_back(-1);
+        probe_write_idxs.emplace_back(pos);
+    }
+};
+
+/**
+ * @brief Specialization of handle_probe_table_miss for the case where we
+ * have an outer join and a broadcast join.
+ *
+ */
+template <>
+struct handle_probe_table_miss<true, true> {
+    /**
+     * @brief Mark the current row as not having found a match in the join
+     * by updating the bitmap.
+     *
+     * @param build_write_idxs The indices of the build table for an output.
+     * @param probe_write_idxs The indices of the probe table for an output.
+     * @param V_probe_map The bitmap holding if we found a match for the rows
+     * in the probe table. This is the parameter we will modify.
+     * @param pos The current row number.
+     */
+    static inline void apply(std::vector<int64_t>& build_write_idxs,
+                             std::vector<int64_t>& probe_write_idxs,
+                             std::vector<uint8_t>& V_probe_map, size_t pos) {
+        SetBitTo(V_probe_map.data(), pos, false);
+    }
+};
+
+/**
+ * @brief Insert the probe table rows into the hash maps for
+ * joins that have additional non-equality conditions.
+ *
+ * @tparam build_table_outer Is the build table output an outer join?
+ * @tparam probe_table_outer Is the probe table output an outer join?
+ * @tparam is_outer_broadcast Is the probe table an outer join and a broadcast
+ * join?
+ * @param[in] key_rows_map The hash map that maps keys to a hashmap of common
+ * non-key columns used in the non-equality function.
+ * @param[in] second_level_hash_maps The hash map that groups rows with the same
+ * keys and non-key columns in the non-equality function.
+ * @param[in] groups Vector of row groups that have the same keys in the build
+ * table.
+ * @param[in] build_table_rows The number of rows in the build table.
+ * @param[in] probe_table_rows The number of rows in the probe table.
+ * @param[in] V_build_map The bitmap that indicates which rows in the build
+ * table found matches.
+ * @param[in] V_probe_map The bitmap that indicates which rows in the probe
+ * table found matches.
+ * @param[out] build_write_idxs The vector of rows for generating the output for
+ * the build table.
+ * @param[out] probe_write_idxs The vector of rows for generating the output for
+ * the probe table.
+ * @param[in] build_is_left Is the build table the left table in the join?
+ * @param[in] col_ptrs_left The column pointers for the left table.
+ * @param[in] col_ptrs_right The column pointers for the right table.
+ * @param[in] null_bitmap_left The null bitmaps for the left table.
+ * @param[in] null_bitmap_right The null bitmaps for the right table.
+ * @param[in] cond_func The non-equality function checked for correctness.
+ */
+template <bool build_table_outer, bool probe_table_outer,
+          bool is_outer_broadcast>
+void insert_probe_table_equi_join_some_non_equality(
+    UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
+                        joinHashFcts::KeyEqualHashJoinTable>* key_rows_map,
+    std::vector<UNORD_MAP_CONTAINER<
+        size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
+        joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
+        second_level_hash_maps,
+    std::vector<std::vector<size_t>*>* groups, size_t build_table_rows,
+    size_t probe_table_rows, std::vector<uint8_t>& V_build_map,
+    std::vector<uint8_t>& V_probe_map, std::vector<int64_t>& build_write_idxs,
+    std::vector<int64_t>& probe_write_idxs, bool build_is_left,
+    std::vector<array_info*>& left_table_infos,
+    std::vector<array_info*>& right_table_infos,
+    std::vector<void*>& col_ptrs_left, std::vector<void*>& col_ptrs_right,
+    std::vector<void*>& null_bitmap_left, std::vector<void*>& null_bitmap_right,
+    cond_expr_fn_t cond_func) {
+    for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
+        size_t i_probe_shift = i_probe + build_table_rows;
+        auto iter = key_rows_map->find(i_probe_shift);
+        if (iter == key_rows_map->end()) {
+            handle_probe_table_miss<probe_table_outer,
+                                    is_outer_broadcast>::apply(build_write_idxs,
+                                                               probe_write_idxs,
+                                                               V_probe_map,
+                                                               i_probe);
+        } else {
+            // If the first level matches, check each second level
+            // hash.
+            UNORD_MAP_CONTAINER<
+                size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
+                joinHashFcts::SecondLevelKeyEqualHashJoinTable>* group_map =
+                (*second_level_hash_maps)[iter->second - 1];
+
+            bool has_match = false;
+            // Iterate over all of the keys and compare each group.
+            // TODO [BE-1300]: Explore tsl:sparse_map
+            for (auto& item : *group_map) {
+                size_t pos = item.second - 1;
+                std::vector<size_t>* group = (*groups)[pos];
+                // Select a single member
+                size_t cmp_row = (*group)[0];
+                size_t left_ind = 0;
+                size_t right_ind = 0;
+                if (build_is_left) {
+                    left_ind = cmp_row;
+                    right_ind = i_probe;
+                } else {
+                    left_ind = i_probe;
+                    right_ind = cmp_row;
+                }
+                bool match =
+                    cond_func(left_table_infos.data(), right_table_infos.data(),
+                              col_ptrs_left.data(), col_ptrs_right.data(),
+                              null_bitmap_left.data(), null_bitmap_right.data(),
+                              left_ind, right_ind);
+                if (match) {
+                    // If our group matches, add every row and
+                    // update the bitmap
+                    handle_build_table_hit<build_table_outer>::apply(
+                        V_build_map, pos);
+                    has_match = true;
+                    for (size_t idx = 0; idx < group->size(); idx++) {
+                        size_t j_build = (*group)[idx];
+                        build_write_idxs.emplace_back(j_build);
+                        probe_write_idxs.emplace_back(i_probe);
+                    }
+                }
+            }
+            if (!has_match) {
+                handle_probe_table_miss<probe_table_outer, is_outer_broadcast>::
+                    apply(build_write_idxs, probe_write_idxs, V_probe_map,
+                          i_probe);
+            }
+        }
+    }
+}
+
+/**
+ * @brief Insert the probe table rows into the hash maps for
+ * joins that only have equality conditions.
+ *
+ * @tparam build_table_outer Is the build table output an outer join?
+ * @tparam probe_table_outer Is the probe table output an outer join?
+ * @tparam is_outer_broadcast Is the probe table an outer join and a broadcast
+ * join?
+ * @param[in] key_rows_map The hash map that maps keys to rows in the build
+ * table.
+ * @param[in] groups Vector of row groups that have the same keys in the build
+ * table.
+ * @param[in] build_table_rows The number of rows in the build table.
+ * @param[in] probe_table_rows The number of rows in the probe table.
+ * @param[in] V_build_map The bitmap that indicates which rows in the build
+ * table found matches.
+ * @param[in] V_probe_map The bitmap that indicates which rows in the probe
+ * table found matches.
+ * @param[out] build_write_idxs The vector of rows for generating the output for
+ * the build table.
+ * @param[out] probe_write_idxs The vector of rows for generating the output for
+ * the probe table.
+ */
+template <bool build_table_outer, bool probe_table_outer,
+          bool is_outer_broadcast>
+void insert_probe_table_equi_join_all_equality(
+    UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
+                        joinHashFcts::KeyEqualHashJoinTable>* key_rows_map,
+    std::vector<std::vector<size_t>*>* groups, size_t build_table_rows,
+    size_t probe_table_rows, std::vector<uint8_t>& V_build_map,
+    std::vector<uint8_t>& V_probe_map, std::vector<int64_t>& build_write_idxs,
+    std::vector<int64_t>& probe_write_idxs) {
+    for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
+        size_t i_probe_shift = i_probe + build_table_rows;
+        auto iter = key_rows_map->find(i_probe_shift);
+        if (iter == key_rows_map->end()) {
+            handle_probe_table_miss<probe_table_outer,
+                                    is_outer_broadcast>::apply(build_write_idxs,
+                                                               probe_write_idxs,
+                                                               V_probe_map,
+                                                               i_probe);
+        } else {
+            // If the build table entry is present in output as
+            // well, then we need to keep track whether they are
+            // used or not by the long table.
+            std::vector<size_t>* group = (*groups)[iter->second - 1];
+            size_t pos = iter->second - 1;
+            handle_build_table_hit<build_table_outer>::apply(V_build_map, pos);
+            for (size_t idx = 0; idx < group->size(); idx++) {
+                size_t j_build = (*group)[idx];
+                build_write_idxs.emplace_back(j_build);
+                probe_write_idxs.emplace_back(i_probe);
+            }
+        }
+    }
+}
+
+/**
+ * @brief Template to handle the update to build_write_idxs and probe_write_idxs
+ * when a build table doesn't have a match and we are in an outer join.
+ *
+ * @tparam build_miss_needs_reduction Is a reduction step required to update the
+ * build table. This is means the build table is broadcast but the output is
+ * distributed.
+ */
+template <bool build_miss_needs_reduction>
+struct insert_build_table_miss;
+
+template <>
+struct insert_build_table_miss<true> {
+    /**
+     * @brief Update the build_write_idxs and probe_write_idxs when a short
+     * table doesn't have a match and we are in an outer join. This is the case
+     * where the build table is broadcast, so we divide the misses across ranks.
+     *
+     * @param pos The position of the build table row.
+     * @param build_write_idxs The build table write indices.
+     * @param probe_write_idxs The probe table write indices.
+     * @param myrank The current rank.
+     * @param n_pes The total number of processes.
+     * @param pos_build_disp The total number of missing rows in the build table
+     * so far.
+     */
+    static inline void apply(size_t pos, std::vector<int64_t>& build_write_idxs,
+                             std::vector<int64_t>& probe_write_idxs,
+                             int64_t myrank, int64_t n_pes,
+                             int64_t pos_build_disp) {
+        int node = pos_build_disp % n_pes;
+        // For build_miss_needs_reduction=True, the output table
+        // is distributed. Since the table in input is
+        // replicated, we dispatch it by rank.
+        if (node == myrank) {
+            build_write_idxs.emplace_back(pos);
+            probe_write_idxs.emplace_back(-1);
+        }
+    }
+};
+
+template <>
+struct insert_build_table_miss<false> {
+    /**
+     * @brief Update the build_write_idxs and probe_write_idxs when a build
+     * table doesn't have a match and we are in an outer join. This is the case
+     * where the build table is distributed so we just write to the output.
+     *
+     * @param pos The position of the build table row.
+     * @param build_write_idxs The build table write indices.
+     * @param probe_write_idxs The probe table write indices.
+     * @param myrank The current rank.
+     * @param n_pes The total number of processes.
+     * @param pos_build_disp The total number of missing rows in the build table
+     * so far.
+     */
+    static inline void apply(size_t pos, std::vector<int64_t>& build_write_idxs,
+                             std::vector<int64_t>& probe_write_idxs,
+                             int64_t myrank, int64_t n_pes,
+                             int64_t pos_build_disp) {
+        build_write_idxs.emplace_back(pos);
+        probe_write_idxs.emplace_back(-1);
+    }
+};
+
+/**
+ * @brief Template to handle the update build_write_idxs and probe_write_idxs
+ * with any missing rows from the build table.
+ *
+ * @tparam build_miss_needs_reduction Is a reduction step required to update the
+ * build table. This means the build table is broadcast but the output is
+ * distributed.
+ *
+ * @param V_build_map Bitmap vector of hits/misses in the build table's groups.
+ * @param groups Vector of vector of rows in the build table.
+ * @param build_write_idxs The build table write indices.
+ * @param probe_write_idxs The probe table write indices.
+ * @param myrank The current rank.
+ * @param n_pes The total number of processes.
+ */
+template <bool build_miss_needs_reduction>
+void insert_build_table_misses(std::vector<uint8_t>& V_build_map,
+                               std::vector<std::vector<size_t>*>* groups,
+                               std::vector<int64_t>& build_write_idxs,
+                               std::vector<int64_t>& probe_write_idxs,
+                               int64_t myrank, int64_t n_pes) {
+    if (build_miss_needs_reduction) {
+        // Perform the reduction on build table misses if necessary
+        MPI_Allreduce_bool_or(V_build_map);
+    }
+    int64_t pos_build_disp = 0;
+    // Add missing rows for outer joins when there are no matching build
+    // table groups.
+    for (size_t pos = 0; pos < groups->size(); pos++) {
+        std::vector<size_t>* group = (*groups)[pos];
+        bool bit = GetBit(V_build_map.data(), pos);
+        if (!bit) {
+            for (size_t idx = 0; idx < group->size(); idx++) {
+                size_t j_build = (*group)[idx];
+                insert_build_table_miss<build_miss_needs_reduction>::apply(
+                    j_build, build_write_idxs, probe_write_idxs, myrank, n_pes,
+                    pos_build_disp);
+                pos_build_disp++;
+            }
+        }
+    }
+}
+
+/**
+ * @brief Update the build_write_idxs and probe_write_idxs when a probe table is
+ * broadcast but the output is distributed. For each miss, we divide the misses
+ * across ranks.
+ *
+ * @param V_probe_map The bitmap vector of hits/misses in the probe table's
+ * groups.
+ * @param build_write_idxs The build table write indices.
+ * @param probe_write_idxs The probe table write indices.
+ * @param probe_table_rows The number of rows in the probe table.
+ * @param myrank The current rank.
+ * @param n_pes The total number of processes.
+ */
+void insert_probe_table_broadcast_misses(std::vector<uint8_t>& V_probe_map,
+                                         std::vector<int64_t>& build_write_idxs,
+                                         std::vector<int64_t>& probe_write_idxs,
+                                         size_t probe_table_rows,
+                                         int64_t myrank, int64_t n_pes) {
+    MPI_Allreduce_bool_or(V_probe_map);
+    int pos = 0;
+    for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
+        bool bit = GetBit(V_probe_map.data(), i_probe);
+        // The replicated input table is dispatched over the rows in the
+        // distributed output.
+        if (!bit) {
+            int node = pos % n_pes;
+            if (node == myrank) {
+                build_write_idxs.emplace_back(-1);
+                probe_write_idxs.emplace_back(i_probe);
+            }
+            pos++;
+        }
+    }
+}
+
+/**
+ * @brief Compute the information about the last use of each column in the work
+ * tables and free any columns that are not needed for generating the outputs.
+ * There are many cases to cover, so we preprocess last_col_use_left and
+ * last_col_use_right first to determine last usage before creating the return
+ * table. last_col_use_left/right can be assigned many different values.
+ * Here are there meanings.
+ *  0 - Default value. This means the column is not used in the output at
+ *  all. 1 - Column is the output of converting an index to the output
+ *  data columns. 2 - Column is a key column with the same name in the
+ *  left and right tables. 3 - Column is in the left table and is not a
+ * matching key with the right table. 4 - Column is in the right table,
+ * is not a matching key with the left table, and the operation is not a
+ * join in Pandas.
+ *
+ * This function also frees any columns in last_col_use_left/right that have a
+ * value of 0.
+ *
+ * @param[out] last_col_use_left The vector of last use information for the left
+ * table.
+ * @param[out] last_col_use_right The vector of last use information for the
+ * right table.
+ * @param[in] work_left_table The left table.
+ * @param[in] work_right_table The right table.
+ * @param[in] n_tot_left The number of left table columns.
+ * @param[in] n_tot_right The number of right table columns.
+ * @param[in] n_key The number of key columns.
+ * @param[in] vect_same_key Boolean array tracking if the same key becomes 1
+ * output column.
+ * @param[in] key_in_output Boolean array tracking which key columns are live in
+ * the output.
+ * @param[in] left_cond_func_cols_set Set of left table columns used in the
+ * condition function.
+ * @param[in] right_cond_func_cols_set Set of right table columns used in the
+ * condition function.
+ * @param[in] extra_data_col Does the output have an extra data column that is
+ * generated from converting an index column to a data column?
+ * @param[in] is_join Is this operation generated via DataFrame.join? This seems
+ * to impact which right table columns are live in the output, although this may
+ * be a bug.
+ */
+void generate_col_last_use_info(
+    std::vector<uint8_t>& last_col_use_left,
+    std::vector<uint8_t>& last_col_use_right, table_info* work_left_table,
+    table_info* work_right_table, size_t n_tot_left, size_t n_tot_right,
+    size_t n_key, int64_t* vect_same_key, bool* key_in_output,
+    UNORD_SET_CONTAINER<int64_t>* left_cond_func_cols_set,
+    UNORD_SET_CONTAINER<int64_t>* right_cond_func_cols_set, bool extra_data_col,
+    bool is_join) {
+    offset_t key_in_output_idx = 0;
+
+    if (extra_data_col) {
+        size_t i = 0;
+        last_col_use_left[i] = 1;
+        last_col_use_right[i] = 1;
+    }
+    // Iterate through the left table columns. If its a key column, check if it
+    // is shared with the right table and if so update the right key column as
+    // being used when the left key is.
+    for (size_t i = 0; i < n_tot_left; i++) {
+        if (i < n_key && vect_same_key[i] == 1) {
+            if (key_in_output[key_in_output_idx++]) {
+                // Key is shared by both tables and kept in the output.
+                last_col_use_left[i] = 2;
+                last_col_use_right[i] = 2;
+            }
+        } else {
+            // For deletion purposes the key is either a regular key column or
+            // a data column used in a general join condition.
+            bool is_key_col = i < n_key || left_cond_func_cols_set->contains(i);
+            if (!is_key_col || key_in_output[key_in_output_idx++]) {
+                // Column is only in the left table.
+                last_col_use_left[i] = 3;
+            }
+        }
+    }
+    // Iterate through the right table columns. Here we check for any columns
+    // in the right table that are live in the output. There are two main cases
+    // in which we mark a column as being used when inserting into the right
+    // table.
+    // -- It is a right key column with different name from the left and
+    // !is_join?
+    //    is_join indicates that we are doing a DataFrame.join, which right now
+    //    always uses the right table's index as a key column. This may be a bug
+    //    and we likely need to handle the more general case of merging on
+    //    indices.
+    // -- It is a right data column. If a right data column is used in the
+    // general
+    //    merge condition then we have to check if it is kept in the output as
+    //    it is used like a key.
+    for (size_t i = 0; i < n_tot_right; i++) {
+        bool is_normal_key = i < n_key && vect_same_key[i] == 0 && !is_join;
+        if (i >= n_key || is_normal_key) {
+            // Is the column a key column via the non-equality function?
+            bool is_non_equal_key =
+                i >= n_key && right_cond_func_cols_set->contains(i);
+            if (!(is_normal_key || is_non_equal_key) ||
+                key_in_output[key_in_output_idx++]) {
+                // Column is only in the right table.
+                last_col_use_right[i] = 4;
+            }
+        }
+    }
+    // If the arrays aren't used in the output decref immediately.
+    for (size_t i = 0; i < n_tot_left; i++) {
+        if (last_col_use_left[i] == 0) {
+            array_info* left_arr = work_left_table->columns[i];
+            decref_array(left_arr);
+        }
+    }
+    for (size_t i = 0; i < n_tot_right; i++) {
+        if (last_col_use_right[i] == 0) {
+            array_info* right_arr = work_right_table->columns[i];
+            decref_array(right_arr);
+        }
+    }
+}
+
 // An overview of the join design can be found on Confluence:
 // https://bodo.atlassian.net/wiki/spaces/B/pages/821624833/Join+Code+Design
 
@@ -656,9 +1305,9 @@ table_info* hash_join_table_inner(
     // rank to determine that a row has no matches. As a result,
     // these variables track if we will need to perform a reduction
     // or if a row has a match.
-    bool build_miss_needs_reduction =
+    const bool build_miss_needs_reduction =
         build_table_outer && build_replicated && !probe_replicated;
-    bool probe_miss_needs_reduction =
+    const bool probe_miss_needs_reduction =
         probe_table_outer && probe_replicated && !build_replicated;
 
     tracing::Event ev_tuples("compute_tuples", parallel_trace);
@@ -669,13 +1318,13 @@ table_info* hash_join_table_inner(
         ev_tuples.add_attribute("probe_table_outer", probe_table_outer);
     }
 
+    tracing::Event ev_alloc_map("alloc_hashmap", parallel_trace);
     joinHashFcts::HashHashJoinTable hash_fct{
         build_table_rows, build_table_hashes, probe_table_hashes};
     joinHashFcts::KeyEqualHashJoinTable equal_fct{
         build_table_rows, n_key, build_table, probe_table, is_na_equal};
-    tracing::Event ev_alloc_map("alloc_hashmap", parallel_trace);
 
-    // The entList contains the identical keys with the corresponding rows.
+    // The key_rows_map contains the identical keys with the corresponding rows.
     // We address the entry by the row index. We store all the rows which
     // are identical in a "group". The hashmap stores the group number
     // and the groups are stored in the `groups` std::vector.
@@ -693,15 +1342,18 @@ table_info* hash_join_table_inner(
     // If we also need to do build_table_outer then we store an index in the
     // first position of the std::vector
     UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
-                        joinHashFcts::KeyEqualHashJoinTable>
-        entList({}, hash_fct, equal_fct);
+                        joinHashFcts::KeyEqualHashJoinTable>* key_rows_map =
+        new UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
+                                joinHashFcts::KeyEqualHashJoinTable>(
+            {}, hash_fct, equal_fct);
     // reserving space is very important to avoid expensive reallocations
     // (at the cost of using more memory)
     // [BE-1078]: Should this use statistics to influence how much we
     // reserve?
-    entList.reserve(build_table_rows);
-    std::vector<std::vector<size_t>> groups;
-    groups.reserve(build_table_rows);
+    key_rows_map->reserve(build_table_rows);
+    std::vector<std::vector<size_t>*>* groups =
+        new std::vector<std::vector<size_t>*>();
+    groups->reserve(build_table_rows);
 
     // Create a data structure containing the columns to match the format
     // expected by cond_func. We create two pairs of vectors, one with
@@ -736,8 +1388,10 @@ table_info* hash_join_table_inner(
     uint32_t* build_nonequal_key_hashes = nullptr;
     std::vector<UNORD_MAP_CONTAINER<
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
-        joinHashFcts::SecondLevelKeyEqualHashJoinTable>>
-        second_level_hash_maps;
+        joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
+        second_level_hash_maps = new std::vector<UNORD_MAP_CONTAINER<
+            size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
+            joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>();
     // Keep track of which table to use to populate the second level hash
     // table if 'uses_cond_func'
     uint64_t* build_data_key_cols = nullptr;
@@ -756,7 +1410,7 @@ table_info* hash_join_table_inner(
             SEED_HASH_JOIN, parallel_trace);
         // [BE-1078]: Should this use statistics to influence how much we
         // reserve?
-        second_level_hash_maps.reserve(build_table_rows);
+        second_level_hash_maps->reserve(build_table_rows);
     }
     joinHashFcts::SecondLevelHashHashJoinTable second_level_hash_fct{
         build_nonequal_key_hashes};
@@ -785,383 +1439,148 @@ table_info* hash_join_table_inner(
     // This is needed only if said table is replicated
     // (i.e probe_miss_needs_reduction/build_miss_needs_reduction).
     std::vector<uint8_t> V_probe_map(n_bytes_probe, 255);
+
+    tracing::Event ev_groups("calc_groups", parallel_trace);
+    // Loop over the build table.
+    if (uses_cond_func) {
+        insert_build_table_equi_join_some_non_equality(
+            key_rows_map, second_level_hash_maps, second_level_hash_fct,
+            second_level_equal_fct, groups, build_table_rows);
+    } else {
+        insert_build_table_equi_join_all_equality(key_rows_map, groups,
+                                                  build_table_rows);
+    }
+    ev_groups.finalize();
+    size_t n_bytes_build = 0;
     if (build_table_outer) {
-        // The loop over the build table.
-        // entries are stored one by one and all of them are put in a group
-        // even if they are identical in value.
-        // The first entry is going to be the index for the boolean array.
-        // This code path will be selected whenever we have an OUTER merge.
-
-        tracing::Event ev_groups("calc_groups", parallel_trace);
-        // TODO: Refactor code paths into helper functions.
-        if (uses_cond_func) {
-            // If 'uses_cond_func' we have a separate insertion process. We
-            // place the condition before the loop to avoid overhead.
-            for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
-                // Check if the group already exists, if it doesn't this
-                // will insert a value.
-                size_t& first_level_group_id = entList[i_build];
-                // first_level_group_id==0 means the equality condition
-                // doesn't have a match
-                if (first_level_group_id == 0) {
-                    // Update the value of first_level_group_id stored in
-                    // the hash map as well since its pass by reference.
-                    first_level_group_id = second_level_hash_maps.size() + 1;
-                    UNORD_MAP_CONTAINER<
-                        size_t, size_t,
-                        joinHashFcts::SecondLevelHashHashJoinTable,
-                        joinHashFcts::SecondLevelKeyEqualHashJoinTable>
-                        group_map({}, second_level_hash_fct,
-                                  second_level_equal_fct);
-                    second_level_hash_maps.emplace_back(group_map);
+        n_bytes_build = (groups->size() + 7) >> 3;
+    }
+    // Allocate the vector any build misses
+    std::vector<uint8_t> V_build_map(n_bytes_build, 0);
+    // We now iterate over all the entries of the long table in order to
+    // get the entries in the build_write_idxs and probe_write_idxs. We add
+    // different paths to allow templated code since the miss handling depends
+    // on the type of join or if we have an outer join.
+    if (uses_cond_func) {
+        if (build_table_outer) {
+            if (probe_table_outer) {
+                if (probe_miss_needs_reduction) {
+                    insert_probe_table_equi_join_some_non_equality<true, true,
+                                                                   true>(
+                        key_rows_map, second_level_hash_maps, groups,
+                        build_table_rows, probe_table_rows, V_build_map,
+                        V_probe_map, build_write_idxs, probe_write_idxs,
+                        build_is_left, left_table_infos, right_table_infos,
+                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                        null_bitmap_right, cond_func);
+                } else {
+                    insert_probe_table_equi_join_some_non_equality<true, true,
+                                                                   false>(
+                        key_rows_map, second_level_hash_maps, groups,
+                        build_table_rows, probe_table_rows, V_build_map,
+                        V_probe_map, build_write_idxs, probe_write_idxs,
+                        build_is_left, left_table_infos, right_table_infos,
+                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                        null_bitmap_right, cond_func);
                 }
-                auto& group_map =
-                    second_level_hash_maps[first_level_group_id - 1];
-                // Check if the group already exists, if it doesn't this
-                // will insert a value.
-                size_t& second_level_group_id = group_map[i_build];
-                if (second_level_group_id == 0) {
-                    // Update the value of group_id stored in the hash map
-                    // as well since its pass by reference.
-                    second_level_group_id = groups.size() + 1;
-                    groups.emplace_back();
-                }
-                groups[second_level_group_id - 1].emplace_back(i_build);
+            } else {
+                insert_probe_table_equi_join_some_non_equality<true, false,
+                                                               false>(
+                    key_rows_map, second_level_hash_maps, groups,
+                    build_table_rows, probe_table_rows, V_build_map,
+                    V_probe_map, build_write_idxs, probe_write_idxs,
+                    build_is_left, left_table_infos, right_table_infos,
+                    col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                    null_bitmap_right, cond_func);
             }
         } else {
-            for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
-                // Check if the group already exists, if it doesn't this
-                // will insert a value.
-                size_t& group_id = entList[i_build];
-                // group_id==0 means key doesn't exist in map
-                if (group_id == 0) {
-                    // Update the value of group_id stored in the hash map
-                    // as well since its pass by reference.
-                    group_id = groups.size() + 1;
-                    groups.emplace_back();
-                }
-                groups[group_id - 1].emplace_back(i_build);
-            }
-        }
-        ev_groups.finalize();
-        //
-        // Now iterating and determining how many entries we have to do.
-        //
-        size_t n_bytes = (groups.size() + 7) >> 3;
-        std::vector<uint8_t> V_build_map(n_bytes, 0);
-        // We now iterate over all entries of the probe table in order to get
-        // the entries in the build_write_idxs and probe_write_idxs.
-
-        // TODO: Refactor code paths into helper functions.
-        if (uses_cond_func) {
-            // If 'uses_cond_func' we have a separate check to search
-            // second level hashes. We place the condition before the loop
-            // to avoid overhead.
-            for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
-                size_t i_probe_shift = i_probe + build_table_rows;
-                auto iter = entList.find(i_probe_shift);
-                if (iter == entList.end()) {
-                    if (probe_table_outer) {
-                        if (probe_miss_needs_reduction) {
-                            SetBitTo(V_probe_map.data(), i_probe, false);
-                        } else {
-                            build_write_idxs.emplace_back(-1);
-                            probe_write_idxs.emplace_back(i_probe);
-                        }
-                    }
+            if (probe_table_outer) {
+                if (probe_miss_needs_reduction) {
+                    insert_probe_table_equi_join_some_non_equality<false, true,
+                                                                   true>(
+                        key_rows_map, second_level_hash_maps, groups,
+                        build_table_rows, probe_table_rows, V_build_map,
+                        V_probe_map, build_write_idxs, probe_write_idxs,
+                        build_is_left, left_table_infos, right_table_infos,
+                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                        null_bitmap_right, cond_func);
                 } else {
-                    // If the first level matches, check each second level
-                    // hash.
-                    UNORD_MAP_CONTAINER<
-                        size_t, size_t,
-                        joinHashFcts::SecondLevelHashHashJoinTable,
-                        joinHashFcts::SecondLevelKeyEqualHashJoinTable>
-                        group_map = second_level_hash_maps[iter->second - 1];
-
-                    bool has_match = false;
-                    // Iterate over all of the keys and compare each group.
-                    // TODO [BE-1300]: Explore tsl:sparse_map
-                    for (auto& item : group_map) {
-                        size_t pos = item.second - 1;
-                        std::vector<size_t>& group = groups[pos];
-                        // Select a single member
-                        size_t cmp_row = group[0];
-                        size_t left_ind = 0;
-                        size_t right_ind = 0;
-                        if (build_is_left) {
-                            left_ind = cmp_row;
-                            right_ind = i_probe;
-                        } else {
-                            left_ind = i_probe;
-                            right_ind = cmp_row;
-                        }
-                        bool match = cond_func(
-                            left_table_infos.data(), right_table_infos.data(),
-                            col_ptrs_left.data(), col_ptrs_right.data(),
-                            null_bitmap_left.data(), null_bitmap_right.data(),
-                            left_ind, right_ind);
-                        if (match) {
-                            // If our group matches, add every row and
-                            // update the bitmap
-                            SetBitTo(V_build_map.data(), pos, true);
-                            has_match = true;
-                            for (size_t idx = 0; idx < group.size(); idx++) {
-                                size_t j_build = group[idx];
-                                build_write_idxs.emplace_back(j_build);
-                                probe_write_idxs.emplace_back(i_probe);
-                            }
-                        }
-                    }
-                    if (!has_match && probe_table_outer) {
-                        // If there is no match, update the probe table row.
-                        if (probe_miss_needs_reduction) {
-                            SetBitTo(V_probe_map.data(), i_probe, false);
-                        } else {
-                            build_write_idxs.emplace_back(-1);
-                            probe_write_idxs.emplace_back(i_probe);
-                        }
-                    }
+                    insert_probe_table_equi_join_some_non_equality<false, true,
+                                                                   false>(
+                        key_rows_map, second_level_hash_maps, groups,
+                        build_table_rows, probe_table_rows, V_build_map,
+                        V_probe_map, build_write_idxs, probe_write_idxs,
+                        build_is_left, left_table_infos, right_table_infos,
+                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                        null_bitmap_right, cond_func);
                 }
-            }
-        } else {
-            for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
-                size_t i_probe_shift = i_probe + build_table_rows;
-                auto iter = entList.find(i_probe_shift);
-                if (iter == entList.end()) {
-                    if (probe_table_outer) {
-                        if (probe_miss_needs_reduction) {
-                            SetBitTo(V_probe_map.data(), i_probe, false);
-                        } else {
-                            build_write_idxs.emplace_back(-1);
-                            probe_write_idxs.emplace_back(i_probe);
-                        }
-                    }
-                } else {
-                    // If the build table entry are present in output as
-                    // well, then we need to keep track whether they are
-                    // used or not by the probe table.
-                    std::vector<size_t>& group = groups[iter->second - 1];
-                    size_t pos = iter->second - 1;
-                    SetBitTo(V_build_map.data(), pos, true);
-                    for (size_t idx = 0; idx < group.size(); idx++) {
-                        size_t j_build = group[idx];
-                        build_write_idxs.emplace_back(j_build);
-                        probe_write_idxs.emplace_back(i_probe);
-                    }
-                }
-            }
-        }
-
-        // Perform the reduction on build table misses if necessary
-        if (build_miss_needs_reduction) {
-            MPI_Allreduce_bool_or(V_build_map);
-        }
-        int pos_build_disp = 0;
-        // Add missing rows for outer joins when there are no matching build
-        // table groups.
-        for (size_t pos = 0; pos < groups.size(); pos++) {
-            std::vector<size_t>& group = groups[pos];
-            bool bit = GetBit(V_build_map.data(), pos);
-            if (!bit) {
-                for (size_t idx = 0; idx < group.size(); idx++) {
-                    size_t j_build = group[idx];
-                    // For build_miss_needs_reduction=True, the output table
-                    // is distributed. Since the table in input is
-                    // replicated, we dispatch it by rank.
-                    if (build_miss_needs_reduction) {
-                        int node = pos_build_disp % n_pes;
-                        if (node == myrank) {
-                            build_write_idxs.emplace_back(j_build);
-                            probe_write_idxs.emplace_back(-1);
-                        }
-                        pos_build_disp++;
-                    } else {
-                        build_write_idxs.emplace_back(j_build);
-                        probe_write_idxs.emplace_back(-1);
-                    }
-                }
+            } else {
+                insert_probe_table_equi_join_some_non_equality<false, false,
+                                                               false>(
+                    key_rows_map, second_level_hash_maps, groups,
+                    build_table_rows, probe_table_rows, V_build_map,
+                    V_probe_map, build_write_idxs, probe_write_idxs,
+                    build_is_left, left_table_infos, right_table_infos,
+                    col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                    null_bitmap_right, cond_func);
             }
         }
     } else {
-        // The loop over the build table.
-        // entries are stored one by one and all of them are put even if
-        // identical in value.
-        // No need to keep track of the usage of the build table.
-        // This code path is selected whenever the build table is an inner
-        // join.
-
-        tracing::Event ev_groups("calc_groups", parallel_trace);
-        // TODO: Refactor code paths into helper functions.
-        if (uses_cond_func) {
-            // If 'uses_cond_func' we have a separate check to search
-            // second level hashes. We place the condition before the loop
-            // to avoid overhead..
-            for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
-                // Check if the group already exists, if it doesn't this
-                // will insert a value.
-                size_t& first_level_group_id = entList[i_build];
-                // first_level_group_id==0 means the equality condition
-                // doesn't have a match
-                if (first_level_group_id == 0) {
-                    // Update the value of first_level_group_id stored in
-                    // the hash map as well since its pass by reference.
-                    first_level_group_id = second_level_hash_maps.size() + 1;
-                    UNORD_MAP_CONTAINER<
-                        size_t, size_t,
-                        joinHashFcts::SecondLevelHashHashJoinTable,
-                        joinHashFcts::SecondLevelKeyEqualHashJoinTable>
-                        group_map({}, second_level_hash_fct,
-                                  second_level_equal_fct);
-                    second_level_hash_maps.emplace_back(group_map);
-                }
-                auto& group_map =
-                    second_level_hash_maps[first_level_group_id - 1];
-                // Check if the group already exists, if it doesn't this
-                // will insert a value.
-                size_t& second_level_group_id = group_map[i_build];
-                if (second_level_group_id == 0) {
-                    // Update the value of group_id stored in the hash map
-                    // as well since its pass by reference.
-                    second_level_group_id = groups.size() + 1;
-                    groups.emplace_back();
-                }
-                groups[second_level_group_id - 1].emplace_back(i_build);
-            }
-
-        } else {
-            for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
-                // Check if the group already exists, if it doesn't this
-                // will insert a value.
-                size_t& group_id = entList[i_build];
-                // group_id==0 means key doesn't exist in map
-                if (group_id == 0) {
-                    // Update the value of group_id stored in the hash map
-                    // as well since its pass by reference.
-                    group_id = groups.size() + 1;
-                    groups.emplace_back();
-                }
-                groups[group_id - 1].emplace_back(i_build);
-            }
-        }
-        ev_groups.finalize();
-        //
-        // Now iterating and determining how many entries we have to do.
-        //
-
-        // We now iterate over all entries of the probe table in order to get
-        // the entries in build_write_idxs and probe_write_idxs.
-
-        // TODO: Refactor code paths into helper functions.
-        if (uses_cond_func) {
-            // If 'uses_cond_func' we have a separate check to search
-            // second level hashes. We place the condition before the loop
-            // to avoid overhead.
-            for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
-                size_t i_probe_shift = i_probe + build_table_rows;
-                auto iter = entList.find(i_probe_shift);
-                if (iter == entList.end()) {
-                    if (probe_table_outer) {
-                        if (probe_miss_needs_reduction) {
-                            SetBitTo(V_probe_map.data(), i_probe, false);
-                        } else {
-                            build_write_idxs.emplace_back(-1);
-                            probe_write_idxs.emplace_back(i_probe);
-                        }
-                    }
+        if (build_table_outer) {
+            if (probe_table_outer) {
+                if (probe_miss_needs_reduction) {
+                    insert_probe_table_equi_join_all_equality<true, true, true>(
+                        key_rows_map, groups, build_table_rows,
+                        probe_table_rows, V_build_map, V_probe_map,
+                        build_write_idxs, probe_write_idxs);
                 } else {
-                    // If the first level matches, check each second level
-                    // hash.
-                    UNORD_MAP_CONTAINER<
-                        size_t, size_t,
-                        joinHashFcts::SecondLevelHashHashJoinTable,
-                        joinHashFcts::SecondLevelKeyEqualHashJoinTable>
-                        group_map = second_level_hash_maps[iter->second - 1];
-
-                    bool has_match = false;
-                    // Iterate over all of the keys and compare each group.
-                    // TODO [BE-1300]: Explore tsl:sparse_map
-                    for (auto& item : group_map) {
-                        size_t pos = item.second - 1;
-                        std::vector<size_t>& group = groups[pos];
-                        // Select a single member
-                        size_t cmp_row = group[0];
-                        size_t left_ind = 0;
-                        size_t right_ind = 0;
-                        if (build_is_left) {
-                            left_ind = cmp_row;
-                            right_ind = i_probe;
-                        } else {
-                            left_ind = i_probe;
-                            right_ind = cmp_row;
-                        }
-                        bool match = cond_func(
-                            left_table_infos.data(), right_table_infos.data(),
-                            col_ptrs_left.data(), col_ptrs_right.data(),
-                            null_bitmap_left.data(), null_bitmap_right.data(),
-                            left_ind, right_ind);
-                        if (match) {
-                            // If our group matches, add every row
-                            has_match = true;
-                            for (size_t idx = 0; idx < group.size(); idx++) {
-                                size_t j_build = group[idx];
-                                build_write_idxs.emplace_back(j_build);
-                                probe_write_idxs.emplace_back(i_probe);
-                            }
-                        }
-                    }
-                    if (!has_match && probe_table_outer) {
-                        // If there is no match, update the probe table row.
-                        if (probe_miss_needs_reduction) {
-                            SetBitTo(V_probe_map.data(), i_probe, false);
-                        } else {
-                            build_write_idxs.emplace_back(-1);
-                            probe_write_idxs.emplace_back(i_probe);
-                        }
-                    }
+                    insert_probe_table_equi_join_all_equality<true, true,
+                                                              false>(
+                        key_rows_map, groups, build_table_rows,
+                        probe_table_rows, V_build_map, V_probe_map,
+                        build_write_idxs, probe_write_idxs);
                 }
+            } else {
+                insert_probe_table_equi_join_all_equality<true, false, false>(
+                    key_rows_map, groups, build_table_rows, probe_table_rows,
+                    V_build_map, V_probe_map, build_write_idxs,
+                    probe_write_idxs);
             }
-
         } else {
-            for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
-                size_t i_probe_shift = i_probe + build_table_rows;
-                auto iter = entList.find(i_probe_shift);
-                if (iter == entList.end()) {
-                    if (probe_table_outer) {
-                        if (probe_miss_needs_reduction) {
-                            SetBitTo(V_probe_map.data(), i_probe, false);
-                        } else {
-                            build_write_idxs.emplace_back(-1);
-                            probe_write_idxs.emplace_back(i_probe);
-                        }
-                    }
+            if (probe_table_outer) {
+                if (probe_miss_needs_reduction) {
+                    insert_probe_table_equi_join_all_equality<false, true,
+                                                              true>(
+                        key_rows_map, groups, build_table_rows,
+                        probe_table_rows, V_build_map, V_probe_map,
+                        build_write_idxs, probe_write_idxs);
                 } else {
-                    // If the build table entry are present in output as
-                    // well, then we need to keep track whether they are
-                    // used or not by the probe table.
-                    std::vector<size_t>& group = groups[iter->second - 1];
-                    for (auto& j_build : group) {
-                        build_write_idxs.emplace_back(j_build);
-                        probe_write_idxs.emplace_back(i_probe);
-                    }
+                    insert_probe_table_equi_join_all_equality<false, true,
+                                                              false>(
+                        key_rows_map, groups, build_table_rows,
+                        probe_table_rows, V_build_map, V_probe_map,
+                        build_write_idxs, probe_write_idxs);
                 }
+            } else {
+                insert_probe_table_equi_join_all_equality<false, false, false>(
+                    key_rows_map, groups, build_table_rows, probe_table_rows,
+                    V_build_map, V_probe_map, build_write_idxs,
+                    probe_write_idxs);
             }
         }
     }
-    tracing::Event ev_clear_map("dealloc_hashmap", parallel_trace);
+
+    tracing::Event ev_clear_map("dealloc_hashmaps", parallel_trace);
     // Data structures used during computation of the tuples can become
     // quite large and their deallocation can take a non-negligible amount
     // of time. We dealloc them here to free memory for the next stage and
     // also to trace dealloc time
-    std::vector<std::vector<size_t>>().swap(
-        groups);  // force groups vector to dealloc
-    entList.clear();
-    entList.reserve(0);  // try to force dealloc of hashmap
-    // Force second_level_hash_maps vector to dealloc. This should
-    // deallocate the hashmaps as well.
-    std::vector<UNORD_MAP_CONTAINER<
-        size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
-        joinHashFcts::SecondLevelKeyEqualHashJoinTable>>()
-        .swap(second_level_hash_maps);
+    delete key_rows_map;
+    // Delete all the hash maps in the non-equality function case.
+    for (auto map : *second_level_hash_maps) {
+        delete map;
+    }
+    delete second_level_hash_maps;
 
     // Delete the hashes
     delete[] hashes_left;
@@ -1170,23 +1589,33 @@ table_info* hash_join_table_inner(
         delete[] build_nonequal_key_hashes;
     }
     ev_clear_map.finalize();
-    // In replicated case, we put the probe rows in distributed output
-    if (probe_table_outer && probe_miss_needs_reduction) {
-        MPI_Allreduce_bool_or(V_probe_map);
-        int pos = 0;
-        for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
-            bool bit = GetBit(V_probe_map.data(), i_probe);
-            // The replicated input table is dispatched over the rows in the
-            // distributed output.
-            if (!bit) {
-                int node = pos % n_pes;
-                if (node == myrank) {
-                    build_write_idxs.emplace_back(-1);
-                    probe_write_idxs.emplace_back(i_probe);
-                }
-                pos++;
-            }
+
+    // Handle updating the indices for any misses in the short table.
+    if (build_table_outer) {
+        if (build_miss_needs_reduction) {
+            insert_build_table_misses<true>(V_build_map, groups,
+                                            build_write_idxs, probe_write_idxs,
+                                            myrank, n_pes);
+        } else {
+            insert_build_table_misses<false>(V_build_map, groups,
+                                             build_write_idxs, probe_write_idxs,
+                                             myrank, n_pes);
         }
+    }
+
+    tracing::Event ev_clear_groups("dealloc_groups", parallel_trace);
+    // Delete the groups now that they are no longer needed.
+    for (auto group : *groups) {
+        delete group;
+    }
+    delete groups;
+    ev_clear_groups.finalize();
+
+    // In replicated case, we put the long rows in distributed output
+    if (probe_miss_needs_reduction) {
+        insert_probe_table_broadcast_misses(V_probe_map, build_write_idxs,
+                                            probe_write_idxs, probe_table_rows,
+                                            myrank, n_pes);
     }
     ev_tuples.add_attribute("output_nrows", probe_write_idxs.size());
     ev_tuples.finalize();
@@ -1210,45 +1639,13 @@ table_info* hash_join_table_inner(
     //        and the operation is not a join in Pandas.
     std::vector<uint8_t> last_col_use_left(n_tot_left, 0);
     std::vector<uint8_t> last_col_use_right(n_tot_right, 0);
-    if (extra_data_col) {
-        size_t i = 0;
-        last_col_use_left[i] = 1;
-        last_col_use_right[i] = 1;
-    }
-    for (size_t i = 0; i < n_tot_left; i++) {
-        if (i < n_key && vect_same_key[i] == 1) {
-            // Key is shared by both tables
-            last_col_use_left[i] = 2;
-            last_col_use_right[i] = 2;
-        } else {
-            // Column is only in the left table.
-            last_col_use_left[i] = 3;
-        }
-    }
-    for (size_t i = 0; i < n_tot_right; i++) {
-        // There are two cases where we put the column in output:
-        // ---It is a right key column with different name from the left.
-        // ---It is a right data column
-        if (i >= n_key ||
-            (i < n_key && vect_same_key[i < n_key ? i : 0] == 0 && !is_join)) {
-            // TODO: Why do we check !is_join?
-            // Column is only in the right table.
-            last_col_use_right[i] = 4;
-        }
-    }
-    // If the arrays aren't used in the output decref immediately.
-    for (size_t i = 0; i < n_tot_left; i++) {
-        if (last_col_use_left[i] == 0) {
-            array_info* left_arr = work_left_table->columns[i];
-            decref_array(left_arr);
-        }
-    }
-    for (size_t i = 0; i < n_tot_right; i++) {
-        if (last_col_use_right[i] == 0) {
-            array_info* right_arr = work_right_table->columns[i];
-            decref_array(right_arr);
-        }
-    }
+
+    generate_col_last_use_info(
+        last_col_use_left, last_col_use_right, work_left_table,
+        work_right_table, n_tot_left, n_tot_right, n_key, vect_same_key,
+        key_in_output, left_cond_func_cols_set, right_cond_func_cols_set,
+        extra_data_col, is_join);
+
     // Determine the number of rows in your local chunk of the output.
     // This is passed to Python in case all columns are dead.
     uint64_t num_rows = probe_write_idxs.size();
@@ -1259,7 +1656,7 @@ table_info* hash_join_table_inner(
     // ensure we match the expected column order (as opposed to build/probe).
 
     // Inserting the optional column in the case of merging on column and
-    // index.
+    // an index.
     if (extra_data_col) {
         tracing::Event ev_fill_optional("fill_extra_data_col", parallel_trace);
         size_t i = 0;
@@ -1288,13 +1685,16 @@ table_info* hash_join_table_inner(
     // Inserting the Left side of the table
     tracing::Event ev_fill_left("fill_left", parallel_trace);
     int idx = 0;
-    for (size_t i = 0; i < n_tot_left; i++) {
-        if (i < n_key && vect_same_key[i] == 1) {
-            // We are in the case of a key that has the same name on left
-            // and right. This means that additional NaNs cannot happen.
-            array_info* left_arr = work_left_table->columns[i];
-            array_info* right_arr = work_right_table->columns[i];
-            if (key_in_output[key_in_output_idx]) {
+
+    // Insert the key columns
+    for (size_t i = 0; i < n_key; i++) {
+        // Check if this key column is included.
+        if (key_in_output[key_in_output_idx++]) {
+            if (vect_same_key[i] == 1) {
+                // If we are merging the same in two table then
+                // additional NaNs cannot happen.
+                array_info* left_arr = work_left_table->columns[i];
+                array_info* right_arr = work_right_table->columns[i];
                 if (build_is_left) {
                     out_arrs.emplace_back(RetrieveArray_TwoColumns(
                         left_arr, right_arr, build_write_idxs,
@@ -1304,25 +1704,17 @@ table_info* hash_join_table_inner(
                         right_arr, left_arr, build_write_idxs,
                         probe_write_idxs));
                 }
-                idx++;
-            }
-            // Decref columns that are no longer used
-            if (last_col_use_left[i] == 2) {
-                decref_array(left_arr);
-            }
-            if (last_col_use_right[i] == 2) {
-                decref_array(right_arr);
-            }
-            key_in_output_idx++;
-        } else {
-            // Check if a column may be eliminated from the output
-            bool check_key_in_output =
-                (i < n_key) || (left_cond_func_cols_set->contains(i));
-            array_info* left_arr = work_left_table->columns[i];
-            // We are in data case or in the case of a key that is taken
-            // only from one side. Therefore we have to plan for the
-            // possibility of additional NaN.
-            if (!check_key_in_output || key_in_output[key_in_output_idx]) {
+                // Decref columns that are no longer used
+                if (last_col_use_left[i] == 2) {
+                    decref_array(left_arr);
+                }
+                if (last_col_use_right[i] == 2) {
+                    decref_array(right_arr);
+                }
+            } else {
+                // We are just inserting the keys so converting to a nullable
+                // array depends on the type of join.
+                array_info* left_arr = work_left_table->columns[i];
                 bool use_nullable_arr = use_nullable_arr_type[idx];
                 if (build_is_left) {
                     out_arrs.push_back(RetrieveArray_SingleColumn(
@@ -1331,34 +1723,56 @@ table_info* hash_join_table_inner(
                     out_arrs.push_back(RetrieveArray_SingleColumn(
                         left_arr, probe_write_idxs, use_nullable_arr));
                 }
-                idx++;
+                // Decref columns that are no longer used
+                if (last_col_use_left[i] == 3) {
+                    decref_array(left_arr);
+                }
             }
-            // Decref columns that are no longer used
-            if (last_col_use_left[i] == 3) {
-                decref_array(left_arr);
-            }
-            if (check_key_in_output) {
-                key_in_output_idx++;
-            }
+            // update the output indices
+            idx++;
+        }
+    }
+    // Insert the data columns
+    for (size_t i = n_key; i < n_tot_left; i++) {
+        if (left_cond_func_cols_set->contains(i) &&
+            !key_in_output[key_in_output_idx++]) {
+            // If this data column is used in the non equality
+            // condition we have to check if its in the output.
+            continue;
+        }
+        array_info* left_arr = work_left_table->columns[i];
+        bool use_nullable_arr = use_nullable_arr_type[idx];
+        if (build_is_left) {
+            out_arrs.push_back(RetrieveArray_SingleColumn(
+                left_arr, build_write_idxs, use_nullable_arr));
+        } else {
+            out_arrs.push_back(RetrieveArray_SingleColumn(
+                left_arr, probe_write_idxs, use_nullable_arr));
+        }
+        // update the output indices
+        idx++;
+        // Decref columns that are no longer used
+        if (last_col_use_left[i] == 3) {
+            decref_array(left_arr);
         }
     }
     // Delete to free memory
     delete left_cond_func_cols_set;
     ev_fill_left.finalize();
-    tracing::Event ev_fill_right("fill_right", parallel_trace);
+
     // Inserting the right side of the table.
-    for (size_t i = 0; i < n_tot_right; i++) {
-        // There are two cases where we put the column in output:
-        // ---It is a right key column with different name from the left.
-        // ---It is a right data column
-        bool is_new_key =
-            i < n_key && vect_same_key[i < n_key ? i : 0] == 0 && !is_join;
-        if (i >= n_key || is_new_key) {
-            array_info* right_arr = work_right_table->columns[i];
-            // Check if a column may be eliminated from the output.
-            bool check_key_in_output =
-                is_new_key || (right_cond_func_cols_set->contains(i));
-            if (!check_key_in_output || key_in_output[key_in_output_idx]) {
+    tracing::Event ev_fill_right("fill_right", parallel_trace);
+
+    // Insert right keys
+    for (size_t i = 0; i < n_key; i++) {
+        // vect_same_key[i] == 0 means this key doesn't become a natural
+        // join and get clobbered. The !is_join is unclear but seems to be
+        // because DataFrame.join always merged with the index of the right
+        // table, so this could be a bug in handling index cases.
+        if (vect_same_key[i] == 0 && !is_join) {
+            // If we might insert a key we have to verify it is in the output.
+            if (key_in_output[key_in_output_idx++]) {
+                array_info* right_arr = work_right_table->columns[i];
                 bool use_nullable_arr = use_nullable_arr_type[idx];
                 if (build_is_left) {
                     out_arrs.push_back(RetrieveArray_SingleColumn(
@@ -1367,20 +1781,44 @@ table_info* hash_join_table_inner(
                     out_arrs.push_back(RetrieveArray_SingleColumn(
                         right_arr, build_write_idxs, use_nullable_arr));
                 }
+                // update the output indices
                 idx++;
-            }
-            // Decref columns that are no longer used
-            if (last_col_use_right[i] == 4) {
-                decref_array(right_arr);
-            }
-            if (check_key_in_output) {
-                key_in_output_idx++;
+                // Decref columns that are no longer used
+                if (last_col_use_right[i] == 4) {
+                    decref_array(right_arr);
+                }
             }
         }
     }
+    // Insert the data columns
+    for (size_t i = n_key; i < n_tot_right; i++) {
+        if (right_cond_func_cols_set->contains(i) &&
+            !key_in_output[key_in_output_idx++]) {
+            // If this data column is used in the non equality
+            // condition we have to check if its in the output.
+            continue;
+        }
+        array_info* right_arr = work_right_table->columns[i];
+        bool use_nullable_arr = use_nullable_arr_type[idx];
+        if (build_is_left) {
+            out_arrs.push_back(RetrieveArray_SingleColumn(
+                right_arr, probe_write_idxs, use_nullable_arr));
+        } else {
+            out_arrs.push_back(RetrieveArray_SingleColumn(
+                right_arr, build_write_idxs, use_nullable_arr));
+        }
+        // update the output indices
+        idx++;
+        // Decref columns that are no longer used
+        if (last_col_use_right[i] == 4) {
+            decref_array(right_arr);
+        }
+    }
+
     // Delete to free memory
     delete right_cond_func_cols_set;
     ev_fill_right.finalize();
+
     // Create indicator column if indicator=True
     if (indicator) {
         tracing::Event ev_indicator("create_indicator", parallel_trace);
@@ -1411,6 +1849,7 @@ table_info* hash_join_table_inner(
             }
         }
         out_arrs.emplace_back(indicator_col);
+        ev_indicator.finalize();
     }
 
     // Delete the inputs
