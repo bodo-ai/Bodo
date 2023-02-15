@@ -254,7 +254,7 @@ def untuple_if_one_tuple(v):
 def untuple_if_one_tuple_overload(v):
     """if 'v' is a single element tuple, return 'v[0]' to avoid unnecessary tuple value."""
     if isinstance(v, types.BaseTuple) and len(v.types) == 1:
-        return lambda v: v[0]
+        return lambda v: v[0]  # pragma: no cover
 
     return lambda v: v
 
