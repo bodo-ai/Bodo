@@ -223,10 +223,10 @@ jobs:
       fi
       echo "artifactory_os_dir: $artifactory_os_dir"
 
-      # we build non-Linux packages only for releases and weekly runs, see conda-build command
+      # We build non-Linux packages only for releases and weekly runs, see conda-build command
       ./buildscripts/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
 
       if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
         ./buildscripts/azure/trigger_ami_build.sh $artifactory_channel $artifactory_os_dir $PLATFORM_DEV_RELEASE $BODO_VERSION
       fi
-    displayName: 'Publish Bodo Binary to Artifactory'
+    displayName: 'Publish Bodo Binary'
