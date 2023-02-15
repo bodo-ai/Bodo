@@ -1640,7 +1640,7 @@ def replace_func(
     func.__globals__.update(glbls)
 
     # create explicit arg variables for defaults if func has any
-    # XXX: inine_closure_call() can't handle defaults properly
+    # XXX: inline_closure_call() can't handle defaults properly
     if pysig is not None:
         pre_nodes = [] if pre_nodes is None else pre_nodes
         scope = next(iter(pass_info.func_ir.blocks.values())).scope
