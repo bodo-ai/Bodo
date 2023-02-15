@@ -1373,6 +1373,38 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
 
     HashLookupIn32bitTable hash_fct{hashes};
 
+    // use faster specialized implementation for common 1 key cases
+    if (n_keys == 1) {
+        array_info* arr = table->columns[0];
+        bodo_array_type::arr_type_enum arr_type = arr->arr_type;
+        Bodo_CTypes::CTypeEnum dtype = arr->dtype;
+
+        // macro to reduce code duplication
+#ifndef GROUPBY_INFO_IMPL_1_KEY
+#define GROUPBY_INFO_IMPL_1_KEY(ARRAY_TYPE, DTYPE)                        \
+    if (arr_type == ARRAY_TYPE && dtype == DTYPE) {                       \
+        using KeyType = KeysEqualComparatorOneKey<ARRAY_TYPE, DTYPE>;     \
+        KeyType equal_fct{arr};                                           \
+        using rh_flat_t =                                                 \
+            UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable, \
+                                KeyType>;                                 \
+        rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);          \
+        get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table,    \
+                            key_cols, hashes, nunique_hashes,             \
+                            check_for_null_keys, key_dropna,              \
+                            UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);  \
+        return;                                                           \
+    }
+#endif
+
+        GROUPBY_INFO_IMPL_1_KEY(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::INT32);
+        GROUPBY_INFO_IMPL_1_KEY(bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::INT64);
+        GROUPBY_INFO_IMPL_1_KEY(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME);
+        GROUPBY_INFO_IMPL_1_KEY(bodo_array_type::DICT, Bodo_CTypes::STRING);
+    }
+
     // use faster specialized implementation for common 2 key cases
     if (n_keys == 2) {
         array_info* arr1 = table->columns[0];
@@ -1402,7 +1434,7 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
     }
 #endif
 
-        // int32/(int32, int64, datetime)
+        // int32/(int32, int64, datetime, dict-encoded)
         GROUPBY_INFO_IMPL_2_KEYS(
             bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32,
             bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32);
@@ -1412,7 +1444,10 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
         GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
                                  Bodo_CTypes::INT32, bodo_array_type::NUMPY,
                                  Bodo_CTypes::DATETIME);
-        // int64/(int32, int64, datetime)
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                 Bodo_CTypes::INT32, bodo_array_type::DICT,
+                                 Bodo_CTypes::STRING);
+        // int64/(int32, int64, datetime, dict-encoded)
         GROUPBY_INFO_IMPL_2_KEYS(
             bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT64,
             bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32);
@@ -1422,7 +1457,10 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
         GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
                                  Bodo_CTypes::INT64, bodo_array_type::NUMPY,
                                  Bodo_CTypes::DATETIME);
-        // datetime/(int32, int64, datetime)
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                 Bodo_CTypes::INT64, bodo_array_type::DICT,
+                                 Bodo_CTypes::STRING);
+        // datetime/(int32, int64, datetime, dict-encoded)
         GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
                                  bodo_array_type::NULLABLE_INT_BOOL,
                                  Bodo_CTypes::INT32);
@@ -1431,7 +1469,19 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
                                  Bodo_CTypes::INT64);
         GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
                                  bodo_array_type::NUMPY, Bodo_CTypes::DATETIME);
-
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                                 bodo_array_type::DICT, Bodo_CTypes::STRING);
+        // dict-encoded/(int32, int64, datetime, dict-encoded)
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                                 bodo_array_type::NULLABLE_INT_BOOL,
+                                 Bodo_CTypes::INT32);
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                                 bodo_array_type::NULLABLE_INT_BOOL,
+                                 Bodo_CTypes::INT64);
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                                 bodo_array_type::NUMPY, Bodo_CTypes::DATETIME);
+        GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                                 bodo_array_type::DICT, Bodo_CTypes::STRING);
 #undef GROUPBY_INFO_IMPL_2_KEYS
     }
 
