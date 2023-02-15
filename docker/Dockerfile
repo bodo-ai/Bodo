@@ -6,15 +6,17 @@ RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 #ENV http_proxy http://proxy-chain.intel.com:911
 #ENV https_proxy http://proxy-chain.intel.com:911
 
-RUN apt-get update && apt-get install -y wget bzip2 git vim make
-RUN wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-RUN chmod +x miniconda.sh
-RUN ./miniconda.sh -b
-ENV PATH="/root/miniconda3/bin/:${PATH}"
-#RUN conda create -n Bodo -c ehsantn -c anaconda -c conda-forge bodo
-RUN conda create -n Bodo -c ehsantn -c anaconda -c conda-forge bodo
+# Ubuntu Install. Best to do in 1 line and remove cache at end
+# https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#run
+RUN apt-get update && apt-get install -y wget bzip2 git vim make && rm -rf /var/lib/apt/lists/*
 
-RUN echo "export PATH=/root/miniconda3/bin/:${PATH}" >> /root/.bashrc
+# Setup Mambaforge
+RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh \
+	&& chmod +x mambaforge.sh \
+	&& ./mambaforge.sh -b
+ENV PATH /root/mambaforge/bin:${PATH}
+RUN conda create -n Bodo -c ehsantn -c anaconda -c conda-forge bodo
+RUN echo "export PATH=/root/mambaforge/bin/:${PATH}" >> /root/.bashrc
 RUN echo "source activate Bodo" >> /root/.bashrc
 
 #ENV http_proxy ""
