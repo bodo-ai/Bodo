@@ -31,6 +31,7 @@ phases:
 
   post_build:
     commands:
+      - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
       - echo Entered the post-build phase...
       - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/run_unittests.sh
       - ./buildscripts/aws/CI_if_changes.sh buildscripts/bodosql/test.sh
