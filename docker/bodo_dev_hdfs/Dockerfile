@@ -1,31 +1,27 @@
-FROM ubuntu:latest AS env_setup
-#
-# The docker is compiled for example with the command
-# docker build -t bodo_dev_hdfs .
-#
-
+# Make sure to build the docker image from the top folder:
+# docker build -t bodo_dev_hdfs -f docker/bodo_dev_hdfs/Dockerfile .
+FROM --platform=linux/amd64 ubuntu:latest AS env_setup
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /root
-#
-# Ubuntu installs and Mambaforge
-#
-RUN apt-get update && apt-get install -y wget bzip2 git vim make curl \
-	&& wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh \
-	&& chmod +x mambaforge.sh\
+
+# Ubuntu Install. Best to do in 1 line and remove cache at end
+# https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#run
+RUN apt-get update && apt-get install -y wget bzip2 git vim && rm -rf /var/lib/apt/lists/*
+
+# Setup Mambaforge
+RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh \
+	&& chmod +x mambaforge.sh \
 	&& ./mambaforge.sh -b
-ENV PATH /root/mambaforge/bin/:${PATH}
+ENV PATH /root/mambaforge/bin:${PATH}
 
-#
 # Creation of the BODODEV environment
-#
-RUN mamba create -n BODODEV -y numpy scipy pandas=${BODO_PD_VERSION:-'1.4.*'} boost-cpp=1.74.0 cmake h5py mpich mpi 'gcc_linux-64>=9' 'gxx_linux-64>=9' python=3.9 -c conda-forge
-RUN mamba install -n BODODEV -y numba=0.55.2 'hdf5=1.12.*=*mpich*' pyarrow=9.0.0 fsspec -c conda-forge
-RUN mamba install -n BODODEV -y sqlalchemy pymysql xlrd openpyxl mpi4py cython hdfs3 ccache -c conda-forge
-RUN mamba install -n BODODEV -y openjdk=11 pytest flaky ipython
-# RUN mamba install -n BODODEV scikit-learn='1.1.*' -c conda-forge
+ADD buildscripts/envs/conda-lock.yml conda-lock.yml
+RUN mamba install -y -c conda-forge conda-lock
+RUN conda-lock install --mamba -n BODODEV conda-lock.yml
+RUN mamba install -y -n BODODEV -c conda-forge flaky ipython
 
-# installing hadoop and libhdfs (JNI)
+# Installing hadoop and libhdfs (JNI)
 ARG hdfs=3.3.2
 ENV HADOOP_HOME=/opt/hadoop-${hdfs}
 ENV HADOOP_YARN_HOME=$HADOOP_HOME
@@ -37,19 +33,13 @@ COPY core-site.xml $HADOOP_HOME/etc/hadoop/
 COPY hdfs-site.xml $HADOOP_HOME/etc/hadoop/
 COPY reset_hdfs.sh /root
 
-# install ssh server
-RUN apt-get update
-RUN apt-get install -y openssh-server
-
 # configure ssh
 RUN ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa
 RUN cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
 RUN chmod 0600 ~/.ssh/authorized_keys
 
-#
-# set up initial .bashrc for ssh
-#
-
+# Set up initial .bashrc for ssh
+RUN apt-get update && apt-get install -y openssh-server
 RUN echo "export PATH=$HOME/mambaforge/bin:$PATH" >> ~/.bashrc
 RUN echo "source activate BODODEV" >> ~/.bashrc
 

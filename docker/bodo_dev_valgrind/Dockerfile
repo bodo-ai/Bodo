@@ -1,17 +1,24 @@
+# Make sure to build the docker image from the top folder:
+# docker build -t bodo_dev_valgrind -f docker/bodo_dev_valgrind/Dockerfile .
+
 # A initial version
 # TODO: hava Python compiled from source to work with conda
-FROM buildpack-deps:stretch
+FROM --platform=linux/amd64 buildpack-deps:stretch
 ARG PYTHON_VERSION=3.10.1
 
 ENV PYTHONMALLOC malloc
 ENV MKL_DISABLE_FAST_MM 1
+
+# Ubuntu Install. Best to do in 1 line and remove cache at end
+# https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#run
+RUN apt-get update && apt-get install -y wget bzip2 git vim make curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 
 # Builds python with the proper flags, and then copies the suppression file generated during
 # the build process to /src.
 RUN set -e \
-    && apt-get update && apt-get install -y  valgrind --no-install-recommends  \
+    && apt-get update && apt-get install -y valgrind --no-install-recommends  \
     && curl "https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tgz" > python.tgz  \
     && mkdir -p /usr/src/python \
     && tar -xzC /usr/src/python --strip-components=1 -f python.tgz \
@@ -31,23 +38,18 @@ RUN set -e \
     && ln -s $(which pip3) /usr/local/bin/pip
 
 WORKDIR /root
-RUN wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh \
-    && chmod +x miniconda.sh\
-    && ./miniconda.sh -b
-ENV PATH /root/miniconda3/bin/:${PATH}
-#
+RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh \
+	&& chmod +x mambaforge.sh \
+	&& ./mambaforge.sh -b
+ENV PATH /root/mambaforge/bin:${PATH}
+
 # Creation of the BODODEV environment
-#
-RUN conda create -n BODODEV numpy scipy pandas=${BODO_PD_VERSION:-'1.4.*'} boost-cpp=1.74.0 cmake h5py mpich mpi 'gcc_linux-64>=9' 'gxx_linux-64>=9' python=3.9 -c conda-forge
-RUN conda install -n BODODEV python hdf5='1.10.*=*mpich*' -c conda-forge
-RUN conda install -n BODODEV python pyarrow=9.0.0 fsspec>=2021.09 -c conda-forge
-RUN conda install -n BODODEV python numba=0.55.1 -c conda-forge
-RUN conda install -v -n BODODEV python nomkl numpy -c conda-forge
-RUN conda install -v -n BODODEV scikit-learn='1.1.*' -c conda-forge
-RUN conda install -v -n BODODEV python pytest sqlalchemy pymysql xlrd openpyxl mpi4py cython -c conda-forge
-#
+ADD buildscripts/envs/conda-lock.yml conda-lock.yml
+RUN mamba install -y -c conda-forge conda-lock
+RUN conda-lock install --mamba -n BODODEV conda-lock.yml
+RUN mamba install -y -n BODODEV nomkl -c conda-forge
+
 # Creation of the .bashrc file
-#
 RUN echo "source activate BODODEV" > ~/.bashrc
 
 ENTRYPOINT ["bash"]
