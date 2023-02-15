@@ -2431,8 +2431,7 @@ def _gen_join_cpp_call(
             f"{len(right_col_nums)}, "
             f"total_rows_np.ctypes)\n"
         )
-    func_text += "    delete_table(table_left)\n"
-    func_text += "    delete_table(table_right)\n"
+    # Note: Deleting table_left and table_right is done inside C++
     out_types = "(py_table_type, index_col_type)"
     func_text += f"    out_data = cpp_table_to_py_data(out_table, out_col_inds, {out_types}, total_rows_np[0], {join_node.n_out_table_cols})\n"
     if join_node.has_live_out_table_var:
