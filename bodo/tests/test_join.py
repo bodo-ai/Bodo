@@ -433,7 +433,7 @@ def test_merge_decimal(memory_leak_check):
 
 def test_merge_empty_suffix_keys(memory_leak_check):
     """
-    Test merge(): merging on keys and having an empty sufix.
+    Test merge(): merging on keys and having an empty suffix.
     """
 
     def f1(df1, df2):

@@ -222,7 +222,7 @@ class Join(ir.Stmt):
         self.left_len_var = left_len_var
         self.right_len_var = right_len_var
         # Columns within the output table type that are actually used.
-        # These will be updated during optimzations. For more
+        # These will be updated during optimizations. For more
         # information see 'join_remove_dead_column'.
         self.n_out_table_cols = len(self.out_col_names)
         self.out_used_cols = set(range(self.n_out_table_cols))
@@ -327,7 +327,7 @@ class Join(ir.Stmt):
                     suffixed_right_name = str(c) + suffix_right
                     out_col_num = out_df_type.column_index[suffixed_right_name]
                     # If a column is both a data column and a key
-                    # from left we have an extra column.
+                    # from right we have an extra column.
                     if left_index and not right_index and i in self.right_key_set:
                         extra_data_col_num = out_df_type.column_index[c]
                         out_to_input_col_map[extra_data_col_num] = ("right", i)
