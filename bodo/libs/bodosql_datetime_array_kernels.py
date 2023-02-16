@@ -1236,12 +1236,12 @@ def _install_dt_diff_fn_overload():
 _install_dt_diff_fn_overload()
 
 
-def date_trunc(date_or_time_part, ts_arg):  # pragma: no cover
+def date_trunc(date_or_time_part, date_or_time_expr):  # pragma: no cover
     pass
 
 
 @overload(date_trunc)
-def overload_date_trunc(date_or_time_part, ts_arg):
+def overload_date_trunc(date_or_time_part, date_or_time_expr):
     """
     Truncates a given Timestamp argument to the provided
     date_or_time_part. This corresponds to DATE_TRUNC inside snowflake
@@ -1249,36 +1249,37 @@ def overload_date_trunc(date_or_time_part, ts_arg):
     Args:
         date_or_time_part (types.Type): A string scalar or array stating how to truncate
             the timestamp
-        tz_arg (types.Type): A tz-aware or tz-naive Timestamp or Timestamp array to be truncated.
+        date_or_time_expr (types.Type): A bodo.Time object or bodo.Time array or tz-aware or tz-naive Timestamp or
+            Timestamp array to be truncated.
 
     Returns:
-        types.Type: A tz-aware or tz-naive Timestamp or Timestamp array
+        types.Type: The bodo.Time/timestamp after being truncated, which has same type as date_or_time_expr
     """
     if isinstance(date_or_time_part, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.date_trunc",
-            ["date_or_time_part", "ts_arg"],
+            ["date_or_time_part", "date_or_time_expr"],
             0,
         )
-    if isinstance(ts_arg, types.optional):  # pragma: no cover
+    if isinstance(date_or_time_expr, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.date_trunc",
-            ["date_or_time_part", "ts_arg"],
+            ["date_or_time_part", "date_or_time_expr"],
             1,
         )
 
-    def impl(date_or_time_part, ts_arg):  # pragma: no cover
-        return date_trunc_util(date_or_time_part, ts_arg)
+    def impl(date_or_time_part, date_or_time_expr):  # pragma: no cover
+        return date_trunc_util(date_or_time_part, date_or_time_expr)
 
     return impl
 
 
-def date_trunc_util(date_or_time_part, ts_arg):  # pragma: no cover
+def date_trunc_util(date_or_time_part, date_or_time_expr):  # pragma: no cover
     pass
 
 
 @overload(date_trunc_util)
-def overload_date_trunc_util(date_or_time_part, ts_arg):
+def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
     """
     Truncates a given Timestamp argument to the provided
     date_or_time_part. This corresponds to DATE_TRUNC inside snowflake
@@ -1286,78 +1287,108 @@ def overload_date_trunc_util(date_or_time_part, ts_arg):
     Args:
         date_or_time_part (types.Type): A string scalar or array stating how to truncate
             the timestamp
-        tz_arg (types.Type): A tz-aware or tz-naive Timestamp or Timestamp array to be truncated.
+        date_or_time_expr (types.Type): A bodo.Time object or bodo.Time array or tz-aware or tz-naive Timestamp or
+            Timestamp array to be truncated.
 
     Returns:
-        types.Type: A tz-aware or tz-naive Timestamp or Timestamp array
+        types.Type: The bodo.Time/timestamp after being truncated, which has same type as date_or_time_expr
     """
     verify_string_arg(date_or_time_part, "DATE_TRUNC", "date_or_time_part")
-    verify_datetime_arg_allow_tz(ts_arg, "DATE_TRUNC", "ts_arg")
-    tz_literal = get_tz_if_exists(ts_arg)
-
-    arg_names = ["date_or_time_part", "ts_arg"]
-    arg_types = [date_or_time_part, ts_arg]
+    arg_names = ["date_or_time_part", "date_or_time_expr"]
+    arg_types = [date_or_time_part, date_or_time_expr]
     propagate_null = [True, True]
-    # We perform computation on Timestamp types.
-    box_str = (
-        "bodo.utils.conversion.box_if_dt64"
-        if bodo.utils.utils.is_array_typ(ts_arg, True)
-        else ""
-    )
-    # When returning a scalar we return a pd.Timestamp type.
-    unbox_str = (
-        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-        if bodo.utils.utils.is_array_typ(ts_arg, True)
-        else ""
-    )
     # Standardize the input to limit the condition in the loop
     scalar_text = "part_str = bodo.libs.bodosql_array_kernels.standardize_snowflake_date_time_part(arg0)\n"
-    if tz_literal is None:
-        scalar_text += f"arg1 = {box_str}(arg1)\n"
-    scalar_text += "if part_str == 'quarter':\n"
-    scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month= (3*(arg1.quarter - 1)) + 1, day=1, tz=tz_literal)\n"
-    scalar_text += "elif part_str == 'year':\n"
-    scalar_text += (
-        "    out_val = pd.Timestamp(year=arg1.year, month=1, day=1, tz=tz_literal)\n"
-    )
-    scalar_text += "elif part_str == 'month':\n"
-    scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month=arg1.month, day=1, tz=tz_literal)\n"
-    scalar_text += "elif part_str == 'day':\n"
-    scalar_text += "    out_val = arg1.normalize()\n"
-    scalar_text += "elif part_str == 'week':\n"
-    # If we are already at the start of the week just normalize.
-    scalar_text += "    if arg1.dayofweek == 0:\n"
-    scalar_text += "        out_val = arg1.normalize()\n"
-    scalar_text += "    else:\n"
-    scalar_text += (
-        "        out_val = arg1.normalize() - pd.tseries.offsets.Week(n=1, weekday=0)\n"
-    )
-    scalar_text += "elif part_str == 'hour':\n"
-    scalar_text += "    out_val = arg1.floor('H')\n"
-    scalar_text += "elif part_str == 'minute':\n"
-    scalar_text += "    out_val = arg1.floor('min')\n"
-    scalar_text += "elif part_str == 'second':\n"
-    scalar_text += "    out_val = arg1.floor('S')\n"
-    scalar_text += "elif part_str == 'millisecond':\n"
-    scalar_text += "    out_val = arg1.floor('ms')\n"
-    scalar_text += "elif part_str == 'microsecond':\n"
-    scalar_text += "    out_val = arg1.floor('us')\n"
-    scalar_text += "elif part_str == 'nanosecond':\n"
-    scalar_text += "    out_val = arg1\n"
-    scalar_text += "else:\n"
-    # TODO: Include part_str when non-constant exception strings are supported.
-    scalar_text += "    raise ValueError('Invalid date or time part for DATE_TRUNC')\n"
-    if tz_literal is None:
-        # In the tz-naive array case we have to convert the Timestamp to dt64
-        scalar_text += f"res[i] = {unbox_str}(out_val)\n"
-    else:
-        scalar_text += f"res[i] = out_val\n"
+    if is_valid_time_arg(date_or_time_expr):  # truncate a bodo.Time object/array
+        scalar_text += "if part_str in ('quarter', 'year', 'month', 'week', 'day'):\n"
+        # date_or_time_part is too large, set everything to 0
+        scalar_text += "    res[i] = bodo.Time()\n"
+        scalar_text += "else:\n"
+        scalar_text += "    if part_str == 'hour':\n"
+        scalar_text += "        res[i] = bodo.Time(arg1.hour)\n"
+        scalar_text += "    elif part_str == 'minute':\n"
+        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute)\n"
+        scalar_text += "    elif part_str == 'second':\n"
+        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second)\n"
+        scalar_text += "    elif part_str == 'millisecond':\n"
+        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, " \
+                       "arg1.millisecond)\n"
+        scalar_text += "    elif part_str == 'microsecond':\n"
+        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, " \
+                       "arg1.millisecond, arg1.microsecond)\n"
+        scalar_text += "    elif part_str == 'nanosecond':\n"
+        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, " \
+                       "arg1.millisecond, arg1.microsecond, arg1.nanosecond)\n"
+        scalar_text += "    else:\n"
+        scalar_text += "        raise ValueError('Invalid time part for DATE_TRUNC')\n"
+        out_dtype = bodo.TimeArrayType(9)
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+        )
+    else:  # Truncate a timestamp object/array
+        verify_datetime_arg_allow_tz(date_or_time_expr, "DATE_TRUNC", "date_or_time_expr")
+        tz_literal = get_tz_if_exists(date_or_time_expr)
+        # We perform computation on Timestamp types.
+        box_str = (
+            "bodo.utils.conversion.box_if_dt64"
+            if bodo.utils.utils.is_array_typ(date_or_time_expr, True)
+            else ""
+        )
+        # When returning a scalar we return a pd.Timestamp type.
+        unbox_str = (
+            "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+            if bodo.utils.utils.is_array_typ(date_or_time_expr, True)
+            else ""
+        )
+        if tz_literal is None:
+            scalar_text += f"arg1 = {box_str}(arg1)\n"
+        scalar_text += "if part_str == 'quarter':\n"
+        scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month= (3*(arg1.quarter - 1)) + 1, day=1, tz=tz_literal)\n"
+        scalar_text += "elif part_str == 'year':\n"
+        scalar_text += (
+            "    out_val = pd.Timestamp(year=arg1.year, month=1, day=1, tz=tz_literal)\n"
+        )
+        scalar_text += "elif part_str == 'month':\n"
+        scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month=arg1.month, day=1, tz=tz_literal)\n"
+        scalar_text += "elif part_str == 'day':\n"
+        scalar_text += "    out_val = arg1.normalize()\n"
+        scalar_text += "elif part_str == 'week':\n"
+        # If we are already at the start of the week just normalize.
+        scalar_text += "    if arg1.dayofweek == 0:\n"
+        scalar_text += "        out_val = arg1.normalize()\n"
+        scalar_text += "    else:\n"
+        scalar_text += (
+            "        out_val = arg1.normalize() - pd.tseries.offsets.Week(n=1, weekday=0)\n"
+        )
+        scalar_text += "elif part_str == 'hour':\n"
+        scalar_text += "    out_val = arg1.floor('H')\n"
+        scalar_text += "elif part_str == 'minute':\n"
+        scalar_text += "    out_val = arg1.floor('min')\n"
+        scalar_text += "elif part_str == 'second':\n"
+        scalar_text += "    out_val = arg1.floor('S')\n"
+        scalar_text += "elif part_str == 'millisecond':\n"
+        scalar_text += "    out_val = arg1.floor('ms')\n"
+        scalar_text += "elif part_str == 'microsecond':\n"
+        scalar_text += "    out_val = arg1.floor('us')\n"
+        scalar_text += "elif part_str == 'nanosecond':\n"
+        scalar_text += "    out_val = arg1\n"
+        scalar_text += "else:\n"
+        # TODO: Include part_str when non-constant exception strings are supported.
+        scalar_text += "    raise ValueError('Invalid date or time part for DATE_TRUNC')\n"
+        if tz_literal is None:
+            # In the tz-naive array case we have to convert the Timestamp to dt64
+            scalar_text += f"res[i] = {unbox_str}(out_val)\n"
+        else:
+            scalar_text += f"res[i] = out_val\n"
 
-    if tz_literal is None:
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
-    else:
-        out_dtype = bodo.DatetimeArrayType(tz_literal)
-
+        if tz_literal is None:
+            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+        else:
+            out_dtype = bodo.DatetimeArrayType(tz_literal)
     return gen_vectorized(
         arg_names,
         arg_types,

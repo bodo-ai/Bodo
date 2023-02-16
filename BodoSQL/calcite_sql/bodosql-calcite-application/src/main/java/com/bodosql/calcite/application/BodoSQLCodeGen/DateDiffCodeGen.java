@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTruncCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 
 import com.bodosql.calcite.application.*;
 
@@ -11,11 +12,14 @@ public class DateDiffCodeGen {
     RexNodeVisitorInfo dayVisitor = new RexNodeVisitorInfo("", arg0);
     diffExpr.append("bodo.libs.bodosql_array_kernels.date_sub_date_unit(");
     diffExpr.append(arg0).append(",");
+    String unit = standardizeTimeUnit("DATEDIFF" , arg0, false);
+    // TODO: Support TIME type input
     diffExpr.append(
-        generateDateTruncCode(dayVisitor, new RexNodeVisitorInfo("", arg1)).getExprCode());
+        generateDateTruncCode(unit, new RexNodeVisitorInfo("", arg1)).getExprCode());
+
     diffExpr.append(", ");
     diffExpr.append(
-        generateDateTruncCode(dayVisitor, new RexNodeVisitorInfo("", arg2)).getExprCode());
+        generateDateTruncCode(unit, new RexNodeVisitorInfo("", arg2)).getExprCode());
     diffExpr.append(")");
     return diffExpr.toString();
   }

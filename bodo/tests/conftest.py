@@ -9,6 +9,7 @@ import os
 import subprocess
 from typing import Protocol
 
+import pandas as pd
 import pytest
 from mpi4py import MPI
 from numba.core.runtime import rtsys
@@ -536,5 +537,72 @@ def datetime_part_strings(request):
     """
     Fixture containing a representative set of datetime part strings
     for use in testing, including aliases.
+    """
+    return request.param
+
+
+@pytest.fixture
+def time_df():
+    """
+    Fixture containing a representative set of bodo.Time object
+    for use in testing, including None object.
+    """
+    return {
+        "table1": pd.DataFrame(
+            {
+                "bodotime": pd.Series([
+                    bodo.Time(17, 33, 26, 91, 8, 79),
+                    bodo.Time(0, 24, 43, 365, 18, 74),
+                    bodo.Time(3, 59, 6, 25, 757, 3),
+                    bodo.Time(),
+                    bodo.Time(4),
+                    bodo.Time(6, 41),
+                    bodo.Time(22, 13, 57),
+                    bodo.Time(17, 34, 29, 90),
+                    bodo.Time(7, 3, 45, 876, 234),
+                    None,
+                ])
+            }
+        )
+    }
+
+
+@pytest.fixture(
+    params=[
+        "quarter",
+        "yyy",
+        "MONTH",
+        "mon",
+        "WEEK",
+        "wk",
+        "DAY",
+        "dd",
+    ]
+)
+def day_part_strings(request):
+    """
+    Fixture containing a representative set of large time unit part strings
+    (larger or equal to day) for use in testing, including aliases.
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        "HOUR",
+        "hr",
+        "MINUTE",
+        "min",
+        "SECOND",
+        "ms",
+        "microsecond",
+        "usec",
+        "nanosecs",
+    ]
+)
+def time_part_strings(request):
+    """
+    Fixture containing a representative set of small time unit part strings
+    (smaller or equal to hour) for use in testing, including aliases.
     """
     return request.param
