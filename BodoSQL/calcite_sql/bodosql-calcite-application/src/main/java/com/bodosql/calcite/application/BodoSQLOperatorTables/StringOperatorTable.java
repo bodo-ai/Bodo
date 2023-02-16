@@ -5,6 +5,8 @@ import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTabl
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
+
+import net.snowflake.client.jdbc.internal.google.type.TimeOfDayOrBuilder;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.type.*;
@@ -433,8 +435,27 @@ public final class StringOperatorTable implements SqlOperatorTable {
               OperandTypes.STRING, OperandTypes.STRING_STRING, OperandTypes.STRING_STRING_INTEGER),
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction LTRIM = SqlLibraryOperators.LTRIM;
-  public static final SqlFunction RTRIM = SqlLibraryOperators.RTRIM;
+  public static final SqlFunction LTRIM =
+      new SqlFunction(
+          "LTRIM",
+          SqlKind.OTHER,
+          ReturnTypes.VARCHAR_2000_NULLABLE,
+          null,
+          argumentRange(
+                  1, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
+          SqlFunctionCategory.STRING
+      );
+
+  public static final SqlFunction RTRIM =
+      new SqlFunction(
+          "RTRIM",
+          SqlKind.OTHER,
+          ReturnTypes.VARCHAR_2000_NULLABLE,
+          null,
+          argumentRange(
+                  1, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
+          SqlFunctionCategory.STRING
+      );
 
   public static final SqlFunction SUBSTRING_INDEX =
       new SqlFunction(
@@ -594,6 +615,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SUBSTRING_INDEX,
           SqlLibraryOperators.TRANSLATE3,
           INITCAP,
+          // TRIM,
           LTRIM,
           RTRIM,
           LEN,

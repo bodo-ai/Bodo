@@ -2067,19 +2067,19 @@ BodoSQL currently supports the following string functions:
     spaces.
 
 #### LTRIM
--   `#!sql LTRIM(str)`
+-   `#!sql LTRIM(str[, chars])`
 
-    Returns the input string, will remove all spaces from the
-    left of the string
+    Removes leading characters from a string column/literal str. 
+    These characters are specified by chars or are whitespace.
 
 #### RTRIM
--   `#!sql RTRIM(str)`
+-   `#!sql RTRIM(str[, chars])`
 
-    Returns the input string, will remove all spaces from the
-    right of the string
+    Removes trailing characters from a string column/literal str. 
+    These characters are specified by chars or are whitespace.
 
 #### TRIM
--   `#!sql TRIM(str)`
+-   `#!sql TRIM(str[, chars])`
 
     Returns the input string, will remove all spaces from the
     left and right of the string
