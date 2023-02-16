@@ -76,16 +76,12 @@ public class NumericCodeGen {
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
    * @param arg1Name The string name of arg1
-   * @param outputScalar Should the output generate scalar code.
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
-  public static RexNodeVisitorInfo getSingleArgNumericFnInfo(
-      String fnName, String arg1Expr, String arg1Name) {
+  public static RexNodeVisitorInfo getSingleArgNumericFnInfo(String fnName, String arg1Expr) {
 
-    String new_fn_name = fnName + "(" + arg1Name + ")";
     if (equivalentFnMap.containsKey(fnName)) {
-      return new RexNodeVisitorInfo(
-          new_fn_name, equivalentFnMap.get(fnName) + "(" + arg1Expr + ")");
+      return new RexNodeVisitorInfo(equivalentFnMap.get(fnName) + "(" + arg1Expr + ")");
     } else {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + " not supported");
     }
@@ -96,21 +92,17 @@ public class NumericCodeGen {
    *
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
-   * @param arg1Name The name of arg1
    * @param arg2Expr The string expression of arg2
-   * @param arg2Name The name of arg2
-   * @param outputScalar Should the output generate scalar code.
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static RexNodeVisitorInfo getDoubleArgNumericFnInfo(
-      String fnName, String arg1Expr, String arg1Name, String arg2Expr, String arg2Name) {
+      String fnName, String arg1Expr, String arg2Expr) {
 
     if (!doubleArgFns.contains(fnName)) {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + " not supported");
     }
-    String new_fn_name = fnName + "(" + arg1Name + ", " + arg2Name + ")";
     return new RexNodeVisitorInfo(
-        new_fn_name, equivalentFnMap.get(fnName) + "(" + arg1Expr + ", " + arg2Expr + ")");
+        equivalentFnMap.get(fnName) + "(" + arg1Expr + ", " + arg2Expr + ")");
   }
 
   /**
@@ -169,12 +161,10 @@ public class NumericCodeGen {
       List<BodoSQLExprType.ExprType> exprTypes,
       boolean isScalar) {
     StringBuilder exprStrBuilder = new StringBuilder();
-    StringBuilder nameStrBuilder = new StringBuilder();
     if (operandsInfo.size() == 1) {
       // One operand, we default to log10 as that is the default behavior in mySQL
       exprStrBuilder.append(
           "bodo.libs.bodosql_array_kernels.log10(" + operandsInfo.get(0).getExprCode() + ")");
-      nameStrBuilder.append("LOG(").append(operandsInfo.get(0).getName()).append(")");
     } else {
       assert operandsInfo.size() == 2;
 
@@ -184,15 +174,8 @@ public class NumericCodeGen {
           .append(",")
           .append(operandsInfo.get(1).getExprCode())
           .append(")");
-
-      nameStrBuilder
-          .append("LOG(")
-          .append(operandsInfo.get(0).getName())
-          .append(", ")
-          .append(operandsInfo.get(0).getName())
-          .append(")");
     }
-    return new RexNodeVisitorInfo(nameStrBuilder.toString(), exprStrBuilder.toString());
+    return new RexNodeVisitorInfo(exprStrBuilder.toString());
   }
 
   /**
@@ -201,23 +184,23 @@ public class NumericCodeGen {
    * @param arg1Info The VisitorInfo for the first argument.
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateToNumberCode(RexNodeVisitorInfo arg1Info, String fnName) {
-    String name = fnName + "(" + arg1Info.getName() + ")";
-    String outputExpr =
-        "bodo.libs.bodosql_array_kernels.to_number(" + arg1Info.getExprCode() + ")";
-    return new RexNodeVisitorInfo(name, outputExpr);
+  public static RexNodeVisitorInfo generateToNumberCode(
+      RexNodeVisitorInfo arg1Info, String fnName) {
+    String outputExpr = "bodo.libs.bodosql_array_kernels.to_number(" + arg1Info.getExprCode() + ")";
+    return new RexNodeVisitorInfo(outputExpr);
   }
 
   /**
-   * Helper function that handles the codegen for TRY_TO_NUMBER/TRY_TO_NUMERIC/TRY_TO_DECIMAL function
+   * Helper function that handles the codegen for TRY_TO_NUMBER/TRY_TO_NUMERIC/TRY_TO_DECIMAL
+   * function
    *
    * @param arg1Info The VisitorInfo for the first argument.
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateTryToNumberCode(RexNodeVisitorInfo arg1Info, String fnName) {
-    String name = fnName + "(" + arg1Info.getName() + ")";
+  public static RexNodeVisitorInfo generateTryToNumberCode(
+      RexNodeVisitorInfo arg1Info, String fnName) {
     String outputExpr =
         "bodo.libs.bodosql_array_kernels.try_to_number(" + arg1Info.getExprCode() + ")";
-    return new RexNodeVisitorInfo(name, outputExpr);
+    return new RexNodeVisitorInfo(outputExpr);
   }
 }

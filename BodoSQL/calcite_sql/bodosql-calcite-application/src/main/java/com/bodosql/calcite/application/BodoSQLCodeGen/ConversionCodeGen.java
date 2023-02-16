@@ -66,7 +66,6 @@ public class ConversionCodeGen {
    */
   public static RexNodeVisitorInfo generateDateFnCode(String datetimeStr) {
     return new RexNodeVisitorInfo(
-        "DATE(" + datetimeStr + ")",
         "bodo.libs.bodosql_array_kernels.create_date(" + datetimeStr + ")");
   }
 
@@ -83,18 +82,14 @@ public class ConversionCodeGen {
       throw new BodoSQLCodegenException(
           "Error, " + fnName + " with two arguments not yet supported");
     }
-    StringBuilder name = new StringBuilder();
     StringBuilder exprCode = new StringBuilder();
-
-    name.append(fnName).append("(").append(operandsInfo.get(0).getName()).append(")");
-
     exprCode
         .append("bodo.libs.bodosql_array_kernels.")
         .append(fnName.toLowerCase())
         .append("(")
         .append(operandsInfo.get(0).getExprCode())
         .append(", None)");
-    return new RexNodeVisitorInfo(name.toString(), exprCode.toString());
+    return new RexNodeVisitorInfo(exprCode.toString());
   }
 
   /**
@@ -120,7 +115,6 @@ public class ConversionCodeGen {
             "Error, format string for " + fnName + " not yet supported");
       }
     }
-    StringBuilder name = new StringBuilder();
     StringBuilder exprCode = new StringBuilder();
 
     String kernelName;
@@ -129,8 +123,6 @@ public class ConversionCodeGen {
     } else {
       kernelName = "to_timestamp";
     }
-
-    name.append(fnName).append("(").append(operandsInfo.get(0).getName()).append(")");
 
     exprCode
         .append("bodo.libs.bodosql_array_kernels.")
@@ -142,7 +134,7 @@ public class ConversionCodeGen {
         .append(", ")
         .append(scaleStr)
         .append(")");
-    return new RexNodeVisitorInfo(name.toString(), exprCode.toString());
+    return new RexNodeVisitorInfo(exprCode.toString());
   }
 
   /**
@@ -158,14 +150,13 @@ public class ConversionCodeGen {
       throw new BodoSQLCodegenException(
           "Error, format string for " + fnName + " not yet supported");
     }
-    String name = fnName + "(" + operandsInfo.get(0).getName() + ")";
     String exprCode =
         "bodo.libs.bodosql_array_kernels."
             + fnName.toLowerCase()
             + "("
             + operandsInfo.get(0).getExprCode()
             + ", None)";
-    return new RexNodeVisitorInfo(name, exprCode);
+    return new RexNodeVisitorInfo(exprCode);
   }
 
   /**
@@ -182,10 +173,9 @@ public class ConversionCodeGen {
       throw new BodoSQLCodegenException(
           "Error, format string for " + fnName + " not yet supported");
     }
-    String name = fnName + "(" + operandsInfo.get(0).getName() + ")";
     String exprCode =
         "bodo.libs.bodosql_array_kernels.to_char(" + operandsInfo.get(0).getExprCode() + ")";
-    return new RexNodeVisitorInfo(name, exprCode);
+    return new RexNodeVisitorInfo(exprCode);
   }
 
   /**
@@ -198,14 +188,13 @@ public class ConversionCodeGen {
   public static RexNodeVisitorInfo generateToBooleanFnCode(
       List<RexNodeVisitorInfo> operandsInfo, String fnName) {
     assert operandsInfo.size() == 1 : "Error, " + fnName + " function takes 1 argument";
-    String name = fnName + "(" + operandsInfo.get(0).getName() + ")";
     String exprCode =
         "bodo.libs.bodosql_array_kernels."
             + fnName.toLowerCase()
             + "("
             + operandsInfo.get(0).getExprCode()
             + ")";
-    return new RexNodeVisitorInfo(name, exprCode);
+    return new RexNodeVisitorInfo(exprCode);
   }
 
   /**
@@ -221,14 +210,13 @@ public class ConversionCodeGen {
       throw new BodoSQLCodegenException(
           fnName.toLowerCase() + ": format argument not yet supported");
     }
-    String name = fnName + "(" + operandsInfo.get(0).getName() + ")";
     String exprCode =
         "bodo.libs.bodosql_array_kernels."
             + fnName.toLowerCase()
             + "("
             + operandsInfo.get(0).getExprCode()
             + ")";
-    return new RexNodeVisitorInfo(name, exprCode);
+    return new RexNodeVisitorInfo(exprCode);
   }
 
   /**
@@ -239,7 +227,6 @@ public class ConversionCodeGen {
    */
   public static RexNodeVisitorInfo generateTimestampFnCode(String datetimeStr) {
     return new RexNodeVisitorInfo(
-        "TIMESTAMP(" + datetimeStr + ")",
         "bodo.libs.bodosql_array_kernels.create_timestamp(" + datetimeStr + ")");
   }
 }

@@ -35,18 +35,11 @@ public class CondOpCodeGen {
    * argument
    *
    * @param fnName the name of the function being called
-   * @param name1 the name of the argument
    * @param code1 the Python expression to calculate the argument
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  public static RexNodeVisitorInfo getSingleArgCondFnInfo(
-      String fnName, String name1, String code1) {
-
-    StringBuilder name = new StringBuilder(fnName);
-    name.append("(");
-    name.append(name1);
-    name.append(")");
+  public static RexNodeVisitorInfo getSingleArgCondFnInfo(String fnName, String code1) {
 
     String kernel_str;
     if (equivalentFnMap.containsKey(fnName)) {
@@ -60,7 +53,7 @@ public class CondOpCodeGen {
     expr_code.append(code1);
     expr_code.append(")");
 
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return new RexNodeVisitorInfo(expr_code.toString());
   }
 
   /**
@@ -68,22 +61,13 @@ public class CondOpCodeGen {
    * arguments
    *
    * @param fnName the name of the function being called
-   * @param name1 the name of the first argument
    * @param code1 the Python expression to calculate the first argument
-   * @param name2 the name of the second argument
    * @param code2 the Python expression to calculate the second argument
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
   public static RexNodeVisitorInfo getDoubleArgCondFnInfo(
-      String fnName, String name1, String code1, String name2, String code2) {
-
-    StringBuilder name = new StringBuilder(fnName);
-    name.append("(");
-    name.append(name1);
-    name.append(", ");
-    name.append(name2);
-    name.append(")");
+      String fnName, String code1, String code2) {
 
     String kernel_str;
     if (equivalentFnMap.containsKey(fnName)) {
@@ -99,7 +83,7 @@ public class CondOpCodeGen {
     expr_code.append(code2);
     expr_code.append(")");
 
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return new RexNodeVisitorInfo(expr_code.toString());
   }
 
   /**
@@ -171,33 +155,20 @@ public class CondOpCodeGen {
    * Return a pandas expression that replicates a call to the SQL functions COALESCE, DECODE, or any
    * of their variants.
    *
-   * @param names the names of each of the arguments
    * @param codeExprs the Python strings that calculate each of the arguments
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  public static RexNodeVisitorInfo visitVariadic(
-      RexCall fnOperation, List<String> names, List<String> codeExprs) {
+  public static RexNodeVisitorInfo visitVariadic(RexCall fnOperation, List<String> codeExprs) {
     String func_name = fnOperation.getOperator().toString();
     int n = fnOperation.operands.size();
-    StringBuilder name = new StringBuilder();
     StringBuilder expr_code = new StringBuilder();
     if (func_name == "DECODE") {
-      name.append("DECODE(");
       expr_code.append("bodo.libs.bodosql_array_kernels.decode((");
     } else {
-      name.append("COALESCE(");
       expr_code.append("bodo.libs.bodosql_array_kernels.coalesce((");
     }
 
-    for (int i = 0; i < n; i++) {
-      name.append(names.get(i));
-      if (i != n - 1) {
-        name.append(", ");
-      } else {
-        name.append(")");
-      }
-    }
     for (int i = 0; i < n; i++) {
       expr_code.append(codeExprs.get(i));
 
@@ -211,29 +182,20 @@ public class CondOpCodeGen {
       }
     }
 
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return new RexNodeVisitorInfo(expr_code.toString());
   }
 
   /**
    * Return a pandas expression that replicates a SQL IF function call. This function requires very
    * specific handling of the nullset
    *
-   * @param names the names of each of the arguments
    * @param codeExprs the Python strings that calculate each of the arguments
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  public static RexNodeVisitorInfo visitIf(
-      RexCall fnOperation, List<String> names, List<String> codeExprs) {
+  public static RexNodeVisitorInfo visitIf(RexCall fnOperation, List<String> codeExprs) {
 
-    StringBuilder name = new StringBuilder("IF(");
     StringBuilder expr_code = new StringBuilder("bodo.libs.bodosql_array_kernels.cond(");
-    name.append(names.get(0))
-        .append(", ")
-        .append(names.get(1))
-        .append(", ")
-        .append(names.get(2))
-        .append(")");
     expr_code
         .append(codeExprs.get(0))
         .append(", ")
@@ -242,6 +204,6 @@ public class CondOpCodeGen {
         .append(codeExprs.get(2))
         .append(")");
 
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return new RexNodeVisitorInfo(expr_code.toString());
   }
 }

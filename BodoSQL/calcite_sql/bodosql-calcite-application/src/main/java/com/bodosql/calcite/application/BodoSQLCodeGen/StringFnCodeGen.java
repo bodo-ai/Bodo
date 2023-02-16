@@ -60,17 +60,14 @@ public class StringFnCodeGen {
    *
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
-   * @param arg1Name The name of arg1
+   * @param fnName The name of arg1
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
-  public static RexNodeVisitorInfo getSingleArgStringFnInfo(
-      String fnName, String arg1Expr, String arg1Name) {
-    String new_fn_name = fnName + "(" + arg1Name + ")";
-
+  public static RexNodeVisitorInfo getSingleArgStringFnInfo(String fnName, String arg1Expr) {
     // If the functions has a broadcasted array kernel, always use it
     if (equivalentFnMapBroadcast.containsKey(fnName)) {
       String fn_expr = equivalentFnMapBroadcast.get(fnName);
-      return new RexNodeVisitorInfo(new_fn_name, fn_expr + "(" + arg1Expr + ")");
+      return new RexNodeVisitorInfo(fn_expr + "(" + arg1Expr + ")");
       // Otherwise, either use the scalar implementation or the Series implementation
     }
     // If we made it here, something has gone very wrong
@@ -88,15 +85,13 @@ public class StringFnCodeGen {
   public static RexNodeVisitorInfo getTwoArgStringFnInfo(
       String fnName, String inputVar, RexNodeVisitorInfo arg1Info, RexNodeVisitorInfo arg2Info) {
 
-    String new_fn_name = fnName + "(" + arg1Info.getName() + "," + arg2Info.getName() + ")";
-
     String arg1Expr = arg1Info.getExprCode();
     String arg2Expr = arg2Info.getExprCode();
 
     // All of these functions should have a broadcasted BodoSQL array kernel
     if (equivalentFnMapBroadcast.containsKey(fnName)) {
       String fn_expr = equivalentFnMapBroadcast.get(fnName);
-      return new RexNodeVisitorInfo(new_fn_name, fn_expr + "(" + arg1Expr + "," + arg2Expr + ")");
+      return new RexNodeVisitorInfo(fn_expr + "(" + arg1Expr + "," + arg2Expr + ")");
     }
 
     // If we made it here, something has gone very wrong
@@ -118,16 +113,6 @@ public class StringFnCodeGen {
       RexNodeVisitorInfo arg2Info,
       RexNodeVisitorInfo arg3Info) {
 
-    String new_fn_name =
-        fnName
-            + "("
-            + arg1Info.getName()
-            + ","
-            + arg2Info.getName()
-            + ", "
-            + arg3Info.getName()
-            + ")";
-
     String arg1Expr = arg1Info.getExprCode();
     String arg2Expr = arg2Info.getExprCode();
     String arg3Expr = arg3Info.getExprCode();
@@ -136,7 +121,7 @@ public class StringFnCodeGen {
     if (equivalentFnMapBroadcast.containsKey(fnName)) {
       String fn_expr = equivalentFnMapBroadcast.get(fnName);
       return new RexNodeVisitorInfo(
-          new_fn_name, fn_expr + "(" + arg1Expr + "," + arg2Expr + "," + arg3Expr + ")");
+          fn_expr + "(" + arg1Expr + "," + arg2Expr + "," + arg3Expr + ")");
     }
 
     // If we made it here, something has gone very wrong
@@ -150,20 +135,11 @@ public class StringFnCodeGen {
    * @return The RexNodeVisitorInfo generated that matches the Concat expression.
    */
   public static RexNodeVisitorInfo generateConcatFnInfo(List<RexNodeVisitorInfo> operandsInfo) {
-
-    StringBuilder concatName = new StringBuilder();
-    concatName.append("CONCAT(");
-    // Iterate through the list of input operands, building the name
-    for (RexNodeVisitorInfo curOpInfo : operandsInfo) {
-      concatName.append(curOpInfo.getName()).append(", ");
-    }
-    concatName.append(")");
-
-    RexNodeVisitorInfo separatorInfo = new RexNodeVisitorInfo(makeQuoted(""), makeQuoted(""));
+    RexNodeVisitorInfo separatorInfo = new RexNodeVisitorInfo(makeQuoted(""));
 
     RexNodeVisitorInfo concatWSInfo = generateConcatWSFnInfo(separatorInfo, operandsInfo);
 
-    return new RexNodeVisitorInfo(concatName.toString(), concatWSInfo.getExprCode());
+    return new RexNodeVisitorInfo(concatWSInfo.getExprCode());
   }
 
   /**
@@ -175,10 +151,6 @@ public class StringFnCodeGen {
    */
   public static RexNodeVisitorInfo generateConcatWSFnInfo(
       RexNodeVisitorInfo separatorInfo, List<RexNodeVisitorInfo> operandsInfo) {
-
-    StringBuilder concatWsName = new StringBuilder();
-    concatWsName.append("CONCAT_WS(");
-    concatWsName.append(separatorInfo.getName()).append(", ");
     StringBuilder concatCodeGen = new StringBuilder();
     concatCodeGen.append("bodo.libs.bodosql_array_kernels.concat_ws((");
 
@@ -186,12 +158,10 @@ public class StringFnCodeGen {
     // to generateBinOpCode
     for (int i = 0; i < operandsInfo.size(); i++) {
       RexNodeVisitorInfo curOpInfo = operandsInfo.get(i);
-      concatWsName.append(curOpInfo.getName()).append(", ");
       concatCodeGen.append(curOpInfo.getExprCode()).append(", ");
     }
-    concatWsName.append(")");
     concatCodeGen.append("), ").append(separatorInfo.getExprCode()).append(")");
-    return new RexNodeVisitorInfo(concatWsName.toString(), concatCodeGen.toString());
+    return new RexNodeVisitorInfo(concatCodeGen.toString());
   }
 
   /**
@@ -201,7 +171,6 @@ public class StringFnCodeGen {
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static RexNodeVisitorInfo generateInitcapInfo(List<RexNodeVisitorInfo> operandsInfo) {
-    StringBuilder name = new StringBuilder();
     StringBuilder expr_code = new StringBuilder();
 
     int argCount = operandsInfo.size();
@@ -209,27 +178,20 @@ public class StringFnCodeGen {
       throw new BodoSQLCodegenException("Error, invalid number of arguments passed to INITCAP");
     }
 
-    name.append("INITCAP(");
-    name.append(operandsInfo.get(0));
-    name.append(", ");
-
     expr_code.append("bodo.libs.bodosql_array_kernels.initcap(");
     expr_code.append(operandsInfo.get(0).getExprCode());
     expr_code.append(", ");
 
     // If 1 arguments was provided, provide a default delimeter string
     if (argCount == 1) {
-      name.append("' \\t\\n\\r\\f\\u000b!?@\\\"^#$&~_,.:;+-*%/|\\[](){}<>'");
       expr_code.append("' \\t\\n\\r\\f\\u000b!?@\\\"^#$&~_,.:;+-*%/|\\[](){}<>'");
       // Otherwise, extract the delimeter string argument
     } else {
-      name.append(operandsInfo.get(1).getName());
       expr_code.append(operandsInfo.get(1).getExprCode());
     }
 
-    name.append(")");
     expr_code.append(")");
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return new RexNodeVisitorInfo(expr_code.toString());
   }
 
   /*
@@ -245,41 +207,31 @@ public class StringFnCodeGen {
       throw new BodoSQLCodegenException("Error, invalid number of arguments passed to STRTOK");
     }
 
-    StringBuilder name = new StringBuilder();
     StringBuilder expr_code = new StringBuilder();
 
-    name.append("STRTOK(");
-    name.append(operandsInfo.get(0).getName());
     expr_code.append("bodo.libs.bodosql_array_kernels.strtok(");
     expr_code.append(operandsInfo.get(0).getExprCode());
 
     // If 1 argument is provided, use space as the delimeter
     if (argCount == 1) {
-      name.append(", ' '");
       expr_code.append(", ' '");
       // Otherwise, extract the delimeter argument
     } else {
-      name.append(", ");
-      name.append(operandsInfo.get(1).getName());
       expr_code.append(", ");
       expr_code.append(operandsInfo.get(1).getExprCode());
     }
 
     // If 1-2 arguments are provided, use 1 as the part
     if (argCount < 3) {
-      name.append(", 1");
       expr_code.append(", 1");
       // Otherwise, extract the part argument
     } else {
-      name.append(", ");
-      name.append(operandsInfo.get(2).getName());
       expr_code.append(", ");
       expr_code.append(operandsInfo.get(2).getExprCode());
     }
 
-    name.append(")");
     expr_code.append(")");
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return new RexNodeVisitorInfo(expr_code.toString());
   }
 
   /**
@@ -290,25 +242,14 @@ public class StringFnCodeGen {
    */
   public static RexNodeVisitorInfo generateEditdistance(List<RexNodeVisitorInfo> operandsInfo) {
 
-    StringBuilder name = new StringBuilder();
     StringBuilder expr_code = new StringBuilder();
 
-    name.append("EDITDISTANCE(");
-
     if (operandsInfo.size() == 2) {
-      name.append(operandsInfo.get(0).getName());
-      name.append(", ");
-      name.append(operandsInfo.get(1).getName());
       expr_code.append("bodo.libs.bodosql_array_kernels.editdistance_no_max(");
       expr_code.append(operandsInfo.get(0).getExprCode());
       expr_code.append(", ");
       expr_code.append(operandsInfo.get(1).getExprCode());
     } else if (operandsInfo.size() == 3) {
-      name.append(operandsInfo.get(0).getName());
-      name.append(", ");
-      name.append(operandsInfo.get(1).getName());
-      name.append(", ");
-      name.append(operandsInfo.get(2).getName());
       expr_code.append("bodo.libs.bodosql_array_kernels.editdistance_with_max(");
       expr_code.append(operandsInfo.get(0).getExprCode());
       expr_code.append(", ");
@@ -319,9 +260,8 @@ public class StringFnCodeGen {
       throw new BodoSQLCodegenException(
           "Error, invalid number of arguments passed to EDITDISTANCE");
     }
-    name.append(")");
     expr_code.append(")");
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return new RexNodeVisitorInfo(expr_code.toString());
   }
 
   /*
@@ -337,24 +277,19 @@ public class StringFnCodeGen {
       throw new BodoSQLCodegenException("Error, invalid number of arguments passed to INSERT");
     }
 
-    StringBuilder name = new StringBuilder();
     StringBuilder expr_code = new StringBuilder();
 
-    name.append("INSERT(");
     expr_code.append("bodo.libs.bodosql_array_kernels.insert(");
 
     for (int i = 0; i < 4; i++) {
-      name.append(operandsInfo.get(i).getName());
       expr_code.append(operandsInfo.get(i).getExprCode());
       if (i < 3) {
-        name.append(", ");
         expr_code.append(", ");
       }
     }
 
-    name.append(")");
     expr_code.append(")");
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return new RexNodeVisitorInfo(expr_code.toString());
   }
 
   /**
@@ -369,14 +304,8 @@ public class StringFnCodeGen {
       throw new BodoSQLCodegenException("Error, invalid number of arguments passed to POSITION");
     }
 
-    StringBuilder name = new StringBuilder();
     StringBuilder expr_code = new StringBuilder();
 
-    name.append("POSITION(");
-    name.append(operandsInfo.get(0).getName());
-    name.append(", ");
-    name.append(operandsInfo.get(1).getName());
-    name.append(", ");
     expr_code.append("bodo.libs.bodosql_array_kernels.position(");
     expr_code.append(operandsInfo.get(0).getExprCode());
     expr_code.append(", ");
@@ -384,19 +313,16 @@ public class StringFnCodeGen {
     expr_code.append(", ");
 
     if (operandsInfo.size() == 3) {
-      name.append(operandsInfo.get(2).getName());
       expr_code.append(operandsInfo.get(2).getExprCode());
 
       // If 2 arguments are provided, the default value for the start position
       // is 1
     } else {
-      name.append("1");
       expr_code.append("1");
     }
 
-    name.append(")");
     expr_code.append(")");
-    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    return new RexNodeVisitorInfo(expr_code.toString());
   }
 
   /**
@@ -413,12 +339,11 @@ public class StringFnCodeGen {
       RexNodeVisitorInfo stringToBeTrimmed,
       RexNodeVisitorInfo charactersToBeTrimmed) {
 
-    String outputName = trimName + "(" + stringToBeTrimmed.getName() + ", " + charactersToBeTrimmed.getName() + ")";
     String outputExpr =
         String.format(
                 "bodo.libs.bodosql_array_kernels.%s(%s, %s)",
                 trimName.toLowerCase(), stringToBeTrimmed.getExprCode(),
                 charactersToBeTrimmed.getExprCode());
-    return new RexNodeVisitorInfo(outputName, outputExpr);
+    return new RexNodeVisitorInfo(outputExpr);
   }
 }
