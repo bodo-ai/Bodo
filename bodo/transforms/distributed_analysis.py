@@ -1936,6 +1936,33 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
+        if fdef == ("union_tables", "bodo.libs.array"):
+            # output of union_tables is variable-length even if input is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            # arg0 is a tuple of "tables". Here each table is either a
+            # tuple of arrays or the actual table type. We currently require
+            # either all inputs to be replicated or none to be replicated
+            arg0 = rhs.args[0]
+            rhs_dists = array_dists[arg0.name]
+            # First unify the distributions of the inputs.
+            table_dists = []
+            for col_dists in rhs_dists:
+                table_dist = (
+                    Distribution(min(a.value for a in col_dists))
+                    if isinstance(col_dists, (list, tuple))
+                    else col_dists
+                )
+                table_dists.append(table_dist)
+            rhs_total_dist = Distribution(min(a.value for a in table_dists))
+            out_dist = Distribution(min(rhs_total_dist.value, array_dists[lhs].value))
+            self._set_var_dist(lhs, array_dists, out_dist)
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+            return
+
         if fdef == ("drop_duplicates_array", "bodo.libs.array_kernels"):
             # output of drop_duplicates_array is variable-length even if input is 1D
             if lhs not in array_dists:

@@ -1236,28 +1236,335 @@ uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
     return hashes;
 }
 
+/**
+ * @brief Verify that the dictionary arrays attempted to be unified have
+ * satified the requirements for unification.
+ *
+ * @param arrs The arrays to unify.
+ * @param is_parallels If each array is parallel.
+ */
+void ensure_dicts_can_unify(std::vector<array_info*>& arrs,
+                            std::vector<bool>& is_parallels) {
+    for (size_t i = 0; i < arrs.size(); i++) {
+        if (is_parallels[i] && !arrs[i]->has_global_dictionary) {
+            throw std::runtime_error(
+                "unify_dictionaries: array does not have global dictionary");
+        }
+        if (!arrs[i]->has_deduped_local_dictionary) {
+            throw std::runtime_error(
+                "unify_dictionaries: array's dictionary has duplicate "
+                "values");
+        }
+    }
+}
+
+/**
+ * @brief Create a Hashmap that that compares several arrays that are inserted
+ * one at a time.
+ *
+ * @param arrs[in] The arrays that may need to be inserted.
+ * @param hashes[in] The vector where hashes will be inserted.
+ * @param stored_arrs[in] The vector where arrays will be inserted
+ * @return UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t>* A
+ * pointer to the heap allocated hashmap.
+ */
+UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t, HashMultiArray,
+                    MultiArrayInfoEqual>*
+create_several_array_hashmap(std::vector<array_info*>& arrs,
+                             std::vector<uint32_t*>& hashes,
+                             std::vector<array_info*>& stored_arrs) {
+    // hash map mapping dictionary values of arr1 and arr2 to index in unified
+    // dictionary
+    HashMultiArray hash_fct{hashes};
+    MultiArrayInfoEqual equal_fct{stored_arrs};
+    UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
+                        HashMultiArray, MultiArrayInfoEqual>*
+        dict_value_to_unified_index =
+            new UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
+                                    HashMultiArray, MultiArrayInfoEqual>(
+                {}, hash_fct, equal_fct);
+    // Estimate how much to reserve. We could get an accurate
+    // estimate with hyperloglog but it seems unnecessary for this use case.
+    // For now we reserve initial capacity as the max size of any of the
+    // dictionaries.
+    std::vector<size_t> lengths(arrs.size());
+    for (size_t i = 0; i < arrs.size(); i++) {
+        lengths[i] = arrs[i]->info1->length;
+    }
+    size_t max_length = *std::max_element(lengths.begin(), lengths.end());
+    dict_value_to_unified_index->reserve(max_length);
+    return dict_value_to_unified_index;
+}
+
+/**
+ * @brief Inserts the initial dictionary to the hashmap.
+ * This dictionary is guaranteed to be unique so we never need to check
+ * if it is already in the hashmap.
+ *
+ * @param[in] dict_value_to_unified_index The hashmap
+ * @param[out] hashes The vector of hashes used by the hashmap.
+ * @param[out] stored_arrs The vector of arrays used by the hashmap.
+ * @param[in] dict THe input dictionary.
+ * @param[in] offsets The array of offsets. This is used to determine
+ * how many characters will need to be inserted into the new dictionary.
+ * @param[in] len The length of the dictionary
+ * @param[in, out] next_index The next index to insert in the hashmap.
+ * @param[in, out] n_chars The number of chars needed by the data that matches
+ * the keys in the hashmap.
+ * @param[in] hash_seed Seed for hashing
+ */
+void insert_initial_dict_to_multiarray_hashmap(
+    UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
+                        HashMultiArray, MultiArrayInfoEqual>*
+        dict_value_to_unified_index,
+    std::vector<uint32_t*>& hashes, std::vector<array_info*>& stored_arrs,
+    array_info* dict, offset_t const* const offsets, const size_t len,
+    dict_indices_t& next_index, size_t& n_chars, const uint32_t hash_seed) {
+    uint32_t* arr_hashes = new uint32_t[len];
+    hash_array(arr_hashes, dict, len, hash_seed, false,
+               /*global_dict_needed=*/false);
+    // Insert the hashes and the array
+    hashes.push_back(arr_hashes);
+    stored_arrs.push_back(dict);
+    // Update the number of chars
+    n_chars += offsets[len];
+    // Insert the dictionary values
+    for (size_t j = 0; j < len; j++) {
+        // Set the first n elements in the hash map, each of which is
+        // always unique.
+        dict_indices_t& index =
+            (*dict_value_to_unified_index)[std::pair<size_t, size_t>(j, 0)];
+        index = next_index++;
+    }
+}
+
+/**
+ * @brief Inserts a new dictionary to the hashmap.
+ *
+ * @param[in] dict_value_to_unified_index The hashmap
+ * @param[out] hashes The vector of hashes used by the hashmap.
+ * @param[out] stored_arrs The vector of arrays used by the hashmap.
+ * @param[out] arr_index_map The vector of mapping the current indices
+ * to the indices in the final dictionary.
+ * @param[out] unique_indices_all_arrs The vector that stores the vector
+ * of row numbers for the unique indices in each newly inserted array.
+ * @param[in] dict THe input dictionary.
+ * @param[in] offsets The array of offsets. This is used to determine
+ * how many characters will need to be inserted into the new dictionary.
+ * @param[in] len The length of the dictionary
+ * @param[in, out] next_index The next index to insert in the hashmap.
+ * @param[in, out] n_chars The number of chars needed by the data that matches
+ * the keys in the hashmap.
+ * @param[in] arr_num What number array being inserted is this?
+ * @param[in] hash_seed Seed for hashing
+ */
+void insert_new_dict_to_multiarray_hashmap(
+    UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
+                        HashMultiArray, MultiArrayInfoEqual>*
+        dict_value_to_unified_index,
+    std::vector<uint32_t*>& hashes, std::vector<array_info*>& stored_arrs,
+    std::vector<dict_indices_t>& arr_index_map,
+    std::vector<std::vector<dict_indices_t>*>& unique_indices_all_arrs,
+    array_info* dict, offset_t const* const offsets, const size_t len,
+    dict_indices_t& next_index, size_t& n_chars, size_t arr_num,
+    const uint32_t hash_seed) {
+    uint32_t* arr_hashes = new uint32_t[len];
+    hash_array(arr_hashes, dict, len, hash_seed, false,
+               /*global_dict_needed=*/false);
+    // Insert the hashes and the array
+    hashes.push_back(arr_hashes);
+    stored_arrs.push_back(dict);
+    // Create a vector to store the indices of the unique strings in the
+    // current arr.
+    std::vector<dict_indices_t>* unique_indices =
+        new std::vector<dict_indices_t>();
+    // Store the mapping of indices for this array
+    // Insert the dictionary values
+    for (size_t j = 0; j < len; j++) {
+        // Set the first n elements in the hash map, each of which is
+        // always unique.
+        dict_indices_t& index =
+            (*dict_value_to_unified_index)[std::pair<size_t, size_t>(j,
+                                                                     arr_num)];
+        // Hashmap's return 0 if there is no match
+        if (index == 0) {
+            // found new string
+            index = next_index++;
+            n_chars += (offsets[j + 1] - offsets[j]);
+            unique_indices->emplace_back(j);
+        }
+        arr_index_map[j] = index - 1;
+    }
+    // Add this array's unique indices to the list of all arrays.
+    unique_indices_all_arrs.emplace_back(unique_indices);
+}
+
+/**
+ * @brief Update the indices for this array. If there is only one reference to
+ * the dict_array remaining we can update the array inplace without
+ * allocating a new array.
+ *
+ * @param arr The array whose indices need to be updated.
+ * @param arr_index_map Mapping from the indices in this array to the indices
+ * in the new dictionary.
+ */
+void replace_dict_arr_indices(array_info* arr,
+                              std::vector<dict_indices_t>& arr_index_map) {
+    // Update the indices for this array. If there is only one reference to
+    // the dict_array remaining we can update the array inplace without
+    // allocating a new array.
+    bool inplace = (arr->info2->meminfo->refct == 1);
+    if (!inplace) {
+        array_info* indices = copy_array(arr->info2);
+        delete_info_decref_array(arr->info2);
+        arr->info2 = indices;
+        arr->null_bitmask = indices->null_bitmask;
+    }
+
+    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+
+    for (size_t j = 0; j < arr->info2->length; j++) {
+        if (GetBit(null_bitmask, j)) {
+            dict_indices_t& index = arr->info2->at<dict_indices_t>(j);
+            index = arr_index_map[index];
+        }
+    }
+}
+
+void unify_several_dictionaries(std::vector<array_info*>& arrs,
+                                std::vector<bool>& is_parallels) {
+    // Validate the inputs
+    ensure_dicts_can_unify(arrs, is_parallels);
+    // Keep a vector of hashes for each array. That will be checked. We will
+    // update this dynamically to avoid need to constantly rehash/update the
+    // array.
+    std::vector<uint32_t*> hashes;
+    // Keep a vector of array infos
+    std::vector<array_info*> stored_arrs;
+    // Create the hash table. We will dynamically fill the vector of
+    // hashes and dictionaries as we go.
+    const uint32_t hash_seed = SEED_HASH_JOIN;
+    UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
+                        HashMultiArray, MultiArrayInfoEqual>*
+        dict_value_to_unified_index =
+            create_several_array_hashmap(arrs, hashes, stored_arrs);
+
+    // The first dictionary will always be entirely included in the output
+    // unified dictionary.
+    array_info* base_dict = arrs[0]->info1;
+    const size_t base_len = static_cast<size_t>(base_dict->length);
+    offset_t const* const base_offsets = (offset_t*)base_dict->data2;
+    bool added_first = false;
+    size_t arr_num = 1;
+    size_t n_chars = 0;
+    dict_indices_t next_index = 1;
+
+    // Keep track of the unique indices for each array. We will use this to
+    // build the final dictionary. We will omit the base dictionary.
+    std::vector<std::vector<dict_indices_t>*> unique_indices_all_arrs;
+
+    for (size_t i = 1; i < arrs.size(); i++) {
+        // Process the dictionaries 1 at a time. To do this we always insert
+        // any new dictionary entries in order by array (first all of arr1,
+        // then anything new from arr2, etc). As a result, this means that the
+        // entries in arr{i} can never modify the indices of arr{i-1}.
+        array_info* curr_arr = arrs[i];
+        array_info* curr_dict = curr_arr->info1;
+        offset_t const* const curr_dict_offsets = (offset_t*)curr_dict->data2;
+
+        // Using this realization, we can then conclude that we can simply
+        // process the dictionaries in order and then update the dictionaries at
+        // the end.
+        if (curr_dict == base_dict) {
+            // If this dictionary matches the first one, we will
+            // not add entries or update the indices.
+            continue;
+        }
+        if (!added_first) {
+            // If this is the first arr we are adding we need to insert
+            // the base dictionary.
+            insert_initial_dict_to_multiarray_hashmap(
+                dict_value_to_unified_index, hashes, stored_arrs, base_dict,
+                base_offsets, base_len, next_index, n_chars, hash_seed);
+            added_first = true;
+        }
+        // Add the elements for the ith array.
+        const size_t curr_len = static_cast<size_t>(curr_dict->length);
+        // Store the mapping of indices for this array
+        std::vector<dict_indices_t> arr_index_map(curr_len);
+
+        insert_new_dict_to_multiarray_hashmap(
+            dict_value_to_unified_index, hashes, stored_arrs, arr_index_map,
+            unique_indices_all_arrs, curr_dict, curr_dict_offsets, curr_len,
+            next_index, n_chars, arr_num, hash_seed);
+
+        replace_dict_arr_indices(curr_arr, arr_index_map);
+
+        // Update the array number.
+        arr_num += 1;
+    }
+    if (!added_first) {
+        // No dictionary was modified so we can just return.
+        return;
+    }
+
+    delete dict_value_to_unified_index;
+    // Free all of the hashes
+    for (size_t i = 0; i < hashes.size(); i++) {
+        delete[] hashes[i];
+    }
+
+    // Now that we have all of the dictionary elements we can create the
+    // dictionary. The next_index is always num_strings + 1, so we can use that
+    // to get the length of the dictionary.
+    size_t n_strings = next_index - 1;
+    array_info* new_dict = alloc_string_array(n_strings, n_chars, 0);
+    offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2;
+
+    // Initialize the offset and string index to the end of the base dictionary
+    offset_t cur_offset = base_offsets[base_len];
+    int64_t cur_offset_idx = base_len + 1;
+
+    // copy offsets from arr1 into new_dict_str_offsets
+    memcpy(new_dict_str_offsets, base_offsets,
+           cur_offset_idx * sizeof(offset_t));
+    // copy strings from arr1 into new_dict
+    memcpy(new_dict->data1, base_dict->data1, cur_offset);
+    for (size_t i = 0; i < unique_indices_all_arrs.size(); i++) {
+        std::vector<dict_indices_t>*& arr_unique_indices =
+            unique_indices_all_arrs[i];
+        // Load the relevant array. This is the i+1 array we stored for the
+        // hashmap because we skip the base array.
+        array_info* dict_arr = stored_arrs[i + 1];
+        offset_t const* const arr_offsets = (offset_t*)dict_arr->data2;
+
+        for (dict_indices_t j : *arr_unique_indices) {
+            offset_t str_len = arr_offsets[j + 1] - arr_offsets[j];
+            memcpy(new_dict->data1 + cur_offset,
+                   dict_arr->data1 + arr_offsets[j], str_len);
+            cur_offset += str_len;
+            new_dict_str_offsets[cur_offset_idx++] = cur_offset;
+        }
+        delete arr_unique_indices;
+    }
+
+    // replace old dictionaries with a new one
+    for (size_t i = 0; i < arrs.size(); i++) {
+        delete_info_decref_array(arrs[i]->info1);
+        arrs[i]->info1 = new_dict;
+        if (i != 0) {
+            // This same array is now in N places so we need to incref it.
+            incref_array(new_dict);
+        }
+    }
+}
+
 void unify_dictionaries(array_info* arr1, array_info* arr2,
                         bool arr1_is_parallel, bool arr2_is_parallel) {
-    if (arr1_is_parallel && !arr1->has_global_dictionary) {
-        throw std::runtime_error(
-            "unify_dictionaries: first array does not have global dictionary");
-    }
-    if (!arr1->has_deduped_local_dictionary) {
-        throw std::runtime_error(
-            "unify_dictionaries: first array's dictionary has duplicate "
-            "values");
-    }
-
-    if (arr2_is_parallel && !arr2->has_global_dictionary) {
-        throw std::runtime_error(
-            "unify_dictionaries: second array does not have global dictionary");
-    }
-
-    if (!arr2->has_deduped_local_dictionary) {
-        throw std::runtime_error(
-            "unify_dictionaries: second array's dictionary has duplicate "
-            "values");
-    }
+    // Validate the inputs
+    std::vector<array_info*> arrs = {arr1, arr2};
+    std::vector<bool> is_parallel = {arr1_is_parallel, arr2_is_parallel};
+    ensure_dicts_can_unify(arrs, is_parallel);
 
     if (arr1->info1 == arr2->info1) return;  // dictionaries are the same
 
@@ -1283,13 +1590,15 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     HashDict hash_fct{arr1_dictionary_len, arr1_hashes, arr2_hashes};
     KeyEqualDict equal_fct{arr1_dictionary_len, arr1->info1,
                            arr2->info1 /*, is_na_equal*/};
-    UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict, KeyEqualDict>
-        dict_value_to_unified_index({}, hash_fct, equal_fct);
+    UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict,
+                        KeyEqualDict>* dict_value_to_unified_index =
+        new UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict, KeyEqualDict>(
+            {}, hash_fct, equal_fct);
     // Size of new dictionary could end up as large as
     // arr1_dictionary_len + arr2_dictionary_len. We could get an accurate
     // estimate with hyperloglog but it seems unnecessary for this use case.
     // For now we reserve initial capacity as the max size of the two
-    dict_value_to_unified_index.reserve(
+    dict_value_to_unified_index->reserve(
         std::max(arr1_dictionary_len, arr2_dictionary_len));
 
     // this vector stores indices of the strings in arr2 that will be
@@ -1306,14 +1615,14 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
         // TODO: Move into the constructor
         // Set the first n elements in the hash map, each of which is
         // always unique.
-        dict_indices_t& index = dict_value_to_unified_index[i];
+        dict_indices_t& index = (*dict_value_to_unified_index)[i];
         index = next_index++;
     }
 
     offset_t const* const arr2_str_offsets = (offset_t*)arr2->info1->data2;
     for (size_t i = 0; i < arr2_dictionary_len; i++) {
         dict_indices_t& index =
-            dict_value_to_unified_index[i + arr1_dictionary_len];
+            (*dict_value_to_unified_index)[i + arr1_dictionary_len];
         if (index == 0) {
             // found new string
             index = next_index++;
@@ -1323,8 +1632,7 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
         arr2_index_map[i] = index - 1;
     }
     int64_t n_strings = arr1_dictionary_len + arr2_unique_strs.size();
-    dict_value_to_unified_index.clear();
-    dict_value_to_unified_index.reserve(0);  // try to force dealloc of hashmap
+    delete dict_value_to_unified_index;
     delete[] arr1_hashes;
     delete[] arr2_hashes;
 
@@ -1356,21 +1664,5 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     incref_array(new_dict);
 
     // convert old indices to new ones for arr2
-
-    bool inplace = (arr2->info2->meminfo->refct == 1);
-    if (!inplace) {
-        array_info* indices = copy_array(arr2->info2);
-        delete_info_decref_array(arr2->info2);
-        arr2->info2 = indices;
-        arr2->null_bitmask = indices->null_bitmask;
-    }
-
-    uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask;
-
-    for (size_t i = 0; i < arr2->info2->length; i++) {
-        if (GetBit(null_bitmask2, i)) {
-            dict_indices_t& index = arr2->info2->at<dict_indices_t>(i);
-            index = arr2_index_map[index];
-        }
-    }
+    replace_dict_arr_indices(arr2, arr2_index_map);
 }

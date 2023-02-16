@@ -1744,3 +1744,77 @@ def test_tz_aware_dataframe_getitem(memory_leak_check):
     )
     check_func(impl_iat, (df,))
     check_func(impl_iloc, (df,))
+
+
+def test_union_dict_encoding(memory_leak_check):
+    """
+    Tests that a union of 3 tables with 1 dictionary encoded column
+    works and results in a dictionary encoded output.
+    """
+    new_cols_tup = bodo.utils.typing.ColNamesMetaType(("A",))
+
+    def impl(df1, df2, df3, drop_duplicates):
+        return bodo.hiframes.pd_dataframe_ext.union_dataframes(
+            (df1, df2, df3), drop_duplicates, new_cols_tup
+        )
+
+    # Generate the arrays for the columns.
+    dict_list = ["abc", "b", None, "abc", None, "b", "cde", "россия "]
+    dict_arr = pd.arrays.ArrowStringArray(
+        pa.array(
+            dict_list,
+            type=pa.dictionary(pa.int32(), pa.string()),
+        ).cast(pa.dictionary(pa.int32(), pa.large_string()))
+    )
+    str_list1 = ["ac", "e", None, "abc", None, "b", "cde"]
+    str_list2 = ["россия", "alxfe", None, "abc", None, "b", "cde", "b", "d"]
+    df1 = pd.DataFrame({"A": str_list1})
+    df2 = pd.DataFrame({"B": dict_arr})
+    df3 = pd.DataFrame({"C": str_list2})
+    for drop_duplicates in (True, False):
+        concat_list = dict_list + str_list1 + str_list2
+        py_output = pd.DataFrame({"A": concat_list})
+        if drop_duplicates:
+            py_output = py_output.drop_duplicates()
+        check_func(
+            impl,
+            (df1, df2, df3, drop_duplicates),
+            py_output=py_output,
+            sort_output=True,
+            reset_index=True,
+            use_dict_encoded_strings=False,
+        )
+
+
+def test_union_integer_promotion(memory_leak_check):
+    """
+    Tests that a union of 3 tables will promote to the maximum
+    bit width of the integer columns and will be nullable if any is
+    nullable.
+    """
+    new_cols_tup = bodo.utils.typing.ColNamesMetaType(("A",))
+
+    def impl(df1, df2, df3, drop_duplicates):
+        return bodo.hiframes.pd_dataframe_ext.union_dataframes(
+            (df1, df2, df3), drop_duplicates, new_cols_tup
+        )
+
+    # Generate the arrays for the columns.
+    int_list1 = [1, 2, 6, 4, 3, 4, 6]
+    int_list2 = [1, 2, 5, 4, None] * 3
+    int_list3 = [155, 2134, 231313, 4532532, 5425422, 532]
+    df1 = pd.DataFrame({"A": pd.Series(int_list1, dtype="int32")})
+    df2 = pd.DataFrame({"B": pd.Series(int_list2, dtype="Int8")})
+    df3 = pd.DataFrame({"C": pd.Series(int_list3, dtype="int64")})
+    for drop_duplicates in (True, False):
+        concat_list = int_list1 + int_list2 + int_list3
+        py_output = pd.DataFrame({"A": pd.Series(concat_list, dtype="Int64")})
+        if drop_duplicates:
+            py_output = py_output.drop_duplicates()
+        check_func(
+            impl,
+            (df1, df2, df3, drop_duplicates),
+            py_output=py_output,
+            sort_output=True,
+            reset_index=True,
+        )

@@ -91,6 +91,8 @@ from bodo.utils.typing import (
     create_unsupported_overload,
     decode_if_dict_array,
     dtype_to_array_type,
+    get_castable_arr_dtype,
+    get_common_scalar_dtype,
     get_index_data_arr_types,
     get_literal_value,
     get_overload_const,
@@ -103,6 +105,7 @@ from bodo.utils.typing import (
     is_heterogeneous_tuple_type,
     is_iterable_type,
     is_literal_type,
+    is_nullable,
     is_overload_bool,
     is_overload_constant_bool,
     is_overload_constant_int,
@@ -5168,6 +5171,110 @@ def handle_inplace_df_type_change(inplace, _bodo_transformed, func_name):
         raise Exception(
             "DataFrame.{}(): transform necessary for inplace".format(func_name)
         )
+
+
+def union_dataframes(df_tup, drop_duplicates, output_colnames):  # pragma: no cover
+    pass
+
+
+@overload(union_dataframes, inline="always")
+def overload_union_dataframes(
+    df_tup, drop_duplicates, output_colnames
+):  # pragma: no cover
+    # Step 1: Verify that all DataFrames have the same number of columns.
+    # We don't care about the index or the names.
+    df_types = df_tup.types
+    if len(df_types) == 0:
+        raise BodoError(
+            "union_distinct_dataframes must be called with at least one DataFrame"
+        )
+
+    num_cols = -1
+    col_types = None
+    for df_type in df_types:
+        if not isinstance(df_type, DataFrameType):
+            raise BodoError("union_distinct_dataframes must be called with DataFrames")
+        if num_cols == -1:
+            num_cols = len(df_type.data)
+            col_types = df_type.data
+        else:
+            if num_cols != len(df_type.data):
+                raise BodoError(
+                    "union_distinct_dataframes must be called with DataFrames with the same number of columns"
+                )
+            new_col_types = []
+            for i, col_typ in enumerate(col_types):
+                other_col_typ = df_type.data[i]
+                if col_typ == other_col_typ:
+                    new_col_types.append(col_typ)
+                elif (
+                    col_typ == bodo.dict_str_arr_type
+                    or other_col_typ == bodo.dict_str_arr_type
+                ):
+                    if (
+                        col_typ != bodo.string_array_type
+                        and other_col_typ != bodo.string_array_type
+                    ):
+                        # If one column is dict encoded the other column must be a string.
+                        raise BodoError(
+                            f"Unable to union table with columns of incompatible types. Found types {col_dtype} and {other_col_dtype} in column {i}."
+                        )
+                    # If either array is dict encoded we want the output to be dict encoded.
+                    new_col_types.append(bodo.dict_str_arr_type)
+                else:
+                    col_dtype = col_typ.dtype
+                    other_col_dtype = other_col_typ.dtype
+                    new_dtype, success = get_common_scalar_dtype(
+                        [col_dtype, other_col_dtype]
+                    )
+                    if not success:
+                        raise BodoError(
+                            f"Unable to union table with columns of incompatible types. Found types {col_dtype} and {other_col_dtype} in column {i}."
+                        )
+                    new_col_type = dtype_to_array_type(
+                        new_dtype, is_nullable(col_typ) or is_nullable(other_col_typ)
+                    )
+                    new_col_types.append(new_col_type)
+            col_types = tuple(new_col_types)
+
+    func_text = "def impl(df_tup, drop_duplicates, output_colnames):\n"
+    glbls = {
+        "bodo": bodo,
+        "py_table_typ": bodo.TableType(col_types),
+    }
+    # Step 2 generate code to convert each DataFrame to C++.
+    for i, df_type in enumerate(df_types):
+        # Load the DataFrame
+        func_text += f"  df{i} = df_tup[{i}]\n"
+        # TODO: If necessary create an astype to unify the types.
+        # Convert the DataFrame to a C++ table.
+        if df_type.is_table_format:
+            func_text += f"  table{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df{i})\n"
+            if df_type.data != col_types:
+                # If the types differ we need to cast.
+                func_text += f"  arg{i} = bodo.utils.table_utils.table_astype(table{i}, py_table_typ, False, _bodo_nan_to_str=False)\n"
+            else:
+                func_text += f"  arg{i} = table{i}\n"
+        else:
+            for j in range(num_cols):
+                func_text += f"  arr{i}_{j} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df{i}, {j})\n"
+                if df_type.data[j] != col_types[j]:
+                    glbls[f"arr_typ_{i}_{j}"] = get_castable_arr_dtype(col_types[j])
+                    # Cast the array if there is a type mismatch.
+                    func_text += f"  arg{i}_{j} = bodo.utils.conversion.fix_arr_dtype(arr{i}_{j}, arr_typ_{i}_{j}, False, nan_to_str=False, from_series=True)\n"
+                else:
+                    func_text += f"  arg{i}_{j} = arr{i}_{j}\n"
+            arrs = [f"arg{i}_{j}" for j in range(num_cols)]
+            tuple_inputs = ", ".join(arrs)
+            func_text += f"  arg{i} = ({tuple_inputs},)\n"
+    df_args = ", ".join([f"arg{i}" for i in range(len(df_types))])
+    # Step 3 call the C++ kernel
+    func_text += f"  out_py_table = bodo.libs.array.union_tables(({df_args}, ), drop_duplicates, py_table_typ)\n"
+    func_text += f"  out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe((out_py_table,), bodo.hiframes.pd_index_ext.init_range_index(0, len(out_py_table), 1, None), output_colnames)\n"
+    func_text += f"  return out_df\n"
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
 
 
 # Throw BodoError for top-level unsupported functions in Pandas

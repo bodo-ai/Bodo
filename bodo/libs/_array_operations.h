@@ -90,6 +90,22 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
                                         bool drop_duplicates_dict,
                                         uint32_t* hashes = nullptr);
 
+/**
+ * @brief Performs a SQL UNION operation on the input tables.
+ * This operations concatenates all of the input tables and optionally removes
+ * any duplicate rows.
+ *
+ * @param in_table Array of input tables each with the same schema.
+ * @param num_tables The number of tables in the input array.
+ * @param drop_duplicates Should duplicate rows be removed? This is used for the
+ * SQL UNION DISTINCT operation.
+ * @param is_parallel Are the tables distributed or replicated? If one table is
+ * replicated all will be replicated.
+ * @return table_info* The output table.
+ */
+table_info* union_tables(table_info** in_table, int64_t num_tables,
+                         bool drop_duplicates, bool is_parallel);
+
 /** This function is the function for the dropping of duplicated keys:
  * ---only the keys are returned
  * ---non-null entries are removed from the output.

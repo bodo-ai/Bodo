@@ -750,7 +750,6 @@ class BodoSQLContext:
         }
 
         glbls.update(lowered_globals)
-
         loc_vars = {}
         exec(
             func_text,
