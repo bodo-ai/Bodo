@@ -1067,6 +1067,22 @@ def tz_aware_df():
     return {"table1": df}
 
 
+@pytest.fixture
+def trim_df():
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(["   ABC   ", "A  BC  ", "  AB  C", "        ", ""] * 4),
+            "B": pd.Series(
+                ["+**ABC+**", "***+ABC+***", None, "**++*ABC++", "+++***+++"] * 4,
+            ),
+            "C": pd.Series(
+                ["asdafzcvdf", "dsasdaadsd", None, "xcvxcbxasd", "dakjhkjhsd"] * 4,
+            ),
+        }
+    )
+    return {"table1": df}
+
+
 @pytest.fixture(scope="module")
 def tpch_data(datapath):
     """
