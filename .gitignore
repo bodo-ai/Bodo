@@ -124,6 +124,7 @@ wheels/
 BodoSQL/share/python-wheels/
 BodoSQL/.installed.cfg
 BodoSQL/MANIFEST
+BodoSQL/test-output.xml
 
 # development documentation builds
 BodoSQL/dev_docs/_build
