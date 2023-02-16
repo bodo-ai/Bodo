@@ -21,17 +21,8 @@ public class DateAddCodeGen {
       List<RexNodeVisitorInfo> operandsInfo) {
 
     final String unit;
-    final String unit_arg = operandsInfo.get(0).getName();
-    StringBuilder name = new StringBuilder();
+    final String unit_arg = operandsInfo.get(0).getExprCode();
     StringBuilder code = new StringBuilder();
-
-    name.append("DATEADD(")
-        .append(unit_arg)
-        .append(", ")
-        .append(operandsInfo.get(1).getName())
-        .append(", ")
-        .append(operandsInfo.get(2).getName())
-        .append(")");
 
     switch (unit_arg) {
       case "\"year\"":
@@ -140,7 +131,7 @@ public class DateAddCodeGen {
         .append(operandsInfo.get(2).getExprCode())
         .append(")");
 
-    return new RexNodeVisitorInfo(name.toString(), code.toString());
+    return new RexNodeVisitorInfo(code.toString());
   }
 
   /**

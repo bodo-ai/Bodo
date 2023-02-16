@@ -43,19 +43,15 @@ public class DatetimeFnCodeGen {
    *
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
-   * @param arg1Name The name of arg1
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
-  public static RexNodeVisitorInfo getSingleArgDatetimeFnInfo(
-      String fnName, String arg1Expr, String arg1Name) {
-    StringBuilder name = new StringBuilder();
-    name.append(fnName).append("(").append(arg1Name).append(")");
+  public static RexNodeVisitorInfo getSingleArgDatetimeFnInfo(String fnName, String arg1Expr) {
     StringBuilder expr_code = new StringBuilder();
 
     // If the functions has a broadcasted array kernel, always use it
     if (equivalentFnMap.containsKey(fnName)) {
       expr_code.append(equivalentFnMap.get(fnName)).append("(").append(arg1Expr).append(")");
-      return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+      return new RexNodeVisitorInfo(expr_code.toString());
     }
 
     // If we made it here, something has gone very wrong
@@ -67,15 +63,11 @@ public class DatetimeFnCodeGen {
    *
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
-   * @param arg1Name The name of arg1
    * @param arg2Expr The string expression of arg2
-   * @param arg2Name The name of arg2
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static RexNodeVisitorInfo getDoubleArgDatetimeFnInfo(
-      String fnName, String arg1Expr, String arg1Name, String arg2Expr, String arg2Name) {
-    StringBuilder name = new StringBuilder();
-    name.append(fnName).append("(").append(arg1Name).append(", ").append(arg2Name).append(")");
+      String fnName, String arg1Expr, String arg2Expr) {
     StringBuilder expr_code = new StringBuilder();
 
     // If the functions has a broadcasted array kernel, always use it
@@ -87,7 +79,7 @@ public class DatetimeFnCodeGen {
           .append(",")
           .append(arg2Expr)
           .append(")");
-      return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+      return new RexNodeVisitorInfo(expr_code.toString());
     }
 
     // If we made it here, something has gone very wrong
@@ -103,15 +95,13 @@ public class DatetimeFnCodeGen {
    */
   public static RexNodeVisitorInfo generateMakeDateInfo(
       RexNodeVisitorInfo arg1Info, RexNodeVisitorInfo arg2Info) {
-    String name = "MAKEDATE(" + arg1Info.getName() + ", " + arg2Info.getName() + ")";
-
     String outputExpr =
         "bodo.libs.bodosql_array_kernels.makedate("
             + arg1Info.getExprCode()
             + ", "
             + arg2Info.getExprCode()
             + ")";
-    return new RexNodeVisitorInfo(name, outputExpr);
+    return new RexNodeVisitorInfo(outputExpr);
   }
 
   /**
@@ -122,23 +112,20 @@ public class DatetimeFnCodeGen {
    * @return
    */
   public static RexNodeVisitorInfo generateCurrTimestampCode(String opName, BodoTZInfo tzInfo) {
-    String fnName = opName + "()";
     String fnExpression = String.format("pd.Timestamp.now(%s)", tzInfo.getPyZone());
-    return new RexNodeVisitorInfo(fnName, fnExpression);
+    return new RexNodeVisitorInfo(fnExpression);
   }
 
   public static RexNodeVisitorInfo generateUTCTimestampCode() {
-    String fnName = "UTC_TIMESTAMP()";
     // use utcnow if/when we decide to support timezones
     String fnExpression = "pd.Timestamp.now()";
-    return new RexNodeVisitorInfo(fnName, fnExpression);
+    return new RexNodeVisitorInfo(fnExpression);
   }
 
   public static RexNodeVisitorInfo generateUTCDateCode() {
-    String fnName = "UTC_Date()";
     // use utcnow if/when we decide to support timezones
     String fnExpression = "pd.Timestamp.now().floor(freq=\"D\")";
-    return new RexNodeVisitorInfo(fnName, fnExpression);
+    return new RexNodeVisitorInfo(fnExpression);
   }
 
   /**
@@ -150,12 +137,11 @@ public class DatetimeFnCodeGen {
    */
   public static RexNodeVisitorInfo generateDateTruncCode(
       String unit, RexNodeVisitorInfo arg2Info) {
-    String name = "DATE_TRUNC(" + unit + ", " + arg2Info.getName() + ")";
     String codeGen =
         String.format(
             "bodo.libs.bodosql_array_kernels.date_trunc(\"%s\", %s)",
             unit, arg2Info.getExprCode());
-    return new RexNodeVisitorInfo(name, codeGen);
+    return new RexNodeVisitorInfo(codeGen);
   }
 
   /**
@@ -174,8 +160,6 @@ public class DatetimeFnCodeGen {
       BodoSQLExprType.ExprType arg1ExprType,
       RexNodeVisitorInfo arg2Info,
       boolean isSingleRow) {
-    String name = "DATE_FORMAT(" + arg1Info.getName() + ", " + arg2Info.getName() + ")";
-
     assert isStringLiteral(arg2Info.getExprCode());
     String pythonFormatString = convertMySQLFormatStringToPython(arg2Info.getExprCode());
     String outputExpression;
@@ -196,7 +180,7 @@ public class DatetimeFnCodeGen {
               + "))";
     }
 
-    return new RexNodeVisitorInfo(name, outputExpression);
+    return new RexNodeVisitorInfo(outputExpression);
   }
 
   /**
@@ -206,9 +190,8 @@ public class DatetimeFnCodeGen {
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static RexNodeVisitorInfo generateCurdateCode(String opName) {
-    String fnName = opName + "()";
     String fnExpression = "pd.Timestamp.now().floor(freq=\"D\")";
-    return new RexNodeVisitorInfo(fnName, fnExpression);
+    return new RexNodeVisitorInfo(fnExpression);
   }
 
   /**
@@ -228,9 +211,7 @@ public class DatetimeFnCodeGen {
             "bodo.libs.bodosql_array_kernels.add_numeric(bodo.libs.bodosql_array_kernels.multiply_numeric(bodo.libs.bodosql_array_kernels.get_year(%s),"
                 + " 100), bodo.libs.bodosql_array_kernels.get_weekofyear(%s))",
             arg0Expr, arg0Expr);
-
-    String name = "YEARWEEK(" + arg0Info.getName() + ")";
-    return new RexNodeVisitorInfo(name, outputExpr);
+    return new RexNodeVisitorInfo(outputExpr);
   }
 
   public static String intExprToIntervalDays(String expr) {
@@ -247,14 +228,13 @@ public class DatetimeFnCodeGen {
    */
   public static RexNodeVisitorInfo generateToTimeCode(
       SqlTypeName arg1Type, RexNodeVisitorInfo arg1Info, String opName) {
-    String name = opName + "(" + arg1Info.getName() + ")";
     String outputExpression =
         "bodo.libs.bodosql_array_kernels."
             + opName.toLowerCase()
             + "_util("
             + arg1Info.getExprCode()
             + ")";
-    return new RexNodeVisitorInfo(name, outputExpression);
+    return new RexNodeVisitorInfo(outputExpression);
   }
 
   /**
@@ -265,7 +245,6 @@ public class DatetimeFnCodeGen {
    */
   public static RexNodeVisitorInfo generateDateTimeTypeFromPartsCode(
       String fnName, List<RexNodeVisitorInfo> operandsInfo, String tzStr) {
-    StringBuilder name = new StringBuilder();
     StringBuilder code = new StringBuilder();
 
     boolean time_mode = false;
@@ -287,7 +266,6 @@ public class DatetimeFnCodeGen {
         timestamp_mode = true;
     }
 
-    name.append(fnName).append("(");
     code.append("bodo.libs.bodosql_array_kernels.");
 
     if (time_mode) {
@@ -300,16 +278,13 @@ public class DatetimeFnCodeGen {
 
     for (int i = 0; i < numArgs; i++) {
       if (i != 0) {
-        name.append(", ");
         code.append(", ");
       }
-      name.append(operandsInfo.get(i).getName());
       code.append(operandsInfo.get(i).getExprCode());
     }
 
     // For time, add the nanosecond argument if necessary
     if (time_mode && numArgs == 3) {
-      name.append(", 0");
       code.append(", 0");
     }
     // For date, fill in all the arguments only used for timestamp
@@ -318,19 +293,16 @@ public class DatetimeFnCodeGen {
     }
     // For timestamp, fill in the nanosecond argument if necessary
     if (timestamp_mode && numArgs < 7) {
-      name.append(", 0");
       code.append(", 0");
     }
     // For timestamp, fill in the time_zone argument if necessary
     if (timestamp_mode && numArgs < 8) {
-      name.append(", ").append(tzStr);
       code.append(", ").append(tzStr);
     }
 
-    name.append(")");
     code.append(")");
 
-    return new RexNodeVisitorInfo(name.toString(), code.toString());
+    return new RexNodeVisitorInfo(code.toString());
   }
 
   /**

@@ -15,7 +15,6 @@ public class JsonCodeGen {
   /**
    * Function that return the necessary generated code for a two argument JSON function call.
    *
-   * @param inputVar The name of the funciton
    * @param arg0 The first argument to the function
    * @param arg1 The second argument to the function
    * @return
@@ -27,8 +26,6 @@ public class JsonCodeGen {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
     }
 
-    String outputName = fnName + "(" + arg0.getName() + ", " + arg1.getName() + ")";
-
     StringBuilder output = new StringBuilder();
     output
         .append(jsonFnMap.get(fnName))
@@ -38,6 +35,6 @@ public class JsonCodeGen {
         .append(arg1.getExprCode())
         .append(")");
 
-    return new RexNodeVisitorInfo(outputName, output.toString());
+    return new RexNodeVisitorInfo(output.toString());
   }
 }

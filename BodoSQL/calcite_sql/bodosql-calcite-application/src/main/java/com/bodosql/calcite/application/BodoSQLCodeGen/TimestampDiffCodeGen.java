@@ -24,16 +24,6 @@ public class TimestampDiffCodeGen {
 
     assert exprTypes.size() == 3 && operandsInfo.size() == 3;
 
-    String outputName =
-        "TIMESTAMPDIFF("
-            + operandsInfo.get(0).getName()
-            + ", "
-            + operandsInfo.get(1).getName()
-            + ", "
-            + operandsInfo.get(2).getName()
-            + ", "
-            + ")";
-
     String flagName = operandsInfo.get(0).getExprCode();
     switch (flagName) {
       case "YEAR":
@@ -64,6 +54,6 @@ public class TimestampDiffCodeGen {
         .append(arg1Expr)
         .append(")");
 
-    return new RexNodeVisitorInfo(outputName, output.toString());
+    return new RexNodeVisitorInfo(output.toString());
   }
 }
