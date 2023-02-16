@@ -137,9 +137,6 @@ BODOSQL_TO_PYSPARK_FN_MAP = {
             "UCASE",
             "LOWER",
             "UPPER",
-            "LTRIM",
-            "RTRIM",
-            "TRIM",
         ]
     ]
     +

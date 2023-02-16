@@ -545,23 +545,11 @@ def test_string_one_arg_fns(arg, memory_leak_check):
     def impl3(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.lower(arr))
 
-    def impl4(arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.trim(arr))
-
-    def impl5(arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.ltrim(arr))
-
-    def impl6(arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.rtrim(arr))
-
     # avoid Series conversion for scalar output
     if isinstance(arg, str):
         impl1 = lambda arr: bodo.libs.bodosql_array_kernels.length(arr)
         impl2 = lambda arr: bodo.libs.bodosql_array_kernels.upper(arr)
         impl3 = lambda arr: bodo.libs.bodosql_array_kernels.lower(arr)
-        impl4 = lambda arr: bodo.libs.bodosql_array_kernels.trim(arr)
-        impl5 = lambda arr: bodo.libs.bodosql_array_kernels.ltrim(arr)
-        impl6 = lambda arr: bodo.libs.bodosql_array_kernels.rtrim(arr)
 
     def length_fn(val):
         if pd.isna(val):
@@ -572,16 +560,10 @@ def test_string_one_arg_fns(arg, memory_leak_check):
     length_fn = lambda val: None if pd.isna(val) else len(val)
     upper_fn = lambda val: None if pd.isna(val) else val.upper()
     lower_fn = lambda val: None if pd.isna(val) else val.lower()
-    trim_fn = lambda val: None if pd.isna(val) else val.strip(" ")
-    ltrim_fn = lambda val: None if pd.isna(val) else val.lstrip(" ")
-    rtrim_fn = lambda val: None if pd.isna(val) else val.rstrip(" ")
 
     answer1 = vectorized_sol((arg,), length_fn, object)
     answer2 = vectorized_sol((arg,), upper_fn, object)
     answer3 = vectorized_sol((arg,), lower_fn, object)
-    answer4 = vectorized_sol((arg,), trim_fn, object)
-    answer5 = vectorized_sol((arg,), ltrim_fn, object)
-    answer6 = vectorized_sol((arg,), rtrim_fn, object)
     check_func(
         impl1,
         (arg,),
@@ -600,27 +582,6 @@ def test_string_one_arg_fns(arg, memory_leak_check):
         impl3,
         (arg,),
         py_output=answer3,
-        check_dtype=False,
-        reset_index=True,
-    )
-    check_func(
-        impl4,
-        (arg,),
-        py_output=answer4,
-        check_dtype=False,
-        reset_index=True,
-    )
-    check_func(
-        impl5,
-        (arg,),
-        py_output=answer5,
-        check_dtype=False,
-        reset_index=True,
-    )
-    check_func(
-        impl6,
-        (arg,),
-        py_output=answer6,
         check_dtype=False,
         reset_index=True,
     )
@@ -2505,8 +2466,7 @@ def test_option_translate_initcap(memory_leak_check):
 @pytest.mark.slow
 def test_option_string_one_arg_fns(memory_leak_check):
     """
-    Tests optional support for length, upper, lower,
-    trim, ltrim, and rtrim.
+    Tests optional support for length, upper, lower.
     """
 
     def impl(A, flag):
@@ -2515,9 +2475,6 @@ def test_option_string_one_arg_fns(memory_leak_check):
             bodo.libs.bodosql_array_kernels.length(arg),
             bodo.libs.bodosql_array_kernels.upper(arg),
             bodo.libs.bodosql_array_kernels.lower(arg),
-            bodo.libs.bodosql_array_kernels.trim(arg),
-            bodo.libs.bodosql_array_kernels.ltrim(arg),
-            bodo.libs.bodosql_array_kernels.rtrim(arg),
         )
 
     str_val = "    The night is dark and full of terrors.     "
@@ -2525,11 +2482,91 @@ def test_option_string_one_arg_fns(memory_leak_check):
         a0 = len(str_val) if flag else None
         a1 = str_val.upper() if flag else None
         a2 = str_val.lower() if flag else None
-        a3 = str_val.strip(" ") if flag else None
-        a4 = str_val.lstrip(" ") if flag else None
-        a5 = str_val.rstrip(" ") if flag else None
         check_func(
             impl,
             (str_val, flag),
-            py_output=(a0, a1, a2, a3, a4, a5),
+            py_output=(a0, a1, a2),
+        )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            ("  ABC   ", " "),
+            id="scalar_without_optional_characters",
+        ),
+        pytest.param(
+            ("*-ABC-*-", "*-"),
+            id="scalar_with_optional_characters",
+        ),
+        pytest.param(
+            (
+                pd.Series(["asdfghj", "--++++--", "mnvcxzm", "   lkjdfg   "] * 4),
+                pd.Series(["a", "-+", "mn", " "] * 4),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (pd.Series(["asdfghja", "jhskdjfh", "fdsa", "  a  "] * 4), "a"),
+            id="vector_scalar_mix",
+        ),
+    ],
+)
+def test_trim_ltrim_rtrim(args, memory_leak_check):
+    """
+    Tests BodoSQL array kernels for TRIM, LTRIM, RTRIM.
+    """
+    output_is_scalar = all(not isinstance(arg, pd.Series) for arg in args)
+
+    # impl for trim
+    def trim_impl(source, chars):
+        return pd.Series(bodo.libs.bodosql_array_kernels.trim(source, chars))
+
+    if output_is_scalar:
+        return lambda source, chars: bodo.libs.bodosql_array_kernels.trim(source, chars)
+
+    # impl for ltrim
+    def ltrim_impl(source, chars):
+        return pd.Series(bodo.libs.bodosql_array_kernels.ltrim(source, chars))
+
+    if output_is_scalar:
+        ltrim_impl = lambda source, chars: bodo.libs.bodosql_array_kernels.ltrim(
+            source, chars
+        )
+
+    # impl for rtrim
+    def rtrim_impl(source, chars):
+        return pd.Series(bodo.libs.bodosql_array_kernels.rtrim(source, chars))
+
+    if output_is_scalar:
+        rtrim_impl = lambda source, chars: bodo.libs.bodosql_array_kernels.rtrim(
+            source, chars
+        )
+
+    def trim_scalar_fn(source, chars):
+        return source.strip(chars)
+
+    def ltrim_scalar_fn(source, chars):
+        return source.lstrip(chars)
+
+    def rtrim_scalar_fn(source, chars):
+        return source.rstrip(chars)
+
+    source, chars = args
+
+    impls = (trim_impl, ltrim_impl, rtrim_impl)
+    answers = (
+        vectorized_sol((source, chars), trim_scalar_fn, pd.StringDtype()),
+        vectorized_sol((source, chars), ltrim_scalar_fn, pd.StringDtype()),
+        vectorized_sol((source, chars), rtrim_scalar_fn, pd.StringDtype()),
+    )
+
+    for impl, answer in zip(impls, answers):
+        check_func(
+            impl,
+            (source, chars),
+            py_output=answer,
+            check_dtype=False,
+            reset_index=True,
         )

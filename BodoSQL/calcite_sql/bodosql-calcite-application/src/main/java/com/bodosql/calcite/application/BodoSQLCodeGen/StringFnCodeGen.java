@@ -400,40 +400,25 @@ public class StringFnCodeGen {
   }
 
   /**
-   * Function that returns the rexInfo of a L/R/Trim function Call. Eventually, this may need to be
-   * extended to handle trimming non whitespace characters
+   * Function that returns the rexInfo of a L/R/Trim function Call.
+   * Extended to handle trimming non whitespace characters
    *
-   * @param flagInfo The rexInfo of the argument that determines from which sides we trim whitespace
+   * @param trimName The argument that determines from which sides we trim characters
    * @param stringToBeTrimmed The rexInfo of the string to be trimmed
+   * @param charactersToBeTrimmed The characters to trimmed from the string
    * @return The rexVisitorInfo for the trim call
    */
   public static RexNodeVisitorInfo generateTrimFnInfo(
-      RexNodeVisitorInfo flagInfo, RexNodeVisitorInfo stringToBeTrimmed) {
-    String fnName;
-    String trimName;
+      String trimName,
+      RexNodeVisitorInfo stringToBeTrimmed,
+      RexNodeVisitorInfo charactersToBeTrimmed) {
 
-    switch (flagInfo.getExprCode()) {
-      case "BOTH":
-        fnName = "trim";
-        trimName = "TRIM";
-        break;
-      case "LEADING":
-        fnName = "ltrim";
-        trimName = "LTRIM";
-        break;
-      case "TRAILING":
-        fnName = "rtrim";
-        trimName = "RTRIM";
-        break;
-      default:
-        throw new BodoSQLCodegenException(
-            "Internal Error: Flag: " + flagInfo.getExprCode() + " not supported for Trim");
-    }
-
-    String outputName = trimName + "(" + stringToBeTrimmed.getName() + ")";
+    String outputName = trimName + "(" + stringToBeTrimmed.getName() + ", " + charactersToBeTrimmed.getName() + ")";
     String outputExpr =
         String.format(
-            "bodo.libs.bodosql_array_kernels.%s(%s)", fnName, stringToBeTrimmed.getExprCode());
+                "bodo.libs.bodosql_array_kernels.%s(%s, %s)",
+                trimName.toLowerCase(), stringToBeTrimmed.getExprCode(),
+                charactersToBeTrimmed.getExprCode());
     return new RexNodeVisitorInfo(outputName, outputExpr);
   }
 }

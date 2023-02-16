@@ -3,6 +3,9 @@
 *.pyd
 *~
 
+# Pytest artifacts
+*.xml
+
 # Setuptools distribution folder.
 /dist
 

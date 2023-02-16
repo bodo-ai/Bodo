@@ -2174,17 +2174,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
             operandsInfo.get(1).getExprCode(),
             operandsInfo.get(1).getName());
       case TRIM:
-      case LTRIM:
-      case RTRIM:
         assert operandsInfo.size() == 3;
-        // even though the SQL trim functions only take one arg, Calcite seems to optimize these
-        // into TRIM(L/R flag, 'string_to_trim', expr_to_trim)
-        // Currently, using series.str.strip is unsupported when called with arguments,
-        // which makes it difficult to strip non space values. However, this situation doesn't seem
-        // to happen with the currently added string functions, so for now it's no an issue
-        assert operandsInfo.get(1).getExprCode().equals("\" \"");
-        return generateTrimFnInfo(operandsInfo.get(0), operandsInfo.get(2));
-
+        // Calcite expects: TRIM(<chars> FROM <expr>>) or TRIM(<chars>, <expr>)
+        // However, Snowflake/BodoSQL expects: TRIM(<expr>, <chars>)
+        // So we just need to swap the arguments here.
+        return generateTrimFnInfo(fnOperation.getOperator().toString(), operandsInfo.get(2), operandsInfo.get(1));
       case NULLIF:
         assert operandsInfo.size() == 2;
         outputName =
@@ -2205,6 +2199,22 @@ public class PandasCodeGenVisitor extends RelVisitor {
         boolean isTime;
         String tzStr;
         switch (fnName) {
+          // TODO (allai5): update this in a future PR for clean-up so it re-uses the
+          // SQLLibraryOperator definition.
+          case "LTRIM":
+          case "RTRIM":
+            if (operandsInfo.size() == 1) { // no optional characters to be trimmed
+              return generateTrimFnInfo(fnName, operandsInfo.get(0),
+                      new RexNodeVisitorInfo("SPACE", "' '")); // remove spaces by default
+            }
+            else if (operandsInfo.size() == 2) {
+              return generateTrimFnInfo(fnName, operandsInfo.get(0),
+                      operandsInfo.get(1));
+            }
+            else {
+              throw new BodoSQLCodegenException(
+                      "Invalid number of arguments to TRIM: must be either 1 or 2.");
+            }
           case "WIDTH_BUCKET":
             {
               int numOps = operandsInfo.size();

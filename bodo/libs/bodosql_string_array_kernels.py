@@ -1625,15 +1625,15 @@ def upper(arr):  # pragma: no cover
     pass
 
 
-def trim(arr):  # pragma: no cover
+def trim(source, chars):  # pragma: no cover
     pass
 
 
-def ltrim(arr):  # pragma: no cover
+def ltrim(source, chars):  # pragma: no cover
     pass
 
 
-def rtrim(arr):  # pragma: no cover
+def rtrim(source, chars):  # pragma: no cover
     pass
 
 
@@ -1648,17 +1648,92 @@ def lower_util(arr):  # pragma: no cover
 def upper_util(arr):  # pragma: no cover
     pass
 
+def trim_util(source, chars):  # pragma: no cover
+    pass
 
-def trim_util(arr):  # pragma: no cover
+def ltrim_util(source, chars):  # pragma: no cover
+    pass
+
+def rtrim_util(source, chars):  # pragma: no cover
     pass
 
 
-def ltrim_util(arr):  # pragma: no cover
-    pass
+def create_trim_fn_overload(fn_name):
+    def overload_func(source, chars):
+        """Handles cases where this one argument string function recieves optional
+        arguments and forwards to the appropriate version of the real implementation"""
+        args = [source, chars]
+        for i in range(2):
+            if isinstance(args[i], types.optional):  # pragma: no cover
+                return unopt_argument(
+                    f"bodo.libs.bodosql_array_kernels.{fn_name}",
+                    ["source", "chars"],
+                    i,
+                )
+
+        func_text = "def impl(source, chars):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{fn_name}_util(source, chars)"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+
+        return loc_vars["impl"]
+
+    return overload_func
 
 
-def rtrim_util(arr):  # pragma: no cover
-    pass
+def create_trim_fn_util_overload(fn_name):
+    """Creates an overload function to support one argument string
+    functions.
+
+    Args:
+        fn_name: the function being implemented
+
+    Returns:
+        (function): a utility that takes in a string (either can be scalars
+        or vectors) and returns the corresponding component based on the desired
+        function.
+    """
+
+    def overload_trim_fn(source, chars):  # pragma: no cover
+        verify_string_arg(source, fn_name, "source")
+        verify_string_arg(chars, fn_name, "chars")
+        arg_names = ["source", "chars"]
+        arg_types = [source, chars]
+        propagate_null = [True] * 2
+        if fn_name == "ltrim":
+            scalar_text = "res[i] = arg0.lstrip(arg1)\n"
+        elif fn_name == "rtrim":
+            scalar_text = "res[i] = arg0.rstrip(arg1)\n"
+        else:
+            scalar_text = "res[i] = arg0.strip(arg1)\n"
+
+        out_dtype = bodo.string_array_type
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+        )
+
+    return overload_trim_fn
+
+
+def _install_trim_fn_overloads():
+    """Creates and installs the overloads for one argument string functions"""
+    funcs_utils_names = [
+        ("trim", trim, trim_util),
+        ("ltrim", ltrim, ltrim_util),
+        ("rtrim", rtrim, rtrim_util),
+    ]
+    for fn_name, func, util in funcs_utils_names:
+        func_overload_impl = create_trim_fn_overload(fn_name)
+        overload(func)(func_overload_impl)
+        util_overload_impl = create_trim_fn_util_overload(fn_name)
+        overload(util)(util_overload_impl)
+
+
+_install_trim_fn_overloads()
 
 
 def create_one_arg_str_fn_overload(fn_name):
@@ -1706,11 +1781,7 @@ def create_one_arg_str_fn_util_overload(fn_name):
             verify_string_arg(arr, fn_name, "arr")
             out_dtype = bodo.string_array_type
             may_cause_duplicate_dict_array_values = True
-            if "trim" in fn_name:
-                method_name = fn_name.replace("trim", "strip")
-                fn_call = f"arg0.{method_name}(' ')"
-            else:
-                fn_call = f"arg0.{fn_name}()"
+            fn_call = f"arg0.{fn_name}()"
 
         arg_names = ["arr"]
         arg_types = [arr]
@@ -1735,9 +1806,6 @@ def _install_one_arg_str_fn_overloads():
         ("length", length, length_util),
         ("lower", lower, lower_util),
         ("upper", upper, upper_util),
-        ("trim", trim, trim_util),
-        ("ltrim", ltrim, ltrim_util),
-        ("rtrim", rtrim, rtrim_util),
     ]
     for fn_name, func, util in funcs_utils_names:
         func_overload_impl = create_one_arg_str_fn_overload(fn_name)
