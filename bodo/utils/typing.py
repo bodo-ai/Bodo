@@ -1777,7 +1777,7 @@ def get_common_scalar_dtype(scalar_types):
     except numba.core.errors.NumbaNotImplementedError:
         pass
 
-    # Timestamp/dt64 can be used interchangably
+    # Timestamp/dt64 can be used interchangeably
     # TODO: Should datetime.datetime also be included?
     if scalar_types[0] in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type):
         for typ in scalar_types[1:]:
@@ -1785,7 +1785,7 @@ def get_common_scalar_dtype(scalar_types):
                 return (None, False)
         return (bodo.datetime64ns, True)
 
-    # Timedelta/td64 can be used interchangably
+    # Timedelta/td64 can be used interchangeably
     # TODO: Should datetime.timedelta also be included?
     if scalar_types[0] in (bodo.timedelta64ns, bodo.pd_timedelta_type):
         for typ in scalar_types[1:]:

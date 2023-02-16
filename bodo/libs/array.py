@@ -12,7 +12,7 @@ from numba.core import cgutils, types
 from numba.core.imputils import lower_cast
 from numba.core.typing.templates import signature
 from numba.cpython.listobj import ListInstance
-from numba.extending import intrinsic, models, register_model
+from numba.extending import intrinsic, models, overload, register_model
 from numba.np.arrayobj import _getitem_array_single_int
 
 import bodo
@@ -126,6 +126,7 @@ ll.add_symbol("get_search_regex", array_ext.get_search_regex)
 ll.add_symbol("get_replace_regex", array_ext.get_replace_regex)
 ll.add_symbol("array_info_getitem", array_ext.array_info_getitem)
 ll.add_symbol("array_info_getdata1", array_ext.array_info_getdata1)
+ll.add_symbol("union_tables", array_ext.union_tables)
 
 
 class ArrayInfoType(types.Type):
@@ -2199,6 +2200,95 @@ decref_table_array = types.ExternalFunction(
     "decref_table_array",
     types.void(table_type, types.int32),
 )
+
+
+@intrinsic
+def union_tables_cpp(typing_ctx, table_info_list_t, drop_duplicates_t, is_parallel_t):
+    assert table_info_list_t == types.List(
+        table_type
+    ), "table_info_list_t must be a list of table_type"
+    assert (
+        types.unliteral(drop_duplicates_t) == types.bool_
+    ), "drop_duplicates_t must be an boolean"
+    assert (
+        types.unliteral(is_parallel_t) == types.bool_
+    ), "is_parallel_t must be an boolean"
+
+    def codegen(context, builder, sig, args):
+        info_list, drop_duplicates, is_parallel = args
+        list_inst = numba.cpython.listobj.ListInstance(
+            context, builder, sig.args[0], info_list
+        )
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer().as_pointer(),
+                lir.IntType(64),
+                lir.IntType(1),
+                lir.IntType(1),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="union_tables"
+        )
+        args = [list_inst.data, list_inst.size, drop_duplicates, is_parallel]
+        res = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return res
+
+    return table_type(table_info_list_t, types.bool_, types.bool_), codegen
+
+
+def union_tables(tables_tup, drop_duplicates, is_parallel=False):
+    pass
+
+
+@overload(union_tables)
+def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel=False):
+    """
+    Wrapper around union_tables that allows setting is_parallel in distributed pass.
+    """
+    table_typs = table_tup.types
+    # All inputs have the same number of columns, so generate info from the first input.
+    base_typ = table_typs[0]
+    if isinstance(base_typ, bodo.TableType):
+        n_cols = len(base_typ.arr_types)
+    else:
+        # Input must be a tuple of arrays.
+        n_cols = len(base_typ.types)
+
+    glbls = {
+        "bodo": bodo,
+        "in_col_inds": MetaType(tuple(range(n_cols))),
+        "out_col_inds": np.array(range(n_cols), dtype=np.int64),
+    }
+
+    func_text = (
+        "def impl(table_tup, drop_duplicates, out_table_typ, is_parallel=False):\n"
+    )
+    # Step 1: Convert each of the inputs to a C++ table.
+    for i, table_typ in enumerate(table_typs):
+        if isinstance(table_typ, bodo.TableType):
+            func_text += f"  table{i} = table_tup[{i}]\n"
+            func_text += f"  arrs{i} = ()\n"
+            table_cols = n_cols
+        else:
+            func_text += f"  table{i} = None\n"
+            func_text += f"  arrs{i} = table_tup[{i}]\n"
+            table_cols = 0
+        func_text += f"  cpp_table{i} = bodo.libs.array.py_data_to_cpp_table(table{i}, arrs{i}, in_col_inds, {table_cols})\n"
+    # Step 2 generate code to union the C++ tables.
+    tables = [f"cpp_table{i}" for i in range(len(table_typs))]
+    tuple_inputs = ", ".join(tables)
+    func_text += f"  out_cpp_table = bodo.libs.array.union_tables_cpp([{tuple_inputs}], drop_duplicates, is_parallel)\n"
+    # Step 3 convert the C++ table to a Python table.
+    func_text += f"  out_py_table = bodo.libs.array.cpp_table_to_py_table(out_cpp_table, out_col_inds, out_table_typ)\n"
+    # Step 4 free the output C++ table without modifying the refcounts.
+    func_text += f"  bodo.libs.array.delete_table(out_cpp_table)\n"
+    func_text += f"  return out_py_table\n"
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
 
 
 @intrinsic

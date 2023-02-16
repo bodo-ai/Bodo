@@ -688,6 +688,6 @@ std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type);
  * @param table_chunks input tables which are assumed to have the same schema
  * @return table_info* concatenated table
  */
-table_info* concat_tables(std::vector<table_info*>& table_chunks);
+table_info* concat_tables(const std::vector<table_info*>& table_chunks);
 
 #endif  // _ARRAY_UTILS_H_INCLUDED

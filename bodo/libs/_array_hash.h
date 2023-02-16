@@ -280,6 +280,49 @@ struct KeyEqualDict {
     array_info* local_dictionary;
 };
 
+/**
+ * @brief Unifies dictionaries of 1 or more DICT arrays. If all
+ * arrays have a reference to the same dictionary then this function
+ * does nothing and returns.
+ * Replaces old dictionaries with the new one.
+ * Updates the indices to conform to the new dictionary.
+ *
+ * @param arrs A vector of DICT arrays that need to be unified. These must
+ * have already removed any duplicates and be consistent across ranks.
+ * @param is_parallels If arrs[i] is parallel then is_parallels[i] is true.
+ * This is used for checking the global condition for each array.
+ */
+void unify_several_dictionaries(std::vector<array_info*>& arrs,
+                                std::vector<bool>& is_parallels);
+
+// Hash comparison for comparing multiple arrays where each array is inserted
+// one at a time.
+struct HashMultiArray {
+    uint32_t operator()(const std::pair<size_t, size_t> hash_info) const {
+        const size_t iRow = hash_info.first;
+        const size_t iTable = hash_info.second;
+        return hashes[iTable][iRow];
+    }
+    std::vector<uint32_t*>& hashes;
+};
+
+// Equality comparison for comparing multiple arrays where each array is
+// inserted one at a time.
+struct MultiArrayInfoEqual {
+    bool operator()(const std::pair<size_t, size_t> hash_info1,
+                    const std::pair<size_t, size_t> hash_info2) const {
+        const size_t iRowA = hash_info1.first;
+        const size_t iTableA = hash_info1.second;
+        const size_t iRowB = hash_info2.first;
+        const size_t iTableB = hash_info2.second;
+        array_info* dict_A = arrs[iTableA];
+        array_info* dict_B = arrs[iTableB];
+        // TODO inline?
+        return TestEqualColumn(dict_A, iRowA, dict_B, iRowB, true);
+    }
+    std::vector<array_info*>& arrs;
+};
+
 // convert Array dtype to C type using a trait class
 // similar to:
 // https://github.com/rapidsai/cudf/blob/c4a1389bca6f2fd521bd5e768eda7407aa3e66b5/cpp/include/cudf/utilities/type_dispatcher.hpp#L141

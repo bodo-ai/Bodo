@@ -388,8 +388,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.genRelnodeTimerStart(node);
     String outVar = this.genDfVar();
     List<String> columnNames = node.getRowType().getFieldNames();
-    this.generatedCode.append(
-        generateUnionCode(outVar, columnNames, childExprs, childExprsColumns, node.all));
+    this.generatedCode.append(generateUnionCode(outVar, columnNames, childExprs, node.all, this));
     varGenStack.push(outVar);
     columnNamesStack.push(columnNames);
     this.genRelnodeTimerStop(node);

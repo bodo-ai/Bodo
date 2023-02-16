@@ -773,8 +773,9 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
     // Set dropna=False for drop_duplicates_table_inner because
     // drop_duplicates_keys_inner should have already removed any NA
     // values
-    table_info* ret_table = drop_duplicates_table_inner(
-        shuf_table, num_keys, keep, 1, is_parallel, false, /*drop_duplicates_dict=*/true);
+    table_info* ret_table =
+        drop_duplicates_table_inner(shuf_table, num_keys, keep, 1, is_parallel,
+                                    false, /*drop_duplicates_dict=*/true);
     delete_table(shuf_table);
 #ifdef DEBUG_DD
     std::cout << "OUTPUT : drop_duplicates_keys ret_table=\n";
@@ -808,14 +809,16 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
         // serial case
         if (!is_parallel) {
             return drop_duplicates_table_inner(in_table, num_keys, keep, 1,
-                                               is_parallel, dropna, /*drop_duplicates_dict=*/true);
+                                               is_parallel, dropna,
+                                               /*drop_duplicates_dict=*/true);
         }
         // parallel case
         // pre reduction of duplicates
         table_info* red_table;
         if (drop_local_first) {
-            red_table = drop_duplicates_table_inner(in_table, num_keys, keep, 2,
-                                                    is_parallel, dropna, /*drop_duplicates_dict=*/false);
+            red_table = drop_duplicates_table_inner(
+                in_table, num_keys, keep, 2, is_parallel, dropna,
+                /*drop_duplicates_dict=*/false);
         } else {
             red_table = in_table;
         }
@@ -829,7 +832,8 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
         // drop_duplicates_table_inner should have already handled this
         if (drop_local_first) dropna = false;
         table_info* ret_table = drop_duplicates_table_inner(
-            shuf_table, num_keys, keep, 1, is_parallel, dropna, /*drop_duplicates_dict=*/true);
+            shuf_table, num_keys, keep, 1, is_parallel, dropna,
+            /*drop_duplicates_dict=*/true);
         delete_table(shuf_table);
         // returning table
         return ret_table;
@@ -837,6 +841,99 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
     }
+}
+
+// Note: union_tables steals a reference and generates a new output.
+table_info* union_tables(table_info** in_table, int64_t num_tables,
+                         bool drop_duplicates, bool is_parallel) {
+    tracing::Event ev("union_tables", is_parallel);
+    // Drop duplicates locally first. This won't do a shuffle yet because we
+    // only want to do 1 shuffle.
+    std::vector<table_info*> locally_processed_table(num_tables);
+
+    // All tables have the same number of columns and all columns are keys
+    int64_t num_keys = in_table[0]->ncols();
+
+    if (drop_duplicates) {
+        tracing::Event ev_drop_duplicates("union_tables_drop_duplicates_local",
+                                          is_parallel);
+        for (int i = 0; i < num_tables; i++) {
+            locally_processed_table[i] = drop_duplicates_table_inner(
+                in_table[i], num_keys, 0, 1, false, false, false);
+            // drop_duplicates_table_inner steals a reference on the arrays
+            // but doesn't delete the input table.
+            delete_table(in_table[i]);
+        }
+        ev_drop_duplicates.finalize();
+    } else {
+        for (int i = 0; i < num_tables; i++) {
+            locally_processed_table[i] = in_table[i];
+        }
+    }
+    // Unify all of the dictionaries in any dictionary encoded array columns.
+    // All tables must share the same schema so we iterate over the first table
+    // for types.
+    tracing::Event ev_unify_dicts("union_tables_unify_dictionaries",
+                                  is_parallel);
+    table_info* base_table = locally_processed_table[0];
+    for (int j = 0; j < num_keys; j++) {
+        if (base_table->columns[j]->arr_type == bodo_array_type::DICT) {
+            // Unify all of the dictionaries.
+            std::vector<array_info*> dict_arrs(num_tables);
+            std::vector<bool> is_parallels(num_tables);
+            for (int i = 0; i < num_tables; i++) {
+                // Ensure we have global/unique data for the dictionary.
+                array_info* arr = locally_processed_table[i]->columns[j];
+                make_dictionary_global_and_unique(arr, is_parallel);
+                dict_arrs[i] = arr;
+                is_parallels[i] = is_parallel;
+            }
+            unify_several_dictionaries(dict_arrs, is_parallels);
+        }
+    }
+    ev_unify_dicts.finalize();
+
+    // Shuffle the tables
+    tracing::Event ev_shuffle("union_table_shuffle", is_parallel);
+    std::vector<table_info*> shuffled_tables(num_tables);
+    if (is_parallel && drop_duplicates) {
+        // Shuffle the tables. We don't need to shuffle the tables
+        // if we aren't dropping duplicates.
+        for (int i = 0; i < num_tables; i++) {
+            shuffled_tables[i] =
+                shuffle_table(locally_processed_table[i], num_keys, true);
+            // no need to decref since shuffle_table() steals a reference
+            // but we need to delete the table
+            delete_table(locally_processed_table[i]);
+        }
+    } else {
+        for (int i = 0; i < num_tables; i++) {
+            shuffled_tables[i] = locally_processed_table[i];
+        }
+    }
+    ev_shuffle.finalize();
+
+    // Concatenate all of the tables. Note concat_tables decrefs
+    // the input tables.
+    tracing::Event ev_concat("union_table_concat", is_parallel);
+    table_info* concatenated_table = concat_tables(shuffled_tables);
+    ev_concat.finalize();
+    table_info* out_table;
+    if (drop_duplicates) {
+        tracing::Event ev_drop_duplicates("union_tables_drop_duplicates_local",
+                                          is_parallel);
+        // Drop any duplicates in the concatenated tables
+        out_table = drop_duplicates_table_inner(concatenated_table, num_keys, 0,
+                                                1, false, false, false);
+        // drop_duplicates_table_inner steals a reference on the arrays
+        // but doesn't delete the input table.
+        delete_table(concatenated_table);
+        ev_drop_duplicates.finalize();
+    } else {
+        out_table = concatenated_table;
+    }
+    ev.finalize();
+    return out_table;
 }
 
 //
