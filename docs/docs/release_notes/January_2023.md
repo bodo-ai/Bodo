@@ -45,6 +45,7 @@ Parity Improvements:
 - Support for tz-aware data outputs in Case statements.
 
 Other Improvements:
+
 - Multiple top-level calls to window functions will now compile faster in BodoSQL if they use the same partition and order.
 - Snowflake writes with df.to_sql can now use the more performant direct upload strategy for Azure based Snowflake accounts.
 - Snowflake I/O (read and write) no longer requires the snowflake-sqlalchemy package.
