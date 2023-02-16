@@ -63,6 +63,7 @@ public class ProjectCodeGen {
   public static String generateProjectCode(
       String inVar,
       String outVar,
+      List<String> outputColumns,
       List<RexNodeVisitorInfo> childExprs,
       List<BodoSQLExprType.ExprType> exprTypes,
       List<RelDataType> sqlTypes,
@@ -186,8 +187,8 @@ public class ProjectCodeGen {
 
     // generate output column names for ColNamesMetaType
     StringBuilder colNameTupleString = new StringBuilder("(");
-    for (RexNodeVisitorInfo childExpr : childExprs) {
-      colNameTupleString.append(makeQuoted(childExpr.getName())).append(", ");
+    for (String colName : outputColumns) {
+      colNameTupleString.append(makeQuoted(colName)).append(", ");
     }
     colNameTupleString.append(")");
     String globalVarName = pdVisitorClass.lowerAsColNamesMetaType(colNameTupleString.toString());
@@ -206,13 +207,16 @@ public class ProjectCodeGen {
    * @return The code generated for the Project expression.
    */
   public static String generateProjectedDataframe(
-      String inVar, List<RexNodeVisitorInfo> childExprs, List<BodoSQLExprType.ExprType> exprTypes) {
+      String inVar,
+      List<String> childExprNames,
+      List<RexNodeVisitorInfo> childExprs,
+      List<BodoSQLExprType.ExprType> exprTypes) {
     StringBuilder projectString = new StringBuilder("pd.DataFrame({");
     boolean allScalars = true;
     for (int i = 0; i < childExprs.size(); i++) {
       RexNodeVisitorInfo column = childExprs.get(i);
       BodoSQLExprType.ExprType exprType = exprTypes.get(i);
-      String name = escapePythonQuotes(column.getName());
+      String name = escapePythonQuotes(childExprNames.get(i));
       projectString.append(makeQuoted(name)).append(": ");
       projectString.append(column.getExprCode());
 

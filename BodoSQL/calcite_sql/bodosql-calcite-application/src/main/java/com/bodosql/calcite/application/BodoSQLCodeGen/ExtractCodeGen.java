@@ -88,13 +88,6 @@ public class ExtractCodeGen {
    * @return The name generated that matches the Extract expression.
    */
   public static RexNodeVisitorInfo generateDatePart(List<RexNodeVisitorInfo> operandsInfo) {
-    StringBuilder name = new StringBuilder();
-    name.append("DATE_PART(")
-        .append(operandsInfo.get(0).getName())
-        .append(", ")
-        .append(operandsInfo.get(1).getName())
-        .append(")");
-
     String unit;
     switch (operandsInfo.get(0).getExprCode()) {
       case "\"year\"":
@@ -201,9 +194,9 @@ public class ExtractCodeGen {
 
       default:
         throw new BodoSQLCodegenException(
-            "Unsupported DATE_PART unit: " + operandsInfo.get(0).getName());
+            "Unsupported DATE_PART unit: " + operandsInfo.get(0).getExprCode());
     }
     String code = generateExtractCode(unit, operandsInfo.get(1).getExprCode());
-    return new RexNodeVisitorInfo(name.toString(), code);
+    return new RexNodeVisitorInfo(code);
   }
 }
