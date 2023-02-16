@@ -553,7 +553,7 @@ def get_schema_from_metadata(
     return arrow_fields, col_types, unsupported_columns, unsupported_arrow_types
 
 
-def _get_table_row_count(cursor, table_name, is_table):
+def _get_table_row_count(cursor, table_name):
     """get total number of rows for a Snowflake table. Returns None if input is not a
     table or probe query failed.
 
@@ -611,10 +611,12 @@ def _detect_column_dict_encoding(
 
     # Always read the total rows in case we have a view. In the query is complex
     # this may time out.
-    total_rows = _get_table_row_count(cursor, sql_query, is_table_input)
+    total_rows = _get_table_row_count(cursor, sql_query)
 
     if total_rows is not None and total_rows <= SF_SMALL_TABLE_THRESHOLD:
-        # If we have a small table
+        # use dict-encoding for all strings if we have a small table since it can be
+        # joined with large tables producing many duplicates (dict-encoding overheads
+        # are minimal for small tables if this is not true).
         for i in string_col_ind:
             col_types[i] = dict_str_arr_type
         return dict_encode_timeout_info
@@ -634,6 +636,7 @@ def _detect_column_dict_encoding(
 
     # use system sampling if input is a table
     if is_table_input and not is_view and total_rows is not None:
+        # get counts for roughly probe_limit rows to minimize overheads
         sample_percentage = (
             0 if total_rows <= probe_limit else probe_limit / total_rows * 100
         )
@@ -651,15 +654,22 @@ def _detect_column_dict_encoding(
                 predict_cardinality_call,
             )
     else:
+        # get counts for roughly probe_limit rows to minimize overheads
+        if total_rows is not None:
+            sample_percentage = (
+                0 if total_rows <= probe_limit else probe_limit / total_rows * 100
+            )
+            sample_call = f"SAMPLE ({sample_percentage})" if sample_percentage else ""
+        else:
+            sample_call = f"limit {probe_limit}"
 
         # construct the prediction query script for the string columns
         # in which we sample 1 percent of the data
         # upper bound limits the total amount of sampling that will occur
         # to prevent a hang/timeout
-        subquery = sql_query if is_table_input else f"({sql_query})"
         predict_cardinality_call = (
             f"select count(*),{', '.join(query_args)}"
-            f"from ( select * from {subquery} limit {probe_limit} ) SAMPLE (1)"
+            f"from ( select * from ({sql_query}) {sample_call})"
         )
 
     prediction_query = execute_query(
