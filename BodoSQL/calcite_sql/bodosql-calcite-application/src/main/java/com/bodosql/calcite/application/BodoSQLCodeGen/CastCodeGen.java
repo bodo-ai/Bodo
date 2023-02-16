@@ -96,10 +96,10 @@ public class CastCodeGen {
         // TODO: Remove once we support Date type natively
         if (typeName == SqlTypeName.DATE) {
           // Generate a dummy visitor so we can reuse DATE_TRUNC code.
-          RexNodeVisitorInfo dayVisitor = new RexNodeVisitorInfo("", makeQuoted("day"));
+          RexNodeVisitorInfo dayVisitor = new RexNodeVisitorInfo("", "day");
           codeBuilder.append(
               generateDateTruncCode(
-                      dayVisitor, new RexNodeVisitorInfo("", asTypeBuilder.toString()))
+                      dayVisitor.getExprCode(), new RexNodeVisitorInfo("", asTypeBuilder.toString()))
                   .getExprCode());
         } else {
           codeBuilder.append(asTypeBuilder);

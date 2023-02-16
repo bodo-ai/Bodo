@@ -144,18 +144,17 @@ public class DatetimeFnCodeGen {
   /**
    * Helper function handles the codegen for Date_Trunc
    *
-   * @param arg1Info The VisitorInfo for the first argument. Currently, this is required to be a *
-   *     constant string literal.
+   * @param unit A constant string literal, the time unit to truncate.
    * @param arg2Info The VisitorInfo for the second argument. = * @return the rexNodeVisitorInfo for
    *     the result.
    */
   public static RexNodeVisitorInfo generateDateTruncCode(
-      RexNodeVisitorInfo arg1Info, RexNodeVisitorInfo arg2Info) {
-    String name = "DATE_TRUNC(" + arg1Info.getName() + ", " + arg2Info.getName() + ")";
+      String unit, RexNodeVisitorInfo arg2Info) {
+    String name = "DATE_TRUNC(" + unit + ", " + arg2Info.getName() + ")";
     String codeGen =
         String.format(
-            "bodo.libs.bodosql_array_kernels.date_trunc(%s, %s)",
-            arg1Info.getExprCode(), arg2Info.getExprCode());
+            "bodo.libs.bodosql_array_kernels.date_trunc(\"%s\", %s)",
+            unit, arg2Info.getExprCode());
     return new RexNodeVisitorInfo(name, codeGen);
   }
 
@@ -333,4 +332,134 @@ public class DatetimeFnCodeGen {
 
     return new RexNodeVisitorInfo(name.toString(), code.toString());
   }
+
+  /**
+   * Helper function that verifies and standardizes the time unit input
+   *
+   * @param fnName the function which takes this time unit as input
+   * @param inputTimeStr the input time unit string
+   * @param isTime if this time unit should fit with Bodo.Time, which means smaller or equal to hour
+   * @return the standardized time unit string
+   */
+  public static String standardizeTimeUnit(String fnName, String inputTimeStr, boolean isTime) {
+    String unit;
+    switch (inputTimeStr.toLowerCase()) {
+      case "\"year\"":
+      case "\"y\"":
+      case "\"yy\"":
+      case "\"yyy\"":
+      case "\"yyyy\"":
+      case "\"yr\"":
+      case "\"years\"":
+      case "\"yrs\"":
+        if (isTime)
+          throw new BodoSQLCodegenException(
+                  "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+        unit = "year";
+        break;
+
+      case "\"month\"":
+      case "\"mm\"":
+      case "\"mon\"":
+      case "\"mons\"":
+      case "\"months\"":
+
+        if (isTime)
+          throw new BodoSQLCodegenException(
+                  "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+        unit = "month";
+        break;
+
+      case "\"day\"":
+      case "\"d\"":
+      case "\"dd\"":
+      case "\"days\"":
+      case "\"dayofmonth\"":
+        if (isTime)
+          throw new BodoSQLCodegenException(
+                  "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+        unit = "day";
+        break;
+
+      case "\"week\"":
+      case "\"w\"":
+      case "\"wk\"":
+      case "\"weekofyear\"":
+      case "\"woy\"":
+      case "\"wy\"":
+        if (isTime)
+          throw new BodoSQLCodegenException(
+                  "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+        unit = "week";
+        break;
+
+      case "\"quarter\"":
+      case "\"q\"":
+      case "\"qtr\"":
+      case "\"qtrs\"":
+      case "\"quarters\"":
+        if (isTime)
+          throw new BodoSQLCodegenException(
+                  "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+        unit = "quarter";
+        break;
+
+      case "\"hour\"":
+      case "\"h\"":
+      case "\"hh\"":
+      case "\"hr\"":
+      case "\"hours\"":
+      case "\"hrs\"":
+        unit = "hour";
+        break;
+
+      case "\"minute\"":
+      case "\"m\"":
+      case "\"mi\"":
+      case "\"min\"":
+      case "\"minutes\"":
+      case "\"mins\"":
+        unit = "minute";
+        break;
+
+      case "\"second\"":
+      case "\"s\"":
+      case "\"sec\"":
+      case "\"seconds\"":
+      case "\"secs\"":
+        unit = "second";
+        break;
+
+      case "\"millisecond\"":
+      case "\"ms\"":
+      case "\"msec\"":
+      case "\"milliseconds\"":
+        unit = "millisecond";
+        break;
+
+      case "\"microsecond\"":
+      case "\"us\"":
+      case "\"usec\"":
+      case "\"microseconds\"":
+        unit = "microsecond";
+        break;
+
+      case "\"nanosecond\"":
+      case "\"ns\"":
+      case "\"nsec\"":
+      case "\"nanosec\"":
+      case "\"nsecond\"":
+      case "\"nanoseconds\"":
+      case "\"nanosecs\"":
+      case "\"nseconds\"":
+        unit = "nanosecond";
+        break;
+
+      default:
+        throw new BodoSQLCodegenException(
+                "Unsupported " + fnName + " unit: " + inputTimeStr);
+    }
+    return unit;
+  }
+
 }

@@ -11,8 +11,9 @@ from bodosql.tests.utils import check_query
 from bodo import Time
 from bodo.tests.timezone_common import (  # noqa
     generate_date_trunc_func,
-    representative_tz,
+    representative_tz, generate_date_trunc_time_func,
 )
+from bodo.tests.conftest import time_df, time_part_strings, day_part_strings
 
 EQUIVALENT_SPARK_DT_FN_MAP = {
     "WEEK": "WEEKOFYEAR",
@@ -2099,7 +2100,40 @@ def test_to_date_scalar(
     )
 
 
-def test_date_trunc(dt_fn_dataframe, date_trunc_literal, memory_leak_check):
+def test_date_trunc_time_small_unit(time_df, time_part_strings, memory_leak_check):
+    query = (
+        f"SELECT DATE_TRUNC('{time_part_strings}', BODOTIME) as output from table1"
+    )
+    scalar_func = generate_date_trunc_time_func(time_part_strings)
+    output = pd.DataFrame(
+        {"output": time_df["table1"]["bodotime"].map(scalar_func)}
+    )
+    check_query(query,
+                time_df,
+                None,
+                check_dtype=False,
+                check_names=False,
+                expected_output=output)
+
+
+def test_date_trunc_time_large_unit(time_df, day_part_strings, memory_leak_check):
+    query = (
+        f"SELECT DATE_TRUNC('{day_part_strings}', BODOTIME) as output from table1"
+    )
+    output = pd.DataFrame(
+        {"output": []}
+    )
+    with pytest.raises(Exception, match=
+        f"Unsupported DATE_TRUNC unit for TIME input: \"{day_part_strings}\""):
+        check_query(query,
+                    time_df,
+                    None,
+                    check_dtype=False,
+                    check_names=False,
+                    expected_output=output)
+
+
+def test_date_trunc_timestamp(dt_fn_dataframe, date_trunc_literal, memory_leak_check):
     query = (
         f"SELECT DATE_TRUNC('{date_trunc_literal}', TIMESTAMPS) as output from table1"
     )
