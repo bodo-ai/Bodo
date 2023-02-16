@@ -1,8 +1,11 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
+import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
+import static com.bodosql.calcite.application.Utils.Utils.renameColumns;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import java.util.HashMap;
 import java.util.List;
 
@@ -15,77 +18,43 @@ public class SetOpCodeGen {
    * Function that return the necessary generated code for a Union expression.
    *
    * @param outVar The output variable.
+   * @param outputColumnNames a list containing the expected output column names
    * @param childExprs The child expressions to be Unioned together. The expressions must all be
    *     dataframes
-   * @param childExprColumns the columns of each of the child expressions. Must be the same length
-   *     as childExprs
    * @param isAll Is the union a UnionAll Expression.
-   * @param outputColumnNames a list containing the expected output column names
+   * @param pdVisitorClass Pandas Visitor used to create global variables.
    * @return The code generated for the Union expression.
    */
   public static String generateUnionCode(
       String outVar,
       List<String> outputColumnNames,
       List<String> childExprs,
-      List<List<String>> childExprColumns,
-      boolean isAll) {
+      boolean isAll,
+      PandasCodeGenVisitor pdVisitorClass) {
     StringBuilder unionBuilder = new StringBuilder();
-
-    // check that the number of child column name lists passed in is equal to the number of child
-    // expressions
-    assert childExprColumns.size() == childExprs.size();
-
-    // check that the number of columns in each input table is equal to the number of columns we
-    // expect to see in the output
-    assert (childExprColumns.size() == 0
-        || childExprColumns.get(0).size() == outputColumnNames.size());
-
-    final String indent = getBodoIndent();
-
-    // Panda's Concat function can concatenate along the row index such that
-    // the new table will have all of the rows of both the tables, with nulls filled in
-    // where one table doesn't have a value for a particular column
-    // IE  A  C CONCAT  B  C  --->      A    B   C
-    //     1  2         2  3            1   NA   2
-    //                                  NA   2   3
-    //
-    // Therefore, in order to get the concatenation function to behave like a union,
-    // before I concat the two tables, I need to set the column names as being equal
-
-    // perform the concat, renaming each table to have the output column names
-    unionBuilder.append(indent).append(outVar).append(" = ").append("pd.concat((");
+    unionBuilder
+        .append(getBodoIndent())
+        .append(outVar)
+        .append(" = ")
+        .append("bodo.hiframes.pd_dataframe_ext.union_dataframes((");
     for (int i = 0; i < childExprs.size(); i++) {
-      String expr = childExprs.get(i);
-      HashMap<String, String> renameMap = new HashMap<>();
-      List<String> colNames = childExprColumns.get(i);
-      for (int j = 0; j < colNames.size(); j++) {
-        if (!colNames.get(j).equals(outputColumnNames.get(j))) {
-          renameMap.put(colNames.get(j), outputColumnNames.get(j));
-        }
-      }
-      unionBuilder.append(expr);
-      /* Union All includes duplicates, Union doesn't. preemptively dropping duplicate here to reduce size of the concat */
-      if (!isAll) {
-        unionBuilder.append(".drop_duplicates()");
-      }
-      if (!renameMap.isEmpty()) {
-        unionBuilder
-            .append(".rename(columns=")
-            .append(renameColumns(renameMap))
-            .append(", copy=False)");
-      }
-      unionBuilder.append(",");
+      unionBuilder.append(childExprs.get(i));
+      unionBuilder.append(", ");
     }
-    // We set ignore_index=True for faster runtime performance, as we don't care about the index in
-    // BodoSQL
-    unionBuilder.append("), ignore_index=True)");
-
-    /* Need to perform a final drop to account for values in both tables */
-    if (!isAll) {
-      unionBuilder.append(".drop_duplicates()");
+    unionBuilder.append("), ");
+    if (isAll) {
+      unionBuilder.append("False");
+    } else {
+      unionBuilder.append("True");
     }
-    unionBuilder.append("\n");
-
+    // generate output column names for ColNamesMetaType
+    StringBuilder colNameTupleString = new StringBuilder("(");
+    for (String colName : outputColumnNames) {
+      colNameTupleString.append(makeQuoted(colName)).append(", ");
+    }
+    colNameTupleString.append(")");
+    String globalVarName = pdVisitorClass.lowerAsColNamesMetaType(colNameTupleString.toString());
+    unionBuilder.append(", ").append(globalVarName).append(")\n");
     return unionBuilder.toString();
   }
 

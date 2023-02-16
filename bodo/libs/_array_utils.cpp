@@ -1971,13 +1971,12 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
  * @param table_chunks input tables which are assumed to have the same schema
  * @return table_info* concatenated table
  */
-table_info* concat_tables(std::vector<table_info*>& table_chunks) {
+table_info* concat_tables(const std::vector<table_info*>& table_chunks) {
     // get number of total rows for TableBuilder
     int64_t n_total_rows = 0;
     for (table_info* table : table_chunks) {
         n_total_rows += table->nrows();
     }
-
     assert(table_chunks->size() > 0);
     TableBuilder table_builder(table_chunks[0], n_total_rows);
     for (table_info* table : table_chunks) {

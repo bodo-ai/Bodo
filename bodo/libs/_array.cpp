@@ -1648,6 +1648,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&sort_values_table)));
     PyObject_SetAttrString(m, "drop_duplicates_table",
                            PyLong_FromVoidPtr((void*)(&drop_duplicates_table)));
+    PyObject_SetAttrString(m, "union_tables",
+                           PyLong_FromVoidPtr((void*)(&union_tables)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
     PyObject_SetAttrString(

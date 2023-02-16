@@ -215,6 +215,18 @@ inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
  * --- data2 is for the data_offsets
  * --- data3 is for the index_offsets
  * --- null_bitmask for whether the data is missing or not.
+ * case of DICT:
+ * --- info1 is the string array for the dictionary.
+ * --- info2 is a Int32 array for the indices. This array and
+ *     the main info share a bitmap.
+ * --- has_global_dictionary is true if the dictionary has the same
+ *     values in the same order for all ranks.
+ * --- has_deduped_local_dictionary is true if a dictionary doesn't have
+ *     any duplicates on the current rank. This may be false if the values
+ *     are unique but we couldn't safely determine this. There are no false
+ *     positives.
+ * --- has_sorted_dictionary is true if a dictionary is sorted on the current
+ * rank.
  */
 struct array_info {
     bodo_array_type::arr_type_enum arr_type;
