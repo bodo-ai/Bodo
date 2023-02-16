@@ -136,6 +136,21 @@ updated to <fin>FINISHED</fin>.
 
 ![Cluster-Status-Finished](../platform2-gifs/create_cluster_details.gif#center)
 
+### Cluster Instance Type and Size Recommendations
+If you were previously running a query on a Snowflake Warehouse this table provides a starting point for what
+instance type and size you can use to run the query using Bodo. Since this is only a starting point you should
+experiment to find the best configuration for your specific use case.
+
+| Snowflake Warehouse Size | Bodo Cluster Spec |
+|--------------------------|-------------------|
+| XS                       | 1 x c5n.2xlarge   |
+| S                        | 1 x r5n.4xlarge   |
+| M                        | 1 x r5n.8xlarge   |
+| L                        | 1 x r5n.24xlarge  |
+| XL                       | 2 x r5n.24xlarge  |
+| 2XL                      | 5 x r5n.24xlarge  |
+
+
 ## Attaching a Notebook to a Cluster {#attaching_notebook_to_cluster}
 
 To attach a notebook to a cluster, select the cluster from the drop-down in the top-left.
