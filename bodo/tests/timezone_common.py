@@ -32,9 +32,7 @@ def representative_tz(request):
 def generate_date_trunc_func(part: str):
     """
     Generate a function that can be used in Series.map
-    to compute the expected output for date_trunc.
-
-    Note
+    to compute the expected output for date_trunc with timestamp input.
 
     Args:
         part (str): Part to truncate the input to.
@@ -98,3 +96,47 @@ def generate_date_trunc_func(part: str):
                 return ts_input
 
     return date_trunc_scalar_fn
+
+
+def generate_date_trunc_time_func(part_str: str):
+    """
+    Generate a function that can be used in Series.map
+    to compute the expected output for date_trunc with Time type input.
+
+    Args:
+        part (str): Part to truncate the input to.
+
+    Return:
+        Function: Function to use in Series.map to match
+            DATE_TRUNC behavior.
+    """
+
+    @bodo.jit
+    def standardize_part(part_str):
+        return bodo.libs.bodosql_array_kernels.standardize_snowflake_date_time_part(
+            part_str
+        )
+
+    # Standardize the part using our snowflake mapping kernel.
+    if part_str is not None:
+        standardized_part = standardize_part(part_str)
+    else:
+        standardized_part = part_str
+
+    def date_trunc_time_scalar_fn(time_input):
+        if pd.isna(part_str) or pd.isna(time_input):
+            return None
+        else:
+            if standardized_part in ('quarter', 'year', 'month', 'week', 'day'):
+                # date_or_time_part is too large, set everything to 0
+                return bodo.Time()
+            else:
+                time_args = []
+                time_units = ('hour', 'minute', 'second', 'millisecond', 'microsecond', 'nanosecond')
+                for unit in time_units:
+                    time_args.append(getattr(time_input, unit))
+                    if standardized_part == unit:
+                        break
+                return bodo.Time(*time_args)
+
+    return date_trunc_time_scalar_fn

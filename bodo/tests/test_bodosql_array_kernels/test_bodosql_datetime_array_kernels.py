@@ -12,7 +12,7 @@ from bodo.libs.bodosql_array_kernels import *
 from bodo.libs.bodosql_datetime_array_kernels import (
     standardize_snowflake_date_time_part_compile_time,
 )
-from bodo.tests.timezone_common import generate_date_trunc_func
+from bodo.tests.timezone_common import generate_date_trunc_func, generate_date_trunc_time_func
 from bodo.tests.utils import check_func, nanoseconds_to_other_time_units
 
 
@@ -1327,7 +1327,7 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
 )
 def test_date_trunc(datetime_part_strings, ts_input, memory_leak_check):
     """
-    Tests date_trunc array kernel on various inputs, testing all the different code paths
+    Tests date_trunc array kernel on various timestamp inputs, testing all the different code paths
     in the generated kernel.
     """
 
@@ -1357,6 +1357,58 @@ def test_date_trunc(datetime_part_strings, ts_input, memory_leak_check):
         reset_index=True,
     )
 
+
+@pytest.mark.parametrize(
+    "time_input",
+    [
+        pytest.param(
+            bodo.Time(14, 24, 35, 523, 98, 13),
+            id="scalar-time",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    bodo.Time(19, 53, 26, 901, 8, 79),
+                    bodo.Time(0, 20, 43, 365, 128, 74),
+                    bodo.Time(23, 16, 6, 25, 77, 32),
+                    None,
+                ]
+            ).values,
+            id="vector-time",
+        ),
+    ],
+)
+def test_date_trunc_time(datetime_part_strings, time_input, memory_leak_check):
+    """
+    Tests date_trunc array kernel on various bodo.Time inputs, testing all the different code paths
+    in the generated kernel.
+    """
+
+    def impl(datetime_part_strings, arr):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.date_trunc(datetime_part_strings, arr)
+        )
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(time_input, bodo.Time):
+        impl = lambda datetime_part_strings, arr: bodo.libs.bodosql_array_kernels.date_trunc(
+            datetime_part_strings, arr
+        )
+
+    # Simulates date_trunc on a single row
+    def date_trunc_time_scalar_fn(datetime_part_strings, time_input):
+        return generate_date_trunc_time_func(datetime_part_strings)(time_input)
+
+    answer = vectorized_sol(
+        (datetime_part_strings, time_input), date_trunc_time_scalar_fn, None
+    )
+    check_func(
+        impl,
+        (datetime_part_strings, time_input),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
 
 @pytest.mark.parametrize(
     "interval_input",

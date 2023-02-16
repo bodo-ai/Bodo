@@ -2201,8 +2201,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         return generatePosition(operandsInfo);
       case OTHER:
       case OTHER_FUNCTION:
-        String tzStr;
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
+        boolean isTime;
+        String tzStr;
         switch (fnName) {
           case "WIDTH_BUCKET":
             {
@@ -2702,7 +2703,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "INITCAP":
             return generateInitcapInfo(operandsInfo);
           case "DATE_TRUNC":
-            return generateDateTruncCode(operandsInfo.get(0), operandsInfo.get(1));
+            isTime =
+                    fnOperation
+                            .getOperands()
+                            .get(1)
+                            .getType()
+                            .getSqlTypeName()
+                            .toString()
+                            .equals("TIME");
+            String unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getName(), isTime);
+            return generateDateTruncCode(unit, operandsInfo.get(1));
           case "MICROSECOND":
           case "SECOND":
           case "MINUTE":
