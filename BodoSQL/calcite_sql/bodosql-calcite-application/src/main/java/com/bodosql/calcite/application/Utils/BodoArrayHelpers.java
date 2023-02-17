@@ -75,10 +75,7 @@ public class BodoArrayHelpers {
     boolean nullable = type.isNullable();
     switch (type.getSqlTypeName()) {
       case NULL:
-        // NULL can map to any type since we can't determine
-        // a type. As a result we opt to a type with low memory
-        // usage.
-        return "bodo.IntegerArrayType(bodo.int8)";
+        return "bodo.null_array_type";
       case BOOLEAN:
         if (nullable) {
           return "bodo.boolean_array";

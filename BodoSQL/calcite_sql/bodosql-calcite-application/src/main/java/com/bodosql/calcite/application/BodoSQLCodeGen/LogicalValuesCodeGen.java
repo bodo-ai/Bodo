@@ -1,10 +1,11 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.Utils.Utils.*;
 
-import java.util.List;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.sql.type.SqlTypeName;
+import com.bodosql.calcite.application.*;
+import java.util.*;
+import org.apache.calcite.rel.type.*;
 
 /** Class that returns the generated code for Logical Values after all inputs have been visited. */
 public class LogicalValuesCodeGen {
@@ -15,38 +16,47 @@ public class LogicalValuesCodeGen {
    * @param outVar The output variable.
    * @param argExprs The expression for each argument.
    * @param rowType The row type of the output. This is used if there are no initial values.
+   * @param pdVisitorClass The PandasCodeGenVisitor used to lower globals.
    * @return The code generated for the LogicalValues expression.
    */
   public static String generateLogicalValuesCode(
-      String outVar, List<String> argExprs, RelDataType rowType) {
+      String outVar,
+      List<String> argExprs,
+      RelDataType rowType,
+      PandasCodeGenVisitor pdVisitorClass) {
 
     final String indent = getBodoIndent();
 
     StringBuilder outputStr = new StringBuilder();
     List<String> columnNames = rowType.getFieldNames();
+    List<RelDataTypeField> sqlTypes = rowType.getFieldList();
     outputStr.append(indent).append(outVar).append(" = pd.DataFrame({");
+
+    final int columnLength;
     if (argExprs.size() == 0) {
-      for (int i = 0; i < columnNames.size(); i++) {
-        SqlTypeName typeName = rowType.getFieldList().get(i).getValue().getSqlTypeName();
-        String dType = sqlTypenameToPandasTypename(typeName, false);
-        outputStr
-            .append(makeQuoted(rowType.getFieldList().get(i).getKey()))
-            .append(": pd.Series(dtype=")
-            .append(dType)
-            .append("), ");
-      }
-      outputStr.append("})\n");
+      columnLength = 0;
+      // Generate a list of all Nones for consistent codegen.
+      argExprs = Collections.nCopies(columnNames.size(), "None");
     } else {
-      /* to the best of my knowledge, it seems that the logical value node contains one tuple, with the needed number
-      of values to fill in the rows in the table */
-      for (int i = 0; i < columnNames.size(); i++) {
-        String colName = columnNames.get(i);
-        // using coerce_to_array(use_nullable_array=True) to create nullable columns by default
-        outputStr.append(makeQuoted(colName)).append(": bodo.utils.conversion.coerce_to_array(");
-        outputStr.append(argExprs.get(i)).append(", True, True, scalar_to_arr_len=1),");
-      }
-      outputStr.append("})\n");
+      columnLength = 1;
     }
+    // Logical Values contain a tuple of entries to fill one row
+    for (int i = 0; i < columnNames.size(); i++) {
+      // Scalars require separate code path to handle null.
+      String globalName =
+          pdVisitorClass.lowerAsGlobal(sqlTypeToBodoArrayType(sqlTypes.get(i).getType(), true));
+      String colName = columnNames.get(i);
+      outputStr
+          .append(makeQuoted(colName))
+          .append(
+              String.format(
+                  ": bodo.utils.conversion.coerce_scalar_to_array(%s, %d, %s), ",
+                  argExprs.get(i), columnLength, globalName));
+    }
+    outputStr.append(
+        String.format(
+            "}, index=bodo.hiframes.pd_index_ext.init_range_index(0, %d, 1, None))\n",
+            columnLength));
     return outputStr.toString();
   }
 }

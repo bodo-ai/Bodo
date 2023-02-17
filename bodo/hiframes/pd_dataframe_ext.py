@@ -5211,11 +5211,15 @@ def overload_union_dataframes(
                     col_typ == bodo.dict_str_arr_type
                     or other_col_typ == bodo.dict_str_arr_type
                 ):
-                    if (
-                        col_typ != bodo.string_array_type
-                        and other_col_typ != bodo.string_array_type
+                    if col_typ not in (
+                        bodo.string_array_type,
+                        bodo.null_array_type,
+                    ) and other_col_typ not in (
+                        bodo.string_array_type,
+                        bodo.null_array_type,
                     ):
-                        # If one column is dict encoded the other column must be a string.
+                        # If one column is dict encoded the other column must be a string
+                        # or null array.
                         raise BodoError(
                             f"Unable to union table with columns of incompatible types. Found types {col_dtype} and {other_col_dtype} in column {i}."
                         )
