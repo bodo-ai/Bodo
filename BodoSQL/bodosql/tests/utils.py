@@ -255,6 +255,15 @@ def check_query(
     ):
         run_jit_seq = False
         run_python = False
+    elif (
+        n_pes == 1
+        and not numba.core.config.DEVELOPER_MODE
+        and os.environ.get("BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST", False)
+    ):
+        # We only skip the parallel tests when running on one rank if we know that
+        # there exists another worker running on multiple ranks
+        run_jit_1D = False
+        run_jit_1DVar = False
 
     # If a user sets BODOSQL_TESTING_DEBUG, we print the
     # unoptimized plan, optimized plan, and the Pandas code

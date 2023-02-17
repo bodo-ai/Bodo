@@ -3,6 +3,7 @@ parameters:
   vmImage: ''
   caching_test: false
   PYTHON_VERSION: ''
+  BODO_TESTING_HAS_MULTI_RANK_TEST: false
   matrix: []
 
 jobs:
@@ -292,6 +293,7 @@ jobs:
       SF_PASSWORD2: $(SNOWFLAKE_PASSWORD2)
       SF_AZURE_USER: $(SF_AZURE_USER)
       SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
+      BODO_TESTING_HAS_MULTI_RANK_TEST: ${{ parameters.BODO_TESTING_HAS_MULTI_RANK_TEST }}
     displayName: 'Test Bodo'
 
   - script: |
