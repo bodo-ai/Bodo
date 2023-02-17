@@ -1208,6 +1208,7 @@ void coherent_hash_array_combine(uint32_t* out_hashes, array_info* array,
 uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
                              std::vector<array_info*> const& ref_key_arrs,
                              const uint32_t seed, bool is_parallel) {
+    tracing::Event ev("coherent_hash_keys", is_parallel);
     size_t n_rows = (size_t)key_arrs[0]->length;
     uint32_t* hashes = new uint32_t[n_rows];
     coherent_hash_array(hashes, key_arrs[0], ref_key_arrs[0], n_rows, seed,
