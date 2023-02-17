@@ -621,12 +621,12 @@ def int_arr_setitem(A, idx, val):
 @overload(len, no_unliteral=True)
 def overload_int_arr_len(A):
     if isinstance(A, IntegerArrayType):
-        return lambda A: len(A._data)
+        return lambda A: len(A._data)  # pragma: no cover
 
 
 @overload_attribute(IntegerArrayType, "shape")
 def overload_int_arr_shape(A):
-    return lambda A: (len(A._data),)
+    return lambda A: (len(A._data),)  # pragma: no cover
 
 
 @overload_attribute(IntegerArrayType, "dtype")
@@ -634,12 +634,12 @@ def overload_int_arr_dtype(A):
     dtype_class = getattr(
         pd, "{}Int{}Dtype".format("" if A.dtype.signed else "U", A.dtype.bitwidth)
     )
-    return lambda A: dtype_class()
+    return lambda A: dtype_class()  # pragma: no cover
 
 
 @overload_attribute(IntegerArrayType, "ndim")
 def overload_int_arr_ndim(A):
-    return lambda A: 1
+    return lambda A: 1  # pragma: no cover
 
 
 @overload_attribute(IntegerArrayType, "nbytes")

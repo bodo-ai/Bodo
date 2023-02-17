@@ -18,6 +18,29 @@ def null_set_df():
     return {"table1": pd.DataFrame(data=int_data, dtype="Int64")}
 
 
+def test_union_null_literals(memory_leak_check):
+    """Test for [BE-4320], checks that union works for various null literals"""
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4] * 3,
+            "B": [1.1, 2.7, 3.4, 110.3] * 3,
+            "C": ["A", None, "c", "recall"] * 3,
+        }
+    )
+    ctx = {"table1": df}
+    expected_output = pd.DataFrame(
+        {
+            "A": pd.Series([1, 2, 3, 4, None], dtype="Int64"),
+            "B": pd.Series([1.1, 2.7, 3.4, 110.3, None], dtype="Float64"),
+            "C": ["A", None, "c", "recall", None],
+        }
+    )
+    query = (
+        "(SELECT A, B, C from table1) UNION (select null as A, null as B, null as C)"
+    )
+    check_query(query, ctx, None, expected_output=expected_output, check_dtype=False)
+
+
 def test_union_cols(basic_df, spark_info, memory_leak_check):
     """tests that union works for columns"""
     query = "(Select A from table1) union (Select B from table1)"

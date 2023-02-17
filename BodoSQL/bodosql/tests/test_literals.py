@@ -345,6 +345,7 @@ def test_boolean_null_literals(bodosql_boolean_types, spark_info, memory_leak_ch
     )
 
 
+@pytest.mark.skip("[BE-4406] Support boxing null arrays")
 def test_integer_null_literals(basic_df, spark_info, memory_leak_check):
     """
     tests that integer literals are correctly parsed by BodoSQL

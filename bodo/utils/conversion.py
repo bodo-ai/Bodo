@@ -423,6 +423,11 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type):
     """
     # The array type always needs to be nullable for the gen_na_array case.
     _arr_typ = to_nullable_type(unwrap_typeref(arr_type))
+    if _arr_typ == bodo.null_array_type:
+        return lambda scalar, length, arr_type: bodo.libs.null_arr_ext.init_null_array(
+            length
+        )  # pragma: no cover
+
     if scalar == types.none:
         # If the scalar is None we generate an array of all NA
         def impl(scalar, length, arr_type):  # pragma: no cover
@@ -550,6 +555,7 @@ def overload_coerce_to_array(
         bodo.hiframes.datetime_date_ext.datetime_date_array_type,
         bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
         bodo.hiframes.split_impl.string_array_split_view_type,
+        bodo.null_array_type,
     ) or isinstance(
         data,
         (
@@ -916,8 +922,19 @@ def overload_fix_arr_dtype(
 
         return impl
 
+    # null array input case
+    if data == bodo.null_array_type:
+
+        def impl_null_array(
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
+        ):  # pragma: no cover
+            return data.astype(new_dtype)
+
+        return impl_null_array
+
     # convert to string
     if _is_str_dtype(new_dtype):
+        #
         # special optimized case for int to string conversion, uses inplace write to
         # string array to avoid extra allocation
         if isinstance(data.dtype, types.Integer):

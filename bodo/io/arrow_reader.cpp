@@ -131,7 +131,7 @@ bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
 inline void copy_data_dispatch(uint8_t* out_data, const uint8_t* buff,
                                int64_t rows_to_skip, int64_t rows_to_read,
                                std::shared_ptr<arrow::DataType> arrow_type,
-                               int out_dtype) {
+                               Bodo_CTypes::CTypeEnum out_dtype) {
     // read date32 values into datetime.date arrays, default from Arrow >= 0.13
     if (arrow_type->id() == Type::DATE32 && out_dtype == Bodo_CTypes::DATE) {
         copy_data_dt32((uint64_t*)out_data, (int32_t*)buff, rows_to_skip,
@@ -201,7 +201,8 @@ inline void copy_data_dispatch(uint8_t* out_data, const uint8_t* buff,
         }
     } else {
         throw std::runtime_error("arrow read: invalid dtype conversion for " +
-                                 arrow_type->ToString());
+                                 arrow_type->ToString() + " to " +
+                                 GetDtype_as_string(out_dtype));
     }
 }
 

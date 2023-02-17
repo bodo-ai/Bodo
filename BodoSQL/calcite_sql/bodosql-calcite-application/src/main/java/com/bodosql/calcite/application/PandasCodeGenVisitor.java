@@ -327,7 +327,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       }
     }
     this.genRelnodeTimerStart(node);
-    this.generatedCode.append(generateLogicalValuesCode(outVar, exprCodes, node.getRowType()));
+    this.generatedCode.append(
+        generateLogicalValuesCode(outVar, exprCodes, node.getRowType(), this));
     this.columnNamesStack.push(columnNames);
     this.varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);

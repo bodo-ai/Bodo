@@ -844,8 +844,8 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
 }
 
 // Note: union_tables steals a reference and generates a new output.
-table_info* union_tables(table_info** in_table, int64_t num_tables,
-                         bool drop_duplicates, bool is_parallel) {
+table_info* union_tables_inner(table_info** in_table, int64_t num_tables,
+                               bool drop_duplicates, bool is_parallel) {
     tracing::Event ev("union_tables", is_parallel);
     // Drop duplicates locally first. This won't do a shuffle yet because we
     // only want to do 1 shuffle.
@@ -934,6 +934,17 @@ table_info* union_tables(table_info** in_table, int64_t num_tables,
     }
     ev.finalize();
     return out_table;
+}
+
+table_info* union_tables(table_info** in_table, int64_t num_tables,
+                         bool drop_duplicates, bool is_parallel) {
+    try {
+        return union_tables_inner(in_table, num_tables, drop_duplicates,
+                                  is_parallel);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }
 
 //
