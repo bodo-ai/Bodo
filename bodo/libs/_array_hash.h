@@ -60,6 +60,7 @@ inline uint32_t* coherent_hash_keys_table(table_info* in_table,
                                           table_info* ref_table,
                                           size_t num_keys, uint32_t seed,
                                           bool is_parallel) {
+    tracing::Event ev("coherent_hash_keys_table", is_parallel);
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
     std::vector<array_info*> ref_key_arrs(
