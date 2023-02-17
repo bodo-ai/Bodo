@@ -58,6 +58,14 @@
 			<!-- Test here by changing the branch version -->
 			<version>bodo-calcite-1.30.0-dev-SNAPSHOT</version>
 		</dependency>
+
+		<dependency>
+			<groupId>com.github.Bodo-inc.calcite</groupId>
+			<artifactId>calcite-bodo</artifactId>
+			<!-- Test here by changing the branch version -->
+			<version>bodo-calcite-1.30.0-dev-SNAPSHOT</version>
+		</dependency>
+
 		<dependency>
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>

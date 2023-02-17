@@ -15,7 +15,7 @@ import java.util.Properties;
 /** Class for locally testing codegen using a snowflake catalog */
 public class SnowflakeGenTest {
   public static void main(String[] args) throws Exception {
-    String sql = " select * from LINEITEM1 r full outer join localtable on l_orderkey = a";
+    String sql = " select * from LINEITEM1 r limit 10";
     Map envVars = System.getenv();
     Properties prop = new Properties();
     prop.put("schema", "PUBLIC");

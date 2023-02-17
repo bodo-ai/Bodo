@@ -54,6 +54,7 @@ import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.parser.bodo.SqlBodoParserImpl;
 import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.util.ChainedSqlOperatorTable;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
@@ -204,7 +205,8 @@ public class RelationalAlgebraGenerator {
                       .withQuoting(Quoting.BACK_TICK)
                       .withQuotedCasing(Casing.UNCHANGED)
                       .withUnquotedCasing(Casing.UNCHANGED)
-                      .withConformance(SqlConformanceEnum.LENIENT))
+                      .withConformance(SqlConformanceEnum.LENIENT)
+                      .withParserFactory(SqlBodoParserImpl.FACTORY))
               .convertletTable(
                   new StandardConvertletTable(new StandardConvertletTableConfig(false, false)))
               .sqlValidatorConfig(

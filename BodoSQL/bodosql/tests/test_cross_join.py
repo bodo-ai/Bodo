@@ -156,5 +156,8 @@ def test_cross_join_error(basic_df, spark_info, memory_leak_check):
     }
     query = "select table1.a from table1 cross join on table1.A = table2.B table2"
     bc = bodosql.BodoSQLContext(ctx)
-    with pytest.raises(BodoError, match='.*Encountered "join on".*'):
+    # NOTE: the error message will be Encountered "join on"... if/when
+    # we revert the bodo parser to using a lookahead of 1
+    # https://bodo.atlassian.net/browse/BE-4404
+    with pytest.raises(BodoError, match='.*Encountered "cross join on".*'):
         bc.sql(query)
