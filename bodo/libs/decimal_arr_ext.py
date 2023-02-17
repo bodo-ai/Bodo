@@ -300,10 +300,10 @@ def decimal_constructor_overload(value="0", context=None):
     if not is_overload_none(context):  # pragma: no cover
         raise BodoError("decimal.Decimal() context argument not supported yet")
 
-    # TODO: Handle Floats. These currently don't match exactly with Python because
-    # a value like 3.3 is not exactly 3.3 in floating point
+    # [BE-4399]: implement a more efficient constructor for integers/floats that
+    # does not need to convert to strings first, and has more precise float support
     if (
-        isinstance(value, (types.Integer,))
+        isinstance(value, (types.Number,))
         or is_overload_constant_str(value)
         or value == bodo.string_type
     ):
@@ -312,9 +312,11 @@ def decimal_constructor_overload(value="0", context=None):
             return str_to_decimal(str(value), 38, 18)
 
         return impl
-    # TODO: Add support for the float, tuple, and Decimal arguments
+    # TODO: Add support for the tuple, and Decimal arguments
     else:
-        raise BodoError("decimal.Decimal() value type must be an integer or string")
+        raise BodoError(
+            "decimal.Decimal() value type must be an integer, float or string"
+        )
 
 
 @overload(bool, no_unliteral=True)
@@ -679,7 +681,16 @@ def decimal_arr_setitem(A, idx, val):
             # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
             return impl_scalar
         else:
-            raise BodoError(typ_err_msg)
+
+            # [BE-4399] make a more efficient way to insert integers/floats into
+            # a Decimal array
+            def impl_scalar(A, idx, val):  # pragma: no cover
+                A._data[idx] = decimal128type_to_int128(
+                    str_to_decimal(str(val), 38, 18)
+                )
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+
+        return impl_scalar
 
     if not (
         (is_iterable_type(val) and isinstance(val.dtype, bodo.Decimal128Type))

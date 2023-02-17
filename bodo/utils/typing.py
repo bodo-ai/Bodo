@@ -1560,7 +1560,6 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         if convert_nullable:
             return to_nullable_type(arr)
         return arr
-
     raise BodoError(f"dtype {dtype} cannot be stored in arrays")  # pragma: no cover
 
 
@@ -1801,6 +1800,14 @@ def get_common_scalar_dtype(scalar_types):
             if scalar_types[0] not in (bodo.timedelta64ns, bodo.pd_timedelta_type):
                 return (None, False)
         return (bodo.timedelta64ns, True)
+
+    # If one of the types is Decimal128Type, then all values must be integers/floats
+    if any([isinstance(t, bodo.Decimal128Type) for t in scalar_types]):
+        if all(
+            [isinstance(t, (types.Number, bodo.Decimal128Type)) for t in scalar_types]
+        ):
+            return (bodo.Decimal128Type(38, 18), True)
+        return (None, False)
 
     # If we don't have a common type, then all types need to be equal.
     # See: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-identical
