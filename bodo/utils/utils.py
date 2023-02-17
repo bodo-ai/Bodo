@@ -216,6 +216,7 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "alloc_pd_datetime_array"
             and mod_name == "bodo.libs.pd_datetime_arr_ext"
         )
+        or (func_name == "init_null_array" and mod_name == "bodo.libs.null_arr_ext")
     )
 
 
@@ -354,6 +355,7 @@ def is_array_typ(var_typ, include_index_series=True):
             boolean_array,
             bodo.libs.str_ext.random_access_string_array,
             bodo.libs.interval_arr_ext.IntervalArrayType,
+            bodo.null_array_type,
         )
         or isinstance(
             var_typ,

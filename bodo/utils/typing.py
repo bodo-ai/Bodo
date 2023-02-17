@@ -1478,6 +1478,10 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         dtype = dtype.type
         convert_nullable = True
 
+    # null array
+    if dtype == bodo.null_dtype:
+        return bodo.null_array_type
+
     # string array
     if dtype == bodo.string_type:
         return bodo.string_array_type
@@ -1742,6 +1746,7 @@ def is_scalar_type(t):
         bodo.week_type,
         bodo.date_offset_type,
         types.none,
+        bodo.null_dtype,
     )
 
 
@@ -1763,6 +1768,10 @@ def get_common_scalar_dtype(scalar_types):
         raise_bodo_error(
             "Internal error, length of argument passed to get_common_scalar_dtype scalar_types is 0"
         )
+    if all(t == bodo.null_dtype for t in scalar_types):
+        return (bodo.null_dtype, True)
+    # bodo.null_dtype can be cast to any type so remove it from the list.
+    scalar_types = [t for t in scalar_types if t != bodo.null_dtype]
     try:
         common_dtype = np.find_common_type(
             [numba.np.numpy_support.as_dtype(t) for t in scalar_types], []
