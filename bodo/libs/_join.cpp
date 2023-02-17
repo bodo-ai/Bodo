@@ -390,15 +390,16 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
                 // from A because the cost of making the bloom filter will
                 // probably be larger than what we save from filtering B
                 // Also see https://bodo.atlassian.net/browse/BE-1321
-                // regarding tuning these values
+                // regarding tuning these values.
+                // Note that we create a bloom filter (if appropriate), even in
+                // the outer (left/right/full) join case since the filter is
+                // still useful.
                 // Note: make_bloom_left depends on is_right_outer because the
                 // filter is used to filter the right table (and the converse
                 // for make_bloom_right).
                 bool make_bloom_left =
-                    !is_right_outer &&
                     left_table_global_nrows <= (right_table_global_nrows * 10);
                 bool make_bloom_right =
-                    !is_left_outer &&
                     right_table_global_nrows <= (left_table_global_nrows * 10);
                 // We are going to build global bloom filters, and we need
                 // to know how many unique elements we are inserting into
@@ -407,7 +408,7 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
                 // estimate if there is a reasonable chance that the bloom
                 // filter will be smaller than MAX_BLOOM_SIZE.
                 // Also see https://bodo.atlassian.net/browse/BE-1321
-                // regarding tuning these values
+                // regarding tuning these values.
                 make_bloom_left =
                     make_bloom_left &&
                     (bloom_size_bytes(double(left_table_global_nrows) * 0.3) <
@@ -480,10 +481,19 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
             }
 
             // Shuffle both the left and right tables.
+            // If it's a left outer join or full outer join, we want to keep
+            // the misses in the left table (based on the bloom filter) on this
+            // rank (i.e. not shuffle them to other ranks). If they don't appear
+            // in the bloom filter (which can only give false positives and not
+            // false negatives), we can be sure that they don't exist at all in
+            // the right table and therefore won't match with anything.
+            // Vice-versa for the right table.
             work_left_table = coherent_shuffle_table(
-                left_table, right_table, n_key, hashes_left, bloom_right);
+                left_table, right_table, n_key, hashes_left, bloom_right,
+                /*keep_filter_misses=*/is_left_outer);
             work_right_table = coherent_shuffle_table(
-                right_table, left_table, n_key, hashes_right, bloom_left);
+                right_table, left_table, n_key, hashes_right, bloom_left,
+                /*keep_filter_misses=*/is_right_outer);
             // Delete left_table and right_table as they are no longer used.
             delete_table(left_table);
             delete_table(right_table);

@@ -93,13 +93,17 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info);
  * @param hashes : provide precomputed hashes, otherwise this function
  * will compute the hashes
  * @param filter : filter to discard rows from shuffle. If no filter is
- * provided then no filtering will happen
+ * provided then no filtering will happen.
+ * @param keep_filter_misses : In case a Bloom filter is provided and a
+ * key is not present in the bloom filter, should we keep the value on this rank
+ * (i.e. not discard it altogether). This is useful in the outer join cases.
  * @return the new table after the shuffling-
  */
 table_info* coherent_shuffle_table(
     table_info* in_table, table_info* ref_table, int64_t n_keys,
     uint32_t* hashes = nullptr,
-    SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr);
+    SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
+    const bool keep_filter_misses = false);
 
 /** Shuffling a table from all nodes to all the other nodes.
  *

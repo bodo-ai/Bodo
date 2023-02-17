@@ -15,6 +15,7 @@
 mpi_comm_info::mpi_comm_info(std::vector<array_info*>& _arrays)
     : arrays(_arrays) {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     n_rows = arrays[0]->length;
     has_nulls = false;
     for (array_info* arr_info : arrays) {
@@ -75,11 +76,69 @@ static void calc_disp(std::vector<T>& disps, std::vector<T> const& counts) {
     for (size_t i = 1; i < n; i++) disps[i] = disps[i - 1] + counts[i - 1];
 }
 
+/**
+ * @brief Template used to handle the case in mpi_comm_info::set_counts
+ * where a bloom filter is provided for additional filtering and we
+ * need to decide what to do with the misses.
+ *
+ * @tparam keep_filter_misses Whether to keep the misses on the current rank, or
+ * drop the misses altogether.
+ */
+template <bool keep_filter_misses>
+struct handle_keep_filter_misses;
+
+/**
+ * @brief Specialization of handle_keep_filter_misses for the case where we
+ * decide to keep the misses locally. This is useful for outer joins.
+ *
+ */
+template <>
+struct handle_keep_filter_misses<true> {
+    /**
+     * @brief Keep the row on the current rank.
+     *
+     * @param row_dest Vector keeping track of the destination for each row.
+     * This will be updated in place.
+     * @param send_count Vector keeping track of the number of rows to send to
+     * each rank. This will be updated in place.
+     * @param pos The row position to keep on current rank.
+     * @param myrank Rank of the current process.
+     */
+    static inline void apply(std::vector<int>& row_dest,
+                             std::vector<int64_t>& send_count, size_t pos,
+                             int myrank) {
+        row_dest[pos] = myrank;
+        send_count[myrank]++;
+    }
+};
+
+/**
+ * @brief Specialization of handle_keep_filter_misses for the case where we
+ * decide to drop the misses altogether.
+ *
+ */
+template <>
+struct handle_keep_filter_misses<false> {
+    /**
+     * @brief This function does nothing.
+     *
+     * See the argument descriptions in the previous specialization function.
+     */
+    static inline void apply(std::vector<int>& row_dest,
+                             std::vector<int64_t>& send_count, size_t pos,
+                             int myrank) {
+        // This function does nothing
+    }
+};
+
+template <bool keep_filter_misses>
 void mpi_comm_info::set_counts(
     uint32_t const* const hashes, bool is_parallel,
     SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter) {
     tracing::Event ev("set_counts", is_parallel);
     ev.add_attribute("n_rows", n_rows);
+    ev.add_attribute("using_filter", filter != nullptr);
+    ev.add_attribute("keep_filter_misses", keep_filter_misses);
     // get send count
     // -1 indicates that a row is dropped (not sent anywhere)
     row_dest.resize(n_rows, -1);
@@ -94,10 +153,14 @@ void mpi_comm_info::set_counts(
             const uint32_t& hash = hashes[i];
             // if the hash is not in the filter we drop this row (row_dest[i]
             // will stay as default initialized value of -1)
-            if (!filter->Find(static_cast<uint64_t>(hash))) continue;
-            int node = hash_to_rank(hash, n_pes);
-            row_dest[i] = node;
-            send_count[node]++;
+            if (!filter->Find(static_cast<uint64_t>(hash))) {
+                handle_keep_filter_misses<keep_filter_misses>::apply(
+                    row_dest, send_count, i, this->myrank);
+            } else {
+                int node = hash_to_rank(hash, n_pes);
+                row_dest[i] = node;
+                send_count[node]++;
+            }
         }
         filtered = true;
     }
@@ -1831,7 +1894,9 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info) {
 
 table_info* coherent_shuffle_table(
     table_info* in_table, table_info* ref_table, int64_t n_keys,
-    uint32_t* hashes, SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter) {
+    uint32_t* hashes, SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
+    const bool keep_filter_misses) {
+    tracing::Event ev("coherent_shuffle_table", true);
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
@@ -1859,7 +1924,11 @@ table_info* coherent_shuffle_table(
     // coherent_shuffle_table only called in join with parallel options.
     // is_parallel = true
     // Prereq to calling shuffle_table_kernel
-    comm_info.set_counts(hashes, true, filter);
+    if (keep_filter_misses) {
+        comm_info.set_counts<true>(hashes, true, filter);
+    } else {
+        comm_info.set_counts<false>(hashes, true, filter);
+    }
     table_info* table = shuffle_table_kernel(in_table, hashes, comm_info, true);
     if (delete_hashes) delete[] hashes;
     return table;

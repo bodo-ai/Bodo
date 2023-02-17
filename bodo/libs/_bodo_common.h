@@ -447,6 +447,7 @@ inline T& getv(array_info* arr, size_t idx) {
 }
 
 struct mpi_comm_info {
+    int myrank;
     int n_pes;
     std::vector<array_info*> arrays;
     size_t n_rows;
@@ -494,7 +495,13 @@ struct mpi_comm_info {
      * @param filter : Bloom filter. Rows whose hash is not in the filter will
      * be discarded from shuffling. If no filter is provided no filtering will
      * happen.
+     *
+     * @tparam keep_filter_misses : In case a Bloom filter is provided and a key
+     * is not present in the bloom filter, should we keep the value on this rank
+     * (i.e. not discard it altogether). This is useful in the outer join
+     * cases. Defaults to false.
      */
+    template <bool keep_filter_misses = false>
     void set_counts(
         uint32_t const* const hashes, bool is_parallel,
         SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr);
