@@ -3,12 +3,15 @@
 Test correctness of SQL conditional functions on BodoSQL
 """
 import copy
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.string_ops_common import bodosql_string_fn_testing_df  # noqa
 from bodosql.tests.utils import check_query
+
+import bodo
 
 
 @pytest.fixture(
@@ -27,6 +30,37 @@ def test_coalesce_cols_basic(spark_info, basic_df, memory_leak_check):
     query = "select COALESCE(A, B, C) from table1"
 
     check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
+
+
+@pytest.mark.parametrize(
+    "scalar", [pytest.param("1", id="integer"), pytest.param("-0.1", id="float")]
+)
+def test_coalesce_128(spark_info, scalar, memory_leak_check):
+    """tests the coalesce function with a NUMBER(38, 18) column and integer/float
+    scalars."""
+    query = f"select COALESCE(A, {scalar}) from table1"
+
+    @bodo.jit
+    def make_d128_df():
+        A = pd.Series(
+            [
+                Decimal(0),
+                None,
+                Decimal(2),
+                None,
+                Decimal((2**33 - 1) / 13),
+                None,
+                Decimal((2**65 - 1) / 4),
+                None,
+                Decimal((2**97 - 1) / 100),
+                None,
+            ]
+        )
+        return pd.DataFrame({"A": A})
+
+    ctx = {"table1": make_d128_df()}
+
+    check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
 
 
 @pytest.mark.parametrize(
