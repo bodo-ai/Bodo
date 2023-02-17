@@ -5,6 +5,7 @@ Test SQL `time` support
 import numpy as np
 import pandas as pd
 import pytest
+from bodosql.context import BodoSQLContext
 from bodosql.tests.utils import check_query
 
 import bodo
@@ -253,47 +254,133 @@ def test_time_from_parts_vector(
 
 
 @pytest.mark.parametrize(
-    "part,value",
+    "unit, test_fn_type, answer",
     [
         pytest.param(
             "hour",
-            1,
-            id="hour",
-            marks=pytest.mark.slow,
+            "DATE_PART",
+            pd.Series([12, 1, 9, 20, 23]),
+            id="valid-hour-date_part",
         ),
         pytest.param(
             "minute",
-            2,
-            id="minute",
-            marks=pytest.mark.slow,
+            "MINUTE",
+            pd.Series([30, 2, 59, 45, 50]),
+            id="valid-minute-regular",
         ),
         pytest.param(
             "second",
-            3,
-            id="second",
-            marks=pytest.mark.slow,
+            "DATE_PART",
+            pd.Series([15, 3, 0, 1, 59]),
+            id="valid-second-date_part",
         ),
         pytest.param(
             "millisecond",
-            4,
-            id="millisecond",
-            marks=pytest.mark.slow,
+            "EXTRACT",
+            pd.Series([0, 4, 100, 123, 500]),
+            id="valid-millisecond-extract",
         ),
         pytest.param(
             "microsecond",
-            5,
-            id="microsecond",
-            marks=pytest.mark.slow,
+            "MICROSECOND",
+            pd.Series([0, 0, 250, 456, 0]),
+            id="valid-microsecond-regular",
         ),
         pytest.param(
             "nanosecond",
-            6,
-            id="nanosecond",
+            "EXTRACT",
+            pd.Series([0, 0, 0, 789, 999]),
+            id="valid-nanosecond-extract",
+        ),
+        pytest.param(
+            "day",
+            "DATE_PART",
+            None,
+            id="invalid-day-date_part",
+        ),
+        pytest.param(
+            "dayofyear",
+            "DAYOFYEAR",
+            None,
+            id="invalid-dayofyear-regular",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "dow",
+            "EXTRACT",
+            None,
+            id="invalid-dow-extract",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "week",
+            "WEEK",
+            None,
+            id="invalid-week-regular",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "weekiso",
+            "DATE_PART",
+            None,
+            id="invalid-weekiso-date_part",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "month",
+            "EXTRACT",
+            None,
+            id="invalid-month-extract",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "quarter",
+            "DATE_PART",
+            None,
+            id="invalid-quarter-date_part",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "year",
+            "YEAR",
+            None,
+            id="invalid-year-regular",
+            marks=pytest.mark.slow,
         ),
     ],
 )
-def test_time_extract(part, value, memory_leak_check):
-    query = f"select extract({part} from to_time('01:02:03.004005006')) as A"
-    ctx = {}
-    expected_output = pd.DataFrame({"A": value}, index=np.arange(1))
-    check_query(query, ctx, None, expected_output=expected_output)
+def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
+    """Tests EXTRACT and EXTRACT-like functions on time data, checking that
+    values larger than HOUR raise an exception"""
+    if test_fn_type == "EXTRACT":
+        query = f"SELECT EXTRACT({unit} FROM T) AS U FROM table1"
+    elif test_fn_type == "DATE_PART":
+        query = f"SELECT DATE_PART('{unit}', T) AS U FROM table1"
+    else:
+        query = f"SELECT {test_fn_type}(T) AS U FROM table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "T": pd.Series(
+                    [
+                        bodo.Time(12, 30, 15, precision=0),
+                        bodo.Time(1, 2, 3, 4, precision=3),
+                        bodo.Time(9, 59, 0, 100, 250, precision=6),
+                        bodo.Time(20, 45, 1, 123, 456, 789, precision=9),
+                        bodo.Time(23, 50, 59, 500, 0, 999, precision=9),
+                    ]
+                )
+            }
+        )
+    }
+    if answer is None:
+        bc = BodoSQLContext(ctx)
+        with pytest.raises(
+            Exception, match=r"Cannot extract unit \w+ from TIME values"
+        ):
+            bc.sql(query)
+    else:
+        expected_output = pd.DataFrame({"U": answer})
+        check_query(
+            query, ctx, None, expected_output=expected_output, check_dtype=False
+        )

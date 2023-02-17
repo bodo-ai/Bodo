@@ -835,7 +835,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           ReturnTypes.INTEGER_NULLABLE,
           null,
           OperandTypes.sequence(
-              "DATE_PART(STRING, TIMESTAMP)", OperandTypes.STRING, OperandTypes.TIMESTAMP),
+              "DATE_PART(STRING, TIMESTAMP)", OperandTypes.STRING, OperandTypes.DATETIME),
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction NEXT_DAY =

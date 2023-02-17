@@ -4,12 +4,33 @@ import static com.bodosql.calcite.application.Utils.Utils.escapePythonQuotes;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
+import java.util.ArrayList;
 import java.util.List;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlKind;
 
 /** Class that returns the generated code for Extract after all inputs have been visited. */
 public class ExtractCodeGen {
+
+  // List of units that are unsupported for TIME inputs
+  public static List<String> dayPlusUnits;
+
+  static {
+    dayPlusUnits = new ArrayList<String>();
+    dayPlusUnits.add("YEAR");
+    dayPlusUnits.add("QUARTER");
+    dayPlusUnits.add("MONTH");
+    dayPlusUnits.add("WEEK");
+    dayPlusUnits.add("WEEKOFYEAR");
+    dayPlusUnits.add("WEEKISO");
+    dayPlusUnits.add("DAY");
+    dayPlusUnits.add("DAYOFMONTH");
+    dayPlusUnits.add("DOY");
+    dayPlusUnits.add("DAYOFYEAR");
+    dayPlusUnits.add("DOW");
+    dayPlusUnits.add("DAYOFWEEK");
+    dayPlusUnits.add("DAYOFWEEKISO");
+  }
 
   // Used for doing null checking binary operations
   static SqlBinaryOperator addBinop =
@@ -23,9 +44,13 @@ public class ExtractCodeGen {
    * @param datetimeVal The arg expr for selecting which datetime field to extract. This must be a
    *     constant string.
    * @param column The column arg expr.
+   * @param isTime Is the input TIME data?
    * @return The code generated that matches the Extract expression.
    */
-  public static String generateExtractCode(String datetimeVal, String column) {
+  public static String generateExtractCode(String datetimeVal, String column, boolean isTime) {
+    if (isTime && dayPlusUnits.contains(datetimeVal)) {
+      throw new BodoSQLCodegenException("Cannot extract unit " + datetimeVal + " from TIME values");
+    }
     String extractCode;
     switch (datetimeVal) {
       case "NANOSECOND":
@@ -85,9 +110,11 @@ public class ExtractCodeGen {
    * gen as EXTRACT
    *
    * @param operandsInfo The information about the arguments to the call
+   * @param isTime Is the input TIME data?
    * @return The name generated that matches the Extract expression.
    */
-  public static RexNodeVisitorInfo generateDatePart(List<RexNodeVisitorInfo> operandsInfo) {
+  public static RexNodeVisitorInfo generateDatePart(
+      List<RexNodeVisitorInfo> operandsInfo, boolean isTime) {
     String unit;
     switch (operandsInfo.get(0).getExprCode()) {
       case "\"year\"":
@@ -196,7 +223,7 @@ public class ExtractCodeGen {
         throw new BodoSQLCodegenException(
             "Unsupported DATE_PART unit: " + operandsInfo.get(0).getExprCode());
     }
-    String code = generateExtractCode(unit, operandsInfo.get(1).getExprCode());
+    String code = generateExtractCode(unit, operandsInfo.get(1).getExprCode(), isTime);
     return new RexNodeVisitorInfo(code);
   }
 }

@@ -1320,7 +1320,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
         visitRexNode(node.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
     RexNodeVisitorInfo column =
         visitRexNode(node.operands.get(1), colNames, id, inputVar, isSingleRow, ctx);
-    String codeExpr = generateExtractCode(dateVal.getExprCode(), column.getExprCode());
+    boolean isTime = node.operands.get(1).getType().getSqlTypeName().toString().equals("TIME");
+    String codeExpr = generateExtractCode(dateVal.getExprCode(), column.getExprCode(), isTime);
     return new RexNodeVisitorInfo(codeExpr);
   }
 
@@ -2180,9 +2181,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         return generatePosition(operandsInfo);
       case OTHER:
       case OTHER_FUNCTION:
-        /* If sqlKind = other function, the only recourse is to match on the name of the function. */
         boolean isTime;
         String tzStr;
+        /* If sqlKind = other function, the only recourse is to match on the name of the function. */
         switch (fnName) {
             // TODO (allai5): update this in a future PR for clean-up so it re-uses the
             // SQLLibraryOperator definition.
@@ -2485,7 +2486,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DATE_PART":
             assert operandsInfo.size() == 2;
             assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
-            return generateDatePart(operandsInfo);
+            isTime =
+                fnOperation
+                    .getOperands()
+                    .get(1)
+                    .getType()
+                    .getSqlTypeName()
+                    .toString()
+                    .equals("TIME");
+            return generateDatePart(operandsInfo, isTime);
           case "TO_DAYS":
             return generateToDaysCode(operandsInfo.get(0));
           case "TO_SECONDS":
@@ -2673,8 +2682,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "WEEK":
           case "WEEKOFYEAR":
           case "WEEKISO":
+            isTime =
+                fnOperation
+                    .getOperands()
+                    .get(0)
+                    .getType()
+                    .getSqlTypeName()
+                    .toString()
+                    .equals("TIME");
             return new RexNodeVisitorInfo(
-                generateExtractCode(fnName, operandsInfo.get(0).getExprCode()));
+                generateExtractCode(fnName, operandsInfo.get(0).getExprCode(), isTime));
           case "REGR_VALX":
           case "REGR_VALY":
             return getDoubleArgCondFnInfo(
