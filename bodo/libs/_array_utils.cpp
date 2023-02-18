@@ -1376,13 +1376,153 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
     return false;
 };
 
+/**
+ * @brief Helper function for create_temp_null_bitmask_for_array to fill the
+ * bitmask for a NUMPY array.
+ *
+ * @param[out] bitmask Bitmask array to fill. It is pre-allocated to the correct
+ * size and just needs to be filled up.
+ * @param arr The array to create bitmask for.
+ *
+ * @tparam DType The dtype for the array. Only certain dtypes that can have have
+ * sentinel nulls are supported.
+ */
+template <Bodo_CTypes::CTypeEnum DType>
+requires(NullSentinelDtype<DType>) void fill_null_bitmask_numpy(
+    uint8_t* bitmask, const array_info* arr) {
+    using T = typename dtype_to_type<DType>::type;
+    T* data = (T*)(arr->data1);
+    for (size_t i = 0; i < arr->length; i++) {
+        SetBitTo(bitmask, i, !isnan_alltype<T, DType>(data[i]));
+    }
+}
+
+/**
+ * @brief Helper function for bitwise_and_null_bitmasks to create a temp null
+ * bitmask for the provided array. Only NUMPY, CATEGORICAL and ARROW array types
+ * are supported. For other types, there's either a null-bitmask already, or the
+ * array types are not supported as join keys (which is the use case for this).
+ *
+ * @param arr Array to build bitmask for.
+ * @return uint8_t* Bitmask constructed for the array. Caller is responsible for
+ * cleaning up the returned array using delete[].
+ */
+uint8_t* create_temp_null_bitmask_for_array(const array_info* arr) {
+    uint64_t length = arr->length;
+    int64_t n_bytes = ((length + 7) >> 3);
+    uint8_t* bitmask = new uint8_t[n_bytes];
+
+    switch (arr->arr_type) {
+        case bodo_array_type::NUMPY: {
+            // Only some dtypes have the concept of a sentinel null,
+            // for the rest, there's no concept of a null, so we set all bits to
+            // not null.
+            if (arr->dtype == Bodo_CTypes::FLOAT32) {
+                fill_null_bitmask_numpy<Bodo_CTypes::FLOAT32>(bitmask, arr);
+            } else if (arr->dtype == Bodo_CTypes::FLOAT64) {
+                fill_null_bitmask_numpy<Bodo_CTypes::FLOAT64>(bitmask, arr);
+            } else if (arr->dtype == Bodo_CTypes::DATETIME) {
+                fill_null_bitmask_numpy<Bodo_CTypes::DATETIME>(bitmask, arr);
+            } else if (arr->dtype == Bodo_CTypes::TIMEDELTA) {
+                fill_null_bitmask_numpy<Bodo_CTypes::TIMEDELTA>(bitmask, arr);
+            } else {
+                // Set all bits to not null.
+                memset(bitmask, 0xff, n_bytes);
+            }
+            break;
+        }
+        case bodo_array_type::CATEGORICAL: {
+            uint64_t siztype = numpy_item_size[arr->dtype];
+            char* data_ptr = arr->data1;
+            for (size_t i = 0; i < arr->length; i++) {
+                SetBitTo(bitmask, i,
+                         !isnan_categorical_ptr(arr->dtype,
+                                                data_ptr + (siztype * i)));
+            }
+            break;
+        }
+        case bodo_array_type::ARROW: {
+            // For robustness, we do a for loop and use the IsNull function
+            // to determine if an element is null. IsNull correctly handles all
+            // cases including no nulls, all nulls (Null array type), etc.
+            for (size_t i = 0; i < arr->length; i++) {
+                SetBitTo(bitmask, i, !arr->array->IsNull(i));
+            }
+
+            // XXX If we want, we can do something smarter like:
+            // const uint8_t* arrow_null_bitmask =
+            //     arr->array->null_bitmap_data();
+            // if (arrow_null_bitmask != nullptr)
+            //     memcpy(bitmask, arrow_null_bitmask, n_bytes);
+            // else {
+            //     if (arr->array->null_count() == arr->array->length())
+            //         // all null case
+            //         memset(bitmask, 0, n_bytes);
+            //     else
+            //         // no null case
+            //         memset(bitmask, 0xff, n_bytes);
+            // }
+
+            break;
+        }
+        default:
+            // For cases like INTERVAL and ARRAY_ITEM.
+            // These cannot be key columns at this point anyway (see
+            // KeyComparisonAsPython_Column).
+            throw std::runtime_error(
+                "create_temp_null_bitmask_for_array not supported for "
+                "array "
+                "type: " +
+                GetArrType_as_string(arr->arr_type));
+    }
+
+    return bitmask;
+};
+
+uint8_t* bitwise_and_null_bitmasks(const std::vector<array_info*>& arrays,
+                                   const bool is_parallel) {
+    tracing::Event ev("bitwise_and_null_bitmasks", is_parallel);
+    ev.add_attribute("num_arrays", arrays.size());
+    uint64_t length = arrays[0]->length;
+    ev.add_attribute("nrows", length);
+    int64_t n_bytes = ((length + 7) >> 3);
+    uint8_t* final_bitmask = new uint8_t[n_bytes];
+    // XXX Might want to optimize for the single key case.
+    memset(final_bitmask, 0xff, n_bytes);  // Start off as not nulls
+
+    for (array_info* arr : arrays) {
+        uint8_t* arr_null_bitmask;
+        bool free_bitmask = false;
+        if (arr->null_bitmask) {
+            // Use existing bitmask if one exists
+            arr_null_bitmask = (uint8_t*)(arr->null_bitmask);
+        } else {
+            // Create a temporary one for NUMPY, CATEGORICAL and ARROW arrays.
+            // The remaining array types are not supported as join keys.
+            arr_null_bitmask = create_temp_null_bitmask_for_array(arr);
+            free_bitmask = true;
+        }
+        // Do a bitwise AND on all the bits, one byte at a time.
+        // XXX The compiler should vectorize it automatically
+        // (hopefully)?
+        for (int i = 0; i < n_bytes; i++) {
+            final_bitmask[i] &= arr_null_bitmask[i];
+        }
+        if (free_bitmask) {
+            delete[] arr_null_bitmask;
+        }
+    }
+
+    return final_bitmask;
+};
+
 // ----------------------- Debug functions -----------------------
 
 /** Printing the string expression of an entry in the column
  *
  * @param dtype: the data type on input
- * @param ptrdata: The pointer to the data (its length is determined by
- * dtype)
+ * @param ptrdata: The pointer to the data (its length is determined
+ * by dtype)
  * @return The string on output.
  */
 std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
@@ -1880,18 +2020,19 @@ void DEBUG_PrintColumn(std::ostream& os, array_info* arr) {
 }
 
 /**
- * Used for a custom reduction to merge all the HyperLogLog registers across
- * all ranks.
+ * Used for a custom reduction to merge all the HyperLogLog
+ * registers across all ranks.
  *
- * The body of this function is what is done in the `HyperLogLog.merge()`
- * function with some decoration to deal with MPI.
+ * The body of this function is what is done in the
+ * `HyperLogLog.merge()` function with some decoration to deal with
+ * MPI.
  */
 void MPI_hyper_log_log_merge(void* in, void* inout, int* len,
                              MPI_Datatype* dptr) {
     uint8_t* M_in = reinterpret_cast<uint8_t*>(in);
     uint8_t* M_inout = reinterpret_cast<uint8_t*>(inout);
-    // The loop below comes from libs/hyperloglog.hpp:merge() (currently
-    // like 161)
+    // The loop below comes from libs/hyperloglog.hpp:merge()
+    // (currently like 161)
     for (int r = 0; r < *len; ++r) {
         if (M_inout[r] < M_in[r]) {
             M_inout[r] |= M_in[r];
@@ -1925,14 +2066,15 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
     ev.add_attribute("local_estimate", local_est);
     ev_local.finalize();
 
-    // To get a global estimate of the cardinality we first do a custom
-    // reduction of the "registers" in the HyperLogLog. Once the registers
-    // have been reduced to rank 0, we overwrite the local register in the
-    // hll object, and then compute the estimate.
+    // To get a global estimate of the cardinality we first do a
+    // custom reduction of the "registers" in the HyperLogLog. Once
+    // the registers have been reduced to rank 0, we overwrite the
+    // local register in the hll object, and then compute the
+    // estimate.
     //
-    // Note: the merge for HLL-HIP is much more complicated and so isn't a
-    // trivial replacement. It certainly could be tested, but would require
-    // writing more code.
+    // Note: the merge for HLL-HIP is much more complicated and so
+    // isn't a trivial replacement. It certainly could be tested,
+    // but would require writing more code.
     int my_rank = std::numeric_limits<int>::max();
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     std::vector<uint8_t> hll_registers(hll.data().size(), 0);
@@ -1944,8 +2086,8 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
         MPI_Op_free(&mpi_hll_op);
     }
 
-    // Cast to known MPI-compatible type since size_t is implementation
-    // defined.
+    // Cast to known MPI-compatible type since size_t is
+    // implementation defined.
     unsigned long local_len = static_cast<unsigned long>(len);
     unsigned long global_len = 0;
     MPI_Allreduce(&local_len, &global_len, 1, MPI_UNSIGNED_LONG, MPI_SUM,
@@ -1968,7 +2110,8 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
  * Input tables are assumed to have the same schema, and will
  * be fully deleted (decref arrays and delete pointers).
  *
- * @param table_chunks input tables which are assumed to have the same schema
+ * @param table_chunks input tables which are assumed to have the
+ * same schema
  * @return table_info* concatenated table
  */
 table_info* concat_tables(const std::vector<table_info*>& table_chunks) {

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
+// Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_shuffle.h"
 #include <arrow/api.h>
 #include <numeric>
@@ -77,93 +77,141 @@ static void calc_disp(std::vector<T>& disps, std::vector<T> const& counts) {
 }
 
 /**
- * @brief Template used to handle the case in mpi_comm_info::set_counts
- * where a bloom filter is provided for additional filtering and we
+ * @brief Template used to handle the unmatchable rows in
+ * mpi_comm_info::set_counts. This is used in two cases:
+ * - A bloom filter is provided for additional filtering and we
  * need to decide what to do with the misses.
+ * - A null bitmask is provided (only provided when nulls don't match with each
+ * other, e.g. SQL joins), and we need to decide what to do with the nulls.
  *
- * @tparam keep_filter_misses Whether to keep the misses on the current rank, or
- * drop the misses altogether.
+ * @param row_dest Vector keeping track of the destination for each row.
+ * This will be updated in place.
+ * @param send_count Vector keeping track of the number of rows to send
+ * to each rank. This will be updated in place.
+ * @param pos The row position to keep on current rank.
+ * @param myrank Rank of the current process.
+ *
+ * @tparam keep_unmatchable_rows_local Whether to keep the unmatchable rows on
+ * the current rank (e.g. in case they are on an outer side of a join), or drop
+ * them altogether (e.g. in case they are on an inner side of a join).
  */
-template <bool keep_filter_misses>
-struct handle_keep_filter_misses;
+template <bool keep_unmatchable_rows_local>
+void handle_unmatchable_rows(std::vector<int>& row_dest,
+                             std::vector<int64_t>& send_count, size_t pos,
+                             int myrank);
 
 /**
- * @brief Specialization of handle_keep_filter_misses for the case where we
- * decide to keep the misses locally. This is useful for outer joins.
- *
+ * @brief Specialization of keep_unmatchable_rows_local for the case where
+ * we decide to keep these rows locally. This is useful for rows on an outer
+ * side of a join.
  */
 template <>
-struct handle_keep_filter_misses<true> {
-    /**
-     * @brief Keep the row on the current rank.
-     *
-     * @param row_dest Vector keeping track of the destination for each row.
-     * This will be updated in place.
-     * @param send_count Vector keeping track of the number of rows to send to
-     * each rank. This will be updated in place.
-     * @param pos The row position to keep on current rank.
-     * @param myrank Rank of the current process.
-     */
-    static inline void apply(std::vector<int>& row_dest,
-                             std::vector<int64_t>& send_count, size_t pos,
-                             int myrank) {
-        row_dest[pos] = myrank;
-        send_count[myrank]++;
-    }
-};
+void handle_unmatchable_rows<true>(std::vector<int>& row_dest,
+                                   std::vector<int64_t>& send_count, size_t pos,
+                                   int myrank) {
+    row_dest[pos] = myrank;
+    send_count[myrank]++;
+}
 
 /**
- * @brief Specialization of handle_keep_filter_misses for the case where we
- * decide to drop the misses altogether.
- *
+ * @brief Specialization of keep_unmatchable_rows_local for the case where
+ * we decide to drop these rows altogether. This is useful for rows on an
+ * inner side of a join.
  */
 template <>
-struct handle_keep_filter_misses<false> {
-    /**
-     * @brief This function does nothing.
-     *
-     * See the argument descriptions in the previous specialization function.
-     */
-    static inline void apply(std::vector<int>& row_dest,
-                             std::vector<int64_t>& send_count, size_t pos,
-                             int myrank) {
-        // This function does nothing
-    }
-};
+void handle_unmatchable_rows<false>(std::vector<int>& row_dest,
+                                    std::vector<int64_t>& send_count,
+                                    size_t pos, int myrank) {
+    // This function does nothing.
+    // row_dest[pos] will stay as default initialized value of
+    // -1 and hence get dropped.
+}
 
-template <bool keep_filter_misses>
+template <bool keep_nulls_and_filter_misses>
 void mpi_comm_info::set_counts(
     uint32_t const* const hashes, bool is_parallel,
-    SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter) {
+    SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
+    const uint8_t* null_bitmask) {
     tracing::Event ev("set_counts", is_parallel);
     ev.add_attribute("n_rows", n_rows);
-    ev.add_attribute("using_filter", filter != nullptr);
-    ev.add_attribute("keep_filter_misses", keep_filter_misses);
+    ev.add_attribute("g_using_filter", filter != nullptr);
+    ev.add_attribute("g_keep_filter_misses", keep_nulls_and_filter_misses);
+    ev.add_attribute("g_using_hash_null_bitmask", null_bitmask != nullptr);
+    ev.add_attribute("g_keep_nulls_local", ((null_bitmask != nullptr) &&
+                                            keep_nulls_and_filter_misses));
+    ev.add_attribute("g_drop_nulls", ((null_bitmask != nullptr) &&
+                                      !keep_nulls_and_filter_misses));
+
     // get send count
     // -1 indicates that a row is dropped (not sent anywhere)
     row_dest.resize(n_rows, -1);
     if (filter == nullptr) {
-        for (size_t i = 0; i < n_rows; i++) {
-            int node = hash_to_rank(hashes[i], n_pes);
-            row_dest[i] = node;
-            send_count[node]++;
-        }
-    } else {
-        for (size_t i = 0; i < n_rows; i++) {
-            const uint32_t& hash = hashes[i];
-            // if the hash is not in the filter we drop this row (row_dest[i]
-            // will stay as default initialized value of -1)
-            if (!filter->Find(static_cast<uint64_t>(hash))) {
-                handle_keep_filter_misses<keep_filter_misses>::apply(
-                    row_dest, send_count, i, this->myrank);
-            } else {
-                int node = hash_to_rank(hash, n_pes);
+        if (null_bitmask == nullptr) {
+            for (size_t i = 0; i < n_rows; i++) {
+                int node = hash_to_rank(hashes[i], n_pes);
                 row_dest[i] = node;
                 send_count[node]++;
             }
+        } else {
+            for (size_t i = 0; i < n_rows; i++) {
+                if (!GetBit(null_bitmask, i)) {
+                    // if null: keep the row on this rank if
+                    // keep_nulls_and_filter_misses=true, or drop entirely
+                    // otherwise (i.e. leave row_dest[i] as -1).
+                    handle_unmatchable_rows<keep_nulls_and_filter_misses>(
+                        row_dest, send_count, i, this->myrank);
+                } else {
+                    int node = hash_to_rank(hashes[i], n_pes);
+                    row_dest[i] = node;
+                    send_count[node]++;
+                }
+            }
         }
-        filtered = true;
+    } else {
+        if (null_bitmask == nullptr) {
+            for (size_t i = 0; i < n_rows; i++) {
+                const uint32_t& hash = hashes[i];
+                if (!filter->Find(static_cast<uint64_t>(hash))) {
+                    // if not in filter: keep the row on this rank if
+                    // keep_nulls_and_filter_misses=true, or drop entirely
+                    // otherwise (i.e. leave row_dest[i] as -1).
+                    handle_unmatchable_rows<keep_nulls_and_filter_misses>(
+                        row_dest, send_count, i, this->myrank);
+                } else {
+                    int node = hash_to_rank(hash, n_pes);
+                    row_dest[i] = node;
+                    send_count[node]++;
+                }
+            }
+        } else {
+            for (size_t i = 0; i < n_rows; i++) {
+                if (!GetBit(null_bitmask, i)) {
+                    // if null: keep the row on this rank if
+                    // keep_nulls_and_filter_misses=true, or drop entirely
+                    // otherwise (i.e. leave row_dest[i] as -1).
+                    handle_unmatchable_rows<keep_nulls_and_filter_misses>(
+                        row_dest, send_count, i, this->myrank);
+                } else {
+                    const uint32_t& hash = hashes[i];
+                    if (!filter->Find(static_cast<uint64_t>(hash))) {
+                        // if not in filter: keep the row on this rank if
+                        // keep_nulls_and_filter_misses=true, or drop entirely
+                        // otherwise (i.e. leave row_dest[i] as -1).
+                        handle_unmatchable_rows<keep_nulls_and_filter_misses>(
+                            row_dest, send_count, i, this->myrank);
+                    } else {
+                        int node = hash_to_rank(hash, n_pes);
+                        row_dest[i] = node;
+                        send_count[node]++;
+                    }
+                }
+            }
+        }
     }
+    // Rows can get filtered if either a bloom-filter or a null filter is
+    // provided
+    this->filtered = (null_bitmask != nullptr) || (filter != nullptr);
+
     if (ev.is_tracing()) {
         int64_t n_rows_send =
             std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
@@ -243,8 +291,8 @@ void mpi_comm_info::set_counts(
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel or
- * not
+ * @param is_parallel: Used to indicate whether tracing should be parallel
+ * or not
  */
 template <class T>
 static void fill_send_array_inner(T* send_buff, const T* data,
@@ -270,8 +318,8 @@ static void fill_send_array_inner(T* send_buff, const T* data,
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel or
- * not
+ * @param is_parallel: Used to indicate whether tracing should be parallel
+ * or not
  */
 static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
                                           std::vector<int64_t> const& send_disp,
@@ -300,7 +348,8 @@ static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
   @param send_disp        : the sending array of displacements
   @param send_disp_sub    : the sending array of sub displacements
   @param n_rows           : the number of rows.
-  @param is_parallel: Used to indicate whether tracing should be parallel or not
+  @param is_parallel: Used to indicate whether tracing should be parallel or
+  not
  */
 static void fill_send_array_string_inner(
     // XXX send_length_buff was allocated as offset_t but treating as uint32
@@ -327,8 +376,8 @@ static void fill_send_array_string_inner(
 
 /*
   The function for setting up the sending arrays in list_string_array case.
-  Data should be ordered by processor for being sent and received by the other
-  side.
+  Data should be ordered by processor for being sent and received by the
+  other side.
   @param send_data_buff    : the data to be sent.
   @param send_length_data  : the data lengths
   @param send_length_index : the data indexes
@@ -354,16 +403,16 @@ static void fill_send_array_list_string_inner(
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
     std::vector<int64_t> tmp_offset_sub_sub(send_disp_sub_sub);
     for (size_t i = 0; i < n_rows; i++) {
-        // Compute the number of strings and the number of characters that will
-        // have to be sent.
+        // Compute the number of strings and the number of characters that
+        // will have to be sent.
         const int node = row_dest[i];
         if (node == -1) continue;
         int64_t ind = tmp_offset[node];
         uint32_t len_sub = arr_index_offsets[i + 1] - arr_index_offsets[i];
         uint32_t len_sub_sub = arr_data_offsets[arr_index_offsets[i + 1]] -
                                arr_data_offsets[arr_index_offsets[i]];
-        // Assigning the number of strings to be sent (len_sub is the number of
-        // strings)
+        // Assigning the number of strings to be sent (len_sub is the number
+        // of strings)
         send_length_index[ind] = len_sub;
         tmp_offset[node]++;
         // write the lengths of the strings that will be sent from this
@@ -403,8 +452,8 @@ static void fill_send_array_null_inner(
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel or
- * not
+ * @param is_parallel: Used to indicate whether tracing should be parallel
+ * or not
  */
 static void fill_send_array(array_info* send_arr, array_info* in_arr,
                             std::vector<int64_t> const& send_disp,
@@ -551,15 +600,16 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
 }
 
 /**
- * @brief Updates a dictionary array to drop any duplicates from its dictionary.
- * If we gather_global_dict then we first unify the dictionaries on all ranks
- * to become consistent.
- * We also drop the nulls in the dictionary. The null bit
- * of the elements in the indices array that were pointing to nulls in the
- * dictionary, are set to false to indicate null instead.
+ * @brief Updates a dictionary array to drop any duplicates from its
+ * dictionary. If we gather_global_dict then we first unify the dictionaries
+ * on all ranks to become consistent. We also drop the nulls in the
+ * dictionary. The null bit of the elements in the indices array that were
+ * pointing to nulls in the dictionary, are set to false to indicate null
+ * instead.
  *
  * @param dict_array Dictionary array to update.
- * @param gather_global_dict Should we gather the dictionaries across all ranks?
+ * @param gather_global_dict Should we gather the dictionaries across all
+ * ranks?
  * @param sort_dictionary Should we sort the dictionary?
  */
 void update_local_dictionary_remove_duplicates(array_info* dict_array,
@@ -585,8 +635,9 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
 
     // We always want to drop the NAs from the dictionary itself. We will
     // handle the indices pointing to the null during the re-assignment.
-    table_info* dist_dictionary_table = drop_duplicates_table(
-        in_dictionary_table, gather_global_dict, 1, 0, /*dropna=*/true, false);
+    table_info* dist_dictionary_table =
+        drop_duplicates_table(in_dictionary_table, gather_global_dict, 1, 0,
+                              /*dropna=*/true, false);
     delete in_dictionary_table;  // no array decref because
                                  // drop_duplicates_table stole the
                                  // reference
@@ -639,20 +690,19 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     HashDict hash_fct{global_dict_len, hashes_global_dict, hashes_local_dict};
     KeyEqualDict equal_fct{global_dict_len, global_dictionary,
                            local_dictionary /*, is_na_equal*/};
-    // dict_value_to_global_index will map a dictionary value (string) to its
-    // index in the global dictionary array. We don't want strings as keys
-    // of the hash map because that would be inefficient in terms of storage
-    // and string copies. Instead, we will use the global and local dictionary
-    // indices as keys, and use these indices to refer to the strings. Because
-    // the index space of global and local dictionaries overlap, to have the
-    // hash map distinguish between them, indices referring to the local
-    // dictionary are incremented by 'global_dict_len' before accessing
-    // the map.
-    // For example:
-    // global dictionary: ["ABC", "CC", "D"]. Keys that refer to these strings:
-    // [0, 1, 2] local dictionary: ["CC", "D"]. Keys that refer to these
-    // strings: [3, 4] Also see HashDict and KeyEqualDict to see how keys are
-    // mapped to get the hashes and to compare values
+    // dict_value_to_global_index will map a dictionary value (string) to
+    // its index in the global dictionary array. We don't want strings as
+    // keys of the hash map because that would be inefficient in terms of
+    // storage and string copies. Instead, we will use the global and local
+    // dictionary indices as keys, and use these indices to refer to the
+    // strings. Because the index space of global and local dictionaries
+    // overlap, to have the hash map distinguish between them, indices
+    // referring to the local dictionary are incremented by
+    // 'global_dict_len' before accessing the map. For example: global
+    // dictionary: ["ABC", "CC", "D"]. Keys that refer to these strings: [0,
+    // 1, 2] local dictionary: ["CC", "D"]. Keys that refer to these
+    // strings: [3, 4] Also see HashDict and KeyEqualDict to see how keys
+    // are mapped to get the hashes and to compare values
 
     UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict, KeyEqualDict>
         dict_value_to_global_index({}, hash_fct, equal_fct);
@@ -682,8 +732,8 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     // remap old (local) indices to global ones
 
     // TODO? if there is only one reference to dict_array remaining, I can
-    // modify indices in place, otherwise I have to allocate a new array if I am
-    // not changing the dictionary of the input array in Python side
+    // modify indices in place, otherwise I have to allocate a new array if
+    // I am not changing the dictionary of the input array in Python side
     bool inplace = (dict_array->info2->meminfo->refct == 1);
     if (!inplace) {
         array_info* dict_indices = copy_array(dict_array->info2);
@@ -698,8 +748,8 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
             dict_indices_t& index = dict_array->info2->at<dict_indices_t>(i);
             if (local_to_global_index[index] < 0) {
                 // This has to be an NA since all values in local dictionary
-                // (except NA) _must_ be in the global/deduplicated dictionary,
-                // and therefore have an index >= 0.
+                // (except NA) _must_ be in the global/deduplicated
+                // dictionary, and therefore have an index >= 0.
                 SetBitTo(null_bitmask, i, false);
                 // Set index to 0 to avoid any indexing issues later on.
                 index = 0;
@@ -796,8 +846,8 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel or
- * not
+ * @param is_parallel: Used to indicate whether tracing should be parallel
+ * or not
  */
 static void shuffle_array(array_info* send_arr, array_info* out_arr,
                           std::vector<int64_t> const& send_count,
@@ -1263,8 +1313,8 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
 /*
   A prerequisite for the function to run correctly is that the set_counts
   method has been used and set correctly. It determines which sizes go to
-  each processor. It performs a determination of the the sending and receiving
-  arrays.
+  each processor. It performs a determination of the the sending and
+  receiving arrays.
   ---
   1) The first step is to accumulate the sizes from each processors.
   2) Then for each row a number of operations are done:
@@ -1366,11 +1416,12 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                 -1, -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, out_array);
         }
         // release reference of input array
-        // This is a steal reference case. The idea is to release memory as soon
-        // as possible. If this release is not wished (which is a rare case)
-        // then the incref before operation is needed. Using an optional
-        // argument (like decref_input) to the input is a false good idea since
-        // it changes the semantics to something different from Python.
+        // This is a steal reference case. The idea is to release memory as
+        // soon as possible. If this release is not wished (which is a rare
+        // case) then the incref before operation is needed. Using an
+        // optional argument (like decref_input) to the input is a false
+        // good idea since it changes the semantics to something different
+        // from Python.
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
             array_info* out_dict_arr = new array_info(
@@ -1394,9 +1445,9 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
 
 // Shuffle is basically to send data to other processes for operations like
 // drop_duplicates, etc. Usually though you want to know the indices in the
-// original DF (usually the first occurring ones). Reverse shuffle is basically
-// tranferring the shuffled data back to the original DF. Useful for things like
-// cumulative operations, array_isin, etc.
+// original DF (usually the first occurring ones). Reverse shuffle is
+// basically tranferring the shuffled data back to the original DF. Useful
+// for things like cumulative operations, array_isin, etc.
 
 array_info* reverse_shuffle_numpy_array(array_info* in_arr,
                                         mpi_comm_info const& comm_info) {
@@ -1703,8 +1754,8 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
     Thus the data is in consecutive blocks.
     As a consequence of that, we cannot use the existing infrastructure
     for making the reverse shuffle.
-    There is no way we can build a uint32_t* compute_reverse_shuffle(uint32_t*
-   hashes)
+    There is no way we can build a uint32_t*
+   compute_reverse_shuffle(uint32_t* hashes)
     ---
     @param in_table  : The shuffled input table
     @param hashes    : the hashes (of the original table)
@@ -1803,9 +1854,10 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
 
     // For any dictionary arrays that have local dictionaries, convert their
     // dictionaries to global now (since it's needed for the shuffle) and if
-    // any of them are key columns, this will allow to simply hash the indices
-    // TODO maybe it's better to do this in hash_keys_table to avoid repeating
-    // this code in other operations?
+    // any of them are key columns, this will allow to simply hash the
+    // indices
+    // TODO maybe it's better to do this in hash_keys_table to avoid
+    // repeating this code in other operations?
     for (array_info* a : in_table->columns) {
         if (a->arr_type == bodo_array_type::DICT) {
             // XXX is the dictionary replaced in Python input array and
@@ -1895,7 +1947,7 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info) {
 table_info* coherent_shuffle_table(
     table_info* in_table, table_info* ref_table, int64_t n_keys,
     uint32_t* hashes, SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
-    const bool keep_filter_misses) {
+    const uint8_t* null_bitmask, const bool keep_nulls_and_filter_misses) {
     tracing::Event ev("coherent_shuffle_table", true);
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
@@ -1907,12 +1959,13 @@ table_info* coherent_shuffle_table(
 
     // For any dictionary arrays that have local dictionaries, convert their
     // dictionaries to global now (since it's needed for the shuffle) and if
-    // any of them are key columns, this will allow to simply hash the indices
+    // any of them are key columns, this will allow to simply hash the
+    // indices
     for (array_info* a : in_table->columns) {
         if (a->arr_type == bodo_array_type::DICT) {
-            // coherent_shuffle_table only called in join with parallel options.
-            // is_parallel = true
-            // We need dictionaries to be global and unique for hashing.
+            // coherent_shuffle_table only called in join with parallel
+            // options. is_parallel = true We need dictionaries to be global
+            // and unique for hashing.
             make_dictionary_global_and_unique(a, true);
         }
     }
@@ -1924,10 +1977,10 @@ table_info* coherent_shuffle_table(
     // coherent_shuffle_table only called in join with parallel options.
     // is_parallel = true
     // Prereq to calling shuffle_table_kernel
-    if (keep_filter_misses) {
-        comm_info.set_counts<true>(hashes, true, filter);
+    if (keep_nulls_and_filter_misses) {
+        comm_info.set_counts<true>(hashes, true, filter, null_bitmask);
     } else {
-        comm_info.set_counts<false>(hashes, true, filter);
+        comm_info.set_counts<false>(hashes, true, filter, null_bitmask);
     }
     table_info* table = shuffle_table_kernel(in_table, hashes, comm_info, true);
     if (delete_hashes) delete[] hashes;
@@ -2172,8 +2225,8 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
 }
 
 /* Broadcast the first n_cols of in_table to the other nodes.
-   The ref_table contains only the type information. In order to eliminate it,
-   we would need to have a broadcast_datatype function.
+   The ref_table contains only the type information. In order to eliminate
+   it, we would need to have a broadcast_datatype function.
 
    For dict columns, we use the global dictionary from columns of
    ref_table (since columns in in_table are null on ranks != 0).
@@ -2183,8 +2236,8 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
    @param ref_table : the reference table used for the datatype.
    @param in_table : the table that is broadcasted.
    @param n_cols : the number of columns in output
-   @param is_parallel: Used to indicate whether tracing should be parallel or
-   not
+   @param is_parallel: Used to indicate whether tracing should be parallel
+   or not
    @return the table put in all the nodes
 */
 table_info* broadcast_table(table_info* ref_table, table_info* in_table,
@@ -2311,7 +2364,8 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
         // At this point out_arr is a NULLABLE_INT_BOOL array and contains
         // the indices.
         // We assume the ref_table has the correct global
-        // dictionary that can be used for the final dictionary output array.
+        // dictionary that can be used for the final dictionary output
+        // array.
         if (ref_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
             if (myrank == mpi_root) {
                 // Restore in_arr to the DICT array
@@ -2650,8 +2704,8 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel or
- * not
+ * @param is_parallel: Used to indicate whether tracing should be parallel
+ * or not
  */
 table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                          bool all_gather, bool is_parallel = true) {
@@ -2951,11 +3005,13 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 out_arr = new array_info(
                     bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1,
                     -1, NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL,
-                    NULL, NULL, 0, 0, 0, /*has_global_dictionary=*/true,
+                    NULL, NULL, 0, 0, 0,
+                    /*has_global_dictionary=*/true,
                     /*has_deduped_local_dictionary=*/true,
                     in_arr->has_sorted_dictionary, in_arr->info1, out_arr);
                 incref_array(in_arr->info1);
-            }  // else out_arr is already NULL, so doesn't need to be handled
+            }  // else out_arr is already NULL, so doesn't need to be
+               // handled
         }
         out_arrs.push_back(out_arr);
         // Reference stealing. See shuffle_table_kernel for discussion.
@@ -2971,8 +3027,8 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
 
 /* Whether or not a reshuffling is needed.
    The idea is following:
-   ---What slows down the running is if one or 2 processors have a much higher
-   load than other because it serializes the computation.
+   ---What slows down the running is if one or 2 processors have a much
+   higher load than other because it serializes the computation.
    ---If 1 or 2 processors have little load then that is not so bad. It just
    decreases the number of effective processors used.
    ---Thus the metric to consider or not a reshuffling is
@@ -3041,8 +3097,8 @@ table_info* shuffle_renormalization_group(table_info* in_table,
     }
 
     // We use the word "hashes" as they are used all over the shuffle code.
-    // However, in that case, it does not mean literally "hash". What it means
-    // is the global rank to which the row is going to be sent.
+    // However, in that case, it does not mean literally "hash". What it
+    // means is the global rank to which the row is going to be sent.
     std::vector<uint32_t> hashes(n_rows);
     if (n_dest_ranks > 0) {
         // take data from all ranks and distribute to a subset of ranks
@@ -3069,8 +3125,9 @@ table_info* shuffle_renormalization_group(table_info* in_table,
     table_info* ret_table =
         shuffle_table_kernel(in_table, hashes.data(), comm_info, parallel);
     if (random) {
-        // data arrives ordered by source and for each source in its original
-        // (not random) order, so we need to do a local random shuffle
+        // data arrives ordered by source and for each source in its
+        // original (not random) order, so we need to do a local random
+        // shuffle
         n_rows = ret_table->nrows();
         random_order.resize(n_rows);
         for (int64_t i = 0; i < n_rows; i++) random_order[i] = i;
