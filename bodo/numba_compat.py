@@ -6610,3 +6610,145 @@ if _check_numba_change:  # pragma: no cover
 numba.parfors.parfor._update_parfor_get_setitems = _update_parfor_get_setitems
 
 #### END PATCH OF GETITEM OPTIMIZATIONS TO SUPPORT scalar_optional_getitem ####
+
+from numba.cpython.unicode import _get_code_point, generate_finder
+
+#### START PATCH TO COPY BOYER-MOORE STRING SEARCH ALGORITHM FROM NUMBA ####
+# TODO: Remove once we upgrade to include https://github.com/numba/numba/pull/8626
+from numba.extending import register_jitable
+
+# https://github.com/python/cpython/blob/1960eb005e04b7ad8a91018088cfdb0646bc1ca0/Objects/stringlib/fastsearch.h#L31    # noqa: E501
+_BLOOM_WIDTH = types.intp.bitwidth
+
+# FAST SEARCH algorithm implementation from cpython
+
+
+@register_jitable
+def _bloom_add(mask, ch):
+    mask |= 1 << (ch & (_BLOOM_WIDTH - 1))
+    return mask
+
+
+@register_jitable
+def _bloom_check(mask, ch):
+    return mask & (1 << (ch & (_BLOOM_WIDTH - 1)))
+
+
+# https://github.com/python/cpython/blob/1960eb005e04b7ad8a91018088cfdb0646bc1ca0/Objects/stringlib/fastsearch.h#L550    # noqa: E501
+@register_jitable
+def _default_find(data, substr, start, end):
+    """Left finder."""
+    m = len(substr)
+    if m == 0:
+        return start
+
+    gap = mlast = m - 1
+    last = _get_code_point(substr, mlast)
+
+    zero = types.intp(0)
+    mask = _bloom_add(zero, last)
+    for i in range(mlast):
+        ch = _get_code_point(substr, i)
+        mask = _bloom_add(mask, ch)
+        if ch == last:
+            gap = mlast - i - 1
+    i = start
+    while i <= end - m:
+        ch = _get_code_point(data, mlast + i)
+        if ch == last:
+            j = 0
+            while j < mlast:
+                haystack_ch = _get_code_point(data, i + j)
+                needle_ch = _get_code_point(substr, j)
+                if haystack_ch != needle_ch:
+                    break
+                j += 1
+            if j == mlast:
+                # got a match
+                return i
+
+            ch = _get_code_point(data, mlast + i + 1)
+            if _bloom_check(mask, ch) == 0:
+                i += m
+            else:
+                i += gap
+        else:
+            ch = _get_code_point(data, mlast + i + 1)
+            if _bloom_check(mask, ch) == 0:
+                i += m
+        i += 1
+
+    return -1
+
+
+@register_jitable
+def _default_rfind(data, substr, start, end):
+    """Right finder."""
+    m = len(substr)
+    if m == 0:
+        return end
+
+    skip = mlast = m - 1
+    mfirst = _get_code_point(substr, 0)
+    mask = _bloom_add(0, mfirst)
+    i = mlast
+    while i > 0:
+        ch = _get_code_point(substr, i)
+        mask = _bloom_add(mask, ch)
+        if ch == mfirst:
+            skip = i - 1
+        i -= 1
+
+    i = end - m
+    while i >= start:
+        ch = _get_code_point(data, i)
+        if ch == mfirst:
+            j = mlast
+            while j > 0:
+                haystack_ch = _get_code_point(data, i + j)
+                needle_ch = _get_code_point(substr, j)
+                if haystack_ch != needle_ch:
+                    break
+                j -= 1
+
+            if j == 0:
+                # got a match
+                return i
+
+            ch = _get_code_point(data, i - 1)
+            if i > start and _bloom_check(mask, ch) == 0:
+                i -= m
+            else:
+                i -= skip
+
+        else:
+            ch = _get_code_point(data, i - 1)
+            if i > start and _bloom_check(mask, ch) == 0:
+                i -= m
+        i -= 1
+
+    return -1
+
+
+_find = register_jitable(generate_finder(_default_find))
+_rfind = register_jitable(generate_finder(_default_rfind))
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.cpython.unicode._finder)
+    print(hashlib.sha256(lines.encode()).hexdigest())
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "d63f662f6f9179f84f6668f1d7566a506c0a6ff3c87ebba06c6af0d29201a9f6"
+    ):
+        warnings.warn("numba.cpython.unicode._finder has changed")
+    lines = inspect.getsource(numba.cpython.unicode._rfinder)
+    print(hashlib.sha256(lines.encode()).hexdigest())
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "419c326e6c4af8977cba5cf96b7a92905708e328d69ae59ebb53ddba714e47b9"
+    ):
+        warnings.warn("numba.cpython.unicode._rfinder has changed")
+
+numba.cpython.unicode._find = _find
+numba.cpython.unicode._rfind = _rfind
+#### END PATCH TO COPY BOYER-MOORE STRING SEARCH ALGORITHM FROM NUMBA ####
