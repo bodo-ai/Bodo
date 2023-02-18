@@ -495,16 +495,26 @@ struct mpi_comm_info {
      * @param filter : Bloom filter. Rows whose hash is not in the filter will
      * be discarded from shuffling. If no filter is provided no filtering will
      * happen.
+     * @param null_bitmask : Null bitmask specifying if any of the keys are
+     * null. In those cases, the rows will be handled based on the value of the
+     * templated parameter keep_nulls_and_filter_misses. Note that this should
+     * only be passed when nulls are not considered equal to each other (e.g.
+     * SQL join).
      *
-     * @tparam keep_filter_misses : In case a Bloom filter is provided and a key
-     * is not present in the bloom filter, should we keep the value on this rank
-     * (i.e. not discard it altogether). This is useful in the outer join
-     * cases. Defaults to false.
+     * @tparam keep_nulls_and_filter_misses : In case a Bloom filter is provided
+     * and a key is not present in the bloom filter, should we keep the value on
+     * this rank (i.e. not discard it altogether).
+     * Similarly, in case a null-bitmask is provided and a row
+     * is determined to have a null in one of the keys (i.e. this row cannot
+     * match with any other in case of SQL joins), this flag determines whether
+     * to keep the row on this rank (i.e. not discard it altogether).
+     * This is useful in the outer join cases. Defaults to false.
      */
-    template <bool keep_filter_misses = false>
+    template <bool keep_nulls_and_filter_misses = false>
     void set_counts(
         uint32_t const* const hashes, bool is_parallel,
-        SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr);
+        SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
+        const uint8_t* null_bitmask = nullptr);
 };
 
 struct table_info {

@@ -324,53 +324,6 @@ struct MultiArrayInfoEqual {
     std::vector<array_info*>& arrs;
 };
 
-// convert Array dtype to C type using a trait class
-// similar to:
-// https://github.com/rapidsai/cudf/blob/c4a1389bca6f2fd521bd5e768eda7407aa3e66b5/cpp/include/cudf/utilities/type_dispatcher.hpp#L141
-
-template <Bodo_CTypes::CTypeEnum T>
-struct dtype_to_type {
-    using type = void;
-};
-
-#ifndef DTYPE_TO_C_TYPE
-#define DTYPE_TO_C_TYPE(Type, Id) \
-    template <>                   \
-    struct dtype_to_type<Id> {    \
-        using type = Type;        \
-    };
-#endif
-
-DTYPE_TO_C_TYPE(int8_t, Bodo_CTypes::INT8)
-DTYPE_TO_C_TYPE(int16_t, Bodo_CTypes::INT16)
-DTYPE_TO_C_TYPE(int32_t, Bodo_CTypes::INT32)
-DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::INT64)
-DTYPE_TO_C_TYPE(uint8_t, Bodo_CTypes::UINT8)
-DTYPE_TO_C_TYPE(uint16_t, Bodo_CTypes::UINT16)
-DTYPE_TO_C_TYPE(uint32_t, Bodo_CTypes::UINT32)
-DTYPE_TO_C_TYPE(uint64_t, Bodo_CTypes::UINT64)
-DTYPE_TO_C_TYPE(float, Bodo_CTypes::FLOAT32)
-DTYPE_TO_C_TYPE(double, Bodo_CTypes::FLOAT64)
-DTYPE_TO_C_TYPE(bool, Bodo_CTypes::_BOOL)
-// NOTE: for functions that only need a C type with similar size (for copy,
-// equality, ...) but not the actual semantics (e.g. isna)
-DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATETIME)
-DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIMEDELTA)
-DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIME)
-// TODO[BE-2711]: update when we move to date32 type
-DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATE)
-DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::DECIMAL)
-DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
-
-#define DICT_INDEX_C_TYPE int32_t
-
-// select dtypes that can have sentinel nulls
-template <Bodo_CTypes::CTypeEnum DType>
-concept NullSentinelDtype = ((DType == Bodo_CTypes::FLOAT32) ||
-                             (DType == Bodo_CTypes::FLOAT64) ||
-                             (DType == Bodo_CTypes::DATETIME) ||
-                             (DType == Bodo_CTypes::TIMEDELTA));
-
 /**
  * @brief functor for comparing two elements of the same array.
  * Treats two NA elements as equal (TODO: template NA behavior for more general

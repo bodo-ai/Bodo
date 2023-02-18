@@ -94,16 +94,25 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info);
  * will compute the hashes
  * @param filter : filter to discard rows from shuffle. If no filter is
  * provided then no filtering will happen.
- * @param keep_filter_misses : In case a Bloom filter is provided and a
- * key is not present in the bloom filter, should we keep the value on this rank
- * (i.e. not discard it altogether). This is useful in the outer join cases.
+ * @param null_bitmask : In case of a SQL join where nulls are not considered
+ equal, a null bitmask can be provided that indicates whether any of the keys
+ columns in the table are null (and hence cannot match with any other row).
+ * @param keep_nulls_and_filter_misses : In case a Bloom filter is provided and
+ * a key is not present in the bloom filter, should we keep the value on this
+ * rank (i.e. not discard it altogether). Similarly, in cases where a
+ * null-bitmask is provided, this parameter determines what should be done with
+ * rows with nulls in keys. If set to true, we keep these rows on this same
+ * rank, and if set to false, we drop these rows altogether. This is useful in
+ * the outer join cases.
+ *
  * @return the new table after the shuffling-
  */
 table_info* coherent_shuffle_table(
     table_info* in_table, table_info* ref_table, int64_t n_keys,
     uint32_t* hashes = nullptr,
     SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
-    const bool keep_filter_misses = false);
+    const uint8_t* null_bitmask = nullptr,
+    const bool keep_nulls_and_filter_misses = true);
 
 /** Shuffling a table from all nodes to all the other nodes.
  *

@@ -938,6 +938,7 @@ def get_dataset(
         if bodo.get_rank() == 0 or is_independent:
             cur = conn.cursor()
             ev_query = tracing.Event("execute_length_query", is_parallel=False)
+            ev_query.add_attribute("query", query)
             cur.execute(query)
             # We are just loading a single row of data so we can just load
             # all of the data.
@@ -955,6 +956,7 @@ def get_dataset(
             # Execute query
             cur = conn.cursor()
             ev_query = tracing.Event("execute_query", is_parallel=False)
+            ev_query.add_attribute("query", query)
             cur = conn.cursor()
             cur.execute(query)
             ev_query.finalize()
