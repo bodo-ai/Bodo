@@ -63,6 +63,57 @@
 #define UNORD_MAP_CONTAINER robin_hood::unordered_node_map
 #define UNORD_SET_CONTAINER robin_hood::unordered_node_set
 #endif
+
+// ------------------------------------------------
+
+// convert Array dtype to C type using a trait class
+// similar to:
+// https://github.com/rapidsai/cudf/blob/c4a1389bca6f2fd521bd5e768eda7407aa3e66b5/cpp/include/cudf/utilities/type_dispatcher.hpp#L141
+template <Bodo_CTypes::CTypeEnum T>
+struct dtype_to_type {
+    using type = void;
+};
+
+#ifndef DTYPE_TO_C_TYPE
+#define DTYPE_TO_C_TYPE(Type, Id) \
+    template <>                   \
+    struct dtype_to_type<Id> {    \
+        using type = Type;        \
+    };
+#endif
+
+DTYPE_TO_C_TYPE(int8_t, Bodo_CTypes::INT8)
+DTYPE_TO_C_TYPE(int16_t, Bodo_CTypes::INT16)
+DTYPE_TO_C_TYPE(int32_t, Bodo_CTypes::INT32)
+DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::INT64)
+DTYPE_TO_C_TYPE(uint8_t, Bodo_CTypes::UINT8)
+DTYPE_TO_C_TYPE(uint16_t, Bodo_CTypes::UINT16)
+DTYPE_TO_C_TYPE(uint32_t, Bodo_CTypes::UINT32)
+DTYPE_TO_C_TYPE(uint64_t, Bodo_CTypes::UINT64)
+DTYPE_TO_C_TYPE(float, Bodo_CTypes::FLOAT32)
+DTYPE_TO_C_TYPE(double, Bodo_CTypes::FLOAT64)
+DTYPE_TO_C_TYPE(bool, Bodo_CTypes::_BOOL)
+// NOTE: for functions that only need a C type with similar size (for copy,
+// equality, ...) but not the actual semantics (e.g. isna)
+DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATETIME)
+DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIMEDELTA)
+DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIME)
+// TODO[BE-2711]: update when we move to date32 type
+DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATE)
+DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::DECIMAL)
+DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
+
+#define DICT_INDEX_C_TYPE int32_t
+
+// ------------------------------------------------
+
+// select dtypes that can have sentinel nulls
+template <Bodo_CTypes::CTypeEnum DType>
+concept NullSentinelDtype = ((DType == Bodo_CTypes::FLOAT32) ||
+                             (DType == Bodo_CTypes::FLOAT64) ||
+                             (DType == Bodo_CTypes::DATETIME) ||
+                             (DType == Bodo_CTypes::TIMEDELTA));
+
 // ------------------------------------------------
 
 inline void CheckEqualityArrayType(array_info* arr1, array_info* arr2) {
@@ -571,6 +622,23 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
 int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                                  size_t const& iRow1, array_info* arr2,
                                  size_t const& iRow2);
+
+/**
+ * @brief Create a null-bitmask that is a bitwise AND of the bitmasks of the
+ * specified arrays. This is equivalent to computing if _any_ column in a row is
+ * a null (since it will get set to 0). This is useful in SQL joins where we
+ * compute this information for the join keys to filter rows that cannot match
+ * with any other rows.
+ * For certain array types where a null-bitmask already exists, we will use it
+ * directly, and for others like NUMPY, CATEGORICAL and ARROW, we will compute
+ * one dynamically.
+ *
+ * @param arrays Vector of arrays whose bitmasks need to be bitwise AND-ed.
+ * @param is_parallel Are the arrays distributed (for tracing purposes).
+ * @return uint8_t* Output bitmask.
+ */
+uint8_t* bitwise_and_null_bitmasks(const std::vector<array_info*>& arrays,
+                                   const bool is_parallel);
 
 // ----------------------- Debug functions -----------------------
 
