@@ -9,11 +9,16 @@ import pytest
 from bodosql.tests.utils import check_query
 
 from bodo import Time
+from bodo.tests.conftest import (  # noqa
+    day_part_strings,
+    time_df,
+    time_part_strings,
+)
 from bodo.tests.timezone_common import (  # noqa
     generate_date_trunc_func,
-    representative_tz, generate_date_trunc_time_func,
+    generate_date_trunc_time_func,
+    representative_tz,
 )
-from bodo.tests.conftest import time_df, time_part_strings, day_part_strings
 
 EQUIVALENT_SPARK_DT_FN_MAP = {
     "WEEK": "WEEKOFYEAR",
@@ -439,17 +444,6 @@ def test_get_format(get_format_str, dt_fn_dataframe, spark_info, memory_leak_che
     )
 
 
-@pytest.fixture(
-    params=[
-        "CURRENT_TIMESTAMP",
-        pytest.param("LOCALTIMESTAMP", marks=pytest.mark.slow),
-        pytest.param("NOW", marks=pytest.mark.slow),
-    ]
-)
-def now_equivalent_fns(request):
-    return request.param
-
-
 @pytest.mark.parametrize(
     "query",
     [
@@ -506,57 +500,261 @@ def test_getdate(query, spark_info, memory_leak_check):
     )
 
 
-def test_now_equivalents_cols(basic_df, now_equivalent_fns, memory_leak_check):
-    """Tests the group of equivalent functions which return the current timestamp
-    This one needs special handling, as the timestamps returned by each call will be
-    slightly different, depending on when the function was run.
+def compute_valid_times(start_time, timeout=3):
+    """Computes a list of valid days, hours, and minutes that are at most `timeout`
+    minutes after a given pd.Timestamp. Used to test NOW, LOCALTIME, SYSDATE, and
+    other equivalent functions.
+
+    Given the timestamp "2022-12-31 23:58:58", this function returns as strings:
+        valid_days = "31, 1"
+        valid_hours = "23, 0"
+        valid_minutes = "58, 59, 0"
+
+    Args
+        start_time [pd.Timestamp]: Starting timestamp, usually pd.Timestamp.now().
+        timeout [int]: Max number of minutes that the test is expected to take.
+
+    Returns: (valid_days [str], valid_hours [str], valid_minutes [str])
     """
-    query = f"SELECT A, DATE_TRUNC('DAY', {now_equivalent_fns}()) as normalized, (EXTRACT(HOUR from {now_equivalent_fns}()) + EXTRACT(MINUTE from {now_equivalent_fns}()) + EXTRACT(SECOND from {now_equivalent_fns}()) ) >= 1 as now_not_normalized from table1"
-    kept_col = basic_df["table1"]["A"]
+    valid_days = set()
+    valid_hours = set()
+    valid_minutes = set()
+
+    for t in range(timeout + 1):
+        current_time = start_time + pd.Timedelta(minutes=t)
+        valid_days.add(str(current_time.day))
+        valid_hours.add(str(current_time.hour))
+        valid_minutes.add(str(current_time.minute))
+
+    valid_days = ", ".join(valid_days)
+    valid_hours = ", ".join(valid_hours)
+    valid_minutes = ", ".join(valid_minutes)
+    return valid_days, valid_hours, valid_minutes
+
+
+@pytest.fixture(
+    params=[
+        "CURRENT_TIMESTAMP",
+        pytest.param("GETDATE", marks=pytest.mark.slow),
+        pytest.param("LOCALTIMESTAMP", marks=pytest.mark.slow),
+        pytest.param("SYSTIMESTAMP", marks=pytest.mark.slow),
+        pytest.param("NOW", marks=pytest.mark.slow),
+    ]
+)
+def now_equiv_fns(request):
+    return request.param
+
+
+def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
+    """Tests the group of equivalent functions which return the current timestamp,
+    without timezone info from the Snowflake Catalog.
+    As the results depend on when the function was run, we precompute a list of valid times.
+    """
+    current_time = pd.Timestamp.now(tz="UTC")
+    valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
+    query = (
+        f"SELECT A, "
+        f"  DATE_TRUNC('DAY', {now_equiv_fns}()) AS date_trunc, "
+        f"  EXTRACT(DAY from {now_equiv_fns}()) IN ({valid_days}) AS is_valid_day, "
+        f"  EXTRACT(HOUR from {now_equiv_fns}()) IN ({valid_hours}) AS is_valid_hour, "
+        f"  EXTRACT(MINUTE from {now_equiv_fns}()) IN ({valid_minutes}) AS is_valid_minute "
+        f"FROM table1"
+    )
     py_output = pd.DataFrame(
         {
-            "A": kept_col,
-            "normalized": pd.Timestamp.now(tz="UTC").normalize(),
-            "now_not_normalized": True,
+            "A": basic_df["table1"]["A"],
+            "date_trunc": current_time.normalize(),
+            "is_valid_day": True,
+            "is_valid_hour": True,
+            "is_valid_minute": True,
         }
     )
 
     check_query(query, basic_df, None, expected_output=py_output, check_dtype=False)
 
 
-def test_now_equivalents_case(now_equivalent_fns, memory_leak_check):
-    """Tests the group of equivalent functions which return the current timestamp
-    in case.
+def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
+    """Tests the group of equivalent functions which return the current timestamp in case,
+    without timezone info from the Snowflake Catalog.
+    As the results depend on when the function was run, we precompute a list of valid times.
     """
+    current_time = pd.Timestamp.now(tz="UTC")
+    valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
+    query = (
+        f"SELECT A, "
+        f"  CASE WHEN A THEN DATE_TRUNC('DAY', {now_equiv_fns}()) END AS date_trunc, "
+        f"  CASE WHEN A THEN EXTRACT(DAY from {now_equiv_fns}()) IN ({valid_days}) END AS is_valid_day, "
+        f"  CASE WHEN A THEN EXTRACT(HOUR from {now_equiv_fns}()) IN ({valid_hours}) END AS is_valid_hour, "
+        f"  CASE WHEN A THEN EXTRACT(MINUTE from {now_equiv_fns}()) IN ({valid_minutes}) END AS is_valid_minute "
+        f"FROM table1"
+    )
+
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
     ctx = {"table1": df}
-    query = f"SELECT CASE WHEN A THEN DATE_TRUNC('DAY', {now_equivalent_fns}()) END as normalized from table1"
-    S = pd.Series(pd.Timestamp.now(tz="UTC").normalize(), index=np.arange(len(df)))
+    D = pd.Series(current_time.normalize(), index=np.arange(len(df)))
+    D[~df.A] = None
+    S = pd.Series(True, index=np.arange(len(df)))
     S[~df.A] = None
     py_output = pd.DataFrame(
-        {"normalized": S},
+        {
+            "A": df.A,
+            "date_trunc": D,
+            "is_valid_day": S,
+            "is_valid_hour": S,
+            "is_valid_minute": S,
+        }
     )
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
-@pytest.mark.slow
-def test_utc_timestamp(basic_df, spark_info, memory_leak_check):
-    """tests utc_timestamp"""
-    query = f"SELECT A, EXTRACT(DAY from UTC_TIMESTAMP()), (EXTRACT(HOUR from UTC_TIMESTAMP()) + EXTRACT(MINUTE from UTC_TIMESTAMP()) + EXTRACT(SECOND from UTC_TIMESTAMP()) ) >= 1  from table1"
-    expected_output = pd.DataFrame(
+@pytest.fixture(
+    params=[
+        "LOCALTIME",
+        pytest.param("CURRENT_TIME", marks=pytest.mark.slow),
+    ]
+)
+def localtime_equiv_fns(request):
+    return request.param
+
+
+def test_localtime_equivalents_cols(basic_df, localtime_equiv_fns, memory_leak_check):
+    """Tests the group of equivalent functions which return the local time,
+    without timezone info from the Snowflake Catalog.
+    As the results depend on when the function was run, we precompute a list of valid times.
+    """
+    current_time = pd.Timestamp.now(tz="UTC")
+    _, valid_hours, valid_minutes = compute_valid_times(current_time)
+    query = (
+        f"SELECT A, "
+        f"  EXTRACT(HOUR from {localtime_equiv_fns}()) IN ({valid_hours}) AS is_valid_hour, "
+        f"  EXTRACT(MINUTE from {localtime_equiv_fns}()) IN ({valid_minutes}) AS is_valid_minute "
+        f"FROM table1"
+    )
+    py_output = pd.DataFrame(
         {
-            "unkown_name1": basic_df["table1"]["A"],
-            "unkown_name2": pd.Timestamp.now().day,
-            "unkown_name5": True,
+            "A": basic_df["table1"]["A"],
+            "is_valid_hour": True,
+            "is_valid_minute": True,
         }
     )
+
+    check_query(query, basic_df, None, expected_output=py_output, check_dtype=False)
+
+
+def test_localtime_equivalents_case(localtime_equiv_fns, memory_leak_check):
+    """Tests the group of equivalent functions which return the local time in case,
+    without timezone info from the Snowflake Catalog.
+    As the results depend on when the function was run, we precompute a list of valid times.
+    """
+    current_time = pd.Timestamp.now(tz="UTC")
+    _, valid_hours, valid_minutes = compute_valid_times(current_time)
+    query = (
+        f"SELECT A, "
+        f"  CASE WHEN A THEN EXTRACT(HOUR from {localtime_equiv_fns}()) IN ({valid_hours}) END AS is_valid_hour, "
+        f"  CASE WHEN A THEN EXTRACT(MINUTE from {localtime_equiv_fns}()) IN ({valid_minutes}) END AS is_valid_minute "
+        f"FROM table1"
+    )
+
+    df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
+    ctx = {"table1": df}
+    S = pd.Series(True, index=np.arange(len(df)))
+    S[~df.A] = None
+    py_output = pd.DataFrame(
+        {
+            "A": df.A,
+            "is_valid_hour": S,
+            "is_valid_minute": S,
+        }
+    )
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
+
+@pytest.fixture(
+    params=[
+        "UTC_TIMESTAMP",
+        pytest.param("SYSDATE", marks=pytest.mark.slow),
+    ]
+)
+def sysdate_equiv_fns(request):
+    return request.param
+
+
+def test_sysdate_equivalents_cols(
+    basic_df, sysdate_equiv_fns, spark_info, memory_leak_check
+):
+    """
+    Tests the group of equivalent functions which return the UTC timestamp.
+    As the results depend on when the function was run, we precompute a list of valid times.
+    """
+    current_time = pd.Timestamp.now(tz="UTC")
+    valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
+    query = (
+        f"SELECT A, "
+        f"  DATE_TRUNC('DAY', {sysdate_equiv_fns}()) AS date_trunc, "
+        f"  EXTRACT(DAY from {sysdate_equiv_fns}()) IN ({valid_days}) AS is_valid_day, "
+        f"  EXTRACT(HOUR from {sysdate_equiv_fns}()) IN ({valid_hours}) AS is_valid_hour, "
+        f"  EXTRACT(MINUTE from {sysdate_equiv_fns}()) IN ({valid_minutes}) AS is_valid_minute "
+        f"FROM table1"
+    )
+    py_output = pd.DataFrame(
+        {
+            "A": basic_df["table1"]["A"],
+            "date_trunc": current_time.normalize(),
+            "is_valid_day": True,
+            "is_valid_hour": True,
+            "is_valid_minute": True,
+        }
+    )
+
     check_query(
         query,
         basic_df,
         spark_info,
         check_names=False,
         check_dtype=False,
-        expected_output=expected_output,
+        expected_output=py_output,
+    )
+
+
+def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_check):
+    """
+    Tests the group of equivalent functions which return the UTC timestamp in case.
+    As the results depend on when the function was run, we precompute a list of valid times.
+    """
+    current_time = pd.Timestamp.now(tz="UTC")
+    valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
+    query = (
+        f"SELECT A, "
+        f"  CASE WHEN A THEN DATE_TRUNC('DAY', {sysdate_equiv_fns}()) END AS date_trunc, "
+        f"  CASE WHEN A THEN EXTRACT(DAY from {sysdate_equiv_fns}()) IN ({valid_days}) END AS is_valid_day, "
+        f"  CASE WHEN A THEN EXTRACT(HOUR from {sysdate_equiv_fns}()) IN ({valid_hours}) END AS is_valid_hour, "
+        f"  CASE WHEN A THEN EXTRACT(MINUTE from {sysdate_equiv_fns}()) IN ({valid_minutes}) END AS is_valid_minute "
+        f"FROM table1"
+    )
+
+    df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
+    ctx = {"table1": df}
+    D = pd.Series(current_time.normalize(), index=np.arange(len(df)))
+    D[~df.A] = None
+    S = pd.Series(True, index=np.arange(len(df)))
+    S[~df.A] = None
+    py_output = pd.DataFrame(
+        {
+            "A": df.A,
+            "date_trunc": D,
+            "is_valid_day": S,
+            "is_valid_hour": S,
+            "is_valid_minute": S,
+        }
+    )
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=py_output,
     )
 
 
@@ -568,7 +766,7 @@ def test_utc_date(basic_df, spark_info, memory_leak_check):
     expected_output = pd.DataFrame(
         {
             "unknown_name1": basic_df["table1"]["A"],
-            "unknown_name2": pd.Timestamp.now().day,
+            "unknown_name2": pd.Timestamp.now(tz="UTC").day,
             "unknown_name5": True,
         }
     )
@@ -613,7 +811,7 @@ def test_utc_date(basic_df, spark_info, memory_leak_check):
         ("%u", "%W"),
         ('% %a %\\, %%a, %%, %%%%, "%", %', ' %a \\, %%a, %%, %%%%, "", %'),
     ]
-    # TODO: add addition format charecters when/if they become supported
+    # TODO: add addition format characters when/if they become supported
 )
 def python_mysql_dt_format_strings(request):
     """returns a tuple of python mysql string, and the equivalent python format string"""
@@ -2101,36 +2299,34 @@ def test_to_date_scalar(
 
 
 def test_date_trunc_time_small_unit(time_df, time_part_strings, memory_leak_check):
-    query = (
-        f"SELECT DATE_TRUNC('{time_part_strings}', BODOTIME) as output from table1"
-    )
+    query = f"SELECT DATE_TRUNC('{time_part_strings}', BODOTIME) as output from table1"
     scalar_func = generate_date_trunc_time_func(time_part_strings)
-    output = pd.DataFrame(
-        {"output": time_df["table1"]["bodotime"].map(scalar_func)}
+    output = pd.DataFrame({"output": time_df["table1"]["bodotime"].map(scalar_func)})
+    check_query(
+        query,
+        time_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=output,
     )
-    check_query(query,
-                time_df,
-                None,
-                check_dtype=False,
-                check_names=False,
-                expected_output=output)
 
 
 def test_date_trunc_time_large_unit(time_df, day_part_strings, memory_leak_check):
-    query = (
-        f"SELECT DATE_TRUNC('{day_part_strings}', BODOTIME) as output from table1"
-    )
-    output = pd.DataFrame(
-        {"output": []}
-    )
-    with pytest.raises(Exception, match=
-        f"Unsupported DATE_TRUNC unit for TIME input: \"{day_part_strings}\""):
-        check_query(query,
-                    time_df,
-                    None,
-                    check_dtype=False,
-                    check_names=False,
-                    expected_output=output)
+    query = f"SELECT DATE_TRUNC('{day_part_strings}', BODOTIME) as output from table1"
+    output = pd.DataFrame({"output": []})
+    with pytest.raises(
+        Exception,
+        match=f'Unsupported DATE_TRUNC unit for TIME input: "{day_part_strings}"',
+    ):
+        check_query(
+            query,
+            time_df,
+            None,
+            check_dtype=False,
+            check_names=False,
+            expected_output=output,
+        )
 
 
 def test_date_trunc_timestamp(dt_fn_dataframe, date_trunc_literal, memory_leak_check):
