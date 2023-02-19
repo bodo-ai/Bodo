@@ -23,11 +23,17 @@ def make_time_to_time_util(name):
 
         if is_valid_int_arg(arr):
             scalar_text = "res[i] = bodo.Time(0, 0, arg0)"
+        elif (
+            is_valid_date_arg(arr)
+            or is_valid_tz_naive_datetime_arg(arr)
+            or is_valid_tz_aware_datetime_arg(arr)
+        ):
+            scalar_text = "res[i] = bodo.Time(arg0.hour, arg0.minute, arg0.second, arg0.nanosecond)"
         elif is_valid_string_arg(arr):
             scalar_text = "res[i] = bodo.time_from_str(arg0)"
         else:
             raise_bodo_error(
-                f"{name} argument must be an integer, string, integer or string column, or null"
+                f"{name} argument must be an integer, datetime, string, or null"
             )
 
         out_dtype = bodo.TimeArrayType(9)

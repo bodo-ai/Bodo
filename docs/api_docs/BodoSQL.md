@@ -1700,6 +1700,28 @@ BodoSQL currently supports the following Timestamp functions:
 
     Equivalent to `#!sql NOW`
 
+#### GETDATE
+-   `#!sql GETDATE()`
+
+    Equivalent to `#!sql NOW`
+
+#### SYSTIMESTAMP
+-   `#!sql SYSTIMESTAMP()`
+
+    Equivalent to `#!sql NOW`
+
+#### LOCALTIME
+-   `#!sql LOCALTIME()`
+
+    Computes a time equal to the current time in the session's timezone.
+    By default the current time is in local time, and it can be updated as a
+    parameter when using the Snowflake Catalog.
+
+#### CURRENT_TIME
+-   `#!sql CURRENT_TIME()`
+
+    Equivalent to `#!sql LOCALTIME`
+
 #### CURDATE
 -   `#!sql CURDATE()`
 
@@ -1710,12 +1732,6 @@ BodoSQL currently supports the following Timestamp functions:
 -   `#!sql CURRENT_DATE()`
 
     Equivalent to `#!sql CURDATE`
-
-#### GETDATE
--   `#!sql GETDATE()`
-
-    Equivalent to `#!sql CURDATE`
-
 
 #### EXTRACT
 -   `#!sql EXTRACT(TimeUnit from timestamp_val)`
@@ -1909,6 +1925,11 @@ BodoSQL currently supports the following Timestamp functions:
 -   `#!sql UTC_TIMESTAMP()`
 
     Returns the current UTC date and time as a timestamp value.
+
+#### SYSDATE
+-   `SYSDATE()`
+
+    Equivalent to `UTC_TIMESTAMP`
 
 #### UTC_DATE
 -   `#!sql UTC_DATE()`
