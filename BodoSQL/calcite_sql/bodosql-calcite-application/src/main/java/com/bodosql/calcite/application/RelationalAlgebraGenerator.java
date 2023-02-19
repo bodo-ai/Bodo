@@ -108,6 +108,9 @@ public class RelationalAlgebraGenerator {
   /** Store the catalog being used to close any connections after processing a query. */
   private BodoSQLCatalog catalog;
 
+  /** Store the typesystem being used to access timezone info during Pandas codegen */
+  private final RelDataTypeSystem typeSystem;
+
   /** The Bodo verbose level. This is used to control code generated and/or compilation info. * */
   private final int verboseLevel;
 
@@ -266,6 +269,7 @@ public class RelationalAlgebraGenerator {
     List<SchemaPlus> defaultSchemas = new ArrayList();
     defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
+    this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, schema, namedParamTableName, typeSystem);
   }
 
@@ -303,6 +307,7 @@ public class RelationalAlgebraGenerator {
     // Create a type system with the correct default Timezone.
     BodoTZInfo tzInfo = catalog.getDefaultTimezone();
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem(tzInfo);
+    this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, schema, namedParamTableName, typeSystem);
   }
 
@@ -677,6 +682,7 @@ public class RelationalAlgebraGenerator {
             searchMap,
             this.loweredGlobalVariables,
             originalSQL,
+            this.typeSystem,
             debugDeltaTable,
             this.verboseLevel);
     codegen.go(plan);

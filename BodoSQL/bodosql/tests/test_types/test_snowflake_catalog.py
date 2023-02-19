@@ -11,6 +11,7 @@ import bodosql
 import numpy as np
 import pandas as pd
 import pytest
+from bodosql.tests.test_datetime_fns import compute_valid_times
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     test_db_snowflake_catalog,
 )
@@ -558,23 +559,39 @@ def test_current_timestamp_case(
     """Tests CURRENT_TIMESTAMP and equivalents with a snowflake catalog to verify that
     the output uses the default Snowflake timezone.
     """
+    current_timestamp = pd.Timestamp.now(tz="US/Pacific")
+    _, valid_hours, _ = compute_valid_times(current_timestamp)
 
     def impl(bc):
         return bc.sql(
-            "SELECT DATE_TRUNC('DAY', NOW()) as NOW_TRUNC, DATE_TRUNC('DAY', LOCALTIMESTAMP()) as LOCAL_TRUNC, CASE WHEN A THEN DATE_TRUNC('DAY', CURRENT_TIMESTAMP()) END as normalized from __bodolocal__.table1"
+            f"SELECT "
+            f"  DATE_TRUNC('DAY', NOW()) AS now_trunc, "
+            f"  DATE_TRUNC('DAY', LOCALTIMESTAMP()) AS local_trunc, "
+            f"  DATE_TRUNC('DAY', GETDATE()) AS getdate_trunc, "
+            f"  DATE_TRUNC('DAY', SYSTIMESTAMP()) AS sys_trunc, "
+            f"  CASE WHEN A THEN DATE_TRUNC('DAY', CURRENT_TIMESTAMP()) END AS case_current_trunc, "
+            f"  CASE WHEN A THEN EXTRACT(HOUR from NOW()) IN ({valid_hours}) END AS is_valid_now, "
+            f"  CASE WHEN A THEN EXTRACT(HOUR from LOCALTIME()) IN ({valid_hours}) END AS is_valid_localtime "
+            f"FROM __bodolocal__.table1"
         )
 
     bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
     df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
     bc = bc.add_or_replace_view("table1", df)
-    normalize_val = pd.Timestamp.now(tz="US/Pacific").normalize()
+    normalize_val = current_timestamp.normalize()
     S = pd.Series(normalize_val, index=np.arange(len(df)))
     S[~df.A] = None
+    V = pd.Series(True, index=np.arange(len(df)))
+    V[~df.A] = None
     py_output = pd.DataFrame(
         {
-            "NOW_TRUNC": normalize_val,
-            "LOCAL_TRUNC": normalize_val,
-            "normalized": S,
+            "now_trunc": normalize_val,
+            "local_trunc": normalize_val,
+            "getdate_trunc": normalize_val,
+            "sys_trunc": normalize_val,
+            "case_current_trunc": S,
+            "is_valid_now": V,
+            "is_valid_localtime": V,
         },
     )
     check_func(

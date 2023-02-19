@@ -558,7 +558,37 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
+          opBinding ->
+              opBinding
+                  .getTypeFactory()
+                  .createTZAwareSqlType(
+                      opBinding.getTypeFactory().getTypeSystem().getDefaultTZInfo()),
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.NILADIC,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  // CURRENT_TIMESTAMP is already supported inside Calcite and will be picked
+  // up automatically. No need to implement it again here
+
+  // LOCALTIMESTAMP is already supported inside Calcite and will be picked
+  // up automatically. No need to implement it again here
+
+  public static final SqlFunction SYSTIMESTAMP =
+      new SqlFunction(
+          "SYSTIMESTAMP",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          opBinding ->
+              opBinding
+                  .getTypeFactory()
+                  .createTZAwareSqlType(
+                      opBinding.getTypeFactory().getTypeSystem().getDefaultTZInfo()),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -587,21 +617,11 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction LOCALTIMESTAMP =
-      new SqlFunction(
-          "LOCALTIMESTAMP",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.NILADIC,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
+  // CURRENT_TIME is already supported inside Calcite and will be picked
+  // up automatically. No need to implement it again here
+
+  // LOCALTIME is already supported inside Calcite and will be picked
+  // up automatically. No need to implement it again here
 
   public static final SqlFunction UTC_TIMESTAMP =
       new SqlFunction(
@@ -610,7 +630,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
+          opBinding -> opBinding.getTypeFactory().createTZAwareSqlType(BodoTZInfo.UTC),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -627,6 +647,22 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
           ReturnTypes.TIMESTAMP,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.NILADIC,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction SYSDATE =
+      new SqlFunction(
+          "SYSDATE",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          opBinding -> opBinding.getTypeFactory().createTZAwareSqlType(BodoTZInfo.UTC),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -896,11 +932,12 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           TIMESTAMP_TZ_FROM_PARTS,
           TIMESTAMPTZFROMPARTS,
           STR_TO_DATE,
-          LOCALTIMESTAMP,
           GETDATE,
+          SYSTIMESTAMP,
           NOW,
           UTC_TIMESTAMP,
           UTC_DATE,
+          SYSDATE,
           DAYNAME,
           DAYOFWEEKISO,
           MONTHNAME,

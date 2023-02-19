@@ -116,15 +116,32 @@ public class DatetimeFnCodeGen {
     return new RexNodeVisitorInfo(fnExpression);
   }
 
-  public static RexNodeVisitorInfo generateUTCTimestampCode() {
+  /**
+   * Generate code for computing a time value for the current time in the default timezone.
+   *
+   * @param opName The name of the function. Several functions map to the same operation.
+   * @param tzInfo The Timezone information with which to create the Time.
+   * @return
+   */
+  public static RexNodeVisitorInfo generateCurrTimeCode(String opName, BodoTZInfo tzInfo) {
+    String fnExpression =
+        String.format(
+            "bodo.libs.bodosql_array_kernels.to_time_util(pd.Timestamp.now(%s))",
+            tzInfo == null ? "" : tzInfo.getPyZone());
+    return new RexNodeVisitorInfo(fnExpression);
+  }
+
+  public static RexNodeVisitorInfo generateUTCTimestampCode(String opName) {
     // use utcnow if/when we decide to support timezones
-    String fnExpression = "pd.Timestamp.now()";
+    String fnExpression = "pd.Timestamp.now(tz='UTC')";
     return new RexNodeVisitorInfo(fnExpression);
   }
 
   public static RexNodeVisitorInfo generateUTCDateCode() {
     // use utcnow if/when we decide to support timezones
-    String fnExpression = "pd.Timestamp.now().floor(freq=\"D\")";
+    // As dates are tz-naive, we use tz_localize to convert a UTC timestamp
+    // into a tz-naive date type with the correct value.
+    String fnExpression = "pd.Timestamp.now(tz='UTC').floor(freq=\"D\").tz_localize(None)";
     return new RexNodeVisitorInfo(fnExpression);
   }
 
@@ -135,12 +152,10 @@ public class DatetimeFnCodeGen {
    * @param arg2Info The VisitorInfo for the second argument. = * @return the rexNodeVisitorInfo for
    *     the result.
    */
-  public static RexNodeVisitorInfo generateDateTruncCode(
-      String unit, RexNodeVisitorInfo arg2Info) {
+  public static RexNodeVisitorInfo generateDateTruncCode(String unit, RexNodeVisitorInfo arg2Info) {
     String codeGen =
         String.format(
-            "bodo.libs.bodosql_array_kernels.date_trunc(\"%s\", %s)",
-            unit, arg2Info.getExprCode());
+            "bodo.libs.bodosql_array_kernels.date_trunc(\"%s\", %s)", unit, arg2Info.getExprCode());
     return new RexNodeVisitorInfo(codeGen);
   }
 
@@ -326,7 +341,7 @@ public class DatetimeFnCodeGen {
       case "\"yrs\"":
         if (isTime)
           throw new BodoSQLCodegenException(
-                  "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+              "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
         unit = "year";
         break;
 
@@ -335,10 +350,9 @@ public class DatetimeFnCodeGen {
       case "\"mon\"":
       case "\"mons\"":
       case "\"months\"":
-
         if (isTime)
           throw new BodoSQLCodegenException(
-                  "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+              "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
         unit = "month";
         break;
 
@@ -349,7 +363,7 @@ public class DatetimeFnCodeGen {
       case "\"dayofmonth\"":
         if (isTime)
           throw new BodoSQLCodegenException(
-                  "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+              "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
         unit = "day";
         break;
 
@@ -361,7 +375,7 @@ public class DatetimeFnCodeGen {
       case "\"wy\"":
         if (isTime)
           throw new BodoSQLCodegenException(
-                  "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+              "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
         unit = "week";
         break;
 
@@ -372,7 +386,7 @@ public class DatetimeFnCodeGen {
       case "\"quarters\"":
         if (isTime)
           throw new BodoSQLCodegenException(
-                  "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+              "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
         unit = "quarter";
         break;
 
@@ -428,10 +442,8 @@ public class DatetimeFnCodeGen {
         break;
 
       default:
-        throw new BodoSQLCodegenException(
-                "Unsupported " + fnName + " unit: " + inputTimeStr);
+        throw new BodoSQLCodegenException("Unsupported " + fnName + " unit: " + inputTimeStr);
     }
     return unit;
   }
-
 }

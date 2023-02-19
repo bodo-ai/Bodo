@@ -131,6 +131,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // when encountering a merge into operation
   private final boolean debuggingDeltaTable;
 
+  // The typesystem, used to access timezone info during codegen
+  private final RelDataTypeSystem typeSystem;
+
   // Bodo verbose level. This is used to generate code/compiler information
   // with extra debugging or logging. 0 is the default verbose level which
   // means no action should be taken. As verboseLevel increases more detailed
@@ -150,6 +153,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       HashMap<String, RexNode> searchMap,
       HashMap<String, String> loweredGlobalVariablesMap,
       String originalSQLQuery,
+      RelDataTypeSystem typeSystem,
       boolean debuggingDeltaTable,
       int verboseLevel) {
     super();
@@ -158,6 +162,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.varCache = new HashMap<Integer, Pair<String, List<String>>>();
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
+    this.typeSystem = typeSystem;
     this.debuggingDeltaTable = debuggingDeltaTable;
     this.targetTableDf = null;
     this.fileListAndSnapshotIdArgs = null;
@@ -2432,18 +2437,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateConcatWSFnInfo(
                 operandsInfo.get(0), operandsInfo.subList(1, operandsInfo.size()));
           case "GETDATE":
-            assert operandsInfo.size() == 0;
-            return new RexNodeVisitorInfo("pd.Timestamp.now().normalize()");
           case "CURRENT_TIMESTAMP":
           case "NOW":
           case "LOCALTIMESTAMP":
+          case "SYSTIMESTAMP":
             assert operandsInfo.size() == 0;
             assert fnOperation.getType() instanceof TZAwareSqlType;
-            BodoTZInfo tzInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo();
-            return generateCurrTimestampCode(fnName, tzInfo);
+            BodoTZInfo tzTimestampInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo();
+            return generateCurrTimestampCode(fnName, tzTimestampInfo);
+          case "CURRENT_TIME":
+          case "LOCALTIME":
+            assert operandsInfo.size() == 0;
+            BodoTZInfo tzTimeInfo = this.typeSystem.getDefaultTZInfo();
+            return generateCurrTimeCode(fnName, tzTimeInfo);
+          case "SYSDATE":
           case "UTC_TIMESTAMP":
             assert operandsInfo.size() == 0;
-            return generateUTCTimestampCode();
+            return generateUTCTimestampCode(fnName);
           case "UTC_DATE":
             assert operandsInfo.size() == 0;
             return generateUTCDateCode();
