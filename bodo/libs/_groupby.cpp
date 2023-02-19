@@ -5874,15 +5874,20 @@ class GroupbyPipeline {
             // shuffle_before_update=false)
 
             int shuffle_before_update_local = 0;
-            float groups_in_nrows_ratio;
-            if (in_table->nrows() == 0)
-                groups_in_nrows_ratio = 1.0;
-            else
-                groups_in_nrows_ratio =
-                    float(nunique_hashes) / in_table->nrows();
-            if (groups_in_nrows_ratio >= 0.9)  // XXX what threshold is best?
+            double local_expected_avg_group_size;
+            if (nunique_hashes == 0) {
+                local_expected_avg_group_size = 1.0;
+            } else {
+                local_expected_avg_group_size =
+                    in_table->nrows() / double(nunique_hashes);
+            }
+            // XXX what threshold is best? Here we say on average we expect
+            // every group to shrink.
+            if (local_expected_avg_group_size <= 2.0) {
                 shuffle_before_update_local = 1;
-            ev.add_attribute("groups_in_nrows_ratio", groups_in_nrows_ratio);
+            }
+            ev.add_attribute("local_expected_avg_group_size",
+                             local_expected_avg_group_size);
             ev.add_attribute("shuffle_before_update_local",
                              shuffle_before_update_local);
             // global count of ranks that decide to shuffle before update
@@ -5894,8 +5899,9 @@ class GroupbyPipeline {
             // to shuffle: https://bodo.atlassian.net/browse/BE-1140
             int num_ranks;
             MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-            if (shuffle_before_update_count >= num_ranks * 0.5)
+            if (shuffle_before_update_count >= num_ranks * 0.5) {
                 shuffle_before_update = true;
+            }
         }
 
         if (shuffle_before_update) {
