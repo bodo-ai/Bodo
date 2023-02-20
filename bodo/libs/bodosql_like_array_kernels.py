@@ -519,7 +519,7 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
     }
     prefix_code = None
     scalar_text = ""
-    use_dict_encoding = not is_overload_none(arr) and (
+    pattern_conversion_use_dict_encoding = not is_overload_none(arr) and (
         (
             pattern == bodo.dict_str_arr_type
             and types.unliteral(escape) == types.unicode_type
@@ -529,43 +529,66 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
             and escape == bodo.dict_str_arr_type
         )
     )
+    # If we have two dictionary encoded arrays we can use the indices array to
+    # cache results.
+    use_multiple_dict_encoding_path = (
+        arr == bodo.dict_str_arr_type and pattern_conversion_use_dict_encoding
+    )
     prefix_code = ""
-    if use_dict_encoding:
+    if is_case_insensitive and not is_overload_none(arr):
+        # Lower the input once at the onset to enable dict encoding.
+        # TODO: Move as a requirement for this kernel in the codegen step. This will
+        # allow removing redundant lower calls.
+        prefix_code += "arr = bodo.libs.bodosql_array_kernels.lower(arr)\n"
+    if pattern_conversion_use_dict_encoding:
         # If we are using dictionary encoding we convert the patterns before the for loop
         prefix_code += "(python_pattern_arr, requires_regex_arr, must_match_start_arr, must_match_end_arr, match_anything_arr) = convert_sql_pattern_dict_encoding(pattern, escape, case_insensitive)\n"
         # We will access these outputs using the indices array.
         if pattern == bodo.dict_str_arr_type:
-            prefix_code += "indices_arr = pattern._indices\n"
+            prefix_code += "conversion_indices_arr = pattern._indices\n"
         else:
-            prefix_code += "indices_arr = escape._indices\n"
-    if is_case_insensitive and not is_overload_none(arr):
-        if not bodo.utils.utils.is_array_typ(arr, True):
-            # If the output is an array, but the first argument is a scalar we need to convert
-            # it to lower case do it once before the loop to avoid overhead on each iteration.
-            prefix_code += "arr = arr.lower()"
-        else:
-            # lower each element instead.
-            scalar_text += "arg0 = arg0.lower()\n"
+            prefix_code += "conversion_indices_arr = escape._indices\n"
+    if use_multiple_dict_encoding_path:
+        # If both the pattern and arr are dictionary encoded we can cache results
+        # since we can't compute directly on dictionaries.
+        prefix_code += "arr_indices = arr._indices\n"
+        # We use an empty range for type stability.
+        prefix_code += (
+            "idx_cache = {(np.int32(i), np.int32(i)): False for i in range(0)}\n"
+        )
     # Convert the pattern on each iteration since it may change.
     # XXX Consider moving to a helper function to keep the IR smaller?
-    if use_dict_encoding:
-        scalar_text += "index = indices_arr[i]\n"
-        scalar_text += "(python_pattern, requires_regex, must_match_start, must_match_end, match_anything) = python_pattern_arr[index], requires_regex_arr[index], must_match_start_arr[index], must_match_end_arr[index], match_anything_arr[index]\n"
+    if use_multiple_dict_encoding_path:
+        scalar_text += "a_idx = arr_indices[i]\n"
+        # use_multiple_dict_encoding_path = True implies pattern_conversion_use_dict_encoding = True
+        scalar_text += "c_idx = conversion_indices_arr[i]\n"
+        scalar_text += "key = (a_idx, c_idx)\n"
+        scalar_text += "if key in idx_cache:\n"
+        scalar_text += "  res[i] = idx_cache[key]\n"
+        scalar_text += "  continue\n"
+    if pattern_conversion_use_dict_encoding:
+        if not use_multiple_dict_encoding_path:
+            scalar_text += "c_idx = conversion_indices_arr[i]\n"
+        scalar_text += "(python_pattern, requires_regex, must_match_start, must_match_end, match_anything) = python_pattern_arr[c_idx], requires_regex_arr[c_idx], must_match_start_arr[c_idx], must_match_end_arr[c_idx], match_anything_arr[c_idx]\n"
     else:
         scalar_text += "(python_pattern, requires_regex, must_match_start, must_match_end, match_anything) = convert_sql_pattern(arg1, arg2, case_insensitive)\n"
     scalar_text += "if match_anything:\n"
-    scalar_text += "  res[i] = True\n"
+    scalar_text += "  result = True\n"
     scalar_text += "elif requires_regex:\n"
     scalar_text += "  matcher = re.compile(python_pattern)\n"
-    scalar_text += "  res[i] = bool(matcher.search(arg0))\n"
+    scalar_text += "  result = bool(matcher.search(arg0))\n"
     scalar_text += "elif must_match_start and must_match_end:\n"
-    scalar_text += "  res[i] = arg0 == python_pattern\n"
+    scalar_text += "  result = arg0 == python_pattern\n"
     scalar_text += "elif must_match_start:\n"
-    scalar_text += "  res[i] = arg0.startswith(python_pattern)\n"
+    scalar_text += "  result = arg0.startswith(python_pattern)\n"
     scalar_text += "elif must_match_end:\n"
-    scalar_text += "  res[i] = arg0.endswith(python_pattern)\n"
+    scalar_text += "  result = arg0.endswith(python_pattern)\n"
     scalar_text += "else:\n"
-    scalar_text += "  res[i] = python_pattern in arg0\n"
+    scalar_text += "  result = python_pattern in arg0\n"
+    if use_multiple_dict_encoding_path:
+        # Store the result in the cache.
+        scalar_text += "idx_cache[key] = result\n"
+    scalar_text += "res[i] = result\n"
     return gen_vectorized(
         arg_names,
         arg_types,
