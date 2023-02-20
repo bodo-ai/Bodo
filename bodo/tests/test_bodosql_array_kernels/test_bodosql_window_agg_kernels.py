@@ -12,6 +12,44 @@ import bodo
 from bodo.tests.utils import check_func
 
 
+@bodo.jit
+def nullable_float_arr_maker(L, to_null, to_nan):
+    """
+    Utility funciton for helping test cases to generate nullable floating
+    point arrays that contain both NULL and NaN. Takes in a list of numbers,
+    a list of indices that should be set to NULL, a list of indices that should
+    be set to NaN, and outputs the corresponding floating point array.
+
+    For example:
+    nullable_float_arr_maker(list(range(10)), [1, 5, 9], [2, 3, 7])
+
+    Outputs the following Series:
+    0     0.0
+    1    <NA>
+    2     NaN
+    3     NaN
+    4     4.0
+    5    <NA>
+    6     6.0
+    7     NaN
+    8     8.0
+    9    <NA>
+    dtype: Float64
+    """
+    n = len(L)
+    data_arr = np.empty(n, np.float64)
+    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
+    A = bodo.libs.float_arr_ext.init_float_array(data_arr, nulls)
+    for i in range(len(L)):
+        if i in to_null:
+            bodo.libs.array_kernels.setna(A, i)
+        elif i in to_nan:
+            A[i] = np.nan
+        else:
+            A[i] = L[i]
+    return pd.Series(A)
+
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -159,49 +197,70 @@ def test_change_event(args):
     )
 
 
-def window_refsol(S, lower, upper, func):
+def window_refsol(S, lower, upper, func, use_nans=False):
     L = []
+    to_nan = [-1]
+    to_null = [-1]
     for i in range(len(S)):
         if upper < lower:
             result = None
         else:
             # Extract the window frame of elements by slicing about the current
             # index using the lower/upper bounds (without going out of bounds)
-            elems = [
-                elem
-                for elem in S.iloc[
-                    np.clip(i + lower, 0, len(S)) : np.clip(i + upper + 1, 0, len(S))
+            elems = pd.Series(
+                [
+                    elem
+                    for elem in S.iloc[
+                        np.clip(i + lower, 0, len(S)) : np.clip(
+                            i + upper + 1, 0, len(S)
+                        )
+                    ]
+                    if ((str(elem) != "<NA>") if use_nans else not (pd.isna(elem)))
                 ]
-                if not pd.isna(elem)
-            ]
-            if func == "sum":
-                result = None if len(elems) == 0 else sum(elems)
-            elif func == "count":
+            )
+            if func == "count":
                 result = len(elems)
+            elif use_nans and ("nan" in map(str, elems)):
+                result = np.nan
+            elif func == "sum":
+                result = None if len(elems) == 0 else elems.sum()
             elif func == "avg":
-                result = None if len(elems) == 0 else sum(elems) / len(elems)
+                result = None if len(elems) == 0 else elems.mean()
             elif func == "median":
-                result = None if len(elems) == 0 else np.median(elems)
+                result = None if len(elems) == 0 else elems.median()
             elif func == "ratio_to_report":
+                total = elems.sum()
                 result = (
                     None
-                    if len(elems) == 0 or S[i] == None or sum(elems) == 0
-                    else S[i] / sum(elems)
+                    if len(elems) == 0 or S[i] == None or pd.isna(S[i]) or total == 0
+                    else S[i] / total
                 )
-        L.append(result)
-    dtype_map = {
-        "sum": pd.Int64Dtype() if S.dtype.kind == "i" else None,
-        "count": pd.Int64Dtype(),
-        "avg": None,
-        "median": None,
-        "ratio_to_report": None,
-    }
-    out_dtype = dtype_map[func]
-    return pd.Series(L, dtype=out_dtype)
+        if use_nans:
+            if result is None:
+                to_null.append(i)
+                L.append(0.0)
+            elif result is np.nan:
+                to_nan.append(i)
+                L.append(0.0)
+            else:
+                L.append(result)
+        else:
+            L.append(result)
+    if use_nans:
+        return nullable_float_arr_maker(L, to_null, to_nan)
+    else:
+        dtype_map = {
+            "sum": pd.Int64Dtype() if S.dtype.kind == "i" else None,
+            "count": pd.Int64Dtype(),
+        }
+        out_dtype = dtype_map.get(func, None)
+        return pd.Series(L, dtype=out_dtype)
 
 
-def window_refsol_double(Y, X, lower, upper, func):
+def window_refsol_double(Y, X, lower, upper, func, use_nans=False):
     L = []
+    to_null = [-1]
+    to_nan = [-1]
     for i in range(len(Y)):
         if upper < lower:
             result = None
@@ -222,73 +281,208 @@ def window_refsol_double(Y, X, lower, upper, func):
                         )
                     ],
                 )
-                if not (pd.isna(y) or pd.isna(x))
+                if (
+                    (str(x) != "<NA>" and str(y) != "<NA>")
+                    if use_nans
+                    else not (pd.isna(x) or pd.isna(y))
+                )
             ]
-            elems_y = pd.Series(y for y, x in elems)
-            elems_x = pd.Series(x for y, x in elems)
-            if func == "covar_pop":
+            elems_y = pd.Series(y for y, _ in elems)
+            elems_x = pd.Series(x for _, x in elems)
+            if use_nans and ("nan" in map(str, elems_y) or "nan" in map(str, elems_x)):
+                result = np.nan
+            elif func == "covar_pop":
                 result = None if len(elems) == 0 else elems_y.cov(elems_x, ddof=0)
             elif func == "covar_samp":
-                result = None if len(elems) == 0 else elems_y.cov(elems_x)
-        L.append(result)
-    return pd.Series(L)
+                result = None if len(elems) <= 1 else elems_y.cov(elems_x)
+        if use_nans:
+            if result is None:
+                to_null.append(i)
+                L.append(0.0)
+            elif result is np.nan:
+                to_nan.append(i)
+                L.append(0.0)
+            else:
+                L.append(result)
+        else:
+            L.append(result)
+    if use_nans:
+        return nullable_float_arr_maker(L, to_null, to_nan)
+    else:
+        return pd.Series(L)
+
+
+@pytest.fixture
+def window_kernel_numeric_data():
+    return {
+        "null": pd.Series([None] * 5, dtype=pd.Int32Dtype()),
+        "int32": pd.Series(
+            [
+                None if math.cos(i**2) < -0.5 else int(2 / math.tan(i + 1))
+                for i in range(30)
+            ],
+            dtype=pd.Int32Dtype(),
+        ),
+        "float64_nonan": pd.Series(
+            [
+                None if math.sin(i**2) < -0.75 else (i**0.5) + math.tan(i)
+                for i in range(500)
+            ]
+        ),
+        "float64_nan": nullable_float_arr_maker(
+            [i for i in range(100)],
+            [i**2 for i in range(10)],
+            [i**3 + 5 for i in range(5)],
+        ),
+    }
+
+
+@pytest.fixture
+def window_kernel_all_types_data():
+    return {
+        "null": pd.Series([None] * 5, dtype=pd.UInt8Dtype()),
+        "uint8": pd.Series(
+            [None if "0" in str(i) else (i**2) % 17 for i in range(100)],
+            dtype=pd.UInt8Dtype(),
+        ),
+        "float64_nonan": pd.Series(
+            [
+                None if "11" in str(i) else (((13 + i) ** 2) % 41) ** 0.4
+                for i in range(100)
+            ]
+        ),
+        "float64_nan": nullable_float_arr_maker(
+            [i % 13 for i in range(100)],
+            [i**2 for i in range(10)],
+            [i**3 + 5 for i in range(5)],
+        ),
+        "string": pd.Series(
+            [chr(65 + (i**2) % 5) if i % 7 < 6 else None for i in range(250)]
+        ),
+        "binary": pd.Series(
+            [
+                None
+                if "1" in str(i) and "2" in str(i)
+                else bytes(bin((i**2) % 47), encoding="utf-8")
+                for i in range(450)
+            ]
+        ),
+        "datetime": pd.Series(
+            [
+                None if year is None else pd.datetime(2000 + year, 1, 1)
+                for tup in zip(
+                    [i for i in range(50)],
+                    [((i + 3) ** 2) % 22 for i in range(50)],
+                    [None] * 50,
+                    [((i + 4) ** 3) % 22 for i in range(50)],
+                    [((i + 5) ** 4) % 22 for i in range(50)],
+                    [((i + 6) ** 5) % 22 for i in range(50)],
+                )
+                for year in tup
+            ]
+        ),
+    }
+
+
+@pytest.fixture
+def window_kernel_two_arg_data():
+    return {
+        "null": (
+            pd.Series([None] * 13, dtype=pd.Int32Dtype()),
+            pd.Series([None] * 13, dtype=pd.Int32Dtype()),
+        ),
+        "int32": (
+            pd.Series(
+                [None if "0" in str(i) else (i**2) % 17 for i in range(400)],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.Series(
+                [None if "9" in str(i) else (i**3) % 23 for i in range(400)],
+                dtype=pd.Int32Dtype(),
+            ),
+        ),
+        "float64_nonan": (
+            pd.Series(
+                [
+                    None if "11" in str(i) else (((13 + i) ** 2) % 12345) ** 0.7 - 250
+                    for i in range(900)
+                ]
+            ),
+            pd.Series(
+                [
+                    None if "12" in str(i) else (((100 + i) ** 3) % 54321) ** 0.7 - 1234
+                    for i in range(900)
+                ]
+            ),
+        ),
+        "float64_nan": (
+            nullable_float_arr_maker(
+                [math.tan(i) for i in range(100)],
+                [(i**2) % 100 for i in range(15)],
+                [(i**3) % 100 for i in range(15)],
+            ),
+            nullable_float_arr_maker(
+                [1 / (math.tan(i) + 0.1) for i in range(100)],
+                [(i**4) % 100 for i in range(15)],
+                [(i**5) % 100 for i in range(15)],
+            ),
+        ),
+    }
 
 
 @pytest.mark.parametrize(
-    "S",
+    ["dataset", "lower_bound", "upper_bound"],
     [
+        pytest.param("null", -10000, 0, id="null-prefix"),
+        pytest.param("null", -10000, 10000, id="null-entire_window"),
+        pytest.param("int32", -10000, 0, id="int32-prefix"),
         pytest.param(
-            pd.Series(
-                [None] * 10,
-                dtype=pd.Int32Dtype(),
-            ),
-            id="null",
+            "int32", 1, 10000, id="int32-suffix_exclusive", marks=pytest.mark.slow
+        ),
+        pytest.param("int32", -5, -1, id="int32-lagging_5"),
+        pytest.param("int32", -10000, 10000, id="int32-entire_window"),
+        pytest.param("int32", 10000, 5000, id="int32-too_large"),
+        pytest.param("float64_nonan", -10000, 0, id="float64_nonan-prefix"),
+        pytest.param(
+            "float64_nonan", 0, 0, id="float64_nonan-current", marks=pytest.mark.slow
+        ),
+        pytest.param("float64_nonan", -1, 1, id="float64_nonan-rolling_3"),
+        pytest.param(
+            "float64_nonan",
+            100,
+            400,
+            id="float64_nonan-leading_300",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param("float64_nonan", -10000, 10000, id="float64_nonan-entire_window"),
+        pytest.param(
+            "float64_nonan", 3, -3, id="float64_nonan-backward", marks=pytest.mark.slow
+        ),
+        pytest.param("float64_nan", -10000, 0, id="float64_nan-prefix"),
+        pytest.param(
+            "float64_nan", -3, 3, id="float64_nan-rolling_7", marks=pytest.mark.slow
         ),
         pytest.param(
-            pd.Series(
-                [1, None, -2, 3, None, None, None, -4, 5, 6], dtype=pd.Int32Dtype()
-            ),
-            id="int32",
-        ),
-        pytest.param(
-            pd.Series(
-                [
-                    None
-                    if i <= 2 or i >= 18 or i % 7 >= 5
-                    else (-1) ** i * round(math.pi, i)
-                    for i in range(20)
-                ]
-            ),
-            id="float64",
+            "float64_nan",
+            -10000,
+            10000,
+            id="float64_nan-entire_window",
             marks=pytest.mark.slow,
         ),
     ],
 )
 @pytest.mark.parametrize(
-    ["lower_bound", "upper_bound"],
-    [
-        pytest.param(-1000, 0, id="prefix"),
-        pytest.param(1, 1000, id="suffix_exclusive", marks=pytest.mark.slow),
-        pytest.param(-1000, 1000, id="entire_window"),
-        pytest.param(0, 0, id="current"),
-        pytest.param(-1, 1, id="rolling_3"),
-        pytest.param(-5, -1, id="lagging_5", marks=pytest.mark.slow),
-        pytest.param(-1000, -500, id="too_small"),
-        pytest.param(100, 200, id="too_large", marks=pytest.mark.slow),
-        pytest.param(3, -3, id="backward"),
-    ],
-)
-@pytest.mark.parametrize(
     "func",
-    [
-        "median",
-        "sum",
-        "count",
-        "avg",
-        "ratio_to_report",
-    ],
+    ["median", "sum", "count", "avg", "ratio_to_report"],
 )
-def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak_check):
+def test_windowed_kernels_numeric(
+    func,
+    window_kernel_numeric_data,
+    dataset,
+    lower_bound,
+    upper_bound,
+    memory_leak_check,
+):
     def impl1(S, lower, upper):
         return pd.Series(bodo.libs.bodosql_array_kernels.windowed_sum(S, lower, upper))
 
@@ -310,6 +504,8 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
             bodo.libs.bodosql_array_kernels.windowed_ratio_to_report(S, lower, upper)
         )
 
+    S = window_kernel_numeric_data[dataset]
+
     implementations = {
         "sum": impl1,
         "count": impl2,
@@ -322,7 +518,9 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
     check_func(
         impl,
         (S, lower_bound, upper_bound),
-        py_output=window_refsol(S, lower_bound, upper_bound, func),
+        py_output=window_refsol(
+            S, lower_bound, upper_bound, func, dataset == "float64_nan"
+        ),
         check_dtype=False,
         reset_index=True,
         # For now, only works sequentially because it can only be used inside
@@ -332,124 +530,145 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
 
 
 @pytest.mark.parametrize(
-    "data",
+    ["dataset", "lower_bound", "upper_bound"],
     [
+        pytest.param("null", -1000, 0, id="null-prefix"),
+        pytest.param("null", -1000, 1000, id="null-entire_window"),
+        pytest.param("null", 0, 0, id="null-current", marks=pytest.mark.slow),
+        pytest.param("null", 3, -3, id="null-backward", marks=pytest.mark.slow),
+        pytest.param("uint8", -1000, 0, id="uint8-prefix"),
+        pytest.param("uint8", -1000, 0, id="uint8-suffix_exclusive"),
+        pytest.param("uint8", -1000, 1000, id="uint8-entire_window"),
+        pytest.param("uint8", 0, 0, id="uint8-current"),
+        pytest.param("uint8", -1000, -700, id="uint8-too_small"),
+        pytest.param("uint8", 3, -3, id="uint8-backward"),
+        pytest.param("float64_nonan", -1000, 0, id="float64_nonan-prefix"),
         pytest.param(
-            pd.Series(
-                [None] * 72,
-                dtype=pd.UInt8Dtype(),
-            ),
-            id="null",
-        ),
-        pytest.param(
-            pd.Series(
-                [None if "0" in str(i) else (i**2) % 17 for i in range(500)],
-                dtype=pd.UInt8Dtype(),
-            ),
-            id="uint8",
-        ),
-        pytest.param(
-            pd.Series(
-                [
-                    None if "11" in str(i) else (((13 + i) ** 2) % 41) ** 0.4
-                    for i in range(500)
-                ]
-            ),
-            id="float",
+            "float64_nonan",
+            -1000,
+            1000,
+            id="float64_nonan-entire_window",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Series(
-                [chr(65 + (i**2) % 5) if i % 7 < 6 else None for i in range(250)]
-            ),
-            id="string",
+            "float64_nonan",
+            1000,
+            7000,
+            id="float64_nonan-too_large",
+            marks=pytest.mark.slow,
         ),
+        pytest.param("float64_nan", -1000, 0, id="float64_nan-prefix"),
         pytest.param(
-            pd.Series(
-                [
-                    None
-                    if "1" in str(i) and "2" in str(i)
-                    else bytes(bin((i**2) % 47), encoding="utf-8")
-                    for i in range(450)
-                ]
-            ),
-            id="binary",
+            "float64_nan",
+            -1000,
+            1000,
+            id="float64_nan-entire_window",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Series(
-                [
-                    None if year is None else pd.datetime(2000 + year, 1, 1)
-                    for tup in zip(
-                        [i for i in range(50)],
-                        [((i + 3) ** 2) % 22 for i in range(50)],
-                        [None] * 50,
-                        [((i + 4) ** 3) % 22 for i in range(50)],
-                        [((i + 5) ** 4) % 22 for i in range(50)],
-                        [((i + 6) ** 5) % 22 for i in range(50)],
-                    )
-                    for year in tup
-                ]
-            ),
-            id="datetime",
+            "string", -1000, 0, id="string-suffix_exclusive", marks=pytest.mark.slow
         ),
+        pytest.param(
+            "string", -1000, 1000, id="string-entire_window", marks=pytest.mark.slow
+        ),
+        pytest.param("string", -20, 20, id="string-rolling_41", marks=pytest.mark.slow),
+        pytest.param("string", 1, 3, id="string-leading_3", marks=pytest.mark.slow),
+        pytest.param("string", 3, -3, id="string-backward", marks=pytest.mark.slow),
+        pytest.param("binary", -1000, 0, id="binary-prefix", marks=pytest.mark.slow),
+        pytest.param(
+            "binary", -1000, 1000, id="binary-entire_window", marks=pytest.mark.slow
+        ),
+        pytest.param("binary", 0, 0, id="binary-current", marks=pytest.mark.slow),
+        pytest.param("binary", 1, 3, id="binary-leading_3", marks=pytest.mark.slow),
+        pytest.param("binary", 3, -3, id="binary-backward", marks=pytest.mark.slow),
+        pytest.param(
+            "datetime", -1000, 0, id="datetime-suffix_exclusive", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            "datetime", -1000, 1000, id="datetime-entire_window", marks=pytest.mark.slow
+        ),
+        pytest.param("datetime", 0, 0, id="datetime-current", marks=pytest.mark.slow),
+        pytest.param(
+            "datetime", -20, 20, id="datetime-rolling_41", marks=pytest.mark.slow
+        ),
+        pytest.param("datetime", 3, -3, id="datetime-backward", marks=pytest.mark.slow),
     ],
 )
-@pytest.mark.parametrize(
-    ["lower_bound", "upper_bound"],
-    [
-        pytest.param(-1000, 0, id="prefix"),
-        pytest.param(1, 1000, id="suffix_exclusive", marks=pytest.mark.slow),
-        pytest.param(-1000, 1000, id="entire_window"),
-        pytest.param(0, 0, id="current"),
-        pytest.param(-20, 20, id="rolling_41"),
-        pytest.param(1, 3, id="leading_3", marks=pytest.mark.slow),
-        pytest.param(-1000, -700, id="too_small"),
-        pytest.param(3, -3, id="backward", marks=pytest.mark.slow),
-    ],
-)
-def test_windowed_mode(data, lower_bound, upper_bound, memory_leak_check):
+def test_windowed_mode(
+    dataset,
+    window_kernel_all_types_data,
+    lower_bound,
+    upper_bound,
+    memory_leak_check,
+):
     def impl(S, lower, upper):
         return pd.Series(bodo.libs.bodosql_array_kernels.windowed_mode(S, lower, upper))
 
     if bodo.get_size() > 1:
         pytest.skip("These kernels are only sequential")
 
+    data = window_kernel_all_types_data[dataset]
+
     # Calculates the window function for each row, breaking ties by finding
     # the element that appeared first in the sequence chronologically
-    def generate_answers(S, lower, upper):
+    def generate_answers(S, lower, upper, use_nans):
         L = []
+        to_null = [-1]
+        to_nan = [-1]
         for i in range(len(S)):
             if upper < lower:
                 L.append(None)
             else:
-                elems = [
-                    elem
-                    for elem in S.iloc[
-                        np.clip(i + lower, 0, len(S)) : np.clip(
-                            i + upper + 1, 0, len(S)
-                        )
+                elems = pd.Series(
+                    [
+                        elem
+                        for elem in S.iloc[
+                            np.clip(i + lower, 0, len(S)) : np.clip(
+                                i + upper + 1, 0, len(S)
+                            )
+                        ]
+                        if ((str(elem) != "<NA>") if use_nans else not (pd.isna(elem)))
                     ]
-                    if not pd.isna(elem)
-                ]
-                counts = {}
-                bestVal = None
-                bestCount = 0
-                for elem in elems:
-                    counts[elem] = counts.get(elem, 0) + 1
-                    if counts[elem] > bestCount or (
-                        counts[elem] == bestCount
-                        and S[S == elem].index[0] < S[S == bestVal].index[0]
-                    ):
-                        bestCount = counts[elem]
-                        bestVal = elem
-                L.append(bestVal)
-        return pd.Series(L, dtype=S.dtype)
+                )
+                if len(elems) == 0:
+                    if use_nans:
+                        L.append(0.0)
+                        to_null.append(i)
+                    else:
+                        L.append(None)
+                else:
+                    counts = {}
+                    if use_nans:
+                        bestVal, bestCount = np.nan, np.isnan(elems).sum()
+                    else:
+                        bestVal, bestCount = None, 0
+                    for elem in elems:
+                        counts[elem] = counts.get(elem, 0) + 1
+                        if counts[elem] > bestCount or (
+                            (bestVal is not np.nan)
+                            and counts[elem] == bestCount
+                            and S[S == elem].index[0] < S[S == bestVal].index[0]
+                        ):
+                            bestCount = counts[elem]
+                            bestVal = elem
+
+                    if bestVal is np.nan:
+                        L.append(0.0)
+                        to_nan.append(i)
+                    else:
+                        L.append(bestVal)
+
+        if use_nans:
+            return nullable_float_arr_maker(L, to_null, to_nan)
+        else:
+            return pd.Series(L, dtype=S.dtype)
 
     check_func(
         impl,
         (data, lower_bound, upper_bound),
-        py_output=generate_answers(data, lower_bound, upper_bound),
+        py_output=generate_answers(
+            data, lower_bound, upper_bound, dataset == "float64_nan"
+        ),
         check_dtype=False,
         reset_index=True,
         # For now, only works sequentially because it can only be used inside
@@ -459,58 +678,48 @@ def test_windowed_mode(data, lower_bound, upper_bound, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    ["lower_bound", "upper_bound"],
+    ["dataset", "lower_bound", "upper_bound"],
     [
-        pytest.param(-1000, 0, id="prefix"),
-        pytest.param(1, 1000, id="suffix_exclusive", marks=pytest.mark.slow),
-        pytest.param(-1000, 1000, id="entire_window"),
-        pytest.param(0, 0, id="current"),
-        pytest.param(-2, 0, id="lagging_3", marks=pytest.mark.slow),
-        pytest.param(-2000, -1000, id="too_small"),
-        pytest.param(1000, 2000, id="too_large", marks=pytest.mark.slow),
-        pytest.param(3, -3, id="backward"),
-    ],
-)
-@pytest.mark.parametrize(
-    "Y, X",
-    [
+        pytest.param("null", -1000, 0, id="null-prefix"),
+        pytest.param("null", -1000, 1000, id="null-entire_window"),
+        pytest.param("int32", -1000, 0, id="int32-prefix"),
         pytest.param(
-            pd.Series(
-                [None if i % 2 == 0 or i % 3 == 0 else i for i in range(100)],
-                dtype=pd.UInt8Dtype(),
-            ),
-            pd.Series(
-                [None if i % 2 == 1 or i % 3 == 0 else i for i in range(100)],
-                dtype=pd.UInt8Dtype(),
-            ),
-            id="null",
+            "int32", 1, 1000, id="int32-suffix_exclusive", marks=pytest.mark.slow
         ),
+        pytest.param("int32", -1000, 1000, id="int32-entire_window"),
+        pytest.param("int32", -2, 0, id="int32-lagging_3"),
+        pytest.param("int32", 1, 70, id="int32-leading_70", marks=pytest.mark.slow),
+        pytest.param("int32", -2000, -1000, id="int32-too_small"),
+        pytest.param("float64_nonan", -1000, 0, id="float64_nonan-prefix"),
+        pytest.param("float64_nonan", -1000, 1000, id="float64_nonan-entire_window"),
+        pytest.param("float64_nonan", 0, 0, id="float64_nonan-current"),
         pytest.param(
-            pd.Series(
-                [None if "0" in str(i) else (i**2) % 17 for i in range(500)],
-                dtype=pd.UInt8Dtype(),
-            ),
-            pd.Series(
-                [None if "9" in str(i) else (i**3) % 23 for i in range(500)],
-                dtype=pd.UInt8Dtype(),
-            ),
-            id="uint8",
-        ),
-        pytest.param(
-            pd.Series(
-                [
-                    None if "11" in str(i) else (((13 + i) ** 2) % 12345) ** 0.7 - 250
-                    for i in range(500)
-                ]
-            ),
-            pd.Series(
-                [
-                    None if "12" in str(i) else (((100 + i) ** 3) % 54321) ** 0.7 - 1234
-                    for i in range(500)
-                ]
-            ),
-            id="float",
+            "float64_nonan",
+            -50,
+            50,
+            id="float64_nonan-rolling_101",
             marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "float64_nonan",
+            1000,
+            2000,
+            id="float64_nonan-too_large",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "float64_nonan", 3, -3, id="float64_nonan-backward", marks=pytest.mark.slow
+        ),
+        pytest.param("float64_nan", -1000, 0, id="float64_nan-prefix"),
+        pytest.param(
+            "float64_nan",
+            -1000,
+            1000,
+            id="float64_nan-entire_window",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "float64_nan", -2, 2, id="float64_nan-rolling-5", marks=pytest.mark.slow
         ),
     ],
 )
@@ -522,7 +731,12 @@ def test_windowed_mode(data, lower_bound, upper_bound, memory_leak_check):
     ],
 )
 def test_windowed_kernels_two_arg(
-    func, Y, X, lower_bound, upper_bound, memory_leak_check
+    func,
+    dataset,
+    window_kernel_two_arg_data,
+    lower_bound,
+    upper_bound,
+    memory_leak_check,
 ):
     def impl1(Y, X, lower, upper):
         return pd.Series(
@@ -534,6 +748,8 @@ def test_windowed_kernels_two_arg(
             bodo.libs.bodosql_array_kernels.windowed_covar_samp(Y, X, lower, upper)
         )
 
+    Y, X = window_kernel_two_arg_data[dataset]
+
     implementations = {
         "covar_pop": impl1,
         "covar_samp": impl2,
@@ -543,7 +759,9 @@ def test_windowed_kernels_two_arg(
     check_func(
         impl,
         (Y, X, lower_bound, upper_bound),
-        py_output=window_refsol_double(Y, X, lower_bound, upper_bound, func),
+        py_output=window_refsol_double(
+            Y, X, lower_bound, upper_bound, func, dataset == "float64_nan"
+        ),
         check_dtype=False,
         reset_index=True,
         # For now, only works sequentially because it can only be used inside
