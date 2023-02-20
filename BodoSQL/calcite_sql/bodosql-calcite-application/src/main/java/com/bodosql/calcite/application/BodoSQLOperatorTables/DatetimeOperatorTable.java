@@ -527,7 +527,37 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               OperandTypes.sequence(
                   "DATEDIFF(TIMESTAMP, TIMESTAMP)",
                   OperandTypes.TIMESTAMP,
-                  OperandTypes.TIMESTAMP)),
+                  OperandTypes.TIMESTAMP),
+              OperandTypes.sequence(
+                  "DATEDIFF(CHARACTER, TIME, TIME)",
+                  OperandTypes.CHARACTER,
+                  OperandTypes.DATETIME,
+                  OperandTypes.DATETIME)),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TIMEDIFF =
+      new SqlFunction(
+          "TIMEDIFF",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.BIGINT,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          OperandTypes.or(
+              OperandTypes.sequence(
+                  "TIMEDIFF(CHARACTER, TIMESTAMP, TIMESTAMP)",
+                  OperandTypes.CHARACTER,
+                  OperandTypes.TIMESTAMP,
+                  OperandTypes.TIMESTAMP),
+              OperandTypes.sequence(
+                  "TIMEDIFF(CHARACTER, TIME, TIME)",
+                  OperandTypes.CHARACTER,
+                  OperandTypes.DATETIME,
+                  OperandTypes.DATETIME)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -921,6 +951,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           DATE_ADD,
           DATE_SUB,
           DATEDIFF,
+          TIMEDIFF,
           DATE_FROM_PARTS,
           DATEFROMPARTS,
           TIMESTAMP_FROM_PARTS,

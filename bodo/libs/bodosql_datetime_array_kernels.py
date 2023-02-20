@@ -2668,8 +2668,11 @@ def overload_date_sub_date_unit_util(date_or_time_part, arr0, arr1):  # pragma: 
     # TODO: When we have a formal date type in SQL this should only
     # accept dates.
     verify_string_arg(date_or_time_part, "DATE_SUB_DATE_UNIT", "date_or_time_part")
-    verify_datetime_arg(arr0, "DATE_SUB_DATE_UNIT", "arr0")
-    verify_datetime_arg(arr1, "DATE_SUB_DATE_UNIT", "arr1")
+    if is_valid_time_arg(arr0):
+        assert is_valid_time_arg(arr1)
+    else:
+        verify_datetime_arg(arr0, "DATE_SUB_DATE_UNIT", "arr0")
+        verify_datetime_arg(arr1, "DATE_SUB_DATE_UNIT", "arr1")
 
     unit = ""
     if is_overload_constant_str(date_or_time_part):
@@ -2721,8 +2724,7 @@ def overload_date_sub_date_unit_util(date_or_time_part, arr0, arr1):  # pragma: 
     elif datetime_part == "day":
         scalar_text = f"res[i] = ({arg2} - {arg1}).days\n"
     else:
-        # A Pandas Timedelta value attribute is in nanoseconds by default
-        timedelta_str = f"({arg2} - {arg1}).value"
+        timedelta_str = f"({arg2}.value - {arg1}.value)"
 
         if datetime_part == "hour":
             scalar_text = (

@@ -2299,9 +2299,9 @@ def test_to_date_scalar(
 
 
 def test_date_trunc_time_small_unit(time_df, time_part_strings, memory_leak_check):
-    query = f"SELECT DATE_TRUNC('{time_part_strings}', BODOTIME) as output from table1"
+    query = f"SELECT DATE_TRUNC('{time_part_strings}', A) as output from table1"
     scalar_func = generate_date_trunc_time_func(time_part_strings)
-    output = pd.DataFrame({"output": time_df["table1"]["bodotime"].map(scalar_func)})
+    output = pd.DataFrame({"output": time_df["table1"]["A"].map(scalar_func)})
     check_query(
         query,
         time_df,
@@ -2313,11 +2313,11 @@ def test_date_trunc_time_small_unit(time_df, time_part_strings, memory_leak_chec
 
 
 def test_date_trunc_time_large_unit(time_df, day_part_strings, memory_leak_check):
-    query = f"SELECT DATE_TRUNC('{day_part_strings}', BODOTIME) as output from table1"
+    query = f"SELECT DATE_TRUNC('{day_part_strings}', A) as output from table1"
     output = pd.DataFrame({"output": []})
     with pytest.raises(
         Exception,
-        match=f'Unsupported DATE_TRUNC unit for TIME input: "{day_part_strings}"',
+        match=f"Unsupported DATE_TRUNC unit for TIME input: \"{day_part_strings}\""
     ):
         check_query(
             query,

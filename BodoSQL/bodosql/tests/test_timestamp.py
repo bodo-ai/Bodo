@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
-
+from bodo.tests.conftest import time_df, time_part_strings, day_part_strings
+from bodo.tests.timezone_common import date_sub_unit_time_fn
 
 def test_datetime_condition(spark_info, memory_leak_check):
     """test selecting column satisfying condition on timestamp type column"""
@@ -132,6 +133,58 @@ def test_datediff_args3_literals(query, expected_output, basic_df, memory_leak_c
     )
 
 
+@pytest.mark.parametrize(
+    "query, expected_output",
+    [
+        pytest.param(
+            "SELECT DATEDIFF('HOUR', TO_TIME('10:10:10'), TO_TIME('22:33:33'))",
+            pd.DataFrame({"A": pd.Series([12])}),
+            id="hour",
+        ),
+        pytest.param(
+            "SELECT TIMEDIFF('MINUTE', TO_TIME('12:10:05'), TO_TIME('10:10:10'))",
+            pd.DataFrame({"A": pd.Series([-120])}),
+            id="minute",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('SECOND', TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
+            pd.DataFrame({"A": pd.Series([-37408])}),
+            id="second",
+        ),
+        pytest.param(
+            "SELECT TIMEDIFF('MILLISECOND', TO_TIME('10:10:10'), TO_TIME('12:10:05'))",
+            pd.DataFrame({"A": pd.Series([7195000])}),
+            id="millisecond",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('MICROSECOND', TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
+            pd.DataFrame({"A": pd.Series([-37408000000])}),
+            id="microsecond",
+        ),
+        pytest.param(
+            "SELECT TIMEDIFF('NANOSECOND', TO_TIME('22:33:33'), TO_TIME('10:10:10'))",
+            pd.DataFrame({"A": pd.Series([-44603000000000])}),
+            id="nanosecond",
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_datediff_time_literals(query, expected_output, basic_df, memory_leak_check):
+    """
+    Checks that calling DATEDIFF/TIMEDIFF on bodo.Time literals behaves as expected.
+    Tests all possible datetime parts except for time units.
+    """
+
+    check_query(
+        query,
+        basic_df,
+        spark=None,
+        expected_output=expected_output,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
 @pytest.mark.slow
 def test_str_to_date_literals(basic_df, spark_info, memory_leak_check):
     """
@@ -157,6 +210,47 @@ def test_datediff_columns(bodosql_datetime_types, spark_info, memory_leak_check)
     check_query(
         query, bodosql_datetime_types, spark_info, check_names=False, check_dtype=False
     )
+
+
+def test_datediff_time_columns(time_df, time_part_strings, memory_leak_check):
+    """
+    Checks that calling DATEDIFF/TIMEDIFF on columns behaves as expected
+    """
+    query = (
+        f"SELECT TIMEDIFF('{time_part_strings}', A, B) as output from table1"
+    )
+    output = pd.DataFrame(
+        {"output": [
+            date_sub_unit_time_fn(time_part_strings,
+                                  time_df["table1"]["A"][i],
+                                  time_df["table1"]["B"][i]
+                                  ) for i in range(len(time_df["table1"]["A"]))]}
+    )
+    check_query(
+        query, time_df, None, check_names=False, check_dtype=False, expected_output=output
+    )
+
+
+def test_datediff_time_large_unit(time_df, day_part_strings, memory_leak_check):
+    """
+    Checks that calling DATEDIFF/TIMEDIFF throws correct error when input time is large
+    """
+    query = (
+        f"SELECT TIMEDIFF('{day_part_strings}', A, B) as output from table1"
+    )
+    output = pd.DataFrame(
+        {"output": []}
+    )
+    with pytest.raises(Exception, match=
+        f"Unsupported TIMEDIFF unit for TIME input: \"{day_part_strings}\""):
+        check_query(
+            query,
+            time_df,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=output
+        )
 
 
 @pytest.mark.slow
