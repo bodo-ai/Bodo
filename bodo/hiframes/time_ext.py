@@ -293,6 +293,11 @@ def time_nanosecond_attribute(val):  # pragma: no cover
     return lambda val: cast_time_to_int(val) % _nanos_per_micro
 
 
+@overload_attribute(TimeType, "value")
+def time_value_attribute(val):  # pragma: no cover
+    return lambda val: cast_time_to_int(val)
+
+
 def _to_nanos_codegen(
     c, hour_ll, minute_ll, second_ll, millisecond_ll, microsecond_ll, nanosecond_ll
 ):

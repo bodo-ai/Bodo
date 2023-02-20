@@ -1687,6 +1687,14 @@ def date_sub_unit_fn(unit, arg0, arg1):
             return nanoseconds_to_other_time_units((B - A).value, datetime_part)
 
 
+def date_sub_unit_time_fn(unit, arg0, arg1):
+    if pd.isna(arg0) or pd.isna(arg1):
+        return None
+    else:
+        time_part = standardize_snowflake_date_time_part_compile_time(unit)(unit)
+        return nanoseconds_to_other_time_units(arg1.value - arg0.value, time_part)
+
+
 def test_date_sub_date_unit(datetime_part_strings, memory_leak_check):
     """
     Tests date_sub_date_unit with array and scalar data.
@@ -1727,6 +1735,53 @@ def test_date_sub_date_unit(datetime_part_strings, memory_leak_check):
         scalar_impl,
         args,
         py_output=vectorized_sol(args, date_sub_unit_fn, None),
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_date_sub_date_time_unit(time_part_strings, memory_leak_check):
+    """
+    Tests date_sub_date_unit with array and scalar data.
+    """
+
+    def impl(unit, arg0, arg1):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.date_sub_date_unit(
+                numba.literally(unit), arg0, arg1
+            )
+        )
+
+    scalar_impl = (
+        lambda unit, arg0, arg1: bodo.libs.bodosql_array_kernels.date_sub_date_unit(
+            numba.literally(unit), arg0, arg1
+        )
+    )
+
+    S0 = pd.Series(
+        [bodo.Time(17, 33, 26, 91, 8, 79), None, bodo.Time(0, 24, 43, 365, 18, 74), bodo.Time(22, 13, 57)] * 4
+    )
+    S1 = pd.Series(
+        [bodo.Time(3, 59, 6, 25, 757, 3), bodo.Time(17, 34, 29, 90), None, bodo.Time(7, 3, 45, 876, 234)] * 4
+    )
+    arr0 = S0.values
+    arr1 = S1.values
+    scalar0 = S0[0]
+    scalar1 = S1[15]
+
+    args = (time_part_strings, arr0, arr1)
+    check_func(
+        impl,
+        args,
+        py_output=vectorized_sol(args, date_sub_unit_time_fn, None),
+        check_dtype=False,
+        reset_index=True,
+    )
+    args = (time_part_strings, scalar0, scalar1)
+    check_func(
+        scalar_impl,
+        args,
+        py_output=vectorized_sol(args, date_sub_unit_time_fn, None),
         check_dtype=False,
         reset_index=True,
     )

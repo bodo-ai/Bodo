@@ -550,7 +550,7 @@ def time_df():
     return {
         "table1": pd.DataFrame(
             {
-                "bodotime": pd.Series([
+                "A": pd.Series([
                     bodo.Time(17, 33, 26, 91, 8, 79),
                     bodo.Time(0, 24, 43, 365, 18, 74),
                     bodo.Time(3, 59, 6, 25, 757, 3),
@@ -561,6 +561,18 @@ def time_df():
                     bodo.Time(17, 34, 29, 90),
                     bodo.Time(7, 3, 45, 876, 234),
                     None,
+                ]),
+                "B": pd.Series([
+                    bodo.Time(20, 6, 26, 324, 4, 79),
+                    bodo.Time(3, 59, 6, 25, 57, 3),
+                    bodo.Time(7, 3, 45, 876, 234),
+                    bodo.Time(17, 34, 29, 90),
+                    bodo.Time(22, 13, 57),
+                    bodo.Time(6, 41),
+                    bodo.Time(4),
+                    bodo.Time(),
+                    None,
+                    bodo.Time(0, 24, 4, 512, 18, 74),
                 ])
             }
         )
