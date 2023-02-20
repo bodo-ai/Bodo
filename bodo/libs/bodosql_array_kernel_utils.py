@@ -1208,6 +1208,7 @@ def gen_windowed(
     exit_block=None,
     empty_block=None,
     num_args=1,
+    propagate_nan=True,
 ):
     """Creates an impl for a window frame function that accumulates some value
     as elements enter and exit a window that starts/ends some number of indices
@@ -1219,23 +1220,34 @@ def gen_windowed(
     window functions currently only work on partitioned data.
 
     Args:
-        calculate_block (string): how should the current array value be
+        calculate_block (string): How should the current array value be
         calculated in terms of the up-to-date accumulators
+
         out_dtype (dtype): what is the dtype of the output data.
-        constant_block (optional): what should happen if the output value will
+
+        constant_block (optional): What should happen if the output value will
         always be the same due to the window size being so big. If None,
         this means that there is no such case.
-        setup_block (string, optional): what should happen to initialize the
-        accumulators
+
+        setup_block (string, optional): What should happen to initialize the
+        accumulators. If not provided, does nothing.
+
         enter_block (string, optional): what should happen when a non-null
-        element enters the window
-        exit_block (string, optional):  what should happen when a non-null
-        element exits the window
-        empty_block (string, optional): what should happen if the entire window
-        frame is null. If None, calls setna. Defaults to None.
-        num_args (integer, optional): how many arguments the function takes in.
+        element enters the window. If not provided, does nothing.
+
+        exit_block (string, optional): what should happen when a non-null
+        element exits the window. If not provided, does nothing.
+
+        empty_block (string, optional): What should happen if the window frame
+        is null/empty. If not provided, calls setna.
+
+        num_args (integer): how many arguments the function takes in.
         The default is 1. Only 1 or 2 arguments supported. If 1, the input is
-        called S. If 2, the inputs are called (Y, X)
+        called S. If 2, the inputs are called (Y, X).
+
+        propagate_nan (boolean): If True, the output is NaN if any element
+        in the current window frame is NaN. Note: if a NaN is encountered, the
+        enter/exit blocks are not invoked. The default value is True.
 
     Returns:
         function: a window function that takes in a Series, lower bound,
@@ -1256,64 +1268,76 @@ def gen_windowed(
           (if 2 arguments).
         - After being coerced to arrays, they can be accessed as arr0, arr1, etc.
 
-    The generated code will look as follows:
+    Below is an example of the generated code when used to calculate sum on an
+    array of floats:
+
+    calculate_block = "res[i] = total"
+    constant_block = "constant_value = S.sum()"
+    setup_block = "total = 0"
+    enter_block = "total += elem0"
+    exit_block = "total -= elem0"
+    empty_block = None
+    num_args = 1
+    propagate_nan = True
 
     def impl(S, lower_bound, upper_bound):
         n = len(S)
-        arr = bodo.utils.conversion.coerce_to_array(S)
-        res = bodo.utils.utils.alloc_type(n, out_dtype, -1)
-        # If the slice is empty, output all nulls
+        arr0 = bodo.utils.conversion.coerce_to_array(S)
+        res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))
         if upper_bound < lower_bound:
             for i in range(n):
                 bodo.libs.array_kernels.setna(res, i)
         elif lower_bound <= -n+1 and n-1 <= upper_bound:
-            if S.count() == 0:
-                # << EMPTY_BLOCK >>
-            else:
-                # << CONSTANT_BLOCK >>
+            has_non_null = False
+            for i in range(n):
+                if not (bodo.libs.array_kernels.isna(arr0, i)):
+                    has_non_null = True
+            if not has_non_null:
                 for i in range(n):
-                    res[i] = constant_value
+                    bodo.libs.array_kernels.setna(res, i)
+            else:
+                constant_value = S.sum()
+                res[:] = constant_value
         else:
-            # Keep track of the first/last index of the current window,
-            # the number of non-null entries in the window, and the current
-            # values for the crucial variables
             exiting = lower_bound
             entering = upper_bound
             in_window = 0
-            << INSERT SETUP_BLOCK HERE >>
-            # Calculate the starting values
+            nan_counter = 0
+            total = 0
             for i in range(min(max(0, exiting), n), min(max(0, entering + 1), n)):
-                if not bodo.libs.array_kernels.isna(arr, i):
+                if not (bodo.libs.array_kernels.isna(arr0, i)):
                     in_window += 1
                     elem0 = arr0[i]
-                    << INSERT ENTER_BLOCK HERE >>
-            # Loop over each entry and update the number of elements
-            # in the window & the current sum
+                    if np.isnan(arr0[i]):
+                        nan_counter += 1
+                    else:
+                        total += elem0
             for i in range(n):
-                # The current element is null if the window has no
-                # non-null elements, otherwise it is the current total
                 if in_window == 0:
-                    << INSERT EMPTY_BLOCK HERE >>
+                    bodo.libs.array_kernels.setna(res, i)
                 else:
-                    elem0 = arr0[i]
-                    << INSERT CALCULATE_BLOCK HERE >>
-                # If the old end of the window is in bounds and non-null,
-                # remove it
+                    if nan_counter > 0:
+                        res[i] = np.nan
+                    else:
+                        res[i] = total
                 if 0 <= exiting < n:
-                    if not bodo.libs.array_kernels.isna(arr, exiting):
-                    in_window -= 1
-                    elem0 = arr0[exiting]
-                    << INSERT EXIT_BLOCK HERE >>
-                # Move the start/end of the window forward 1 step
+                    if not (bodo.libs.array_kernels.isna(arr0, exiting)):
+                        in_window -= 1
+                        elem0 = arr0[exiting]
+                        if np.isnan(arr0[exiting]):
+                            nan_counter -= 1
+                        else:
+                            total -= elem0
                 exiting += 1
                 entering += 1
-                # If the new start of the window is in bounds and non-null,
-                # add it
                 if 0 <= entering < n:
-                    if not bodo.libs.array_kernels.isna(arr, entering):
-                    in_window += 1
-                    elem0 = arr0[entering]
-                    << INSERT ENTER_BLOCK HERE >>
+                    if not (bodo.libs.array_kernels.isna(arr0, entering)):
+                        in_window += 1
+                        elem0 = arr0[entering]
+                        if np.isnan(arr0[entering]):
+                            nan_counter += 1
+                        else:
+                            total += elem0
         return res
     """
     if empty_block is None:
@@ -1328,11 +1352,47 @@ def gen_windowed(
     else:
         var_names = ["Y", "X"]
 
+    # [BE-4401] Optimize any_arr_is_null and any_arr_is_nan.
+
     # Define a function that takes in an index name and generates code to detect
     # whether any of the input arrays at that index is null
-    any_arr_is_null = lambda idx: " or ".join(
-        [f"bodo.libs.array_kernels.isna(arr{i}, {idx})" for i in range(num_args)]
-    )
+    def any_arr_is_null(idx):
+        null_arg_terms = [
+            f"bodo.libs.array_kernels.isna(arr{i}, {idx})" for i in range(num_args)
+        ]
+        return " or ".join(null_arg_terms)
+
+    # Same as any_arr_is_null but for NaN
+    def any_arr_is_nan(idx):
+        nan_arg_terms = [f"np.isnan(arr{i}[{idx}])" for i in range(num_args)]
+        return " or ".join(nan_arg_terms)
+
+    # Modify enter_block so that if any of the inputs are NaN, this row is skipped
+    # and the NaN counter is incremented
+    if propagate_nan and enter_block is not None:
+        new_enter_block = f"if {any_arr_is_nan('entering')}:\n"
+        new_enter_block += f"   nan_counter += 1\n"
+        new_enter_block += f"else:\n"
+        new_enter_block += indent_block(enter_block, 3)
+        enter_block = new_enter_block
+
+    # Modify exit_block so that if any of the inputs are NaN, this row is skipped
+    # and the NaN counter is decremented
+    if propagate_nan and exit_block is not None:
+        new_exit_block = f"if {any_arr_is_nan('exiting')}:\n"
+        new_exit_block += f"   nan_counter -= 1\n"
+        new_exit_block += f"else:\n"
+        new_exit_block += indent_block(exit_block, 3)
+        exit_block = new_exit_block
+
+    # Modify calculate_block so that if any of the inputs are NaN, this row is
+    # automatically NaN
+    if propagate_nan:
+        new_calculate_block = f"if nan_counter > 0:\n"
+        new_calculate_block += f"   res[i] = np.nan\n"
+        new_calculate_block += f"else:\n"
+        new_calculate_block += indent_block(calculate_block, 3)
+        calculate_block = new_calculate_block
 
     # Declare the function and set up the variables based on how many arguments there are
     func_text = f"def impl({', '.join(var_names)}, lower_bound, upper_bound):\n"
@@ -1354,16 +1414,18 @@ def gen_windowed(
     # window to have the same value
     if constant_block is not None:
         func_text += "   elif lower_bound <= -n+1 and n-1 <= upper_bound:\n"
-        if empty_block is not None:
-            func_text += "      has_non_null = False\n"
-            func_text += "      for i in range(n):\n"
-            func_text += f"         if not ({any_arr_is_null('i')}):\n"
-            func_text += "            has_non_null = True\n"
-            func_text += "            break\n"
-            func_text += "      if not has_non_null:\n"
-            func_text += "         for i in range(n):\n"
-            func_text += indent_block(empty_block, 12)
-            func_text += "      else:\n"
+
+        # Check to see if there are any non-null entries. If not, set the entire
+        # output output array to NULL
+        func_text += "      has_non_null = False\n"
+        func_text += "      for i in range(n):\n"
+        func_text += f"         if not ({any_arr_is_null('i')}):\n"
+        func_text += "            has_non_null = True\n"
+        func_text += "            break\n"
+        func_text += "      if not has_non_null:\n"
+        func_text += "         for i in range(n):\n"
+        func_text += indent_block(empty_block, 12)
+        func_text += "      else:\n"
         func_text += indent_block(constant_block, 9)
         func_text += "         res[:] = constant_value\n"
 
@@ -1372,7 +1434,12 @@ def gen_windowed(
     func_text += "      exiting = lower_bound\n"
     func_text += "      entering = upper_bound\n"
     func_text += "      in_window = 0\n"
+    if propagate_nan:
+        func_text += "      nan_counter = 0\n"
     func_text += indent_block(setup_block, 6)
+
+    # Loop over all entries that have entered the window frame by the time that
+    # we need to calculate the value for the first row and invoke the enter block
     func_text += (
         "      for i in range(min(max(0, exiting), n), min(max(0, entering + 1), n)):\n"
     )
@@ -1382,15 +1449,24 @@ def gen_windowed(
         if "elem" in enter_block:
             for i in range(num_args):
                 func_text += f"            elem{i} = arr{i}[i]\n"
-        func_text += indent_block(enter_block, 12)
+        func_text += indent_block(enter_block.replace("entering", "i"), 12)
+
+    # Loop over the entire array. Anytime there are zero non-null entries, invoke
+    # the empty block
     func_text += "      for i in range(n):\n"
     func_text += "         if in_window == 0:\n"
     func_text += indent_block(empty_block, 12)
+
+    # Otherwise, calculate the value of the current row based on the accumulated
+    # values that have entered/exited up to this point
     func_text += "         else:\n"
     if "elem" in calculate_block:
         for i in range(num_args):
             func_text += f"            elem{i} = arr{i}[i]\n"
     func_text += indent_block(calculate_block, 12)
+
+    # If the exiting index is in bounds and none of the input arrays are
+    # null in the current row, invoke the exit block
     func_text += "         if 0 <= exiting < n:\n"
     func_text += f"            if not ({any_arr_is_null('exiting')}):\n"
     func_text += "               in_window -= 1\n"
@@ -1399,8 +1475,13 @@ def gen_windowed(
             for i in range(num_args):
                 func_text += f"               elem{i} = arr{i}[exiting]\n"
         func_text += indent_block(exit_block, 15)
+
+    # Increment the entering and exiting indices
     func_text += "         exiting += 1\n"
     func_text += "         entering += 1\n"
+
+    # If the entering index is in bounds and none of the input arrays are
+    # null in the current row, invoke the enter block
     func_text += "         if 0 <= entering < n:\n"
     func_text += f"            if not ({any_arr_is_null('entering')}):\n"
     func_text += "               in_window += 1\n"
