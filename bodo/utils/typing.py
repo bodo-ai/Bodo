@@ -2501,3 +2501,15 @@ def get_castable_arr_dtype(arr_type: types.Type):
         # Most array types cast using the dtype.
         cast_typ = arr_type.dtype
     return cast_typ
+
+
+def get_float_arr_type(base_float_type):
+    """
+    Returns a dtype for floating point arrays depending on whether _use_nullable_float
+    is set to True or not. The base_float_type dictates which float size to use
+    (bodo.float32 or bodo.float64).
+    """
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        return bodo.libs.float_arr_ext.FloatingArrayType(base_float_type)
+    else:
+        return types.Array(base_float_type, 1, "C")
