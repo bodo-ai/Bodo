@@ -843,27 +843,92 @@ class DataFramePass:
         named_params = dict(rhs.kws)
         named_param_args = ", ".join(named_params.keys())
 
-        func_text = f"def f(arrs, n, {named_param_args}):\n"
-        func_text += init_code
-        func_text += "  numba.parfors.parfor.init_prange()\n"
-        func_text += "  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
-        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += body_code
-        func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({var_name})\n"
-        func_text += "  return out_arr\n"
+        # As a simple heuristic we determined complex case statements by looking at the
+        # number of lines in the body of the case
+        is_complex = len(body_code.split("\n")) > bodo.COMPLEX_CASE_THRESHOLD
+        # Extract the arrays used in the codegen to verify we can avoid inlining.
+        var_names = []
+        init_lines = init_code.split("\n")
+        for line in init_lines:
+            parts = line.split("=")
+            # If len parts is 1, then this isn't an assignment
+            # Right now everything is required to be an assignment
+            # except empty whitespace at the BodoSQL level
+            if len(parts) > 1:
+                var_names.append(parts[0].strip())
+            elif parts[0].strip() != "":
+                raise BodoError(
+                    "Invalid initialization code for bodosql_case_placeholder()"
+                )
 
-        loc_vars = {}
-        glbls = {
-            "numba": numba,
-            "pd": pd,
-            "np": np,
-            "re": re,
-            "bodo": bodo,
-            "bodosql": bodosql,
-            "out_arr_type": out_arr_type,
-        }
-        exec(func_text, glbls, loc_vars)
-        f = loc_vars["f"]
+        if is_complex and len(var_names) > 0 and not named_param_args:
+            # TODO: Support named params
+            func_text = f"def f(arrs, n, {named_param_args}):\n"
+            func_text += init_code
+            call_args = ", ".join(var_names)
+            func_text += f"  return bodosql_case_kernel(({call_args},))\n"
+
+            inner_func_text = f"def bodosql_case_kernel(arrs):\n"
+            for i, varname in enumerate(var_names):
+                # Reuse the same variable name as the original query
+                inner_func_text += f"  {varname} = arrs[{i}]\n"
+            # Derive the length from the input array
+            inner_func_text += f"  n = len({var_names[0]})\n"
+            inner_func_text += (
+                f"  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
+            )
+            inner_func_text += "  for i in range(n):\n"
+            inner_func_text += body_code
+            inner_func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({var_name})\n"
+            inner_func_text += "  return out_arr\n"
+
+            loc_vars = {}
+            inner_glbls = {
+                "pd": pd,
+                "np": np,
+                "re": re,
+                "bodo": bodo,
+                "bodosql": bodosql,
+                "out_arr_type": out_arr_type,
+            }
+            exec(inner_func_text, inner_glbls, loc_vars)
+            inner_func = loc_vars["bodosql_case_kernel"]
+            inner_jit = bodo.jit(distributed=False)(inner_func)
+            glbls = {
+                "numba": numba,
+                "pd": pd,
+                "np": np,
+                "re": re,
+                "bodo": bodo,
+                "bodosql": bodosql,
+                "bodosql_case_kernel": inner_jit,
+            }
+            exec(func_text, glbls, loc_vars)
+            f = loc_vars["f"]
+        else:
+            func_text = f"def f(arrs, n, {named_param_args}):\n"
+            func_text += init_code
+            func_text += "  numba.parfors.parfor.init_prange()\n"
+            func_text += (
+                "  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
+            )
+            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+            func_text += body_code
+            func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({var_name})\n"
+            func_text += "  return out_arr\n"
+
+            loc_vars = {}
+            glbls = {
+                "numba": numba,
+                "pd": pd,
+                "np": np,
+                "re": re,
+                "bodo": bodo,
+                "bodosql": bodosql,
+                "out_arr_type": out_arr_type,
+            }
+            exec(func_text, glbls, loc_vars)
+            f = loc_vars["f"]
 
         return replace_func(
             self,

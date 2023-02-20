@@ -331,3 +331,6 @@ try:
     import bodo_azurefs_sas_token_provider
 except:
     pass
+
+# threshold for not inlining complex case statements to reduce compilation time (unit: number of lines in generated body code)
+COMPLEX_CASE_THRESHOLD = 100

@@ -1622,6 +1622,23 @@ class DistributedAnalysis:
                 self._meet_several_array_dists(arrays, array_dists)
             return
 
+        if fdef == ("bodosql_case_kernel", ""):
+            # This is a kernel we generate to avoid inlining case statements
+            # We always generate a tuple directly
+
+            # Initialize the distribution of the output array
+            if lhs not in array_dists:
+                array_dists[lhs] = Distribution.OneD
+            elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
+            assert (
+                elems is not None
+            ), f"Internal error, unable to find build tuple for arg0 of bodosql_case_kernel"
+
+            arrays = [lhs] + [elem.name for elem in elems]
+            if len(arrays) > 1:
+                self._meet_several_array_dists(arrays, array_dists)
+            return
+
         if fdef == ("concat_ws", "bodo.libs.bodosql_array_kernels"):
             # If the generate tuple is a constant we skip this path and
             # cannot have any arrays.

@@ -12,7 +12,11 @@ from numba.core.ir_utils import find_callname, guard
 
 import bodo
 from bodo.tests.timezone_common import representative_tz  # noqa
-from bodo.tests.utils import ParforTestPipeline, gen_nonascii_list
+from bodo.tests.utils import (
+    ParforTestPipeline,
+    SeriesOptTestPipeline,
+    gen_nonascii_list,
+)
 
 
 @pytest.fixture(
@@ -302,3 +306,40 @@ def _check_timestamp_to_datetime_opt(spark_info, query, spark_query):
                         "sql_null_checking_pd_to_datetime_with_format",
                         "bodosql.libs.generated_lib",
                     ), "sql_null_checking_pd_to_datetime_with_format found"
+
+
+def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
+    """
+    Test a case that makes sure the no inlining path works as expected.
+    """
+    try:
+        # Save the old threshold and set it to 1 so that the case statement
+        # is not inlined.
+        old_threshold = bodo.COMPLEX_CASE_THRESHOLD
+        bodo.COMPLEX_CASE_THRESHOLD = 1
+        query = f"Select B, Case WHEN A = 1 THEN 1 WHEN A = 2 THEN 2 WHEN B > 6 THEN 3 ELSE NULL END as CaseRes FROM table1"
+        check_query(
+            query,
+            basic_df,
+            spark_info,
+            check_dtype=False,
+        )
+        # Add a check that the case statement is not inlined.
+        @bodo.jit(pipeline_class=SeriesOptTestPipeline)
+        def bodo_func(bc, query):
+            return bc.sql(query)
+
+        bodo_func(bodosql.BodoSQLContext(basic_df), query)
+        fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+        # Inspect the IR for a bodosql_case_kernel call
+        found = False
+        for block in fir.blocks.values():
+            for stmt in block.body:
+                if isinstance(stmt, ir.Assign):
+                    fdef = guard(find_callname, fir, stmt.value)
+                    found = found or fdef == ("bodosql_case_kernel", "")
+        assert found, "bodosql_case_kernel not found in IR, case statement was inlined"
+
+    finally:
+        # restore the old threshold
+        bodo.COMPLEX_CASE_THRESHOLD = old_threshold
