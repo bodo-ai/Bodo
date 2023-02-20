@@ -183,7 +183,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @return variable name
    */
-  private String genGenericTempVar() {
+  public String genGenericTempVar() {
     return "_temp" + this.dfVarId++;
   }
 
@@ -1371,11 +1371,20 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // we only compile single basic blocks.
     boolean generateApply = !isSingleRow;
 
-    // If we're generating an apply, the input set of columns to add should be empty,
-    // since we only add columns to the colsToAddList when inside an apply.
+    // The body of case may require wrapping everything inside a global variable.
+    // In the future this all needs to be wrapped inside the original builder, but we
+    // can't support that yet.
+    Module.Builder oldBuilder = this.generatedCode;
+    Module.Builder innerBuilder = this.generatedCode;
+
     if (generateApply) {
       assert ctx.getColsToAddList().size() == 0;
+      // If we're generating an apply, the input set of columns to add should be empty,
+      // since we only add columns to the colsToAddList when inside an apply.
+      innerBuilder = new Module.Builder();
     }
+    // Update where we generate code for nested expressions.
+    this.generatedCode = innerBuilder;
 
     List<String> args = new ArrayList<>();
 
@@ -1417,7 +1426,19 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     String codeExpr =
         generateCaseCode(
-            args, generateApply, localCtx, inputVar, node.getType(), colNames, pdVisitorClass);
+            args,
+            generateApply,
+            localCtx,
+            inputVar,
+            node.getType(),
+            pdVisitorClass,
+            oldBuilder,
+            innerBuilder);
+
+    // Restore the code generator. This should be removed once
+    // we can place the entire body of the new statement inside
+    // a global variable.
+    this.generatedCode = oldBuilder;
 
     return new RexNodeVisitorInfo(codeExpr);
   }

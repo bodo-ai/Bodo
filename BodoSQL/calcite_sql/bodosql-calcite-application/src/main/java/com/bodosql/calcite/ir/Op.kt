@@ -21,11 +21,24 @@ interface Op {
     }
 
     /**
-     * Represents a return operation.
-     * @param value Variable to return.
+     * Represents an if operation with an optional else case
+     * for bodies with a single line.
      */
-    data class Return(val value: Variable) : Op {
-        override fun emit(doc: Doc) = doc.write("return ${value.name}")
+    data class If(val condAndBody: List<Pair<Expr, Op>>, val elseBlock: Op) : Op {
+
+        override fun emit(doc: Doc) {
+            // Create an indented version of the doc for the bodies.
+            var indentDoc: Doc = doc.indent()
+            var isFirst: Boolean = true
+            for ((cond, body) in condAndBody) {
+                val starter: String = if (isFirst) "if" else "elif"
+                doc.write("$starter ${cond.emit()}:")
+                body.emit(indentDoc)
+                isFirst = false
+            }
+            doc.write("else:")
+            elseBlock.emit(indentDoc)
+        }
     }
 
     /**

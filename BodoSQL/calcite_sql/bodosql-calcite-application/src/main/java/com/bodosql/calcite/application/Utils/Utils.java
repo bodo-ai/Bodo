@@ -1,9 +1,6 @@
 package com.bodosql.calcite.application.Utils;
 
-import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
-
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
@@ -375,68 +372,6 @@ public class Utils {
       outputExprs.add(renameTableRef(codeExprs.get(i), oldTableName, newTableName));
     }
     return outputExprs;
-  }
-
-  public static String generateDfApply(
-      String inputVar,
-      BodoCtx ctx,
-      String lambdaFnStr,
-      RelDataType outputType,
-      PandasCodeGenVisitor pdVisitorClass) {
-    // We assume, at this point, that the ctx.colsToAddList has been added to inputVar, and
-    // the arguments have been renamed appropriately.
-
-    // pass named parameters as kws to bodosql_case_placeholder()
-    // sorting to make sure the same code is generated on each rank
-    TreeSet<String> sortedParamSet = new TreeSet<>(ctx.getNamedParams());
-    StringBuilder namedParamArgs = new StringBuilder();
-    for (String param : sortedParamSet) {
-      namedParamArgs.append(param + "=" + param + ", ");
-    }
-
-    // generate bodosql_case_placeholder() call with inputs:
-    // 1) a tuple of necessary input arrays
-    // 2) number of output rows (same as input rows, needed for allocation)
-    // 3) initialization code for unpacking the input array tuple with the right array names
-    // (MetaType global)
-    // 4) body of the CASE loop (global constant)
-    // 5) output array type
-    // For example:
-    // S5 = bodo.utils.typing.bodosql_case_placeholder(
-    //   (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df3, 0), ),
-    //   len(df3),
-    //   MetaType(('  df3_0 = arrs[0]',)),
-    //   '((None if (pd.isna(bodo.utils.indexing.scalar_optional_getitem(df3_0)) ) else np.int64(1),
-    //   IntegerArrayType(int64),
-    // )
-    StringBuilder inputDataStr = new StringBuilder();
-    inputDataStr.append("(");
-    StringBuilder initCode = new StringBuilder();
-    initCode.append("(");
-
-    int i = 0;
-    TreeSet<Integer> sortedUsedColumns = new TreeSet<>(ctx.getUsedColumns());
-    for (int colNo : sortedUsedColumns) {
-      inputDataStr.append(
-          String.format(
-              "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(%s, %d), ", inputVar, colNo));
-      initCode
-          .append(makeQuoted(String.format("  %s = arrs[%d]", inputVar + "_" + colNo, i)))
-          .append(", ");
-      i++;
-    }
-    inputDataStr.append(")");
-    initCode.append(")");
-    String initGlobal = pdVisitorClass.lowerAsMetaType(initCode.toString());
-    // have to use triple quotes here since lambdaFnStr can contain " or '
-    String bodyGlobal = pdVisitorClass.lowerAsGlobal("\"\"\"" + lambdaFnStr + "\"\"\"");
-
-    String outputArrayType = sqlTypeToBodoArrayType(outputType, false);
-    String outputArrayTypeGlobal = pdVisitorClass.lowerAsGlobal(outputArrayType);
-
-    return String.format(
-        "bodo.utils.typing.bodosql_case_placeholder(%s, len(%s), %s, %s, %s, %s)",
-        inputDataStr, inputVar, initGlobal, bodyGlobal, outputArrayTypeGlobal, namedParamArgs);
   }
 
   public static void assertWithErrMsg(boolean test, String msg) {
