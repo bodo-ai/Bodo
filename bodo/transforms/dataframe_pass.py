@@ -837,17 +837,19 @@ class DataFramePass:
 
         init_code = self.typemap[rhs.args[2].name].instance_type.meta
         body_code = get_overload_const_str(self.typemap[rhs.args[3].name])
-        out_arr_type = unwrap_typeref(self.typemap[rhs.args[4].name])
+        var_name = get_overload_const_str(self.typemap[rhs.args[4].name])
+        out_arr_type = unwrap_typeref(self.typemap[rhs.args[5].name])
 
         named_params = dict(rhs.kws)
         named_param_args = ", ".join(named_params.keys())
 
         func_text = f"def f(arrs, n, {named_param_args}):\n"
-        func_text += "\n".join(init_code) + "\n"
+        func_text += init_code
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({body_code})\n"
+        func_text += body_code
+        func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({var_name})\n"
         func_text += "  return out_arr\n"
 
         loc_vars = {}

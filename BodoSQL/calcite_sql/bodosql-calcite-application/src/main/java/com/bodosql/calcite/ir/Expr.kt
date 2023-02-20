@@ -37,4 +37,26 @@ abstract class Expr {
             return "${callee}(${args})"
         }
     }
+
+    /**
+     * Represents a tuple creation.
+     * @param args The inputs to the tuple.
+     */
+    data class Tuple(val args: List<Expr>) : Expr() {
+        override fun emit(): String {
+            if (args.isEmpty()) {
+                return "()"
+            }
+            // Note we use postfix to ensure tuples of length 1 work.
+            val tupleArgs = args.joinToString(separator = ", ", postfix = ",") { it.emit() }
+            return "(${tupleArgs})"
+        }
+    }
+    /**
+     * Represents a triple quoted String.
+     * @param arg The body of the string.
+     */
+    data class TripleQuotedString(val arg: Expr) : Expr() {
+        override fun emit(): String = "\"\"\"${arg.emit()}\"\"\""
+    }
 }

@@ -1,13 +1,18 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import com.bodosql.calcite.application.Utils.BodoCtx;
-import java.util.HashMap;
-import java.util.List;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Module;
+import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.Variable;
+import java.util.*;
+import kotlin.Pair;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexCall;
 
@@ -111,44 +116,129 @@ public class CondOpCodeGen {
    * Function that returns the necessary generated code for Case.
    *
    * @param args The arguments to Case.
-   * @param generateApply Is this function used to generate an apply.
+   * @param outputsArray Should this function output an array? If so we must generate a call to
+   *     bodosql_case_placeholder.
    * @param inputVar The input variable.
+   * @param outputType The type of the output scalar/column.
+   * @param pdVisitorClass A reference to the PandasCodeGenVisitor used to create globals and
+   *     variable names.
+   * @param builder The module builder used for Code Generation.
    * @return The code generated for the Case call.
    */
   public static String generateCaseCode(
       List<String> args,
-      boolean generateApply,
+      boolean outputsArray,
       BodoCtx ctx,
       String inputVar,
       RelDataType outputType,
-      List<String> colNames,
-      PandasCodeGenVisitor pdVisitorClass) {
-    StringBuilder genCode = new StringBuilder();
-    genCode.append("(");
-    /*case statements are essentially an infinite number of Then/When clauses, followed by an
-    else clause. So, we iterate through all the Then/When clauses, and then deal with the final
-    else clause at the end*/
+      PandasCodeGenVisitor pdVisitorClass,
+      Module.Builder outerBuilder,
+      Module.Builder innerBuilder) {
+    // We will unify the output of each block into a single variable.
+    // TODO: Move variable generation to the Module.Builder
+    Variable outputVar = new Variable(pdVisitorClass.genGenericTempVar());
+    // case statements are essentially an infinite number of When/Then clauses, followed by an
+    // else clause. We first construct all pairs of condition + if body and finally add the else.
+
+    List<Pair<Expr.Call, Op.Assign>> condAndBody = new ArrayList<>();
+
     for (int i = 0; i < args.size() - 1; i += 2) {
-      String when = args.get(i);
-      String then = args.get(i + 1);
-      genCode.append(then);
-      genCode.append(" if bodo.libs.bodosql_array_kernels.is_true(");
-      genCode.append(when);
-      genCode.append(") else (");
+      // Create the condition
+      Expr.Call when =
+          new Expr.Call(
+              "bodo.libs.bodosql_array_kernels.is_true", List.of(new Expr.Raw(args.get(i))));
+      // Create the if body
+      Op.Assign body = new Op.Assign(outputVar, new Expr.Raw(args.get(i + 1)));
+      condAndBody.add(new Pair<>(when, body));
     }
-    String else_ = args.get(args.size() - 1);
-    genCode.append(else_);
-    // append R parens equal to the number of Then/When clauses
-    for (int j = 0; j < args.size() / 2; j++) {
-      genCode.append(")");
-    }
+    Op.Assign elseBlock = new Op.Assign(outputVar, new Expr.Raw(args.get(args.size() - 1)));
+    // Add the case to the module
+    innerBuilder.add(new Op.If(condAndBody, elseBlock));
 
-    genCode.append(")");
-    if (generateApply) {
-      return generateDfApply(inputVar, ctx, genCode.toString(), outputType, pdVisitorClass);
-    }
+    if (outputsArray) {
+      // Here we need to generate a call to bodosql_case_placeholder.
+      // We assume, at this point, that the ctx.colsToAddList has been added to inputVar, and
+      // the arguments have been renamed appropriately.
 
-    return genCode.toString();
+      // pass named parameters as kws to bodosql_case_placeholder()
+      // sorting to make sure the same code is generated on each rank
+      TreeSet<String> sortedParamSet = new TreeSet<>(ctx.getNamedParams());
+      StringBuilder namedParamArgs = new StringBuilder();
+      for (String param : sortedParamSet) {
+        // TODO: Move these to use the Module.Builder
+        namedParamArgs.append(param + "=" + param + ", ");
+      }
+
+      // generate bodosql_case_placeholder() call with inputs:
+      // 1) a tuple of necessary input arrays
+      // 2) number of output rows (same as input rows, needed for allocation)
+      // 3) initialization code for unpacking the input array tuple with the right array names
+      // (MetaType global)
+      // 4) body of the CASE loop (global constant)
+      // 5) loop variable name
+      // 6) output array type
+      // 7) Named parameters
+      // For example:
+      // S5 = bodo.utils.typing.bodosql_case_placeholder(
+      //   (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df3, 0), ),
+      //   len(df3),
+      //   MetaType(('  df3_0 = arrs[0]',)),
+      //   '((None if (pd.isna(bodo.utils.indexing.scalar_optional_getitem(df3_0)) ) else
+      // np.int64(1),
+      //   IntegerArrayType(int64),
+      //   '_temp4'
+      // )
+      Module.Builder initModule = new Module.Builder();
+
+      List<Expr.Call> inputDataArgs = new ArrayList<>();
+
+      int i = 0;
+      TreeSet<Integer> sortedUsedColumns = new TreeSet<>(ctx.getUsedColumns());
+      for (int colNo : sortedUsedColumns) {
+        inputDataArgs.add(
+            new Expr.Call(
+                "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
+                List.of(new Expr.Raw(inputVar), new Expr.Raw(String.valueOf(colNo)))));
+        initModule.add(
+            new Op.Assign(
+                new Variable(inputVar + "_" + colNo), new Expr.Raw(String.format("arrs[%d]", i))));
+        i++;
+      }
+      Expr.Tuple inputData = new Expr.Tuple(inputDataArgs);
+      // TODO: Move global generation to the Module.Builder + change the return types to Variables
+      Expr.TripleQuotedString initBody =
+          new Expr.TripleQuotedString(new Expr.Raw(initModule.build().emit(1)));
+      Expr.Raw initGlobal = new Expr.Raw(pdVisitorClass.lowerAsMetaType(initBody.emit()));
+      // have to use triple quotes here since the body can contain " or '. We use indent level 2
+      // since
+      // This is embedded inside a for loop.
+      Expr.TripleQuotedString loopBody =
+          new Expr.TripleQuotedString(new Expr.Raw(innerBuilder.build().emit(2)));
+      Expr.Raw bodyGlobal = new Expr.Raw(pdVisitorClass.lowerAsGlobal(loopBody.emit()));
+
+      Expr.Raw outputArrayTypeGlobal =
+          new Expr.Raw(pdVisitorClass.lowerAsGlobal(sqlTypeToBodoArrayType(outputType, false)));
+      // Add a new assignment for the case
+      Variable arrVar = new Variable(pdVisitorClass.genGenericTempVar());
+      Expr.Call functionCall =
+          new Expr.Call(
+              "bodo.utils.typing.bodosql_case_placeholder",
+              List.of(
+                  inputData,
+                  new Expr.Call("len", List.of(new Expr.Raw(inputVar))),
+                  initGlobal,
+                  bodyGlobal,
+                  new Expr.Raw(makeQuoted(outputVar.getName())),
+                  outputArrayTypeGlobal,
+                  new Expr.Raw(namedParamArgs.toString())));
+
+      outerBuilder.add(new Op.Assign(arrVar, functionCall));
+      // Return the name of the variable.
+      return arrVar.getName();
+    } else {
+      // If we just output a scalar just pass back the variable name.
+      return outputVar.getName();
+    }
   }
 
   /**
