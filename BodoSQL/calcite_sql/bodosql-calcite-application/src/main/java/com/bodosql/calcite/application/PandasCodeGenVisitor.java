@@ -2208,6 +2208,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       case OTHER:
       case OTHER_FUNCTION:
         boolean isTime;
+        String unit;
         String tzStr;
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
         switch (fnName) {
@@ -2314,24 +2315,43 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DATEDIFF":
             RexNodeVisitorInfo arg1;
             RexNodeVisitorInfo arg2;
-
-            String datetimePart = "\"DAY\"";
+            unit = "DAY";
 
             if (operandsInfo.size() == 2) {
               arg1 = operandsInfo.get(1);
               arg2 = operandsInfo.get(0);
             } else if (operandsInfo.size() == 3) { // this is the Snowflake option
-              datetimePart = operandsInfo.get(0).getExprCode();
+              unit = operandsInfo.get(0).getExprCode();
               arg1 = operandsInfo.get(1);
               arg2 = operandsInfo.get(2);
             } else {
               throw new BodoSQLCodegenException(
-                  "Invalid number of arguments to DATEDIFF! Must be 2 or 3.");
+                  "Invalid number of arguments to DATEDIFF: must be 2 or 3.");
             }
-
-            String diffExpr =
-                generateDateDiffCode(datetimePart, arg1.getExprCode(), arg2.getExprCode());
-            return new RexNodeVisitorInfo(diffExpr);
+            isTime =
+                fnOperation
+                    .getOperands()
+                    .get(1)
+                    .getType()
+                    .getSqlTypeName()
+                    .toString()
+                    .equals("TIME");
+            unit = standardizeTimeUnit(fnName, unit, isTime);
+            return generateDateDiffFnInfo(unit, arg1, arg2);
+          case "TIMEDIFF":
+            assert operandsInfo.size() == 3;
+            isTime =
+                fnOperation
+                    .getOperands()
+                    .get(1)
+                    .getType()
+                    .getSqlTypeName()
+                    .toString()
+                    .equals("TIME");
+            unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
+            arg1 = operandsInfo.get(1);
+            arg2 = operandsInfo.get(2);
+            return generateDateDiffFnInfo(unit, arg1, arg2);
           case "STR_TO_DATE":
             assert operandsInfo.size() == 2;
             // Format string should be a string literal.
@@ -2696,7 +2716,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                     .getSqlTypeName()
                     .toString()
                     .equals("TIME");
-            String unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
+            unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
             return generateDateTruncCode(unit, operandsInfo.get(1));
           case "MICROSECOND":
           case "SECOND":

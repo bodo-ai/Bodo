@@ -339,6 +339,14 @@ public class DatetimeFnCodeGen {
       case "\"yr\"":
       case "\"years\"":
       case "\"yrs\"":
+      case "year":
+      case "y":
+      case "yy":
+      case "yyy":
+      case "yyyy":
+      case "yr":
+      case "years":
+      case "yrs":
         if (isTime)
           throw new BodoSQLCodegenException(
               "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
@@ -350,6 +358,11 @@ public class DatetimeFnCodeGen {
       case "\"mon\"":
       case "\"mons\"":
       case "\"months\"":
+      case "month":
+      case "mm":
+      case "mon":
+      case "mons":
+      case "months":
         if (isTime)
           throw new BodoSQLCodegenException(
               "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
@@ -361,6 +374,11 @@ public class DatetimeFnCodeGen {
       case "\"dd\"":
       case "\"days\"":
       case "\"dayofmonth\"":
+      case "day":
+      case "d":
+      case "dd":
+      case "days":
+      case "dayofmonth":
         if (isTime)
           throw new BodoSQLCodegenException(
               "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
@@ -373,6 +391,12 @@ public class DatetimeFnCodeGen {
       case "\"weekofyear\"":
       case "\"woy\"":
       case "\"wy\"":
+      case "week":
+      case "w":
+      case "wk":
+      case "weekofyear":
+      case "woy":
+      case "wy":
         if (isTime)
           throw new BodoSQLCodegenException(
               "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
@@ -384,6 +408,11 @@ public class DatetimeFnCodeGen {
       case "\"qtr\"":
       case "\"qtrs\"":
       case "\"quarters\"":
+      case "quarter":
+      case "q":
+      case "qtr":
+      case "qtrs":
+      case "quarters":
         if (isTime)
           throw new BodoSQLCodegenException(
               "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
@@ -396,6 +425,12 @@ public class DatetimeFnCodeGen {
       case "\"hr\"":
       case "\"hours\"":
       case "\"hrs\"":
+      case "hour":
+      case "h":
+      case "hh":
+      case "hr":
+      case "hours":
+      case "hrs":
         unit = "hour";
         break;
 
@@ -405,6 +440,12 @@ public class DatetimeFnCodeGen {
       case "\"min\"":
       case "\"minutes\"":
       case "\"mins\"":
+      case "minute":
+      case "m":
+      case "mi":
+      case "min":
+      case "minutes":
+      case "mins":
         unit = "minute";
         break;
 
@@ -413,6 +454,11 @@ public class DatetimeFnCodeGen {
       case "\"sec\"":
       case "\"seconds\"":
       case "\"secs\"":
+      case "second":
+      case "s":
+      case "sec":
+      case "seconds":
+      case "secs":
         unit = "second";
         break;
 
@@ -420,6 +466,10 @@ public class DatetimeFnCodeGen {
       case "\"ms\"":
       case "\"msec\"":
       case "\"milliseconds\"":
+      case "millisecond":
+      case "ms":
+      case "msec":
+      case "milliseconds":
         unit = "millisecond";
         break;
 
@@ -427,6 +477,10 @@ public class DatetimeFnCodeGen {
       case "\"us\"":
       case "\"usec\"":
       case "\"microseconds\"":
+      case "microsecond":
+      case "us":
+      case "usec":
+      case "microseconds":
         unit = "microsecond";
         break;
 
@@ -438,6 +492,14 @@ public class DatetimeFnCodeGen {
       case "\"nanoseconds\"":
       case "\"nanosecs\"":
       case "\"nseconds\"":
+      case "nanosecond":
+      case "ns":
+      case "nsec":
+      case "nanosec":
+      case "nsecond":
+      case "nanoseconds":
+      case "nanosecs":
+      case "nseconds":
         unit = "nanosecond";
         break;
 

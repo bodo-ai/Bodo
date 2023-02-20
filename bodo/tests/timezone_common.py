@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import nanoseconds_to_other_time_units
 
 
 @pytest.fixture(params=["Poland", None])
@@ -131,12 +132,39 @@ def generate_date_trunc_time_func(part_str: str):
                 # date_or_time_part is too large, set everything to 0
                 return bodo.Time()
             else:
-                time_args = []
-                time_units = ('hour', 'minute', 'second', 'millisecond', 'microsecond', 'nanosecond')
-                for unit in time_units:
-                    time_args.append(getattr(time_input, unit))
-                    if standardized_part == unit:
-                        break
-                return bodo.Time(*time_args)
+                return trunc(time_input, standardized_part)
 
     return date_trunc_time_scalar_fn
+
+
+def trunc(time, time_part):
+    time_args = []
+    time_units = ('hour', 'minute', 'second', 'millisecond', 'microsecond', 'nanosecond')
+    for unit in time_units:
+        time_args.append(getattr(time, unit))
+        if time_part == unit:
+            break
+    return bodo.Time(*time_args)
+
+
+def date_sub_unit_time_fn(part_str, time1, time2):
+    if pd.isna(part_str) or pd.isna(time1) or pd.isna(time2):
+        return None
+    @bodo.jit
+    def standardize_part(part_str):
+        return bodo.libs.bodosql_array_kernels.standardize_snowflake_date_time_part(
+            part_str
+        )
+
+    # Standardize the part using our snowflake mapping kernel.
+    if part_str is not None:
+        standardized_part = standardize_part(part_str)
+    else:
+        standardized_part = part_str
+
+    trunced_time1 = trunc(time1, standardized_part)
+    trunced_time2 = trunc(time2, standardized_part)
+    return nanoseconds_to_other_time_units(
+        trunced_time2.value - trunced_time1.value,
+        standardized_part
+    )
