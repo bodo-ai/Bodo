@@ -2951,9 +2951,9 @@ _get_search_regex = types.ExternalFunction(
 
 _get_replace_regex = types.ExternalFunction(
     "get_replace_regex",
-    # params: in array, pattern, replacement
+    # params: in array, pattern, replacement, is_parallel
     # Output: out array
-    array_info_type(array_info_type, types.voidptr, types.voidptr),
+    array_info_type(array_info_type, types.voidptr, types.voidptr, types.bool_),
 )
 
 
@@ -2972,9 +2972,13 @@ def get_search_regex(in_arr, case, match, pat, out_arr):  # pragma: no cover
 
 
 @numba.njit(no_cpython_wrapper=True)
-def get_replace_regex(in_arr, pattern_typ, replace_typ):  # pragma: no cover
+def get_replace_regex(
+    in_arr, pattern_typ, replace_typ, is_parallel_typ
+):  # pragma: no cover
     in_arr_info = array_to_info(in_arr)
-    out_arr_info = _get_replace_regex(in_arr_info, pattern_typ, replace_typ)
+    out_arr_info = _get_replace_regex(
+        in_arr_info, pattern_typ, replace_typ, is_parallel_typ
+    )
     check_and_propagate_cpp_exception()
     return info_to_array(out_arr_info, in_arr)
 
