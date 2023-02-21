@@ -162,7 +162,9 @@ def regexp_like(arr, pattern, flags):
 
 
 @numba.generated_jit(nopython=True)
-def regexp_replace(arr, pattern, replacement, position, occurrence, flags):
+def regexp_replace(
+    arr, pattern, replacement, position, occurrence, flags, is_parallel=False
+):
     """Handles cases where REGEXP_REPLACE receives optional arguments and forwards
     to args appropriate version of the real implementation"""
     args = [arr, pattern, replacement, position, occurrence, flags]
@@ -170,12 +172,20 @@ def regexp_replace(arr, pattern, replacement, position, occurrence, flags):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.regexp_replace",
-                ["arr", "pattern", "replacement", "position", "occurrence", "flags"],
+                [
+                    "arr",
+                    "pattern",
+                    "replacement",
+                    "position",
+                    "occurrence",
+                    "flags",
+                    "is_parallel=False",
+                ],
                 i,
             )
 
     def impl(
-        arr, pattern, replacement, position, occurrence, flags
+        arr, pattern, replacement, position, occurrence, flags, is_parallel=False
     ):  # pragma: no cover
         return regexp_replace_util(
             arr,
@@ -184,6 +194,7 @@ def regexp_replace(arr, pattern, replacement, position, occurrence, flags):
             position,
             occurrence,
             numba.literally(flags),
+            is_parallel,
         )
 
     return impl
@@ -440,7 +451,9 @@ def regexp_like_util(arr, pattern, flags):
 
 
 @numba.generated_jit(nopython=True)
-def regexp_replace_util(arr, pattern, replacement, position, occurrence, flags):
+def regexp_replace_util(
+    arr, pattern, replacement, position, occurrence, flags, is_parallel
+):
     """A dedicated kernel for the SQL function REGEXP_REPLACE which takes in a string
        (or column), a pattern, a replacement string, an occurrence number, a position,
        and regexp control flags and returns the string(s) with the specified
@@ -453,7 +466,10 @@ def regexp_replace_util(arr, pattern, replacement, position, occurrence, flags):
         pattern (string): the regexp being searched for.
         replacement (string array/series/scalar): the string to replace matches with.
         position (integer array/series/scalar): the starting position(s) (1-indexed).
-        Throws an error if negative.
+        is_parallel (boolean): Is this called on parallel data. If we have a parallel
+        data and a global dictionary, then depending on the dictionary size and
+        communication cost we may opt to have each rank replace only a chunk of the
+        dictionary and then perform an allgatherv to merge the dictionaries.
         occurrence (integer array/series/scalar): which matches to replace (1-indexed).
         Throws an error if negative.
         If 0, replaces all the matches.
@@ -471,9 +487,17 @@ def regexp_replace_util(arr, pattern, replacement, position, occurrence, flags):
     verify_int_arg(occurrence, "REGEXP_REPLACE", "occurrence")
     verify_scalar_string_arg(flags, "REGEXP_REPLACE", "flags")
 
-    arg_names = ["arr", "pattern", "replacement", "position", "occurrence", "flags"]
-    arg_types = [arr, pattern, replacement, position, occurrence, flags]
-    propagate_null = [True] * 6
+    arg_names = [
+        "arr",
+        "pattern",
+        "replacement",
+        "position",
+        "occurrence",
+        "flags",
+        "is_parallel",
+    ]
+    arg_types = [arr, pattern, replacement, position, occurrence, flags, is_parallel]
+    propagate_null = [True] * 6 + [False]
 
     pattern_str = bodo.utils.typing.get_overload_const_str(pattern)
     converted_pattern = posix_to_re(pattern_str)
@@ -498,11 +522,13 @@ def regexp_replace_util(arr, pattern, replacement, position, occurrence, flags):
     ):
         # Optimized implementation just calls into C++ and has it handle the entire array.
         def impl(
-            arr, pattern, replacement, position, occurrence, flags
+            arr, pattern, replacement, position, occurrence, flags, is_parallel
         ):  # pragma: no cover
             utf8_pattern = bodo.libs.str_ext.unicode_to_utf8(pattern)
             utf8_replacement = bodo.libs.str_ext.unicode_to_utf8(replacement)
-            out_arr = get_replace_regex(arr, utf8_pattern, utf8_replacement)
+            out_arr = get_replace_regex(
+                arr, utf8_pattern, utf8_replacement, is_parallel
+            )
             return out_arr
 
         return impl
