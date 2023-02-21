@@ -20,6 +20,7 @@ import bodo
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
+    drop_snowflake_table,
     get_snowflake_connection_string,
     get_start_end,
     pytest_snowflake,
@@ -1461,3 +1462,57 @@ def test_to_sql_snowflake_nulls_in_dict(memory_leak_check):
     # Use the same dict-encoded array for both columns (should catch any refcount bugs)
     test_impl(impl, S, S)
     test_impl(impl_table_format, S, S)
+
+
+def test_snowflake_write_column_name_special_chars(memory_leak_check):
+    """
+    Tests that Snowflake write works correctly when a column name contains
+    special characters and that column are still written case insensitive.
+    """
+
+    @bodo.jit(distributed=["df"])
+    def write_impl(df, table_name, conn):
+        df.to_sql(table_name, conn, if_exists="replace", index=False)
+
+    @bodo.jit(distributed=False)
+    def read_impl(conn_str, table_name):
+        output_df = pd.read_sql(
+            f'select "^$OTHER_temp-col" from {table_name}', conn_str
+        )
+        return output_df
+
+    expected_output = pd.DataFrame(
+        {"$TEMP_COLUMN0": [1.12, 1.1] * 5, "^$OTHER_temp-col": [213, -7] * 5}
+    )
+    if bodo.get_rank() == 0:
+        df = expected_output
+    else:
+        df = None
+    df = bodo.scatterv(df)
+    # Generate a unique table name
+    comm = MPI.COMM_WORLD
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    table_name = None
+    if bodo.get_rank() == 0:
+        unique_name = str(uuid.uuid4()).replace("-", "_")
+        table_name = f"SPECIAL_CHARS_{unique_name}".lower()
+    table_name = comm.bcast(table_name)
+    conn_str = get_snowflake_connection_string(db, schema)
+    try:
+        write_impl(df, table_name, conn_str)
+        output_df = read_impl(conn_str, table_name)
+        pd.testing.assert_frame_equal(
+            output_df.sort_values(by=["^$OTHER_temp-col"]).reset_index(drop=True),
+            expected_output[["^$OTHER_temp-col"]]
+            .sort_values(by=["^$OTHER_temp-col"])
+            .reset_index(drop=True),
+            check_names=False,
+            check_dtype=False,
+            check_index_type=False,
+        )
+    finally:
+        # Make sure every rank has finished writing and reading
+        # before dropping the table
+        bodo.barrier()
+        drop_snowflake_table(table_name, db, schema)
