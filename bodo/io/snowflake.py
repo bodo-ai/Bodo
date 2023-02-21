@@ -133,13 +133,13 @@ INT_BITSIZE_TO_ARROW_DATATYPE = {
 }
 
 
-def gen_snowflake_schema(column_names, column_datatypes):
+def gen_snowflake_schema(column_names, column_datatypes):  # pragma: no cover
     """Generate a dictionary where column is key and
     its corresponding bodo->snowflake datatypes is value
 
     Args:
-        column_names (array-like): Array of dataframe column names
-        column_datatypes (array-like): Array of dataframe column datatypes
+        column_names (array-like): Array of DataFrame column names
+        column_datatypes (array-like): Array of DataFrame column datatypes
 
     Returns:
         sf_schema (dict): {col_name : snowflake_datatype}
@@ -147,6 +147,8 @@ def gen_snowflake_schema(column_names, column_datatypes):
     """
     sf_schema = {}
     for col_name, col_type in zip(column_names, column_datatypes):
+        if col_name == "":
+            raise BodoError("Column name cannot be empty when writing to Snowflake.")
         # TODO: differentiate between timezone aware or not types.
         # [BE-3587] need specific tz for each column type.
         if isinstance(col_type, bodo.DatetimeArrayType) or (
@@ -1136,7 +1138,7 @@ def create_table_handle_exists(
     location: str,
     sf_schema,
     if_exists: str,
-):
+):  # pragma: no cover
     """Automatically create a new table in Snowflake at the given location if
     it doesn't exist, following the schema of staged files.
 
@@ -1180,7 +1182,17 @@ def create_table_handle_exists(
     # dataframe columns to make sure we create the table with its columns
     # in order.
     ev_create_table = tracing.Event("create_table", is_parallel=False)
-    create_table_columns = ", ".join([f"{c} {sf_schema[c]}" for c in sf_schema.keys()])
+
+    # Snowflake requires all column start with a alphanumeric character
+    # or _ to be able to write to it. Otherwise we must wrap the column in
+    # quotes.
+    create_table_col_lst = []
+    for col_name, typ in sf_schema.items():
+        col_name = (
+            col_name if col_name[0].isalnum() or col_name[0] == "_" else f'"{col_name}"'
+        )
+        create_table_col_lst.append(f"{col_name} {typ}")
+    create_table_columns = ", ".join(create_table_col_lst)
     create_table_sql = (
         f"{create_table_cmd} {location} ({create_table_columns}) "
         f"/* Python:bodo.io.snowflake.create_table_if_not_exists() */"
@@ -1196,7 +1208,7 @@ def execute_copy_into(
     stage_name: str,
     location: str,
     sf_schema,
-):
+):  # pragma: no cover
     """Execute a COPY_INTO command from all files in stage to a table location.
 
     Args
@@ -1213,7 +1225,16 @@ def execute_copy_into(
     """
     ev = tracing.Event("execute_copy_into", is_parallel=False)
 
-    columns = ",".join([f"{c}" for c in sf_schema.keys()])
+    cols_list = []
+    # Snowflake requires all column start with a alphanumeric character
+    # or _ to be able to write to it. Otherwise we must wrap the column in
+    # quotes.
+    for col_name in sf_schema.keys():
+        col_name = (
+            col_name if col_name[0].isalnum() or col_name[0] == "_" else f'"{col_name}"'
+        )
+        cols_list.append(f"{col_name}")
+    columns = ",".join(cols_list)
 
     # In Snowflake, all parquet data is stored in a single column, $1,
     # so we must select columns explicitly
@@ -1687,7 +1708,6 @@ def create_table_copy_into(
                 sf_schema,
                 if_exists,
             )
-
             # No point of running COPY INTO if there are no files.
             if num_files_uploaded > 0:
                 (nsuccess, nchunks, nrows, copy_into_result) = execute_copy_into(
