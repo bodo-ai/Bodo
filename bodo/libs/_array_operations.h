@@ -146,9 +146,11 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
  * @param pat A utf-8 encoded regex pattern.
  * @param replacement A utf-8 encoded replacement string to insert based on the
  * pattern.
+ * @param is_parallel Whether this operation is called in parallel. When true
+ * we can potentially do optimizations that would otherwise be unsafe.
  * @return array_info* A output array with the replaced values. This is either
  * dictionary encoded or regular string array depending on the input array.
  */
 array_info* get_replace_regex(array_info* in_arr, char const* const pat,
-                              char const* replacement);
+                              char const* replacement, const bool is_parallel);
 #endif  // _ARRAY_OPERATIONS_H_INCLUDED

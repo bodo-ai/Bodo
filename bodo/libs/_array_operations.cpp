@@ -1255,91 +1255,123 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
     decref_array(in_arr);
 }
 
-array_info* get_replace_regex(array_info* in_arr, char const* const pat,
-                              char const* replacement) {
-    array_info* out_arr = nullptr;
-    const size_t nRow = in_arr->length;
-    if (in_arr->arr_type == bodo_array_type::STRING) {
-        // See:
-        // https://www.boost.org/doc/libs/1_76_0/boost/xpressive/regex_constants.hpp
-        boost::xpressive::regex_constants::syntax_option_type flag =
-            boost::xpressive::regex_constants::ECMAScript;  // default value
+/**
+ * @brief Compute replace_regex on a slice of a string array using
+ * boost::xpressive::regex_replace. This is used to enable optimizations
+ * in which only part of a string array is computed for dictionary encoding.
+ *
+ * @param in_arr The input string array to compute replacement elements for.
+ * @param pat The string pattern used to find where to replace elements.
+ * @param replacement The string used as a replacement wherever the pattern is
+ * encountered.
+ * @param start_idx The starting index to compute for the array slice.
+ * @param end_idx The ending index to compute for the array slice (not
+ * inclusive).
+ * @return array_info* An output array of replaced strings the same length as
+ * end_idx - start_idx. Elements not included in the slice are not included in
+ * the output.
+ */
+array_info* get_replace_regex_slice(array_info* in_arr, char const* const pat,
+                                    char const* replacement, size_t start_idx,
+                                    size_t end_idx) {
+    // See:
+    // https://www.boost.org/doc/libs/1_76_0/boost/xpressive/regex_constants.hpp
+    boost::xpressive::regex_constants::syntax_option_type flag =
+        boost::xpressive::regex_constants::ECMAScript;  // default value
 
-        const boost::xpressive::cregex pattern =
-            boost::xpressive::cregex::compile(pat, flag);
+    const boost::xpressive::cregex pattern =
+        boost::xpressive::cregex::compile(pat, flag);
 
-        offset_t const* const in_data2 =
-            reinterpret_cast<offset_t*>(in_arr->data2);
-        char const* const in_data1 = in_arr->data1;
+    offset_t const* const in_data2 = reinterpret_cast<offset_t*>(in_arr->data2);
+    char const* const in_data1 = in_arr->data1;
 
-        // Look at the pattern length for assumptions about allocated space.
-        size_t repLen = strlen(replacement);
-        repLen = repLen == 0 ? 1 : repLen;
-        size_t num_chars = 0;
-        if (repLen == 1) {
-            // If replacement is a single character (or empty string), we can
-            // use the faster path of just allocating the same size as the input
-            // array. This is because we know that in the worst case (replacing
-            // each character individually with the replacement) the output will
-            // be the same size as the input.
-            num_chars = in_arr->n_sub_elems;
-        } else {
-            // If the array can grow in the worse case then we do an extra pass
-            // to compute the required number of characters.
+    // Look at the pattern length for assumptions about allocated space.
+    size_t repLen = strlen(replacement);
+    repLen = repLen == 0 ? 1 : repLen;
+    size_t num_chars = 0;
+    size_t out_arr_len = end_idx - start_idx;
+    if (repLen == 1) {
+        // If pattern is a single character (or empty string), we can use
+        // the faster path of just allocated the same size as the input
+        // array. This is because we know that in the worst case (replacing
+        // each character individually with the replacement) the output will
+        // be the same size as the input.
+        num_chars = in_data2[end_idx] - in_data2[start_idx];
+    } else {
+        // If the array can grow in the worse case then we do an extra pass
+        // to compute the required number of characters.
 
-            // Allocate a working buffer to contain the result of the regex
-            // replace.
-            size_t buffer_size = 1000;
-            char* buffer = (char*)malloc(buffer_size);
-            // To construct the output array we need to know how many characters
-            // are in the output. As a result we compute the result twice, once
-            // to get the size of the output and once with the result.
-            // TODO: Determine how to dynamically resize the output array since
-            // the compute cost seems to dominate.
-            for (size_t iRow = 0; iRow < nRow; iRow++) {
-                bool bit = in_arr->get_null_bit(iRow);
-                if (bit) {
-                    const offset_t start_pos = in_data2[iRow];
-                    const offset_t end_pos = in_data2[iRow + 1];
-                    while (((end_pos - start_pos) * repLen) >= buffer_size) {
-                        buffer_size *= 2;
-                        buffer = (char*)realloc(buffer, buffer_size);
-                    }
-                    char* out_buffer = boost::xpressive::regex_replace(
-                        buffer, in_data1 + start_pos, in_data1 + end_pos,
-                        pattern, replacement);
-                    num_chars += out_buffer - buffer;
-                }
-            }
-            // Free the buffer now that its no longer needed.
-            free(buffer);
-        }
-        // Allocate the output array. We add 1 because regex_replace
-        // may insert a null terminator
-        out_arr = alloc_string_array(nRow, num_chars, 0);
-        offset_t* const out_data2 = reinterpret_cast<offset_t*>(out_arr->data2);
-        // Initialize the first offset to 0
-        out_data2[0] = 0;
-        char* const out_data1 = out_arr->data1;
-        for (size_t iRow = 0; iRow < nRow; iRow++) {
+        // Allocate a working buffer to contain the result of the regex
+        // replace.
+        size_t buffer_size = 1000;
+        char* buffer = (char*)malloc(buffer_size);
+        // To construct the output array we need to know how many characters
+        // are in the output. As a result we compute the result twice, once
+        // to get the size of the output and once with the result.
+        // TODO: Determine how to dynamically resize the output array since
+        // the compute cost seems to dominate.
+        for (size_t iRow = start_idx; iRow < end_idx; iRow++) {
             bool bit = in_arr->get_null_bit(iRow);
-            const offset_t out_offset = out_data2[iRow];
-            size_t num_chars = 0;
             if (bit) {
                 const offset_t start_pos = in_data2[iRow];
                 const offset_t end_pos = in_data2[iRow + 1];
+                while (((end_pos - start_pos) * repLen) >= buffer_size) {
+                    buffer_size *= 2;
+                    buffer = (char*)realloc(buffer, buffer_size);
+                }
                 char* out_buffer = boost::xpressive::regex_replace(
-                    out_data1 + out_offset, in_data1 + start_pos,
-                    in_data1 + end_pos, pattern, replacement);
-                num_chars = out_buffer - (out_data1 + out_offset);
+                    buffer, in_data1 + start_pos, in_data1 + end_pos, pattern,
+                    replacement);
+                num_chars += out_buffer - buffer;
             }
-            out_arr->set_null_bit(iRow, bit);
-            out_data2[iRow + 1] = out_offset + num_chars;
         }
-        // Update the actual number of characters since there may be fewer than
-        // we allocated. This is necessary if we shuffle data.
-        out_arr->n_sub_elems = out_data2[nRow] - out_data2[0];
+        // Free the buffer now that its no longer needed.
+        free(buffer);
+    }
+    // Allocate the output array. We add 1 because regex_replace
+    // may insert a null terminator
+    array_info* out_arr = alloc_string_array(out_arr_len, num_chars, 0);
+    offset_t* const out_data2 = reinterpret_cast<offset_t*>(out_arr->data2);
+    // Initialize the first offset to 0
+    out_data2[0] = 0;
+    char* const out_data1 = out_arr->data1;
+    for (size_t outRow = 0, iRow = start_idx; iRow < end_idx;
+         iRow++, outRow++) {
+        bool bit = in_arr->get_null_bit(iRow);
+        const offset_t out_offset = out_data2[outRow];
+        size_t num_chars = 0;
+        if (bit) {
+            const offset_t start_pos = in_data2[iRow];
+            const offset_t end_pos = in_data2[iRow + 1];
+            char* out_buffer = boost::xpressive::regex_replace(
+                out_data1 + out_offset, in_data1 + start_pos,
+                in_data1 + end_pos, pattern, replacement);
+            num_chars = out_buffer - (out_data1 + out_offset);
+        }
+        out_arr->set_null_bit(outRow, bit);
+        out_data2[outRow + 1] = out_offset + num_chars;
+    }
+    // Update the actual number of characters since there may be fewer than we
+    // allocated. This is necessary if we shuffle data.
+    out_arr->n_sub_elems = out_data2[out_arr_len] - out_data2[0];
+    return out_arr;
+}
+
+array_info* get_replace_regex(array_info* in_arr, char const* const pat,
+                              char const* replacement, const bool is_parallel) {
+    array_info* out_arr = nullptr;
+    if (in_arr->arr_type == bodo_array_type::STRING) {
+        out_arr = get_replace_regex_slice(in_arr, pat, replacement, 0,
+                                          in_arr->length);
     } else if (in_arr->arr_type == bodo_array_type::DICT) {
+        // Threshold used to determine whether to use the parallel path for a
+        // global dictionary. The takeaway here is that large dictionaries may
+        // benefit from splitting the compute and adding extra communication.
+        // TODO[BE-4418]: Benchmark and creat a reasonable threshold for
+        // dividing computation that accounts for the cost to compute replace on
+        // each byte, the communication initialization overhead, and the cost to
+        // perform the allgatherv.
+        const size_t LOCAL_COMPUTE_THRESHOLD = 1000000;
         // For dictionary-encoded string arrays, we optimize
         // by recursing on the dictionary (info1)
         // (which is presumably much smaller), and then
@@ -1347,15 +1379,37 @@ array_info* get_replace_regex(array_info* in_arr, char const* const pat,
         array_info* dict_arr = in_arr->info1;
         array_info* indices_arr = in_arr->info2;
 
-        // Compute recursively on the dictionary
-        // (dict_arr; which is just a string array).
-        // We incref `dict_arr_out` and `dict_arr` since they'll be decrefed
-        // when we call this function recursively
-        incref_array(dict_arr);
-        array_info* new_dict = get_replace_regex(dict_arr, pat, replacement);
+        // We use a special path for large dictionaries that are global and
+        // called in parallel.
+        bool use_parallel_path = is_parallel && in_arr->has_global_dictionary &&
+                                 dict_arr->length >= LOCAL_COMPUTE_THRESHOLD;
+        array_info* new_dict;
+        if (use_parallel_path) {
+            // Compute your local slice of the dictionary.
+            size_t rank = dist_get_rank();
+            size_t nranks = dist_get_size();
+            size_t start_idx = dist_get_start(dict_arr->length, nranks, rank);
+            size_t end_idx = dist_get_end(dict_arr->length, nranks, rank);
+            // Compute the length with just your chunk.
+            array_info* dict_slice = get_replace_regex_slice(
+                dict_arr, pat, replacement, start_idx, end_idx);
+            // Wrap the dictionary in a table so we can do an allgatherv.
+            table_info* dict_table = new table_info();
+            dict_table->columns.push_back(dict_slice);
+            table_info* gathered_table =
+                gather_table(dict_table, 1, true, true);
+            new_dict = gathered_table->columns[0];
+            // Delete the tables and free the original slice
+            delete dict_table;
+            delete gathered_table;
+        } else {
+            // Just recurse on the dictionary locally
+            new_dict = get_replace_regex_slice(dict_arr, pat, replacement, 0,
+                                               dict_arr->length);
+        }
         array_info* new_indices = copy_array(indices_arr);
         out_arr = new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
-                                 nRow, -1, -1, NULL, NULL, NULL,
+                                 in_arr->length, -1, -1, NULL, NULL, NULL,
                                  new_indices->null_bitmask, NULL, NULL, NULL,
                                  NULL, 0, 0, 0, in_arr->has_global_dictionary,
                                  false,  // Note replace can create collisions.
