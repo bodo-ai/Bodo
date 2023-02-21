@@ -2,6 +2,7 @@
 """Array implementation for null array type. This is an array that contains
 all null values and can be cast to any other array type.
 """
+from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import (
     intrinsic,
@@ -68,6 +69,14 @@ class NullArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
             ("length", types.int64),
+            # Keep an extra field that is always 1 so we can determine
+            # if the struct is null or not. We use context.get_constant_null
+            # inside ensure_column_unboxed and this will become all 0s.
+            # https://github.com/Bodo-inc/Bodo/blob/3108eb47a7a79861739b1ae3a4939c1525ef16ae/bodo/hiframes/table.py#L1195
+            # https://github.com/numba/numba/blob/135d15047c5237f751d4b81347effe2a3704288b/numba/core/base.py#L522
+            # https://github.com/numba/llvmlite/blob/dffe582d6080494ba8e39689d09aacde1952214c/llvmlite/ir/values.py#L457
+            # https://github.com/numba/llvmlite/blob/dffe582d6080494ba8e39689d09aacde1952214c/llvmlite/ir/types.py#L545
+            ("not_empty", types.boolean),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -85,6 +94,7 @@ def init_null_array(typingctx, length_t):
         # create null_arr struct and store values
         null_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
         null_arr.length = length
+        null_arr.not_empty = lir.Constant(lir.IntType(1), 1)
         return null_arr._getvalue()
 
     sig = null_array_type(types.int64)

@@ -876,19 +876,34 @@ table_info* union_tables_inner(table_info** in_table, int64_t num_tables,
     tracing::Event ev_unify_dicts("union_tables_unify_dictionaries",
                                   is_parallel);
     table_info* base_table = locally_processed_table[0];
-    for (int j = 0; j < num_keys; j++) {
-        if (base_table->columns[j]->arr_type == bodo_array_type::DICT) {
-            // Unify all of the dictionaries.
-            std::vector<array_info*> dict_arrs(num_tables);
-            std::vector<bool> is_parallels(num_tables);
-            for (int i = 0; i < num_tables; i++) {
+    // Optimize unify dictionaries for two arrays (common case)
+    if (num_tables == 2) {
+        for (int j = 0; j < num_keys; j++) {
+            if (base_table->columns[j]->arr_type == bodo_array_type::DICT) {
+                // Unify all of the dictionaries.
+                array_info* arr1 = locally_processed_table[0]->columns[j];
+                array_info* arr2 = locally_processed_table[1]->columns[j];
                 // Ensure we have global/unique data for the dictionary.
-                array_info* arr = locally_processed_table[i]->columns[j];
-                make_dictionary_global_and_unique(arr, is_parallel);
-                dict_arrs[i] = arr;
-                is_parallels[i] = is_parallel;
+                make_dictionary_global_and_unique(arr1, is_parallel);
+                make_dictionary_global_and_unique(arr2, is_parallel);
+                unify_dictionaries(arr1, arr2, is_parallel, is_parallel);
             }
-            unify_several_dictionaries(dict_arrs, is_parallels);
+        }
+    } else {
+        for (int j = 0; j < num_keys; j++) {
+            if (base_table->columns[j]->arr_type == bodo_array_type::DICT) {
+                // Unify all of the dictionaries.
+                std::vector<array_info*> dict_arrs(num_tables);
+                std::vector<bool> is_parallels(num_tables);
+                for (int i = 0; i < num_tables; i++) {
+                    // Ensure we have global/unique data for the dictionary.
+                    array_info* arr = locally_processed_table[i]->columns[j];
+                    make_dictionary_global_and_unique(arr, is_parallel);
+                    dict_arrs[i] = arr;
+                    is_parallels[i] = is_parallel;
+                }
+                unify_several_dictionaries(dict_arrs, is_parallels);
+            }
         }
     }
     ev_unify_dicts.finalize();
