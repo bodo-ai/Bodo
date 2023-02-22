@@ -578,7 +578,16 @@ def nullif_util(arr0, arr1):
 
     out_dtype = get_common_broadcasted_type([arr0, arr1], "NULLIF")
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        # We need to remove NAs because we treat them as duplicates.
+        # TODO: Avoid this in the future.
+        may_cause_duplicate_dict_array_values=True,
+    )
 
 
 @numba.generated_jit(nopython=True)

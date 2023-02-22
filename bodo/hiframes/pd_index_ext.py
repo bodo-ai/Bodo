@@ -665,7 +665,7 @@ def overload_sub_operator_datetime_index(lhs, rhs):
         return impl
 
 
-# bionp of DatetimeIndex and string
+# binop of DatetimeIndex and string
 def gen_dti_str_binop_impl(op, is_lhs_dti):
     # is_arg1_dti: is the first argument DatetimeIndex and second argument str
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
