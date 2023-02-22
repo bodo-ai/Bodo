@@ -9,15 +9,7 @@ import com.bodosql.calcite.application.BodoSQLOperatorTables.SinceEpochFnTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.StringOperatorTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.ThreeOperatorStringTable;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
-import com.bodosql.calcite.application.bodo_sql_rules.AliasPreservingAggregateProjectMergeRule;
-import com.bodosql.calcite.application.bodo_sql_rules.AliasPreservingProjectJoinTransposeRule;
-import com.bodosql.calcite.application.bodo_sql_rules.DependencyCheckingProjectMergeRule;
-import com.bodosql.calcite.application.bodo_sql_rules.InnerJoinRemoveRule;
-import com.bodosql.calcite.application.bodo_sql_rules.JoinReorderConditionRule;
-import com.bodosql.calcite.application.bodo_sql_rules.LimitProjectTransposeRule;
-import com.bodosql.calcite.application.bodo_sql_rules.LogicalFilterReorderConditionRule;
-import com.bodosql.calcite.application.bodo_sql_rules.ProjectUnaliasedRemoveRule;
-import com.bodosql.calcite.application.bodo_sql_rules.ProjectionSubcolumnEliminationRule;
+import com.bodosql.calcite.application.bodo_sql_rules.*;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
@@ -430,7 +422,7 @@ public class RelationalAlgebraGenerator {
               TODO(Ritwika: figure out SEARCH handling later. SARG attributes do not have public access methods.
               */
               .addRuleInstance(
-                  ReduceExpressionsRule.FilterReduceExpressionsRule
+                  BodoSQLReduceExpressionsRule.FilterReduceExpressionsRule
                       .FilterReduceExpressionsRuleConfig.DEFAULT
                       .toRule())
               /*
