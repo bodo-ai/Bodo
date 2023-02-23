@@ -27,7 +27,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TimestampDiffCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLExprType.*;
 import static com.bodosql.calcite.application.JoinCondVisitor.*;
 import static com.bodosql.calcite.application.Utils.AggHelpers.*;
 import static com.bodosql.calcite.application.Utils.Utils.*;
