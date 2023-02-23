@@ -194,19 +194,18 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
 
 /**
  * @brief Create a Numpy array by selecting elements from input array as
- * specified by index function f.
+ * provided by index array in_arr_idxs.
  *
- * @tparam F function type with integer input/output
  * @param in_arr Numpy array with input data
- * @param f function that takes output array index and returns input array index
- * to find corresponding data
+ * @param in_arr_idxs array of indices into input array to create the output
+ * array
  * @param nRowOut number of rows in output array
  * @param use_nullable_arr use nullable integer/float data type if input data is
  * Numpy integer/float
  * @return array_info* output data array as specified by input
  */
-template <typename F>
-array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr, F f,
+array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr,
+                                               const int64_t* in_arr_idxs,
                                                size_t nRowOut,
                                                bool use_nullable_arr = false) {
     array_info* out_arr = NULL;
@@ -223,7 +222,7 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr, F f,
                               bodo_array_type::NULLABLE_INT_BOOL, dtype, 0, 0);
         char* out_data1 = out_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
+            int64_t idx = in_arr_idxs[iRow];
             char* out_ptr = out_data1 + siztype * iRow;
             char* in_ptr;
             bool bit = false;
@@ -236,9 +235,39 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr, F f,
         }
     } else {
         out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+
+        if (siztype == sizeof(int32_t)) {
+            using T = int32_t;
+            T na_val;
+            memcpy(&na_val, (T*)vectNaN.data(), sizeof(T));
+            T* out_data1 = (T*)out_arr->data1;
+            T* in_data1 = (T*)in_arr->data1;
+
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                out_data1[iRow] = (idx >= 0) ? in_data1[idx] : na_val;
+            }
+            return out_arr;
+        }
+
+        // TODO: refactor duplicate code
+        if (siztype == sizeof(int64_t)) {
+            using T = int64_t;
+            T na_val;
+            memcpy(&na_val, (T*)vectNaN.data(), sizeof(T));
+            T* out_data1 = (T*)out_arr->data1;
+            T* in_data1 = (T*)in_arr->data1;
+
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                out_data1[iRow] = (idx >= 0) ? in_data1[idx] : na_val;
+            }
+            return out_arr;
+        }
+
         char* out_data1 = out_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
+            int64_t idx = in_arr_idxs[iRow];
             char* out_ptr = out_data1 + siztype * iRow;
             char* in_ptr;
             // To allow NaN values in the column.
@@ -252,8 +281,88 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr, F f,
     return out_arr;
 }
 
-template <typename F>
-array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
+/**
+ * @brief Create a nullable array by selecting elements from input array as
+ * provided by index array in_arr_idxs.
+ *
+ * @param in_arr Numpy array with input data
+ * @param in_arr_idxs array of indices into input array to create the output
+ * array
+ * @param nRowOut number of rows in output array
+ * @return array_info* output data array as specified by input
+ */
+array_info* RetrieveArray_SingleColumn_F_nullable(array_info* in_arr,
+                                                  const int64_t* in_arr_idxs,
+                                                  size_t nRowOut) {
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    array_info* out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+    uint64_t siztype = numpy_item_size[dtype];
+
+    if (siztype == sizeof(int32_t)) {
+        using T = int32_t;
+        T* in_data1 = (T*)in_arr->data1;
+        T* out_data1 = (T*)out_arr->data1;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            int64_t idx = in_arr_idxs[iRow];
+            bool bit = false;
+            if (idx >= 0) {
+                out_data1[iRow] = in_data1[idx];
+                bit = in_arr->get_null_bit(idx);
+            } else {
+                // set index value of dict-encoded string arrays to zero in case
+                // some other code accesses it by mistake. see
+                // https://bodo.atlassian.net/browse/BE-4146
+                out_data1[iRow] = 0;
+            }
+            out_arr->set_null_bit(iRow, bit);
+        }
+        return out_arr;
+    }
+
+    // TODO: refactor duplicate code
+    if (siztype == sizeof(int64_t)) {
+        using T = int64_t;
+        T* in_data1 = (T*)in_arr->data1;
+        T* out_data1 = (T*)out_arr->data1;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            int64_t idx = in_arr_idxs[iRow];
+            bool bit = false;
+            if (idx >= 0) {
+                out_data1[iRow] = in_data1[idx];
+                bit = in_arr->get_null_bit(idx);
+            } else {
+                out_data1[iRow] = 0;
+            }
+            out_arr->set_null_bit(iRow, bit);
+        }
+        return out_arr;
+    }
+
+    char* in_data1 = in_arr->data1;
+    char* out_data1 = out_arr->data1;
+    for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+        int64_t idx = in_arr_idxs[iRow];
+        bool bit = false;
+        char* out_ptr = out_data1 + siztype * iRow;
+        if (idx >= 0) {
+            char* in_ptr = in_data1 + siztype * idx;
+            memcpy(out_ptr, in_ptr, siztype);
+            bit = in_arr->get_null_bit(idx);
+        } else {
+            // set index value of dict-encoded string arrays to zero in case
+            // some other code accesses it by mistake. see
+            // https://bodo.atlassian.net/browse/BE-4146
+            memset(out_ptr, 0, siztype);
+        }
+        out_arr->set_null_bit(iRow, bit);
+    }
+
+    return out_arr;
+}
+
+array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
+                                         const int64_t* in_arr_idxs,
                                          size_t nRowOut,
                                          bool use_nullable_arr = false) {
     array_info* out_arr = NULL;
@@ -271,7 +380,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         offset_t* index_offsets = (offset_t*)in_arr->data3;
         offset_t* data_offsets = (offset_t*)in_arr->data2;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
+            int64_t idx = in_arr_idxs[iRow];
             offset_t size_index = 0;
             offset_t size_data = 0;
             // To allow NaN values in the column
@@ -302,7 +411,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         offset_t* in_data_offsets = (offset_t*)in_arr->data2;
         char* in_data1 = in_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
+            int64_t idx = in_arr_idxs[iRow];
             offset_t size_index = ListSizes_index[iRow];
             offset_t size_data = ListSizes_data[iRow];
             out_index_offsets[iRow] = pos_index;
@@ -342,7 +451,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         offset_t* in_offsets = (offset_t*)in_arr->data2;
         char* in_data1 = in_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
+            int64_t idx = in_arr_idxs[iRow];
             offset_t size = 0;
             // To allow NaN values in the column
             if (idx >= 0) {
@@ -358,7 +467,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         char* out_data1 = out_arr->data1;
         offset_t pos = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
+            int64_t idx = in_arr_idxs[iRow];
             offset_t size = ListSizes[iRow];
             out_offsets[iRow] = pos;
             // To allow NaN values in the column.
@@ -376,30 +485,11 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         out_offsets[nRowOut] = pos;
     }
     if (arr_type == bodo_array_type::DICT) {
-        // TODO refactor: this is mostly the same as NULLABLE_INT_BOOL
-
         array_info* in_indices = in_arr->info2;
-        char* in_data1 = in_indices->data1;
-        array_info* out_indices = alloc_array(
-            nRowOut, -1, -1, in_indices->arr_type, in_indices->dtype, 0, 0);
-        char* out_data1 = out_indices->data1;
-        uint64_t siztype = numpy_item_size[in_indices->dtype];
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
-            // To allow NaN values in the column.
-            bool bit = false;
-            char* out_ptr = out_data1 + siztype * iRow;
-            if (idx >= 0) {
-                char* in_ptr = in_data1 + siztype * idx;
-                memcpy(out_ptr, in_ptr, siztype);
-                bit = in_indices->get_null_bit(idx);
-            } else {
-                // set index value to zero in case some other code accesses it
-                // by mistake. see https://bodo.atlassian.net/browse/BE-4146
-                memset(out_ptr, 0, siztype);
-            }
-            out_indices->set_null_bit(iRow, bit);
-        }
+
+        array_info* out_indices = RetrieveArray_SingleColumn_F_nullable(
+            in_indices, in_arr_idxs, nRowOut);
+
         out_arr = new array_info(
             bodo_array_type::DICT, in_arr->dtype, out_indices->length, -1, -1,
             NULL, NULL, NULL, out_indices->null_bitmask, NULL, NULL, NULL, NULL,
@@ -410,28 +500,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         incref_array(in_arr->info1);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        // In the case of NULLABLE array, we do a single loop for
-        // assigning the arrays.
-        // We do not need to reassign the pointers, only their size
-        // suffices for the copy.
-        // In the case of missing array a value of false is assigned
-        // to the bitmask.
-        char* in_data1 = in_arr->data1;
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
-        char* out_data1 = out_arr->data1;
-        uint64_t siztype = numpy_item_size[dtype];
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
-            // To allow NaN values in the column.
-            bool bit = false;
-            if (idx >= 0) {
-                char* out_ptr = out_data1 + siztype * iRow;
-                char* in_ptr = in_data1 + siztype * idx;
-                memcpy(out_ptr, in_ptr, siztype);
-                bit = in_arr->get_null_bit(idx);
-            }
-            out_arr->set_null_bit(iRow, bit);
-        }
+        out_arr =
+            RetrieveArray_SingleColumn_F_nullable(in_arr, in_arr_idxs, nRowOut);
     }
     if (arr_type == bodo_array_type::INTERVAL) {
         // Interval array requires copying left and right data
@@ -443,7 +513,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         char* out_left_data = out_arr->data1;
         char* out_right_data = out_arr->data2;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
+            int64_t idx = in_arr_idxs[iRow];
             char* out_left_ptr = out_left_data + siztype * iRow;
             char* out_right_ptr = out_right_data + siztype * iRow;
             char* in_left_ptr;
@@ -471,7 +541,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         out_arr = alloc_categorical(nRowOut, dtype, num_categories);
         char* out_data1 = out_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
+            int64_t idx = in_arr_idxs[iRow];
             char* out_ptr = out_data1 + siztype * iRow;
             char* in_ptr;
             // To allow NaN values in the column.
@@ -483,8 +553,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         }
     }
     if (arr_type == bodo_array_type::NUMPY) {
-        out_arr = RetrieveArray_SingleColumn_F_numpy(in_arr, f, nRowOut,
-                                                     use_nullable_arr);
+        out_arr = RetrieveArray_SingleColumn_F_numpy(in_arr, in_arr_idxs,
+                                                     nRowOut, use_nullable_arr);
     }
     if (arr_type == bodo_array_type::ARROW) {
         // Arrow builder for output array. builds it dynamically (buffer
@@ -494,7 +564,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         (void)arrow::MakeBuilder(arrow::default_memory_pool(),
                                  in_arrow_array->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
+            int64_t idx = in_arr_idxs[iRow];
             // append value in position 'row' of input array to builder's
             // array (this is a recursive algorithm, can traverse nested
             // arrays)
@@ -521,9 +591,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
 array_info* RetrieveArray_SingleColumn(array_info* in_arr,
                                        std::vector<int64_t> const& ListIdx,
                                        bool use_nullable_arr) {
-    return RetrieveArray_SingleColumn_F(
-        in_arr, [&](size_t iRow) -> int64_t { return ListIdx[iRow]; },
-        ListIdx.size(), use_nullable_arr);
+    return RetrieveArray_SingleColumn_F(in_arr, ListIdx.data(), ListIdx.size(),
+                                        use_nullable_arr);
 }
 
 array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
@@ -534,13 +603,7 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
         return nullptr;
     }
     size_t siz = idx_arr->length;
-    return RetrieveArray_SingleColumn_F(
-        in_arr,
-        [&](size_t idx) -> int64_t {
-            int64_t val = idx_arr->at<uint64_t>(idx);
-            return val;
-        },
-        siz);
+    return RetrieveArray_SingleColumn_F(in_arr, (int64_t*)idx_arr->data1, siz);
 }
 
 array_info* RetrieveArray_TwoColumns(
