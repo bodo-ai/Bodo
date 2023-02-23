@@ -1377,13 +1377,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Module.Builder innerBuilder = this.generatedCode;
 
     if (generateApply) {
-      assert ctx.getColsToAddList().size() == 0;
       // If we're generating an apply, the input set of columns to add should be empty,
       // since we only add columns to the colsToAddList when inside an apply.
+      assert ctx.getColsToAddList().size() == 0;
+      // If we generate an apply we need to write the generated if/else
       innerBuilder = new Module.Builder();
     }
-    // Update where we generate code for nested expressions.
-    this.generatedCode = innerBuilder;
 
     List<String> args = new ArrayList<>();
 
@@ -1433,11 +1432,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
             pdVisitorClass,
             oldBuilder,
             innerBuilder);
-
-    // Restore the code generator. This should be removed once
-    // we can place the entire body of the new statement inside
-    // a global variable.
-    this.generatedCode = oldBuilder;
 
     return new RexNodeVisitorInfo(codeExpr);
   }
