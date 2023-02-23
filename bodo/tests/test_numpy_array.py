@@ -1030,7 +1030,10 @@ def test_bad_setitem(mutable_bodo_arr):
         error_msg = "received an incorrect 'value' type"
 
     # we support setting a float scalar value to IntegerArray (see int_arr_setitem)
-    if not isinstance(mutable_bodo_arr, pd.arrays.IntegerArray):
+    if not (
+        isinstance(mutable_bodo_arr, pd.arrays.IntegerArray)
+        or isinstance(mutable_bodo_arr[0], Decimal)
+    ):
         with pytest.raises(err_typ, match=error_msg):
             bodo.jit(test_impl_scalar)(mutable_bodo_arr)
 
