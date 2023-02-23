@@ -51,14 +51,11 @@ import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.util.ChainedSqlOperatorTable;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import org.apache.calcite.sql.validate.SqlValidator;
+import org.apache.calcite.sql2rel.RelDecorrelator;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.sql2rel.StandardConvertletTable;
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig;
-import org.apache.calcite.tools.FrameworkConfig;
-import org.apache.calcite.tools.Frameworks;
-import org.apache.calcite.tools.Planner;
-import org.apache.calcite.tools.RelConversionException;
-import org.apache.calcite.tools.ValidationException;
+import org.apache.calcite.tools.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -193,7 +190,9 @@ public class RelationalAlgebraGenerator {
               // or's,
               // and instead do an inner join/filter on the values. See BS-553.
               .sqlToRelConverterConfig(
-                  SqlToRelConverter.config().withInSubQueryThreshold(Integer.MAX_VALUE))
+                  SqlToRelConverter.config()
+                      .withExpand(false)
+                      .withInSubQueryThreshold(Integer.MAX_VALUE))
               .parserConfig(
                   SqlParser.Config.DEFAULT
                       .withCaseSensitive(false)
@@ -352,6 +351,51 @@ public class RelationalAlgebraGenerator {
       catalog.closeConnections();
     }
     return result;
+  }
+
+  /**
+   * Removes subquery nodes from the plan and replaces them with equivalent relational algebra
+   * expressions.
+   *
+   * <p>If subqueries have correlation variables, this will remove the correlation variables through
+   * a decorrelation algorithm.
+   *
+   * <p>No other optimizations to the plan are performed. Its best to run this on the unoptimized
+   * plan and then optimize the resulting plan.
+   *
+   * @param plan input plan
+   * @return plan with subqueries and correlation nodes removed
+   */
+  private RelNode removeSubqueries(RelNode plan) {
+    // Create a program builder with rules to remove subqueries.
+    // This transforms subqueries into equivalent queries with
+    // Correlate nodes.
+    //
+    // If a subquery doesn't require any correlation, this transforms
+    // them into something we can immediately use.
+    //
+    // Correlate nodes are effectively the same as subqueries but
+    // more explicit in the plan.
+    HepProgram program =
+        new HepProgramBuilder()
+            .addRuleInstance(SubQueryRemoveRule.Config.FILTER.toRule())
+            .addRuleInstance(SubQueryRemoveRule.Config.PROJECT.toRule())
+            .addRuleInstance(SubQueryRemoveRule.Config.JOIN.toRule())
+            .addRuleInstance(JoinExtractOverRule.Config.DEFAULT.toRule())
+            .build();
+
+    // Generate the new plan.
+    HepPlanner planner = new HepPlanner(program, config.getContext());
+    planner.setRoot(plan);
+    RelNode newPlan = planner.findBestExp();
+
+    // We now build a RelDecorrelator and decorrelate the above
+    // plan to remove the Correlate nodes when possible.
+    // Correlation is not an efficient operation so we don't want
+    // any in our final plan.
+    RelBuilder relBuilder =
+        config.getSqlToRelConverterConfig().getRelBuilderFactory().create(plan.getCluster(), null);
+    return RelDecorrelator.decorrelateQuery(newPlan, relBuilder);
   }
 
   public RelNode getOptimizedRelationalAlgebra(RelNode nonOptimizedPlan)
@@ -534,7 +578,7 @@ public class RelationalAlgebraGenerator {
 
     final HepPlanner hepPlanner = new HepPlanner(program, config.getContext());
     nonOptimizedPlan.getCluster().getPlanner().setExecutor(new RexExecutorImpl(null));
-    hepPlanner.setRoot(nonOptimizedPlan);
+    hepPlanner.setRoot(removeSubqueries(nonOptimizedPlan));
 
     planner.close();
 
