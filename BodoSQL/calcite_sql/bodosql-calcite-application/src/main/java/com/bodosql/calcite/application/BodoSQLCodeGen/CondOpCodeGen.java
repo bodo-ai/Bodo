@@ -122,7 +122,8 @@ public class CondOpCodeGen {
    * @param outputType The type of the output scalar/column.
    * @param pdVisitorClass A reference to the PandasCodeGenVisitor used to create globals and
    *     variable names.
-   * @param builder The module builder used for Code Generation.
+   * @param outerBuilder The module builder used for Code Generation.
+   * @param innerBuilder The module builder used for generating global variables.
    * @return The code generated for the Case call.
    */
   public static String generateCaseCode(
@@ -136,26 +137,26 @@ public class CondOpCodeGen {
       Module.Builder innerBuilder) {
     // We will unify the output of each block into a single variable.
     // TODO: Move variable generation to the Module.Builder
-    Variable outputVar = new Variable(pdVisitorClass.genGenericTempVar());
-    // case statements are essentially an infinite number of When/Then clauses, followed by an
-    // else clause. We first construct all pairs of condition + if body and finally add the else.
-
-    List<Pair<Expr.Call, Op.Assign>> condAndBody = new ArrayList<>();
-
-    for (int i = 0; i < args.size() - 1; i += 2) {
-      // Create the condition
-      Expr.Call when =
-          new Expr.Call(
-              "bodo.libs.bodosql_array_kernels.is_true", List.of(new Expr.Raw(args.get(i))));
-      // Create the if body
-      Op.Assign body = new Op.Assign(outputVar, new Expr.Raw(args.get(i + 1)));
-      condAndBody.add(new Pair<>(when, body));
-    }
-    Op.Assign elseBlock = new Op.Assign(outputVar, new Expr.Raw(args.get(args.size() - 1)));
-    // Add the case to the module
-    innerBuilder.add(new Op.If(condAndBody, elseBlock));
-
     if (outputsArray) {
+      Variable outputVar = new Variable(pdVisitorClass.genGenericTempVar());
+      // case statements are essentially an infinite number of When/Then clauses, followed by an
+      // else clause. We first construct all pairs of condition + if body and finally add the else.
+
+      List<Pair<Expr.Call, Op.Assign>> condAndBody = new ArrayList<>();
+
+      for (int i = 0; i < args.size() - 1; i += 2) {
+        // Create the condition
+        Expr.Call when =
+            new Expr.Call(
+                "bodo.libs.bodosql_array_kernels.is_true", List.of(new Expr.Raw(args.get(i))));
+        // Create the if body
+        Op.Assign body = new Op.Assign(outputVar, new Expr.Raw(args.get(i + 1)));
+        condAndBody.add(new Pair<>(when, body));
+      }
+      Op.Assign elseBlock = new Op.Assign(outputVar, new Expr.Raw(args.get(args.size() - 1)));
+      // Add the case to the module
+      innerBuilder.add(new Op.If(condAndBody, elseBlock));
+
       // Here we need to generate a call to bodosql_case_placeholder.
       // We assume, at this point, that the ctx.colsToAddList has been added to inputVar, and
       // the arguments have been renamed appropriately.
@@ -236,8 +237,29 @@ public class CondOpCodeGen {
       // Return the name of the variable.
       return arrVar.getName();
     } else {
-      // If we just output a scalar just pass back the variable name.
-      return outputVar.getName();
+      // We can't handle generating code that should be nested inside the case statement yet.
+      // stick to the ternary for now.
+      StringBuilder genCode = new StringBuilder();
+      genCode.append("(");
+      /*case statements are essentially an infinite number of Then/When clauses, followed by an
+      else clause. So, we iterate through all the Then/When clauses, and then deal with the final
+      else clause at the end*/
+      for (int i = 0; i < args.size() - 1; i += 2) {
+        String when = args.get(i);
+        String then = args.get(i + 1);
+        genCode.append(then);
+        genCode.append(" if bodo.libs.bodosql_array_kernels.is_true(");
+        genCode.append(when);
+        genCode.append(") else (");
+      }
+      String else_ = args.get(args.size() - 1);
+      genCode.append(else_);
+      // append R parens equal to the number of Then/When clauses
+      for (int j = 0; j < args.size() / 2; j++) {
+        genCode.append(")");
+      }
+      genCode.append(")");
+      return genCode.toString();
     }
   }
 
