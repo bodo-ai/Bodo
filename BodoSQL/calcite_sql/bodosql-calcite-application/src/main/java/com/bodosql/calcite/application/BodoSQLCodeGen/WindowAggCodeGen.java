@@ -81,6 +81,7 @@ public class WindowAggCodeGen {
     // Window functions that have a two-argument sliding-window kernel
     twoArgWindowOptimizedKernels.add("COVAR_SAMP");
     twoArgWindowOptimizedKernels.add("COVAR_POP");
+    twoArgWindowOptimizedKernels.add("CORR");
 
     // Window functions that have a dedicated kernel
     windowCodeExpressions.put("SUM", "windowed_sum");
@@ -92,6 +93,7 @@ public class WindowAggCodeGen {
     windowCodeExpressions.put("RATIO_TO_REPORT", "windowed_ratio_to_report");
     windowCodeExpressions.put("COVAR_SAMP", "windowed_covar_samp");
     windowCodeExpressions.put("COVAR_POP", "windowed_covar_pop");
+    windowCodeExpressions.put("CORR", "windowed_corr");
     windowCodeExpressions.put("CONDITIONAL_CHANGE_EVENT", "change_event");
     windowCodeExpressions.put("STDDEV", "windowed_stddev_samp");
     windowCodeExpressions.put("STDDEV_SAMP", "windowed_stddev_samp");

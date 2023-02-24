@@ -304,6 +304,8 @@ def window_refsol_double(Y, X, lower, upper, func, use_nans=False):
                 result = None if len(elems) == 0 else elems_y.cov(elems_x, ddof=0)
             elif func == "covar_samp":
                 result = None if len(elems) <= 1 else elems_y.cov(elems_x)
+            elif func == "corr":
+                result = None if len(elems) <= 1 else elems_y.corr(elems_x)
         if use_nans:
             if result is None:
                 to_null.append(i)
@@ -778,6 +780,7 @@ def test_windowed_mode(
     [
         "covar_pop",
         "covar_samp",
+        "corr",
     ],
 )
 def test_windowed_kernels_two_arg(
@@ -798,13 +801,24 @@ def test_windowed_kernels_two_arg(
             bodo.libs.bodosql_array_kernels.windowed_covar_samp(Y, X, lower, upper)
         )
 
+    def impl3(Y, X, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_corr(Y, X, lower, upper)
+        )
+
     Y, X = window_kernel_two_arg_data[dataset]
 
     implementations = {
         "covar_pop": impl1,
         "covar_samp": impl2,
+        "corr": impl3,
     }
     impl = implementations[func]
+    # breakpoint()
+    #        B     P
+    # 129  NaN  <NA>
+    # 162  NaN  <NA>
+    # 332  0.0  <NA>
 
     check_func(
         impl,

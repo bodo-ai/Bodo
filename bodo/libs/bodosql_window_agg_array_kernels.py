@@ -504,3 +504,74 @@ def windowed_covar_samp(Y, X, lower_bound, upper_bound):
         exit_block=exit_block,
         num_args=2,
     )
+
+
+@numba.generated_jit(nopython=True)
+def windowed_corr(Y, X, lower_bound, upper_bound):
+    verify_int_float_arg(Y, "corr", "Y")
+    verify_int_float_arg(X, "corr", "X")
+    if not (
+        bodo.utils.utils.is_array_typ(Y, True)
+        and bodo.utils.utils.is_array_typ(X, True)
+    ):  # pragma: no cover
+        raise_bodo_error("Input must be an array type")
+
+    # Uses Pearson correlation with the formula:
+    # CORR(Y, X) = COVAR_POP(Y, X) / (STD_POP(Y) * STD_POP(X)), where
+    # COVAR_POP(Y, X), STD_POP(Y) and STD_POP(X) are obtained using the same
+    # sliding window logic as their corresponding kernels.
+    # Defaults to null in invalid cases (only 1 element in the window,
+    # one of the deviations is 0, etc.)
+    calculate_block = "std_y = ((e2_y - (e1_y ** 2) / in_window)) ** 0.5\n"
+    calculate_block += "std_x = ((e2_x - (e1_x ** 2) / in_window)) ** 0.5\n"
+    # Checks to see if either deviation is zero by checking if either is very
+    # close to zero while the numerator expression is also zero (which will be
+    # the case if the standard deviation for either is zero), or if either
+    # standard deviation is NaN.
+    calculate_block += "invalid_corr = np.isnan(std_y) or np.isnan(std_x) or (min(std_y, std_x) <= 1e-6)\n"
+    calculate_block += "if in_window <= 1 or invalid_corr:\n"
+    calculate_block += "   bodo.libs.array_kernels.setna(res, i)\n"
+    calculate_block += "else:\n"
+    # Note: the numerator and denominator are both missing a "/ in_window" term
+    # because they cancel out
+    calculate_block += "   numerator = (total_xy - (total_x * total_y) / in_window)\n"
+    calculate_block += "   res[i] = numerator / (std_y * std_x)\n"
+
+    setup_block = "total_y = 0\n"
+    setup_block += "total_x = 0\n"
+    setup_block += "total_xy = 0\n"
+    # The variables used for calculating STD_POP(Y) and STD_POP(X) are shifted
+    # by constants to improve numerical stability
+    setup_block += "k_y = round(Y[~np.isnan(Y)].mean())\n"
+    setup_block += "e1_y = 0\n"
+    setup_block += "e2_y = 0\n"
+    setup_block += "k_x = round(X[~np.isnan(X)].mean())\n"
+    setup_block += "e1_x = 0\n"
+    setup_block += "e2_x = 0\n"
+
+    enter_block = "total_y += elem0 - k_y\n"
+    enter_block += "total_x += elem1 - k_x\n"
+    enter_block += "total_xy += (elem0 - k_y) * (elem1 - k_x)\n"
+    enter_block += "e1_y += elem0 - k_y\n"
+    enter_block += "e2_y += (elem0 - k_y) ** 2\n"
+    enter_block += "e1_x += elem1 - k_x\n"
+    enter_block += "e2_x += (elem1 - k_x) ** 2\n"
+
+    exit_block = "total_y -= elem0 - k_y\n"
+    exit_block += "total_x -= elem1 - k_x\n"
+    exit_block += "total_xy -= (elem0 - k_y) * (elem1 - k_x)\n"
+    exit_block += "e1_y -= elem0 - k_y\n"
+    exit_block += "e2_y -= (elem0 - k_y) ** 2\n"
+    exit_block += "e1_x -= elem1 - k_x\n"
+    exit_block += "e2_x -= (elem1 - k_x) ** 2\n"
+
+    out_dtype = bodo.utils.typing.get_float_arr_type(bodo.float64)
+
+    return gen_windowed(
+        calculate_block,
+        out_dtype,
+        setup_block=setup_block,
+        enter_block=enter_block,
+        exit_block=exit_block,
+        num_args=2,
+    )

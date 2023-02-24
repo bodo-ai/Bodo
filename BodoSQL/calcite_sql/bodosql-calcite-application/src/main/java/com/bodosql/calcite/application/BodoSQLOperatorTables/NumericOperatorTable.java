@@ -297,6 +297,10 @@ public final class NumericOperatorTable implements SqlOperatorTable {
       SqlBasicAggFunction.create(
           "VARIANCE_SAMP", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.NUMERIC);
 
+  public static final SqlBasicAggFunction CORR =
+      SqlBasicAggFunction.create(
+          "CORR", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.NUMERIC_NUMERIC);
+
   public static final SqlAggFunction MEDIAN =
       SqlBasicAggFunction.create(
               "MEDIAN", SqlKind.MEDIAN, ReturnTypes.ARG0_NULLABLE_IF_EMPTY, OperandTypes.NUMERIC)
@@ -312,58 +316,58 @@ public final class NumericOperatorTable implements SqlOperatorTable {
 
   // TODO: Add support for `precision` and `scale` arguments
   public static final SqlFunction TO_NUMBER =
-    new SqlFunction(
-      "TO_NUMBER",
-      SqlKind.OTHER_FUNCTION,
-      ReturnTypes.BIGINT_NULLABLE,
-      null,
-      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
-      SqlFunctionCategory.NUMERIC);
+      new SqlFunction(
+          "TO_NUMBER",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BIGINT_NULLABLE,
+          null,
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction TO_NUMERIC =
-    new SqlFunction(
-      "TO_NUMERIC",
-      SqlKind.OTHER_FUNCTION,
-      ReturnTypes.BIGINT_NULLABLE,
-      null,
-      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
-      SqlFunctionCategory.NUMERIC);
+      new SqlFunction(
+          "TO_NUMERIC",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BIGINT_NULLABLE,
+          null,
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction TO_DECIMAL =
-    new SqlFunction(
-      "TO_DECIMAL",
-      SqlKind.OTHER_FUNCTION,
-      ReturnTypes.BIGINT_NULLABLE,
-      null,
-      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
-      SqlFunctionCategory.NUMERIC);
+      new SqlFunction(
+          "TO_DECIMAL",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BIGINT_NULLABLE,
+          null,
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction TRY_TO_NUMBER =
-    new SqlFunction(
-      "TRY_TO_NUMBER",
-      SqlKind.OTHER_FUNCTION,
-      ReturnTypes.BIGINT_NULLABLE,
-      null,
-      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
-      SqlFunctionCategory.NUMERIC);
-  
+      new SqlFunction(
+          "TRY_TO_NUMBER",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BIGINT_NULLABLE,
+          null,
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          SqlFunctionCategory.NUMERIC);
+
   public static final SqlFunction TRY_TO_NUMERIC =
-    new SqlFunction(
-      "TRY_TO_NUMERIC",
-      SqlKind.OTHER_FUNCTION,
-      ReturnTypes.BIGINT_NULLABLE,
-      null,
-      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
-      SqlFunctionCategory.NUMERIC);
-  
+      new SqlFunction(
+          "TRY_TO_NUMERIC",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BIGINT_NULLABLE,
+          null,
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          SqlFunctionCategory.NUMERIC);
+
   public static final SqlFunction TRY_TO_DECIMAL =
-    new SqlFunction(
-      "TRY_TO_DECIMAL",
-      SqlKind.OTHER_FUNCTION,
-      ReturnTypes.BIGINT_NULLABLE,
-      null,
-      OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
-      SqlFunctionCategory.NUMERIC);
+      new SqlFunction(
+          "TRY_TO_DECIMAL",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BIGINT_NULLABLE,
+          null,
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          SqlFunctionCategory.NUMERIC);
 
   private List<SqlOperator> functionList =
       Arrays.asList(
@@ -385,6 +389,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           HAVERSINE,
           LOG,
           LOG2,
+          CORR,
           MEDIAN,
           RATIO_TO_REPORT,
           POW,
