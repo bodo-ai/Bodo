@@ -235,6 +235,14 @@ def window_refsol(S, lower, upper, func, use_nans=False):
                     if len(elems) == 0 or S[i] == None or pd.isna(S[i]) or total == 0
                     else S[i] / total
                 )
+            elif func == "var_pop":
+                result = None if len(elems) == 0 else np.var(elems, ddof=0)
+            elif func == "var_samp":
+                result = None if len(elems) <= 1 else np.var(elems, ddof=1)
+            elif func == "stddev_pop":
+                result = None if len(elems) == 0 else np.std(elems, ddof=0)
+            elif func == "stddev_samp":
+                result = None if len(elems) <= 1 else np.std(elems, ddof=1)
         if use_nans:
             if result is None:
                 to_null.append(i)
@@ -473,7 +481,17 @@ def window_kernel_two_arg_data():
 )
 @pytest.mark.parametrize(
     "func",
-    ["median", "sum", "count", "avg", "ratio_to_report"],
+    [
+        "median",
+        "sum",
+        "count",
+        "avg",
+        "ratio_to_report",
+        "var_pop",
+        "var_samp",
+        "stddev_pop",
+        "stddev_samp",
+    ],
 )
 def test_windowed_kernels_numeric(
     func,
@@ -504,6 +522,26 @@ def test_windowed_kernels_numeric(
             bodo.libs.bodosql_array_kernels.windowed_ratio_to_report(S, lower, upper)
         )
 
+    def impl6(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_var_pop(S, lower, upper)
+        )
+
+    def impl7(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_var_samp(S, lower, upper)
+        )
+
+    def impl8(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_stddev_pop(S, lower, upper)
+        )
+
+    def impl9(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_stddev_samp(S, lower, upper)
+        )
+
     S = window_kernel_numeric_data[dataset]
 
     implementations = {
@@ -512,6 +550,10 @@ def test_windowed_kernels_numeric(
         "avg": impl3,
         "median": impl4,
         "ratio_to_report": impl5,
+        "var_pop": impl6,
+        "var_samp": impl7,
+        "stddev_pop": impl8,
+        "stddev_samp": impl9,
     }
     impl = implementations[func]
 
@@ -542,7 +584,9 @@ def test_windowed_kernels_numeric(
         pytest.param("uint8", 0, 0, id="uint8-current"),
         pytest.param("uint8", -1000, -700, id="uint8-too_small"),
         pytest.param("uint8", 3, -3, id="uint8-backward"),
-        pytest.param("float64_nonan", -1000, 0, id="float64_nonan-prefix"),
+        pytest.param(
+            "float64_nonan", -1000, 0, id="float64_nonan-prefix", marks=pytest.mark.slow
+        ),
         pytest.param(
             "float64_nonan",
             -1000,
@@ -557,7 +601,9 @@ def test_windowed_kernels_numeric(
             id="float64_nonan-too_large",
             marks=pytest.mark.slow,
         ),
-        pytest.param("float64_nan", -1000, 0, id="float64_nan-prefix"),
+        pytest.param(
+            "float64_nan", -1000, 0, id="float64_nan-prefix", marks=pytest.mark.slow
+        ),
         pytest.param(
             "float64_nan",
             -1000,

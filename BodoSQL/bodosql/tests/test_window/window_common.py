@@ -49,7 +49,7 @@ int64_col = pd.Series(
     [
         None
         if i % 7 == 4 or round(i * 8 / window_col_size) == 6
-        else ((-1) ** (round(math.tan(i)) % 2)) * (2 ** ((i**2) % 60)) - 1
+        else ((-1) ** (round(math.tan(i)) % 2)) * (2 ** ((i**2) % 20)) - 1
         for i in range(window_col_size)
     ],
     dtype=pd.Int64Dtype(),

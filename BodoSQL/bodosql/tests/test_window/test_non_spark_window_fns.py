@@ -4,6 +4,10 @@ import pytest
 from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
 
+from bodo.tests.test_bodosql_array_kernels.test_bodosql_window_agg_kernels import (
+    nullable_float_arr_maker,
+)
+
 
 @pytest.mark.tz_aware
 @pytest.mark.parametrize(
@@ -514,5 +518,61 @@ def test_mode(data_col, bounds, answer, memory_leak_check):
         check_names=False,
         sort_output=False,
         expected_output=answer,
+        only_jit_1DVar=True,
+    )
+
+
+
+
+
+def test_variance_stddev_nan(memory_leak_check):
+    """Tests the 4 major var/std functions on data with both NULL and NaN"""
+    params = [
+        ("VAR_POP", "UNBOUNDED PRECEDING", "CURRENT ROW"),
+        ("VAR_SAMP", "3 PRECEDING", "1 PRECEDING"),
+        ("STDDEV_POP", "CURRENT ROW", "UNBOUNDED FOLLOWING"),
+        ("STDDEV_SAMP", "1 PRECEDING", "1 FOLLOWING"),
+    ]
+    calculations = []
+    for func, frame_start, frame_end in params:
+        calculations.append(
+            f"{func}(D) OVER (PARTITION BY P ORDER BY O ROWS BETWEEN {frame_start} AND {frame_end})"
+        )
+    query = f"SELECT O, {', '.join(calculations)} FROM table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "P": [1] * 10,
+                "O": range(10),
+                "D": nullable_float_arr_maker(list(range(10)), [1, 9], [5, 6]),
+            }
+        )
+    }
+    expected_output = pd.DataFrame({
+        0: range(10),
+        1: nullable_float_arr_maker(
+            [0.0, 0.0, 1.0, 14/9, 35/16] + [0.0] * 5, 
+            [-1], 
+            [5, 6, 7, 8, 9]),
+        2: nullable_float_arr_maker(
+            [0.0] * 3 + [2.0, 0.5, 1.0] + [0.0] * 4, 
+            [0, 1, 2], 
+            [6, 7, 8, 9]),
+        3: nullable_float_arr_maker(
+            [0.0] * 7 + [0.5, 0.0, 0.0], 
+            [9], 
+            [0, 1, 2, 3, 4, 5, 6]),
+        4: nullable_float_arr_maker(
+            [0.0, 2**0.5, 0.5**0.5, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5**0.5, 0.0], 
+            [0, 9], 
+            [4, 5, 6, 7]),
+    })
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output, 
+        check_dtype=False,
+        check_names=False,
         only_jit_1DVar=True,
     )
