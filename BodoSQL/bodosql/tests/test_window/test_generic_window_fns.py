@@ -68,12 +68,12 @@ def test_two_arg_numeric_window_functions(
     """Tests covariance functions with various combinations of window frames to
     test correctness and fusion"""
     combinations = [
-        ("COVAR_SAMP", "U8", "I64"),
-        ("COVAR_SAMP", "U8", "I64"),
-        ("COVAR_SAMP", "F64", "W3"),
-        ("COVAR_POP", "F64", "W3"),
-        ("COVAR_POP", "F64", "U8"),
-        ("COVAR_POP", "W3", "U8"),
+        ("COVAR_SAMP", "W3", "I64"),
+        ("COVAR_SAMP", "U8", "F64"),
+        ("COVAR_POP", "W3", "I64"),
+        ("COVAR_POP", "U8", "F64"),
+        ("CORR", "W3", "I64"),
+        ("CORR", "U8", "F64"),
     ]
     selects = []
     for i in range(len(combinations)):

@@ -2729,6 +2729,13 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
     the window is empty.
 
 
+#### CORR
+-   `#!sql CORR(Y, X)`
+
+    Compute the correlation over the window of both inputs, or `NULL` if 
+    the window is empty. Equivalent to `#!sql COVAR(Y, X) / (STDDEV_POP(Y) * STDDEV_POP(X))`
+
+
 #### MAX
 -   `#!sql MAX(COLUMN_EXPRESSION)`
 
