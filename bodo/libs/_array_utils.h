@@ -118,17 +118,13 @@ concept NullSentinelDtype = ((DType == Bodo_CTypes::FLOAT32) ||
 
 inline void CheckEqualityArrayType(array_info* arr1, array_info* arr2) {
     if (arr1->arr_type != arr2->arr_type) {
-        Bodo_PyErr_SetString(
-            PyExc_RuntimeError,
+        throw std::runtime_error(
             "array_info passed to Cpp code have different arr_type");
-        return;
     }
     if (arr1->arr_type != bodo_array_type::STRING) {
         if (arr1->dtype != arr2->dtype) {
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
+            throw std::runtime_error(
                 "array_info passed to Cpp code have different dtype");
-            return;
         }
     }
 }
@@ -323,7 +319,7 @@ inline bool TestEqual(std::vector<array_info*> const& columns,
  * @param is_na_equal Are NA values considered equal
  * @return True if they are equal and false otherwise.
  */
-inline bool TestEqualJoin(table_info* table1, table_info* table2,
+inline bool TestEqualJoin(const table_info* table1, const table_info* table2,
                           size_t const& iRow1, size_t const& iRow2,
                           size_t const& n_key, bool is_na_equal) {
     // iteration over the list of key for the comparison.
@@ -648,7 +644,7 @@ uint8_t* bitwise_and_null_bitmasks(const std::vector<array_info*>& arrays,
  * @param os is the output stream
  * @param arr is the pointer.
  */
-void DEBUG_PrintColumn(std::ostream& os, array_info* arr);
+void DEBUG_PrintColumn(std::ostream& os, const array_info* arr);
 
 /** The DEBUG_PrintSetOfColumn is printing the contents of the table to
  * the output stream.
