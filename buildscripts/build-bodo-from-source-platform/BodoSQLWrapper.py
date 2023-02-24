@@ -16,7 +16,9 @@ bodo.set_verbose_level(2)
 
 
 @bodo.jit(cache=True)
-def run_sql_query(query_str, bc, pq_out_filename, sf_out_table_name, sf_write_conn):
+def run_sql_query(
+    query_str, bc, pq_out_filename, sf_out_table_name, sf_write_conn, print_output
+):
     """Boilerplate function to execute a query string.
 
     Args:
@@ -25,6 +27,7 @@ def run_sql_query(query_str, bc, pq_out_filename, sf_out_table_name, sf_write_co
         pq_out_filename (str): When provided (i.e. not ''), the query output is written to this location as a parquet file.
         sf_out_table_name (str): When provided (i.e. not ''), the query output is written to this table in Snowflake.
         sf_write_conn (str): Snowflake connection string. Required for Snowflake write.
+        print_output: Flag to print query result.
     """
 
     print(f"Started executing query:\n{query_str}")
@@ -32,8 +35,9 @@ def run_sql_query(query_str, bc, pq_out_filename, sf_out_table_name, sf_write_co
     output = bc.sql(query_str)
     print(f"Finished executing the query. It took {time.time() - t0} seconds.")
     print("Output Shape: ", output.shape)
-    print("Output:")
-    print(output)
+    if print_output:
+        print("Output:")
+        print(output)
     if pq_out_filename != "":
         print("Saving output as parquet dataset to: ", pq_out_filename)
         t0 = time.time()
@@ -104,6 +108,9 @@ def main(args):
             args.sf_out_table_loc.split(".") if args.sf_out_table_loc else ("", "", "")
         )
         sf_write_conn = f"snowflake://{bsql_catalog.username}:{bsql_catalog.password}@{bsql_catalog.account}/{db}/{schema}?{urlencode(params)}"
+    print_output = False
+    if args.print_output:
+        print_output = True
 
     # Run the query
     if args.trace:
@@ -115,6 +122,7 @@ def main(args):
         args.pq_out_filename if args.pq_out_filename else "",
         sf_out_table_name,
         sf_write_conn,
+        print_output,
     )
     bodo.barrier()
     if args.trace:
@@ -179,6 +187,13 @@ if __name__ == "__main__":
         "--generate_plan_filename",
         required=False,
         help="Optional: Write the SQL plan to this location.",
+    )
+    parser.add_argument(
+        "-u",
+        "--print_output",
+        required=False,
+        action='store_true',
+        help="Optional: If provided, the result will printed to std. Useful when testing and don't necessarily want to save results.",
     )
 
     args = parser.parse_args()
