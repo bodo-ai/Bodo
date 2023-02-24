@@ -214,6 +214,89 @@ def windowed_avg(S, lower_bound, upper_bound):
     )
 
 
+def windowed_var_pop(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def windowed_var_samp(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def windowed_stddev_pop(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def windowed_stddev_samp(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+# Algorithm based on: https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Computing_shifted_data
+def make_windowed_variance_stddev_function(name, method, ddof):
+    def impl(S, lower_bound, upper_bound):
+        verify_int_float_arg(S, name, S)
+        if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
+            raise_bodo_error("Input must be an array type")
+
+        constant_block = ""
+        if ddof > 0:
+            constant_block += f"if S.count() <= {ddof}:\n"
+            constant_block += "   constant_value = None\n"
+            constant_block += "else:\n"
+        constant_block += f"   constant_value = S.{method}(ddof={ddof})\n"
+
+        # Choose a value of k that will (ideally) minimize the magnitudes of the
+        # differences and squares to maximize the precision. The mean of
+        # non-NaN elements is chosen as this value.
+        setup_block = "k = S[~np.isnan(S)].mean()\n"
+        setup_block += "e1 = 0\n"
+        setup_block += "e2 = 0"
+
+        enter_block = "e1 += elem0 - k\n"
+        enter_block += "e2 += (elem0 - k) ** 2"
+
+        exit_block = "e1 -= elem0 - k\n"
+        exit_block += "e2 -= (elem0 - k) ** 2"
+
+        if ddof == 0:
+            calculate_block = f"if in_window == {ddof + 1}:\n"
+            calculate_block += f"   res[i] = 0.0\n"
+        else:
+            calculate_block = f"if in_window <= {ddof}:\n"
+            calculate_block += f"   res[i] = None\n"
+        calculation = f"((e2 - (e1 ** 2) / in_window) / (in_window - {ddof}))"
+        if method == "std":
+            calculation += " ** 0.5"
+        calculate_block += "else:\n"
+        calculate_block += f"   res[i] = {calculation}"
+
+        out_dtype = bodo.utils.typing.get_float_arr_type(bodo.float64)
+
+        return gen_windowed(
+            calculate_block,
+            out_dtype,
+            constant_block=constant_block,
+            setup_block=setup_block,
+            enter_block=enter_block,
+            exit_block=exit_block,
+        )
+
+    return impl
+
+
+def _instal_windowed_variance_stddev_fns():
+    overloads = [
+        (windowed_var_pop, "windowed_var_pop", "var", 0),
+        (windowed_var_samp, "windowed_var_samp", "var", 1),
+        (windowed_stddev_pop, "windowed_stddev_pop", "std", 0),
+        (windowed_stddev_samp, "windowed_stddev_samp", "std", 1),
+    ]
+    for func, name, method, ddof in overloads:
+        overload(func)(make_windowed_variance_stddev_function(name, method, ddof))
+
+
+_instal_windowed_variance_stddev_fns()
+
+
 @numba.generated_jit(nopython=True)
 def windowed_median(S, lower_bound, upper_bound):
     verify_int_float_arg(S, "windowed_median", S)
