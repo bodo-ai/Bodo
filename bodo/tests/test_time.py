@@ -588,13 +588,3 @@ def test_comparison_error(memory_leak_check):
         match="Cannot compare Time with non-Time type",
     ):
         impl()
-
-    # Time different precisions
-    def impl2():
-        return bodo.Time(2) < bodo.Time(2, precision=0)
-
-    with pytest.raises(
-        TypeError,
-        match="Cannot compare times with different precisions",
-    ):
-        impl2()

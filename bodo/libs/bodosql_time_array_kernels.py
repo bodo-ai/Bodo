@@ -10,43 +10,53 @@ from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import raise_bodo_error
 
 
-def make_time_to_time_util(name):
-    """Generate the util for `TIME` and `TO_TIME`"""
-
-    @numba.generated_jit(nopython=True)
-    def util(arr):  # pragma: no cover
-        """Kernel for `TO_TIME` and `TIME`"""
-
-        arg_names = ["arr"]
-        arg_types = [arr]
-        propagate_null = [True]
-
-        if is_valid_int_arg(arr):
-            scalar_text = "res[i] = bodo.Time(0, 0, arg0)"
-        elif (
-            is_valid_date_arg(arr)
-            or is_valid_tz_naive_datetime_arg(arr)
-            or is_valid_tz_aware_datetime_arg(arr)
-        ):
-            scalar_text = "res[i] = bodo.Time(arg0.hour, arg0.minute, arg0.second, arg0.nanosecond)"
-        elif is_valid_string_arg(arr):
-            scalar_text = "res[i] = bodo.time_from_str(arg0)"
-        else:
-            raise_bodo_error(
-                f"{name} argument must be an integer, datetime, string, or null"
-            )
-
-        out_dtype = bodo.TimeArrayType(9)
-
-        return gen_vectorized(
-            arg_names, arg_types, propagate_null, scalar_text, out_dtype
+@numba.generated_jit(nopython=True)
+def to_time(arr):
+    """Handles TIME/TO_TIME and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.to_time_util",
+            [
+                "arr",
+            ],
+            0,
         )
 
-    return util
+    def impl(arr):  # pragma: no cover
+        return to_time_util(arr)
+
+    return impl
 
 
-time_util = make_time_to_time_util("TIME")
-to_time_util = make_time_to_time_util("TO_TIME")
+@numba.generated_jit(nopython=True)
+def to_time_util(arr):  # pragma: no cover
+    """Kernel for `TO_TIME` and `TIME`"""
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+
+    if is_valid_int_arg(arr):
+        scalar_text = "res[i] = bodo.Time(0, 0, arg0)"
+    elif (
+        is_valid_date_arg(arr)
+        or is_valid_tz_naive_datetime_arg(arr)
+        or is_valid_tz_aware_datetime_arg(arr)
+    ):
+        scalar_text = (
+            "res[i] = bodo.Time(arg0.hour, arg0.minute, arg0.second, arg0.nanosecond)"
+        )
+    elif is_valid_string_arg(arr):
+        scalar_text = "res[i] = bodo.time_from_str(arg0)"
+    else:
+        raise_bodo_error(
+            f"TO_TIME/TIME argument must be an integer, datetime, string, integer or string column, or null"
+        )
+
+    out_dtype = bodo.TimeArrayType(9)
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)

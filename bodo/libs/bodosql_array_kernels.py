@@ -201,6 +201,7 @@ broadcasted_fixed_arg_functions = {
     "to_date",
     "to_double",
     "to_seconds",
+    "to_time",
     "to_timestamp",
     "to_number",
     "to_numeric",
@@ -223,6 +224,7 @@ broadcasted_fixed_arg_functions = {
     "width_bucket",
     "year_timestamp",
     "yearofweekiso",
+    "time_from_parts",
 }
 
 
