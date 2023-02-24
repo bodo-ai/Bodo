@@ -81,6 +81,7 @@ def check_query(
     use_table_format: Optional[bool] = None,
     use_dict_encoded_strings: Optional[bool] = None,
     is_out_distributed: bool = True,
+    check_typing_issues: bool = True,
 ):
     """
     Evaluates the correctness of a BodoSQL query by comparing SparkSQL
@@ -217,6 +218,8 @@ def check_query(
             If None, tests both formats if input arguments have string arrays.
         is_out_distributed: flag to whether gather the output before equality checking.
             Default True.
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
@@ -398,6 +401,7 @@ def check_query(
         use_table_format,
         use_dict_encoded_strings,
         is_out_distributed=is_out_distributed,
+        check_typing_issues=check_typing_issues,
     )
 
     result = dict()
@@ -439,6 +443,7 @@ def check_query_jit(
     use_table_format,
     use_dict_encoded_strings,
     is_out_distributed,
+    check_typing_issues,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -478,6 +483,9 @@ def check_query_jit(
         use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
             format for testing.
             If None, tests both formats if input arguments have string arrays.
+
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
     """
 
     saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
@@ -504,6 +512,7 @@ def check_query_jit(
                 expected_output,
                 optimize_calcite_plan,
                 convert_nullable_bodosql,
+                check_typing_issues,
             )
         if run_jit_1D:
             check_query_jit_1D(
@@ -517,6 +526,7 @@ def check_query_jit(
                 optimize_calcite_plan,
                 convert_nullable_bodosql,
                 is_out_distributed,
+                check_typing_issues,
             )
         if run_jit_1DVar:
             check_query_jit_1DVar(
@@ -530,6 +540,7 @@ def check_query_jit(
                 optimize_calcite_plan,
                 convert_nullable_bodosql,
                 is_out_distributed,
+                check_typing_issues,
             )
     finally:
         bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
@@ -553,6 +564,7 @@ def check_query_jit(
             use_table_format=False,
             use_dict_encoded_strings=use_dict_encoded_strings,
             is_out_distributed=is_out_distributed,
+            check_typing_issues=check_typing_issues,
         )
 
     # test dict-encoded string type if there is any string array in input
@@ -578,6 +590,7 @@ def check_query_jit(
             use_table_format=True if use_table_format is None else use_table_format,
             use_dict_encoded_strings=True,
             is_out_distributed=is_out_distributed,
+            check_typing_issues=check_typing_issues,
         )
 
 
@@ -645,6 +658,7 @@ def check_query_jit_seq(
     expected_output,
     optimize_calcite_plan,
     convert_nullable_bodosql,
+    check_typing_issues,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -671,9 +685,18 @@ def check_query_jit_seq(
         expected_output: The expected result of running the query.
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
+
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
     """
     bodosql_output = _run_jit_query(
-        query, dataframe_dict, named_params, InputDist.REP, optimize_calcite_plan, False
+        query,
+        dataframe_dict,
+        named_params,
+        InputDist.REP,
+        optimize_calcite_plan,
+        False,
+        check_typing_issues=check_typing_issues,
     )
     _check_query_equal(
         bodosql_output,
@@ -698,6 +721,7 @@ def check_query_jit_1D(
     optimize_calcite_plan,
     convert_nullable_bodosql,
     is_out_distributed,
+    check_typing_issues,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -724,6 +748,9 @@ def check_query_jit_1D(
         expected_output: The expected result of running the query.
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
+
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
     """
     bodosql_output = _run_jit_query(
         query,
@@ -732,6 +759,7 @@ def check_query_jit_1D(
         InputDist.OneD,
         optimize_calcite_plan,
         is_out_distributed,
+        check_typing_issues=check_typing_issues,
     )
     if is_out_distributed:
         bodosql_output = bodo.gatherv(bodosql_output)
@@ -758,6 +786,7 @@ def check_query_jit_1DVar(
     optimize_calcite_plan,
     convert_nullable_bodosql,
     is_out_distributed,
+    check_typing_issues,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -784,6 +813,9 @@ def check_query_jit_1DVar(
         expected_output: The expected result of running the query.
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
+
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
     """
     bodosql_output = _run_jit_query(
         query,
@@ -792,6 +824,7 @@ def check_query_jit_1DVar(
         InputDist.OneDVar,
         optimize_calcite_plan,
         is_out_distributed,
+        check_typing_issues=check_typing_issues,
     )
     if is_out_distributed:
         bodosql_output = bodo.gatherv(bodosql_output)
@@ -814,6 +847,7 @@ def _run_jit_query(
     input_dist,
     optimize_calcite_plan,
     is_out_distributed,
+    check_typing_issues,
 ):
     """
     Helper function to generate and run a JIT based BodoSQL query with a given
@@ -834,6 +868,9 @@ def _run_jit_query(
             1D or 1DVar. All input DataFrames are presumed to have the same
             distribution
 
+        check_typing_issues: raise an error if there is a typing issue for input args.
+        Runs bodo typing on arguments and converts warnings to errors.
+
     @returns:
         The Pandas dataframe (possibly distributed) from running the query.
     """
@@ -853,9 +890,19 @@ def _run_jit_query(
     args = [query]
     for i, key in enumerate(dataframe_dict.keys()):
         if input_dist == InputDist.OneD:
-            args.append(_get_dist_df(dataframe_dict[key]))
+            args.append(
+                _get_dist_df(
+                    dataframe_dict[key], check_typing_issues=check_typing_issues
+                )
+            )
         elif input_dist == InputDist.OneDVar:
-            args.append(_get_dist_df(dataframe_dict[key], var_length=True))
+            args.append(
+                _get_dist_df(
+                    dataframe_dict[key],
+                    var_length=True,
+                    check_typing_issues=check_typing_issues,
+                )
+            )
         else:
             args.append(dataframe_dict[key])
         func_text += f"            '{key}': e{i},\n"

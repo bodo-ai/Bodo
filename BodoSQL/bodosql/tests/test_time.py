@@ -71,46 +71,73 @@ to_time_in_outs = pytest.mark.parametrize(
     "input,output",
     [
         pytest.param(
-            "'01:23:45'",
-            bodo.Time(1, 23, 45, precision=9),
+            pd.Series(
+                [
+                    "11:23:45.999",
+                    "01:23:45",
+                    "01:23:45.67588",
+                    "01:00:02",
+                    "11:59:59",
+                    "01:23:45.67588833",
+                ]
+            ),
+            pd.Series(
+                [
+                    bodo.Time(11, 23, 45, 999, precision=9),
+                    bodo.Time(1, 23, 45, precision=9),
+                    bodo.Time(1, 23, 45, 675, 88, precision=9),
+                    bodo.Time(1, 0, 2, precision=9),
+                    bodo.Time(11, 59, 59, precision=9),
+                    bodo.Time(1, 23, 45, 675, 888, 33, precision=9),
+                ]
+            ),
             id="time_from_string",
         ),
         pytest.param(
-            100,
-            bodo.Time(0, 0, 100, precision=9),
+            pd.Series([100, 1000, 1, 4240, 450, 1200]),
+            pd.Series(
+                [
+                    bodo.Time(0, 0, 100, precision=9),
+                    bodo.Time(0, 0, 1000, precision=9),
+                    bodo.Time(0, 0, 1, precision=9),
+                    bodo.Time(1, 10, 40, precision=9),
+                    bodo.Time(0, 0, 450, precision=9),
+                    bodo.Time(0, 0, 1200, precision=9),
+                ]
+            ),
             id="time_from_int",
         ),
     ],
 )
 
 
-@pytest.mark.skip(
-    "To be fixed in a followup PR: https://bodo.atlassian.net/browse/BE-4402"
-)
 @to_time_fn_names
 @to_time_in_outs
 def test_time_to_time(fn_name, input, output, memory_leak_check):
-    query = f"select {fn_name}({input}) as A"
-    ctx = {}
-    expected_output = pd.DataFrame({"A": output}, index=np.arange(1))
-    check_query(query, ctx, None, expected_output=expected_output, run_dist_tests=False)
+    query = f"select {fn_name}(S) as A FROM table1"
+    ctx = {"table1": pd.DataFrame({"S": input})}
+    expected_output = pd.DataFrame({"A": output})
+    check_query(query, ctx, None, expected_output=expected_output)
 
 
-@pytest.mark.skip(
-    "To be fixed in a followup PR: https://bodo.atlassian.net/browse/BE-4402"
-)
 @to_time_fn_names
 @to_time_in_outs
 def test_time_to_time_case(fn_name, input, output, memory_leak_check):
-    query = f"select case when B is null then {fn_name}({input}) else {fn_name}({input}) end as A from table1"
-    ctx = {"table1": pd.DataFrame({"B": [None]})}
-    expected_output = pd.DataFrame({"A": output}, index=np.arange(1))
-    check_query(query, ctx, None, expected_output=expected_output, run_dist_tests=False)
+    query = f"select case when B is null then {fn_name}(S) else {fn_name}(S) end as A from table1"
+    ctx = {
+        "table1": pd.DataFrame({"B": [None, None, None, None, None, None], "S": input})
+    }
+    expected_output = pd.DataFrame({"A": output}, index=np.arange(6))
+    # check_typing_issues=False since column 'B' is intentionally empty
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_typing_issues=False,
+    )
 
 
-@pytest.mark.skip(
-    "To be fixed in a followup PR: https://bodo.atlassian.net/browse/BE-4402"
-)
 @to_time_fn_names
 @pytest.mark.parametrize(
     "input,output",
@@ -132,7 +159,7 @@ def test_time_to_time_vector(fn_name, input, output, memory_leak_check):
     query = "select to_time(A) as A from table1"
     ctx = {"table1": pd.DataFrame({"A": input})}
     expected_output = pd.DataFrame({"A": output}, index=np.arange(len(input)))
-    check_query(query, ctx, None, expected_output=expected_output, run_dist_tests=False)
+    check_query(query, ctx, None, expected_output=expected_output)
 
 
 time_from_parts_fn_names = pytest.mark.parametrize(
@@ -156,66 +183,68 @@ time_from_parts_in_outs = pytest.mark.parametrize(
 )
 
 
-@pytest.mark.skip("TODO in followup PR: https://bodo.atlassian.net/browse/BE-4397")
 @time_from_parts_fn_names
 @time_from_parts_in_outs
 @pytest.mark.parametrize("wrap_case", [True, False])
 def test_time_from_parts(fn_name, wrap_case, args, value, memory_leak_check):
+    ctx = {"table1": pd.DataFrame({"B": [None, "", "", None, ""]})}
+    default = bodo.Time(0, 0, 0)
     if wrap_case:
-        query = f"select case when B is null then {fn_name}({args}) else {fn_name}({args}) end as A from table1"
-        ctx = {"table1": pd.DataFrame({"B": [None]})}
+        query = f"select case when B is null then {fn_name}(0, 0, 0) else {fn_name}({args}) end as A from table1"
+        expected_output = pd.DataFrame({"A": [default, value, value, default, value]})
     else:
-        query = f"select {fn_name}({args}) as A"
-        ctx = {}
-
-    expected_output = pd.DataFrame({"A": value}, index=np.arange(1))
-    check_query(query, ctx, None, expected_output=expected_output, run_dist_tests=False)
-
-
-@pytest.mark.skip("TODO in followup PR: https://bodo.atlassian.net/browse/BE-4397")
-@pytest.mark.parametrize(
-    "args, value",
-    [
-        pytest.param(
-            "0, 100, 0",
-            bodo.Time(1, 40, 0, precision=9),
-            id="scalar_minute_outside_range",
-        ),
-        pytest.param(
-            "12, 0, 12345",
-            bodo.Time(15, 25, 45, precision=9),
-            id="scalar_second_outside_range",
-        ),
-        pytest.param(
-            "25, 30, 0",
-            bodo.Time(1, 30, 0, precision=9),
-            id="scalar_hour_outside_range",
-        ),
-        pytest.param(
-            "23, -1, 0",
-            bodo.Time(22, 59, 0, precision=9),
-            id="scalar_minute_negative",
-        ),
-        pytest.param(
-            "24, 0, 0",
-            bodo.Time(0, 0, 0, precision=9),
-            id="scalar_zero_overflow",
-        ),
-        pytest.param(
-            "0, 0, 0, -1",
-            bodo.Time(23, 59, 59, nanosecond=999999999, precision=9),
-            id="scalar_ns_negative",
-        ),
-    ],
-)
-def test_time_from_parts_outside_range(args, value, memory_leak_check):
-    query = f"select time_from_parts({args}) as A"
-    ctx = {}
-    expected_output = pd.DataFrame({"A": value}, index=np.arange(1))
-    check_query(query, ctx, None, expected_output=expected_output, run_dist_tests=False)
+        query = f"select {fn_name}({args}) as A from table1"
+        expected_output = pd.DataFrame({"A": [value] * 5})
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_typing_issues=False,
+        check_dtype=False,
+    )
 
 
-@pytest.mark.skip("TODO in followup PR: https://bodo.atlassian.net/browse/BE-4397")
+@pytest.fixture
+def time_from_parts_bounds_data():
+    hours = [0, 12, 25, 23, 24, 0, 0]
+    minutes = [100, 0, 30, -1, 0, 0, -3]
+    seconds = [0, 12345, 0, 0, 0, 0, 65]
+    nanoseconds = [0, 0, 0, 0, 0, -1, 0]
+    answer = [
+        bodo.Time(1, 40, 0, precision=9),
+        bodo.Time(15, 25, 45, precision=9),
+        bodo.Time(1, 30, 0, precision=9),
+        bodo.Time(22, 59, 0, precision=9),
+        bodo.Time(0, 0, 0, precision=9),
+        bodo.Time(23, 59, 59, nanosecond=999999999, precision=9),
+        bodo.Time(23, 58, 5, precision=9),
+    ]
+    return hours, minutes, seconds, nanoseconds, answer
+
+
+def test_time_from_parts_outside_range(time_from_parts_bounds_data, memory_leak_check):
+    hours, minutes, seconds, nanoseconds, answer = time_from_parts_bounds_data
+    query = f"select time_from_parts(H, M, S, N) as A from table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "H": hours,
+                "M": minutes,
+                "S": seconds,
+                "N": nanoseconds,
+            }
+        )
+    }
+    expected_output = pd.DataFrame({"A": answer})
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+    )
+
+
 @time_from_parts_fn_names
 @pytest.mark.parametrize(
     "args_a, args_b, args_c, args_d, value",
@@ -250,7 +279,7 @@ def test_time_from_parts_vector(
     query = "select time_from_parts(A, B, C, D) as A from table1"
     ctx = {"table1": pd.DataFrame({"A": args_a, "B": args_b, "C": args_c, "D": args_d})}
     expected_output = pd.DataFrame({"A": value}, index=np.arange(len(args_a)))
-    check_query(query, ctx, None, expected_output=expected_output, run_dist_tests=False)
+    check_query(query, ctx, None, expected_output=expected_output)
 
 
 @pytest.mark.parametrize(

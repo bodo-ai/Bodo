@@ -244,11 +244,7 @@ public class DatetimeFnCodeGen {
   public static RexNodeVisitorInfo generateToTimeCode(
       SqlTypeName arg1Type, RexNodeVisitorInfo arg1Info, String opName) {
     String outputExpression =
-        "bodo.libs.bodosql_array_kernels."
-            + opName.toLowerCase()
-            + "_util("
-            + arg1Info.getExprCode()
-            + ")";
+        "bodo.libs.bodosql_array_kernels.to_time(" + arg1Info.getExprCode() + ")";
     return new RexNodeVisitorInfo(outputExpression);
   }
 
