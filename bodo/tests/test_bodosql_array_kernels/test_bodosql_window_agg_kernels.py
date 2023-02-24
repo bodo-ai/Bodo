@@ -12,7 +12,7 @@ import bodo
 from bodo.tests.utils import check_func
 
 
-@bodo.jit
+@bodo.jit(distributed=False)
 def nullable_float_arr_maker(L, to_null, to_nan):
     """
     Utility funciton for helping test cases to generate nullable floating
@@ -194,6 +194,7 @@ def test_change_event(args):
         # For now, only works sequentially because it can only be used inside
         # of a Window function with a partition
         only_seq=True,
+        is_out_distributed=False,
     )
 
 
@@ -568,6 +569,7 @@ def test_windowed_kernels_numeric(
         # For now, only works sequentially because it can only be used inside
         # of a Window function with a partition
         only_seq=True,
+        is_out_distributed=False,
     )
 
 
@@ -651,7 +653,8 @@ def test_windowed_mode(
         return pd.Series(bodo.libs.bodosql_array_kernels.windowed_mode(S, lower, upper))
 
     if bodo.get_size() > 1:
-        pytest.skip("These kernels are only sequential")
+        # These kernels are only sequential
+        return
 
     data = window_kernel_all_types_data[dataset]
 
@@ -720,6 +723,7 @@ def test_windowed_mode(
         # For now, only works sequentially because it can only be used inside
         # of a Window function with a partition
         only_seq=True,
+        is_out_distributed=False,
     )
 
 
@@ -813,5 +817,6 @@ def test_windowed_kernels_two_arg(
         # For now, only works sequentially because it can only be used inside
         # of a Window function with a partition
         only_seq=True,
+        is_out_distributed=False,
         atol=1e-4,
     )
