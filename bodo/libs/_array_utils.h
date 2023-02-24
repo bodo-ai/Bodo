@@ -11,7 +11,8 @@
 #undef USE_TSL_ROBIN
 #undef USE_TSL_SPARSE
 #undef USE_TSL_HOPSCOTCH
-#define USE_ROBIN_HOOD_FLAT
+#define USE_ANKERL
+#undef USE_ROBIN_HOOD_FLAT
 #undef USE_ROBIN_HOOD_NODE
 
 #ifdef USE_STD
@@ -48,6 +49,13 @@
 #include <include/tsl/hopscotch_set.h>
 #define UNORD_MAP_CONTAINER tsl::hopscotch_map
 #define UNORD_SET_CONTAINER tsl::hopscotch_set
+#endif
+
+#ifdef USE_ANKERL
+#define UNORDERED_MAP_MAX_LOAD_FACTOR 0.8
+#include "ankerl/unordered_dense.h"
+#define UNORD_MAP_CONTAINER ankerl::unordered_dense::map
+#define UNORD_SET_CONTAINER ankerl::unordered_dense::set
 #endif
 
 #ifdef USE_ROBIN_HOOD_FLAT
