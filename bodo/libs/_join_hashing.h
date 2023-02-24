@@ -161,7 +161,7 @@ struct SecondLevelKeyEqualHashJoinTable {
                                          short_data_key_cols,
                                          short_data_key_n_cols);
     }
-    table_info* short_table;
+    const table_info* short_table;
     uint64_t* short_data_key_cols;
     uint64_t short_data_key_n_cols;
 };

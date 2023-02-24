@@ -1383,7 +1383,8 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
 #ifndef GROUPBY_INFO_IMPL_1_KEY
 #define GROUPBY_INFO_IMPL_1_KEY(ARRAY_TYPE, DTYPE)                        \
     if (arr_type == ARRAY_TYPE && dtype == DTYPE) {                       \
-        using KeyType = KeysEqualComparatorOneKey<ARRAY_TYPE, DTYPE>;     \
+        using KeyType = KeysEqualComparatorOneKey<ARRAY_TYPE, DTYPE,      \
+                                                  /*is_na_equal=*/true>;  \
         KeyType equal_fct{arr};                                           \
         using rh_flat_t =                                                 \
             UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable, \
@@ -1419,8 +1420,9 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
 #define GROUPBY_INFO_IMPL_2_KEYS(ARRAY_TYPE1, DTYPE1, ARRAY_TYPE2, DTYPE2) \
     if (arr_type1 == ARRAY_TYPE1 && dtype1 == DTYPE1 &&                    \
         arr_type2 == ARRAY_TYPE2 && dtype2 == DTYPE2) {                    \
-        using KeyType = KeysEqualComparatorTwoKeys<ARRAY_TYPE1, DTYPE1,    \
-                                                   ARRAY_TYPE2, DTYPE2>;   \
+        using KeyType =                                                    \
+            KeysEqualComparatorTwoKeys<ARRAY_TYPE1, DTYPE1, ARRAY_TYPE2,   \
+                                       DTYPE2, /*is_na_equal=*/true>;      \
         KeyType equal_fct{arr1, arr2};                                     \
         using rh_flat_t =                                                  \
             UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable,  \
@@ -1486,7 +1488,7 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
     }
 
     // general implementation with generic key comparator class
-    KeysEqualComparator equal_fct{n_keys, table};
+    KeysEqualComparator equal_fct{n_keys, table, /*is_na_equal=*/true};
 
     using rh_flat_t =
         UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable,
