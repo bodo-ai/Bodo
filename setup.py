@@ -125,6 +125,8 @@ else:
 
 if development_mode:
     eca.append("-Werror")
+    # avoid GCC errors for using int64 in allocations
+    eca.append("-Wno-alloc-size-larger-than")
 
 MPI_LIBS = ["mpi"]
 H5_CPP_FLAGS = []
