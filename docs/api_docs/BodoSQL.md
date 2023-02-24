@@ -2665,6 +2665,13 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
     `#!sql RANGE BETWEEN` is not currently supported.
     Currently, BodoSQL supports the following Window functions:
 
+!!!note
+    If a window frame contains `NaN` values, the output may diverge from Snowflake's
+    behavior. When a `NaN` value enters a window, any window function that combines
+    the results with arithmetic (e.g. `SUM`, `AVG`, `VARIANCE`, etc.) will output
+    `NaN` until the `NaN` value has exited the window.
+
+
 #### COUNT
 -   `#!sql COUNT(*)`
 

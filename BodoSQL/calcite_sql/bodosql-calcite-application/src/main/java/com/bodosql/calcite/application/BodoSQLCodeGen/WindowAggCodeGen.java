@@ -69,6 +69,14 @@ public class WindowAggCodeGen {
     windowOptimizedKernels.add("MEDIAN");
     windowOptimizedKernels.add("MODE");
     windowOptimizedKernels.add("RATIO_TO_REPORT");
+    windowOptimizedKernels.add("VARIANCE");
+    windowOptimizedKernels.add("VARIANCE_SAMP");
+    windowOptimizedKernels.add("VARIANCE_POP");
+    windowOptimizedKernels.add("VAR_SAMP");
+    windowOptimizedKernels.add("VAR_POP");
+    windowOptimizedKernels.add("STDDEV");
+    windowOptimizedKernels.add("STDDEV_SAMP");
+    windowOptimizedKernels.add("STDDEV_POP");
 
     // Window functions that have a two-argument sliding-window kernel
     twoArgWindowOptimizedKernels.add("COVAR_SAMP");
@@ -85,19 +93,19 @@ public class WindowAggCodeGen {
     windowCodeExpressions.put("COVAR_SAMP", "windowed_covar_samp");
     windowCodeExpressions.put("COVAR_POP", "windowed_covar_pop");
     windowCodeExpressions.put("CONDITIONAL_CHANGE_EVENT", "change_event");
+    windowCodeExpressions.put("STDDEV", "windowed_stddev_samp");
+    windowCodeExpressions.put("STDDEV_SAMP", "windowed_stddev_samp");
+    windowCodeExpressions.put("STDDEV_POP", "windowed_stddev_pop");
+    windowCodeExpressions.put("VARIANCE", "windowed_var_samp");
+    windowCodeExpressions.put("VARIANCE_SAMP", "windowed_var_samp");
+    windowCodeExpressions.put("VAR_SAMP", "windowed_var_samp");
+    windowCodeExpressions.put("VARIANCE_POP", "windowed_var_pop");
+    windowCodeExpressions.put("VAR_POP", "windowed_var_pop");
 
     // Window functions that are still implemented via taking slices in a loop
     // and calling a Pandas method on the result
     windowMethods.put("MIN", ".min()");
     windowMethods.put("MAX", ".max()");
-    windowMethods.put("STDDEV", ".std()");
-    windowMethods.put("STDDEV_SAMP", ".std()");
-    windowMethods.put("STDDEV_POP", ".std(ddof=0)");
-    windowMethods.put("VARIANCE", ".var()");
-    windowMethods.put("VARIANCE_SAMP", ".var()");
-    windowMethods.put("VAR_SAMP", ".var()");
-    windowMethods.put("VARIANCE_POP", ".var(ddof=0)");
-    windowMethods.put("VAR_POP", ".var(ddof=0)");
     windowMethods.put("COUNT_IF", ".sum()");
   }
 
@@ -419,14 +427,6 @@ public class WindowAggCodeGen {
           // at the end.
         case "MIN":
         case "MAX":
-        case "STDDEV":
-        case "STDDEV_POP":
-        case "STDDEV_SAMP":
-        case "VARIANCE":
-        case "VARIANCE_SAMP":
-        case "VARIANCE_POP":
-        case "VAR_SAMP":
-        case "VAR_POP":
         case "COUNT_IF":
           needsToRevertSort |= hasOrder;
           loopAggNames.add(aggName);

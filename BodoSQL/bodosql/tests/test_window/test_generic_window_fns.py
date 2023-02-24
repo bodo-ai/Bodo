@@ -11,14 +11,15 @@ from bodosql.tests.test_window.window_common import (  # noqa
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 
+
 @pytest.mark.parametrize(
     "funcs",
     [
-        pytest.param(["SUM", "AVG"], id="sum-avg"),
-        pytest.param(["STDDEV", "STDDEV_POP", "STDDEV_SAMP"], id="stddev-variants"),
+        pytest.param(["SUM", "AVG"], id="sum_avg"),
+        pytest.param(["STDDEV", "STDDEV_POP", "STDDEV_SAMP"], id="stddev_variants"),
         pytest.param(
             ["VARIANCE", "VARIANCE_POP", "VAR_SAMP", "VARIANCE_SAMP", "VAR_POP"],
-            id="variance-variants",
+            id="variance_variants",
         ),
     ],
 )
