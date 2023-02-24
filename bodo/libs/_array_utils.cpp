@@ -1808,7 +1808,7 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
 
 #undef DEBUG_DEBUG  // Yes, it is a concept
 
-std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
+std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
     size_t nRow = arr->length;
     std::vector<std::string> ListStr(nRow);
     std::string strOut;
@@ -2072,7 +2072,7 @@ void DEBUG_PrintRefct(std::ostream& os,
     }
 }
 
-void DEBUG_PrintColumn(std::ostream& os, array_info* arr) {
+void DEBUG_PrintColumn(std::ostream& os, const array_info* arr) {
     int n_rows = arr->length;
     os << "ARRAY_INFO: Column n=" << n_rows
        << " arr=" << GetArrType_as_string(arr->arr_type)

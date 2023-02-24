@@ -180,9 +180,9 @@ create_non_equi_func_sets(table_info* left_table, table_info* right_table,
  * the same keys.
  * @param build_table_rows THe number of rows in the build table.
  */
+template <typename Map>
 void insert_build_table_equi_join_some_non_equality(
-    UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
-                        joinHashFcts::KeyEqualHashJoinTable>* key_rows_map,
+    Map* key_rows_map,
     std::vector<UNORD_MAP_CONTAINER<
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
         joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
@@ -234,10 +234,10 @@ void insert_build_table_equi_join_some_non_equality(
  * compress rows with common keys.
  * @param build_table_rows The number of rows in the build table.
  */
+template <typename Map>
 void insert_build_table_equi_join_all_equality(
-    UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
-                        joinHashFcts::KeyEqualHashJoinTable>* key_rows_map,
-    std::vector<std::vector<size_t>*>* groups, size_t build_table_rows) {
+    Map* key_rows_map, std::vector<std::vector<size_t>*>* groups,
+    size_t build_table_rows) {
     for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
         // Check if the group already exists, if it doesn't this
         // will insert a value.
@@ -815,10 +815,9 @@ struct handle_probe_table_miss<true, true> {
  * @param[in] cond_func The non-equality function checked for correctness.
  */
 template <bool build_table_outer, bool probe_table_outer,
-          bool is_outer_broadcast>
+          bool is_outer_broadcast, typename Map>
 void insert_probe_table_equi_join_some_non_equality(
-    UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
-                        joinHashFcts::KeyEqualHashJoinTable>* key_rows_map,
+    Map* key_rows_map,
     std::vector<UNORD_MAP_CONTAINER<
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
         joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
@@ -917,13 +916,12 @@ void insert_probe_table_equi_join_some_non_equality(
  * the probe table.
  */
 template <bool build_table_outer, bool probe_table_outer,
-          bool is_outer_broadcast>
+          bool is_outer_broadcast, typename Map>
 void insert_probe_table_equi_join_all_equality(
-    UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
-                        joinHashFcts::KeyEqualHashJoinTable>* key_rows_map,
-    std::vector<std::vector<size_t>*>* groups, size_t build_table_rows,
-    size_t probe_table_rows, std::vector<uint8_t>& V_build_map,
-    std::vector<uint8_t>& V_probe_map, std::vector<int64_t>& build_write_idxs,
+    Map* key_rows_map, std::vector<std::vector<size_t>*>* groups,
+    size_t build_table_rows, size_t probe_table_rows,
+    std::vector<uint8_t>& V_build_map, std::vector<uint8_t>& V_probe_map,
+    std::vector<int64_t>& build_write_idxs,
     std::vector<int64_t>& probe_write_idxs) {
     for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
         size_t i_probe_shift = i_probe + build_table_rows;
@@ -937,7 +935,7 @@ void insert_probe_table_equi_join_all_equality(
         } else {
             // If the build table entry is present in output as
             // well, then we need to keep track whether they are
-            // used or not by the long table.
+            // used or not by the probe table.
             std::vector<size_t>* group = (*groups)[iter->second - 1];
             size_t pos = iter->second - 1;
             handle_build_table_hit<build_table_outer>::apply(V_build_map, pos);
@@ -1211,6 +1209,231 @@ void generate_col_last_use_info(
     }
 }
 
+/**
+ * @brief Helper function for the compute tuple step of hash join.
+ *
+ * All arguments are passed from the main hash join function.
+ *
+ */
+template <typename Map>
+void hash_join_compute_tuples_helper(
+    /*const*/ table_info* work_left_table,
+    /*const*/ table_info* work_right_table, const size_t n_tot_left,
+    const size_t n_tot_right, const bool uses_cond_func,
+    const bool build_is_left, uint64_t* cond_func_left_columns,
+    const uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    const uint64_t cond_func_right_column_len, const bool parallel_trace,
+    const size_t build_table_rows, const table_info* build_table,
+    const size_t probe_table_rows, const bool probe_miss_needs_reduction,
+    Map* key_rows_map, std::vector<std::vector<size_t>*>* groups,
+    const bool build_table_outer, const bool probe_table_outer,
+    cond_expr_fn_t& cond_func, tracing::Event& ev_alloc_map,
+    std::vector<UNORD_MAP_CONTAINER<
+        size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
+        joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
+        second_level_hash_maps,
+    uint32_t*& build_nonequal_key_hashes, std::vector<uint8_t>& V_build_map,
+    std::vector<int64_t>& build_write_idxs, std::vector<uint8_t>& V_probe_map,
+    std::vector<int64_t>& probe_write_idxs) {
+    // Create a data structure containing the columns to match the format
+    // expected by cond_func. We create two pairs of vectors, one with
+    // the array_infos, which handle general types, and one with just data1
+    // as a fast path for accessing numeric data. These include both keys
+    // and data columns as either can be used in the cond_func.
+    std::vector<array_info*>& left_table_infos = work_left_table->columns;
+    std::vector<array_info*>& right_table_infos = work_right_table->columns;
+    std::vector<void*> col_ptrs_left(n_tot_left);
+    std::vector<void*> col_ptrs_right(n_tot_right);
+    // Vectors for null bitmaps for fast null checking from the cfunc
+    std::vector<void*> null_bitmap_left(n_tot_left);
+    std::vector<void*> null_bitmap_right(n_tot_right);
+    for (size_t i = 0; i < n_tot_left; i++) {
+        col_ptrs_left[i] =
+            static_cast<void*>(work_left_table->columns[i]->data1);
+        null_bitmap_left[i] =
+            static_cast<void*>(work_left_table->columns[i]->null_bitmask);
+    }
+    for (size_t i = 0; i < n_tot_right; i++) {
+        col_ptrs_right[i] =
+            static_cast<void*>(work_right_table->columns[i]->data1);
+        null_bitmap_right[i] =
+            static_cast<void*>(work_right_table->columns[i]->null_bitmask);
+    }
+
+    // Keep track of which table to use to populate the second level hash
+    // table if 'uses_cond_func'
+    uint64_t* build_data_key_cols = nullptr;
+    uint64_t build_data_key_n_cols = 0;
+
+    if (uses_cond_func) {
+        if (build_is_left) {
+            build_data_key_cols = cond_func_left_columns;
+            build_data_key_n_cols = cond_func_left_column_len;
+        } else {
+            build_data_key_cols = cond_func_right_columns;
+            build_data_key_n_cols = cond_func_right_column_len;
+        }
+        build_nonequal_key_hashes = hash_data_cols_table(
+            build_table->columns, build_data_key_cols, build_data_key_n_cols,
+            SEED_HASH_JOIN, parallel_trace);
+        // [BE-1078]: Should this use statistics to influence how much we
+        // reserve?
+        second_level_hash_maps->reserve(build_table_rows);
+    }
+    joinHashFcts::SecondLevelHashHashJoinTable second_level_hash_fct{
+        build_nonequal_key_hashes};
+    joinHashFcts::SecondLevelKeyEqualHashJoinTable second_level_equal_fct{
+        build_table, build_data_key_cols, build_data_key_n_cols};
+
+    // [BE-1078]: how much should we reserve?
+    build_write_idxs.reserve(probe_table_rows);
+    probe_write_idxs.reserve(probe_table_rows);
+    ev_alloc_map.finalize();
+
+    // If we will need to perform a reduction on probe table matches,
+    // specify an allocation size for the vector.
+    size_t n_bytes_probe = 0;
+    if (probe_miss_needs_reduction) {
+        n_bytes_probe = (probe_table_rows + 7) >> 3;
+    }
+    V_probe_map.resize(n_bytes_probe, 255);
+
+    tracing::Event ev_groups("calc_groups", parallel_trace);
+    // Loop over the build table.
+    if (uses_cond_func) {
+        insert_build_table_equi_join_some_non_equality(
+            key_rows_map, second_level_hash_maps, second_level_hash_fct,
+            second_level_equal_fct, groups, build_table_rows);
+    } else {
+        insert_build_table_equi_join_all_equality(key_rows_map, groups,
+                                                  build_table_rows);
+    }
+    ev_groups.finalize();
+
+    // Resize V_build_map based on the groups calculation.
+    size_t n_bytes_build = 0;
+    if (build_table_outer) {
+        n_bytes_build = (groups->size() + 7) >> 3;
+    }
+    V_build_map.resize(n_bytes_build, 0);
+
+    // We now iterate over all the entries of the long table in order to
+    // get the entries in the build_write_idxs and probe_write_idxs. We add
+    // different paths to allow templated code since the miss handling depends
+    // on the type of join or if we have an outer join.
+    if (uses_cond_func) {
+        if (build_table_outer) {
+            if (probe_table_outer) {
+                if (probe_miss_needs_reduction) {
+                    insert_probe_table_equi_join_some_non_equality<true, true,
+                                                                   true, Map>(
+                        key_rows_map, second_level_hash_maps, groups,
+                        build_table_rows, probe_table_rows, V_build_map,
+                        V_probe_map, build_write_idxs, probe_write_idxs,
+                        build_is_left, left_table_infos, right_table_infos,
+                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                        null_bitmap_right, cond_func);
+                } else {
+                    insert_probe_table_equi_join_some_non_equality<true, true,
+                                                                   false, Map>(
+                        key_rows_map, second_level_hash_maps, groups,
+                        build_table_rows, probe_table_rows, V_build_map,
+                        V_probe_map, build_write_idxs, probe_write_idxs,
+                        build_is_left, left_table_infos, right_table_infos,
+                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                        null_bitmap_right, cond_func);
+                }
+            } else {
+                insert_probe_table_equi_join_some_non_equality<true, false,
+                                                               false, Map>(
+                    key_rows_map, second_level_hash_maps, groups,
+                    build_table_rows, probe_table_rows, V_build_map,
+                    V_probe_map, build_write_idxs, probe_write_idxs,
+                    build_is_left, left_table_infos, right_table_infos,
+                    col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                    null_bitmap_right, cond_func);
+            }
+        } else {
+            if (probe_table_outer) {
+                if (probe_miss_needs_reduction) {
+                    insert_probe_table_equi_join_some_non_equality<false, true,
+                                                                   true, Map>(
+                        key_rows_map, second_level_hash_maps, groups,
+                        build_table_rows, probe_table_rows, V_build_map,
+                        V_probe_map, build_write_idxs, probe_write_idxs,
+                        build_is_left, left_table_infos, right_table_infos,
+                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                        null_bitmap_right, cond_func);
+                } else {
+                    insert_probe_table_equi_join_some_non_equality<false, true,
+                                                                   false, Map>(
+                        key_rows_map, second_level_hash_maps, groups,
+                        build_table_rows, probe_table_rows, V_build_map,
+                        V_probe_map, build_write_idxs, probe_write_idxs,
+                        build_is_left, left_table_infos, right_table_infos,
+                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                        null_bitmap_right, cond_func);
+                }
+            } else {
+                insert_probe_table_equi_join_some_non_equality<false, false,
+                                                               false, Map>(
+                    key_rows_map, second_level_hash_maps, groups,
+                    build_table_rows, probe_table_rows, V_build_map,
+                    V_probe_map, build_write_idxs, probe_write_idxs,
+                    build_is_left, left_table_infos, right_table_infos,
+                    col_ptrs_left, col_ptrs_right, null_bitmap_left,
+                    null_bitmap_right, cond_func);
+            }
+        }
+    } else {
+        if (build_table_outer) {
+            if (probe_table_outer) {
+                if (probe_miss_needs_reduction) {
+                    insert_probe_table_equi_join_all_equality<true, true, true,
+                                                              Map>(
+                        key_rows_map, groups, build_table_rows,
+                        probe_table_rows, V_build_map, V_probe_map,
+                        build_write_idxs, probe_write_idxs);
+                } else {
+                    insert_probe_table_equi_join_all_equality<true, true, false,
+                                                              Map>(
+                        key_rows_map, groups, build_table_rows,
+                        probe_table_rows, V_build_map, V_probe_map,
+                        build_write_idxs, probe_write_idxs);
+                }
+            } else {
+                insert_probe_table_equi_join_all_equality<true, false, false,
+                                                          Map>(
+                    key_rows_map, groups, build_table_rows, probe_table_rows,
+                    V_build_map, V_probe_map, build_write_idxs,
+                    probe_write_idxs);
+            }
+        } else {
+            if (probe_table_outer) {
+                if (probe_miss_needs_reduction) {
+                    insert_probe_table_equi_join_all_equality<false, true, true,
+                                                              Map>(
+                        key_rows_map, groups, build_table_rows,
+                        probe_table_rows, V_build_map, V_probe_map,
+                        build_write_idxs, probe_write_idxs);
+                } else {
+                    insert_probe_table_equi_join_all_equality<false, true,
+                                                              false, Map>(
+                        key_rows_map, groups, build_table_rows,
+                        probe_table_rows, V_build_map, V_probe_map,
+                        build_write_idxs, probe_write_idxs);
+                }
+            } else {
+                insert_probe_table_equi_join_all_equality<false, false, false,
+                                                          Map>(
+                    key_rows_map, groups, build_table_rows, probe_table_rows,
+                    V_build_map, V_probe_map, build_write_idxs,
+                    probe_write_idxs);
+            }
+        }
+    }
+}
+
 // An overview of the join design can be found on Confluence:
 // https://bodo.atlassian.net/wiki/spaces/B/pages/821624833/Join+Code+Design
 
@@ -1249,6 +1472,8 @@ table_info* hash_join_table_inner(
     size_t n_tot_left = n_key + n_data_left;
     size_t n_tot_right = n_key + n_data_right;
     // Check that the input is valid.
+    // This ensures that the array type and dtype of key columns are the same
+    // in both tables. This is an assumption we will use later in the code.
     validate_equi_join_input(left_table, right_table, n_key, extra_data_col);
 
     if (ev.is_tracing()) {
@@ -1381,11 +1606,34 @@ table_info* hash_join_table_inner(
     tracing::Event ev_alloc_map("alloc_hashmap", parallel_trace);
     joinHashFcts::HashHashJoinTable hash_fct{
         build_table_rows, build_table_hashes, probe_table_hashes};
-    joinHashFcts::KeyEqualHashJoinTable equal_fct{
-        build_table_rows, n_key, build_table, probe_table, is_na_equal};
 
-    // The key_rows_map contains the identical keys with the corresponding rows.
-    // We address the entry by the row index. We store all the rows which
+    std::vector<std::vector<size_t>*>* groups = nullptr;
+    uint32_t* build_nonequal_key_hashes = nullptr;
+    std::vector<UNORD_MAP_CONTAINER<
+        size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
+        joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
+        second_level_hash_maps = nullptr;
+
+    // build_write_idxs and probe_write_idxs are used for the output.
+    // It precises the index used for the writing of the output table
+    // from the build and probe table.
+    std::vector<int64_t> build_write_idxs, probe_write_idxs;
+
+    // Allocate the vector for any build misses.
+    // Start off as empty since it will be resized after the groups are
+    // calculated.
+    std::vector<uint8_t> V_build_map(0);
+
+    // V_probe_map and V_build_map takes similar roles.
+    // They indicate if an entry in the build or probe table
+    // has been matched to the other side.
+    // This is needed only if said table is replicated
+    // (i.e probe_miss_needs_reduction/build_miss_needs_reduction).
+    // Start off as empty, since it will be re-sized later.
+    std::vector<uint8_t> V_probe_map(0);
+
+    // The 'key_rows_map' contains the identical keys with the corresponding
+    // rows. We address the entry by the row index. We store all the rows which
     // are identical in a "group". The hashmap stores the group number
     // and the groups are stored in the `groups` std::vector.
     //
@@ -1401,241 +1649,256 @@ table_info* hash_join_table_inner(
     // StoreHash=true speeds up join code overall in TPC-H.
     // If we also need to do build_table_outer then we store an index in the
     // first position of the std::vector
-    UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
-                        joinHashFcts::KeyEqualHashJoinTable>* key_rows_map =
-        new UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
-                                joinHashFcts::KeyEqualHashJoinTable>(
-            {}, hash_fct, equal_fct);
-    // reserving space is very important to avoid expensive reallocations
-    // (at the cost of using more memory)
-    // [BE-1078]: Should this use statistics to influence how much we
-    // reserve?
-    key_rows_map->reserve(build_table_rows);
-    std::vector<std::vector<size_t>*>* groups =
-        new std::vector<std::vector<size_t>*>();
-    groups->reserve(build_table_rows);
 
-    // Create a data structure containing the columns to match the format
-    // expected by cond_func. We create two pairs of vectors, one with
-    // the array_infos, which handle general types, and one with just data1
-    // as a fast path for accessing numeric data. These include both keys
-    // and data columns as either can be used in the cond_func.
-    std::vector<array_info*>& left_table_infos = work_left_table->columns;
-    std::vector<array_info*>& right_table_infos = work_right_table->columns;
-    std::vector<void*> col_ptrs_left(n_tot_left);
-    std::vector<void*> col_ptrs_right(n_tot_right);
-    // Vectors for null bitmaps for fast null checking from the cfunc
-    std::vector<void*> null_bitmap_left(n_tot_left);
-    std::vector<void*> null_bitmap_right(n_tot_right);
-    for (size_t i = 0; i < n_tot_left; i++) {
-        col_ptrs_left[i] =
-            static_cast<void*>(work_left_table->columns[i]->data1);
-        null_bitmap_left[i] =
-            static_cast<void*>(work_left_table->columns[i]->null_bitmask);
+    // Defining the common part of EQ_JOIN_IMPL_ELSE_CASE, EQ_JOIN_1_KEY_IMPL
+    // and EQ_JOIN_2_KEYS_IMPL macros to avoid repetition.
+#ifndef EQ_JOIN_IMPL_COMMON
+#define EQ_JOIN_IMPL_COMMON(JOIN_KEY_TYPE)                                     \
+    using unordered_map_t =                                                    \
+        UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,   \
+                            JOIN_KEY_TYPE>;                                    \
+    unordered_map_t* key_rows_map = new UNORD_MAP_CONTAINER<                   \
+        size_t, size_t, joinHashFcts::HashHashJoinTable, JOIN_KEY_TYPE>(       \
+        {}, hash_fct, equal_fct);                                              \
+    /* reserving space is very important to avoid expensive reallocations      \
+     * (at the cost of using more memory)                                      \
+     * [BE-1078]: Should this use statistics to influence how much we          \
+     * reserve?                                                                \
+     */                                                                        \
+    key_rows_map->reserve(build_table_rows);                                   \
+    groups = new std::vector<std::vector<size_t>*>();                          \
+    groups->reserve(build_table_rows);                                         \
+    /* Define additional information needed for non-equality conditions,       \
+     * determined by 'uses_cond_func'. We need a vector of hash maps for the   \
+     * build table groups. In addition, we also need hashes for the build      \
+     * table on all columns that are not since they will insert into the       \
+     * hash map.                                                               \
+     */                                                                        \
+    second_level_hash_maps = new std::vector<UNORD_MAP_CONTAINER<              \
+        size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,            \
+        joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>();                   \
+    hash_join_compute_tuples_helper(                                           \
+        work_left_table, work_right_table, n_tot_left, n_tot_right,            \
+        uses_cond_func, build_is_left, cond_func_left_columns,                 \
+        cond_func_left_column_len, cond_func_right_columns,                    \
+        cond_func_right_column_len, parallel_trace, build_table_rows,          \
+        build_table, probe_table_rows, probe_miss_needs_reduction,             \
+        key_rows_map, groups, build_table_outer, probe_table_outer, cond_func, \
+        ev_alloc_map, second_level_hash_maps, build_nonequal_key_hashes,       \
+        V_build_map, build_write_idxs, V_probe_map, probe_write_idxs);         \
+    tracing::Event ev_clear_map("dealloc_key_rows_map", parallel_trace);       \
+    /* Data structures used during computation of the tuples can become        \
+     * quite large and their deallocation can take a non-negligible amount     \
+     * of time. We dealloc them here to free memory for the next stage and     \
+     * also to trace dealloc time.                                             \
+     */                                                                        \
+    delete key_rows_map;                                                       \
+    ev_clear_map.finalize();
+#endif
+
+    // General implementation with generic key comparator class.
+    // Used for non-specialized cases.
+#ifndef EQ_JOIN_IMPL_ELSE_CASE
+#define EQ_JOIN_IMPL_ELSE_CASE                                               \
+    using JoinKeyType = joinHashFcts::KeyEqualHashJoinTable;                 \
+    JoinKeyType equal_fct{build_table_rows, n_key, build_table, probe_table, \
+                          is_na_equal};                                      \
+    EQ_JOIN_IMPL_COMMON(JoinKeyType);
+#endif
+
+    // Use faster specialized implementation for common 1 key cases.
+    if (n_key == 1) {
+        array_info* build_arr = build_table->columns[0];
+        bodo_array_type::arr_type_enum build_arr_type = build_arr->arr_type;
+        Bodo_CTypes::CTypeEnum build_dtype = build_arr->dtype;
+        array_info* probe_arr = probe_table->columns[0];
+        bodo_array_type::arr_type_enum probe_arr_type = probe_arr->arr_type;
+        Bodo_CTypes::CTypeEnum probe_dtype = probe_arr->dtype;
+
+        // Macro to reduce code duplication for the 1-key specialization.
+#ifndef EQ_JOIN_1_KEY_IMPL
+#define EQ_JOIN_1_KEY_IMPL(ARRAY_TYPE, DTYPE, IS_NA_EQUAL, FOUND_MATCH_VAR) \
+    if (build_arr_type == ARRAY_TYPE && build_dtype == DTYPE &&             \
+        is_na_equal == IS_NA_EQUAL && probe_arr_type == ARRAY_TYPE &&       \
+        probe_dtype == DTYPE) {                                             \
+        FOUND_MATCH_VAR = true;                                             \
+        using JoinKeyType =                                                 \
+            JoinKeysEqualComparatorOneKey<ARRAY_TYPE, DTYPE, IS_NA_EQUAL>;  \
+        JoinKeyType equal_fct{build_arr, probe_arr};                        \
+        EQ_JOIN_IMPL_COMMON(JoinKeyType);                                   \
     }
-    for (size_t i = 0; i < n_tot_right; i++) {
-        col_ptrs_right[i] =
-            static_cast<void*>(work_right_table->columns[i]->data1);
-        null_bitmap_right[i] =
-            static_cast<void*>(work_right_table->columns[i]->null_bitmask);
-    }
-
-    // Define additional information needed for non-equality conditions,
-    // determined by 'uses_cond_func'. We need a vector of hash maps for the
-    // build table groups. In addition, we also need hashes for the build
-    // table on all columns that are not since they will insert into the
-    // hash map.
-    uint32_t* build_nonequal_key_hashes = nullptr;
-    std::vector<UNORD_MAP_CONTAINER<
-        size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
-        joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
-        second_level_hash_maps = new std::vector<UNORD_MAP_CONTAINER<
-            size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
-            joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>();
-    // Keep track of which table to use to populate the second level hash
-    // table if 'uses_cond_func'
-    uint64_t* build_data_key_cols = nullptr;
-    uint64_t build_data_key_n_cols = 0;
-
-    if (uses_cond_func) {
-        if (build_is_left) {
-            build_data_key_cols = cond_func_left_columns;
-            build_data_key_n_cols = cond_func_left_column_len;
-        } else {
-            build_data_key_cols = cond_func_right_columns;
-            build_data_key_n_cols = cond_func_right_column_len;
+#endif
+        bool found_match = false;
+        EQ_JOIN_1_KEY_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                           Bodo_CTypes::INT32, true, found_match);
+        EQ_JOIN_1_KEY_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                           Bodo_CTypes::INT32, false, found_match);
+        EQ_JOIN_1_KEY_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                           Bodo_CTypes::INT64, true, found_match);
+        EQ_JOIN_1_KEY_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                           Bodo_CTypes::INT64, false, found_match);
+        EQ_JOIN_1_KEY_IMPL(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME, true,
+                           found_match);
+        EQ_JOIN_1_KEY_IMPL(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME, false,
+                           found_match);
+        EQ_JOIN_1_KEY_IMPL(bodo_array_type::DICT, Bodo_CTypes::STRING, true,
+                           found_match);
+        EQ_JOIN_1_KEY_IMPL(bodo_array_type::DICT, Bodo_CTypes::STRING, false,
+                           found_match);
+        if (!found_match) {
+            EQ_JOIN_IMPL_ELSE_CASE;
         }
-        build_nonequal_key_hashes = hash_data_cols_table(
-            build_table->columns, build_data_key_cols, build_data_key_n_cols,
-            SEED_HASH_JOIN, parallel_trace);
-        // [BE-1078]: Should this use statistics to influence how much we
-        // reserve?
-        second_level_hash_maps->reserve(build_table_rows);
+    } else if (n_key == 2) {
+        array_info* build_arr1 = build_table->columns[0];
+        array_info* build_arr2 = build_table->columns[1];
+        bodo_array_type::arr_type_enum build_arr_type1 = build_arr1->arr_type;
+        Bodo_CTypes::CTypeEnum build_dtype1 = build_arr1->dtype;
+        bodo_array_type::arr_type_enum build_arr_type2 = build_arr2->arr_type;
+        Bodo_CTypes::CTypeEnum build_dtype2 = build_arr2->dtype;
+
+        array_info* probe_arr1 = probe_table->columns[0];
+        array_info* probe_arr2 = probe_table->columns[1];
+        bodo_array_type::arr_type_enum probe_arr_type1 = probe_arr1->arr_type;
+        Bodo_CTypes::CTypeEnum probe_dtype1 = probe_arr1->dtype;
+        bodo_array_type::arr_type_enum probe_arr_type2 = probe_arr2->arr_type;
+        Bodo_CTypes::CTypeEnum probe_dtype2 = probe_arr2->dtype;
+
+        // Macro to reduce code duplication for the 2-keys specialization.
+#ifndef EQ_JOIN_2_KEYS_IMPL
+#define EQ_JOIN_2_KEYS_IMPL(ARRAY_TYPE1, DTYPE1, ARRAY_TYPE2, DTYPE2,          \
+                            IS_NA_EQUAL, FOUND_MATCH_VAR)                      \
+    if (build_arr_type1 == ARRAY_TYPE1 && build_dtype1 == DTYPE1 &&            \
+        build_arr_type2 == ARRAY_TYPE2 && build_dtype2 == DTYPE2 &&            \
+        is_na_equal == IS_NA_EQUAL && probe_arr_type1 == ARRAY_TYPE1 &&        \
+        probe_dtype1 == DTYPE1 && probe_arr_type2 == ARRAY_TYPE2 &&            \
+        probe_dtype2 == DTYPE2) {                                              \
+        FOUND_MATCH_VAR = true;                                                \
+        using JoinKeyType =                                                    \
+            JoinKeysEqualComparatorTwoKeys<ARRAY_TYPE1, DTYPE1, ARRAY_TYPE2,   \
+                                           DTYPE2, IS_NA_EQUAL>;               \
+        JoinKeyType equal_fct{build_arr1, build_arr2, probe_arr1, probe_arr2}; \
+        EQ_JOIN_IMPL_COMMON(JoinKeyType);                                      \
     }
-    joinHashFcts::SecondLevelHashHashJoinTable second_level_hash_fct{
-        build_nonequal_key_hashes};
-    joinHashFcts::SecondLevelKeyEqualHashJoinTable second_level_equal_fct{
-        build_table, build_data_key_cols, build_data_key_n_cols};
+#endif
+        bool found_match = false;
+        // int32 / (int32, int64, datetime, dict-encoded)
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, bodo_array_type::NUMPY,
+                            Bodo_CTypes::DATETIME, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, bodo_array_type::NUMPY,
+                            Bodo_CTypes::DATETIME, false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, bodo_array_type::DICT,
+                            Bodo_CTypes::STRING, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, bodo_array_type::DICT,
+                            Bodo_CTypes::STRING, false, found_match);
+        // int64 / (int32, int64, datetime, dict-encoded)
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, bodo_array_type::NUMPY,
+                            Bodo_CTypes::DATETIME, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, bodo_array_type::NUMPY,
+                            Bodo_CTypes::DATETIME, false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, bodo_array_type::DICT,
+                            Bodo_CTypes::STRING, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, bodo_array_type::DICT,
+                            Bodo_CTypes::STRING, false, found_match);
+        // datetime / (int32, int64, datetime, dict-encoded)
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                            bodo_array_type::NUMPY, Bodo_CTypes::DATETIME, true,
+                            found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                            bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                            false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                            bodo_array_type::DICT, Bodo_CTypes::STRING, true,
+                            found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                            bodo_array_type::DICT, Bodo_CTypes::STRING, false,
+                            found_match);
+        // dict-encoded / (int32, int64, datetime, dict-encoded)
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, true, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                            bodo_array_type::NUMPY, Bodo_CTypes::DATETIME, true,
+                            found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                            bodo_array_type::NUMPY, Bodo_CTypes::DATETIME,
+                            false, found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                            bodo_array_type::DICT, Bodo_CTypes::STRING, true,
+                            found_match);
+        EQ_JOIN_2_KEYS_IMPL(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                            bodo_array_type::DICT, Bodo_CTypes::STRING, false,
+                            found_match);
+        if (!found_match) {
+            EQ_JOIN_IMPL_ELSE_CASE;
+        }
 
-    // build_write_idxs and probe_write_idxs are used for the output.
-    // It precises the index used for the writing of the output table
-    // from the build and probe table.
-    std::vector<int64_t> build_write_idxs;
-    std::vector<int64_t> probe_write_idxs;
-    // [BE-1078]: how much should we reserve?
-    build_write_idxs.reserve(probe_table_rows);
-    probe_write_idxs.reserve(probe_table_rows);
-    ev_alloc_map.finalize();
-
-    // If we will need to perform a reduction on probe table matches,
-    // specify an allocation size for the vector.
-    size_t n_bytes_probe = 0;
-    if (probe_miss_needs_reduction) {
-        n_bytes_probe = (probe_table_rows + 7) >> 3;
-    }
-    // V_probe_map and V_build_map takes similar roles.
-    // They indicate if an entry in the build or probe table
-    // has been matched to the other side.
-    // This is needed only if said table is replicated
-    // (i.e probe_miss_needs_reduction/build_miss_needs_reduction).
-    std::vector<uint8_t> V_probe_map(n_bytes_probe, 255);
-
-    tracing::Event ev_groups("calc_groups", parallel_trace);
-    // Loop over the build table.
-    if (uses_cond_func) {
-        insert_build_table_equi_join_some_non_equality(
-            key_rows_map, second_level_hash_maps, second_level_hash_fct,
-            second_level_equal_fct, groups, build_table_rows);
     } else {
-        insert_build_table_equi_join_all_equality(key_rows_map, groups,
-                                                  build_table_rows);
-    }
-    ev_groups.finalize();
-    size_t n_bytes_build = 0;
-    if (build_table_outer) {
-        n_bytes_build = (groups->size() + 7) >> 3;
-    }
-    // Allocate the vector any build misses
-    std::vector<uint8_t> V_build_map(n_bytes_build, 0);
-    // We now iterate over all the entries of the long table in order to
-    // get the entries in the build_write_idxs and probe_write_idxs. We add
-    // different paths to allow templated code since the miss handling depends
-    // on the type of join or if we have an outer join.
-    if (uses_cond_func) {
-        if (build_table_outer) {
-            if (probe_table_outer) {
-                if (probe_miss_needs_reduction) {
-                    insert_probe_table_equi_join_some_non_equality<true, true,
-                                                                   true>(
-                        key_rows_map, second_level_hash_maps, groups,
-                        build_table_rows, probe_table_rows, V_build_map,
-                        V_probe_map, build_write_idxs, probe_write_idxs,
-                        build_is_left, left_table_infos, right_table_infos,
-                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
-                        null_bitmap_right, cond_func);
-                } else {
-                    insert_probe_table_equi_join_some_non_equality<true, true,
-                                                                   false>(
-                        key_rows_map, second_level_hash_maps, groups,
-                        build_table_rows, probe_table_rows, V_build_map,
-                        V_probe_map, build_write_idxs, probe_write_idxs,
-                        build_is_left, left_table_infos, right_table_infos,
-                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
-                        null_bitmap_right, cond_func);
-                }
-            } else {
-                insert_probe_table_equi_join_some_non_equality<true, false,
-                                                               false>(
-                    key_rows_map, second_level_hash_maps, groups,
-                    build_table_rows, probe_table_rows, V_build_map,
-                    V_probe_map, build_write_idxs, probe_write_idxs,
-                    build_is_left, left_table_infos, right_table_infos,
-                    col_ptrs_left, col_ptrs_right, null_bitmap_left,
-                    null_bitmap_right, cond_func);
-            }
-        } else {
-            if (probe_table_outer) {
-                if (probe_miss_needs_reduction) {
-                    insert_probe_table_equi_join_some_non_equality<false, true,
-                                                                   true>(
-                        key_rows_map, second_level_hash_maps, groups,
-                        build_table_rows, probe_table_rows, V_build_map,
-                        V_probe_map, build_write_idxs, probe_write_idxs,
-                        build_is_left, left_table_infos, right_table_infos,
-                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
-                        null_bitmap_right, cond_func);
-                } else {
-                    insert_probe_table_equi_join_some_non_equality<false, true,
-                                                                   false>(
-                        key_rows_map, second_level_hash_maps, groups,
-                        build_table_rows, probe_table_rows, V_build_map,
-                        V_probe_map, build_write_idxs, probe_write_idxs,
-                        build_is_left, left_table_infos, right_table_infos,
-                        col_ptrs_left, col_ptrs_right, null_bitmap_left,
-                        null_bitmap_right, cond_func);
-                }
-            } else {
-                insert_probe_table_equi_join_some_non_equality<false, false,
-                                                               false>(
-                    key_rows_map, second_level_hash_maps, groups,
-                    build_table_rows, probe_table_rows, V_build_map,
-                    V_probe_map, build_write_idxs, probe_write_idxs,
-                    build_is_left, left_table_infos, right_table_infos,
-                    col_ptrs_left, col_ptrs_right, null_bitmap_left,
-                    null_bitmap_right, cond_func);
-            }
-        }
-    } else {
-        if (build_table_outer) {
-            if (probe_table_outer) {
-                if (probe_miss_needs_reduction) {
-                    insert_probe_table_equi_join_all_equality<true, true, true>(
-                        key_rows_map, groups, build_table_rows,
-                        probe_table_rows, V_build_map, V_probe_map,
-                        build_write_idxs, probe_write_idxs);
-                } else {
-                    insert_probe_table_equi_join_all_equality<true, true,
-                                                              false>(
-                        key_rows_map, groups, build_table_rows,
-                        probe_table_rows, V_build_map, V_probe_map,
-                        build_write_idxs, probe_write_idxs);
-                }
-            } else {
-                insert_probe_table_equi_join_all_equality<true, false, false>(
-                    key_rows_map, groups, build_table_rows, probe_table_rows,
-                    V_build_map, V_probe_map, build_write_idxs,
-                    probe_write_idxs);
-            }
-        } else {
-            if (probe_table_outer) {
-                if (probe_miss_needs_reduction) {
-                    insert_probe_table_equi_join_all_equality<false, true,
-                                                              true>(
-                        key_rows_map, groups, build_table_rows,
-                        probe_table_rows, V_build_map, V_probe_map,
-                        build_write_idxs, probe_write_idxs);
-                } else {
-                    insert_probe_table_equi_join_all_equality<false, true,
-                                                              false>(
-                        key_rows_map, groups, build_table_rows,
-                        probe_table_rows, V_build_map, V_probe_map,
-                        build_write_idxs, probe_write_idxs);
-                }
-            } else {
-                insert_probe_table_equi_join_all_equality<false, false, false>(
-                    key_rows_map, groups, build_table_rows, probe_table_rows,
-                    V_build_map, V_probe_map, build_write_idxs,
-                    probe_write_idxs);
-            }
-        }
+        EQ_JOIN_IMPL_ELSE_CASE;
     }
 
-    tracing::Event ev_clear_map("dealloc_hashmaps", parallel_trace);
-    // Data structures used during computation of the tuples can become
-    // quite large and their deallocation can take a non-negligible amount
-    // of time. We dealloc them here to free memory for the next stage and
-    // also to trace dealloc time
-    delete key_rows_map;
+    tracing::Event ev_clear_map("dealloc_second_level_hashmaps",
+                                parallel_trace);
     // Delete all the hash maps in the non-equality function case.
     for (auto map : *second_level_hash_maps) {
         delete map;

@@ -325,94 +325,167 @@ struct MultiArrayInfoEqual {
 };
 
 /**
- * @brief functor for comparing two elements of the same array.
- * Treats two NA elements as equal (TODO: template NA behavior for more general
- * use).
- *
+ * @brief functor for comparing two elements (one from each of the two arrays).
  */
 class ElementComparator {
    public:
-    // store data pointer to avoid extra struct access in performance critical
+    // Store data pointers to avoid extra struct access in performance critical
     // code
-    ElementComparator(const array_info* arr_) noexcept {
-        // store index data for dict-encoded arrays since index comparison is
-        // enough
-        if (arr_->arr_type == bodo_array_type::DICT) {
-            arr_ = arr_->info2;
+    ElementComparator(const array_info* arr1_, const array_info* arr2_) {
+        // Store the index data for dict encoded arrays since index comparison
+        // is enough in case of unified dictionaries. Only use when the
+        // dictionaries are the same (and are deduped since otherwise the index
+        // comparisons are not accurate).
+        if (arr1_->arr_type == bodo_array_type::DICT &&
+            arr2_->arr_type == bodo_array_type::DICT) {
+            if (arr1_->info1 != arr2_->info1) {
+                throw std::runtime_error(
+                    "ElementComparator: don't know if arrays have "
+                    "unified dictionary.");
+            }
+            if (!(arr1_->has_deduped_local_dictionary)) {
+                throw std::runtime_error(
+                    "ElementComparator: Dictionary is not deduplicated.");
+            }
+            arr1_ = arr1_->info2;
+            arr2_ = arr2_->info2;
         }
-        arr = arr_;
-        data_ptr = arr_->data1;
-        null_bitmask = (uint8_t*)arr_->null_bitmask;
+        this->arr1 = arr1_;
+        this->arr2 = arr2_;
+        this->data_ptr_1 = arr1_->data1;
+        this->data_ptr_2 = arr2_->data1;
+        this->null_bitmask_1 = (uint8_t*)arr1_->null_bitmask;
+        this->null_bitmask_2 = (uint8_t*)arr2_->null_bitmask;
     }
 
     // Numpy arrays with nullable dtypes (float, datetime/timedelta)
+    // NAs equal case
     template <bodo_array_type::arr_type_enum ArrType,
-              Bodo_CTypes::CTypeEnum DType>
-    requires(ArrType == bodo_array_type::NUMPY &&
-             NullSentinelDtype<DType>) constexpr bool
+              Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
+    requires(ArrType == bodo_array_type::NUMPY && NullSentinelDtype<DType> &&
+             is_na_equal) constexpr bool
     operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
-        T* data = (T*)data_ptr;
-        T val1 = data[iRowA];
-        T val2 = data[iRowB];
+        T* data1 = (T*)this->data_ptr_1;
+        T* data2 = (T*)this->data_ptr_2;
+        T val1 = data1[iRowA];
+        T val2 = data2[iRowB];
         bool isna1 = isnan_alltype<T, DType>(val1);
         bool isna2 = isnan_alltype<T, DType>(val2);
         return (isna1 && isna2) || (!isna1 && !isna2 && val1 == val2);
     }
 
-    // Numpy arrays with non-nullable dtypes (integer, boolean)
+    // NAs not equal case
     template <bodo_array_type::arr_type_enum ArrType,
-              Bodo_CTypes::CTypeEnum DType>
+              Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
+    requires(ArrType == bodo_array_type::NUMPY && NullSentinelDtype<DType> &&
+             !is_na_equal) constexpr bool
+    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        using T = typename dtype_to_type<DType>::type;
+        T* data1 = (T*)this->data_ptr_1;
+        T* data2 = (T*)this->data_ptr_2;
+        T val1 = data1[iRowA];
+        T val2 = data2[iRowB];
+        bool isna1 = isnan_alltype<T, DType>(val1);
+        bool isna2 = isnan_alltype<T, DType>(val2);
+        return !isna1 && !isna2 && (val1 == val2);
+    }
+
+    // Numpy arrays with non-nullable dtypes (integer, boolean)
+    // 'is_na_equal' doesn't matter.
+    template <bodo_array_type::arr_type_enum ArrType,
+              Bodo_CTypes::CTypeEnum DType, bool is_na_equal = true>
     requires(ArrType == bodo_array_type::NUMPY &&
              !NullSentinelDtype<DType>) constexpr bool
     operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
-        T* data = (T*)data_ptr;
-        return data[iRowA] == data[iRowB];
+        T* data1 = (T*)this->data_ptr_1;
+        T* data2 = (T*)this->data_ptr_2;
+        return data1[iRowA] == data2[iRowB];
     }
 
     // Nullable arrays
+    // NAs equal case:
     template <bodo_array_type::arr_type_enum ArrType,
-              Bodo_CTypes::CTypeEnum DType>
-    requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL) constexpr bool
+              Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
+    requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
+             is_na_equal) constexpr bool
     operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
-        T* data = (T*)data_ptr;
-        T val1 = data[iRowA];
-        T val2 = data[iRowB];
-        bool isna1 = !GetBit(null_bitmask, iRowA);
-        bool isna2 = !GetBit(null_bitmask, iRowB);
+        T* data1 = (T*)this->data_ptr_1;
+        T* data2 = (T*)this->data_ptr_2;
+        T val1 = data1[iRowA];
+        T val2 = data2[iRowB];
+        bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
+        bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
         return (isna1 && isna2) || (!isna1 && !isna2 && val1 == val2);
     }
 
-    // Dict-encoded string arrays
+    // NAs not equal case:
     template <bodo_array_type::arr_type_enum ArrType,
-              Bodo_CTypes::CTypeEnum DType>
-    requires(ArrType == bodo_array_type::DICT) constexpr bool operator()(
-        const int64_t iRowA, const int64_t iRowB) const {
+              Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
+    requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
+             !is_na_equal) constexpr bool
+    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        using T = typename dtype_to_type<DType>::type;
+        T* data1 = (T*)this->data_ptr_1;
+        T* data2 = (T*)this->data_ptr_2;
+        T val1 = data1[iRowA];
+        T val2 = data2[iRowB];
+        bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
+        bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
+        return !isna1 && !isna2 && (val1 == val2);
+    }
+
+    // Dict-encoded string arrays
+    // NAs equal case:
+    template <bodo_array_type::arr_type_enum ArrType,
+              Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
+    requires(ArrType == bodo_array_type::DICT && is_na_equal) constexpr bool
+    operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = DICT_INDEX_C_TYPE;
-        T* data = (T*)data_ptr;
-        T val1 = data[iRowA];
-        T val2 = data[iRowB];
-        bool isna1 = !GetBit(null_bitmask, iRowA);
-        bool isna2 = !GetBit(null_bitmask, iRowB);
+        T* data1 = (T*)this->data_ptr_1;
+        T* data2 = (T*)this->data_ptr_2;
+        T val1 = data1[iRowA];
+        T val2 = data2[iRowB];
+        bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
+        bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
         return (isna1 && isna2) || (!isna1 && !isna2 && val1 == val2);
+    }
+
+    // NAs not equal case:
+    template <bodo_array_type::arr_type_enum ArrType,
+              Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
+    requires(ArrType == bodo_array_type::DICT && !is_na_equal) constexpr bool
+    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        using T = DICT_INDEX_C_TYPE;
+        T* data1 = (T*)this->data_ptr_1;
+        T* data2 = (T*)this->data_ptr_2;
+        T val1 = data1[iRowA];
+        T val2 = data2[iRowB];
+        bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
+        bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
+        return !isna1 && !isna2 && (val1 == val2);
     }
 
     // generic comparator, fall back to runtime type checks with TestEqualColumn
     template <bodo_array_type::arr_type_enum ArrType,
-              Bodo_CTypes::CTypeEnum DType>
+              Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
     requires(ArrType != bodo_array_type::NUMPY &&
              ArrType != bodo_array_type::NULLABLE_INT_BOOL &&
              ArrType != bodo_array_type::DICT) constexpr bool
     operator()(const int64_t iRowA, const int64_t iRowB) const {
-        return TestEqualColumn(arr, iRowA, arr, iRowB, true);
+        return TestEqualColumn(this->arr1, iRowA, this->arr2, iRowB,
+                               is_na_equal);
     }
 
    private:
-    const array_info* arr;
-    const char* data_ptr;
-    const uint8_t* null_bitmask;
+    const array_info* arr1;
+    const array_info* arr2;
+    const char* data_ptr_1;
+    const char* data_ptr_2;
+    const uint8_t* null_bitmask_1;
+    const uint8_t* null_bitmask_2;
 };
 
 /**
@@ -421,15 +494,18 @@ class ElementComparator {
  *
  * @tparam ArrType array's type (e.g. bodo_array_type::NULLABLE_INT_BOOL)
  * @tparam DType array's dtype (e.g. Bodo_CTypes::INT32)
+ * @tparam is_na_equal Whether NAs are considered equal
  */
-template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          bool is_na_equal>
 class KeysEqualComparatorOneKey {
    public:
-    KeysEqualComparatorOneKey(const array_info* arr) : cmp(arr) {}
+    KeysEqualComparatorOneKey(const array_info* arr) : cmp(arr, arr) {}
 
     constexpr bool operator()(const int64_t iRowA,
                               const int64_t iRowB) const noexcept {
-        return (cmp.template operator()<ArrType, DType>(iRowA, iRowB));
+        return (
+            cmp.template operator()<ArrType, DType, is_na_equal>(iRowA, iRowB));
     }
 
    private:
@@ -444,24 +520,169 @@ class KeysEqualComparatorOneKey {
  * @tparam DType1 first array's dtype (e.g. Bodo_CTypes::INT32)
  * @tparam ArrType2 second array's type (e.g. bodo_array_type::NUMPY)
  * @tparam DType2 first array's dtype (e.g. Bodo_CTypes::DATE)
+ * @tparam is_na_equal Whether NAs are considered equal
  */
-template <
-    bodo_array_type::arr_type_enum ArrType1, Bodo_CTypes::CTypeEnum DType1,
-    bodo_array_type::arr_type_enum ArrType2, Bodo_CTypes::CTypeEnum DType2>
+template <bodo_array_type::arr_type_enum ArrType1,
+          Bodo_CTypes::CTypeEnum DType1,
+          bodo_array_type::arr_type_enum ArrType2,
+          Bodo_CTypes::CTypeEnum DType2, bool is_na_equal>
 class KeysEqualComparatorTwoKeys {
    public:
     KeysEqualComparatorTwoKeys(const array_info* arr1, const array_info* arr2)
-        : cmp1(arr1), cmp2(arr2) {}
+        : cmp1(arr1, arr1), cmp2(arr2, arr2) {}
 
     constexpr bool operator()(const int64_t iRowA,
                               const int64_t iRowB) const noexcept {
-        return (cmp1.template operator()<ArrType1, DType1>(iRowA, iRowB)) &&
-               (cmp2.template operator()<ArrType2, DType2>(iRowA, iRowB));
+        return (cmp1.template operator()<ArrType1, DType1, is_na_equal>(
+                   iRowA, iRowB)) &&
+               (cmp2.template operator()<ArrType2, DType2, is_na_equal>(iRowA,
+                                                                        iRowB));
     }
 
    private:
     const ElementComparator cmp1;
     const ElementComparator cmp2;
+};
+
+/**
+ * @brief Join Key equality comparator class (for hash map use) that is
+ * specialized for one key to make common cases faster (e.g. Int32, Int64, DATE,
+ * DICT).
+ *
+ * @tparam ArrType : array's type (e.g. bodo_array_type::NULLABLE_INT_BOOL)
+ * @tparam DType : array's dtype (e.g. Bodo_CTypes::INT32)
+ * @tparam is_na_equal : Whether NAs are considered equal
+ */
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          bool is_na_equal>
+class JoinKeysEqualComparatorOneKey {
+   public:
+    JoinKeysEqualComparatorOneKey(const array_info* arr1,
+                                  const array_info* arr2)
+        : cmp_arr1(arr1, arr1),
+          cmp_arr2(arr2, arr2),
+          cmp_arr1_arr2(arr1, arr2),
+          cmp_arr2_arr1(arr2, arr1),
+          arr1_len(arr1->length) {}
+
+    constexpr bool operator()(int64_t iRowA, int64_t iRowB) const noexcept {
+        // A row can refer to either arr1 (build table) or arr2 (probe table).
+        // If iRow < arr1_len then it is in the build table
+        //    at index iRow.
+        // If iRow >= arr1_len then it is in the probe table
+        //    at index (iRow - arr1_len).
+        if (iRowA < arr1_len) {
+            if (iRowB < arr1_len) {
+                // Determine if NA columns should match. They should always
+                // match when populating the hash map with the build table.
+                // When comparing the build and probe tables this depends on
+                // is_na_equal.
+                return cmp_arr1.template operator()<ArrType, DType, true>(
+                    iRowA, iRowB);
+            } else {
+                iRowB = iRowB - arr1_len;
+                return cmp_arr1_arr2.template
+                operator()<ArrType, DType, is_na_equal>(iRowA, iRowB);
+            }
+        } else {
+            if (iRowB < arr1_len) {
+                iRowA = iRowA - arr1_len;
+                return cmp_arr2_arr1.template
+                operator()<ArrType, DType, is_na_equal>(iRowA, iRowB);
+            } else {
+                iRowA = iRowA - arr1_len;
+                iRowB = iRowB - arr1_len;
+                // Same logic here regarding is_na_equal
+                return cmp_arr2.template operator()<ArrType, DType, true>(
+                    iRowA, iRowB);
+            }
+        }
+    }
+
+   private:
+    const ElementComparator cmp_arr1;
+    const ElementComparator cmp_arr2;
+    const ElementComparator cmp_arr1_arr2;
+    const ElementComparator cmp_arr2_arr1;
+    const int64_t arr1_len;
+};
+
+template <bodo_array_type::arr_type_enum ArrType1,
+          Bodo_CTypes::CTypeEnum DType1,
+          bodo_array_type::arr_type_enum ArrType2,
+          Bodo_CTypes::CTypeEnum DType2, bool is_na_equal>
+class JoinKeysEqualComparatorTwoKeys {
+   public:
+    JoinKeysEqualComparatorTwoKeys(const array_info* t1_k1,
+                                   const array_info* t1_k2,
+                                   const array_info* t2_k1,
+                                   const array_info* t2_k2)
+        : cmp_k1_t1(t1_k1, t1_k1),
+          cmp_k1_t2(t2_k1, t2_k1),
+          cmp_k1_t1_t2(t1_k1, t2_k1),
+          cmp_k1_t2_t1(t2_k1, t1_k1),
+          cmp_k2_t1(t1_k2, t1_k2),
+          cmp_k2_t2(t2_k2, t2_k2),
+          cmp_k2_t1_t2(t1_k2, t2_k2),
+          cmp_k2_t2_t1(t2_k2, t1_k2),
+          t1_len(t1_k1->length) {}
+
+    constexpr bool operator()(int64_t iRowA, int64_t iRowB) const noexcept {
+        // A row can refer to either t1 (build table) or t2 (probe table).
+        // If iRow < t1_len then it is in the build table
+        //    at index iRow.
+        // If iRow >= t1_len then it is in the probe table
+        //    at index (iRow - t1_len).
+        if (iRowA < t1_len) {
+            if (iRowB < t1_len) {
+                // Determine if NA columns should match. They should always
+                // match when populating the hash map with the build table.
+                // When comparing the build and probe tables this depends on
+                // is_na_equal.
+                return (cmp_k1_t1.template operator()<ArrType1, DType1, true>(
+                           iRowA, iRowB)) &&
+                       (cmp_k2_t1.template operator()<ArrType2, DType2, true>(
+                           iRowA, iRowB));
+            } else {
+                iRowB = iRowB - t1_len;
+                return (cmp_k1_t1_t2
+                            .template operator()<ArrType1, DType1, is_na_equal>(
+                                iRowA, iRowB)) &&
+                       (cmp_k2_t1_t2
+                            .template operator()<ArrType2, DType2, is_na_equal>(
+                                iRowA, iRowB));
+            }
+        } else {
+            if (iRowB < t1_len) {
+                iRowA = iRowA - t1_len;
+                return (cmp_k1_t2_t1
+                            .template operator()<ArrType1, DType1, is_na_equal>(
+                                iRowA, iRowB)) &&
+                       (cmp_k2_t2_t1
+                            .template operator()<ArrType2, DType2, is_na_equal>(
+                                iRowA, iRowB));
+            } else {
+                iRowA = iRowA - t1_len;
+                iRowB = iRowB - t1_len;
+                // Same logic here regarding is_na_equal
+                return (cmp_k1_t2.template operator()<ArrType1, DType1, true>(
+                           iRowA, iRowB)) &&
+                       (cmp_k2_t2.template operator()<ArrType2, DType2, true>(
+                           iRowA, iRowB));
+            }
+        }
+    }
+
+   private:
+    const ElementComparator cmp_k1_t1;
+    const ElementComparator cmp_k1_t2;
+    const ElementComparator cmp_k1_t1_t2;
+    const ElementComparator cmp_k1_t2_t1;
+    const ElementComparator cmp_k2_t1;
+    const ElementComparator cmp_k2_t2;
+    const ElementComparator cmp_k2_t1_t2;
+    const ElementComparator cmp_k2_t2_t1;
+    const int64_t t1_len;
 };
 
 /**
@@ -473,6 +694,7 @@ class KeysEqualComparatorTwoKeys {
  * @tparam Ts types of input arguments to operator()
  * @param arr_type array type for type instantiation
  * @param dtype dtype for type instantiation
+ * @param is_na_equal Whether NAs are considered equal.
  * @param f input functor
  * @param args arguments to pass to operator()
  * @return constexpr decltype(auto) return type inferred from operator()
@@ -480,12 +702,18 @@ class KeysEqualComparatorTwoKeys {
 template <typename Functor, typename... Ts>
 inline constexpr decltype(auto) type_dispatcher(
     bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
-    Functor f, Ts&&... args) {
+    const bool is_na_equal, Functor f, Ts&&... args) {
 #ifndef DISPATCH_CASE
-#define DISPATCH_CASE(ARRAY_TYPE, DTYPE)                 \
-    case DTYPE:                                          \
-        return f.template operator()<ARRAY_TYPE, DTYPE>( \
-            std::forward<Ts>(args)...);
+#define DISPATCH_CASE(ARRAY_TYPE, DTYPE)                            \
+    case DTYPE: {                                                   \
+        if (is_na_equal) {                                          \
+            return f.template operator()<ARRAY_TYPE, DTYPE, true>(  \
+                std::forward<Ts>(args)...);                         \
+        } else {                                                    \
+            return f.template operator()<ARRAY_TYPE, DTYPE, false>( \
+                std::forward<Ts>(args)...);                         \
+        }                                                           \
+    }
 #endif
 
     switch (arr_type) {
@@ -616,14 +844,15 @@ inline constexpr decltype(auto) type_dispatcher(
  */
 class KeysEqualComparator {
    public:
-    KeysEqualComparator(const int64_t n_keys, const table_info* table)
-        : n_keys{n_keys}, table{table} {}
+    KeysEqualComparator(const int64_t n_keys, const table_info* table,
+                        const bool is_na_equal)
+        : n_keys{n_keys}, table{table}, is_na_equal(is_na_equal) {}
 
     constexpr bool operator()(const int64_t iRowA,
                               const int64_t iRowB) const noexcept {
-        auto equal_elements = [=](array_info* arr) {
-            return type_dispatcher(arr->arr_type, arr->dtype,
-                                   ElementComparator{arr}, iRowA, iRowB);
+        auto equal_elements = [=, this](array_info* arr) {
+            return type_dispatcher(arr->arr_type, arr->dtype, this->is_na_equal,
+                                   ElementComparator{arr, arr}, iRowA, iRowB);
         };
 
         return std::all_of(table->columns.begin(),
@@ -633,6 +862,7 @@ class KeysEqualComparator {
    private:
     const int64_t n_keys;
     const table_info* table;
+    const bool is_na_equal;
 };
 
 #endif  // _ARRAY_HASH_H_INCLUDED
