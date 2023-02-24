@@ -254,6 +254,25 @@ void insert_build_table_equi_join_all_equality(
 }
 
 /**
+ * @brief Get the table size threshold (in bytes) for broadcast join
+ *
+ * @return int threshold value
+ */
+int get_bcast_join_threshold() {
+    // We default to 10MB, which matches Spark, unless to user specifies a
+    // threshold manually.
+    int bcast_join_threshold = 10 * 1024 * 1024;  // in bytes
+    char* bcast_threshold = std::getenv("BODO_BCAST_JOIN_THRESHOLD");
+    if (bcast_threshold) {
+        bcast_join_threshold = std::stoi(bcast_threshold);
+    }
+    if (bcast_join_threshold < 0) {
+        throw std::runtime_error("hash_join: bcast_join_threshold < 0");
+    }
+    return bcast_join_threshold;
+}
+
+/**
  * @brief Handles any required shuffle steps for the left and right table to
  * generate local tables for computing the join. This code can either shuffle
  * both tables if we need to do a hash join, broadcast one table if there is a
@@ -300,27 +319,17 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
         // Determine the memory size of each table
         int64_t left_total_memory = table_global_memory_size(left_table);
         int64_t right_total_memory = table_global_memory_size(right_table);
-        // Determine the threshold for broadcast join. We default to 10MB,
-        // which matches Spark, unless to user specifies a specific
-        // threshold for their infrastructure.
-        int CritMemorySize = 10 * 1024 * 1024;  // in bytes
-        char* bcast_threshold = std::getenv("BODO_BCAST_JOIN_THRESHOLD");
-        if (bcast_threshold) {
-            CritMemorySize = std::stoi(bcast_threshold);
-        }
-        if (CritMemorySize < 0) {
-            throw std::runtime_error("hash_join: CritMemorySize < 0");
-        }
+        int bcast_join_threshold = get_bcast_join_threshold();
         if (ev.is_tracing()) {
             ev.add_attribute("g_left_total_memory", left_total_memory);
             ev.add_attribute("g_right_total_memory", right_total_memory);
             ev.add_attribute("g_bloom_filter_supported",
                              bloom_filter_supported());
-            ev.add_attribute("CritMemorySize", CritMemorySize);
+            ev.add_attribute("bcast_join_threshold", bcast_join_threshold);
         }
         bool all_gather = true;
         // Broadcast the smaller table if its replicated size is below a
-        // size limit (CritMemorySize) and not similar or larger than the
+        // size limit (bcast_join_threshold) and not similar or larger than the
         // size of the local "large" table (the latter is to avoid
         // detrimental impact on parallelization/scaling, note that bloom
         // filter approach also reduces cost of shuffle and does not have
@@ -336,7 +345,7 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
             global_build_to_local_probe_ratio_limit = 2.0;
         }
         if (left_total_memory < right_total_memory &&
-            left_total_memory < CritMemorySize &&
+            left_total_memory < bcast_join_threshold &&
             left_total_memory < (right_total_memory / double(n_pes) *
                                  global_build_to_local_probe_ratio_limit)) {
             // Broadcast the left table
@@ -345,7 +354,7 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
             // Delete the left_table as it is no longer used.
             delete_table(left_table);
         } else if (right_total_memory <= left_total_memory &&
-                   right_total_memory < CritMemorySize &&
+                   right_total_memory < bcast_join_threshold &&
                    right_total_memory <
                        (left_total_memory / double(n_pes) *
                         global_build_to_local_probe_ratio_limit)) {
@@ -1209,7 +1218,7 @@ void generate_col_last_use_info(
 // ---We can use shuffle-join or broadcast-join. We have one constant for the
 // maximal
 //    size of the broadcasted table. It is set to 10 MB by default (same as
-//    Spark). Variable name "CritMemorySize".
+//    Spark). Variable name "bcast_join_threshold".
 // ---For the join, we need to construct one hash map for the keys. If we take
 // the left
 //    table and is_left_outer=T then we need to build a more complicated
@@ -2231,6 +2240,31 @@ table_info* cross_join_table(
         bool parallel_trace = (left_parallel || right_parallel);
         tracing::Event ev("cross_join_table", parallel_trace);
         table_info* out_table;
+
+        // use broadcast join if left or right table is small (allgather the
+        // small table)
+        if (left_parallel && right_parallel) {
+            int bcast_join_threshold = get_bcast_join_threshold();
+            int64_t left_total_memory = table_global_memory_size(left_table);
+            int64_t right_total_memory = table_global_memory_size(right_table);
+            if (left_total_memory < right_total_memory &&
+                left_total_memory < bcast_join_threshold) {
+                // Broadcast the left table
+                table_info* work_left_table =
+                    gather_table(left_table, -1, true, true);
+                left_parallel = false;
+                delete_table(left_table);
+                left_table = work_left_table;
+            } else if (right_total_memory <= left_total_memory &&
+                       right_total_memory < bcast_join_threshold) {
+                // Broadcast the right table
+                table_info* work_right_table =
+                    gather_table(right_table, -1, true, true);
+                right_parallel = false;
+                delete_table(right_table);
+                right_table = work_right_table;
+            }
+        }
 
         // handle parallel cross join by broadcasting one side's table chunks of
         // from every rank (loop over all ranks). For outer join handling, the
