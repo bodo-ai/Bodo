@@ -2482,6 +2482,17 @@ class SeriesPass:
                     self,
                     extra_globals={"_tz": tz},
                 )
+            elif isinstance(typ, bodo.TimeArrayType):
+                precision = typ.precision
+                return compile_func_single_block(
+                    eval(
+                        "lambda n, t, s=None: bodo.hiframes.time_ext.alloc_time_array(n, _precision)"
+                    ),
+                    rhs.args,
+                    assign.target,
+                    self,
+                    extra_globals={"_precision": precision},
+                )
 
             return compile_func_single_block(
                 impl, rhs.args, assign.target, self, extra_globals={"_dtype": dtype}

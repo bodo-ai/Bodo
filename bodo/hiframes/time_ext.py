@@ -92,17 +92,14 @@ class Time:
     def __eq__(self, other):
         if not isinstance(other, Time):  # pragma: no cover
             return False
-        return self.value == other.value and self.precision == other.precision
+        # Removing precision check. It does not affect how Bodo computes `value`.
+        # Plus, Snowflake equality test doesn't about precision.
+        # SELECT '12:30:0'::TIME(0) = '12:30:0'::TIME(9) -> TRUE
+        return self.value == other.value
 
     def _check_can_compare(self, other):
         # TODO: [BE-4107] Support comparison where other=None inside Pandas (outside Bodo jit).
-        if isinstance(other, Time):
-            # raise an error if the precision is not the same to mimic sql time comparison
-            if self.precision != other.precision:  # pragma: no cover
-                raise TypeError(
-                    f"Cannot compare times with different precisions: {self} and {other}"
-                )
-        else:
+        if not isinstance(other, Time):
             raise TypeError("Cannot compare Time with non-Time type")
 
     def __lt__(self, other):

@@ -3729,7 +3729,7 @@ class TypingTransforms:
         import bodosql
         from bodosql.context_ext import BodoSQLContextType
 
-        # In order to inline the sql() call, we must insure that the type of the input dataframe(s)
+        # In order to inline the sql() call, we must ensure that the type of the input dataframe(s)
         # are finalized. dataframe type may have changed in typing pass (e.g. due to df setitem)
         # so we shouldn't use the actual type of the dataframes used to initialize the sql_context_var
         def determine_bodosql_context_type(sql_context_var):
