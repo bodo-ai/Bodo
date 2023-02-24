@@ -241,7 +241,7 @@ def test_bodosql_context_boxed_sql(bc, memory_leak_check):
     """
 
     def impl(bc):
-        return bc.sql("select * from t1")
+        return bc.sql("select * from __bodolocal__.t1")
 
     py_output = bc.tables["t1"]
     check_func(impl, (bc,), py_output=py_output)
