@@ -1843,6 +1843,8 @@ def join_distributed_run(
         typemap,
         left_logical_physical_map,
         right_logical_physical_map,
+        # cross join passes batches of input to condition function
+        compute_in_batch=not join_node.left_keys,
     )
 
     # TODO: Update asof to use table format.
@@ -1957,7 +1959,11 @@ distributed_pass.distributed_run_extensions[Join] = join_distributed_run
 
 
 def _gen_general_cond_cfunc(
-    join_node, typemap, left_logical_physical_map, right_logical_physical_map
+    join_node,
+    typemap,
+    left_logical_physical_map,
+    right_logical_physical_map,
+    compute_in_batch,
 ):
     """Generate cfunc for general join condition and return its address.
     Return 0 (NULL) if there is no general join condition to evaluate.
@@ -1976,6 +1982,8 @@ def _gen_general_cond_cfunc(
         right_logical_physical_map (Dict[int, int]): Mapping from the logical
             column number of the right table to the physical number of the C++
             table. This is done because of dead columns.
+        compute_in_batch (bool): process batches of input instead of a single row.
+            Cross join implementation passes input batches currently.
 
     Returns:
         Tuple[cfunc, List[int], List[int]]: Triple containing the generated
@@ -1991,12 +1999,24 @@ def _gen_general_cond_cfunc(
         "bodo": bodo,
         "numba": numba,
         "is_null_pointer": is_null_pointer,
+        "set_bit_to": bodo.utils.cg_helpers.set_bit_to,
     }
     na_check_name = "NOT_NA"
-    func_text = f"def bodo_join_gen_cond{label_suffix}(left_table, right_table, left_data1, right_data1, left_null_bitmap, right_null_bitmap, left_ind, right_ind):\n"
-    func_text += "  if is_null_pointer(left_table):\n"
-    func_text += "    return False\n"
 
+    ext_args = "left_ind, right_ind"
+    if compute_in_batch:
+        ext_args = "match_arr, left_block_start, left_block_end, right_block_start, right_block_end"
+
+    func_text = f"def bodo_join_gen_cond{label_suffix}(left_table, right_table, left_data1, right_data1, left_null_bitmap, right_null_bitmap, {ext_args}):\n"
+    func_text += "  if is_null_pointer(left_table):\n"
+    func_text += f"    return {'' if compute_in_batch else 'False'}\n"
+
+    if compute_in_batch:
+        func_text += "  i = 0\n"
+        func_text += "  for left_ind in range(left_block_start, left_block_end):\n"
+        func_text += "    for right_ind in range(right_block_start, right_block_end):\n"
+
+    indent = "      " if compute_in_batch else "  "
     expr, func_text, left_col_nums = _replace_column_accesses(
         expr,
         left_logical_physical_map,
@@ -2009,6 +2029,7 @@ def _gen_general_cond_cfunc(
         join_node.left_key_set,
         na_check_name,
         join_node.is_left_table,
+        indent,
     )
     expr, func_text, right_col_nums = _replace_column_accesses(
         expr,
@@ -2022,11 +2043,17 @@ def _gen_general_cond_cfunc(
         join_node.right_key_set,
         na_check_name,
         join_node.is_right_table,
+        indent,
     )
     # use short-circuit boolean operators to avoid invalid access of NA locations
     # see https://bodo.atlassian.net/browse/BE-4146
     expr = expr.replace(" & ", " and ").replace(" | ", " or ")
-    func_text += f"  return {expr}"
+
+    if compute_in_batch:
+        func_text += f"      set_bit_to(match_arr, i, {expr})\n"
+        func_text += f"      i += 1\n"
+    else:
+        func_text += f"  return {expr}"
 
     loc_vars = {}
     exec(func_text, table_getitem_funcs, loc_vars)
@@ -2042,6 +2069,22 @@ def _gen_general_cond_cfunc(
         types.int64,
         types.int64,
     )
+
+    if compute_in_batch:
+        c_sig = types.void(
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.int64,
+            types.int64,
+            types.int64,
+            types.int64,
+        )
+
     cfunc_cond = numba.cfunc(c_sig, nopython=True)(cond_func)
     # Store the function inside join_gen_cond_cfunc
     join_gen_cond_cfunc[cfunc_cond.native_name] = cfunc_cond
@@ -2061,6 +2104,7 @@ def _replace_column_accesses(
     key_set,
     na_check_name,
     is_table_var,
+    indent,
 ):
     """replace column accesses in join condition expression with an intrinsic that loads
     values from table data pointers.
@@ -2119,9 +2163,9 @@ def _replace_column_accesses(
                 )
                 or is_str_arr_type(array_typ)
             ):
-                func_text += f"  {na_val_varname} = {na_check_fname}({table_name}_null_bitmap, {table_name}_ind)\n"
+                func_text += f"{indent}{na_val_varname} = {na_check_fname}({table_name}_null_bitmap, {table_name}_ind)\n"
             else:
-                func_text += f"  {na_val_varname} = {na_check_fname}({table_name}_data1, {table_name}_ind)\n"
+                func_text += f"{indent}{na_val_varname} = {na_check_fname}({table_name}_data1, {table_name}_ind)\n"
 
             table_getitem_funcs[
                 na_check_fname
