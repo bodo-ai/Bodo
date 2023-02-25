@@ -26,6 +26,31 @@ typedef bool (*cond_expr_fn_t)(array_info** left_table,
                                void** right_null_bitmap, int64_t l_ind,
                                int64_t r_ind);
 
+/**
+ * @brief Same as previous function type, but processes data in batches and sets
+ * bits in a bitmap.
+ *
+ * @param left_table array of array_info pointers for all columns of left table
+ * @param right_table array of array_info pointers for all columns of right
+ * table
+ * @param left_data1 array of data1 pointers for the left table. This is used as
+ *      a fast path for numeric columns.
+ * @param right_data1  array of data1 pointers for the right table. This is used
+ * as a fast path for numeric columns.
+ * @param left_null_bitmap array of null bitmaps for the left table.
+ * @param right_null_bitmap array of null bitmaps for the right table.
+ * @param match_arr array of null bitmaps to set output
+ * @param left_block_start start index for left table loop
+ * @param left_block_end end index for left table loop
+ * @param right_block_start start index for right table loop
+ * @param right_block_end end index for right table loop
+ */
+typedef void (*cond_expr_fn_batch_t)(
+    array_info** left_table, array_info** right_table, void** left_data1,
+    void** right_data1, void** left_null_bitmap, void** right_null_bitmap,
+    uint8_t* match_arr, int64_t left_block_start, int64_t left_block_end,
+    int64_t right_block_start, int64_t right_block_end);
+
 /** This function does the joining of the table and returns the joined
  * table
  *
@@ -133,7 +158,7 @@ table_info* hash_join_table(
 table_info* cross_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
     bool right_parallel, bool is_left, bool is_right, bool* key_in_output,
-    int64_t* vect_need_typechange, cond_expr_fn_t cond_func,
+    int64_t* vect_need_typechange, cond_expr_fn_batch_t cond_func,
     uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
     uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
     uint64_t* num_rows_ptr);

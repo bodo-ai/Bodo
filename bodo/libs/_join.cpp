@@ -2419,7 +2419,7 @@ table_info* create_out_table(
  */
 void cross_join_table_local(table_info* left_table, table_info* right_table,
                             bool is_left_outer, bool is_right_outer,
-                            cond_expr_fn_t cond_func, bool parallel_trace,
+                            cond_expr_fn_batch_t cond_func, bool parallel_trace,
                             std::vector<int64_t>& left_idxs,
                             std::vector<int64_t>& right_idxs,
                             std::vector<uint8_t>& left_row_is_matched,
@@ -2454,37 +2454,54 @@ void cross_join_table_local(table_info* left_table, table_info* right_table,
     int64_t right_block_n_rows =
         (int64_t)std::ceil(n_rows_right / (double)n_right_blocks);
 
+    // bitmap for output of condition function for each block
+    uint8_t* match_arr = nullptr;
+    if (cond_func != nullptr) {
+        int64_t n_bytes_match =
+            ((left_block_n_rows * right_block_n_rows) + 7) >> 3;
+        match_arr = new uint8_t[n_bytes_match];
+    }
+
     for (int64_t b_left = 0; b_left < n_left_blocks; b_left++) {
         for (int64_t b_right = 0; b_right < n_right_blocks; b_right++) {
             int64_t left_block_start = b_left * left_block_n_rows;
             int64_t right_block_start = b_right * right_block_n_rows;
-            for (int64_t i = left_block_start;
-                 i < left_block_start + left_block_n_rows; i++) {
-                for (int64_t j = right_block_start;
-                     j < right_block_start + right_block_n_rows; j++) {
-                    if ((i < (int64_t)n_rows_left) &&
-                        (j < (int64_t)n_rows_right)) {
-                        bool match = (cond_func == nullptr) ||
-                                     cond_func(left_table_infos.data(),
-                                               right_table_infos.data(),
-                                               col_ptrs_left.data(),
-                                               col_ptrs_right.data(),
-                                               null_bitmap_left.data(),
-                                               null_bitmap_right.data(), i, j);
-                        if (match) {
-                            left_idxs.emplace_back(i);
-                            right_idxs.emplace_back(j);
-                            if (is_left_outer) {
-                                SetBitTo(left_row_is_matched.data(), i, true);
-                            }
-                            if (is_right_outer) {
-                                SetBitTo(right_row_is_matched.data(), j, true);
-                            }
+            int64_t left_block_end = std::min(
+                left_block_start + left_block_n_rows, (int64_t)n_rows_left);
+            int64_t right_block_end = std::min(
+                right_block_start + right_block_n_rows, (int64_t)n_rows_right);
+            // call condition function on the input block which sets match
+            // results in match_arr bitmap
+            if (cond_func != nullptr) {
+                cond_func(left_table_infos.data(), right_table_infos.data(),
+                          col_ptrs_left.data(), col_ptrs_right.data(),
+                          null_bitmap_left.data(), null_bitmap_right.data(),
+                          match_arr, left_block_start, left_block_end,
+                          right_block_start, right_block_end);
+            }
+
+            int64_t match_ind = 0;
+            for (int64_t i = left_block_start; i < left_block_end; i++) {
+                for (int64_t j = right_block_start; j < right_block_end; j++) {
+                    bool match = (match_arr == nullptr) ||
+                                 GetBit(match_arr, match_ind++);
+                    if (match) {
+                        left_idxs.emplace_back(i);
+                        right_idxs.emplace_back(j);
+                        if (is_left_outer) {
+                            SetBitTo(left_row_is_matched.data(), i, true);
+                        }
+                        if (is_right_outer) {
+                            SetBitTo(right_row_is_matched.data(), j, true);
                         }
                     }
                 }
             }
         }
+    }
+
+    if (match_arr != nullptr) {
+        delete[] match_arr;
     }
 }
 
@@ -2494,7 +2511,7 @@ table_info* cross_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
     bool right_parallel, bool is_left_outer, bool is_right_outer,
     bool* key_in_output, int64_t* use_nullable_arr_type,
-    cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
+    cond_expr_fn_batch_t cond_func, uint64_t* cond_func_left_columns,
     uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
     uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
     try {
