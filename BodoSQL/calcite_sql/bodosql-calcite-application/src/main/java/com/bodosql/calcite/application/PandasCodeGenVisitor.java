@@ -178,6 +178,24 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
+   * Generate the new table variable name for step by step pandas codegen
+   *
+   * @return variable name
+   */
+  public String genTableVar() {
+    return "T" + this.dfVarId++;
+  }
+
+  /**
+   * Generate the new Series variable name for step by step pandas codegen
+   *
+   * @return variable name
+   */
+  public String genSeriesVar() {
+    return "S" + this.dfVarId++;
+  }
+
+  /**
    * Generate the new temporary variable name for step by step pandas codegen.
    *
    * @return variable name

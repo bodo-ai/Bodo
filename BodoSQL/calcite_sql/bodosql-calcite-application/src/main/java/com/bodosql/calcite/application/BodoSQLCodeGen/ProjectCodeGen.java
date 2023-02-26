@@ -17,27 +17,6 @@ import org.apache.calcite.rex.RexNode;
  * Class that returns the generated code for Project expressions after all inputs have been visited.
  */
 public class ProjectCodeGen {
-  private static int seriesVarId = 0;
-
-  /**
-   * Generate the new Series variable name for step by step pandas codegen
-   *
-   * @return variable name
-   */
-  private static String genSeriesVarId() {
-    return "S" + seriesVarId++;
-  }
-
-  private static int tableVarId = 0;
-
-  /**
-   * Generate a new table variable name for step by step pandas codegen
-   *
-   * @return variable name
-   */
-  private static String genTableVarname() {
-    return "T" + tableVarId++;
-  }
 
   /*-
    * Generate Python code for a Project expression. Uses logical_table_to_table() to always create a
@@ -98,7 +77,7 @@ public class ProjectCodeGen {
       outColInds.add(currentNonTableInd);
       currentNonTableInd++;
 
-      String seriesName = genSeriesVarId();
+      String seriesName = pdVisitorClass.genSeriesVar();
       seriesNames.add(seriesName);
 
       switch (exprType) {
@@ -154,7 +133,7 @@ public class ProjectCodeGen {
     // For example, if input T1 has 3 columns:
     // logical_table_to_table((T1, S0), (2, 3, 1)) creates a table with (T1_2, S0, T1_1)
     // logical_table_to_table(((A, B, C), S0), (2, 3, 1)) creates a table with (C, S0, B)
-    String outTableName = genTableVarname();
+    String outTableName = pdVisitorClass.genTableVar();
     outString
         .append(indent)
         .append(outTableName)
