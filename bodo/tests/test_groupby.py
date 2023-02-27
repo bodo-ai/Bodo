@@ -570,7 +570,7 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
         sort_output=True,
         reset_index=True,
         convert_columns_to_pandas=True,
-        convert_to_nullable_float=False,
+        check_dtype=False,
     )
     check_func(
         impl8,
@@ -578,7 +578,7 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
         sort_output=True,
         reset_index=True,
         convert_columns_to_pandas=True,
-        convert_to_nullable_float=False,
+        check_dtype=False,
     )
     check_func(
         impl9,
@@ -586,7 +586,7 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
         sort_output=True,
         reset_index=True,
         convert_columns_to_pandas=True,
-        convert_to_nullable_float=False,
+        check_dtype=False,
     )
     check_func(
         impl10,
@@ -594,7 +594,7 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
         sort_output=True,
         reset_index=True,
         convert_columns_to_pandas=True,
-        convert_to_nullable_float=False,
+        check_dtype=False,
     )
 
 
@@ -1771,7 +1771,14 @@ def test_groupby_agg_general_udf(memory_leak_check):
         return res
 
     df = pd.DataFrame({"A": [0, 0, 1, 1, 1, 0], "B": [3, 10, 20, 4, 5, 1]})
-    check_func(impl, (df,), sort_output=True, convert_to_nullable_float=False)
+    # Note: var always outputs nullable float in Bodo, so we disable the check_dtype
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
 
 
 def test_groupby_agg_const_dict(memory_leak_check):
@@ -1886,25 +1893,100 @@ def test_groupby_agg_const_dict(memory_leak_check):
     )
     check_func(impl, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
-    check_func(impl3, (df,), sort_output=True, convert_to_nullable_float=False)
-    check_func(impl4, (df,), sort_output=True, convert_to_nullable_float=False)
-    check_func(impl5, (df,), sort_output=True, convert_to_nullable_float=False)
-    check_func(impl6, (df,), sort_output=True, convert_to_nullable_float=False)
-    check_func(impl7, (df,), sort_output=True, convert_to_nullable_float=False)
+    # For median, var, etc. we output a Float64 even if the input is float64.
+    # As a result we disable the dtype check.
+    check_func(
+        impl3,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(
+        impl4,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(
+        impl5,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(
+        impl6,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(
+        impl7,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
     check_func(
         impl8,
         (df,),
         sort_output=True,
         reset_index=True,
         convert_to_nullable_float=False,
+        check_dtype=False,
     )
-    check_func(impl9, (df,), sort_output=True, convert_to_nullable_float=False)
-    check_func(impl10, (df,), sort_output=True, convert_to_nullable_float=False)
-    check_func(impl11, (df,), sort_output=True, convert_to_nullable_float=False)
-    check_func(impl12, (df,), sort_output=True, convert_to_nullable_float=False)
-    check_func(impl13, (df,), sort_output=True, convert_to_nullable_float=False)
-    check_func(impl14, (df,), sort_output=True, convert_to_nullable_float=False)
-    check_func(impl15, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(
+        impl9,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(
+        impl10,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(
+        impl11,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(
+        impl12,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(
+        impl13,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(
+        impl14,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
+    check_func(
+        impl15,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
     # can't use check_func since lambda name in MultiIndex doesn't match Pandas
     # TODO: fix lambda name
     # check_func(impl16, (df,), sort_output=True, reset_index=True)
@@ -2048,7 +2130,14 @@ def test_groupby_nunique(df, memory_leak_check):
         return df2
 
     check_func(impl0, (df,), sort_output=True)
-    check_func(impl1, (df,), sort_output=True, convert_to_nullable_float=False)
+    # Bodo currently always outputs a nullable float for median
+    check_func(
+        impl1,
+        (df,),
+        sort_output=True,
+        convert_to_nullable_float=False,
+        check_dtype=False,
+    )
     check_func(impl2, (df,), sort_output=True, convert_to_nullable_float=False)
     check_func(impl3, (df,), sort_output=True)
 
