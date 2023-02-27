@@ -106,6 +106,7 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         explicit_select=False,
         series_select=False,
         _num_shuffle_keys=-1,
+        _use_sql_rules=False,
     ):
         # TODO [BE-3982]: Ensure full groupby support with tz-aware keys and data.
         self.df_type = df_type
@@ -118,6 +119,8 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         # How many of the keys to use as the keys to the shuffle. If -1
         # we shuffle on all keys.
         self._num_shuffle_keys = _num_shuffle_keys
+        # Should we use SQL or Pandas rules
+        self._use_sql_rules = _use_sql_rules
 
         super(DataFrameGroupByType, self).__init__(
             name=f"DataFrameGroupBy({df_type}, {keys}, {selection}, {as_index}, {dropna}, {explicit_select}, {series_select}, {_num_shuffle_keys})"
@@ -134,6 +137,7 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
             self.explicit_select,
             self.series_select,
             self._num_shuffle_keys,
+            self._use_sql_rules,
         )
 
     @property
@@ -174,7 +178,13 @@ def validate_udf(func_name, func):
 
 @intrinsic
 def init_groupby(
-    typingctx, obj_type, by_type, as_index_type, dropna_type, _num_shuffle_keys
+    typingctx,
+    obj_type,
+    by_type,
+    as_index_type,
+    dropna_type,
+    _num_shuffle_keys,
+    _is_bodosql,
 ):
     """Initialize a groupby object. The data object inside can be a DataFrame"""
 
@@ -216,6 +226,10 @@ def init_groupby(
         shuffle_keys = get_overload_const_int(_num_shuffle_keys)
     else:  # pragma: no cover
         shuffle_keys = -1
+    if is_overload_constant_bool(_is_bodosql):
+        _use_sql_rules = get_overload_const_bool(_is_bodosql)
+    else:
+        _use_sql_rules = False
     groupby_type = DataFrameGroupByType(
         obj_type,
         keys,
@@ -224,9 +238,17 @@ def init_groupby(
         dropna,
         False,
         _num_shuffle_keys=shuffle_keys,
+        _use_sql_rules=_use_sql_rules,
     )
     return (
-        groupby_type(obj_type, by_type, as_index_type, dropna_type, _num_shuffle_keys),
+        groupby_type(
+            obj_type,
+            by_type,
+            as_index_type,
+            dropna_type,
+            _num_shuffle_keys,
+            _is_bodosql,
+        ),
         codegen,
     )
 
@@ -275,6 +297,7 @@ class StaticGetItemDataFrameGroupBy(AbstractTemplate):
                 True,
                 series_select,
                 _num_shuffle_keys=grpby._num_shuffle_keys,
+                _use_sql_rules=grpby._use_sql_rules,
             )
             return signature(ret_grp, *args)
 
@@ -341,7 +364,8 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     elif (func_name in {"median", "mean", "var", "std"}) and isinstance(
         in_dtype, (Decimal128Type, types.Integer, types.Float)
     ):
-        return dtype_to_array_type(types.float64), "ok"
+        # TODO: Only make the output nullable if the input is nullable?
+        return to_nullable_type(dtype_to_array_type(types.float64)), "ok"
     elif func_name == "boolor_agg":
         if isinstance(
             in_dtype, (Decimal128Type, types.Integer, types.Float, types.Boolean)
@@ -788,6 +812,7 @@ def get_agg_funcname_and_outtyp(
             True,
             True,
             _num_shuffle_keys=grp._num_shuffle_keys,
+            _use_sql_rules=grp._use_sql_rules,
         )
         out_tp = get_agg_typ(
             ret_grp,
@@ -817,6 +842,7 @@ def get_agg_funcname_and_outtyp(
             True,
             True,
             _num_shuffle_keys=grp._num_shuffle_keys,
+            _use_sql_rules=grp._use_sql_rules,
         )
         # out_tp is series because we are passing only one input column
         out_tp = get_agg_typ(
@@ -1650,6 +1676,7 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             True,
             True,
             _num_shuffle_keys=grpby._num_shuffle_keys,
+            _use_sql_rules=grpby._use_sql_rules,
         )
 
 

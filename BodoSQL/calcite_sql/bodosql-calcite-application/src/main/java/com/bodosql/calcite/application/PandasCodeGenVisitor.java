@@ -1920,7 +1920,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // currently, we require there to always be a partition clause
     if (!window.partitionKeys.isEmpty()) {
       StringBuilder grpbyExpr = new StringBuilder(".groupby(").append(groupbyCols.toString());
-      grpbyExpr.append(", as_index = False, dropna=False)");
+      grpbyExpr.append(", as_index=False, dropna=False, _is_bodosql=True)");
       groupedColExpr.append(grpbyExpr);
     } else {
       throw new BodoSQLCodegenException(

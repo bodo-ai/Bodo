@@ -45,6 +45,8 @@ def test_agg_single_str(test_groupby_agg_df, memory_leak_check):
         (test_groupby_agg_df,),
         sort_output=True,
         reset_index=True,
+        # Mean always outputs a nullable float for Bodo.
+        check_dtype=False,
         convert_to_nullable_float=False,
     )
     # Pandas seems to detect that every value can be represented as an integer and returns

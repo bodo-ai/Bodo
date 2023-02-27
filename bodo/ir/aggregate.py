@@ -603,6 +603,7 @@ class Aggregate(ir.Stmt):
         func_name,
         dropna,
         _num_shuffle_keys,
+        _use_sql_rules,
     ):
         """IR node for groupby operations. It takes a logical table (input data can be
         in a table and arrays, or just arrays), and returns a logical table (table and
@@ -656,6 +657,8 @@ class Aggregate(ir.Stmt):
                 table to distribute table across ranks. This leads to shuffling by
                 keys[:_num_shuffle_keys]. If _num_shuffle_keys == -1 then we use all
                 of the keys, which is the common case.
+            _use_sql_rules (bool): whether to use SQL rules for groupby aggregation
+                or Pandas rules
         """
         self.df_out = df_out
         self.df_in = df_in
@@ -675,6 +678,7 @@ class Aggregate(ir.Stmt):
         self.func_name = func_name
         self.dropna = dropna
         self._num_shuffle_keys = _num_shuffle_keys
+        self._use_sql_rules = _use_sql_rules
         # logical column number of dead inputs
         self.dead_in_inds = set()
         # logical column number of dead outputs
@@ -1979,8 +1983,9 @@ def gen_top_level_agg_func(
         f"{agg_node.input_has_index}, ftypes.ctypes, func_offsets.ctypes, "
         f"udf_ncols.ctypes, {parallel}, {skipdropna}, {shift_periods}, "
         f"{transform_func}, {head_n}, {agg_node.return_key}, {agg_node.same_index}, "
-        f"{agg_node.dropna}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr,"
-        f" cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes, {n_shuffle_keys})\n"
+        f"{agg_node.dropna}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, "
+        f"cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes, {n_shuffle_keys}, "
+        f"{agg_node._use_sql_rules})\n"
     )
 
     out_cpp_col_inds = []
