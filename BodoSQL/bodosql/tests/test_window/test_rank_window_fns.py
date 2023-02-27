@@ -36,7 +36,7 @@ def test_row_number_orderby(datapath, memory_leak_check):
         ctx,
         None,
         expected_output=py_output,
-        only_jit_1DVar=True,
+        check_dtype=False,
     )
 
 

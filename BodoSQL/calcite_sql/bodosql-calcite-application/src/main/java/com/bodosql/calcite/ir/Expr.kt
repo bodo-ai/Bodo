@@ -29,7 +29,7 @@ abstract class Expr {
      * @param callee the function this expression will invoke.
      * @param args a list of expressions to be used as arguments.
      */
-    data class Call(val callee: String, val args: List<Expr> = listOf()) : Expr() {
+    data class Call(val callee: String, val args: kotlin.collections.List<Expr> = listOf()) : Expr() {
         constructor(callee: String, vararg args: Expr) : this(callee, args.toList())
 
         override fun emit(): String {
@@ -39,10 +39,55 @@ abstract class Expr {
     }
 
     /**
+     * Represents a Python method call. This should be used as a generic call for certain methods that are unlikely to repeat.
+     * For common operations (e.g. Groupby) we may want to implement an optimized implementation.
+     *
+     * @param inputVar: The input value whose method is being invoked.
+     * @param methodName: The name of the method being called.
+     * @param args: The arguments to be passed as regular arguments.
+     * @param namedArgs: The arguments to be passed as keyword arguments. Note we use a pair instead of a map
+     * to ensure the order is deterministic.
+     */
+    data class Method(val inputVar: Expr, val methodName: String, val args: kotlin.collections.List<Expr> = listOf(), val namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf()) : Expr() {
+
+
+        override fun emit(): String {
+            var regularArgs = ""
+            var keywordArgs = ""
+            if (this.args.isNotEmpty()) {
+                regularArgs = this.args.joinToString(separator = ", ", postfix = ", ") { it.emit() }
+            }
+            if (namedArgs.isNotEmpty()) {
+                keywordArgs = this.namedArgs.map{ Raw(it.first + " = " + it.second.emit())}.joinToString(separator = ", ") { it.emit() }
+            }
+            return "${inputVar.emit()}.$methodName(${regularArgs}${keywordArgs})"
+        }
+    }
+
+    /**
+     * Represents a call to groupby with the arguments that could change depending on the call.
+     *
+     * @param inputVar: The input value whose method is being invoked.
+     * @param keys: The groupby keys.
+     * @param asIndex: Should keys be returned as an index.
+     * @param dropna: Should NA values be dropped.
+     *
+     */
+    data class Groupby(val inputVar: Expr, val keys: Expr.List, val asIndex: Boolean, val dropna: Boolean) : Expr() {
+
+
+        override fun emit(): String {
+            // Generate the keyword args
+            val keywordArgs = listOf(Pair("as_index", BooleanLiteral(asIndex)), Pair("dropna", BooleanLiteral(dropna)), Pair("_is_bodosql", BooleanLiteral(true)));
+            return Method(inputVar, "groupby", listOf(keys), keywordArgs).emit()
+        }
+    }
+
+    /**
      * Represents a tuple creation.
      * @param args The inputs to the tuple.
      */
-    data class Tuple(val args: List<Expr>) : Expr() {
+    data class Tuple(val args: kotlin.collections.List<Expr>) : Expr() {
         override fun emit(): String {
             if (args.isEmpty()) {
                 return "()"
@@ -52,11 +97,46 @@ abstract class Expr {
             return "(${tupleArgs})"
         }
     }
+
+    /**
+     * Represents a List creation.
+     * @param args The inputs to the list.
+     */
+    data class List(val args: kotlin.collections.List<Expr>) : Expr() {
+        override fun emit(): String {
+            val listArgs = args.joinToString(separator = ", ") { it.emit() }
+            return "[${listArgs}]"
+        }
+    }
+
     /**
      * Represents a triple quoted String.
      * @param arg The body of the string.
      */
     data class TripleQuotedString(val arg: Expr) : Expr() {
         override fun emit(): String = "\"\"\"${arg.emit()}\"\"\""
+    }
+
+    /**
+     * Represents a Single literal wrapped in regular
+     * double quotes.
+     * @param arg The body of the string.
+     */
+    data class StringLiteral(val arg: Expr) : Expr() {
+        override fun emit(): String = "\"${arg.emit()}\""
+    }
+
+    /**
+     * Represents a Boolean Literal.
+     * @param arg The value of the literal.
+     */
+    data class BooleanLiteral(val arg: Boolean) : Expr() {
+        override fun emit(): String {
+            if (arg) {
+                return "True"
+            } else {
+                return "False"
+            }
+        }
     }
 }

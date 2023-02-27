@@ -51,12 +51,14 @@ struct Bodo_FTypes {
         boolor_agg = 24,
         udf = 25,
         gen_udf = 26,
-        num_funcs = 27,  // num_funcs is used to know how many functions up to
+        window = 27,
+        row_number = 28,
+        num_funcs = 29,  // num_funcs is used to know how many functions up to
                          // this point. Below this point are functions that are
                          // defined in the C++ code but not the Python enum.
-        mean_eval = 28,
-        var_eval = 29,
-        std_eval = 30
+        mean_eval = 30,
+        var_eval = 31,
+        std_eval = 32
     };
 };
 
@@ -2326,6 +2328,96 @@ void ngroup_computation(array_info* arr, array_info* out_arr,
                 getv<int64_t>(out_arr, i), val);
         }
     }
+}
+
+/**
+ * @brief Handles the update step for the supported window functions.
+ * These functions are not simple reductions and require additional
+ * functionality to operate over a "window" of values (possibly a sort
+ * or equivalent). The output size is always the same size as the original
+ * input.
+ *
+ * @param[in] orderby_arr The array that is being "sorted" to determine
+ * the groups. In some situations it may be possible to do a partial sort
+ * or avoid sorting.
+ * @param[in] window_func The name of the window function being computed.
+ * Currently we only support row_number.
+ * @param[out] out_arr The output array being population.
+ * @param[in] grp_info Struct containing information about the groups.
+ * @param[in] asc Should the array be sorted in ascending order?
+ * @param[in] na_pos Should NA's be placed at the end of the array?
+ * @param[in] is_parallel Is the data distributed? This is used for tracing
+ * informate.
+ */
+void window_computation(array_info* orderby_arr, int64_t window_func,
+                        array_info* out_arr, grouping_info const& grp_info,
+                        bool asc, bool na_pos, bool is_parallel) {
+    const std::vector<int64_t>& row_to_group = grp_info.row_to_group;
+    int64_t num_rows = row_to_group.size();
+    // Wrap the row_to_group in an array info so we can use it to sort.
+    array_info* group_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
+    for (int64_t i = 0; i < num_rows; i++) {
+        getv<int64_t>(group_arr, i) = row_to_group[i];
+    }
+    // Create a new table. We want to sort the table first by
+    // the groups and second by the orderby_arr.
+    table_info* sort_table = new table_info();
+    // sort_values_table_local steals a reference
+    incref_array(orderby_arr);
+    sort_table->columns.push_back(group_arr);
+    sort_table->columns.push_back(orderby_arr);
+    // Append an index column so we can find the original
+    // index in the out array.
+    array_info* idx_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
+    for (int64_t i = 0; i < num_rows; i++) {
+        getv<int64_t>(idx_arr, i) = i;
+    }
+    sort_table->columns.push_back(idx_arr);
+    int64_t vect_ascending[2] = {asc, asc};
+    int64_t na_position[2] = {na_pos, na_pos};
+
+    // Sort the table
+    // XXX: We don't need the entire chunk of data sorted,
+    // just the groups. We could do a partial sort to avoid
+    // the overhead of sorting the data and in the future
+    // we may be want to explore if we can use hashing
+    // instead to avoid sort overhead.
+    table_info* iter_table = sort_values_table_local(
+        sort_table, 2, vect_ascending, na_position, nullptr,
+        is_parallel /* This is just used for tracing */);
+    array_info* sorted_groups = iter_table->columns[0];
+    array_info* sorted_idx = iter_table->columns[2];
+    // sort_values_table_local steals a reference so
+    // we don't need to decref
+    delete sort_table;
+
+    switch (window_func) {
+        case Bodo_FTypes::row_number: {
+            // For row number we just generate np.range(1, n+1) for each group,
+            // where n is the number of rows in the group. To track this we just
+            // check for when the group changes.
+            int64_t prev_group = -1;
+            int64_t row_num = 1;
+            for (int64_t i = 0; i < num_rows; i++) {
+                int64_t curr_group = getv<int64_t>(sorted_groups, i);
+                if (curr_group != prev_group) {
+                    row_num = 1;
+                } else {
+                    row_num++;
+                }
+                // Get the index in the output array.
+                int64_t idx = getv<int64_t>(sorted_idx, i);
+                getv<int64_t>(out_arr, idx) = row_num;
+                // Set the prev group
+                prev_group = curr_group;
+            }
+            break;
+        }
+        default:
+            throw new std::runtime_error("Invalid window function");
+    }
+    // Delete the sorted table.
+    delete_table_decref_arrays(iter_table);
 }
 
 /**
@@ -4753,6 +4845,10 @@ void get_groupby_output_dtype(int ftype,
             array_type = bodo_array_type::NULLABLE_INT_BOOL;
             dtype = Bodo_CTypes::_BOOL;
             return;
+        case Bodo_FTypes::row_number:
+            array_type = bodo_array_type::NUMPY;
+            dtype = Bodo_CTypes::UINT64;
+            return;
         default:
             return;
     }
@@ -5592,6 +5688,7 @@ void copy_dict_string_values_transform(array_info* update_col,
 BasicColSet* makeColSet(array_info* in_col, array_info* index_col, int ftype,
                         bool do_combine, bool skipna, int64_t periods,
                         int64_t transform_func, int n_udf, bool is_parallel,
+                        bool window_ascending, bool window_na_position,
                         int* udf_n_redvars = nullptr,
                         table_info* udf_table = nullptr, int udf_table_idx = 0,
                         table_info* nunique_table = nullptr,
@@ -5600,13 +5697,13 @@ BasicColSet* makeColSet(array_info* in_col, array_info* index_col, int ftype,
 class TransformColSet : public BasicColSet {
    public:
     TransformColSet(array_info* in_col, int ftype, int _func_num,
-                    bool do_combine, bool use_sql_rules)
+                    bool do_combine, bool is_parallel, bool use_sql_rules)
         : BasicColSet(in_col, ftype, false, use_sql_rules),
           transform_func(_func_num) {
         transform_op_col =
             makeColSet(in_col, nullptr, transform_func, do_combine, false, 0,
-                       transform_func, 0, true, nullptr, nullptr, 0, nullptr,
-                       use_sql_rules);  // is_parallel = true
+                       transform_func, 0, is_parallel, false, false, nullptr,
+                       nullptr, 0, nullptr, use_sql_rules);
     }
     virtual ~TransformColSet() {
         if (transform_op_col != nullptr) delete transform_op_col;
@@ -5750,6 +5847,80 @@ class HeadColSet : public BasicColSet {
 };
 
 /**
+ * @brief WindowColSet column set for window operations.
+ *
+ */
+class WindowColSet : public BasicColSet {
+   public:
+    /**
+     * Construct Window column set
+     * @param in_col input column of groupby associated with this column set.
+     * This is a column that we will sort on.
+     * @param _window_func: What function are we computing.
+     * @param _asc: Is the sort ascending on the input column.
+     * @param _na_pos: Are NAs last in the sort
+     * @param _is_parallel: flag to identify whether data is distributed
+     * @param use_sql_rules: Do we use SQL or Pandas null handling rules.
+     *
+     */
+    WindowColSet(array_info* in_col, int64_t _window_func, bool _asc,
+                 bool _na_pos, bool _is_parallel, bool use_sql_rules)
+        : BasicColSet(in_col, Bodo_FTypes::window, false, use_sql_rules),
+          window_func(_window_func),
+          asc(_asc),
+          na_pos(_na_pos),
+          is_parallel(_is_parallel) {}
+    virtual ~WindowColSet() {}
+
+    /**
+     * Allocate column for update step.
+     * @param num_groups: number of groups found in the input table
+     * @param[in,out] out_cols: vector of columns of update table. This method
+     * adds columns to this vector.
+     * NOTE: the added column is an integer array with same length as
+     * input column regardless of input column types (i.e num_groups is not used
+     * in this case)
+     */
+    virtual void alloc_update_columns(size_t num_groups,
+                                      std::vector<array_info*>& out_cols) {
+        bodo_array_type::arr_type_enum arr_type = this->in_col->arr_type;
+        Bodo_CTypes::CTypeEnum dtype = this->in_col->dtype;
+        int64_t num_categories = this->in_col->num_categories;
+        bool is_combine = false;
+        // calling this modifies arr_type and dtype
+        // Output dtype is based on the window function.
+        get_groupby_output_dtype(window_func, arr_type, dtype, false,
+                                 is_combine);
+        // NOTE: output size of window is the same as input size
+        //       (NOT the number of groups)
+        out_cols.push_back(alloc_array_groupby(
+            this->in_col->length, 1, 1, arr_type, dtype, 0, num_categories));
+        this->update_cols.push_back(out_cols.back());
+    }
+
+    /**
+     * Perform update step for this column set. This first shuffles
+     * the data based on the orderby condition + group columns and
+     * then computes the window function. If this is a parallel operations
+     * then we must update the shuffle info so the reverse shuffle will
+     * be correct. If this is a serial operation then we need to execute
+     * a local reverse shuffle.
+     * @param grp_infos: grouping info calculated by GroupbyPipeline
+     */
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
+        window_computation(this->in_col, window_func, this->update_cols[0],
+                           grp_infos[0], asc, na_pos, is_parallel);
+    }
+
+   private:
+    int64_t window_func;
+    bool asc;
+    bool na_pos;
+    bool is_parallel;  // whether input column data is distributed or
+                       // replicated
+};
+
+/**
  * @brief NgroupColSet column set for ngroup operation
  */
 class NgroupColSet : public BasicColSet {
@@ -5829,6 +6000,7 @@ void output_list_arrays(std::vector<array_info*>& ListArr, array_info* arr) {
 BasicColSet* makeColSet(array_info* in_col, array_info* index_col, int ftype,
                         bool do_combine, bool skipna, int64_t periods,
                         int64_t transform_func, int n_udf, bool is_parallel,
+                        bool window_ascending, bool window_na_position,
                         int* udf_n_redvars, table_info* udf_table,
                         int udf_table_idx, table_info* nunique_table,
                         bool use_sql_rules) {
@@ -5862,11 +6034,15 @@ BasicColSet* makeColSet(array_info* in_col, array_info* index_col, int ftype,
             return new ShiftColSet(in_col, ftype, periods, use_sql_rules);
         case Bodo_FTypes::transform:
             return new TransformColSet(in_col, ftype, transform_func,
-                                       do_combine, use_sql_rules);
+                                       do_combine, is_parallel, use_sql_rules);
         case Bodo_FTypes::head:
             return new HeadColSet(in_col, ftype, use_sql_rules);
         case Bodo_FTypes::ngroup:
             return new NgroupColSet(in_col, is_parallel, use_sql_rules);
+        case Bodo_FTypes::window:
+            return new WindowColSet(in_col, transform_func, window_ascending,
+                                    window_na_position, is_parallel,
+                                    use_sql_rules);
         default:
             return new BasicColSet(in_col, ftype, do_combine, use_sql_rules);
     }
@@ -5883,7 +6059,9 @@ class GroupbyPipeline {
                     udf_general_fn general_udfs_cb, bool skipna,
                     int64_t periods, int64_t transform_func, int64_t _head_n,
                     bool _return_key, bool _return_index, bool _key_dropna,
-                    int64_t _n_shuffle_keys, bool _use_sql_rules)
+                    bool window_ascending, bool window_na_position,
+                    bool _maintain_input_size, int64_t _n_shuffle_keys,
+                    bool _use_sql_rules)
         : orig_in_table(_in_table),
           in_table(_in_table),
           num_keys(_num_keys),
@@ -5896,6 +6074,7 @@ class GroupbyPipeline {
           udf_table(_udf_table),
           udf_n_redvars(_udf_nredvars),
           head_n(_head_n),
+          maintain_input_size(_maintain_input_size),
           n_shuffle_keys(_n_shuffle_keys),
           use_sql_rules(_use_sql_rules) {
         tracing::Event ev("GroupbyPipeline()", is_parallel);
@@ -5934,20 +6113,29 @@ class GroupbyPipeline {
                        ftype == Bodo_FTypes::cummax ||
                        ftype == Bodo_FTypes::shift ||
                        ftype == Bodo_FTypes::transform ||
-                       ftype == Bodo_FTypes::ngroup) {
+                       ftype == Bodo_FTypes::ngroup ||
+                       ftype == Bodo_FTypes::window) {
                 // these operations first require shuffling the data to
                 // gather all rows with the same key in the same process
-                if (is_parallel) shuffle_before_update = true;
+                if (is_parallel) {
+                    shuffle_before_update = true;
+                }
                 // these operations require extended group info
                 req_extended_group_info = true;
                 if (ftype == Bodo_FTypes::cumsum ||
                     ftype == Bodo_FTypes::cummin ||
                     ftype == Bodo_FTypes::cumprod ||
-                    ftype == Bodo_FTypes::cummax)
+                    ftype == Bodo_FTypes::cummax) {
                     cumulative_op = true;
-                if (ftype == Bodo_FTypes::shift) shift_op = true;
-                if (ftype == Bodo_FTypes::transform) transform_op = true;
-                if (ftype == Bodo_FTypes::ngroup) ngroup_op = true;
+                } else if (ftype == Bodo_FTypes::shift) {
+                    shift_op = true;
+                } else if (ftype == Bodo_FTypes::transform) {
+                    transform_op = true;
+                } else if (ftype == Bodo_FTypes::ngroup) {
+                    ngroup_op = true;
+                } else if (ftype == Bodo_FTypes::window) {
+                    window_op = true;
+                }
                 break;
             }
         }
@@ -6075,8 +6263,8 @@ class GroupbyPipeline {
             for (auto a : in_table->columns) incref_array(a);
             in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr,
                                             is_parallel);
-            has_reverse_shuffle =
-                cumulative_op || shift_op || transform_op || ngroup_op;
+            has_reverse_shuffle = cumulative_op || shift_op || transform_op ||
+                                  ngroup_op || window_op;
             if (!has_reverse_shuffle) {
                 delete[] hashes;
                 delete comm_info_ptr;
@@ -6121,13 +6309,15 @@ class GroupbyPipeline {
                     col_sets.push_back(makeColSet(
                         nunique_col, index_col, ftypes[j], do_combine, skipna,
                         periods, transform_func, n_udf, is_parallel,
-                        udf_n_redvars, udf_table, udf_table_idx,
-                        nunique_tables[i], use_sql_rules));
+                        window_ascending, window_na_position, udf_n_redvars,
+                        udf_table, udf_table_idx, nunique_tables[i],
+                        use_sql_rules));
                 } else {
                     col_sets.push_back(makeColSet(
                         col, index_col, ftypes[j], do_combine, skipna, periods,
-                        transform_func, n_udf, is_parallel, udf_n_redvars,
-                        udf_table, udf_table_idx, nullptr, use_sql_rules));
+                        transform_func, n_udf, is_parallel, window_ascending,
+                        window_na_position, udf_n_redvars, udf_table,
+                        udf_table_idx, nullptr, use_sql_rules));
                 }
                 if (ftypes[j] == Bodo_FTypes::udf ||
                     ftypes[j] == Bodo_FTypes::gen_udf) {
@@ -6148,27 +6338,29 @@ class GroupbyPipeline {
                                      ftypes[0] == Bodo_FTypes::ngroup)) {
             col_sets.push_back(makeColSet(
                 in_table->columns[0], index_col, ftypes[0], do_combine, skipna,
-                periods, transform_func, n_udf, is_parallel, udf_n_redvars,
-                udf_table, udf_table_idx, nullptr, use_sql_rules));
+                periods, transform_func, n_udf, is_parallel, window_ascending,
+                window_na_position, udf_n_redvars, udf_table, udf_table_idx,
+                nullptr, use_sql_rules));
         }
         // Add key-sort column and index to col_sets
         // to apply head_computation on them as well.
         if (head_op && return_index) {
             // index-column
-            col_sets.push_back(makeColSet(
-                index_col, index_col, Bodo_FTypes::head, do_combine, skipna,
-                periods, transform_func, n_udf, is_parallel, udf_n_redvars,
-                udf_table, udf_table_idx, nullptr, use_sql_rules));
+            col_sets.push_back(
+                makeColSet(index_col, index_col, Bodo_FTypes::head, do_combine,
+                           skipna, periods, transform_func, n_udf, is_parallel,
+                           window_ascending, window_na_position, udf_n_redvars,
+                           udf_table, udf_table_idx, nullptr, use_sql_rules));
             if (head_i) {
                 array_info* col =
                     in_table->columns[in_table->columns.size() - 1];
                 col_sets.push_back(makeColSet(
                     col, index_col, Bodo_FTypes::head, do_combine, skipna,
-                    periods, transform_func, n_udf, is_parallel, udf_n_redvars,
+                    periods, transform_func, n_udf, is_parallel,
+                    window_ascending, window_na_position, udf_n_redvars,
                     udf_table, udf_table_idx, nullptr, use_sql_rules));
             }
         }
-
         in_table->id = 0;
         ev.add_attribute("g_shuffle_before_update",
                          static_cast<size_t>(shuffle_before_update));
@@ -6290,8 +6482,9 @@ class GroupbyPipeline {
             tables.push_back(it->second);
 
         if (req_extended_group_info) {
-            const bool consider_missing =
-                cumulative_op || shift_op || transform_op || ngroup_op;
+            const bool consider_missing = cumulative_op || shift_op ||
+                                          transform_op || ngroup_op ||
+                                          window_op;
             get_group_info_iterate(tables, hashes, nunique_hashes, grp_infos,
                                    consider_missing, key_dropna, is_parallel);
         } else {
@@ -6314,7 +6507,8 @@ class GroupbyPipeline {
         // operations shuffle at different times. For example nunique + sum
         // in test_711.py e2e tests.
         update_table = cur_table = new table_info();
-        if (cumulative_op || shift_op || transform_op || head_op || ngroup_op) {
+        if (cumulative_op || shift_op || transform_op || head_op || ngroup_op ||
+            window_op) {
             num_keys = 0;  // there are no key columns in output of cumulative
                            // operations
         } else {
@@ -6435,27 +6629,37 @@ class GroupbyPipeline {
      * Returns the final output table which is the result of the groupby.
      */
     table_info* getOutputTable(int64_t* n_out_rows) {
-        *n_out_rows = cur_table->nrows();
+        if (maintain_input_size) {
+            // These operations are all defined to maintain the same
+            // length as the input.
+            *n_out_rows = orig_in_table->nrows();
+        } else {
+            *n_out_rows = cur_table->nrows();
+        }
         table_info* out_table = new table_info();
-        if (return_key)
+        if (return_key) {
             out_table->columns.assign(cur_table->columns.begin(),
                                       cur_table->columns.begin() + num_keys);
+        }
 
         // gb.head() with distirbuted data sorted the table so col_sets no
         // longer reflects final
         // output columns.
         if (head_op && is_parallel) {
-            for (uint64_t i = 0; i < cur_table->ncols(); i++)
+            for (uint64_t i = 0; i < cur_table->ncols(); i++) {
                 output_list_arrays(out_table->columns, cur_table->columns[i]);
+            }
         } else {
             for (BasicColSet* col_set : col_sets)
                 output_list_arrays(out_table->columns,
                                    col_set->getOutputColumn());
             // gb.head() already added index to out_table.
-            if (!head_op && return_index)
+            if (!head_op && return_index) {
                 out_table->columns.push_back(cur_table->columns.back());
+            }
         }
-        if ((cumulative_op || shift_op || transform_op || ngroup_op) &&
+        if ((cumulative_op || shift_op || transform_op || ngroup_op ||
+             window_op) &&
             is_parallel) {
             table_info* revshuf_table = reverse_shuffle_table_kernel(
                 out_table, in_hashes, *comm_info_ptr);
@@ -6858,10 +7062,12 @@ class GroupbyPipeline {
     bool nunique_op = false;
     bool head_op = false;
     bool ngroup_op = false;
+    bool window_op = false;
     bool has_reverse_shuffle = false;
     int64_t head_n;
     bool req_extended_group_info = false;
     bool do_combine;
+    bool maintain_input_size;
     int64_t n_shuffle_keys;
     bool use_sql_rules;
 
@@ -7489,7 +7695,8 @@ table_info* groupby_and_aggregate(
     int64_t periods, int64_t transform_func, int64_t head_n, bool return_key,
     bool return_index, bool key_dropna, void* update_cb, void* combine_cb,
     void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table,
-    int64_t* n_out_rows, int64_t n_shuffle_keys, bool use_sql_rules) {
+    int64_t* n_out_rows, bool window_ascending, bool window_na_position,
+    bool maintain_input_size, int64_t n_shuffle_keys, bool use_sql_rules) {
     try {
         tracing::Event ev("groupby_and_aggregate", is_parallel);
         int strategy =
@@ -7507,10 +7714,10 @@ table_info* groupby_and_aggregate(
                 (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
                 (udf_general_fn)general_udfs_cb, skipdropna, periods,
                 transform_func, head_n, return_key, return_index, key_dropna,
+                window_ascending, window_na_position, maintain_input_size,
                 n_shuffle_keys, use_sql_rules);
 
             table_info* ret_table = groupby.run(n_out_rows);
-
             return ret_table;
         };
         auto implement_categorical_exscan =
