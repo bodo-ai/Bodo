@@ -321,10 +321,12 @@ def sql_distributed_run(
     if bodo.user_logging.get_verbose_level() >= 1:
         pruning_msg = "Finish column pruning on read_sql node:\n%s\nColumns loaded %s\n"
         sql_cols = []
+        sql_types = []
         dict_encoded_cols = []
         for i in sql_node.out_used_cols:
             colname = sql_node.df_colnames[i]
             sql_cols.append(colname)
+            sql_types.append(sql_node.out_types[i])
             if isinstance(
                 sql_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
             ):
@@ -352,6 +354,15 @@ def sql_distributed_run(
                 encoding_msg,
                 sql_source,
                 dict_encoded_cols,
+            )
+        if bodo.user_logging.get_verbose_level() >= 2:
+            io_msg = "read_sql table/query:\n%s\n\nColumns/Types:\n"
+            for c, t in zip(sql_cols, sql_types):
+                io_msg += f"{c}: {t}\n"
+            bodo.user_logging.log_message(
+                "SQL I/O",
+                io_msg,
+                sql_node.sql_request,
             )
 
     parallel = bodo.ir.connector.is_connector_table_parallel(
