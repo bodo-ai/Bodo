@@ -4020,6 +4020,8 @@ def overload_dataframe_groupby(
     dropna=True,
     # Bodo specific argument. When provided we shuffle on the first n keys
     _bodo_num_shuffle_keys=-1,
+    # Bodo specific argument to determine Pandas vs BodoSQL.
+    _is_bodosql=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.groupby()")
 
@@ -4035,6 +4037,7 @@ def overload_dataframe_groupby(
         observed,
         dropna,
         _bodo_num_shuffle_keys,
+        _is_bodosql,
     )
 
     def _impl(
@@ -4049,9 +4052,10 @@ def overload_dataframe_groupby(
         observed=True,
         dropna=True,
         _bodo_num_shuffle_keys=-1,
+        _is_bodosql=False,
     ):  # pragma: no cover
         return bodo.hiframes.pd_groupby_ext.init_groupby(
-            df, by, as_index, dropna, _bodo_num_shuffle_keys
+            df, by, as_index, dropna, _bodo_num_shuffle_keys, _is_bodosql
         )
 
     return _impl
@@ -4069,6 +4073,7 @@ def validate_groupby_spec(
     observed,
     dropna,
     _num_shuffle_keys,
+    _is_bodosql,
 ):
     """
     validate df.groupby() specifications: In addition to consistent error checking
@@ -4124,6 +4129,10 @@ def validate_groupby_spec(
     if not is_overload_constant_int(_num_shuffle_keys):  # pragma: no cover
         raise_bodo_error(
             f"groupby(): '_num_shuffle_keys' parameter must be a constant integer, not {_num_shuffle_keys}."
+        )
+    if not is_overload_constant_bool(_is_bodosql):  # pragma: no cover
+        raise_bodo_error(
+            f"groupby(): '_is_bodosql' parameter must be a constant integer, not {_is_bodosql}."
         )
 
     # NOTE: sort default value is True in pandas. We opt to set it to False by default for performance

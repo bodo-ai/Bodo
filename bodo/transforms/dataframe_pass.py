@@ -1918,6 +1918,8 @@ class DataFramePass:
             # If grp_typ._num_shuffle_keys == -1 then we use
             # all of the keys, which is the common case.
             grp_typ._num_shuffle_keys,
+            # Should we use SQL or Pandas rules instead groupby
+            grp_typ._use_sql_rules,
         )
         nodes.append(agg_node)
 

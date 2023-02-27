@@ -188,7 +188,7 @@ public class AggHelpers {
     groupbyBuilder
         .append(".groupby(")
         .append(groupList)
-        .append(", as_index = False, dropna=False)");
+        .append(", as_index=False, dropna=False, _is_bodosql=True)");
     return groupbyBuilder.toString();
   }
 }

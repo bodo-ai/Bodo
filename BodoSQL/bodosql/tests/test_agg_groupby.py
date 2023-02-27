@@ -1059,3 +1059,44 @@ def test_tz_aware_having(memory_leak_check):
         None,
         expected_output=py_output,
     )
+
+
+def test_all_nulls(memory_leak_check):
+    """
+    Test the case where all values in a group are null.
+    """
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5] * 6,
+            # keep 1 value non-null to enable types in spark
+            "B": pd.Series([1] + [None] * 29, dtype="Int64"),
+            "C": pd.Series([False] + [None] * 29, dtype="boolean"),
+        }
+    )
+    py_output = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5],
+            "out1": pd.Series([1, None, None, None, None], dtype="Int64"),
+            "out2": pd.Series([1, None, None, None, None], dtype="Int64"),
+            "out3": pd.Series([1, None, None, None, None], dtype="Int64"),
+            "out4": pd.Series([1, 0, 0, 0, 0], dtype="int64"),
+            "out5": pd.Series([1.0, None, None, None, None], dtype="Float64"),
+            "out6": pd.Series([None, None, None, None, None], dtype="Float64"),
+            "out7": pd.Series([None, None, None, None, None], dtype="Float64"),
+            "out8": pd.Series([False, None, None, None, None], dtype="boolean"),
+        }
+    )
+    ctx = {"table1": df}
+    query = """
+        Select A,
+        SUM(B) as out1,
+        MAX(B) as out2,
+        MIN(B) as out3,
+        COUNT(B) as out4,
+        AVG(B) as out5,
+        STDDEV(B) as out6,
+        VARIANCE(B) as out7,
+        BOOLOR_AGG(C) AS out8
+    from table1 group by A
+    """
+    check_query(query, ctx, None, check_dtype=False, expected_output=py_output)
