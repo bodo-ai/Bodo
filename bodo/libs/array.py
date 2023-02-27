@@ -2796,6 +2796,9 @@ def groupby_and_aggregate(
     general_udfs_cb,
     udf_table_dummy_t,
     n_out_rows_t,
+    window_ascending_t,
+    window_na_position_t,
+    maintain_input_size_t,
     n_shuffle_keys_t,
     use_sql_rules_t,
 ):
@@ -2830,6 +2833,9 @@ def groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(1),  # window_ascending
+                lir.IntType(1),  # window_na_position
+                lir.IntType(1),  # maintain_input_size
                 lir.IntType(64),  # n_shuffle_keys_t
                 lir.IntType(1),  # use_sql_rules_t
             ],
@@ -2865,6 +2871,9 @@ def groupby_and_aggregate(
             types.voidptr,
             table_t,
             types.voidptr,
+            types.boolean,  # window_ascending
+            types.boolean,  # window_na_position
+            types.boolean,  # maintain_input_size
             types.int64,  # n_shuffle_keys_t
             types.boolean,  # use_sql_rules_t
         ),

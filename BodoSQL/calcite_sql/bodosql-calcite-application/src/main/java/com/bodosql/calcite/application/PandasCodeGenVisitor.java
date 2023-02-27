@@ -35,6 +35,7 @@ import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
+import com.bodosql.calcite.ir.*;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
@@ -1482,6 +1483,38 @@ public class PandasCodeGenVisitor extends RelVisitor {
     final String indent = getBodoIndent();
     if (aggOperations.size() == 0) {
       return new ArrayList<>();
+    }
+
+    // Check if we can use the optimized groupby.window C++ kernel. If so
+    // we directly to that codegen path.
+    if (usesOptimizedEngineKernel(aggOperations)) {
+      // usesOptimizedEngineKernel enforces that we have exactly 1 aggOperation
+      // and exactly 1 order by column.
+      RexOver windowFunc = aggOperations.get(0);
+      RexWindow window = windowFunc.getWindow();
+      // We need to visit all partition keys before generating
+      // code for the kernel
+      List<RexNodeVisitorInfo> childExprs = new ArrayList<>();
+      List<BodoSQLExprType.ExprType> childExprTypes = new ArrayList<>();
+      for (int i = 0; i < window.partitionKeys.size(); i++) {
+        RexNode node = window.partitionKeys.get(i);
+        RexNodeVisitorInfo curInfo = visitRexNode(node, colNames, id, inputVar, false, ctx);
+        childExprs.add(new RexNodeVisitorInfo(curInfo.getExprCode()));
+        childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
+      }
+      // Visit the order by key. This is required to be a single column.
+      // The RHS of order keys is a set of SqlKind Values. These are used to stored information
+      // about ascending and nulls first/last
+      RexNode node = window.orderKeys.get(0).left;
+      RexNodeVisitorInfo curRexInfo = visitRexNode(node, colNames, id, inputVar, false, ctx);
+      childExprs.add(new RexNodeVisitorInfo(curRexInfo.getExprCode()));
+      childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
+      Variable outputVar = new Variable(this.genWindowedAggDfName());
+      Expr outputCode =
+          generateOptimizedEngineKernelCode(
+              inputVar, outputVar, aggOperations, childExprs, childExprTypes, this.generatedCode);
+
+      return List.of(new RexNodeVisitorInfo(outputCode.emit()));
     }
 
     // Used to store each distinct window and the list of corresponding

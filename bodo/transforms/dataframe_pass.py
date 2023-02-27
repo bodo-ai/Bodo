@@ -1820,6 +1820,8 @@ class DataFramePass:
         # return_key=True if groupby returns group keys since needed for output.
         # e.g. for sum() but not shift()
         return_key = True
+        # Is the output df defined to maintain the same size as the input.
+        maintain_input_size = False
 
         for funcs in gb_info_in.values():
             for func, _ in funcs:
@@ -1827,12 +1829,16 @@ class DataFramePass:
                     input_has_index = True
                     same_index = True
                     return_key = False
+                    maintain_input_size = True
                 elif func.ftype in {"idxmin", "idxmax"}:
                     input_has_index = True
                 elif func.ftype == "head":
                     input_has_index = True
                     same_index = True
                     return_key = False
+                elif func.ftype == "window":
+                    return_key = False
+                    maintain_input_size = True
 
         # TODO: comment on when this case is possible and necessary
         if (
@@ -1912,6 +1918,7 @@ class DataFramePass:
             return_key,
             lhs.loc,
             func_name,
+            maintain_input_size,
             grp_typ.dropna,
             # Subset of keys to use as the key when shuffling across
             # ranks, keys[:grp_typ._num_shuffle_keys].

@@ -113,7 +113,10 @@ class Table:
         )
 
     def __str__(self) -> str:
-        return str(self.arrays)
+        return f"Table({str(self.arrays)})"
+
+    def __repr__(self) -> str:
+        return f"Table({repr(self.arrays)})"
 
     def to_pandas(self, index=None):
         """convert table to a DataFrame (with column names just a range of numbers)"""
