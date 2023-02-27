@@ -116,3 +116,23 @@ def test_transform_builtin(test_groupby_agg_df, memory_leak_check):
     check_func(test_impl1, (test_groupby_agg_df,), sort_output=True, reset_index=True)
     check_func(test_impl2, (test_groupby_agg_df,), sort_output=True, reset_index=True)
     check_func(test_impl3, (test_groupby_agg_df,), sort_output=True, reset_index=True)
+
+
+def test_groupby_window_all_dead():
+    # TODO: Fix memory leak
+    """
+    Tests the custom groupby.window kernel outputs the correct length
+    when all input columns are dead.
+    """
+
+    def impl(df):
+        res1 = df.groupby(["A"]).window("row_number", "B", True, "last")
+        return len(res1)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 3] * 2,
+            "B": [3, 2, 1, 5, 6, 7, 8, -1],
+        }
+    )
+    check_func(impl, (df,), py_output=8)

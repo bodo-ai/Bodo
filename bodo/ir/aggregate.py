@@ -275,6 +275,8 @@ supported_agg_funcs = [
     "boolor_agg",
     "udf",
     "gen_udf",
+    "window",
+    "row_number",
 ]
 # Currently supported operations with transform
 supported_transform_funcs = [
@@ -291,6 +293,11 @@ supported_transform_funcs = [
     "last",
     "var",
     "std",
+]
+# Currently supported operations with window
+supported_window_funcs = [
+    "no_op",  # needed to ensure that 0 value isn't matched with any function
+    "row_number",
 ]
 
 
@@ -344,7 +351,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 2
         func.ncols_post_shuffle = 2
         return func
-    if func_name in supported_agg_funcs[:-8]:
+    if func_name in supported_agg_funcs[:-9]:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.fname = func_name
@@ -419,12 +426,44 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
             elif bodo.utils.typing.is_builtin_function(agg_func_typ):
                 # Builtin function case (e.g. df.groupby("B").transform(sum))
                 f_name = bodo.utils.typing.get_builtin_function_name(agg_func_typ)
-            if f_name not in bodo.ir.aggregate.supported_transform_funcs[::]:
+            if f_name not in bodo.ir.aggregate.supported_transform_funcs:
                 raise BodoError(f"unsupported transform function {f_name}")
             # TODO: It could be user-defined
             func.transform_func = supported_agg_funcs.index(f_name)
         else:
             func.transform_func = supported_agg_funcs.index("no_op")
+        return func
+    if func_name == "window":
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        kws = dict(rhs.kws)
+        func_var = get_call_expr_arg(func_name, rhs.args, kws, 0, "func", "")
+        if func_var == "":  # pragma: no cover
+            raise BodoError("window function requires a function")
+        window_func = get_literal_value(typemap[func_var.name])
+        if (
+            window_func not in bodo.ir.aggregate.supported_window_funcs
+        ):  # pragma: no cover
+            raise BodoError(f"unsupported window function {window_func}")
+        # Note: Orderby column is in the gb_info
+        ascending_var = get_call_expr_arg(func_name, rhs.args, kws, 2, "ascending", "")
+        if ascending_var == "":  # pragma: no cover
+            raise BodoError("window function requires an ascending argument")
+        ascending = get_literal_value(typemap[ascending_var.name])
+        na_position_var = get_call_expr_arg(
+            func_name, rhs.args, kws, 3, "na_position", ""
+        )
+        if na_position_var == "":  # pragma: no cover
+            raise BodoError("window function requires an na_position argument")
+        na_position = get_literal_value(typemap[na_position_var.name])
+
+        # Update the function information that may need be needed for the generated C++ code.
+        func.ncols_pre_shuffle = 1
+        func.ncols_post_shuffle = 1
+        func.window_func = supported_agg_funcs.index(window_func)
+        func.ascending = ascending
+        func.na_position_b = na_position == "last"
         return func
 
     # agg case
@@ -601,6 +640,7 @@ class Aggregate(ir.Stmt):
         return_key,
         loc,
         func_name,
+        maintain_input_size,
         dropna,
         _num_shuffle_keys,
         _use_sql_rules,
@@ -652,6 +692,8 @@ class Aggregate(ir.Stmt):
             return_key (bool): whether groupby returns key columns in output
             loc (ir.Loc): code location of the IR node
             func_name (str): name of the groupby function called (sum, agg, ...)
+            maintain_input_size (bool): Is the output df the same length as the input
+                df? Used for dead column elimination.
             dropna (bool): whether groupby drops NA values in computation.
             _num_shuffle_keys (int): How many of the keys should be used in the shuffle
                 table to distribute table across ranks. This leads to shuffling by
@@ -676,6 +718,7 @@ class Aggregate(ir.Stmt):
         self.return_key = return_key
         self.loc = loc
         self.func_name = func_name
+        self.maintain_input_size = maintain_input_size
         self.dropna = dropna
         self._num_shuffle_keys = _num_shuffle_keys
         self._use_sql_rules = _use_sql_rules
@@ -1808,6 +1851,8 @@ def gen_top_level_agg_func(
     head_n = -1
     num_cum_funcs = 0
     transform_func = 0
+    window_ascending = False
+    window_na_position = False
 
     funcs = [func for _, func in agg_node.gb_info_out.values()]
     for f_idx, func in enumerate(funcs):
@@ -1823,9 +1868,15 @@ def gen_top_level_agg_func(
         if func.ftype == "shift":
             shift_periods = func.periods
             do_combine = False  # See median/nunique note ^
-        if func.ftype in {"transform"}:
+        if func.ftype == "transform":
             transform_func = func.transform_func
             do_combine = False  # See median/nunique note ^
+        if func.ftype == "window":
+            transform_func = func.window_func
+            do_combine = False  # See median/nunique note ^
+            window_ascending = func.ascending
+            window_na_position = func.na_position_b
+
         if func.ftype == "head":
             head_n = func.head_n
             do_combine = False  # This operation just retruns n rows. No combine needed.
@@ -1984,7 +2035,8 @@ def gen_top_level_agg_func(
         f"udf_ncols.ctypes, {parallel}, {skipdropna}, {shift_periods}, "
         f"{transform_func}, {head_n}, {agg_node.return_key}, {agg_node.same_index}, "
         f"{agg_node.dropna}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, "
-        f"cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes, {n_shuffle_keys}, "
+        f"cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes, {window_ascending}, "
+        f"{window_na_position}, {agg_node.maintain_input_size}, {n_shuffle_keys}, "
         f"{agg_node._use_sql_rules})\n"
     )
 

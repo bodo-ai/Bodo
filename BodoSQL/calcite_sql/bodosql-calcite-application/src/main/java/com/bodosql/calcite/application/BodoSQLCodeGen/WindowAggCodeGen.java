@@ -1,16 +1,23 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.generateProjectedDataframe;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getAscendingBoolString;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getNAPositionString;
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToNullableBodoArray;
 import static com.bodosql.calcite.application.Utils.Utils.addIndent;
 import static com.bodosql.calcite.application.Utils.Utils.assertWithErrMsg;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
-import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.*;
+import com.bodosql.calcite.ir.*;
+import com.bodosql.calcite.ir.Module;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import org.apache.calcite.rel.*;
 import org.apache.calcite.rel.type.*;
+import org.apache.calcite.rex.*;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Pair;
@@ -1416,5 +1423,92 @@ public class WindowAggCodeGen {
     }
 
     return sortText.toString();
+  }
+
+  /**
+   * Determine if this group of window operations can be computed in the Bodo-Engine optimized C++
+   * kernel. Right now we only support computing a single ROW_NUMBER function with exactly 1 order
+   * by column. We also require partition keys.
+   *
+   * @param aggOperations The list of RexOver operations that are being computed.
+   * @return Can these operations take the optimized C++ kernel path.
+   */
+  public static boolean usesOptimizedEngineKernel(List<RexOver> aggOperations) {
+    if (aggOperations.size() == 1) {
+      RexOver windowFunc = aggOperations.get(0);
+      String fnName = windowFunc.getAggOperator().getName();
+      RexWindow window = windowFunc.getWindow();
+      if (window.orderKeys.size() == 1 && window.partitionKeys.size() > 0) {
+        // Right now it's simpler to add more functions so we separate these conditions.
+        return fnName.equals("ROW_NUMBER");
+      }
+    }
+    return false;
+  }
+
+  public static Expr generateOptimizedEngineKernelCode(
+      String inputVar,
+      Variable outputVar,
+      List<RexOver> aggOperations,
+      List<RexNodeVisitorInfo> childExprs,
+      List<BodoSQLExprType.ExprType> childExprTypes,
+      Module.Builder builder) {
+    // usesOptimizedEngineKernel enforces that we have exactly 1 aggOperation
+    // and exactly 1 order by column.
+    RexOver windowFunc = aggOperations.get(0);
+    RexWindow window = windowFunc.getWindow();
+    List<String> childColNames = new ArrayList<>();
+    List<Expr> groupByColNames = new ArrayList<>();
+
+    // Generate intermediate names for each partition keys
+    int col_id_var = 0;
+    for (int i = 0; i < window.partitionKeys.size(); i++) {
+      Expr.Raw colName = new Expr.Raw("GRPBY_COL_" + col_id_var++);
+      groupByColNames.add(new Expr.StringLiteral(colName));
+      childColNames.add(colName.emit());
+    }
+
+    final Expr orderByColName;
+    RelFieldCollation.Direction dir = window.orderKeys.get(0).getDirection();
+    RelFieldCollation.NullDirection nullDir = window.orderKeys.get(0).getNullDirection();
+    if (dir == RelFieldCollation.Direction.ASCENDING) {
+      orderByColName = new Expr.Raw("ASC_COL_" + col_id_var);
+    } else {
+      assert dir == RelFieldCollation.Direction.DESCENDING;
+      orderByColName = new Expr.Raw("DEC_COL_" + col_id_var);
+    }
+    childColNames.add(orderByColName.emit());
+    final Expr.StringLiteral orderByKey = new Expr.StringLiteral(orderByColName);
+    final String orderAscending = getAscendingBoolString(dir);
+    final String orderNAPosition = getNAPositionString(nullDir);
+
+    // Generate a projection in case we needed to compute anything for the orderby/partition by
+    // columns
+    String projection =
+        generateProjectedDataframe(inputVar, childColNames, childExprs, childExprTypes);
+
+    Expr.Raw projectionExpr = new Expr.Raw(projection);
+    // Generate the groupby
+    Expr.List groupbyKeys = new Expr.List(groupByColNames);
+    Expr.Groupby groupby = new Expr.Groupby(projectionExpr, groupbyKeys, false, false);
+    // Generate the Window call
+    Expr.Method windowExpr =
+        new Expr.Method(
+            groupby,
+            "window",
+            List.of(
+                new Expr.StringLiteral(new Expr.Raw("row_number")),
+                orderByKey,
+                new Expr.Raw(orderAscending),
+                new Expr.Raw(orderNAPosition)),
+            List.of());
+
+    // Add the window function to the codegen
+    Op.Assign assignment = new Op.Assign(outputVar, windowExpr);
+    builder.add(assignment);
+    String outputColName = "AGG_OUTPUT_0";
+    return new Expr.Call(
+        "bodo.hiframes.pd_series_ext.get_series_data",
+        new Expr.Raw(String.format("%s[%s]", outputVar.emit(), makeQuoted(outputColName))));
   }
 }
