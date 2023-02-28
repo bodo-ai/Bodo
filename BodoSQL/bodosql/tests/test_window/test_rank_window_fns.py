@@ -91,20 +91,48 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
 
 
 @pytest.mark.parametrize(
+    "input_df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": np.arange(8),
+                    "B": ["A", "B", "C", "B", "C", "B", "B", "C"],
+                    "C": pd.Series(
+                        [1.1, -1.2, 0.9, -1000.0, 1.1, None, 0.0, 1.4], dtype="Float64"
+                    ),
+                }
+            ),
+            id="float64_orderby",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": np.arange(8),
+                    "B": ["A", "B", "C", "B", "C", "B", "B", "C"],
+                    "C": ["k", "b", "gdge", "a", "k", None, "e", "zed"],
+                }
+            ),
+            id="string_orderby",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+@pytest.mark.parametrize(
     "ascending",
     [
         True,
-        False,
+        pytest.param(False, marks=pytest.mark.slow),
     ],
 )
 @pytest.mark.parametrize(
     "nulls_last",
     [
         True,
-        False,
+        pytest.param(False, marks=pytest.mark.slow),
     ],
 )
-def test_row_number_filter(memory_leak_check, ascending, nulls_last):
+def test_row_number_filter(memory_leak_check, input_df, ascending, nulls_last):
     """
     Tests queries involving `where row_number() = 1`. This query
     will generate a special filter function that ensures the ROW_NUMBER()
@@ -127,16 +155,7 @@ def test_row_number_filter(memory_leak_check, ascending, nulls_last):
         )
     WHERE rn = 1
     """
-    df = pd.DataFrame(
-        {
-            "A": np.arange(8),
-            "B": ["A", "B", "C", "B", "C", "B", "B", "C"],
-            "C": pd.Series(
-                [1.1, -1.2, 0.9, -1000.0, 1.1, None, 0.0, 1.4], dtype="Float64"
-            ),
-        }
-    )
-    ctx = {"table1": df}
+    ctx = {"table1": input_df}
     if ascending:
         if nulls_last:
             py_output = pd.DataFrame({"A": [0, 3, 2]})
