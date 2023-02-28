@@ -4,7 +4,6 @@
 #include <arrow/api.h>
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_murmurhash3.h"
 
 /**
  * Computation of the NA value hash
@@ -1666,4 +1665,37 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
 
     // convert old indices to new ones for arr2
     replace_dict_arr_indices(arr2, arr2_index_map);
+}
+
+// CACHE FOR LIKE KERNEL DICT-ENCODING CASE
+
+like_kernel_cache_t* alloc_like_kernel_cache(uint64_t reserve_size) noexcept {
+    auto cache = new like_kernel_cache_t();
+    cache->reserve(reserve_size);
+    return cache;
+}
+
+void add_to_like_kernel_cache(like_kernel_cache_t* cache, uint32_t idx1,
+                              uint32_t idx2, bool val) noexcept {
+    // Concatenate the two uint32_t indices into a uint64_t to form the key.
+    // Primary reason for doing this is that std::hash doesn't support hashing
+    // std::pair.
+    uint64_t key = (((uint64_t)idx1) << 32) | ((uint64_t)idx2);
+    (*cache)[key] = static_cast<int8_t>(val);
+}
+
+int8_t check_like_kernel_cache(like_kernel_cache_t* cache, uint32_t idx1,
+                               uint32_t idx2) noexcept {
+    // Concatenate the two uint32_t indices into a uint64_t to form the key.
+    uint64_t key = (((uint64_t)idx1) << 32) | ((uint64_t)idx2);
+    auto iter = cache->find(key);
+    if (iter == cache->end()) {
+        // Miss
+        return -1;
+    }
+    return (*cache)[key];
+}
+
+void dealloc_like_kernel_cache(like_kernel_cache_t* cache) noexcept {
+    delete cache;
 }
