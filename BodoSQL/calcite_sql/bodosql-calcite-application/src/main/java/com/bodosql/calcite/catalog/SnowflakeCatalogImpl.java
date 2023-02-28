@@ -490,10 +490,11 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The generated code to produce a write.
    */
   @Override
-  public String generateWriteCode(String varName, String schemaName, String tableName) {
+  public String generateWriteCode(String varName, String schemaName, String tableName,
+                                  BodoSQLCatalog.ifExistsBehavior ifExists) {
     return String.format(
-        "%s.to_sql('%s', '%s', schema='%s', if_exists='append', index=False)",
-        varName, tableName, generatePythonConnStr(schemaName), schemaName);
+        "%s.to_sql('%s', '%s', schema='%s', if_exists='%s', index=False)",
+        varName, tableName, generatePythonConnStr(schemaName), schemaName, ifExists.asToSqlKwArgument());
   }
 
   /**

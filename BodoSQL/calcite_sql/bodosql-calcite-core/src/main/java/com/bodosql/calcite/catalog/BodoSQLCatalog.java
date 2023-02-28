@@ -13,6 +13,25 @@ public interface BodoSQLCatalog {
    * https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1130299393/Java+Table+and+Schema+Typing#Catalog
    */
 
+  /** Enum describing the write behavior when the table already exists. */
+  public enum ifExistsBehavior {
+    REPLACE,
+    APPEND,
+    FAIL;
+
+    public String asToSqlKwArgument() {
+      switch (this) {
+        case REPLACE:
+          return "replace";
+        case FAIL:
+          return "fail";
+        case APPEND:
+          return "append";
+      }
+      throw new RuntimeException("Reached Unreachable code in toToSqlKwArgument");
+    }
+  }
+
   /**
    * Returns a set of all table names with the given schema name.
    *
@@ -63,7 +82,8 @@ public interface BodoSQLCatalog {
    * @param tableName Name of the table to use when writing.
    * @return The generated code to produce a write.
    */
-  String generateWriteCode(String varName, String schemaName, String tableName);
+  String generateWriteCode(String varName, String schemaName, String tableName,
+                           BodoSQLCatalog.ifExistsBehavior ifExists);
 
   /**
    * Generates the code necessary to produce a read expression from the given catalog.
