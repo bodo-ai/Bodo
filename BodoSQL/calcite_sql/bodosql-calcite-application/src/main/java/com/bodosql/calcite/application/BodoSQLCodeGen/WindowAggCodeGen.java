@@ -12,9 +12,7 @@ import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 import com.bodosql.calcite.application.*;
 import com.bodosql.calcite.ir.*;
 import com.bodosql.calcite.ir.Module;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import org.apache.calcite.rel.*;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
@@ -1439,8 +1437,8 @@ public class WindowAggCodeGen {
       String fnName = windowFunc.getAggOperator().getName();
       RexWindow window = windowFunc.getWindow();
       if (window.orderKeys.size() == 1 && window.partitionKeys.size() > 0) {
-        // Right now it's simpler to add more functions so we separate these conditions.
-        return fnName.equals("ROW_NUMBER");
+        // Right now it's simpler to add more functions, so we separate these conditions.
+        return fnName.equals("ROW_NUMBER") || fnName.equals("MIN_ROW_NUMBER_FILTER");
       }
     }
     return false;
@@ -1496,8 +1494,10 @@ public class WindowAggCodeGen {
         new Expr.Method(
             groupby,
             "window",
+            // The two supported window functions share the same name with the Python function.
             List.of(
-                new Expr.StringLiteral(new Expr.Raw("row_number")),
+                new Expr.StringLiteral(
+                    new Expr.Raw(windowFunc.getAggOperator().getName().toLowerCase(Locale.ROOT))),
                 orderByKey,
                 new Expr.Raw(orderAscending),
                 new Expr.Raw(orderNAPosition)),
