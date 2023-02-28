@@ -115,10 +115,12 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    *
    * @param varName The name of the variable being written.
    * @param tableName The name of the table as the write destination.
+   * @param ifExists Behavior of the write if the table already exists
    * @return The generated code to compute the write in Python.
    */
-  public String generateWriteCode(String varName, String tableName) {
-    return this.catalog.generateWriteCode(varName, this.getName(), tableName);
+  public String generateWriteCode(
+      String varName, String tableName, BodoSQLCatalog.ifExistsBehavior ifExists) {
+    return this.catalog.generateWriteCode(varName, this.getName(), tableName, ifExists);
   }
 
   /**

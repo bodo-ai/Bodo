@@ -26,6 +26,8 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     check_func,
     create_snowflake_table,
+    drop_snowflake_table,
+    gen_unique_table_id,
     get_snowflake_connection_string,
     pytest_snowflake,
 )
@@ -603,3 +605,168 @@ def test_current_timestamp_case(
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_snowflake_catalog_create_table_does_not_already_exists(
+    test_db_snowflake_catalog, use_default_schema, memory_leak_check
+):
+    """
+    Test Snowflake CREATE TABLE, without a pre-existing table
+    """
+
+    comm = MPI.COMM_WORLD
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    # Create the table
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    comm = MPI.COMM_WORLD
+    table_name = None
+    if bodo.get_rank() == 0:
+        table_name = gen_unique_table_id(
+            "bodosql_catalog_write_create_table_does_not_already_exist"
+        )
+    table_name = comm.bcast(table_name)
+
+    # Write to Snowflake
+    insert_table = table_name if use_default_schema else f"{schema}.{table_name}"
+    succsess_query = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
+    # This should succseed, since the table does not exist
+
+    try:
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
+        output_df = None
+        # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+        # to reduce the demand on Snowflake.
+        if bodo.get_rank() == 0:
+            conn_str = get_snowflake_connection_string(db, schema)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            # Reset the columns to the original names for simpler testing.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+
+        output_df = comm.bcast(output_df)
+        # Recreate the expected output by manually doing an append.
+        result_df = pd.DataFrame(
+            {
+                "column1": "literal",
+                "column2": np.arange(1, 11),
+                "column3": pd.Timestamp("2023-02-21"),
+            }
+        )
+        output_df.columns = output_df.columns.str.upper()
+        result_df.columns = result_df.columns.str.upper()
+        assert_tables_equal(output_df, result_df)
+    finally:
+        # dropping the table for us
+        drop_snowflake_table(table_name, db, schema)
+
+
+def test_snowflake_catalog_create_table_already_exists_error(
+    test_db_snowflake_catalog, use_default_schema,
+):
+    """
+    Test that Snowflake CREATE TABLE errors with a pre-existing table, when we expect an error.
+    """
+    #Note: we have memory leak
+
+    comm = MPI.COMM_WORLD
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": [1, 3, 5, 7, 9] * 10, "B": ["Afe", "fewfe"] * 25, "C": 1.1}
+    )
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+
+    # Create the table
+    with create_snowflake_table(
+        new_df, "bodosql_catalog_write_create_table_test_already_exists", db, schema
+    ) as table_name:
+        # Write to Snowflake
+        insert_table = table_name if use_default_schema else f"{schema}.{table_name}"
+        fail_query = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select 'literal_not' as columnA, A + 10 as columnB, '2023-02-2'::date as columnC from __bodolocal__.table1"
+
+        # This should pass, since the table does not currently exist
+        with pytest.raises(RuntimeError, match=".*Object .* already exists.*"):
+            check_func(impl, (bc, fail_query), only_1D=True, py_output=5)
+
+        #Default behavior is IF NOT EXISTS, if it is not explicitly specified
+        fail_query_2 = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select 'literal' as columnA, A + 1 as columnB, '2023-02-21'::date as columnC from __bodolocal__.table1"
+
+        with pytest.raises(RuntimeError, match=".*Object .* already exists.*"):
+            check_func(impl, (bc, fail_query_2), only_1D=True, py_output=5)
+        # create_snowflake_table handles dropping the table for us
+
+def test_snowflake_catalog_create_table_already_exists(
+    test_db_snowflake_catalog, use_default_schema, memory_leak_check
+):
+    """
+    Test Snowflake CREATE TABLE, with a pre-existing table
+    """
+
+    comm = MPI.COMM_WORLD
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": [1, 3, 5, 7, 9] * 10, "B": ["Afe", "fewfe"] * 25, "C": 1.1}
+    )
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+
+    # Create the table
+    with create_snowflake_table(
+        new_df, "bodosql_catalog_write_create_table_test_already_exists", db, schema
+    ) as table_name:
+        # Write to Snowflake
+        insert_table = table_name if use_default_schema else f"{schema}.{table_name}"
+
+        succsess_query = f"CREATE OR REPLACE TABLE {insert_table} AS Select 2 as column1, A as column2, 'hello world' as column3 from __bodolocal__.table1"
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
+        output_df = None
+        # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+        # to reduce the demand on Snowflake.
+        if bodo.get_rank() == 0:
+            conn_str = get_snowflake_connection_string(db, schema)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            # Reset the columns to the original names for simpler testing.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+
+        output_df = comm.bcast(output_df)
+        # Recreate the expected output by manually doing an append.
+        result_df = pd.DataFrame(
+            {"column1": 2, "column2": np.arange(10), "column3": "hello world"}
+        )
+        output_df.columns = output_df.columns.str.upper()
+        result_df.columns = result_df.columns.str.upper()
+        assert_tables_equal(output_df, result_df)
+        # create_snowflake_table handles dropping the table for us
