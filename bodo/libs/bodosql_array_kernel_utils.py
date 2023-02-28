@@ -1289,10 +1289,19 @@ def gen_windowed(
                 bodo.libs.array_kernels.setna(res, i)
         elif lower_bound <= -n+1 and n-1 <= upper_bound:
             has_non_null = False
+            has_nan = False
+
             for i in range(n):
                 if not (bodo.libs.array_kernels.isna(arr0, i)):
                     has_non_null = True
-            if not has_non_null:
+                if np.isnan(arr0[i]):
+                    has_nan = True
+            
+            if has_nan:
+                for i in range(n):
+                    res[i] = np.nan
+                
+            else if not has_non_null:
                 for i in range(n):
                     bodo.libs.array_kernels.setna(res, i)
             else:
@@ -1343,9 +1352,11 @@ def gen_windowed(
     if empty_block is None:
         empty_block = "bodo.libs.array_kernels.setna(res, i)"
 
+    nan_block = "res[i] = np.nan"
+
     if num_args not in (1, 2):
         raise_bodo_error(
-            f"Unsupported numbber of arguments for sliding window kernel: {num_args}"
+            f"Unsupported number of arguments for sliding window kernel: {num_args}"
         )
     if num_args == 1:
         var_names = ["S"]
@@ -1418,11 +1429,23 @@ def gen_windowed(
         # Check to see if there are any non-null entries. If not, set the entire
         # output output array to NULL
         func_text += "      has_non_null = False\n"
+        if propagate_nan:
+            func_text += "      has_nan = False\n"
         func_text += "      for i in range(n):\n"
+        if propagate_nan:
+            func_text += f"         if has_non_null and has_nan:\n"
+            func_text += "            break\n"
         func_text += f"         if not ({any_arr_is_null('i')}):\n"
         func_text += "            has_non_null = True\n"
-        func_text += "            break\n"
-        func_text += "      if not has_non_null:\n"
+        if propagate_nan:
+            func_text += f"         if ({any_arr_is_nan('i')}):\n"
+            func_text += "            has_nan = True\n"
+            func_text += "      if has_nan:\n"
+            func_text += "         for i in range(n):\n"
+            func_text += indent_block(nan_block, 12)
+            func_text += "      elif not has_non_null:\n"
+        else:
+            func_text += "      if not has_non_null:\n"
         func_text += "         for i in range(n):\n"
         func_text += indent_block(empty_block, 12)
         func_text += "      else:\n"
