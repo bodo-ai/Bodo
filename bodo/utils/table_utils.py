@@ -94,10 +94,12 @@ def generate_mappable_table_func(
     else:
         # We are converting to a common type.
         func_text += f"  out_list = bodo.hiframes.table.alloc_empty_list_type({num_cols}, lst_dtype)\n"
+    has_live_cols = True
     # Convert used_cols to a set if it exists
     if not is_overload_none(used_cols):
         # Get the actual MetaType from the TypeRef
         used_cols_type = used_cols.instance_type
+        has_live_cols = len(used_cols_type) != 0
         used_cols_data = np.array(used_cols_type.meta, dtype=np.int64)
         glbls["used_cols_glbl"] = used_cols_data
         kept_blks = set([table.block_nums[i] for i in used_cols_data])
@@ -113,10 +115,11 @@ def generate_mappable_table_func(
             f"  blk_{blk} = bodo.hiframes.table.get_table_block(table, {blk})\n"
         )
         if keep_input_typ:
-            # If we are maintaining the same types, output each list.
-            # Assign the name for the future loop as well.
-            func_text += f"  out_list_{blk} = bodo.hiframes.table.alloc_list_like(blk_{blk}, len(blk_{blk}), False)\n"
-            out_list_name = f"out_list_{blk}"
+            if has_live_cols:
+                # If we are maintaining the same types, output each list.
+                # Assign the name for the future loop as well.
+                func_text += f"  out_list_{blk} = bodo.hiframes.table.alloc_list_like(blk_{blk}, len(blk_{blk}), False)\n"
+                out_list_name = f"out_list_{blk}"
         else:
             out_list_name = "out_list"
         if used_cols_data is None or blk in kept_blks:
@@ -148,7 +151,7 @@ def generate_mappable_table_func(
                 func_text += (
                     f"    {out_list_name}[{out_idx_val}] = {func_name}(blk_{blk}[i])\n"
                 )
-        if keep_input_typ:
+        if keep_input_typ and has_live_cols:
             func_text += f"  out_table = bodo.hiframes.table.set_table_block(out_table, {out_list_name}, {blk})\n"
 
     if keep_input_typ:

@@ -3,11 +3,11 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.*;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.fun.*;
 import org.apache.calcite.tools.RelBuilder;
-import org.apache.calcite.util.Pair;
+import org.apache.calcite.util.*;
 
 /** Class containing common static helpers shared by 2 or Rules involving filters. */
 public class FilterRulesCommon {
@@ -168,5 +168,30 @@ public class FilterRulesCommon {
       commonOps.add(cond);
       return new Pair<>(cond, false);
     }
+  }
+
+  /**
+   * Determine if a given RexNode contains a case statement.
+   *
+   * @param node The root RexNode to search.
+   * @return Does any subsection of the root node contain a Case operator.
+   */
+  public static boolean rexNodeContainsCase(RexNode node) {
+    try {
+      node.accept(
+          new RexVisitorImpl<Void>(true) {
+            @Override
+            public Void visitCall(RexCall call) {
+              if (call.getOperator() instanceof SqlCaseOperator) {
+                throw Util.FoundOne.NULL;
+              }
+              return super.visitCall(call);
+            }
+          });
+    } catch (Util.FoundOne e) {
+      // If we found a RexOver we failed.
+      return true;
+    }
+    return false;
   }
 }

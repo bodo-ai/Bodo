@@ -470,6 +470,12 @@ public class RelationalAlgebraGenerator {
                   BodoSQLReduceExpressionsRule.FilterReduceExpressionsRule
                       .FilterReduceExpressionsRuleConfig.DEFAULT
                       .toRule())
+              // Simplify constant expressions inside a Projection. Ex condition($0 = 1 and $0 = 2)
+              // ==> condition(FALSE)
+              .addRuleInstance(
+                  BodoSQLReduceExpressionsRule.ProjectReduceExpressionsRule
+                      .ProjectReduceExpressionsRuleConfig.DEFAULT
+                      .toRule())
               /*
               Pushes predicates that are used on one side of equality in a join to
               the other side of the join as well, enabling further filter pushdown
@@ -543,8 +549,9 @@ public class RelationalAlgebraGenerator {
                * Planner rule that ensures filter is always pushed into join. This is needed
                * for complex queries.
                */
-              // Ensure filters always occur before projections.
-              .addRuleInstance(FilterProjectTransposeRule.Config.DEFAULT.toRule())
+              // Ensure filters always occur before projections. Here we set a limit
+              // so extremely complex filters aren't pushed.
+              .addRuleInstance(FilterProjectTransposeNoCaseRule.Config.DEFAULT.toRule())
               // Prune trivial cross-joins
               .addRuleInstance(InnerJoinRemoveRule.Config.DEFAULT.toRule())
               // Rewrite filters in either Filter or Join to convert OR with shared subexpression
@@ -567,6 +574,13 @@ public class RelationalAlgebraGenerator {
               // LogicalProject(x=[$0], x2=[$1], x3=[/(+($1, 10), 2)], x4=[*(/(+($1, 10), 2), 3)])
               //  LogicalProject(x=[$0], x2=[+($0, 10)])
               .addRuleInstance(ProjectionSubcolumnEliminationRule.Config.DEFAULT.toRule())
+              // Remove any case expressions from filters because we cannot use them in filter
+              // pushdown.
+              .addRuleInstance(FilterExtractCaseRule.Config.DEFAULT.toRule())
+              // For two projections separated by a filter, determine if any computation in
+              // the uppermost filter can be removed by referencing a column in the innermost
+              // projection. See the rule docstring for more detail.
+              .addRuleInstance(ProjectFilterProjectColumnEliminationRule.Config.DEFAULT.toRule())
               .addRuleInstance(MinRowNumberFilterRule.Config.DEFAULT.toRule())
               .build();
 
