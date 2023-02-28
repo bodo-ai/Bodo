@@ -17,6 +17,8 @@ package com.bodosql.calcite.application.bodo_sql_rules;
  * limitations under the License.
  */
 
+import static com.bodosql.calcite.application.bodo_sql_rules.FilterRulesCommon.rexNodeContainsCase;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import java.util.ArrayDeque;
@@ -34,7 +36,7 @@ import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Project;
-import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.*;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rules.*;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -60,7 +62,7 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlRowOperator;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.tools.*;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Util;
@@ -113,6 +115,15 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
     @Override
     public void onMatch(RelOptRuleCall call) {
       final Filter filter = call.rel(0);
+      if (filter.containsOver()) {
+        // We cannot reduce filter expressions with an over yet.
+        // This may not be necessary but this is a precaution.
+        return;
+      }
+      // Bodo Change: Do not reduce filters that contain Case statements.
+      if (rexNodeContainsCase(filter.getCondition())) {
+        return;
+      }
       final List<RexNode> expList = Lists.newArrayList(filter.getCondition());
       RexNode newConditionExp;
       boolean reduced;
@@ -235,6 +246,69 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
       @Override
       default FilterReduceExpressionsRule toRule() {
         return new FilterReduceExpressionsRule(this);
+      }
+    }
+  }
+
+  /**
+   * Rule that reduces constants inside a {@link org.apache.calcite.rel.core.Project}.
+   *
+   * @see CoreRules#PROJECT_REDUCE_EXPRESSIONS
+   */
+  public static class ProjectReduceExpressionsRule
+      extends BodoSQLReduceExpressionsRule<
+          ProjectReduceExpressionsRule.ProjectReduceExpressionsRuleConfig> {
+    /** Creates a ProjectReduceExpressionsRule. */
+    protected ProjectReduceExpressionsRule(ProjectReduceExpressionsRuleConfig config) {
+      super(config);
+    }
+
+    @Override
+    public void onMatch(RelOptRuleCall call) {
+      final Project project = call.rel(0);
+      final RelMetadataQuery mq = call.getMetadataQuery();
+      final RelOptPredicateList predicates = mq.getPulledUpPredicates(project.getInput());
+      final List<RexNode> expList = Lists.newArrayList(project.getProjects());
+      try {
+        if (reduceExpressions(
+            project,
+            expList,
+            predicates,
+            false,
+            config.matchNullability(),
+            config.treatDynamicCallsAsConstant())) {
+          assert !project.getProjects().equals(expList)
+              : "Reduced expressions should be different from original expressions";
+          call.transformTo(
+              call.builder()
+                  .push(project.getInput())
+                  .project(expList, project.getRowType().getFieldNames())
+                  .build());
+
+          // New plan is absolutely better than old plan.
+          call.getPlanner().prune(project);
+        }
+      } catch (RuntimeException e) {
+        // Bodo Change: If we hit an exception we cannot reduce this expression.
+        // This rule should never break entirely as it's an optimization.
+        return;
+      }
+    }
+
+    /** Rule configuration. */
+    @Value.Immutable
+    public interface ProjectReduceExpressionsRuleConfig
+        extends BodoSQLReduceExpressionsRule.Config {
+      ProjectReduceExpressionsRuleConfig DEFAULT =
+          ImmutableProjectReduceExpressionsRuleConfig.of()
+              .withMatchNullability(true)
+              .withOperandFor(LogicalProject.class)
+              .withDescription("ReduceExpressionsRule(Project)")
+              .as(ProjectReduceExpressionsRuleConfig.class);
+
+      @Override
+      default ProjectReduceExpressionsRule toRule() {
+        return new ProjectReduceExpressionsRule(this);
       }
     }
   }
@@ -375,6 +449,7 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
     }
 
     final List<RexNode> reducedValues = new ArrayList<>();
+
     executor.reduce(simplify.rexBuilder, constExps2, reducedValues);
 
     // Use RexNode.digest to judge whether each newly generated RexNode
@@ -845,11 +920,10 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
         boolean treatDynamicCallsAsConstant);
 
     /** Defines an operand tree for the given classes. */
-    default BodoSQLReduceExpressionsRule.Config withOperandFor(Class<? extends Filter> relClass) {
+    default BodoSQLReduceExpressionsRule.Config withOperandFor(Class<? extends RelNode> relClass) {
       // Bodo Change: Since we only adopted the filter framework we disallow containsOver for
       // filters.
-      return withOperandSupplier(
-              b -> b.operand(relClass).predicate(f -> !f.containsOver()).anyInputs())
+      return withOperandSupplier(b -> b.operand(relClass).anyInputs())
           .as(BodoSQLReduceExpressionsRule.Config.class);
     }
   }

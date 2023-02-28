@@ -54,38 +54,43 @@ public class DependencyCheckingProjectMergeRule
   }
 
   /**
-   * Determine if the given node contains any inputRefs.
+   * Determine if the given node contains any inputRefs that are not simple references to inputRefs in the bottom project.
    *
    * @param node RexNode to check.
+   * @param bottomProject The Project an inputRef may refer to. We allow an inputRef if it's also an
+   *     inputRef in the bottomProject.
    * @return Does the node contain any inputRefs?
    */
-  public static boolean nodeContainsInputRef(RexNode node) {
+  public static boolean nodeContainsInputRef(RexNode node, Project bottomProject) {
     if (node instanceof RexInputRef) {
-      return true;
+      int index = ((RexInputRef) node).getIndex();
+      // If we have found an input ref it's okay if the column is just an input
+      // ref in the input.
+      return !(bottomProject.getProjects().get(index) instanceof RexInputRef);
     } else if (node instanceof RexOver) {
       // For window functions check both the function and partitions/order by
       RexOver overNode = ((RexOver) node);
       RexWindow window = overNode.getWindow();
       for (RexNode child : window.partitionKeys) {
-        if (nodeContainsInputRef(child)) {
+        if (nodeContainsInputRef(child, bottomProject)) {
           return true;
         }
       }
       for (RexFieldCollation childCollation : window.orderKeys) {
         RexNode child = childCollation.getKey();
-        if (nodeContainsInputRef(child)) {
+        if (nodeContainsInputRef(child, bottomProject)) {
           return true;
         }
       }
       for (RexNode oldOperand : overNode.getOperands()) {
-        if (nodeContainsInputRef(oldOperand)) {
+        if (nodeContainsInputRef(oldOperand, bottomProject)) {
           return true;
         }
       }
     } else if (node instanceof RexCall) {
       RexCall callNode = (RexCall) node;
       for (RexNode operand : callNode.getOperands()) {
-        if (nodeContainsInputRef(operand)) {
+        if (nodeContainsInputRef(operand, bottomProject)) {
           return true;
         }
       }
@@ -101,9 +106,9 @@ public class DependencyCheckingProjectMergeRule
    * @param project The projection to check
    * @return Does any column utilize its input in compute?
    */
-  public static boolean hasDependency(Project project) {
-    for (RexNode col : project.getProjects()) {
-      if (!(col instanceof RexInputRef) && nodeContainsInputRef(col)) {
+  public static boolean hasDependency(Project topProject, Project bottomProject) {
+    for (RexNode col : topProject.getProjects()) {
+      if (!(col instanceof RexInputRef) && nodeContainsInputRef(col, bottomProject)) {
         return true;
       }
     }
@@ -118,7 +123,7 @@ public class DependencyCheckingProjectMergeRule
 
     // Bodo Change: Verify that the top project doesn't
     // depend on the bottom project.
-    if (hasDependency(topProject)) {
+    if (hasDependency(topProject, bottomProject)) {
       return;
     }
 

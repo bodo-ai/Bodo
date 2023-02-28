@@ -155,7 +155,8 @@ def test_snowflake_limit_pushdown(memory_leak_check):
         fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
         assert hasattr(fir, "meta_head_only_info")
         assert fir.meta_head_only_info[0] is not None
-        check_logger_msg(stream, "Columns loaded ['mycol']")
+        # Note the only column need is pruned by the planner due to the filter.
+        check_logger_msg(stream, "Columns loaded []")
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
