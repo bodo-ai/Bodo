@@ -571,7 +571,22 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
             scalar_text += "c_idx = conversion_indices_arr[i]\n"
         scalar_text += "(python_pattern, requires_regex, must_match_start, must_match_end, match_anything) = python_pattern_arr[c_idx], requires_regex_arr[c_idx], must_match_start_arr[c_idx], must_match_end_arr[c_idx], match_anything_arr[c_idx]\n"
     else:
+        # Manually allocate arg1
+        if bodo.utils.utils.is_array_typ(pattern, False):
+            scalar_text += "arg1 = pattern[i]\n"
+        else:
+            scalar_text += "arg1 = pattern\n"
+        # Manually allocate arg2
+        if bodo.utils.utils.is_array_typ(escape, False):
+            scalar_text += "arg2 = escape[i]\n"
+        else:
+            scalar_text += "arg2 = escape\n"
         scalar_text += "(python_pattern, requires_regex, must_match_start, must_match_end, match_anything) = convert_sql_pattern(arg1, arg2, case_insensitive)\n"
+    # Manually allocate arg0 if we don't have a cache hit.
+    if bodo.utils.utils.is_array_typ(arr, False):
+        scalar_text += "arg0 = arr[i]\n"
+    else:
+        scalar_text += "arg0 = arr\n"
     scalar_text += "if match_anything:\n"
     scalar_text += "  result = True\n"
     scalar_text += "elif requires_regex:\n"
@@ -600,6 +615,9 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
         # Manually support dictionary encoding in this implementation
         # to ensure we are more flexible.
         support_dict_encoding=False,
+        # Allocating scalars can have significant overhead for the dictionary case
+        # so we manually check if after checking the dictionary.
+        alloc_array_scalars=False,
     )
 
 
