@@ -12,6 +12,7 @@
 #include <arrow/api.h>
 #include <arrow/python/pyarrow.h>
 #include <numpy/arrayobject.h>
+#include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -1791,5 +1792,18 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
 
     PyObject_SetAttrString(m, "array_info_getdata1",
                            PyLong_FromVoidPtr((void*)(&array_info_getdata1)));
+    // C++ Cache functions for Like Kernel with dictionary encoded inputs
+    PyObject_SetAttrString(
+        m, "alloc_like_kernel_cache",
+        PyLong_FromVoidPtr((void*)(&alloc_like_kernel_cache)));
+    PyObject_SetAttrString(
+        m, "add_to_like_kernel_cache",
+        PyLong_FromVoidPtr((void*)(&add_to_like_kernel_cache)));
+    PyObject_SetAttrString(
+        m, "check_like_kernel_cache",
+        PyLong_FromVoidPtr((void*)(&check_like_kernel_cache)));
+    PyObject_SetAttrString(
+        m, "dealloc_like_kernel_cache",
+        PyLong_FromVoidPtr((void*)(&dealloc_like_kernel_cache)));
     return m;
 }

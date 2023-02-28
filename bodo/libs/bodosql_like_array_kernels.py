@@ -516,6 +516,11 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
         "convert_sql_pattern": convert_sql_pattern_to_python_runtime,
         # Dictionary encoding optimized function.
         "convert_sql_pattern_dict_encoding": convert_sql_pattern_to_python_runtime_dict_encoding,
+        # Cache functions for the 'use_multiple_dict_encoding_path' case
+        "alloc_like_kernel_cache": bodo.libs.array._alloc_like_kernel_cache,
+        "add_to_like_kernel_cache": bodo.libs.array._add_to_like_kernel_cache,
+        "check_like_kernel_cache": bodo.libs.array._check_like_kernel_cache,
+        "dealloc_like_kernel_cache": bodo.libs.array._dealloc_like_kernel_cache,
     }
     prefix_code = None
     scalar_text = ""
@@ -535,6 +540,7 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
         arr == bodo.dict_str_arr_type and pattern_conversion_use_dict_encoding
     )
     prefix_code = ""
+    suffix_code = None
     if is_case_insensitive and not is_overload_none(arr):
         # Lower the input once at the onset to enable dict encoding.
         # TODO: Move as a requirement for this kernel in the codegen step. This will
@@ -552,19 +558,24 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
         # If both the pattern and arr are dictionary encoded we can cache results
         # since we can't compute directly on dictionaries.
         prefix_code += "arr_indices = arr._indices\n"
-        # We use an empty range for type stability.
-        prefix_code += (
-            "idx_cache = {(np.int32(i), np.int32(i)): False for i in range(0)}\n"
-        )
+        # We use a cache defined in C++ for better performance due to Numba dictionaries not being the most performant.
+        # Set the reserved size of the hashmap to min(dict_size(arr) * dict_size(python_pattern_arr), len(arr))
+        # to reduce re-allocations as much as possible.
+        prefix_code += "cache_reserve_size = min(len(arr._data) * len(python_pattern_arr._data), len(arr_indices))\n"
+        prefix_code += "idx_cache = alloc_like_kernel_cache(cache_reserve_size)\n"
+        # Add corresponding suffix code to deallocate the cache at the end.
+        if suffix_code is None:
+            suffix_code = ""
+        suffix_code += "dealloc_like_kernel_cache(idx_cache)\n"
     # Convert the pattern on each iteration since it may change.
     # XXX Consider moving to a helper function to keep the IR smaller?
     if use_multiple_dict_encoding_path:
         scalar_text += "a_idx = arr_indices[i]\n"
         # use_multiple_dict_encoding_path = True implies pattern_conversion_use_dict_encoding = True
         scalar_text += "c_idx = conversion_indices_arr[i]\n"
-        scalar_text += "key = (a_idx, c_idx)\n"
-        scalar_text += "if key in idx_cache:\n"
-        scalar_text += "  res[i] = idx_cache[key]\n"
+        scalar_text += "cache_out = check_like_kernel_cache(idx_cache, a_idx, c_idx)\n"
+        scalar_text += "if cache_out != -1:\n"  # i.e. in the cache
+        scalar_text += "  res[i] = bool(cache_out)\n"
         scalar_text += "  continue\n"
     if pattern_conversion_use_dict_encoding:
         if not use_multiple_dict_encoding_path:
@@ -602,7 +613,7 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
     scalar_text += "  result = python_pattern in arg0\n"
     if use_multiple_dict_encoding_path:
         # Store the result in the cache.
-        scalar_text += "idx_cache[key] = result\n"
+        scalar_text += "add_to_like_kernel_cache(idx_cache, a_idx, c_idx, result)\n"
     scalar_text += "res[i] = result\n"
     return gen_vectorized(
         arg_names,
@@ -615,6 +626,7 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
         # Manually support dictionary encoding in this implementation
         # to ensure we are more flexible.
         support_dict_encoding=False,
+        suffix_code=suffix_code,
         # Allocating scalars can have significant overhead for the dictionary case
         # so we manually check if after checking the dictionary.
         alloc_array_scalars=False,
