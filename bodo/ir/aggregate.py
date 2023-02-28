@@ -277,6 +277,7 @@ supported_agg_funcs = [
     "gen_udf",
     "window",
     "row_number",
+    "min_row_number_filter",
 ]
 # Currently supported operations with transform
 supported_transform_funcs = [
@@ -298,6 +299,7 @@ supported_transform_funcs = [
 supported_window_funcs = [
     "no_op",  # needed to ensure that 0 value isn't matched with any function
     "row_number",
+    "min_row_number_filter",
 ]
 
 
@@ -351,7 +353,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 2
         func.ncols_post_shuffle = 2
         return func
-    if func_name in supported_agg_funcs[:-9]:
+    if func_name in supported_agg_funcs[:-10]:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.fname = func_name
@@ -459,6 +461,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         na_position = get_literal_value(typemap[na_position_var.name])
 
         # Update the function information that may need be needed for the generated C++ code.
+        # TODO: We may want to allow some update before shuffle for min_row_number_filter.
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
         func.window_func = supported_agg_funcs.index(window_func)

@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.test_window.window_common import (  # noqa
@@ -87,3 +88,68 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
         convert_columns_tz_naive=convert_columns_tz_naive,
     )["pandas_code"]
     count_window_applies(pandas_code, 1, ["RANK"])
+
+
+@pytest.mark.parametrize(
+    "ascending",
+    [
+        True,
+        False,
+    ],
+)
+@pytest.mark.parametrize(
+    "nulls_last",
+    [
+        True,
+        False,
+    ],
+)
+def test_row_number_filter(memory_leak_check, ascending, nulls_last):
+    """
+    Tests queries involving `where row_number() = 1`. This query
+    will generate a special filter function that ensures the ROW_NUMBER()
+    can compute just a max/min and skip sorting each group.
+
+    This function tests for various input combinations, including
+    testing ascending/descending and nulls first/last.
+    """
+    ascending_str = "ASC" if ascending else "DESC"
+    nulls_last_str = "NULLS LAST" if nulls_last else "NULLS FIRST"
+    query = f"""
+    SELECT
+        A
+    FROM
+        (
+            SELECT
+                A,
+                ROW_NUMBER() OVER(PARTITION BY B ORDER BY C {ascending_str} {nulls_last_str}) as rn
+            FROM table1
+        )
+    WHERE rn = 1
+    """
+    df = pd.DataFrame(
+        {
+            "A": np.arange(8),
+            "B": ["A", "B", "C", "B", "C", "B", "B", "C"],
+            "C": pd.Series(
+                [1.1, -1.2, 0.9, -1000.0, 1.1, None, 0.0, 1.4], dtype="Float64"
+            ),
+        }
+    )
+    ctx = {"table1": df}
+    if ascending:
+        if nulls_last:
+            py_output = pd.DataFrame({"A": [0, 3, 2]})
+        else:
+            py_output = pd.DataFrame({"A": [0, 5, 2]})
+    else:
+        if nulls_last:
+            py_output = pd.DataFrame({"A": [0, 6, 7]})
+        else:
+            py_output = pd.DataFrame({"A": [0, 5, 7]})
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+    )

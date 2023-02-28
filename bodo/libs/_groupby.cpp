@@ -53,12 +53,17 @@ struct Bodo_FTypes {
         gen_udf = 26,
         window = 27,
         row_number = 28,
-        num_funcs = 29,  // num_funcs is used to know how many functions up to
+        min_row_number_filter = 29,
+        num_funcs = 30,  // num_funcs is used to know how many functions up to
                          // this point. Below this point are functions that are
                          // defined in the C++ code but not the Python enum.
-        mean_eval = 30,
-        var_eval = 31,
-        std_eval = 32
+        mean_eval = 31,
+        var_eval = 32,
+        std_eval = 33,
+        // These are internal operators used by groupby.window
+        // when the orderby clause has na values first.
+        idxmin_na_first = 34,
+        idxmax_na_first = 35
     };
 };
 
@@ -2331,96 +2336,6 @@ void ngroup_computation(array_info* arr, array_info* out_arr,
 }
 
 /**
- * @brief Handles the update step for the supported window functions.
- * These functions are not simple reductions and require additional
- * functionality to operate over a "window" of values (possibly a sort
- * or equivalent). The output size is always the same size as the original
- * input.
- *
- * @param[in] orderby_arr The array that is being "sorted" to determine
- * the groups. In some situations it may be possible to do a partial sort
- * or avoid sorting.
- * @param[in] window_func The name of the window function being computed.
- * Currently we only support row_number.
- * @param[out] out_arr The output array being population.
- * @param[in] grp_info Struct containing information about the groups.
- * @param[in] asc Should the array be sorted in ascending order?
- * @param[in] na_pos Should NA's be placed at the end of the array?
- * @param[in] is_parallel Is the data distributed? This is used for tracing
- * informate.
- */
-void window_computation(array_info* orderby_arr, int64_t window_func,
-                        array_info* out_arr, grouping_info const& grp_info,
-                        bool asc, bool na_pos, bool is_parallel) {
-    const std::vector<int64_t>& row_to_group = grp_info.row_to_group;
-    int64_t num_rows = row_to_group.size();
-    // Wrap the row_to_group in an array info so we can use it to sort.
-    array_info* group_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
-    for (int64_t i = 0; i < num_rows; i++) {
-        getv<int64_t>(group_arr, i) = row_to_group[i];
-    }
-    // Create a new table. We want to sort the table first by
-    // the groups and second by the orderby_arr.
-    table_info* sort_table = new table_info();
-    // sort_values_table_local steals a reference
-    incref_array(orderby_arr);
-    sort_table->columns.push_back(group_arr);
-    sort_table->columns.push_back(orderby_arr);
-    // Append an index column so we can find the original
-    // index in the out array.
-    array_info* idx_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
-    for (int64_t i = 0; i < num_rows; i++) {
-        getv<int64_t>(idx_arr, i) = i;
-    }
-    sort_table->columns.push_back(idx_arr);
-    int64_t vect_ascending[2] = {asc, asc};
-    int64_t na_position[2] = {na_pos, na_pos};
-
-    // Sort the table
-    // XXX: We don't need the entire chunk of data sorted,
-    // just the groups. We could do a partial sort to avoid
-    // the overhead of sorting the data and in the future
-    // we may be want to explore if we can use hashing
-    // instead to avoid sort overhead.
-    table_info* iter_table = sort_values_table_local(
-        sort_table, 2, vect_ascending, na_position, nullptr,
-        is_parallel /* This is just used for tracing */);
-    array_info* sorted_groups = iter_table->columns[0];
-    array_info* sorted_idx = iter_table->columns[2];
-    // sort_values_table_local steals a reference so
-    // we don't need to decref
-    delete sort_table;
-
-    switch (window_func) {
-        case Bodo_FTypes::row_number: {
-            // For row number we just generate np.range(1, n+1) for each group,
-            // where n is the number of rows in the group. To track this we just
-            // check for when the group changes.
-            int64_t prev_group = -1;
-            int64_t row_num = 1;
-            for (int64_t i = 0; i < num_rows; i++) {
-                int64_t curr_group = getv<int64_t>(sorted_groups, i);
-                if (curr_group != prev_group) {
-                    row_num = 1;
-                } else {
-                    row_num++;
-                }
-                // Get the index in the output array.
-                int64_t idx = getv<int64_t>(sorted_idx, i);
-                getv<int64_t>(out_arr, idx) = row_num;
-                // Set the prev group
-                prev_group = curr_group;
-            }
-            break;
-        }
-        default:
-            throw new std::runtime_error("Invalid window function");
-    }
-    // Delete the sorted table.
-    delete_table_decref_arrays(iter_table);
-}
-
-/**
  * The median_computation function. It uses the symbolic information to compute
  * the median results.
  *
@@ -3287,6 +3202,92 @@ void apply_to_column_F(array_info* in_col, array_info* out_col,
                             getv<uint64_t>(index_pos, i_grp), i);
                     }
                 }
+            } else if (ftype == Bodo_FTypes::idxmax_na_first) {
+                // Datetime64 and Timedelta64 represent NA values in the array.
+                // We need to handle these the same as the nullable case. For
+                // all other NA like values (e.g. floats) the relative value of
+                // NaN should be based upon wherever they would be sorted. This
+                // may need to be handled to match SQL, but is a separate issue.
+                array_info* index_pos = aux_cols[0];
+                if (dtype == Bodo_CTypes::DATETIME ||
+                    dtype == Bodo_CTypes::TIMEDELTA) {
+                    for (size_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = f(i);
+                        // If we are putting NA values first then we stop
+                        // visiting a group once we see a NA value. We
+                        // initialize the output values to all be non-NA values
+                        // to ensure this.
+                        if (i_grp != -1 && index_pos->get_null_bit(i_grp)) {
+                            // If we see NA/NaN mark this as the match.
+                            T input_val = getv<T>(in_col, i);
+                            if (!isnan_alltype<T, dtype>(input_val)) {
+                                idxmax_agg<T, dtype>::apply(
+                                    getv<T>(out_col, i_grp), input_val,
+                                    getv<uint64_t>(index_pos, i_grp), i);
+                            } else {
+                                // If we have an NA value mark this group as
+                                // done and update the index
+                                getv<uint64_t>(index_pos, i_grp) = i;
+                                // set the null bit for the count so we know
+                                // to stop visiting the group. The data is still
+                                // valid.
+                                index_pos->set_null_bit(i_grp, false);
+                            }
+                        }
+                    }
+                } else {
+                    for (size_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = f(i);
+                        if (i_grp != -1) {
+                            idxmax_agg<T, dtype>::apply(
+                                getv<T>(out_col, i_grp), getv<T>(in_col, i),
+                                getv<uint64_t>(index_pos, i_grp), i);
+                        }
+                    }
+                }
+            } else if (ftype == Bodo_FTypes::idxmin_na_first) {
+                // Datetime64 and Timedelta64 represent NA values in the array.
+                // We need to handle these the same as the nullable case. For
+                // all other NA like values (e.g. floats) the relative value of
+                // NaN should be based upon wherever they would be sorted. This
+                // may need to be handled to match SQL, but is a separate issue.
+                array_info* index_pos = aux_cols[0];
+                if (dtype == Bodo_CTypes::DATETIME ||
+                    dtype == Bodo_CTypes::TIMEDELTA) {
+                    for (size_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = f(i);
+                        // If we are putting NA values first then we stop
+                        // visiting a group once we see a NA value. We
+                        // initialize the output values to all be non-NA values
+                        // to ensure this.
+                        if (i_grp != -1 && index_pos->get_null_bit(i_grp)) {
+                            // If we see NA/NaN mark this as the match.
+                            T input_val = getv<T>(in_col, i);
+                            if (!isnan_alltype<T, dtype>(input_val)) {
+                                idxmin_agg<T, dtype>::apply(
+                                    getv<T>(out_col, i_grp), input_val,
+                                    getv<uint64_t>(index_pos, i_grp), i);
+                            } else {
+                                // If we have an NA value mark this group as
+                                // done and update the index
+                                getv<uint64_t>(index_pos, i_grp) = i;
+                                // set the null bit for the count so we know
+                                // to stop visiting the group. The data is still
+                                // valid.
+                                index_pos->set_null_bit(i_grp, false);
+                            }
+                        }
+                    }
+                } else {
+                    for (size_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = f(i);
+                        if (i_grp != -1) {
+                            idxmin_agg<T, dtype>::apply(
+                                getv<T>(out_col, i_grp), getv<T>(in_col, i),
+                                getv<uint64_t>(index_pos, i_grp), i);
+                        }
+                    }
+                }
             } else if (ftype == Bodo_FTypes::boolor_agg) {
                 for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
@@ -3491,23 +3492,77 @@ void apply_to_column_F(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::idxmax:
                     for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
-                        if (i_grp != -1) {
+                        if ((i_grp != -1) && in_col->get_null_bit(i)) {
                             idxmax_agg<T, dtype>::apply(
                                 getv<T>(out_col, i_grp), getv<T>(in_col, i),
                                 getv<uint64_t>(aux_cols[0], i_grp), i);
+                            out_col->set_null_bit(i_grp, true);
                         }
                     }
                     return;
+                case Bodo_FTypes::idxmax_na_first: {
+                    array_info* index_pos = aux_cols[0];
+                    for (size_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = f(i);
+                        // If we are putting NA values first then we stop
+                        // visiting a group once we see a NA value. We
+                        // initialize the output values to all be non-NA values
+                        // to ensure this.
+                        if (i_grp != -1 && index_pos->get_null_bit(i_grp)) {
+                            if (in_col->get_null_bit(i)) {
+                                idxmax_agg<T, dtype>::apply(
+                                    getv<T>(out_col, i_grp), getv<T>(in_col, i),
+                                    getv<uint64_t>(index_pos, i_grp), i);
+                            } else {
+                                // If we have an NA value mark this group as
+                                // done and update the index
+                                getv<uint64_t>(index_pos, i_grp) = i;
+                                // set the null bit for the count so we know
+                                // to stop visiting the group. The data is still
+                                // valid.
+                                index_pos->set_null_bit(i_grp, false);
+                            }
+                        }
+                    }
+                    return;
+                }
                 case Bodo_FTypes::idxmin:
                     for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
-                        if (i_grp != -1) {
+                        if ((i_grp != -1) && in_col->get_null_bit(i)) {
                             idxmin_agg<T, dtype>::apply(
                                 getv<T>(out_col, i_grp), getv<T>(in_col, i),
                                 getv<uint64_t>(aux_cols[0], i_grp), i);
+                            out_col->set_null_bit(i_grp, true);
                         }
                     }
                     return;
+                case Bodo_FTypes::idxmin_na_first: {
+                    array_info* index_pos = aux_cols[0];
+                    for (size_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = f(i);
+                        // If we are putting NA values first then we stop
+                        // visiting a group once we see a NA value. We
+                        // initialize the output values to all be non-NA values
+                        // to ensure this.
+                        if (i_grp != -1 && index_pos->get_null_bit(i_grp)) {
+                            if (in_col->get_null_bit(i)) {
+                                idxmin_agg<T, dtype>::apply(
+                                    getv<T>(out_col, i_grp), getv<T>(in_col, i),
+                                    getv<uint64_t>(index_pos, i_grp), i);
+                            } else {
+                                // If we have an NA value mark this group as
+                                // done and update the index
+                                getv<uint64_t>(index_pos, i_grp) = i;
+                                // set the null bit for the count so we know
+                                // to stop visiting the group. The data is still
+                                // valid.
+                                index_pos->set_null_bit(i_grp, false);
+                            }
+                        }
+                    }
+                    return;
+                }
                 case Bodo_FTypes::boolor_agg:
                     for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
@@ -3675,6 +3730,14 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<bool, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<bool, Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::_BOOL>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<bool, Bodo_FTypes::idxmax_na_first,
+                                           Bodo_CTypes::_BOOL>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
                     return apply_to_column<bool, Bodo_FTypes::boolor_agg,
                                            Bodo_CTypes::_BOOL>(
@@ -3728,6 +3791,14 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int8_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<int8_t, Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::INT8>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<int8_t, Bodo_FTypes::idxmax_na_first,
+                                           Bodo_CTypes::INT8>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
                     return apply_to_column<int8_t, Bodo_FTypes::boolor_agg,
                                            Bodo_CTypes::INT8>(
@@ -3775,6 +3846,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<uint8_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::UINT8>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<uint8_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::UINT8>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<uint8_t,
+                                           Bodo_FTypes::idxmax_na_first,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
@@ -3825,6 +3906,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int16_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<int16_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::INT16>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<int16_t,
+                                           Bodo_FTypes::idxmax_na_first,
+                                           Bodo_CTypes::INT16>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
                     return apply_to_column<int16_t, Bodo_FTypes::boolor_agg,
                                            Bodo_CTypes::INT16>(
@@ -3871,6 +3962,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<uint16_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::UINT16>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<uint16_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::UINT16>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<uint16_t,
+                                           Bodo_FTypes::idxmax_na_first,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
@@ -3921,6 +4022,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int32_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<int32_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::INT32>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<int32_t,
+                                           Bodo_FTypes::idxmax_na_first,
+                                           Bodo_CTypes::INT32>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
                     return apply_to_column<int32_t, Bodo_FTypes::boolor_agg,
                                            Bodo_CTypes::INT32>(
@@ -3967,6 +4078,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<uint32_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::UINT32>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<uint32_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::UINT32>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<uint32_t,
+                                           Bodo_FTypes::idxmax_na_first,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
@@ -4017,6 +4138,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<int64_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::INT64>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<int64_t,
+                                           Bodo_FTypes::idxmax_na_first,
+                                           Bodo_CTypes::INT64>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
                     return apply_to_column<int64_t, Bodo_FTypes::boolor_agg,
                                            Bodo_CTypes::INT64>(
@@ -4063,6 +4194,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<uint64_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::UINT64>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<uint64_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::UINT64>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<uint64_t,
+                                           Bodo_FTypes::idxmax_na_first,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
@@ -4113,6 +4254,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<int64_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::DATE>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<int64_t,
+                                           Bodo_FTypes::idxmax_na_first,
+                                           Bodo_CTypes::DATE>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
             }
         // TODO: [BE-4106] Split Time into Time32 and Time64
         case Bodo_CTypes::TIME:
@@ -4160,6 +4311,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::TIME>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<int64_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<int64_t,
+                                           Bodo_FTypes::idxmax_na_first,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
             }
         case Bodo_CTypes::DATETIME:
             switch (ftype) {
@@ -4204,6 +4365,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<int64_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::DATETIME>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<int64_t,
+                                           Bodo_FTypes::idxmax_na_first,
+                                           Bodo_CTypes::DATETIME>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
             }
         case Bodo_CTypes::TIMEDELTA:
             switch (ftype) {
@@ -4246,6 +4417,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<int64_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::TIMEDELTA>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<int64_t,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::TIMEDELTA>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<int64_t,
+                                           Bodo_FTypes::idxmax_na_first,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
             }
@@ -4302,6 +4483,14 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<float, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::FLOAT32>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<float, Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::FLOAT32>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<float, Bodo_FTypes::idxmax_na_first,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
@@ -4364,6 +4553,14 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<double, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<double, Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::FLOAT64>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<double, Bodo_FTypes::idxmax_na_first,
+                                           Bodo_CTypes::FLOAT64>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
                     return apply_to_column<double, Bodo_FTypes::boolor_agg,
                                            Bodo_CTypes::FLOAT64>(
@@ -4422,6 +4619,16 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                                            Bodo_FTypes::idxmax,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmin_na_first:
+                    return apply_to_column<decimal_value_cpp,
+                                           Bodo_FTypes::idxmin_na_first,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
+                case Bodo_FTypes::idxmax_na_first:
+                    return apply_to_column<decimal_value_cpp,
+                                           Bodo_FTypes::idxmax_na_first,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info, use_sql_rules);
                 case Bodo_FTypes::boolor_agg:
                     return apply_to_column<decimal_value_cpp,
                                            Bodo_FTypes::boolor_agg,
@@ -4466,7 +4673,8 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
         // TODO: Template on use_sql_rules
         if (use_sql_rules) {
             // All nullable outputs in SQL output null for empty groups
-            init_val = false;
+            // except for count.
+            init_val = ftype == Bodo_FTypes::count;
         } else {
             if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
                 ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last ||
@@ -4784,6 +4992,12 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                     // will just replace that with the first/last value
                     return;
             }
+        case Bodo_FTypes::min_row_number_filter: {
+            // Initialize all values to false
+            std::fill((bool*)out_col->data1,
+                      (bool*)out_col->data1 + out_col->length, false);
+            return;
+        }
         default:
             // zero initialize
             memset(out_col->data1, 0,
@@ -4848,6 +5062,10 @@ void get_groupby_output_dtype(int ftype,
         case Bodo_FTypes::row_number:
             array_type = bodo_array_type::NUMPY;
             dtype = Bodo_CTypes::UINT64;
+            return;
+        case Bodo_FTypes::min_row_number_filter:
+            array_type = bodo_array_type::NUMPY;
+            dtype = Bodo_CTypes::_BOOL;
             return;
         default:
             return;
@@ -5847,6 +6065,166 @@ class HeadColSet : public BasicColSet {
 };
 
 /**
+ * @brief Handles the update step for the supported window functions.
+ * These functions are not simple reductions and require additional
+ * functionality to operate over a "window" of values (possibly a sort
+ * or equivalent). The output size is always the same size as the original
+ * input
+ *
+ * @param[in] orderby_arr The array that is being "sorted" to determine
+ * the groups. In some situations it may be possible to do a partial sort
+ * or avoid sorting.
+ * @param[in] window_func The name of the window function being computed.
+ * Currently we only support row_number.
+ * @param[out] out_arr The output array being population.
+ * @param[in] grp_info Struct containing information about the groups.
+ * @param[in] asc Should the array be sorted in ascending order?
+ * @param[in] na_pos Should NA's be placed at the end of the array?
+ * @param[in] is_parallel Is the data distributed? This is used for tracing
+ * @param[in] use_sql_rules Do we use SQL or Pandas Null rules
+ * informate.
+ */
+void window_computation(array_info* orderby_arr, int64_t window_func,
+                        array_info* out_arr, grouping_info const& grp_info,
+                        bool asc, bool na_pos, bool is_parallel,
+                        bool use_sql_rules) {
+    switch (window_func) {
+        case Bodo_FTypes::row_number: {
+            const std::vector<int64_t>& row_to_group = grp_info.row_to_group;
+            int64_t num_rows = row_to_group.size();
+            // Wrap the row_to_group in an array info so we can use it to sort.
+            array_info* group_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
+            // TODO: Reuse the row_to_group buffer
+            for (int64_t i = 0; i < num_rows; i++) {
+                getv<int64_t>(group_arr, i) = row_to_group[i];
+            }
+            // Create a new table. We want to sort the table first by
+            // the groups and second by the orderby_arr.
+            table_info* sort_table = new table_info();
+            // sort_values_table_local steals a reference
+            incref_array(orderby_arr);
+            sort_table->columns.push_back(group_arr);
+            sort_table->columns.push_back(orderby_arr);
+            // Append an index column so we can find the original
+            // index in the out array.
+            array_info* idx_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
+            for (int64_t i = 0; i < num_rows; i++) {
+                getv<int64_t>(idx_arr, i) = i;
+            }
+            sort_table->columns.push_back(idx_arr);
+            int64_t vect_ascending[2] = {asc, asc};
+            int64_t na_position[2] = {na_pos, na_pos};
+
+            // Sort the table
+            // XXX: We don't need the entire chunk of data sorted,
+            // just the groups. We could do a partial sort to avoid
+            // the overhead of sorting the data and in the future
+            // we may be want to explore if we can use hashing
+            // instead to avoid sort overhead.
+            table_info* iter_table = sort_values_table_local(
+                sort_table, 2, vect_ascending, na_position, nullptr,
+                is_parallel /* This is just used for tracing */);
+            array_info* sorted_groups = iter_table->columns[0];
+            array_info* sorted_idx = iter_table->columns[2];
+            // sort_values_table_local steals a reference so
+            // we don't need to decref
+            delete sort_table;
+
+            int64_t prev_group = -1;
+            int64_t row_num = 1;
+            for (int64_t i = 0; i < num_rows; i++) {
+                int64_t curr_group = getv<int64_t>(sorted_groups, i);
+                if (curr_group != prev_group) {
+                    row_num = 1;
+                } else {
+                    row_num++;
+                }
+                // Get the index in the output array.
+                int64_t idx = getv<int64_t>(sorted_idx, i);
+                getv<int64_t>(out_arr, idx) = row_num;
+                // Set the prev group
+                prev_group = curr_group;
+            }
+            // Delete the sorted table.
+            delete_table_decref_arrays(iter_table);
+            break;
+        }
+        case Bodo_FTypes::min_row_number_filter: {
+            // To compute min_row_number_filter we want to find the
+            // idxmin/idxmax based on the orderby column. Then in the output
+            // array those locations will have the value true. We have already
+            // initialized all other locations to false.
+            int64_t ftype;
+            bodo_array_type::arr_type_enum idx_arr_type;
+            if (asc) {
+                // The first value of an array in ascending order is the min.
+                if (na_pos) {
+                    ftype = Bodo_FTypes::idxmin;
+                    // We don't need null values for indices
+                    idx_arr_type = bodo_array_type::NUMPY;
+                } else {
+                    ftype = Bodo_FTypes::idxmin_na_first;
+                    // We need null values to signal we found an NA
+                    // value.
+                    idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+                }
+            } else {
+                // The first value of an array in descending order is the max.
+                if (na_pos) {
+                    ftype = Bodo_FTypes::idxmax;
+                    // We don't need null values for indices
+                    idx_arr_type = bodo_array_type::NUMPY;
+                } else {
+                    ftype = Bodo_FTypes::idxmax_na_first;
+                    // We need null values to signal we found an NA
+                    // value.
+                    idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+                }
+            }
+            // Allocate intermediate buffer to find the true element for each
+            // group. Indices
+            size_t num_groups = grp_info.num_groups;
+            array_info* idx_col = alloc_array_groupby(
+                num_groups, 1, 1, idx_arr_type, Bodo_CTypes::UINT64, 0, 0);
+            // create array to store min/max value
+            array_info* data_col =
+                alloc_array_groupby(num_groups, 1, 1, orderby_arr->arr_type,
+                                    orderby_arr->dtype, 0, 0);
+            // Initialize the index column. This is 0 intialized and will
+            // not initial the null values.
+            aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
+                                      use_sql_rules);
+            std::vector<array_info*> aux_cols = {idx_col};
+            // Initialize the max column
+            if (ftype == Bodo_FTypes::idxmax ||
+                ftype == Bodo_FTypes::idxmax_na_first) {
+                aggfunc_output_initialize(data_col, Bodo_FTypes::max,
+                                          use_sql_rules);
+            } else {
+                aggfunc_output_initialize(data_col, Bodo_FTypes::min,
+                                          use_sql_rules);
+            }
+            // Compute the idxmin/idxmax
+            do_apply_to_column(orderby_arr, data_col, aux_cols, grp_info, ftype,
+                               use_sql_rules);
+            // Delete the max/min result
+            delete_info_decref_array(data_col);
+            // Now we have the idxmin/idxmax in the idx_col. We need to set the
+            // indices to true.
+            for (size_t i = 0; i < idx_col->length; i++) {
+                int64_t idx = getv<int64_t>(idx_col, i);
+                getv<bool>(out_arr, idx) = true;
+            }
+            // Delete the idx_col
+            delete_info_decref_array(idx_col);
+            break;
+        }
+        default:
+            throw new std::runtime_error("Invalid window function");
+    }
+}
+
+/**
  * @brief WindowColSet column set for window operations.
  *
  */
@@ -5893,9 +6271,11 @@ class WindowColSet : public BasicColSet {
                                  is_combine);
         // NOTE: output size of window is the same as input size
         //       (NOT the number of groups)
-        out_cols.push_back(alloc_array_groupby(
-            this->in_col->length, 1, 1, arr_type, dtype, 0, num_categories));
-        this->update_cols.push_back(out_cols.back());
+        array_info* c = alloc_array_groupby(this->in_col->length, 1, 1,
+                                            arr_type, dtype, 0, num_categories);
+        aggfunc_output_initialize(c, window_func, use_sql_rules);
+        out_cols.push_back(c);
+        this->update_cols.push_back(c);
     }
 
     /**
@@ -5909,7 +6289,8 @@ class WindowColSet : public BasicColSet {
      */
     virtual void update(const std::vector<grouping_info>& grp_infos) {
         window_computation(this->in_col, window_func, this->update_cols[0],
-                           grp_infos[0], asc, na_pos, is_parallel);
+                           grp_infos[0], asc, na_pos, is_parallel,
+                           use_sql_rules);
     }
 
    private:

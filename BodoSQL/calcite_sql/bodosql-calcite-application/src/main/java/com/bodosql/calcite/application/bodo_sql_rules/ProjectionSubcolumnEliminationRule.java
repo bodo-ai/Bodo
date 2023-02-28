@@ -332,14 +332,15 @@ public class ProjectionSubcolumnEliminationRule
         replaceNode = replaceNode || !newOperand.equals(oldOperand);
       }
       if (replaceNode) {
-        builder
+        return builder
             .aggregateCall(overNode.getAggOperator(), newOperands)
             .distinct(overNode.isDistinct())
             .ignoreNulls(overNode.ignoreNulls())
             .over()
             .partitionBy(newPartitionKeys)
             .orderBy(newOrderKeys)
-            .rangeBetween(window.getLowerBound(), window.getUpperBound());
+            .rangeBetween(window.getLowerBound(), window.getUpperBound())
+            .toRex();
       }
     } else if (node instanceof RexCall) {
       // Call expressions need to have their children traversed. No other RexNodes
@@ -417,14 +418,15 @@ public class ProjectionSubcolumnEliminationRule
         replaceNode = replaceNode || !newOperand.equals(oldOperand);
       }
       if (replaceNode) {
-        builder
+        return builder
             .aggregateCall(overNode.getAggOperator(), newOperands)
             .distinct(overNode.isDistinct())
             .ignoreNulls(overNode.ignoreNulls())
             .over()
             .partitionBy(newPartitionKeys)
             .orderBy(newOrderKeys)
-            .rangeBetween(window.getLowerBound(), window.getUpperBound());
+            .rangeBetween(window.getLowerBound(), window.getUpperBound())
+            .toRex();
       }
     } else if (node instanceof RexCall) {
       // Call expressions need to have their children traversed. No other RexNodes
