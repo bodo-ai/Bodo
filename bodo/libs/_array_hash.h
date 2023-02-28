@@ -4,6 +4,7 @@
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_murmurhash3.h"
 
 #define SEED_HASH_PARTITION 0xb0d01289
 #define SEED_HASH_MULTIKEY 0xb0d01288
@@ -864,5 +865,58 @@ class KeysEqualComparator {
     const table_info* table;
     const bool is_na_equal;
 };
+
+// ----- Simple C++ Cache for LIKE kernel dict-encoding case --------
+
+// Hashmap type for the like kernel cache. The key is `uint64_t`, where
+// the two `uint32_t` indices are bitwise concatenated into a `uint64_t`.
+// The value is `int8_t`, but we will only use 3 value: 0 (false), 1 (true)
+// and -1 (cache miss).
+// We use regular std::hash. Using XXH3 had slightly worse performance during
+// our testing.
+typedef UNORD_MAP_CONTAINER<uint64_t, int8_t, std::hash<uint64_t>,
+                            std::equal_to<>>
+    like_kernel_cache_t;
+
+/**
+ * @brief Allocate the cache for the like kernel dict-encoding case.
+ * The cache will map pair of indices (2 uint32_t bitwise concatenated into an
+ * uint64_t) to a int8_t.
+ *
+ * @param reserve_size Size to reserve the hashmap to.
+ * @return like_kernel_cache_t* Pointer to the hashmap.
+ */
+like_kernel_cache_t* alloc_like_kernel_cache(uint64_t reserve_size) noexcept;
+
+/**
+ * @brief Add computation output to the hashmap.
+ *
+ * @param cache Pointer to the hashmap
+ * @param idx1 Index in the first dictionary
+ * @param idx2 Index in the second dictionary
+ * @param val Boolean output of the computation to cache.
+ */
+void add_to_like_kernel_cache(like_kernel_cache_t* cache, uint32_t idx1,
+                              uint32_t idx2, bool val) noexcept;
+
+/**
+ * @brief Check if a value is in the cache.
+ *
+ *
+ * @param cache Pointer to the hashmap
+ * @param idx1 Index in the first dictionary
+ * @param idx2 Index in the second dictionary
+ * @return int8_t -1 if value doesn't exist in the cache, 0 if it does exist and
+ * it's false and 1 if it's true.
+ */
+int8_t check_like_kernel_cache(like_kernel_cache_t* cache, uint32_t idx1,
+                               uint32_t idx2) noexcept;
+
+/**
+ * @brief Delete the cache and free the memory.
+ *
+ * @param cache Pointer to the hashmap
+ */
+void dealloc_like_kernel_cache(like_kernel_cache_t* cache) noexcept;
 
 #endif  // _ARRAY_HASH_H_INCLUDED

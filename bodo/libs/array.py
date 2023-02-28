@@ -127,6 +127,44 @@ ll.add_symbol("get_replace_regex", array_ext.get_replace_regex)
 ll.add_symbol("array_info_getitem", array_ext.array_info_getitem)
 ll.add_symbol("array_info_getdata1", array_ext.array_info_getdata1)
 ll.add_symbol("union_tables", array_ext.union_tables)
+ll.add_symbol("alloc_like_kernel_cache", array_ext.alloc_like_kernel_cache)
+ll.add_symbol("add_to_like_kernel_cache", array_ext.add_to_like_kernel_cache)
+ll.add_symbol("check_like_kernel_cache", array_ext.check_like_kernel_cache)
+ll.add_symbol("dealloc_like_kernel_cache", array_ext.dealloc_like_kernel_cache)
+
+
+class LikeKernelCache(types.Opaque):
+    """
+    Cache for SQL Like Kernel where both the array and the pattern
+    array are dictionary encoded.
+    We map the pair of indices from the two dictionary encoded arrays
+    to a boolean computation output value.
+    We implement the cache in C++ for better performance.
+    """
+
+    def __init__(self):
+        super(LikeKernelCache, self).__init__(name="LikeKernelCache")
+
+
+like_kernel_cache_type = LikeKernelCache()
+types.like_kernel_cache_type = like_kernel_cache_type  # type: ignore
+register_model(LikeKernelCache)(models.OpaqueModel)
+
+
+_alloc_like_kernel_cache = types.ExternalFunction(
+    "alloc_like_kernel_cache", types.like_kernel_cache_type(types.uint64)
+)
+_add_to_like_kernel_cache = types.ExternalFunction(
+    "add_to_like_kernel_cache",
+    types.void(types.like_kernel_cache_type, types.uint32, types.uint32, types.bool_),
+)
+_check_like_kernel_cache = types.ExternalFunction(
+    "check_like_kernel_cache",
+    types.int8(types.like_kernel_cache_type, types.uint32, types.uint32),
+)
+_dealloc_like_kernel_cache = types.ExternalFunction(
+    "dealloc_like_kernel_cache", types.void(types.like_kernel_cache_type)
+)
 
 
 class ArrayInfoType(types.Type):
