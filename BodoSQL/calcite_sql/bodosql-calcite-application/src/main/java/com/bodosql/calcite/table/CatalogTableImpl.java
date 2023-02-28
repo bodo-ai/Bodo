@@ -1,5 +1,6 @@
 package com.bodosql.calcite.table;
 
+import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import java.util.*;
@@ -66,7 +67,8 @@ public class CatalogTableImpl extends BodoSqlTable {
    */
   @Override
   public String generateWriteCode(String varName) {
-    return this.getCatalogSchema().generateWriteCode(varName, this.getName());
+    return this.getCatalogSchema()
+        .generateWriteCode(varName, this.getName(), BodoSQLCatalog.ifExistsBehavior.APPEND);
   }
 
   /**

@@ -36,7 +36,9 @@ import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.ir.*;
+import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Module;
+import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
 import com.google.common.collect.Range;
@@ -46,13 +48,11 @@ import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
-import org.apache.calcite.rel.core.AggregateCall;
-import org.apache.calcite.rel.core.Join;
-import org.apache.calcite.rel.core.TableModify;
-import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.core.*;
 import org.apache.calcite.rel.logical.*;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
+import org.apache.calcite.schema.Schema;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.*;
 import org.apache.calcite.sql.type.*;
@@ -320,6 +320,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.visitLogicalValues((LogicalValues) node);
     } else if (node instanceof LogicalTableModify) {
       this.visitLogicalTableModify((LogicalTableModify) node);
+    } else if (node instanceof LogicalTableCreate) {
+      visitLogicalTableCreate((LogicalTableCreate) node);
     } else if (node instanceof LogicalCorrelate) {
       throw new BodoSQLCodegenException(
           "Internal Error: BodoSQL does not support Correlated Queries");
@@ -714,6 +716,34 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.genRelnodeTimerStop(node);
     }
     varGenStack.push(projectOutVar);
+  }
+
+  public void visitLogicalTableCreate(LogicalTableCreate node) {
+    this.visit(node.getInput(0), 0, node);
+    // Not going to do a relNodeTimer on this
+
+    Schema outputSchema = node.getSchema();
+
+    // Fow now, we only support CREATE TABLE AS with CatalogSchema
+    if (!(outputSchema instanceof CatalogSchemaImpl)) {
+      throw new BodoSQLCodegenException("CREATE TABLE is only supported for Snowflake Catalog Schemas");
+    }
+
+    CatalogSchemaImpl outputSchemaAsCatalog = (CatalogSchemaImpl) outputSchema;
+
+    BodoSQLCatalog.ifExistsBehavior ifExists;
+    if (node.isReplace()) {
+      ifExists = BodoSQLCatalog.ifExistsBehavior.REPLACE;
+    } else {
+      ifExists = BodoSQLCatalog.ifExistsBehavior.FAIL;
+    }
+
+    this.generatedCode
+        .append(getBodoIndent())
+        .append(
+            outputSchemaAsCatalog.generateWriteCode(
+                this.varGenStack.pop(), node.getTableName(), ifExists))
+        .append("\n");
   }
 
   /**

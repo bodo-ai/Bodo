@@ -2215,8 +2215,7 @@ def create_snowflake_table(
     table_name = None
     try:
         if bodo.get_rank() == 0:
-            unique_name = str(uuid4()).replace("-", "_")
-            table_name = f"{base_table_name}_{unique_name}".lower()
+            table_name = gen_unique_table_id(base_table_name)
             conn_str = get_snowflake_connection_string(db, schema)
             df.to_sql(
                 table_name, conn_str, schema=schema, index=False, if_exists="replace"
@@ -2225,6 +2224,11 @@ def create_snowflake_table(
         yield table_name
     finally:
         drop_snowflake_table(table_name, db, schema)
+
+
+def gen_unique_table_id(base_table_name):
+    unique_name = str(uuid4()).replace("-", "_")
+    return f"{base_table_name}_{unique_name}".lower()
 
 
 def drop_snowflake_table(table_name: str, db: str, schema: str):
