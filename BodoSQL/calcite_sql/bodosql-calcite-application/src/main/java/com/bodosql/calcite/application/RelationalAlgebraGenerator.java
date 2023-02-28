@@ -410,7 +410,7 @@ public class RelationalAlgebraGenerator {
               /*
               Planner rule that combines two LogicalFilters.
               */
-              .addRuleInstance(FilterMergeRule.Config.DEFAULT.toRule())
+              .addRuleInstance(FilterMergeRuleNoWindow.Config.DEFAULT.toRule())
               /*
                  Planner rule that merges a Project into another Project,
                  provided the projects aren't projecting identical sets of input references
@@ -420,7 +420,7 @@ public class RelationalAlgebraGenerator {
               /*
               Planner rule that pushes a Filter past a Aggregate.
                  */
-              .addRuleInstance(FilterAggregateTransposeRule.Config.DEFAULT.toRule())
+              .addRuleInstance(FilterAggregateTransposeRuleNoWindow.Config.DEFAULT.toRule())
               /*
                * Planner rule that matches an {@link org.apache.calcite.rel.core.Aggregate}
                * on a {@link org.apache.calcite.rel.core.Join} and removes the join
@@ -449,7 +449,8 @@ public class RelationalAlgebraGenerator {
               Rule that tries to push filter expressions into a join condition and into the inputs of the join.
               */
               .addRuleInstance(
-                  FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT.toRule())
+                  FilterJoinRuleNoWindow.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT
+                      .toRule())
               /*
               Rule that applies moves any filters that depend on a single table before the join in
               which they occur.
@@ -566,6 +567,7 @@ public class RelationalAlgebraGenerator {
               // LogicalProject(x=[$0], x2=[$1], x3=[/(+($1, 10), 2)], x4=[*(/(+($1, 10), 2), 3)])
               //  LogicalProject(x=[$0], x2=[+($0, 10)])
               .addRuleInstance(ProjectionSubcolumnEliminationRule.Config.DEFAULT.toRule())
+              .addRuleInstance(MinRowNumberFilterRule.Config.DEFAULT.toRule())
               .build();
 
     } else {

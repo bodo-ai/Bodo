@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
+import org.apache.calcite.avatica.*;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
@@ -12,6 +13,7 @@ import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
+import org.apache.calcite.util.*;
 
 public class CondOperatorTable implements SqlOperatorTable {
   private static @Nullable CondOperatorTable instance;
@@ -311,6 +313,11 @@ public class CondOperatorTable implements SqlOperatorTable {
       SqlBasicAggFunction.create(
           "COUNT_IF", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.BOOLEAN);
 
+  // MIN_ROW_NUMBER_FILTER is an internal function created as an optimization
+  // on ROW_NUMBER = 1
+  public static final SqlRankFunction MIN_ROW_NUMBER_FILTER =
+      new SqlRankFunction(SqlKind.MIN_ROW_NUMBER_FILTER, ReturnTypes.BOOLEAN_NOT_NULL, true);
+
   //  Returns the logical (boolean) OR value of all non-NULL boolean records in a group.
   //  BOOLOR_AGG returns ‘true’ if at least one record in the group evaluates to ‘true’.
   //  Numeric values, Decimal, and floating point values are converted to ‘true’ if they are
@@ -344,7 +351,8 @@ public class CondOperatorTable implements SqlOperatorTable {
           NVL,
           NVL2,
           ZEROIFNULL,
-          DECODE);
+          DECODE,
+          MIN_ROW_NUMBER_FILTER);
 
   @Override
   public void lookupOperatorOverloads(
