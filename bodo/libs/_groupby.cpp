@@ -539,6 +539,22 @@ struct aggstring<Bodo_FTypes::max> {
     }
 };
 
+static void idxmin_string(std::string& v1, std::string& v2, uint64_t& index_pos,
+                          int64_t i) {
+    if (v1.compare(v2) > 0) {
+        v1 = v2;
+        index_pos = i;
+    }
+}
+
+static void idxmax_string(std::string& v1, std::string& v2, uint64_t& index_pos,
+                          int64_t i) {
+    if (v1.compare(v2) < 0) {
+        v1 = v2;
+        index_pos = i;
+    }
+}
+
 template <>
 struct aggstring<Bodo_FTypes::last> {
     static void apply(std::string& v1, std::string& v2) { v1 = v2; }
@@ -579,6 +595,22 @@ struct aggdict<Bodo_FTypes::max> {
         }
     }
 };
+
+static void idxmin_dict(int32_t& v1, int32_t& v2, std::string& s1,
+                        std::string& s2, uint64_t& index_pos, int64_t i) {
+    if (s1.compare(s2) > 0) {
+        v1 = v2;
+        index_pos = i;
+    }
+}
+
+static void idxmax_dict(int32_t& v1, int32_t& v2, std::string& s1,
+                        std::string& s2, uint64_t& index_pos, int64_t i) {
+    if (s1.compare(s2) < 0) {
+        v1 = v2;
+        index_pos = i;
+    }
+}
 
 template <>
 struct aggdict<Bodo_FTypes::last> {
@@ -2811,34 +2843,153 @@ array_info* apply_to_column_list_string(array_info* in_col, array_info* out_col,
 
 template <typename F, int ftype>
 array_info* apply_to_column_string(array_info* in_col, array_info* out_col,
+                                   std::vector<array_info*>& aux_cols,
                                    const grouping_info& grp_info, F f) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of apply_to_column_string\n";
-#endif
     size_t num_groups = grp_info.num_groups;
     size_t n_bytes = (num_groups + 7) >> 3;
     std::vector<uint8_t> V(n_bytes, 0);
     std::vector<std::string> ListString(num_groups);
     char* data_i = in_col->data1;
     offset_t* offsets_i = (offset_t*)in_col->data2;
-    // Computing the strings used in output.
-    for (size_t i = 0; i < in_col->length; i++) {
-        int64_t i_grp = f(i);
-        if ((i_grp != -1) && in_col->get_null_bit(i)) {
-            bool out_bit_set = GetBit(V.data(), i_grp);
-            if (ftype == Bodo_FTypes::first && out_bit_set) continue;
-            offset_t start_offset = offsets_i[i];
-            offset_t end_offset = offsets_i[i + 1];
-            offset_t len = end_offset - start_offset;
-            std::string val(&data_i[start_offset], len);
-            if (out_bit_set) {
-                aggstring<ftype>::apply(ListString[i_grp], val);
-            } else {
-                ListString[i_grp] = val;
-                SetBitTo(V.data(), i_grp, true);
+    switch (ftype) {
+        case Bodo_FTypes::idxmax: {
+            array_info* index_pos = aux_cols[0];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                if ((i_grp != -1) && in_col->get_null_bit(i)) {
+                    bool out_bit_set = GetBit(V.data(), i_grp);
+                    offset_t start_offset = offsets_i[i];
+                    offset_t end_offset = offsets_i[i + 1];
+                    offset_t len = end_offset - start_offset;
+                    std::string val(&data_i[start_offset], len);
+                    if (out_bit_set) {
+                        idxmax_string(ListString[i_grp], val,
+                                      getv<uint64_t>(index_pos, i_grp), i);
+                    } else {
+                        ListString[i_grp] = val;
+                        getv<uint64_t>(index_pos, i_grp) = i;
+                        SetBitTo(V.data(), i_grp, true);
+                    }
+                }
             }
+            break;
         }
+        case Bodo_FTypes::idxmin: {
+            array_info* index_pos = aux_cols[0];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                if ((i_grp != -1) && in_col->get_null_bit(i)) {
+                    bool out_bit_set = GetBit(V.data(), i_grp);
+                    offset_t start_offset = offsets_i[i];
+                    offset_t end_offset = offsets_i[i + 1];
+                    offset_t len = end_offset - start_offset;
+                    std::string val(&data_i[start_offset], len);
+                    if (out_bit_set) {
+                        idxmin_string(ListString[i_grp], val,
+                                      getv<uint64_t>(index_pos, i_grp), i);
+                    } else {
+                        ListString[i_grp] = val;
+                        getv<uint64_t>(index_pos, i_grp) = i;
+                        SetBitTo(V.data(), i_grp, true);
+                    }
+                }
+            }
+            break;
+        }
+        case Bodo_FTypes::idxmax_na_first: {
+            array_info* index_pos = aux_cols[0];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                // If we are putting NA values first then we stop
+                // visiting a group once we see a NA value. We
+                // initialize the output values to all be non-NA values
+                // to ensure this.
+                if (i_grp != -1 && index_pos->get_null_bit(i_grp)) {
+                    if (in_col->get_null_bit(i)) {
+                        bool out_bit_set = GetBit(V.data(), i_grp);
+                        offset_t start_offset = offsets_i[i];
+                        offset_t end_offset = offsets_i[i + 1];
+                        offset_t len = end_offset - start_offset;
+                        std::string val(&data_i[start_offset], len);
+                        if (out_bit_set) {
+                            idxmax_string(ListString[i_grp], val,
+                                          getv<uint64_t>(index_pos, i_grp), i);
+                        } else {
+                            ListString[i_grp] = val;
+                            getv<uint64_t>(index_pos, i_grp) = i;
+                            SetBitTo(V.data(), i_grp, true);
+                        }
+                    } else {
+                        // If we have an NA value mark this group as
+                        // done and update the index
+                        getv<uint64_t>(index_pos, i_grp) = i;
+                        // set the null bit for the count so we know
+                        // to stop visiting the group. The data is still
+                        // valid.
+                        index_pos->set_null_bit(i_grp, false);
+                    }
+                }
+            }
+            break;
+        }
+        case Bodo_FTypes::idxmin_na_first: {
+            array_info* index_pos = aux_cols[0];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                // If we are putting NA values first then we stop
+                // visiting a group once we see a NA value. We
+                // initialize the output values to all be non-NA values
+                // to ensure this.
+                if (i_grp != -1 && index_pos->get_null_bit(i_grp)) {
+                    if (in_col->get_null_bit(i)) {
+                        bool out_bit_set = GetBit(V.data(), i_grp);
+                        offset_t start_offset = offsets_i[i];
+                        offset_t end_offset = offsets_i[i + 1];
+                        offset_t len = end_offset - start_offset;
+                        std::string val(&data_i[start_offset], len);
+                        if (out_bit_set) {
+                            idxmin_string(ListString[i_grp], val,
+                                          getv<uint64_t>(index_pos, i_grp), i);
+                        } else {
+                            ListString[i_grp] = val;
+                            getv<uint64_t>(index_pos, i_grp) = i;
+                            SetBitTo(V.data(), i_grp, true);
+                        }
+                    } else {
+                        // If we have an NA value mark this group as
+                        // done and update the index
+                        getv<uint64_t>(index_pos, i_grp) = i;
+                        // set the null bit for the count so we know
+                        // to stop visiting the group. The data is still
+                        // valid.
+                        index_pos->set_null_bit(i_grp, false);
+                    }
+                }
+            }
+            break;
+        }
+        default:
+            // Computing the strings used in output.
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                if ((i_grp != -1) && in_col->get_null_bit(i)) {
+                    bool out_bit_set = GetBit(V.data(), i_grp);
+                    if (ftype == Bodo_FTypes::first && out_bit_set) continue;
+                    offset_t start_offset = offsets_i[i];
+                    offset_t end_offset = offsets_i[i + 1];
+                    offset_t len = end_offset - start_offset;
+                    std::string val(&data_i[start_offset], len);
+                    if (out_bit_set) {
+                        aggstring<ftype>::apply(ListString[i_grp], val);
+                    } else {
+                        ListString[i_grp] = val;
+                        SetBitTo(V.data(), i_grp, true);
+                    }
+                }
+            }
     }
+    // TODO: Avoid creating the output array for
+    // idxmin/idxmax/idxmin_na_first/idxmax_na_first
     // Determining the number of characters in output.
     return create_string_array(grp_info, V, ListString);
 }
@@ -2846,10 +2997,6 @@ array_info* apply_to_column_string(array_info* in_col, array_info* out_col,
 template <typename F, int ftype>
 array_info* apply_sum_to_column_string(array_info* in_col, array_info* out_col,
                                        const grouping_info& grp_info, F f) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of apply_to_column_string\n";
-#endif
-
     // allocate output array (length is number of groups, number of chars same
     // as input)
     size_t num_groups = grp_info.num_groups;
@@ -2901,6 +3048,7 @@ array_info* apply_sum_to_column_string(array_info* in_col, array_info* out_col,
  */
 template <typename F, int ftype>
 array_info* apply_to_column_dict(array_info* in_col, array_info* out_col,
+                                 std::vector<array_info*>& aux_cols,
                                  const grouping_info& grp_info, F f) {
     size_t num_groups = grp_info.num_groups;
     size_t n_bytes = (num_groups + 7) >> 3;
@@ -2910,33 +3058,199 @@ array_info* apply_to_column_dict(array_info* in_col, array_info* out_col,
                            0);  // bitmask to mark if group's been updated
     char* data_i = in_col->info1->data1;
     offset_t* offsets_i = (offset_t*)in_col->info1->data2;
-    // Populate the new indices array.
-    for (size_t i = 0; i < in_col->length; i++) {
-        int64_t i_grp = f(i);
-        if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
-            bool out_bit_set = GetBit(V.data(), i_grp);
-            if (ftype == Bodo_FTypes::first && out_bit_set) continue;
-            int32_t& dict_ind = getv<int32_t>(in_col->info2, i);
-            int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
-            if (out_bit_set) {
-                // Ge the address and length of the new value to be compared
-                offset_t start_offset = offsets_i[dict_ind];
-                offset_t end_offset = offsets_i[dict_ind + 1];
-                offset_t len = end_offset - start_offset;
-                std::string s2(&data_i[start_offset], len);
-                // Get the address and length of the cumulative result
-                offset_t start_offset_org = offsets_i[org_ind];
-                offset_t end_offset_org = offsets_i[org_ind + 1];
-                offset_t len_org = end_offset_org - start_offset_org;
-                std::string s1(&data_i[start_offset_org], len_org);
-                aggdict<ftype>::apply(org_ind, dict_ind, s1, s2);
-            } else {
-                org_ind = dict_ind;
-                SetBitTo(V.data(), i_grp, true);
-                indices_arr->set_null_bit(i_grp, true);
+    switch (ftype) {
+        case Bodo_FTypes::idxmax: {
+            array_info* index_pos = aux_cols[0];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                if ((i_grp != -1) && in_col->get_null_bit(i)) {
+                    bool out_bit_set = GetBit(V.data(), i_grp);
+                    int32_t& dict_ind = getv<int32_t>(in_col->info2, i);
+                    int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
+                    if (out_bit_set) {
+                        // Get the address and length of the new value to be
+                        // compared
+                        offset_t start_offset = offsets_i[dict_ind];
+                        offset_t end_offset = offsets_i[dict_ind + 1];
+                        offset_t len = end_offset - start_offset;
+                        std::string s2(&data_i[start_offset], len);
+                        // Get the address and length of the cumulative result
+                        offset_t start_offset_org = offsets_i[org_ind];
+                        offset_t end_offset_org = offsets_i[org_ind + 1];
+                        offset_t len_org = end_offset_org - start_offset_org;
+                        std::string s1(&data_i[start_offset_org], len_org);
+                        idxmax_dict(org_ind, dict_ind, s1, s2,
+                                    getv<uint64_t>(index_pos, i_grp), i);
+                    } else {
+                        org_ind = dict_ind;
+                        getv<uint64_t>(index_pos, i_grp) = i;
+                        SetBitTo(V.data(), i_grp, true);
+                        indices_arr->set_null_bit(i_grp, true);
+                    }
+                }
             }
+            break;
         }
+        case Bodo_FTypes::idxmin: {
+            array_info* index_pos = aux_cols[0];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                if ((i_grp != -1) && in_col->get_null_bit(i)) {
+                    bool out_bit_set = GetBit(V.data(), i_grp);
+                    int32_t& dict_ind = getv<int32_t>(in_col->info2, i);
+                    int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
+                    if (out_bit_set) {
+                        // Get the address and length of the new value to be
+                        // compared
+                        offset_t start_offset = offsets_i[dict_ind];
+                        offset_t end_offset = offsets_i[dict_ind + 1];
+                        offset_t len = end_offset - start_offset;
+                        std::string s2(&data_i[start_offset], len);
+                        // Get the address and length of the cumulative result
+                        offset_t start_offset_org = offsets_i[org_ind];
+                        offset_t end_offset_org = offsets_i[org_ind + 1];
+                        offset_t len_org = end_offset_org - start_offset_org;
+                        std::string s1(&data_i[start_offset_org], len_org);
+                        idxmin_dict(org_ind, dict_ind, s1, s2,
+                                    getv<uint64_t>(index_pos, i_grp), i);
+                    } else {
+                        org_ind = dict_ind;
+                        getv<uint64_t>(index_pos, i_grp) = i;
+                        SetBitTo(V.data(), i_grp, true);
+                        indices_arr->set_null_bit(i_grp, true);
+                    }
+                }
+            }
+            break;
+        }
+        case Bodo_FTypes::idxmax_na_first: {
+            array_info* index_pos = aux_cols[0];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                // If we are putting NA values first then we stop
+                // visiting a group once we see a NA value. We
+                // initialize the output values to all be non-NA values
+                // to ensure this.
+                if (i_grp != -1 && index_pos->get_null_bit(i_grp)) {
+                    if (in_col->get_null_bit(i)) {
+                        bool out_bit_set = GetBit(V.data(), i_grp);
+                        int32_t& dict_ind = getv<int32_t>(in_col->info2, i);
+                        int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
+                        if (out_bit_set) {
+                            // Get the address and length of the new value to be
+                            // compared
+                            offset_t start_offset = offsets_i[dict_ind];
+                            offset_t end_offset = offsets_i[dict_ind + 1];
+                            offset_t len = end_offset - start_offset;
+                            std::string s2(&data_i[start_offset], len);
+                            // Get the address and length of the cumulative
+                            // result
+                            offset_t start_offset_org = offsets_i[org_ind];
+                            offset_t end_offset_org = offsets_i[org_ind + 1];
+                            offset_t len_org =
+                                end_offset_org - start_offset_org;
+                            std::string s1(&data_i[start_offset_org], len_org);
+                            idxmax_dict(org_ind, dict_ind, s1, s2,
+                                        getv<uint64_t>(index_pos, i_grp), i);
+                        } else {
+                            org_ind = dict_ind;
+                            getv<uint64_t>(index_pos, i_grp) = i;
+                            SetBitTo(V.data(), i_grp, true);
+                            indices_arr->set_null_bit(i_grp, true);
+                        }
+                    } else {
+                        // If we have an NA value mark this group as
+                        // done and update the index
+                        getv<uint64_t>(index_pos, i_grp) = i;
+                        // set the null bit for the count so we know
+                        // to stop visiting the group. The data is still
+                        // valid.
+                        index_pos->set_null_bit(i_grp, false);
+                    }
+                }
+            }
+            break;
+        }
+        case Bodo_FTypes::idxmin_na_first: {
+            array_info* index_pos = aux_cols[0];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                // If we are putting NA values first then we stop
+                // visiting a group once we see a NA value. We
+                // initialize the output values to all be non-NA values
+                // to ensure this.
+                if (i_grp != -1 && index_pos->get_null_bit(i_grp)) {
+                    if (in_col->get_null_bit(i)) {
+                        bool out_bit_set = GetBit(V.data(), i_grp);
+                        int32_t& dict_ind = getv<int32_t>(in_col->info2, i);
+                        int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
+                        if (out_bit_set) {
+                            // Get the address and length of the new value to be
+                            // compared
+                            offset_t start_offset = offsets_i[dict_ind];
+                            offset_t end_offset = offsets_i[dict_ind + 1];
+                            offset_t len = end_offset - start_offset;
+                            std::string s2(&data_i[start_offset], len);
+                            // Get the address and length of the cumulative
+                            // result
+                            offset_t start_offset_org = offsets_i[org_ind];
+                            offset_t end_offset_org = offsets_i[org_ind + 1];
+                            offset_t len_org =
+                                end_offset_org - start_offset_org;
+                            std::string s1(&data_i[start_offset_org], len_org);
+                            idxmin_dict(org_ind, dict_ind, s1, s2,
+                                        getv<uint64_t>(index_pos, i_grp), i);
+                        } else {
+                            org_ind = dict_ind;
+                            getv<uint64_t>(index_pos, i_grp) = i;
+                            SetBitTo(V.data(), i_grp, true);
+                            indices_arr->set_null_bit(i_grp, true);
+                        }
+                    } else {
+                        // If we have an NA value mark this group as
+                        // done and update the index
+                        getv<uint64_t>(index_pos, i_grp) = i;
+                        // set the null bit for the count so we know
+                        // to stop visiting the group. The data is still
+                        // valid.
+                        index_pos->set_null_bit(i_grp, false);
+                    }
+                }
+            }
+            break;
+        }
+        default:
+            // Populate the new indices array.
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
+                    bool out_bit_set = GetBit(V.data(), i_grp);
+                    if (ftype == Bodo_FTypes::first && out_bit_set) continue;
+                    int32_t& dict_ind = getv<int32_t>(in_col->info2, i);
+                    int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
+                    if (out_bit_set) {
+                        // Get the address and length of the new value to be
+                        // compared
+                        offset_t start_offset = offsets_i[dict_ind];
+                        offset_t end_offset = offsets_i[dict_ind + 1];
+                        offset_t len = end_offset - start_offset;
+                        std::string s2(&data_i[start_offset], len);
+                        // Get the address and length of the cumulative result
+                        offset_t start_offset_org = offsets_i[org_ind];
+                        offset_t end_offset_org = offsets_i[org_ind + 1];
+                        offset_t len_org = end_offset_org - start_offset_org;
+                        std::string s1(&data_i[start_offset_org], len_org);
+                        aggdict<ftype>::apply(org_ind, dict_ind, s1, s2);
+                    } else {
+                        org_ind = dict_ind;
+                        SetBitTo(V.data(), i_grp, true);
+                        indices_arr->set_null_bit(i_grp, true);
+                    }
+                }
+            }
     }
+    // TODO: Avoid creating the output dict array if have
+    // idxmin/idxmax/idxmin_na_first/idxmax_na_first
     // Start at 1 since 0 is is returned by the hashmap if data needs to be
     // inserted.
     int32_t k = 1;
@@ -2993,9 +3307,6 @@ array_info* apply_to_column_dict(array_info* in_col, array_info* out_col,
 template <typename F, int ftype>
 array_info* apply_sum_to_column_dict(array_info* in_col, array_info* out_col,
                                      const grouping_info& grp_info, F f) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of apply_to_column_dict\n";
-#endif
     size_t num_groups = grp_info.num_groups;
     int64_t n_chars = 0;
     size_t n_bytes = (num_groups + 7) >> 3;
@@ -3335,7 +3646,7 @@ void apply_to_column_F(array_info* in_col, array_info* out_col,
                 }
                 default:
                     array_info* new_out_col = apply_to_column_dict<F, ftype>(
-                        in_col, out_col, grp_info, f);
+                        in_col, out_col, aux_cols, grp_info, f);
                     *out_col = std::move(*new_out_col);
                     delete new_out_col;
                     return;
@@ -3362,7 +3673,8 @@ void apply_to_column_F(array_info* in_col, array_info* out_col,
                     return;
             }
 
-        // For the STRING we compute the count, sum, max, min, first, last
+        // For the STRING we compute the count, sum, max, min, first, last,
+        // idxmin, idxmax, idxmin_na_first, idxmax_na_first
         case bodo_array_type::STRING:
             switch (ftype) {
                 case Bodo_FTypes::count: {
@@ -3386,7 +3698,7 @@ void apply_to_column_F(array_info* in_col, array_info* out_col,
                 }
                 default:
                     array_info* new_out_col = apply_to_column_string<F, ftype>(
-                        in_col, out_col, grp_info, f);
+                        in_col, out_col, aux_cols, grp_info, f);
                     *out_col = std::move(*new_out_col);
                     delete new_out_col;
                     return;
@@ -3665,6 +3977,24 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     in_col, out_col, aux_cols, grp_info, use_sql_rules);
             case Bodo_FTypes::last:
                 return apply_to_column<int, Bodo_FTypes::last,
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, use_sql_rules);
+            case Bodo_FTypes::idxmin:
+                // idxmin handles the na_last case
+                return apply_to_column<int, Bodo_FTypes::idxmin,
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, use_sql_rules);
+            case Bodo_FTypes::idxmax:
+                // idxmax handles the na_last case
+                return apply_to_column<int, Bodo_FTypes::idxmax,
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, use_sql_rules);
+            case Bodo_FTypes::idxmin_na_first:
+                return apply_to_column<int, Bodo_FTypes::idxmin_na_first,
+                                       Bodo_CTypes::STRING>(
+                    in_col, out_col, aux_cols, grp_info, use_sql_rules);
+            case Bodo_FTypes::idxmax_na_first:
+                return apply_to_column<int, Bodo_FTypes::idxmax_na_first,
                                        Bodo_CTypes::STRING>(
                     in_col, out_col, aux_cols, grp_info, use_sql_rules);
         }
