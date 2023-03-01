@@ -28,7 +28,6 @@
 	</properties>
 
 	<modules>
-		<module>bodosql-calcite-core</module>
 		<module>bodosql-calcite-application</module>
 	</modules>
 
