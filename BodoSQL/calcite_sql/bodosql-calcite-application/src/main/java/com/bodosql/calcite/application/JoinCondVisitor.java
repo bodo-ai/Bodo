@@ -203,6 +203,14 @@ public class JoinCondVisitor {
         String notCond = "(~" + val1Info.getKey() + ")";
         return new Pair<>(notCond, val1Info.getValue());
       }
+    } else if (joinNode.getOperator() instanceof SqlPostfixOperator) {
+      SqlOperator postfixOp = joinNode.getOperator();
+      if (postfixOp.getKind() == SqlKind.IS_NOT_TRUE) {
+        Pair<String, Boolean> val1Info =
+            visitJoinCond(joinNode.operands.get(0), leftColNames, rightColNames, mergeCols);
+        String notCond = "(~" + val1Info.getKey() + ")";
+        return new Pair<>(notCond, val1Info.getValue());
+      }
     } else if (joinNode.getOperator() instanceof SqlFunction
         && joinNode.getOperator().toString().equals("POW")) {
       // TODO[BE-4274]: support all possible functions
