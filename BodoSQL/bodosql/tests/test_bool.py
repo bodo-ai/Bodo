@@ -7,6 +7,8 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
+from bodo import Time
+
 
 @pytest.fixture(
     params=[
@@ -280,152 +282,46 @@ def test_boolnot(args, numeric_truthy_df, spark_info, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "use_case",
     [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "dtype, val1, val2",
+    [
+        pytest.param(str, "A", "B", id="string"),
+        pytest.param(str, b"yay", b"boo", id="binary"),
+        pytest.param(pd.Int32Dtype(), -1, 500, id="int32"),
         pytest.param(
-            (
-                "SELECT EQUAL_NULL(A, B) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                True,
-                                False,
-                                False,
-                                False,
-                                False,
-                                True,
-                                False,
-                                False,
-                                True,
-                                False,
-                            ]
-                        )
-                    }
-                ),
-            ),
-            id="all_vector_string",
+            None,
+            pd.Timestamp("2023-1-30 6:00:00"),
+            pd.Timestamp("2024-2-29 9:30:00"),
+            id="timestamp",
         ),
+        pytest.param(None, True, False, id="bool"),
         pytest.param(
-            (
-                "SELECT EQUAL_NULL(A, 'A') OR EQUAL_NULL(A, 'B') FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                True,
-                                True,
-                                False,
-                                False,
-                                True,
-                                True,
-                                False,
-                                False,
-                                False,
-                                False,
-                            ]
-                        )
-                    }
-                ),
-            ),
-            id="vector_scalar_string",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            (
-                "SELECT CASE WHEN B = '' THEN TRUE ELSE EQUAL_NULL(B, NULLIF(B, B)) END FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                False,
-                                True,
-                                False,
-                                False,
-                                False,
-                                False,
-                                False,
-                                True,
-                                True,
-                                True,
-                            ]
-                        )
-                    }
-                ),
-            ),
-            id="case_string",
-        ),
-        pytest.param(
-            (
-                "SELECT EQUAL_NULL(C, D) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                True,
-                                True,
-                                True,
-                                True,
-                                True,
-                                False,
-                                True,
-                                True,
-                                False,
-                                False,
-                            ]
-                        )
-                    }
-                ),
-            ),
-            id="all_vector_int",
-        ),
-        pytest.param(
-            (
-                "SELECT CASE WHEN C IS NULL OR C = 1 THEN TRUE ELSE EQUAL_NULL(C, D) END FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                True,
-                                True,
-                                True,
-                                True,
-                                True,
-                                False,
-                                True,
-                                True,
-                                True,
-                                True,
-                            ]
-                        )
-                    }
-                ),
-            ),
-            id="all_vector_int",
+            None, Time(12, 30, 0), Time(16, 59, 30, nanosecond=999999999), id="time"
         ),
     ],
 )
-def test_equal_null(args, spark_info, memory_leak_check):
-    query, answer = args
-    ctx = {
-        "table1": pd.DataFrame(
-            {
-                "A": ["A", "B", "", None, "A", "B", "C", "D", None, None],
-                "B": ["A", "", "B", "A", "C", "B", "A", None, None, ""],
-                "C": pd.Series(
-                    [1, 2, 3, 4, 5, 5, None, 3, None, 1], dtype=pd.Int32Dtype()
-                ),
-                "D": pd.Series(
-                    [1, 2, 3, 4, 5, 1, None, 3, 4, None], dtype=pd.Int32Dtype()
-                ),
-            }
-        )
-    }
+def test_equal_null(dtype, val1, val2, use_case, memory_leak_check):
+    """Tests EQUAL_NULL on multiple dtypes by parametrizing the values used
+    from each dtype."""
+    A = pd.Series([val1, val2, None] * 3, dtype=dtype)
+    B = pd.Series([val1] * 3 + [val2] * 3 + [None] * 3, dtype=dtype)
+    result = pd.Series([True, False, False, False, True, False, False, False, True])
+    if use_case:
+        query = "SELECT CASE WHEN EQUAL_NULL(A, B) THEN 'T' ELSE 'F' END AS are_equal FROM TABLE1"
+        result = result.astype(str).str[0]
+    else:
+        query = "SELECT EQUAL_NULL(A, B) AS are_equal FROM TABLE1"
+    ctx = {"table1": pd.DataFrame({"A": A, "B": B})}
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
-        check_names=False,
-        expected_output=answer,
+        expected_output=pd.DataFrame({"are_equal": result}),
     )
