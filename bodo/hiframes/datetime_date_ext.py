@@ -525,6 +525,23 @@ def date_min(lhs, rhs):
 
         return impl
 
+    # Support min of IndexValue with date because Numba 0.56 IndexValueType implementation uses np.isnan which isn't
+    # implemented for dates.
+    if (
+        isinstance(lhs, numba.core.typing.builtins.IndexValueType)
+        and lhs.val_typ == datetime_date_type
+        and isinstance(rhs, numba.core.typing.builtins.IndexValueType)
+        and rhs.val_typ == datetime_date_type
+    ):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            if lhs.value == rhs.value:
+                # If the values are equal return the smaller index
+                return lhs if lhs.index < rhs.index else rhs
+            return lhs if lhs.value < rhs.value else rhs
+
+        return impl
+
 
 @overload(max, no_unliteral=True)
 def date_max(lhs, rhs):
@@ -532,6 +549,23 @@ def date_max(lhs, rhs):
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs if lhs > rhs else rhs
+
+        return impl
+
+    # Support max of IndexValue with date because np.isnan isn't
+    # implemented for dates.
+    if (
+        isinstance(lhs, numba.core.typing.builtins.IndexValueType)
+        and lhs.val_typ == datetime_date_type
+        and isinstance(rhs, numba.core.typing.builtins.IndexValueType)
+        and rhs.val_typ == datetime_date_type
+    ):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            if lhs.value == rhs.value:
+                # If the values are equal return the smaller index
+                return lhs if lhs.index < rhs.index else rhs
+            return lhs if lhs.value > rhs.value else rhs
 
         return impl
 

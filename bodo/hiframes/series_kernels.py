@@ -107,8 +107,9 @@ def _get_type_max_value_overload(dtype):
     if dtype.dtype == types.bool_:
         return lambda dtype: True  # pragma: no cover
 
+    _dtype = dtype.dtype
     return lambda dtype: numba.cpython.builtins.get_type_max_value(
-        dtype
+        _dtype
     )  # pragma: no cover
 
 
@@ -153,8 +154,9 @@ def _get_type_min_value_overload(dtype):
     if dtype.dtype == types.bool_:
         return lambda dtype: False  # pragma: no cover
 
+    _dtype = dtype.dtype
     return lambda dtype: numba.cpython.builtins.get_type_min_value(
-        dtype
+        _dtype
     )  # pragma: no cover
 
 
