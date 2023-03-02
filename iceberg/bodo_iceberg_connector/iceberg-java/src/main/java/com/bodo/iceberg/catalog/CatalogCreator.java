@@ -21,12 +21,17 @@ public class CatalogCreator {
             .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));
     params.remove("type");
 
+    // Create Configuration
+    // Additional parameters like Iceberg-specific ones should be ignored
+    // Since the conf is reused by multiple objects, like Hive and Hadoop ones
+    // TODO: Spark does something similar, but I believe they do some filtering. What is it?
+    Configuration conf = new Configuration();
+    for (Map.Entry<String, String> entry : params.entrySet())
+      conf.set(entry.getKey(), entry.getValue());
+
     // Catalog URI (without parameters)
     String uriStr = uriBuilder.removeQuery().build().toString();
     params.put(CatalogProperties.URI, uriStr);
-
-    // Create Configuration
-    Configuration conf = new Configuration();
 
     // Create Catalog
     Catalog catalog;
