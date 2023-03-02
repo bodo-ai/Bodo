@@ -664,10 +664,10 @@ setup(
     install_requires=[]
     if development_mode
     else [
-        "numba==0.55.2",
+        "numba==0.56.4",
         "pyarrow==9.0.0",
         "pandas>=1.3.*,<1.5",
-        "numpy>=1.18,<1.22",
+        "numpy>=1.18,<1.24",
         "fsspec>=2021.09",
         "mpi4py_mpich==3.1.2",
     ],

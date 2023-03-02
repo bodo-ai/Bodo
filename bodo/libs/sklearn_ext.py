@@ -1353,7 +1353,7 @@ def overload_log_loss(
     func_text += "            y_true, y_pred, eps=eps, normalize=normalize,\n"
     func_text += "            sample_weight=sample_weight, labels=labels\n"
     func_text += "        )\n"
-    func_text += "        return loss\n"
+    func_text += "    return loss\n"
     loc_vars = {}
     exec(func_text, globals(), loc_vars)
     _log_loss_impl = loc_vars["_log_loss_impl"]

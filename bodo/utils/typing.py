@@ -1175,36 +1175,6 @@ def get_index_name_types(t):
     return (t.name_typ,)
 
 
-# Check if boxing if defined for SliceLiteral. If not provide the implementation.
-if types.SliceLiteral in numba.core.pythonapi._boxers.functions:
-    warnings.warn("SliceLiteral boxing has been implemented in Numba")
-else:
-
-    @box(types.SliceLiteral)
-    def box_slice_literal(typ, val, c):
-        """box slice literal by constructing a slice from start, stop, and step"""
-        slice_val = typ.literal_value
-        slice_fields = []
-        for field_name in ("start", "stop", "step"):
-            field_obj = getattr(typ.literal_value, field_name)
-            field_val = (
-                c.pyapi.make_none()
-                if field_obj is None
-                else c.pyapi.from_native_value(
-                    types.literal(field_obj), field_obj, c.env_manager
-                )
-            )
-            slice_fields.append(field_val)
-        # TODO: Replace with a CPython API once added to pythonapi.py
-        slice_call_obj = c.pyapi.unserialize(c.pyapi.serialize_object(slice))
-        slice_obj = c.pyapi.call_function_objargs(slice_call_obj, slice_fields)
-        # Decref objects
-        for a in slice_fields:
-            c.pyapi.decref(a)
-        c.pyapi.decref(slice_call_obj)
-        return slice_obj
-
-
 class ListLiteral(types.Literal):
     """class for literal lists, only used when Bodo forces an argument to be a literal
     list (e.g. in typing pass for groupby/join/sort_values).

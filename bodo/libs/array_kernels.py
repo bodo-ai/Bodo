@@ -2699,7 +2699,7 @@ def overload_array_sum(A):
         def impl(A):  # pragma: no cover
             return pd.Series(A).sum()
 
-    return impl
+        return impl
 
 
 # Use function decorator to enable stacked inlining
@@ -2714,7 +2714,7 @@ def overload_array_prod(A):
         def impl(A):  # pragma: no cover
             return pd.Series(A).prod()
 
-    return impl
+        return impl
 
 
 def nonzero(arr):  # pragma: no cover
@@ -3643,11 +3643,13 @@ def _overload_nan_argmin(arr):
     """
     # We check just the dtype because the previous function ensures
     # we are operating on 1D arrays
-
     if (
         isinstance(arr, (IntegerArrayType, FloatingArrayType))
         or arr in [boolean_array, datetime_date_array_type]
         or arr.dtype == bodo.timedelta64ns
+        # Recent Numpy versions treat NA as min while pandas
+        # skips NA values
+        or isinstance(arr.dtype, types.Float)
     ):
 
         def impl_bodo_arr(arr):  # pragma: no cover
@@ -3706,6 +3708,9 @@ def _overload_nan_argmax(arr):
         isinstance(arr, (IntegerArrayType, FloatingArrayType))
         or arr in [boolean_array, datetime_date_array_type]
         or arr.dtype == bodo.timedelta64ns
+        # Recent Numpy versions treat NA as max while pandas
+        # skips NA values
+        or isinstance(arr.dtype, types.Float)
     ):
 
         def impl_bodo_arr(arr):  # pragma: no cover

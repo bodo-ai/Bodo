@@ -3820,9 +3820,8 @@ class DistributedPass:
         loc = parfor.init_block.loc
         pre = []
         out = []
-        for reduce_varname, (_init_val, reduce_nodes, _op) in sorted(
-            parfor.reddict.items()
-        ):
+        for reduce_varname, _reduce_var_info in sorted(parfor.reddict.items()):
+            reduce_nodes = _reduce_var_info.reduce_nodes
             reduce_op = guard(
                 get_reduce_op, reduce_varname, reduce_nodes, self.func_ir, self.typemap
             )

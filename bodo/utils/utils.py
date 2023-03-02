@@ -657,7 +657,7 @@ if bodo.numba_compat._check_numba_change:
     lines = inspect.getsource(numba.np.arrayobj._empty_nd_impl)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "b6a998927680caa35917a553c79704e9d813d8f1873d83a5f8513837c159fa29"
+        != "009ebfa261e39c4d8b9fdcc956205d9ee03ad87feea6560ef5fc2ddc8551c70d"
     ):  # pragma: no cover
         warnings.warn("numba.np.arrayobj._empty_nd_impl has changed")
 

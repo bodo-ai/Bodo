@@ -87,7 +87,7 @@ class Flags(TargetConfig):
     forceinline = Option(
         type=bool,
         default=False,
-        doc="TODO",
+        doc="Force inlining of the function. Overrides _dbg_optnone.",
     )
     no_cpython_wrapper = Option(
         type=bool,
@@ -140,6 +140,24 @@ detail""",
     # This will be the XYZ in @jit(_target=XYZ).
     target_backend = Option(
         type=str, default="cpu", doc="backend"  # if not set, default to CPU
+    )
+
+    dbg_extend_lifetimes = Option(
+        type=bool,
+        default=False,
+        doc=(
+            "Extend variable lifetime for debugging. "
+            "This automatically turns on with debug=True."
+        ),
+    )
+
+    dbg_optnone = Option(
+        type=bool,
+        default=False,
+        doc=(
+            "Disable optimization for debug. "
+            "Equivalent to adding optnone attribute in the LLVM Function."
+        ),
     )
 
     # Bodo change: add Bodo-specific options
@@ -217,7 +235,7 @@ if bodo.numba_compat._check_numba_change:
     lines = inspect.getsource(numba.core.compiler.Flags)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "9d5f7a93545fe783c20a9d7579c73e04d91d6b2841fb5972b391a67fff03b9c3"
+        != "76e32e82ab2ba19f4480a9facca588318be51dce074fe4733ad8aa08d20db8e1"
     ):  # pragma: no cover
         warnings.warn("numba.core.compiler.Flags has changed")
 
