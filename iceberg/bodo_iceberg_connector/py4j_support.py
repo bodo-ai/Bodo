@@ -4,17 +4,21 @@ Contains information used to access the Java package via py4j.
 import os
 import sys
 import warnings
-from typing import Any, List, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, cast
 
 from mpi4py import MPI
 from py4j.java_collections import ListConverter
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaClass
+
+
 # The gateway object used to communicate with the JVM.
-gateway = None
+gateway: Optional[JavaGateway] = None
 
 # Java Classes used by the Python Portion
-CLASSES = {}
+CLASSES: Dict[str, "JavaClass"] = {}
 
 # Dictionary mapping table info -> Reader obj
 table_dict = {}
@@ -57,10 +61,14 @@ def get_java_path() -> str:
     return "java"
 
 
-def launch_jvm():
+def launch_jvm() -> JavaGateway:
     """
-    Launches the gateway server, if it is not already running, and returns
-    a gateway object.
+    Launches Py4J's Java Gateway server if it is not already running.
+    The gateway server manages a backend Java process that has access to
+    various Iceberg, Hive, and Hadoop Java libraries.
+
+    Returns:
+        The active Py4J java gateway instance
     """
     global CLASSES, gateway
 
@@ -88,6 +96,7 @@ def launch_jvm():
             ),
         )
 
+        print("Current Rank: ", MPI.COMM_WORLD.Get_rank())
         # TODO: Test out auto_convert=True for converting collections (esp lists)
         # https://www.py4j.org/advanced_topics.html#collections-conversion
         gateway = JavaGateway(gateway_parameters=GatewayParameters(port=gateway_port))
@@ -102,7 +111,9 @@ def launch_jvm():
     return gateway
 
 
-def get_class_wrapper(class_name: str, class_inst):
+def get_class_wrapper(
+    class_name: str, class_inst: Callable[[JavaGateway], "JavaClass"]
+):
     """
     Wrapper around getting the constructor for a specified Java class
     on first request, and caching the rest.
@@ -134,7 +145,7 @@ def get_literal_converter_class():
     """
     return get_class_wrapper(
         "LiteralConverterClass",
-        lambda gateway: gateway.jvm.com.bodo.iceberg.LiteralConverters,
+        lambda gateway: gateway.jvm.com.bodo.iceberg.LiteralConverters,  # type: ignore
     )()
 
 
@@ -142,31 +153,39 @@ def get_literal_converter_class():
 # Built-in Classes
 get_linkedlist_class = get_class_wrapper(
     "LinkedListClass",
-    lambda gateway: gateway.jvm.java.util.LinkedList,
+    lambda gateway: gateway.jvm.java.util.LinkedList,  # type: ignore
+)
+get_system_class = get_class_wrapper(
+    "SystemClass",
+    lambda gateway: gateway.jvm.System,  # type: ignore
 )
 
 # Iceberg Classes
 get_iceberg_schema_class = get_class_wrapper(
     "IcebergSchemaClass",
-    lambda gateway: gateway.jvm.org.apache.iceberg.Schema,
+    lambda gateway: gateway.jvm.org.apache.iceberg.Schema,  # type: ignore
 )
 get_iceberg_type_class = get_class_wrapper(
     "IcebergTypeClass",
-    lambda gateway: gateway.jvm.org.apache.iceberg.types.Types,
+    lambda gateway: gateway.jvm.org.apache.iceberg.types.Types,  # type: ignore
+)
+get_hadoop_conf_class = get_class_wrapper(
+    "ConfigurationClass",
+    lambda gateway: gateway.jvm.org.apache.hadoop.conf.Configuration,  # type: ignore
 )
 
 # Bodo Classes
 get_bodo_iceberg_handler_class = get_class_wrapper(
     "BodoIcebergHandlerClass",
-    lambda gateway: gateway.jvm.com.bodo.iceberg.BodoIcebergHandler,
+    lambda gateway: gateway.jvm.com.bodo.iceberg.BodoIcebergHandler,  # type: ignore
 )
 get_op_enum_class = get_class_wrapper(
     "OpEnumClass",
-    lambda gateway: gateway.jvm.com.bodo.iceberg.OpEnum,
+    lambda gateway: gateway.jvm.com.bodo.iceberg.OpEnum,  # type: ignore
 )
 get_data_file_class = get_class_wrapper(
     "DataFileClass",
-    lambda gateway: gateway.jvm.com.bodo.iceberg.DataFileInfo,
+    lambda gateway: gateway.jvm.com.bodo.iceberg.DataFileInfo,  # type: ignore
 )
 
 
