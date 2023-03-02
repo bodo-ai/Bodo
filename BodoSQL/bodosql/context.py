@@ -47,6 +47,7 @@ if bodo.get_rank() == 0:
             gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalogImpl
         )
         BodoTZInfoClass = gateway.jvm.org.apache.calcite.sql.type.BodoTZInfo
+        SnowflakeDriver = gateway.jvm.net.snowflake.client.jdbc.SnowflakeDriver
     except Exception as e:
         saw_error = True
         msg = str(e)
@@ -60,6 +61,7 @@ else:
     PropertiesClass = None
     SnowflakeCatalogImplClass = None
     BodoTZInfoClass = None
+    SnowflakeDriver = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
