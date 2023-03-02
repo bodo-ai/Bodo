@@ -22,7 +22,7 @@
 		<sourceEncoding>UTF-8</sourceEncoding>
 		<project.build.sourceEncoding>${sourceEncoding}</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>${sourceEncoding}</project.reporting.outputEncoding>
-		<java.version>1.11</java.version>
+		<java.version>1.9</java.version>
 		<org.slf4j-version>1.7.29</org.slf4j-version>
 		<junit.version>4.12</junit.version>
 	</properties>
