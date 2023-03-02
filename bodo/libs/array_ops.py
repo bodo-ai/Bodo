@@ -325,7 +325,7 @@ def overload_array_op_min(arr):
 
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
-        s = bodo.hiframes.series_kernels._get_type_max_value(arr.dtype)
+        s = bodo.hiframes.series_kernels._get_type_max_value(arr)
         count = 0
         for i in numba.parfors.parfor.internal_prange(len(arr)):
             val = s
@@ -423,7 +423,7 @@ def overload_array_op_max(arr):
 
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
-        s = bodo.hiframes.series_kernels._get_type_min_value(arr.dtype)
+        s = bodo.hiframes.series_kernels._get_type_min_value(arr)
         count = 0
         for i in numba.parfors.parfor.internal_prange(len(arr)):
             val = s

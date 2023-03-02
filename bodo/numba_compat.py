@@ -22,6 +22,7 @@ from contextlib import ExitStack
 import numba
 import numba.core.boxing
 import numba.core.inline_closurecall
+import numba.core.runtime.context
 import numba.core.typing.listdecl
 import numba.np.linalg
 import numba.np.ufunc.array_exprs as array_exprs
@@ -68,7 +69,6 @@ from numba.parfors.parfor import get_expr_args
 
 from bodo.utils.python_310_bytecode_pass import (
     Bodo310ByteCodePass,
-    peep_hole_call_function_ex_to_call_function_kw,
     peep_hole_fuse_dict_add_updates,
     peep_hole_fuse_tuple_adds,
 )
@@ -111,9 +111,8 @@ def run_frontend(func, inline_closures=False, emit_dels=False):
     interp = numba.core.interpreter.Interpreter(func_id)
     bc = numba.core.bytecode.ByteCode(func_id=func_id)
     func_ir = interp.interpret(bc)
-    # BODO Change: add 3.10 byte code changes until Numba 0.56 if PYVERSION is 3.10
+    # BODO Change: add 3.10 byte code changes if PYVERSION is 3.10
     if PYVERSION == (3, 10):
-        func_ir = peep_hole_call_function_ex_to_call_function_kw(func_ir)
         func_ir = peep_hole_fuse_dict_add_updates(func_ir)
         func_ir = peep_hole_fuse_tuple_adds(func_ir)
 
@@ -780,7 +779,7 @@ def generic(self, args, kws):
         # needs to exist for type resolution
 
         # NOTE: If lowering is failing on a `_EmptyImplementationEntry`,
-        #       the inliner has failed to inline this entry corretly.
+        #       the inliner has failed to inline this entry correctly.
         impl_init = _EmptyImplementationEntry("always inlined")
         self._compiled_overloads[sig.args] = impl_init
         if not self._inline.is_always_inline:
@@ -809,7 +808,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "5d453a6d0215ebf0bab1279ff59eb0040b34938623be99142ce20acc09cdeb64"
+        != "6c20b70f62c5793c0d7f903a7d79c773357817b206b1d5dafd75309b6da94e52"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.typing.templates._OverloadFunctionTemplate.generic has changed"
@@ -1875,14 +1874,14 @@ def CacheImpl__init__(self, py_func):
 
 
 if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.caching._CacheImpl.__init__)
+    lines = inspect.getsource(numba.core.caching.CacheImpl.__init__)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
         != "b46d298146e3844e9eaeef29d36f5165ba4796c270ca50d2b35f9fcdc0fa032a"
     ):  # pragma: no cover
         warnings.warn("numba.core.caching._CacheImpl.__init__ has changed")
 
-numba.core.caching._CacheImpl.__init__ = CacheImpl__init__
+numba.core.caching.CacheImpl.__init__ = CacheImpl__init__
 
 
 # replacing _analyze_broadcast in array analysis to fix a bug. It's assuming that
@@ -2167,7 +2166,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.np.ufunc.parallel._launch_threads)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "a57ef28c4168fdd436a5513bba4351ebc6d9fba76c5819f44046431a79b9030f"
+        != "a48af3def2fc24be499cc0a95d82dbe2134f918aa2aae70c62fa7b606373152c"
     ):  # pragma: no cover
         warnings.warn("numba.np.ufunc.parallel._launch_threads has changed")
 
@@ -2759,7 +2758,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
         )
         folded = e.fold_arguments(folding_args, self.kws)
         requested = set()
-        unsatisified = set()
+        unsatisfied = set()
         new_file_infos = {}  # Bodo change: propagate file_infos
         for idx in e.requested_args:
             maybe_arg = typeinfer.func_ir.get_definition(folded[idx])
@@ -2768,8 +2767,8 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
                 if maybe_arg.index in e.file_infos:
                     new_file_infos[maybe_arg.index] = e.file_infos[maybe_arg.index]
             else:  # pragma: no cover
-                unsatisified.add(idx)
-        if unsatisified:  # pragma: no cover
+                unsatisfied.add(idx)
+        if unsatisfied:  # pragma: no cover
             raise TypingError("Cannot request literal type.", loc=self.loc)
         elif requested:
             # Bodo change: propagate file_infos
@@ -2829,7 +2828,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typeinfer.CallConstraint.resolve)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "c78cd8ffc64b836a6a2ddf0362d481b52b9d380c5249920a87ff4da052ce081f"
+        != "d987a5c642549f6fa0218faa3cb9356bc51459a34303b2a9227d37b5fb96aec4"
     ):  # pragma: no cover
         warnings.warn("numba.core.typeinfer.CallConstraint.resolve has changed")
 
@@ -4303,9 +4302,7 @@ def make_constant_array(self, builder, typ, ary):
             flat = flat.view("int64")
         # Note: we use `bytearray(flat.data)` instead of `bytearray(flat)` to
         #       workaround issue #1850 which is due to numpy issue #3147
-        # TODO: Replace with cgutils.create_constant_array when Numba 0.56 merges.
-        val = bytearray(flat.data)
-        consts = lir.Constant(lir.ArrayType(lir.IntType(8), len(val)), val)
+        consts = cgutils.create_constant_array(lir.IntType(8), bytearray(flat.data))
         data = cgutils.global_constant(builder, ".const.array.data", consts)
         # Ensure correct data alignment (issue #1933)
         data.align = self.get_abi_alignment(datatype)
@@ -4315,13 +4312,11 @@ def make_constant_array(self, builder, typ, ary):
     # Handle shape
     llintp = self.get_value_type(types.intp)
     shapevals = [self.get_constant(types.intp, s) for s in ary.shape]
-    # TODO: Replace with cgutils.create_constant_array when Numba 0.56 merges.
-    cshape = lir.Constant(lir.ArrayType(llintp, len(shapevals)), shapevals)
+    cshape = cgutils.create_constant_array(llintp, shapevals)
 
     # Handle strides
     stridevals = [self.get_constant(types.intp, s) for s in ary.strides]
-    # TODO: Replace with cgutils.create_constant_array when Numba 0.56 merges.
-    cstrides = lir.Constant(lir.ArrayType(llintp, len(stridevals)), stridevals)
+    cstrides = cgutils.create_constant_array(llintp, stridevals)
 
     intp_itemsize = self.get_constant(types.intp, ary.dtype.itemsize)
 
@@ -4356,7 +4351,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.base.BaseContext.make_constant_array)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "5721b5360b51f782f79bd794f7bf4d48657911ecdc05c30db22fd55f15dad821"
+        != "cd037700687287a68960dbfbb54e6710d937f4f29305eacee6362222428b7e9a"
     ):  # pragma: no cover
         warnings.warn("numba.core.base.BaseContext.make_constant_array has changed")
 
@@ -4667,134 +4662,6 @@ if _check_numba_change:  # pragma: no cover
 numba.cpython.unicode.make_string_from_constant = make_string_from_constant
 
 
-#########  Start changes to allow IntEnum support for `np.empty`, `np.zeros`, and `np.ones`  #########
-# change `parse_shape` to support IntEnum
-
-
-def parse_shape(shape):
-    """
-    Given a shape, return the number of dimensions.
-    """
-    ndim = None
-    if isinstance(shape, types.Integer):
-        ndim = 1
-    elif isinstance(shape, (types.Tuple, types.UniTuple)):
-        # Bodo Change: support IntEnum members within tuples
-        # see: https://github.com/Bodo-inc/Bodo/pull/3499
-        if all(isinstance(s, (types.Integer, types.IntEnumMember)) for s in shape):
-            ndim = len(shape)
-    return ndim
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.typing.npydecl.parse_shape)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "e62e3ff09d36df5ac9374055947d6a8be27160ce32960d3ef6cb67f89bd16429"
-    ):
-        warnings.warn("numba.core.typing.npydecl.parse_shape has changed")
-
-numba.core.typing.npydecl.parse_shape = parse_shape
-#########  End changes to allow IntEnum support for `np.empty`, `np.zeros`, and `np.ones`  #########
-
-#########  Start changes to allow unsupported types in `ShapeEquivSet._getnames()`  #########
-
-
-def _get_names(self, obj):
-    """Return a set of names for the given obj, where array and tuples
-    are broken down to their individual shapes or elements. This is
-    safe because both Numba array shapes and Python tuples are immutable.
-    """
-    if isinstance(obj, ir.Var) or isinstance(obj, str):
-        name = obj if isinstance(obj, str) else obj.name
-        if name not in self.typemap:
-            return (name,)
-        typ = self.typemap[name]
-        if isinstance(typ, (types.BaseTuple, types.ArrayCompatible)):
-            ndim = typ.ndim if isinstance(typ, types.ArrayCompatible) else len(typ)
-            # Treat 0d array as if it were a scalar.
-            if ndim == 0:
-                return (name,)
-            else:
-                return tuple("{}#{}".format(name, i) for i in range(ndim))
-        else:
-            return (name,)
-    elif isinstance(obj, ir.Const):
-        if isinstance(obj.value, tuple):
-            return obj.value
-        else:
-            return (obj.value,)
-    elif isinstance(obj, tuple):
-
-        def get_names(x):
-            names = self._get_names(x)
-            if len(names) != 0:
-                return names[0]
-            return names
-
-        return tuple(get_names(x) for x in obj)
-    elif isinstance(obj, int):
-        return (obj,)
-    # Bodo Change: removed error throwing
-    return ()
-
-
-def get_equiv_const(self, obj):
-    """If the given object is equivalent to a constant scalar,
-    return the scalar value, or None otherwise.
-    """
-    names = self._get_names(obj)
-    # Bodo Change: accounted for the case where len(names) == 0
-    if len(names) != 1:
-        return None
-    return super(numba.parfors.array_analysis.ShapeEquivSet, self).get_equiv_const(
-        names[0]
-    )
-
-
-def get_equiv_set(self, obj):
-    """Return the set of equivalent objects."""
-    names = self._get_names(obj)
-    # Bodo Change: accounted for the case where len(names) == 0
-    if len(names) != 1:
-        return None
-    return super(numba.parfors.array_analysis.ShapeEquivSet, self).get_equiv_set(
-        names[0]
-    )
-
-
-if _check_numba_change:  # pragma: no cover
-    for name, orig, new, hash in (
-        (
-            "numba.parfors.array_analysis.ShapeEquivSet._get_names",
-            numba.parfors.array_analysis.ShapeEquivSet._get_names,
-            _get_names,
-            "8c9bf136109028d5445fd0a82387b6abeb70c23b20b41e2b50c34ba5359516ee",
-        ),
-        (
-            "numba.parfors.array_analysis.ShapeEquivSet.get_equiv_const",
-            numba.parfors.array_analysis.ShapeEquivSet.get_equiv_const,
-            get_equiv_const,
-            "bef410ca31a9e29df9ee74a4a27d339cc332564e4a237828b8a4decf625ce44e",
-        ),
-        (
-            "numba.parfors.array_analysis.ShapeEquivSet.get_equiv_set",
-            numba.parfors.array_analysis.ShapeEquivSet.get_equiv_set,
-            get_equiv_set,
-            "ec936d340c488461122eb74f28a28b88227cb1f1bca2b9ba3c19258cfe1eb40a",
-        ),
-    ):
-        lines = inspect.getsource(orig)
-        if hashlib.sha256(lines.encode()).hexdigest() != hash:
-            warnings.warn(f"{name} has changed")
-
-
-numba.parfors.array_analysis.ShapeEquivSet._get_names = _get_names
-numba.parfors.array_analysis.ShapeEquivSet.get_equiv_const = get_equiv_const
-numba.parfors.array_analysis.ShapeEquivSet.get_equiv_set = get_equiv_set
-#########  End changes to allow unsupported types in `ShapeEquivSet._getnames()`  #########
-
-
 # Bodo change: avoid raising errors for constant global dictionaries
 def raise_on_unsupported_feature(func_ir, typemap):  # pragma: no cover
     """
@@ -5077,288 +4944,6 @@ if _check_numba_change:  # pragma: no cover
 numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype
 
 
-#########  Start bytecode changes for Python 3.10  #########
-
-# Remove once https://github.com/numba/numba/pull/7866
-# and https://github.com/numba/numba/pull/7964/ merges
-
-# Bodo Change: Add op_DICT_UPDATE to byteflow and interpreter
-
-
-def op_DICT_UPDATE_byteflow(self, state, inst):
-    value = state.pop()
-    index = inst.arg
-    target = state.peek(index)
-    updatevar = state.make_temp()
-    res = state.make_temp()
-    state.append(inst, target=target, value=value, updatevar=updatevar, res=res)
-
-
-if _check_numba_change:  # pragma: no cover
-    if hasattr(numba.core.byteflow.TraceRunner, "op_DICT_UPDATE"):
-        warnings.warn("numba.core.byteflow.TraceRunner.op_DICT_UPDATE has changed")
-
-
-numba.core.byteflow.TraceRunner.op_DICT_UPDATE = op_DICT_UPDATE_byteflow
-
-
-def op_DICT_UPDATE_interpreter(self, inst, target, value, updatevar, res):
-    from numba.core import ir
-
-    target = self.get(target)
-    value = self.get(value)
-    updateattr = ir.Expr.getattr(target, "update", loc=self.loc)
-    self.store(value=updateattr, name=updatevar)
-    updateinst = ir.Expr.call(self.get(updatevar), (value,), (), loc=self.loc)
-    self.store(value=updateinst, name=res)
-
-
-if _check_numba_change:  # pragma: no cover
-    if hasattr(numba.core.interpreter.Interpreter, "op_DICT_UPDATE"):
-        warnings.warn("numba.core.interpreter.Interpreter.op_DICT_UPDATE has changed")
-
-
-numba.core.interpreter.Interpreter.op_DICT_UPDATE = op_DICT_UPDATE_interpreter
-
-# Bodo Change: Support Dict.update as a fallback.
-@numba.extending.overload_method(numba.core.types.DictType, "update")
-def ol_dict_update(d, other):
-    if not isinstance(d, numba.core.types.DictType):
-        return
-    if not isinstance(other, numba.core.types.DictType):
-        return
-
-    def impl(d, other):
-        for k, v in other.items():
-            d[k] = v
-
-    return impl
-
-
-if _check_numba_change:  # pragma: no cover
-    if hasattr(numba.core.interpreter.Interpreter, "ol_dict_update"):
-        warnings.warn("numba.typed.dictobject.ol_dict_update has changed")
-
-
-def op_CALL_FUNCTION_EX_byteflow(self, state, inst):
-    from numba.core.utils import PYVERSION
-
-    # Bodo change enable varkwarg with PYVERSION 3.10
-    if inst.arg & 1 and PYVERSION != (3, 10):
-        errmsg = "CALL_FUNCTION_EX with **kwargs not supported"
-        raise errors.UnsupportedError(errmsg)
-    if inst.arg & 1:
-        varkwarg = state.pop()
-    else:
-        varkwarg = None
-    vararg = state.pop()
-    func = state.pop()
-    res = state.make_temp()
-    state.append(inst, func=func, vararg=vararg, varkwarg=varkwarg, res=res)
-    state.push(res)
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.byteflow.TraceRunner.op_CALL_FUNCTION_EX)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "349e7cfd27f5dab80fe15a7728c5f098f3f225ba8512d84331e39d01e863c6d4"
-    ):
-        warnings.warn("numba.core.byteflow.TraceRunner.op_CALL_FUNCTION_EX has changed")
-numba.core.byteflow.TraceRunner.op_CALL_FUNCTION_EX = op_CALL_FUNCTION_EX_byteflow
-
-
-def op_CALL_FUNCTION_EX_interpreter(self, inst, func, vararg, varkwarg, res):
-    func = self.get(func)
-    vararg = self.get(vararg)
-    # BODO CHANGE: Add varkwarg to the call
-    if varkwarg is not None:
-        varkwarg = self.get(varkwarg)
-    expr = ir.Expr.call(func, [], [], loc=self.loc, vararg=vararg, varkwarg=varkwarg)
-    self.store(expr, res)
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.interpreter.Interpreter.op_CALL_FUNCTION_EX)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "84846e5318ab7ccc8f9abaae6ab9e0ca879362648196f9d4b0ffb91cf2e01f5d"
-    ):
-        warnings.warn(
-            "numba.core.interpreter.Interpreter.op_CALL_FUNCTION_EX has changed"
-        )
-numba.core.interpreter.Interpreter.op_CALL_FUNCTION_EX = op_CALL_FUNCTION_EX_interpreter
-
-
-@classmethod
-def ir_expr_call(cls, func, args, kws, loc, vararg=None, varkwarg=None, target=None):
-    assert isinstance(func, ir.Var)
-    assert isinstance(loc, ir.Loc)
-    op = "call"
-    # BODO CHANGE: Include the varkwarg argument
-    return cls(
-        op=op,
-        loc=loc,
-        func=func,
-        args=args,
-        kws=kws,
-        vararg=vararg,
-        varkwarg=varkwarg,
-        target=target,
-    )
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(ir.Expr.call)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "665601d0548d4f648d454492e542cb8aa241107a8df6bc68d0eec664c9ada738"
-    ):
-        warnings.warn("ir.Expr.call has changed")
-
-ir.Expr.call = ir_expr_call
-
-
-# Bodo Change: Include bytecode changes in the Numba pipeline. Necessary for
-# internally compiled functions.
-@staticmethod
-def define_untyped_pipeline(state, name="untyped"):
-    """Returns an untyped part of the nopython pipeline"""
-    from numba.core.compiler_machinery import PassManager
-    from numba.core.untyped_passes import (
-        DeadBranchPrune,
-        FindLiterallyCalls,
-        FixupArgs,
-        GenericRewrites,
-        InlineClosureLikes,
-        InlineInlinables,
-        IRProcessing,
-        LiteralPropagationSubPipelinePass,
-        LiteralUnroll,
-        MakeFunctionToJitFunction,
-        ReconstructSSA,
-        RewriteSemanticConstants,
-        TranslateByteCode,
-        WithLifting,
-    )
-    from numba.core.utils import PYVERSION
-
-    pm = PassManager(name)
-    if state.func_ir is None:
-        pm.add_pass(TranslateByteCode, "analyzing bytecode")
-        # Bodo Change: Insert Python 3.10 Bytecode peepholes
-        if PYVERSION == (3, 10):
-            pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
-        pm.add_pass(FixupArgs, "fix up args")
-    pm.add_pass(IRProcessing, "processing IR")
-    pm.add_pass(WithLifting, "Handle with contexts")
-
-    # inline closures early in case they are using nonlocal's
-    # see issue #6585.
-    pm.add_pass(InlineClosureLikes, "inline calls to locally defined closures")
-
-    # pre typing
-    if not state.flags.no_rewrites:
-        pm.add_pass(RewriteSemanticConstants, "rewrite semantic constants")
-        pm.add_pass(DeadBranchPrune, "dead branch pruning")
-        pm.add_pass(GenericRewrites, "nopython rewrites")
-
-    # convert any remaining closures into functions
-    pm.add_pass(MakeFunctionToJitFunction, "convert make_function into JIT functions")
-    # inline functions that have been determined as inlinable and rerun
-    # branch pruning, this needs to be run after closures are inlined as
-    # the IR repr of a closure masks call sites if an inlinable is called
-    # inside a closure
-    pm.add_pass(InlineInlinables, "inline inlinable functions")
-    if not state.flags.no_rewrites:
-        pm.add_pass(DeadBranchPrune, "dead branch pruning")
-
-    pm.add_pass(FindLiterallyCalls, "find literally calls")
-    pm.add_pass(LiteralUnroll, "handles literal_unroll")
-
-    if state.flags.enable_ssa:
-        pm.add_pass(ReconstructSSA, "ssa")
-
-    pm.add_pass(LiteralPropagationSubPipelinePass, "Literal propagation")
-
-    pm.finalize()
-    return pm
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(
-        numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline
-    )
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "fc5a0665658cc30588a78aca984ac2d323d5d3a45dce538cc62688530c772896"
-    ):
-        warnings.warn(
-            "numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline has changed"
-        )
-numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline = define_untyped_pipeline
-
-#########  End bytecode changes for Python 3.10  #########
-
-
-#### BEGIN MONKEY PATCH FOR INT * LIST SUPPORT ####
-# TODO: Remove once https://github.com/numba/numba/pull/7848 is merged
-
-
-def mul_list_generic(self, args, kws):
-    a, b = args
-    if isinstance(a, types.List) and isinstance(b, types.Integer):
-        return signature(a, a, types.intp)
-    # Bodo Change: Add typing for Int * List
-    elif isinstance(a, types.Integer) and isinstance(b, types.List):
-        return signature(b, types.intp, b)
-
-
-if _check_numba_change:  # pragma: no cover  # pragma: no cover
-    lines = inspect.getsource(numba.core.typing.listdecl.MulList.generic)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "95882385a8ffa67aa576e8169b9ee6b3197e0ad3d5def4b47fa65ce8cd0f1575"
-    ):  # pragma: no cover
-        warnings.warn("numba.core.typing.listdecl.MulList.generic has changed")
-numba.core.typing.listdecl.MulList.generic = mul_list_generic
-
-# Bodo Change: Reimplement with indices flipped.
-@lower_builtin(operator.mul, types.Integer, types.List)
-def list_mul(context, builder, sig, args):
-    from llvmlite import ir as lir
-    from numba.core.imputils import impl_ret_new_ref
-    from numba.cpython.listobj import ListInstance
-
-    if isinstance(sig.args[0], types.List):
-        list_idx, int_idx = 0, 1
-    else:
-        list_idx, int_idx = 1, 0
-    src = ListInstance(context, builder, sig.args[list_idx], args[list_idx])
-    src_size = src.size
-
-    mult = args[int_idx]
-    zero = lir.Constant(mult.type, 0)
-    mult = builder.select(cgutils.is_neg_int(builder, mult), zero, mult)
-    nitems = builder.mul(mult, src_size)
-
-    dest = ListInstance.allocate(context, builder, sig.return_type, nitems)
-    dest.size = nitems
-
-    with cgutils.for_range_slice(builder, zero, nitems, src_size, inc=True) as (
-        dest_offset,
-        _,
-    ):
-        with cgutils.for_range(builder, src_size) as loop:
-            value = src.getitem(loop.index)
-            dest.setitem(builder.add(loop.index, dest_offset), value, incref=True)
-
-    return impl_ret_new_ref(context, builder, sig.return_type, dest.value)
-
-
-#### END MONKEY PATCH FOR INT * LIST SUPPORT   ####
-
-
 #### START MONKEY PATCH SUPPORT FOR unifying unknown types ####
 
 
@@ -5422,569 +5007,6 @@ if _check_numba_change:  # pragma: no cover
 numba.core.typing.context.BaseContext.unify_pairs = unify_pairs
 
 #### END MONKEY PATCH SUPPORT FOR unifying unknown types ####
-
-
-#### BEGIN MONKEY PATCH FOR REFERENCE COUNTED SET SUPPORT ####
-
-
-def _native_set_to_python_list(typ, payload, c):
-    """
-    Create a Python list from a native set's items.
-    """
-    from llvmlite import ir
-
-    nitems = payload.used
-    listobj = c.pyapi.list_new(nitems)
-    ok = cgutils.is_not_null(c.builder, listobj)
-    with c.builder.if_then(ok, likely=True):
-        index = cgutils.alloca_once_value(c.builder, ir.Constant(nitems.type, 0))
-        with payload._iterate() as loop:
-            i = c.builder.load(index)
-            item = loop.entry.key
-            # Bodo change: added incref
-            c.context.nrt.incref(c.builder, typ.dtype, item)
-            itemobj = c.box(typ.dtype, item)
-            c.pyapi.list_setitem(listobj, i, itemobj)
-            i = c.builder.add(i, ir.Constant(i.type, 1))
-            c.builder.store(i, index)
-    return ok, listobj
-
-
-def _lookup(self, item, h, for_insert=False):
-    """
-    Lookup the *item* with the given hash values in the entries.
-    Return a (found, entry index) tuple:
-    - If found is true, <entry index> points to the entry containing
-      the item.
-    - If found is false, <entry index> points to the empty entry that
-      the item can be written to (only if *for_insert* is true)
-    """
-    from llvmlite import ir
-
-    context = self._context
-    builder = self._builder
-    intp_t = h.type
-    mask = self.mask
-    dtype = self._ty.dtype
-    tyctx = context.typing_context
-    fnty = tyctx.resolve_value_type(operator.eq)
-    sig = fnty.get_call_type(tyctx, (dtype, dtype), {})
-    # Bodo change: removed error message from reference counted items in set
-    eqfn = context.get_function(fnty, sig)
-
-    one = ir.Constant(intp_t, 1)
-    five = ir.Constant(intp_t, 5)
-    # The perturbation value for probing
-    perturb = cgutils.alloca_once_value(builder, h)
-    # The index of the entry being considered: start with (hash & mask)
-    index = cgutils.alloca_once_value(builder, builder.and_(h, mask))
-    if for_insert:
-        # The index of the first deleted entry in the lookup chain
-        free_index_sentinel = mask.type(-1)  # highest unsigned index
-        free_index = cgutils.alloca_once_value(builder, free_index_sentinel)
-    bb_body = builder.append_basic_block("lookup.body")
-    bb_found = builder.append_basic_block("lookup.found")
-    bb_not_found = builder.append_basic_block("lookup.not_found")
-    bb_end = builder.append_basic_block("lookup.end")
-
-    def check_entry(i):
-        """
-        Check entry *i* against the value being searched for.
-        """
-        entry = self.get_entry(i)
-        entry_hash = entry.hash
-        with builder.if_then(builder.icmp_unsigned("==", h, entry_hash)):
-            # Hashes are equal, compare values
-            # (note this also ensures the entry is used)
-            eq = eqfn(builder, (item, entry.key))
-            with builder.if_then(eq):
-                builder.branch(bb_found)
-        with builder.if_then(
-            numba.cpython.setobj.is_hash_empty(context, builder, entry_hash)
-        ):
-            builder.branch(bb_not_found)
-        if for_insert:
-            # Memorize the index of the first deleted entry
-            with builder.if_then(
-                numba.cpython.setobj.is_hash_deleted(context, builder, entry_hash)
-            ):
-                j = builder.load(free_index)
-                j = builder.select(
-                    builder.icmp_unsigned("==", j, free_index_sentinel), i, j
-                )
-                builder.store(j, free_index)
-
-    # First linear probing.  When the number of collisions is small,
-    # the lineary probing loop achieves better cache locality and
-    # is also slightly cheaper computationally.
-    with cgutils.for_range(
-        builder, ir.Constant(intp_t, numba.cpython.setobj.LINEAR_PROBES)
-    ):
-        i = builder.load(index)
-        check_entry(i)
-        i = builder.add(i, one)
-        i = builder.and_(i, mask)
-        builder.store(i, index)
-    # If not found after linear probing, switch to a non-linear
-    # perturbation keyed on the unmasked hash value.
-    # XXX how to tell LLVM this branch is unlikely?
-    builder.branch(bb_body)
-    with builder.goto_block(bb_body):
-        i = builder.load(index)
-        check_entry(i)
-        # Perturb to go to next entry:
-        #   perturb >>= 5
-        #   i = (i * 5 + 1 + perturb) & mask
-        p = builder.load(perturb)
-        p = builder.lshr(p, five)
-        i = builder.add(one, builder.mul(i, five))
-        i = builder.and_(mask, builder.add(i, p))
-        builder.store(i, index)
-        builder.store(p, perturb)
-        # Loop
-        builder.branch(bb_body)
-    with builder.goto_block(bb_not_found):
-        if for_insert:
-            # Not found => for insertion, return the index of the first
-            # deleted entry (if any), to avoid creating an infinite
-            # lookup chain (issue #1913).
-            i = builder.load(index)
-            j = builder.load(free_index)
-            i = builder.select(
-                builder.icmp_unsigned("==", j, free_index_sentinel), i, j
-            )
-            builder.store(i, index)
-        builder.branch(bb_end)
-    with builder.goto_block(bb_found):
-        builder.branch(bb_end)
-    builder.position_at_end(bb_end)
-    found = builder.phi(ir.IntType(1), "found")
-    found.add_incoming(cgutils.true_bit, bb_found)
-    found.add_incoming(cgutils.false_bit, bb_not_found)
-    return found, builder.load(index)
-
-
-def _add_entry(self, payload, entry, item, h, do_resize=True):
-    context = self._context
-    builder = self._builder
-
-    old_hash = entry.hash
-    entry.hash = h
-    # Bodo change: added incref
-    context.nrt.incref(builder, self._ty.dtype, item)
-    entry.key = item
-    # used++
-    used = payload.used
-    one = ir.Constant(used.type, 1)
-    used = payload.used = builder.add(used, one)
-    # fill++ if entry wasn't a deleted one
-    with builder.if_then(
-        numba.cpython.setobj.is_hash_empty(context, builder, old_hash), likely=True
-    ):
-        payload.fill = builder.add(payload.fill, one)
-    # Grow table if necessary
-    if do_resize:
-        self.upsize(used)
-    self.set_dirty(True)
-
-
-def _add_key(self, payload, item, h, do_resize=True):
-    from llvmlite import ir
-
-    context = self._context
-    builder = self._builder
-    found, i = payload._lookup(item, h, for_insert=True)
-    not_found = builder.not_(found)
-    with builder.if_then(not_found):
-        # Not found => add it
-        entry = payload.get_entry(i)
-        old_hash = entry.hash
-        entry.hash = h
-        # Bodo change: added incref
-        context.nrt.incref(builder, self._ty.dtype, item)
-        entry.key = item
-        # used++
-        used = payload.used
-        one = ir.Constant(used.type, 1)
-        used = payload.used = builder.add(used, one)
-        # fill++ if entry wasn't a deleted one
-        with builder.if_then(
-            numba.cpython.setobj.is_hash_empty(context, builder, old_hash), likely=True
-        ):
-            payload.fill = builder.add(payload.fill, one)
-        # Grow table if necessary
-        if do_resize:
-            self.upsize(used)
-        self.set_dirty(True)
-
-
-def _remove_entry(self, payload, entry, do_resize=True):
-    from llvmlite import ir
-
-    # Mark entry deleted
-    entry.hash = ir.Constant(entry.hash.type, numba.cpython.setobj.DELETED)
-    # Bodo change: added decref
-    self._context.nrt.decref(self._builder, self._ty.dtype, entry.key)
-    # used--
-    used = payload.used
-    one = ir.Constant(used.type, 1)
-    used = payload.used = self._builder.sub(used, one)
-    # Shrink table if necessary
-    if do_resize:
-        self.downsize(used)
-    self.set_dirty(True)
-
-
-def pop(self):
-    context = self._context
-    builder = self._builder
-    lty = context.get_value_type(self._ty.dtype)
-    key = cgutils.alloca_once(builder, lty)
-    payload = self.payload
-    with payload._next_entry() as entry:
-        builder.store(entry.key, key)
-        # Bodo change: added incref
-        # incref since the value is returned but _remove_entry() decrefs
-        context.nrt.incref(builder, self._ty.dtype, entry.key)
-        self._remove_entry(payload, entry)
-
-    return builder.load(key)
-
-
-def _resize(self, payload, nentries, errmsg):
-    """
-    Resize the payload to the given number of entries.
-    CAUTION: *nentries* must be a power of 2!
-    """
-    context = self._context
-    builder = self._builder
-    # Allocate new entries
-    old_payload = payload
-    ok = self._allocate_payload(nentries, realloc=True)
-    with builder.if_then(builder.not_(ok), likely=False):
-        context.call_conv.return_user_exc(builder, MemoryError, (errmsg,))
-
-    # Bodo change: added decref
-    # Re-insert old entries
-    # Decref to balance incref from `_add_key`
-    payload = self.payload
-    with old_payload._iterate() as loop:
-        entry = loop.entry
-        self._add_key(payload, entry.key, entry.hash, do_resize=False)
-        context.nrt.decref(builder, self._ty.dtype, entry.key)
-
-    self._free_payload(old_payload.ptr)
-
-
-def _replace_payload(self, nentries):
-    """
-    Replace the payload with a new empty payload with the given number
-    of entries.
-    CAUTION: *nentries* must be a power of 2!
-    """
-    context = self._context
-    builder = self._builder
-
-    # Bodo change: added decref
-    # decref all of the previous entries
-    with self.payload._iterate() as loop:
-        entry = loop.entry
-        context.nrt.decref(builder, self._ty.dtype, entry.key)
-
-    # Free old payload
-    self._free_payload(self.payload.ptr)
-
-    ok = self._allocate_payload(nentries, realloc=True)
-    with builder.if_then(builder.not_(ok), likely=False):
-        context.call_conv.return_user_exc(
-            builder, MemoryError, ("cannot reallocate set",)
-        )
-
-
-def _allocate_payload(self, nentries, realloc=False):
-    """
-    Allocate and initialize payload for the given number of entries.
-    If *realloc* is True, the existing meminfo is reused.
-    CAUTION: *nentries* must be a power of 2!
-    """
-    from llvmlite import ir
-
-    context = self._context
-    builder = self._builder
-    ok = cgutils.alloca_once_value(builder, cgutils.true_bit)
-    intp_t = context.get_value_type(types.intp)
-    zero = ir.Constant(intp_t, 0)
-    one = ir.Constant(intp_t, 1)
-    payload_type = context.get_data_type(types.SetPayload(self._ty))
-    payload_size = context.get_abi_sizeof(payload_type)
-    entry_size = self._entrysize
-    # Account for the fact that the payload struct already contains an entry
-    payload_size -= entry_size
-    # Total allocation size = <payload header size> + nentries * entry_size
-    allocsize, ovf = cgutils.muladd_with_overflow(
-        builder,
-        nentries,
-        ir.Constant(intp_t, entry_size),
-        ir.Constant(intp_t, payload_size),
-    )
-    with builder.if_then(ovf, likely=False):
-        builder.store(cgutils.false_bit, ok)
-    with builder.if_then(builder.load(ok), likely=True):
-        if realloc:
-            meminfo = self._set.meminfo
-            ptr = context.nrt.meminfo_varsize_alloc(builder, meminfo, size=allocsize)
-            alloc_ok = cgutils.is_null(builder, ptr)
-        else:
-            # Bodo change: added destructor
-            # create destructor to be called upon set destruction
-            dtor = _imp_dtor(context, builder.module, self._ty)
-            meminfo = context.nrt.meminfo_new_varsize_dtor(
-                builder, allocsize, builder.bitcast(dtor, cgutils.voidptr_t)
-            )
-            alloc_ok = cgutils.is_null(builder, meminfo)
-
-        # Bodo change: used `alloc_ok`
-        with builder.if_else(alloc_ok, likely=False) as (if_error, if_ok):
-            with if_error:
-                builder.store(cgutils.false_bit, ok)
-            with if_ok:
-                if not realloc:
-                    self._set.meminfo = meminfo
-                    self._set.parent = context.get_constant_null(types.pyobject)
-                payload = self.payload
-                # Initialize entries to 0xff (EMPTY)
-                cgutils.memset(builder, payload.ptr, allocsize, 0xFF)
-                payload.used = zero
-                payload.fill = zero
-                payload.finger = zero
-                new_mask = builder.sub(nentries, one)
-                payload.mask = new_mask
-    return builder.load(ok)
-
-
-def _copy_payload(self, src_payload):
-    """
-    Raw-copy the given payload into self.
-    """
-    from llvmlite import ir
-
-    context = self._context
-    builder = self._builder
-    ok = cgutils.alloca_once_value(builder, cgutils.true_bit)
-    intp_t = context.get_value_type(types.intp)
-    zero = ir.Constant(intp_t, 0)
-    one = ir.Constant(intp_t, 1)
-    payload_type = context.get_data_type(types.SetPayload(self._ty))
-    payload_size = context.get_abi_sizeof(payload_type)
-    entry_size = self._entrysize
-    # Account for the fact that the payload struct already contains an entry
-    payload_size -= entry_size
-    mask = src_payload.mask
-    nentries = builder.add(one, mask)
-    # Total allocation size = <payload header size> + nentries * entry_size
-    # (note there can't be any overflow since we're reusing an existing
-    #  payload's parameters)
-    allocsize = builder.add(
-        ir.Constant(intp_t, payload_size),
-        builder.mul(ir.Constant(intp_t, entry_size), nentries),
-    )
-
-    with builder.if_then(builder.load(ok), likely=True):
-        # Bodo change: added destructor
-        # create destructor for new meminfo
-        dtor = _imp_dtor(context, builder.module, self._ty)
-        meminfo = context.nrt.meminfo_new_varsize_dtor(
-            builder, allocsize, builder.bitcast(dtor, cgutils.voidptr_t)
-        )
-        alloc_ok = cgutils.is_null(builder, meminfo)
-
-        # Bodo change: used `alloc_ok`
-        with builder.if_else(alloc_ok, likely=False) as (if_error, if_ok):
-            with if_error:
-                builder.store(cgutils.false_bit, ok)
-            with if_ok:
-                self._set.meminfo = meminfo
-                payload = self.payload
-                payload.used = src_payload.used
-                payload.fill = src_payload.fill
-                payload.finger = zero
-                payload.mask = mask
-
-                # instead of using `_add_key` for every entry, since the
-                # size of the new set is the same, we can just copy the
-                # data directly without having to re-compute the hash
-                cgutils.raw_memcpy(
-                    builder, payload.entries, src_payload.entries, nentries, entry_size
-                )
-                # Bodo change: added increfs
-                # increment the refcounts to simulate `_add_key` for each
-                # element
-                with src_payload._iterate() as loop:
-                    context.nrt.incref(builder, self._ty.dtype, loop.entry.key)
-
-    return builder.load(ok)
-
-
-# Bodo change: added `_imp_dtor`
-def _imp_dtor(context, module, set_type):
-    """Define the dtor for set"""
-    from llvmlite import ir
-
-    llvoidptr = context.get_value_type(types.voidptr)
-    llsize = context.get_value_type(types.uintp)
-    # create a dtor function that takes (void* set, size_t size, void* dtor_info)
-    fnty = ir.FunctionType(
-        ir.VoidType(),
-        [llvoidptr, llsize, llvoidptr],
-    )
-    # create type-specific name
-    fname = f"_numba_set_dtor_{set_type}"
-
-    fn = cgutils.get_or_insert_function(module, fnty, name=fname)
-
-    if fn.is_declaration:
-        # Set linkage
-        fn.linkage = "linkonce_odr"
-        # Define
-        builder = ir.IRBuilder(fn.append_basic_block())
-        set_ptr = builder.bitcast(fn.args[0], cgutils.voidptr_t.as_pointer())
-        payload = numba.cpython.setobj._SetPayload(context, builder, set_type, set_ptr)
-        with payload._iterate() as loop:
-            entry = loop.entry
-            context.nrt.decref(builder, set_type.dtype, entry.key)
-        builder.ret_void()
-
-    return fn
-
-
-@lower_builtin(set, types.IterableType)
-def set_constructor(context, builder, sig, args):
-    set_type = sig.return_type
-    (items_type,) = sig.args
-    (items,) = args
-
-    # Bodo change: added decref
-    # If the argument has a len(), preallocate the set so as to
-    # avoid resizes.
-    # both `add` and `for_iter` incref each item in the set, so manually decref
-    # the items to avoid a leak from the double incref
-    n = numba.core.imputils.call_len(context, builder, items_type, items)
-    inst = numba.cpython.setobj.SetInstance.allocate(context, builder, set_type, n)
-    with numba.core.imputils.for_iter(context, builder, items_type, items) as loop:
-        inst.add(loop.value)
-        context.nrt.decref(builder, set_type.dtype, loop.value)
-
-    return numba.core.imputils.impl_ret_new_ref(context, builder, set_type, inst.value)
-
-
-@lower_builtin("set.update", types.Set, types.IterableType)
-def set_update(context, builder, sig, args):
-    inst = numba.cpython.setobj.SetInstance(context, builder, sig.args[0], args[0])
-    items_type = sig.args[1]
-    items = args[1]
-    # If the argument has a len(), assume there are few collisions and
-    # presize to len(set) + len(items)
-    n = numba.core.imputils.call_len(context, builder, items_type, items)
-    if n is not None:
-        new_size = builder.add(inst.payload.used, n)
-        inst.upsize(new_size)
-    with numba.core.imputils.for_iter(context, builder, items_type, items) as loop:
-        # make sure that the items being added are of the same dtype as the
-        # set instance
-        casted = context.cast(builder, loop.value, items_type.dtype, inst.dtype)
-        inst.add(casted)
-        # Bodo change: added decref
-        # decref each item to counter balance the double incref from `add` +
-        # `for_iter`
-        context.nrt.decref(builder, items_type.dtype, loop.value)
-
-    if n is not None:
-        # If we pre-grew the set, downsize in case there were many collisions
-        inst.downsize(inst.payload.used)
-    return context.get_dummy_value()
-
-
-if _check_numba_change:  # pragma: no cover
-    for name, orig, hash in (
-        (
-            "numba.core.boxing._native_set_to_python_list",
-            numba.core.boxing._native_set_to_python_list,
-            "b47f3d5e582c05d80899ee73e1c009a7e5121e7a660d42cb518bb86933f3c06f",
-        ),
-        (
-            "numba.cpython.setobj._SetPayload._lookup",
-            numba.cpython.setobj._SetPayload._lookup,
-            "c797b5399d7b227fe4eea3a058b3d3103f59345699388afb125ae47124bee395",
-        ),
-        (
-            "numba.cpython.setobj.SetInstance._add_entry",
-            numba.cpython.setobj.SetInstance._add_entry,
-            "c5ed28a5fdb453f242e41907cb792b66da2df63282c17abe0b68fc46782a7f94",
-        ),
-        (
-            "numba.cpython.setobj.SetInstance._add_key",
-            numba.cpython.setobj.SetInstance._add_key,
-            "324d6172638d02a361cfa0ca7f86e241e5a56a008d4ab581a305f9ae5ea4a75f",
-        ),
-        (
-            "numba.cpython.setobj.SetInstance._remove_entry",
-            numba.cpython.setobj.SetInstance._remove_entry,
-            "2c441b00daac61976e673c0e738e8e76982669bd2851951890dd40526fa14da1",
-        ),
-        (
-            "numba.cpython.setobj.SetInstance.pop",
-            numba.cpython.setobj.SetInstance.pop,
-            "1a7b7464cbe0577f2a38f3af9acfef6d4d25d049b1e216157275fbadaab41d1b",
-        ),
-        (
-            "numba.cpython.setobj.SetInstance._resize",
-            numba.cpython.setobj.SetInstance._resize,
-            "5ca5c2ba4f8c4bf546fde106b9c2656d4b22a16d16e163fb64c5d85ea4d88746",
-        ),
-        (
-            "numba.cpython.setobj.SetInstance._replace_payload",
-            numba.cpython.setobj.SetInstance._replace_payload,
-            "ada75a6c85828bff69c8469538c1979801f560a43fb726221a9c21bf208ae78d",
-        ),
-        (
-            "numba.cpython.setobj.SetInstance._allocate_payload",
-            numba.cpython.setobj.SetInstance._allocate_payload,
-            "2e80c419df43ebc71075b4f97fc1701c10dbc576aed248845e176b8d5829e61b",
-        ),
-        (
-            "numba.cpython.setobj.SetInstance._copy_payload",
-            numba.cpython.setobj.SetInstance._copy_payload,
-            "0885ac36e1eb5a0a0fc4f5d91e54b2102b69e536091fed9f2610a71d225193ec",
-        ),
-        (
-            "numba.cpython.setobj.set_constructor",
-            numba.cpython.setobj.set_constructor,
-            "3d521a60c3b8eaf70aa0f7267427475dfddd8f5e5053b5bfe309bb5f1891b0ce",
-        ),
-        (
-            "numba.cpython.setobj.set_update",
-            numba.cpython.setobj.set_update,
-            "965c4f7f7abcea5cbe0491b602e6d4bcb1800fa1ec39b1ffccf07e1bc56051c3",
-        ),
-    ):
-        lines = inspect.getsource(orig)
-        if hashlib.sha256(lines.encode()).hexdigest() != hash:
-            warnings.warn(f"{name} has changed")
-        orig = new
-
-
-numba.core.boxing._native_set_to_python_list = _native_set_to_python_list
-numba.cpython.setobj._SetPayload._lookup = _lookup
-numba.cpython.setobj.SetInstance._add_entry = _add_entry
-numba.cpython.setobj.SetInstance._add_key = _add_key
-numba.cpython.setobj.SetInstance._remove_entry = _remove_entry
-numba.cpython.setobj.SetInstance.pop = pop
-numba.cpython.setobj.SetInstance._resize = _resize
-numba.cpython.setobj.SetInstance._replace_payload = _replace_payload
-numba.cpython.setobj.SetInstance._allocate_payload = _allocate_payload
-numba.cpython.setobj.SetInstance._copy_payload = _copy_payload
-
-#### END MONKEY PATCH FOR REFERENCE COUNTED SET SUPPORT ####
 
 #### BEGIN MONKEY PATCH FOR METADATA CACHING SUPPORT ####
 
@@ -6088,7 +5110,6 @@ if _check_numba_change:  # pragma: no cover
         lines = inspect.getsource(orig)
         if hashlib.sha256(lines.encode()).hexdigest() != hash:
             warnings.warn(f"{name} has changed")
-        orig = new
 
 numba.core.compiler.CompileResult._reduce = _reduce
 numba.core.compiler.CompileResult._rebuild = _rebuild
@@ -6118,12 +5139,94 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
 
 #### END MONKEY PATCH FOR CACHING TO SPECIFIC DIRECTORY FROM IPYTHON NOTEBOOKS ####
 
+#### START MONKEY PATCH FOR FUSING Tuples with Python 3.10 ####
+# Bodo Change: Include bytecode changes in the Numba pipeline. Necessary for
+# internally compiled functions.
+@staticmethod
+def define_untyped_pipeline(state, name="untyped"):
+    """Returns an untyped part of the nopython pipeline"""
+    from numba.core.compiler_machinery import PassManager
+    from numba.core.untyped_passes import (
+        DeadBranchPrune,
+        FindLiterallyCalls,
+        FixupArgs,
+        GenericRewrites,
+        InlineClosureLikes,
+        InlineInlinables,
+        IRProcessing,
+        LiteralPropagationSubPipelinePass,
+        LiteralUnroll,
+        MakeFunctionToJitFunction,
+        ReconstructSSA,
+        RewriteSemanticConstants,
+        TranslateByteCode,
+        WithLifting,
+    )
+    from numba.core.utils import PYVERSION
+
+    pm = PassManager(name)
+    if state.func_ir is None:
+        pm.add_pass(TranslateByteCode, "analyzing bytecode")
+        # Bodo Change: Insert Python 3.10 Bytecode peepholes
+        if PYVERSION == (3, 10):
+            pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
+        pm.add_pass(FixupArgs, "fix up args")
+    pm.add_pass(IRProcessing, "processing IR")
+    pm.add_pass(WithLifting, "Handle with contexts")
+
+    # inline closures early in case they are using nonlocal's
+    # see issue #6585.
+    pm.add_pass(InlineClosureLikes, "inline calls to locally defined closures")
+
+    # pre typing
+    if not state.flags.no_rewrites:
+        pm.add_pass(RewriteSemanticConstants, "rewrite semantic constants")
+        pm.add_pass(DeadBranchPrune, "dead branch pruning")
+        pm.add_pass(GenericRewrites, "nopython rewrites")
+
+    # convert any remaining closures into functions
+    pm.add_pass(MakeFunctionToJitFunction, "convert make_function into JIT functions")
+    # inline functions that have been determined as inlinable and rerun
+    # branch pruning, this needs to be run after closures are inlined as
+    # the IR repr of a closure masks call sites if an inlinable is called
+    # inside a closure
+    pm.add_pass(InlineInlinables, "inline inlinable functions")
+    if not state.flags.no_rewrites:
+        pm.add_pass(DeadBranchPrune, "dead branch pruning")
+
+    pm.add_pass(FindLiterallyCalls, "find literally calls")
+    pm.add_pass(LiteralUnroll, "handles literal_unroll")
+
+    if state.flags.enable_ssa:
+        pm.add_pass(ReconstructSSA, "ssa")
+
+    pm.add_pass(LiteralPropagationSubPipelinePass, "Literal propagation")
+
+    pm.finalize()
+    return pm
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(
+        numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "fc5a0665658cc30588a78aca984ac2d323d5d3a45dce538cc62688530c772896"
+    ):
+        warnings.warn(
+            "numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline has changed"
+        )
+numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline = define_untyped_pipeline
+#### END MONKEY PATCH FOR FUSING Tuples with Python 3.10 ####
+
+
 #### BEGIN MONKEY PATCH FOR BYTES OBJECTS ####
 if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.types.containers.Bytes)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "977423d833eeb4b8fd0c87f55dce7251c107d8d10793fe5723de6e5452da32e2"
+        != "bf6188e70df712cb74cd4e904c19cf54b0554c80c311fcb20018c0fe1547179f"
     ):
         warnings.warn("numba.core.types.containers.Bytes has changed")
 numba.core.types.containers.Bytes.slice_is_copy = True
@@ -6196,7 +5299,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "612cbc67e8e462f25f348b2a5dd55595f4201a6af826cffcd38b16cd85fc70f7"
+        != "c9cfebc2dd058b6f4779a67d1445211f11aaafa18705f051c93f8eb9e4fc0b16"
     ):
         warnings.warn(
             "numba.parfors.array_analysis.ArrayAnalysis._analyze_op_call_builtins_len has changed"
@@ -6208,6 +5311,60 @@ numba.parfors.array_analysis.ArrayAnalysis._analyze_op_call_builtins_len = (
 )
 
 #### END MONKEY PATCH FOR TYPES.BYTES CHECK ON LEN OPERATION IN ARRAY ANALYSIS ####
+
+
+#### BEGIN MONKEY PATCH FOR NRT NULL CHECKING ####
+def _check_null_result(func):
+    @functools.wraps(func)
+    def wrap(self, builder, *args, **kwargs):
+        memptr = func(self, builder, *args, **kwargs)
+        msg = "Allocation failed (probably too large)."
+        # Bodo Change: guard_memory_error only works for JIT code,
+        # so if the builder function comes from boxing/unboxing we
+        # skip it.
+        if builder.function.args[1].name != "py_args":
+            cgutils.guard_memory_error(self._context, builder, memptr, msg=msg)
+        return memptr
+
+    return wrap
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.runtime.context.NRTContext._check_null_result)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "03562334cb6af11b659c1ba26085350aec9c2b41c5d59b4ef1b139366505ac7f"
+    ):
+        warnings.warn(
+            "numba.core.runtime.context.NRTContext._check_null_result has changed"
+        )
+numba.core.runtime.context.NRTContext._check_null_result = _check_null_result
+# Update all of the functions that contain _check_null_result
+numba.core.runtime.context.NRTContext.allocate = _check_null_result(
+    numba.core.runtime.context.NRTContext.allocate.__wrapped__
+)
+numba.core.runtime.context.NRTContext.meminfo_alloc = _check_null_result(
+    numba.core.runtime.context.NRTContext.meminfo_alloc.__wrapped__
+)
+numba.core.runtime.context.NRTContext.meminfo_alloc_dtor = _check_null_result(
+    numba.core.runtime.context.NRTContext.meminfo_alloc_dtor.__wrapped__
+)
+numba.core.runtime.context.NRTContext.meminfo_alloc_aligned = _check_null_result(
+    numba.core.runtime.context.NRTContext.meminfo_alloc_aligned.__wrapped__
+)
+numba.core.runtime.context.NRTContext.meminfo_new_varsize = _check_null_result(
+    numba.core.runtime.context.NRTContext.meminfo_new_varsize.__wrapped__
+)
+numba.core.runtime.context.NRTContext.meminfo_new_varsize_dtor = _check_null_result(
+    numba.core.runtime.context.NRTContext.meminfo_new_varsize_dtor.__wrapped__
+)
+numba.core.runtime.context.NRTContext.meminfo_varsize_alloc = _check_null_result(
+    numba.core.runtime.context.NRTContext.meminfo_varsize_alloc.__wrapped__
+)
+numba.core.runtime.context.NRTContext.meminfo_varsize_realloc = _check_null_result(
+    numba.core.runtime.context.NRTContext.meminfo_varsize_realloc.__wrapped__
+)
+#### END MONKEY PATCH FOR NRT NULL CHECKING ####
 
 #### BEGIN MONKEY PATCH FOR TYPE.BYTES CHECK IN SIGNATURE GENERATOR FOR LEN ####
 def generic(self, args, kws):
@@ -6226,7 +5383,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typing.builtins.Len.generic)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "88d54238ebe0896f4s69b7347105a6a68dec443036a61f9e494c1630c62b0fa76"
+        != "e0093abc077d47fabb699624279bee359276705a313991eac665507ec0f5d305"
     ):
         warnings.warn("numba.core.typing.builtins.Len.generic has changed")
 
@@ -6339,216 +5496,319 @@ array_exprs.RewriteArrayExprs._handle_matches = _handle_matches
 
 #### BEGIN PATCH OF GETITEM OPTIMIZATIONS TO SUPPORT scalar_optional_getitem ####
 
-# Bodo Change: Pass func_ir as the last argument. All uses of this function
-# are included below in numba_compat.py
-def has_cross_iter_dep(parfor, func_ir):
-    # we conservatively assume there is cross iteration dependency when
-    # the parfor index is used in any expression since the expression could
-    # be used for indexing arrays
+
+def has_cross_iter_dep(
+    parfor,
+    func_ir,
+    typemap,
+    index_positions=None,
+    indexed_arrays=None,
+    non_indexed_arrays=None,
+):
+    from numba.core.ir_utils import find_build_sequence, find_callname
+
+    from bodo.utils.utils import is_array_typ
+
+    # We should assume there is cross iteration dependency unless we can
+    # prove otherwise.  Return True if there is a cross-iter dependency
+    # that should prevent fusion, False if fusion is okay.
+    # Also returns index_positions, indexed_arrays, and non_indexed_arrays
+    # who purpose is described below so that subsequent additional
+    # has_cross_iter_dep calls for other parfors can build on the same
+    # data structures to make sure that the array accesses generate no
+    # cross-iter dependencies both within a parfor but also across parfors.
     # TODO: make it more accurate using ud-chains
-    indices = {l.index_variable for l in parfor.loop_nests}
+    # Get the index variable used by this parfor.
+    # This will hold other variables with equivalent value, e.g., a = index_var
+    indices = {l.index_variable.name for l in parfor.loop_nests}
+    # This set will store variables that are (potentially recursively)
+    # defined in relation to an index variable, e.g., a = index_var + 1.
+    # A getitem that uses an index variable from this set will be considered
+    # as potentially having a cross-iter dependency and so won't fuse.
+    derived_from_indices = set()
+    # For the first parfor considered for fusion, the latter 3 args will be None
+    # and initialized to empty.  For the second parfor, the structures from the
+    # previous parfor are passed in so that cross-parfor violations of the
+    # below comments can prevent fusion.
+    #
+    # index_positions keeps track of which index positions have had an index
+    # variable used for them and which ones haven't for each possible array
+    # dimensionality.  After the first array access is seen, if subsequent
+    # ones use a parfor index for a different dimension then we conservatively
+    # say that we can't fuse.  For example, if a 2D array is accessed with
+    # a[parfor_index, 0] then index_positions[2] will be (True, False) and
+    # if a[0, parfor_index] happens later which is (False, True) then this
+    # conflicts with the previous value and will prevent fusion.
+    #
+    # indexed_arrays records arrays that are accessed with at least one
+    # parfor index.  If such an array is later accessed with indices that
+    # don't include a parfor index then conservatively assume we can't fuse.
+    #
+    # non_indexed_arrays holds arrays that are indexed without a parfor index.
+    # If an array first accessed without a parfor index is later indexed
+    # with one then conservatively assume we can't fuse.
+    if index_positions is None:
+        index_positions = {}
+    if indexed_arrays is None:
+        indexed_arrays = set()
+    if non_indexed_arrays is None:
+        non_indexed_arrays = set()
+
+    def add_check_position(
+        new_position,
+        array_accessed,
+        index_positions,
+        indexed_arrays,
+        non_indexed_arrays,
+    ):
+        """Returns True if there is a reason to prevent fusion based
+        on the rules described above.
+        new_position will be a list or tuple of booleans that
+        says whether the index in that spot is a parfor index
+        or not.  array_accessed is the array on which the access
+        is occurring."""
+
+        # Convert list indices to tuple for generality.
+        if isinstance(new_position, list):
+            new_position = tuple(new_position)
+
+        # If none of the indices are based on a parfor index.
+        if True not in new_position:
+            # See if this array has been accessed before with a
+            # a parfor index and if so say that we can't fuse.
+            if array_accessed in indexed_arrays:
+                return True
+            else:
+                # Either array is already in non_indexed arrays or we
+                # will add it.  Either way, this index usage can fuse.
+                non_indexed_arrays.add(array_accessed)
+                return False
+
+        # Fallthrough for cases where one of the indices is a parfor index.
+        # If this array was previously accessed without a parfor index then
+        # conservatively say we can't fuse.
+        if array_accessed in non_indexed_arrays:
+            return True
+
+        npsize = len(new_position)
+        # See if we have not seen a npsize dimensioned array accessed before.
+        if npsize not in index_positions:
+            # If not then add current set of parfor/non-parfor indices and
+            # indicate it is safe as it is the first usage.
+            index_positions[npsize] = new_position
+            return False
+
+        # Here we have a subsequent access to a npsize-dimensioned array.
+        # Make sure we see the same combination of parfor/non-parfor index
+        # indices that we've seen before.  If not then return True saying
+        # that we can't fuse.
+        return index_positions[npsize] != new_position
+
+    def check_index(
+        stmt_index,
+        array_accessed,
+        index_positions,
+        indexed_arrays,
+        non_indexed_arrays,
+        derived_from_indices,
+    ):
+        """Looks at the indices of a getitem or setitem to see if there
+        is a reason that they would prevent fusion.
+        Returns True if fusion should be prohibited, False otherwise.
+        """
+        if isinstance(stmt_index, ir.Var):
+            # If the array is 2+ dimensions then the index should be a tuple.
+            if isinstance(typemap[stmt_index.name], types.BaseTuple):
+                # Get how the index tuple is constructed.
+                fbs_res = guard(find_build_sequence, func_ir, stmt_index)
+                if fbs_res is not None:
+                    ind_seq, _ = fbs_res
+                    # If any indices are derived from an index is used then
+                    # return True to say we can't fuse.
+                    if all(
+                        [
+                            x.name in indices or x.name not in derived_from_indices
+                            for x in ind_seq
+                        ]
+                    ):
+                        # Get position in index tuple where parfor indices used.
+                        new_index_positions = [x.name in indices for x in ind_seq]
+                        # Make sure that we aren't accessing a given array with
+                        # different indices in a different order.
+                        return add_check_position(
+                            new_index_positions,
+                            array_accessed,
+                            index_positions,
+                            indexed_arrays,
+                            non_indexed_arrays,
+                        )
+                    else:
+                        # index derived from a parfor index used so no fusion
+                        return True
+                else:
+                    # Don't know how the index tuple is built so
+                    # have to assume fusion can't happen.
+                    return True
+            else:
+                # Should be for 1D arrays.
+                if stmt_index.name in indices:
+                    # Array indexed by a parfor index variable.
+                    # Make sure this 1D access is consistent with prior ones.
+                    return add_check_position(
+                        (True,),
+                        array_accessed,
+                        index_positions,
+                        indexed_arrays,
+                        non_indexed_arrays,
+                    )
+                elif stmt_index.name in derived_from_indices:
+                    # If we ever index an array with something calculated
+                    # from an index then no fusion.
+                    return True
+                else:
+                    # Some kind of index that isn't a parfor index or
+                    # one derived from one, e.g., a constant.  Make sure
+                    # this is consistent with prior accessed of this array.
+                    return add_check_position(
+                        (False,),
+                        array_accessed,
+                        index_positions,
+                        indexed_arrays,
+                        non_indexed_arrays,
+                    )
+        else:
+            # We don't know how to handle non-Var indices so no fusion.
+            return True
+
+        # All branches above should cover all the cases and each should
+        # return so we should never get here.
+        raise errors.InternalError(
+            "Some code path in the parfor fusion "
+            "cross-iteration dependency checker "
+            "check_index didn't return a result."
+        )
+
+    # Iterate through all the statements in the parfor.
     for b in parfor.loop_body.values():
         for stmt in b.body:
-            # GetItem/SetItem nodes are fine since can't have expression inside
-            # and only simple indices are possible
+            # Make sure SetItem accesses are fusion safe.
             if isinstance(stmt, (ir.SetItem, ir.StaticSetItem)):
+                # Bodo Change: Check Bodo arrays in addition to Numba arrays.
+                if is_array_typ(typemap[stmt.target.name], True):
+                    # Check index safety with prior array accesses.
+                    if check_index(
+                        stmt.index,
+                        stmt.target.name,
+                        index_positions,
+                        indexed_arrays,
+                        non_indexed_arrays,
+                        derived_from_indices,
+                    ):
+                        return True, index_positions, indexed_arrays, non_indexed_arrays
+                # Fusion safe so go to next statement.
                 continue
-            # tuples are immutable so no expression on parfor possible
-            if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Expr):
-                op = stmt.value.op
-                if op in ["build_tuple", "getitem", "static_getitem"]:
-                    continue
-                # Bodo Change treat scalar_optional_getitem the same as getitem
-                elif op == "call" and guard(find_callname, func_ir, stmt.value) == (
-                    "scalar_optional_getitem",
-                    "bodo.utils.indexing",
-                ):
-                    continue
-            # other statements can have potential violations
-            if not indices.isdisjoint(stmt.list_vars()):
-                numba.parfors.parfor.dprint("has_cross_iter_dep found", indices, stmt)
-                return True
-    return False
+            elif isinstance(stmt, ir.Assign):
+                # If stmt of form a = parfor_index then add "a" to set of
+                # parfor indices.
+                if isinstance(stmt.value, ir.Var):
+                    if stmt.value.name in indices:
+                        indices.add(stmt.target.name)
+                        continue
+                elif isinstance(stmt.value, ir.Expr):
+                    op = stmt.value.op
+                    # Make sure getitem accesses are fusion safe.
+                    if op in ["getitem", "static_getitem"]:
+                        # Bodo Change: Check Bodo arrays in addition to Numba arrays.
+                        if is_array_typ(typemap[stmt.value.value.name], True):
+                            # Check index safety with prior array accesses.
+                            if check_index(
+                                stmt.value.index,
+                                stmt.value.value.name,
+                                index_positions,
+                                indexed_arrays,
+                                non_indexed_arrays,
+                                derived_from_indices,
+                            ):
+                                return (
+                                    True,
+                                    index_positions,
+                                    indexed_arrays,
+                                    non_indexed_arrays,
+                                )
+                        # Fusion safe so go to next statement.
+                        continue
+                    elif op == "call":
+                        # Bodo Change. Allow fusion with scalar_optional_getitem
+                        fdef = guard(find_callname, func_ir, stmt.value)
+                        if fdef == ("scalar_optional_getitem", "bodo.utils.indexing"):
+                            # If there are kws no fusion is possible. TODO: FIX
+                            if dict(stmt.value.kws):
+                                return (
+                                    True,
+                                    index_positions,
+                                    indexed_arrays,
+                                    non_indexed_arrays,
+                                )
+
+                            arr_var = stmt.value.args[0]
+                            idx_var = stmt.value.args[1]
+                            # Check that the index is safe.
+                            if check_index(
+                                idx_var,
+                                arr_var.name,
+                                index_positions,
+                                indexed_arrays,
+                                non_indexed_arrays,
+                                derived_from_indices,
+                            ):
+                                return (
+                                    True,
+                                    index_positions,
+                                    indexed_arrays,
+                                    non_indexed_arrays,
+                                )
+                        else:
+                            # If there is a call in the parfor body that takes some
+                            # array parameter then we have no way to analyze what
+                            # that call is doing so presume it is unsafe for fusion.
+                            # Bodo Change: Check Bodo arrays in addition to Numba arrays.
+                            if any(
+                                [
+                                    is_array_typ(typemap[x.name], True)
+                                    for x in stmt.value.list_vars()
+                                ]
+                            ):
+                                return (
+                                    True,
+                                    index_positions,
+                                    indexed_arrays,
+                                    non_indexed_arrays,
+                                )
+
+                    # Get the vars used by this non-setitem/getitem statement.
+                    rhs_vars = [x.name for x in stmt.value.list_vars()]
+                    # If a parfor index is used as part of this statement or
+                    # something previous determined to be derived from a parfor
+                    # index then add the target variable to the set of
+                    # variables that are derived from parfors and so should
+                    # prevent fusion if used as an index.
+                    if not indices.isdisjoint(
+                        rhs_vars
+                    ) or not derived_from_indices.isdisjoint(rhs_vars):
+                        derived_from_indices.add(stmt.target.name)
+
+    return False, index_positions, indexed_arrays, non_indexed_arrays
 
 
 if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.parfors.parfor.has_cross_iter_dep)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "d79fa2cde3112a2fec69def6f707c09618a2ebc78dc720b6757a45c648ee8918"
+        != "6b095ffde7c8b4c3cf80e6c323c5f9e990a2ce9f3a62476fff7a289460fbd44a"
     ):
         warnings.warn("numba.parfors.parfor.has_cross_iter_dep has changed")
 
 numba.parfors.parfor.has_cross_iter_dep = has_cross_iter_dep
-
-
-# Bodo Change: Pass func_ir as the last argument. All uses of this function
-# are included below in numba_compat.py
-def try_fuse(equiv_set, parfor1, parfor2, metadata, func_ir):
-    """try to fuse parfors and return a fused parfor, otherwise return None"""
-    numba.parfors.parfor.dprint("try_fuse: trying to fuse \n", parfor1, "\n", parfor2)
-
-    # default report is None
-    report = None
-
-    # fusion of parfors with different dimensions not supported yet
-    if len(parfor1.loop_nests) != len(parfor2.loop_nests):
-        numba.parfors.parfor.dprint("try_fuse: parfors number of dimensions mismatch")
-        msg = "- fusion failed: number of loops mismatched, %s, %s."
-        fmt = "parallel loop #%s has a nest of %s loops"
-        l1 = fmt % (parfor1.id, len(parfor1.loop_nests))
-        l2 = fmt % (parfor2.id, len(parfor2.loop_nests))
-        report = numba.parfors.parfor.FusionReport(
-            parfor1.id, parfor2.id, msg % (l1, l2)
-        )
-        return None, report
-
-    ndims = len(parfor1.loop_nests)
-    # all loops should be equal length
-
-    def is_equiv(x, y):
-        return x == y or equiv_set.is_equiv(x, y)
-
-    def get_user_varname(v):
-        """get original variable name by user if possible"""
-        if not isinstance(v, ir.Var):
-            return v
-        v = v.name
-        if "var_rename_map" in metadata and v in metadata["var_rename_map"]:
-            user_varname = metadata["var_rename_map"][v]
-            return user_varname
-        return v
-
-    for i in range(ndims):
-        nest1 = parfor1.loop_nests[i]
-        nest2 = parfor2.loop_nests[i]
-        if not (
-            is_equiv(nest1.start, nest2.start)
-            and is_equiv(nest1.stop, nest2.stop)
-            and is_equiv(nest1.step, nest2.step)
-        ):
-            numba.parfors.parfor.dprint(
-                "try_fuse: parfor dimension correlation mismatch", i
-            )
-            msg = "- fusion failed: loop dimension mismatched in axis %s. "
-            msg += "slice(%s, %s, %s) != " % (
-                get_user_varname(nest1.start),
-                get_user_varname(nest1.stop),
-                get_user_varname(nest1.step),
-            )
-            msg += "slice(%s, %s, %s)" % (
-                get_user_varname(nest2.start),
-                get_user_varname(nest2.stop),
-                get_user_varname(nest2.step),
-            )
-            report = numba.parfors.parfor.FusionReport(parfor1.id, parfor2.id, msg % i)
-            return None, report
-
-    # TODO: make sure parfor1's reduction output is not used in parfor2
-    # only data parallel loops
-    # Bodo Change: Pass an additional argument to has_cross_iter_dep
-    if has_cross_iter_dep(parfor1, func_ir) or has_cross_iter_dep(parfor2, func_ir):
-        numba.parfors.parfor.dprint("try_fuse: parfor cross iteration dependency found")
-        msg = (
-            "- fusion failed: cross iteration dependency found "
-            "between loops #%s and #%s"
-        )
-        report = numba.parfors.parfor.FusionReport(
-            parfor1.id, parfor2.id, msg % (parfor1.id, parfor2.id)
-        )
-        return None, report
-
-    # find parfor1's defs, only body is considered since init_block will run
-    # first after fusion as well
-    p1_body_usedefs = numba.parfors.parfor.compute_use_defs(parfor1.loop_body)
-    p1_body_defs = set()
-    for defs in p1_body_usedefs.defmap.values():
-        p1_body_defs |= defs
-
-    p2_usedefs = numba.parfors.parfor.compute_use_defs(parfor2.loop_body)
-    p2_uses = numba.parfors.parfor.compute_use_defs({0: parfor2.init_block}).usemap[0]
-    for uses in p2_usedefs.usemap.values():
-        p2_uses |= uses
-
-    if not p1_body_defs.isdisjoint(p2_uses):
-        numba.parfors.parfor.dprint("try_fuse: parfor2 depends on parfor1 body")
-        msg = (
-            "- fusion failed: parallel loop %s has a dependency on the "
-            "body of parallel loop %s. "
-        )
-        report = numba.parfors.parfor.FusionReport(
-            parfor1.id, parfor2.id, msg % (parfor1.id, parfor2.id)
-        )
-        return None, report
-
-    return numba.parfors.parfor.fuse_parfors_inner(parfor1, parfor2)
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.parfors.parfor.try_fuse)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "e808c358f351f8c7b38bdddb018ae9aea2e67062fa716f6c9ebe8c00ca9c397b"
-    ):
-        warnings.warn("numba.parfors.parfor.try_fuse has changed")
-
-numba.parfors.parfor.try_fuse = try_fuse
-
-
-def fuse_parfors(self, array_analysis, blocks):
-    for label, block in blocks.items():
-        equiv_set = array_analysis.get_equiv_set(label)
-        fusion_happened = True
-        while fusion_happened:
-            fusion_happened = False
-            new_body = []
-            i = 0
-            while i < len(block.body) - 1:
-                stmt = block.body[i]
-                next_stmt = block.body[i + 1]
-                if isinstance(stmt, numba.parfors.parfor.Parfor) and isinstance(
-                    next_stmt, numba.parfors.parfor.Parfor
-                ):
-                    # we have to update equiv_set since they have changed due to
-                    # variables being renamed before fusion.
-                    equiv_set = array_analysis.get_equiv_set(label)
-                    stmt.equiv_set = equiv_set
-                    next_stmt.equiv_set = equiv_set
-                    # Bodo Change: Pass the func_ir to try_fuse
-                    fused_node, fuse_report = try_fuse(
-                        equiv_set,
-                        stmt,
-                        next_stmt,
-                        self.metadata["parfors"],
-                        self.func_ir,
-                    )
-                    # accumulate fusion reports
-                    self.diagnostics.fusion_reports.append(fuse_report)
-                    if fused_node is not None:
-                        fusion_happened = True
-                        self.diagnostics.fusion_info[stmt.id].extend([next_stmt.id])
-                        new_body.append(fused_node)
-                        self.fuse_recursive_parfor(fused_node, equiv_set)
-                        i += 2
-                        continue
-                new_body.append(stmt)
-                if isinstance(stmt, numba.parfors.parfor.Parfor):
-                    self.fuse_recursive_parfor(stmt, equiv_set)
-                i += 1
-            new_body.append(block.body[-1])
-            block.body = new_body
-    return
-
-
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.parfors.parfor.ParforPass.fuse_parfors)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "c333368ebe1ea0b1103fc4fd10ea9556ae9df39910411857aa1df75887cf73e2"
-    ):
-        warnings.warn("numba.parfors.parfor.ParforPass.fuse_parfors has changed")
-
-numba.parfors.parfor.ParforPass.fuse_parfors = fuse_parfors
 
 
 # Bodo Change: Pass func_ir as the last argument. All uses of this function
@@ -6735,14 +5995,12 @@ _rfind = register_jitable(generate_finder(_default_rfind))
 
 if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.cpython.unicode._finder)
-    print(hashlib.sha256(lines.encode()).hexdigest())
     if (
         hashlib.sha256(lines.encode()).hexdigest()
         != "d63f662f6f9179f84f6668f1d7566a506c0a6ff3c87ebba06c6af0d29201a9f6"
     ):
         warnings.warn("numba.cpython.unicode._finder has changed")
     lines = inspect.getsource(numba.cpython.unicode._rfinder)
-    print(hashlib.sha256(lines.encode()).hexdigest())
     if (
         hashlib.sha256(lines.encode()).hexdigest()
         != "419c326e6c4af8977cba5cf96b7a92905708e328d69ae59ebb53ddba714e47b9"
