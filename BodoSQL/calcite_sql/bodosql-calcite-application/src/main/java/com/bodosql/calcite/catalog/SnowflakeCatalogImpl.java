@@ -11,12 +11,23 @@ import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.CatalogTableImpl;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.sql.*;
-import java.util.*;
-import javax.annotation.*;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.DriverManager;
+import java.sql.JDBCType;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import javax.annotation.Nullable;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.BodoTZInfo;
 import org.json.simple.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -490,11 +501,18 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The generated code to produce a write.
    */
   @Override
-  public String generateWriteCode(String varName, String schemaName, String tableName,
-                                  BodoSQLCatalog.ifExistsBehavior ifExists) {
+  public String generateWriteCode(
+      String varName,
+      String schemaName,
+      String tableName,
+      BodoSQLCatalog.ifExistsBehavior ifExists) {
     return String.format(
         "%s.to_sql('%s', '%s', schema='%s', if_exists='%s', index=False)",
-        varName, tableName, generatePythonConnStr(schemaName), schemaName, ifExists.asToSqlKwArgument());
+        varName,
+        tableName,
+        generatePythonConnStr(schemaName),
+        schemaName,
+        ifExists.asToSqlKwArgument());
   }
 
   /**
