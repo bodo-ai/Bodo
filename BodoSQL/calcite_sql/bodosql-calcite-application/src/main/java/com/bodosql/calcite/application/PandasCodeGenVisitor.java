@@ -2250,6 +2250,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String expr;
     BodoSQLExprType.ExprType exprType;
     String strExpr;
+    boolean isTime;
+    String unit;
     switch (fnOperation.getOperator().kind) {
       case CEIL:
       case FLOOR:
@@ -2260,6 +2262,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
             fnOperation.getOperator().toString(),
             operandsInfo.get(0).getExprCode(),
             operandsInfo.get(1).getExprCode());
+      case TIMESTAMP_ADD:
+        // Uses Calcite parser, accepts both quoted and unquoted time units
+        isTime = fnOperation
+            .getOperands()
+            .get(1)
+            .getType()
+            .getSqlTypeName()
+            .toString()
+            .equals("TIME");
+        unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
+        assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
+        return generateSnowflakeDateAddCode(operandsInfo, unit);
       case TRIM:
         assert operandsInfo.size() == 3;
         // Calcite expects: TRIM(<chars> FROM <expr>>) or TRIM(<chars>, <expr>)
@@ -2281,8 +2295,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
         return generatePosition(operandsInfo);
       case OTHER:
       case OTHER_FUNCTION:
-        boolean isTime;
-        String unit;
         String tzStr;
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
         switch (fnName) {
@@ -2351,10 +2363,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DATEADD":
           case "TIMEADD":
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
-            // Otherwise, fall back to the normal DATEADD. TIMEADD is an alias.
+            // Otherwise, fall back to the normal DATEADD. TIMEADD and TIMESTAMPADD are aliases.
             if (operandsInfo.size() == 3) {
+              isTime = fnOperation
+                  .getOperands()
+                  .get(1)
+                  .getType()
+                  .getSqlTypeName()
+                  .toString()
+                  .equals("TIME");
+              unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
               assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
-              return generateSnowflakeDateAddCode(operandsInfo);
+              return generateSnowflakeDateAddCode(operandsInfo, unit);
             }
           case "DATE_ADD":
           case "ADDDATE":

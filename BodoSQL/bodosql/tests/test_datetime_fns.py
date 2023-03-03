@@ -1255,23 +1255,6 @@ def make_spark_interval(interval_str, value):
         raise Exception(f"Error, need a case for timeunit: {interval_str}")
 
 
-def test_timestamp_add_cols(
-    spark_info, mysql_interval_str, dt_fn_dataframe, memory_leak_check
-):
-    query = f"SELECT timestampadd({mysql_interval_str}, small_positive_integers, timestamps) from table1"
-    spark_interval = make_spark_interval(mysql_interval_str, "small_positive_integers")
-    spark_query = f"SELECT timestamps + {spark_interval} from table1"
-
-    check_query(
-        query,
-        dt_fn_dataframe,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-        equivalent_spark_query=spark_query,
-    )
-
-
 @pytest.fixture
 def dateadd_df():
     """Returns the context used by test_snowflake_dateadd"""
@@ -1336,7 +1319,7 @@ def dateadd_df():
         ),
         pytest.param(
             (
-                "DATEADD({!r}, col_int, col_dt)",
+                "TIMEADD({!r}, col_int, col_dt)",
                 ["hour", "minute", "second"],
                 pd.DataFrame(
                     {
@@ -1368,7 +1351,7 @@ def dateadd_df():
         ),
         pytest.param(
             (
-                "DATEADD({!r}, col_int, col_dt)",
+                "TIMESTAMPADD({!r}, col_int, col_dt)",
                 ["millisecond", "microsecond", "nanosecond"],
                 pd.DataFrame(
                     {
@@ -1439,7 +1422,7 @@ def dateadd_df():
         ),
         pytest.param(
             (
-                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!r}, -25, col_dt) END",
+                "CASE WHEN col_int < 0 THEN NULL else TIMESTAMPADD({!r}, -25, col_dt) END",
                 ["hour", "minute", "second"],
                 pd.DataFrame(
                     {
@@ -1844,22 +1827,39 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
         only_jit_1DVar=True,
     )
 
-
-@pytest.mark.slow
-def test_timestamp_add_scalar(
-    spark_info, mysql_interval_str, dt_fn_dataframe, memory_leak_check
-):
-    query = f"SELECT CASE WHEN timestampadd({mysql_interval_str}, small_positive_integers, timestamps) < TIMESTAMP '1970-01-01' THEN TIMESTAMP '1970-01-01' ELSE timestampadd({mysql_interval_str}, small_positive_integers, timestamps) END from table1"
-    spark_interval = make_spark_interval(mysql_interval_str, "small_positive_integers")
-    spark_query = f"SELECT CASE WHEN ADD_TS < TIMESTAMP '1970-01-01' THEN TIMESTAMP '1970-01-01' ELSE ADD_TS END from (SELECT timestamps + {spark_interval} as ADD_TS from table1)"
-
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(
+            True,
+            id="with_case",
+            marks=pytest.mark.skip(reason="TODO: support time in CASE statements"),
+        ),
+    ],
+)
+def test_timestampadd_time(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_check):
+    unit, answer = timeadd_arguments
+    unit_str = {
+        "hour": unit,
+        "minute": f"'{unit}'",
+        "second": unit,
+        "millisecond": f"'{unit}'",
+        "microsecond": unit,
+        "nanosecond": f"'{unit}'",
+    }[unit]
+    if use_case:
+        query = f"SELECT T, CASE WHEN N < -100 THEN NULL ELSE TIMESTAMPADD({unit_str}, N, T) END FROM TABLE1"
+    else:
+        query = f"SELECT T, TIMESTAMPADD({unit_str}, N, T) FROM TABLE1"
     check_query(
         query,
-        dt_fn_dataframe,
-        spark_info,
+        timeadd_dataframe,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        expected_output=answer,
+        only_jit_1DVar=True,
     )
 
 
