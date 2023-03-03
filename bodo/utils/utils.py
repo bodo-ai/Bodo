@@ -51,6 +51,7 @@ from bodo.utils.typing import (
     MetaType,
     is_str_arr_type,
 )
+from bodo.ir.filter import supported_compute_funcs
 
 int128_type = types.Integer("int128", 128)
 
@@ -1507,10 +1508,7 @@ def get_filter_predicate_compute_func(col_val):
         isinstance(col_val, tuple) and len(col_val) == 3
     ), f"Filter must maintain the structure Tuple[str, str, Var]. Invalid filter: {col_val}"
 
-    supported_compute_funcs = ["coalesce", "lower", "upper", "length"]
-
     compute_func = col_val[1]
-
     assert (
         compute_func in supported_compute_funcs
     ), f"Unsupported compute function for column in filter predicate: {compute_func}"

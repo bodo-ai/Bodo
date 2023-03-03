@@ -41,6 +41,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
+from bodo.ir.filter import string_funcs_no_arg_map
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (
@@ -1928,10 +1929,13 @@ class TypingTransforms:
                 )
                 return (col_name, "coalesce", args[1])
 
-            if fdef[1] == "bodo.libs.bodosql_array_kernels":
-                # We currently only support 1 argument functions
-                require(fdef[0] in ("lower", "upper", "length"))
+            if fdef[1] == "bodo.libs.bodosql_array_kernels":  # pragma: no cover
+                # We currently only support functions that use only
+                # the column data (1-arg), rather than functions
+                # that also take in additional args.
+                require(fdef[0] in string_funcs_no_arg_map.keys())
                 require((len(var_def.args) == 1) and not var_def.kws)
+
                 arg0 = var_def.args[0]
                 # arg[0] must be an array
                 arg_type = self.typemap.get(arg0.name, None)
