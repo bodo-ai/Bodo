@@ -18,114 +18,13 @@ public class DateAddCodeGen {
    * @return The code generated that matches the DATEADD expression.
    */
   public static RexNodeVisitorInfo generateSnowflakeDateAddCode(
-      List<RexNodeVisitorInfo> operandsInfo) {
-
-    final String unit;
-    final String unit_arg = operandsInfo.get(0).getExprCode();
+      List<RexNodeVisitorInfo> operandsInfo, String unit) {
+    // input check for time unit is moved to standardizeTimeUnit() function,
+    // which is called in PandasCodeGenVisitor.java
     StringBuilder code = new StringBuilder();
-
-    switch (unit_arg) {
-      case "\"year\"":
-      case "\"y\"":
-      case "\"yy\"":
-      case "\"yyy\"":
-      case "\"yyyy\"":
-      case "\"yr\"":
-      case "\"years\"":
-      case "\"yrs\"":
-        unit = "years";
-        break;
-
-      case "\"quarter\"":
-      case "\"q\"":
-      case "\"qtr\"":
-      case "\"qtrs\"":
-      case "\"quarters\"":
-        unit = "quarters";
-        break;
-
-      case "\"month\"":
-      case "\"mm\"":
-      case "\"mon\"":
-      case "\"mons\"":
-      case "\"months\"":
-        unit = "months";
-        break;
-
-      case "\"week\"":
-      case "\"w\"":
-      case "\"wk\"":
-      case "\"weekofyear\"":
-      case "\"woy\"":
-      case "\"wy\"":
-        unit = "weeks";
-        break;
-
-      case "\"day\"":
-      case "\"d\"":
-      case "\"dd\"":
-      case "\"days\"":
-      case "\"dayofmonth\"":
-        unit = "days";
-        break;
-
-      case "\"hour\"":
-      case "\"h\"":
-      case "\"hh\"":
-      case "\"hr\"":
-      case "\"hours\"":
-      case "\"hrs\"":
-        unit = "hours";
-        break;
-
-      case "\"minute\"":
-      case "\"m\"":
-      case "\"mi\"":
-      case "\"min\"":
-      case "\"minutes\"":
-      case "\"mins\"":
-        unit = "minutes";
-        break;
-
-      case "\"second\"":
-      case "\"s\"":
-      case "\"sec\"":
-      case "\"seconds\"":
-      case "\"secs\"":
-        unit = "seconds";
-        break;
-
-      case "\"millisecond\"":
-      case "\"ms\"":
-      case "\"msec\"":
-      case "\"milliseconds\"":
-        unit = "milliseconds";
-        break;
-
-      case "\"microsecond\"":
-      case "\"us\"":
-      case "\"usec\"":
-      case "\"microseconds\"":
-        unit = "microseconds";
-        break;
-
-      case "\"nanosecond\"":
-      case "\"ns\"":
-      case "\"nsec\"":
-      case "\"nanosec\"":
-      case "\"nsecond\"":
-      case "\"nanoseconds\"":
-      case "\"nanonsecs\"":
-      case "\"nsecs\"":
-        unit = "nanoseconds";
-        break;
-
-      default:
-        throw new BodoSQLCodegenException("Invalid DATEADD unit: " + unit_arg);
-    }
     code.append("bodo.libs.bodosql_array_kernels.add_interval_")
         .append(unit)
-        .append("(")
+        .append("s(")
         .append(operandsInfo.get(1).getExprCode())
         .append(", ")
         .append(operandsInfo.get(2).getExprCode())

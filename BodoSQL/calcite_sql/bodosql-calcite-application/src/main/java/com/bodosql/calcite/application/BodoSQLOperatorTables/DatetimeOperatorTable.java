@@ -95,6 +95,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               OperandTypes.DATETIME),
           SqlFunctionCategory.TIMEDATE);
 
+
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction DATE_ADD =
       new SqlFunction(
