@@ -20,6 +20,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -39,7 +40,7 @@ from bodo.utils.indexing import (
 from bodo.utils.typing import (
     BodoError,
     is_iterable_type,
-    is_list_like_index_type,
+    is_list_like_index_type, is_overload_none,
 )
 
 _nanos_per_micro = 1000
@@ -97,18 +98,46 @@ class Time:
         # SELECT '12:30:0'::TIME(0) = '12:30:0'::TIME(9) -> TRUE
         return self.value == other.value
 
+    def __ne__(self, other):
+        if not isinstance(other, Time):  # pragma: no cover
+            return True
+        return self.value != other.value
+
     def _check_can_compare(self, other):
-        # TODO: [BE-4107] Support comparison where other=None inside Pandas (outside Bodo jit).
         if not isinstance(other, Time):
             raise TypeError("Cannot compare Time with non-Time type")
 
-    def __lt__(self, other):
+    def __lt__(self, other):  # pragma: no cover
+        if other is None or other == float('inf'):  # pragma: no cover
+            # None will be transformed to float('inf') during < comparison
+            # with other Time objects in pandas.Series
+            return True
         self._check_can_compare(other)
         return self.value < other.value
 
-    def __le__(self, other):
+    def __le__(self, other):  # pragma: no cover
+        if other is None or other == float('inf'):  # pragma: no cover
+            # None will be transformed to float('inf') during <= comparison
+            # with other Time objects in pandas.Series
+            return True
         self._check_can_compare(other)
         return self.value <= other.value
+
+    def __gt__(self, other):
+        if other is None or other == float('-inf'):  # pragma: no cover
+            # None will be transformed to float('inf') during > comparison
+            # with other Time objects in pandas.Series
+            return True
+        self._check_can_compare(other)
+        return self.value > other.value
+
+    def __ge__(self, other):
+        if other is None or other == float('-inf'):  # pragma: no cover
+            # None will be transformed to float('-inf') during >= comparison
+            # with other Time objects in pandas.Series
+            return True
+        self._check_can_compare(other)
+        return self.value >= other.value
 
     def __int__(self):
         """Return the value of the time as an integer in the given precision.
@@ -879,7 +908,6 @@ def time_arr_nbytes_overload(A):
 
 def create_cmp_op_overload(op):
     """create overload function for comparison operators with Time type."""
-
     def overload_time_cmp(lhs, rhs):
         if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
 
@@ -890,4 +918,34 @@ def create_cmp_op_overload(op):
 
             return impl
 
+        if isinstance(lhs, TimeType) and is_overload_none(rhs):
+            # When we compare Time and None in order to sort or take extreme values
+            # in a series/array of Time, Time() > None, Time() < None should all return True
+            return lambda lhs, rhs: False if op is operator.eq else True  # pragma: no cover
+
+        if is_overload_none(lhs) and isinstance(rhs, TimeType):
+            # When we compare None and Time in order to sort or take extreme values
+            # in a series/array of Time, None > Time(), None < Time() should all return False
+            return lambda lhs, rhs: False  # pragma: no cover
+
     return overload_time_cmp
+
+
+@overload(min, no_unliteral=True)
+def time_min(lhs, rhs):
+    if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs < rhs else rhs
+
+        return impl
+
+
+@overload(max, no_unliteral=True)
+def time_max(lhs, rhs):
+    if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs > rhs else rhs
+
+        return impl

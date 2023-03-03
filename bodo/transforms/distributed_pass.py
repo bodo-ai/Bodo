@@ -46,6 +46,7 @@ import bodo
 import bodo.utils.utils
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.time_ext import TimeType
 from bodo.io import csv_cpp
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import (
@@ -4361,6 +4362,8 @@ class DistributedPass:
                     return []
             elif el_typ == bodo.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_max_value()"
+            elif isinstance(el_typ, TimeType):
+                init_val = "bodo.hiframes.series_kernels._get_time_max_value()"
             else:
                 init_val = f"numba.cpython.builtins.get_type_max_value(np.ones(1,dtype=np.{el_typ}).dtype)"
         if reduce_op == Reduce_Type.Max:
@@ -4370,6 +4373,8 @@ class DistributedPass:
                     return []
             elif el_typ == bodo.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_min_value()"
+            elif isinstance(el_typ, TimeType):
+                init_val = "bodo.hiframes.series_kernels._get_time_min_value()"
             else:
                 init_val = f"numba.cpython.builtins.get_type_min_value(np.ones(1,dtype=np.{el_typ}).dtype)"
         if reduce_op in [Reduce_Type.Argmin, Reduce_Type.Argmax]:

@@ -15,6 +15,7 @@ from numba.extending import overload
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.utils import tracing
 from bodo.utils.typing import (
     element_type,
@@ -323,6 +324,25 @@ def overload_array_op_min(arr):
 
         return impl_date
 
+    if isinstance(arr, TimeArrayType):
+
+        def impl_time(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            s = bodo.hiframes.series_kernels._get_time_max_value()
+            count = 0
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                val = s
+                count_val = 0
+                if not bodo.libs.array_kernels.isna(arr, i):
+                    val = arr[i]
+                    count_val = 1
+                s = min(s, val)
+                count += count_val
+            res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
+            return res
+
+        return impl_time
+
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
         s = bodo.hiframes.series_kernels._get_type_max_value(arr)
@@ -420,6 +440,25 @@ def overload_array_op_max(arr):
             return res
 
         return impl_date
+
+    if isinstance(arr, TimeArrayType):
+
+        def impl_time(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            s = bodo.hiframes.series_kernels._get_time_min_value()
+            count = 0
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                val = s
+                count_val = 0
+                if not bodo.libs.array_kernels.isna(arr, i):
+                    val = arr[i]
+                    count_val = 1
+                s = max(s, val)
+                count += count_val
+            res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
+            return res
+
+        return impl_time
 
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()

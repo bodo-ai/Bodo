@@ -51,6 +51,7 @@ from bodo.utils.typing import (
     is_overload_bool,
     is_str_arr_type,
     is_timedelta_type,
+    is_overload_none,
 )
 
 
@@ -567,6 +568,13 @@ def create_overload_cmp_operator(op):
 
         # time to time comparison
         if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
+            return bodo.hiframes.time_ext.create_cmp_op_overload(op)(lhs, rhs)
+
+        # time to none comparison
+        if isinstance(lhs, TimeType) and is_overload_none(rhs):
+            return bodo.hiframes.time_ext.create_cmp_op_overload(op)(lhs, rhs)
+
+        if is_overload_none(lhs) and isinstance(rhs, TimeType):
             return bodo.hiframes.time_ext.create_cmp_op_overload(op)(lhs, rhs)
 
         # datetime.date and datetime.datetime
