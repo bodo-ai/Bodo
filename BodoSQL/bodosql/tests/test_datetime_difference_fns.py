@@ -519,3 +519,96 @@ def nanosecond_data(has_tz):
         answers,
         "US/Mountain" if has_tz else None,
     )
+
+@pytest.fixture
+def timestampdiff_data():
+    """Returns a dictionary mapping each unit to a function that takes in a
+       boolean for whether the input is tz-aware and following testing arugments
+       for TIMESTAMPDIFF on each of the tested units:
+    1. The string representation of the timestamps being subtracted from
+    2. The string representation of the timestamps that are subtracted from #2
+    3. The numerical differnence between #2 and #3 in the units specified
+    4. The timezone to use"""
+
+    fixture_dict = {
+        "YEAR": year_data,
+        "QUARTER": quarter_data,
+        "MONTH": month_data,
+        "WEEK": week_data,
+        "DAY": day_data,
+        "HOUR": hour_data,
+        "MINUTE": minute_data,
+        "SECOND": second_data,
+        "MICROSECOND": microsecond_data,
+        "NANOSECOND": nanosecond_data,
+    }
+    return fixture_dict
+
+
+@pytest.mark.parametrize(
+    "has_tz, has_case",
+    [
+        pytest.param(False, False, id="no_tz-no_case"),
+        pytest.param(False, True, id="no_tz-with_case", marks=pytest.mark.slow),
+        pytest.param(False, False, id="with_tz-no_case", marks=pytest.mark.slow),
+        pytest.param(True, True, id="with_tz-with_case"),
+    ],
+)
+@pytest.mark.parametrize(
+    "unit",
+    [
+        "YEAR",
+        "QUARTER",
+        "MONTH",
+        "WEEK",
+        "DAY",
+        "HOUR",
+        "MINUTE",
+        "SECOND",
+        "MICROSECOND",
+        "NANOSECOND",
+    ],
+)
+def test_timestampdiff_cols(
+    timestampdiff_data, unit, has_tz, has_case, memory_leak_check
+):
+    """Tests TIMESTAMPDIFF on various units, with and without case statements, and on
+    both tz-aware and tz-naive data. Parametrizes on several arguments at once
+    to manually add slow markers while also diversifying coverage."""
+    subtract_from_strings, subtract_strings, answers, time_zone = timestampdiff_data[
+        unit
+    ](has_tz)
+    if has_case:
+        query = f"SELECT A, B, CASE WHEN C THEN NULL ELSE TIMESTAMPDIFF({unit}, A, B) END FROM table1"
+    else:
+        query = f"SELECT A, B, TIMESTAMPDIFF({unit}, A, B) FROM table1"
+    table1 = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [
+                    None if s is None else pd.Timestamp(s, tz=time_zone)
+                    for s in subtract_strings
+                ]
+            ),
+            "B": pd.Series(
+                [
+                    None if s is None else pd.Timestamp(s, tz=time_zone)
+                    for s in subtract_from_strings
+                ]
+            ),
+            "C": [i in (1, 10, 100) for i in range(len(subtract_strings))],
+        }
+    )
+    expected_output = pd.DataFrame(
+        {"A": table1.A, "B": table1.B, "res": pd.Series(answers, dtype=pd.Int64Dtype())}
+    )
+    if has_case:
+        expected_output["res"][table1.C] = None
+    check_query(
+        query,
+        {"table1": table1},
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
