@@ -123,6 +123,7 @@ public class ExprTypeVisitor {
           "DATEADD",
           "DATEDIFF",
           "TIMEDIFF",
+          "TIMESTAMPDIFF",
           "DATE_TRUNC",
           "DECODE",
           "DIV0",

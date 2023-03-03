@@ -1328,8 +1328,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
       result = visitLikeOp(node, colNames, id, inputVar, isSingleRow, ctx);
     } else if (node.getOperator() instanceof SqlCaseOperator) {
       result = visitCaseOp(node, colNames, id, inputVar, isSingleRow, ctx, this);
-    } else if (node.getOperator() instanceof SqlTimestampDiffFunction) {
-      result = visitTimestampDiff(node, colNames, id, inputVar, isSingleRow, ctx);
     } else if (node.getOperator() instanceof SqlCastFunction) {
       result = visitCastScan(node, colNames, id, inputVar, isSingleRow, ctx);
     } else if (node.getOperator() instanceof SqlExtractFunction) {
@@ -2109,34 +2107,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     return result;
   }
 
-  private RexNodeVisitorInfo visitTimestampDiff(
-      RexCall fnOperation,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-
-    List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
-    for (RexNode node : fnOperation.getOperands()) {
-      exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
-    }
-
-    // The first argument is required to be an interval symbol.
-    assert fnOperation.getOperands().get(0) instanceof RexLiteral;
-
-    // Extract all the inputs to the current function
-    List<RexNodeVisitorInfo> operandsInfo =
-        new ArrayList<RexNodeVisitorInfo>() {
-          {
-            for (RexNode operand : fnOperation.operands) {
-              add(visitRexNode(operand, colNames, id, inputVar, isSingleRow, ctx));
-            }
-          }
-        };
-
-    return generateTimestampDiffInfo(inputVar, exprTypes, operandsInfo, ctx);
-  }
 
   /**
    * Return a pandas expression that replicates an SQL function call
@@ -2252,6 +2222,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String strExpr;
     boolean isTime;
     String unit;
+    String tzStr;
     switch (fnOperation.getOperator().kind) {
       case CEIL:
       case FLOOR:
@@ -2274,6 +2245,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
         unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
         assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
         return generateSnowflakeDateAddCode(operandsInfo, unit);
+      case TIMESTAMP_DIFF:
+        assert operandsInfo.size() == 3;
+        isTime =
+            fnOperation
+                .getOperands()
+                .get(1)
+                .getType()
+                .getSqlTypeName()
+                .toString()
+                .equals("TIME");
+        unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
+        return generateTimestampDiffInfo(operandsInfo, unit);
       case TRIM:
         assert operandsInfo.size() == 3;
         // Calcite expects: TRIM(<chars> FROM <expr>>) or TRIM(<chars>, <expr>)
@@ -2295,7 +2278,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
         return generatePosition(operandsInfo);
       case OTHER:
       case OTHER_FUNCTION:
-        String tzStr;
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
         switch (fnName) {
             // TODO (allai5): update this in a future PR for clean-up so it re-uses the

@@ -11,43 +11,21 @@ public class TimestampDiffCodeGen {
   /**
    * Function that return the necessary generated code for a TimestampDiff Function Call.
    *
-   * @param inputVar Input Dataframe variable name
-   * @param exprTypes ExpressionTypes of the arguments to the function call
    * @param operandsInfo RexVisitorinfo's of the arguments to the function call
+   * @param unit Time unit to calculate the difference between to timestamps/bodo.Time objects
    * @return
    */
   public static RexNodeVisitorInfo generateTimestampDiffInfo(
-      String inputVar,
-      List<BodoSQLExprType.ExprType> exprTypes,
       List<RexNodeVisitorInfo> operandsInfo,
-      BodoCtx ctx) {
-
-    assert exprTypes.size() == 3 && operandsInfo.size() == 3;
-
-    String flagName = operandsInfo.get(0).getExprCode();
-    switch (flagName) {
-      case "YEAR":
-      case "QUARTER":
-      case "MONTH":
-      case "WEEK":
-      case "DAY":
-      case "HOUR":
-      case "MINUTE":
-      case "SECOND":
-      case "MILLISECOND":
-      case "MICROSECOND":
-      case "NANOSECOND":
-        break;
-      default:
-        throw new BodoSQLCodegenException("Unsupported unit for TIMESTAMPDIFF: " + flagName);
-    }
+      String unit) {
 
     String arg0Expr = operandsInfo.get(1).getExprCode();
     String arg1Expr = operandsInfo.get(2).getExprCode();
     StringBuilder output = new StringBuilder();
+    // pintaoz2: TODO: merge TIMEDIFF, DATEDIFF and TIMESTAMPDIFF to use the same kernel
     output
         .append("bodo.libs.bodosql_array_kernels.diff_")
-        .append(flagName.toLowerCase())
+        .append(unit)
         .append("(")
         .append(arg0Expr)
         .append(", ")
