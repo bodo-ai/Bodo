@@ -13,6 +13,7 @@ import bodo
 from bodo.libs.float_arr_ext import FloatDtype, FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.utils.typing import decode_if_dict_array
+from bodo.hiframes.time_ext import TimeArrayType
 
 
 # TODO[BE-476]: refactor dataframe column filtering
@@ -92,6 +93,10 @@ def _get_type_max_value_overload(dtype):
     if dtype == bodo.datetime_date_array_type:
         return lambda dtype: _get_date_max_value()  # pragma: no cover
 
+    # bodo.Time array
+    if dtype == TimeArrayType:
+        return lambda dtype: _get_time_max_value()  # pragma: no cover
+
     # dt64
     if isinstance(dtype.dtype, types.NPDatetime):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
@@ -118,6 +123,11 @@ def _get_date_max_value():  # pragma: no cover
     return datetime.date(datetime.MAXYEAR, 12, 31)
 
 
+@register_jitable
+def _get_time_max_value():  # pragma: no cover
+    return bodo.Time(23, 59, 59, 999, 999, 999)
+
+
 def _get_type_min_value(dtype):  # pragma: no cover
     return 0
 
@@ -137,6 +147,10 @@ def _get_type_min_value_overload(dtype):
     # datetime.date array
     if dtype == bodo.datetime_date_array_type:
         return lambda dtype: _get_date_min_value()  # pragma: no cover
+
+    # bodo.Time array
+    if dtype == TimeArrayType:
+        return lambda dtype: _get_time_min_value()  # pragma: no cover
 
     # dt64
     if isinstance(dtype.dtype, types.NPDatetime):
@@ -163,6 +177,10 @@ def _get_type_min_value_overload(dtype):
 @register_jitable
 def _get_date_min_value():  # pragma: no cover
     return datetime.date(datetime.MINYEAR, 1, 1)
+
+@register_jitable
+def _get_time_min_value():  # pragma: no cover
+    return bodo.Time()
 
 
 @overload(min)

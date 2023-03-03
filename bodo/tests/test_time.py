@@ -577,14 +577,140 @@ def test_time_array_setitem_none(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_comparison_error(memory_leak_check):
+def test_compare_with_none(memory_leak_check):
+    """
+    Tests to compare Time with None
+    """
+    def impl1():
+        return bodo.Time(1, 2, 3) < None
 
-    # Time vs. non-Time
-    def impl():
-        return bodo.Time(2) < None
+    check_func(impl1, (), py_output=True)
 
-    with pytest.raises(
-        TypeError,
-        match="Cannot compare Time with non-Time type",
-    ):
-        impl()
+    def impl2():
+        return None > bodo.Time(4, 5, 6)
+
+    check_func(impl2, (), py_output=False)
+
+    def impl3():
+        return bodo.Time(1, 2, 3) != None
+
+    check_func(impl3, (), py_output=True)
+    def impl4():
+        return None == bodo.Time(4, 5, 6)
+
+    check_func(impl4, (), py_output=False)
+
+
+@pytest.mark.slow
+def test_compare_different_precisions(memory_leak_check):
+    """
+    Tests to compare Time objects with different precisions
+    """
+    def impl1():
+        return bodo.Time(5, 6, 7, 8) != bodo.Time(5, 6, 7, 8, precision=3)
+
+    check_func(impl1, ())
+
+    def impl2():
+        return bodo.Time(2) == bodo.Time(2, precision=0)
+
+    check_func(impl2, ())
+
+    def impl3():
+        return bodo.Time(12, precision=0) < bodo.Time(12, 13, 14)
+
+    check_func(impl3, ())
+
+    def impl4():
+        return bodo.Time(13, precision=6) >= bodo.Time(12, 13, 14, 15, 16, 17)
+
+    check_func(impl4, ())
+
+
+@pytest.mark.slow
+def test_compare_same_precision(memory_leak_check):
+    """
+    Tests to compare Time objects with the same precision
+    """
+    def impl1():
+        return bodo.Time(12) != bodo.Time(12, 13, 14)
+
+    check_func(impl1, ())
+
+    def impl2():
+        return bodo.Time(12) == bodo.Time(12)
+
+    check_func(impl2, ())
+
+    def impl3():
+        return bodo.Time(12) > bodo.Time(9, 8, 7)
+
+    check_func(impl3, ())
+
+    def impl4():
+        return bodo.Time(22) <= bodo.Time(9, 8, 7)
+
+    check_func(impl4, ())
+
+
+def test_time_series_min_max(time_df, memory_leak_check):
+    """
+    Test Series.min() and Series.max() with a bodo.Time Series.
+    """
+    np.random.seed(1)
+    time_arr = [
+        bodo.Time(17, 33, 26, 91, 8, 79),
+        bodo.Time(0, 24, 43, 365, 18, 74),
+        bodo.Time(3, 59, 6, 25, 757, 3),
+        bodo.Time(),
+        bodo.Time(4),
+        bodo.Time(6, 41),
+        bodo.Time(22, 13, 57),
+        bodo.Time(17, 34, 29, 90),
+        bodo.Time(7, 3, 45, 876, 234),
+    ]
+    np.random.shuffle(time_arr)
+    S = pd.Series(time_arr)
+
+    def impl_min(S):
+        return S.min()
+
+    def impl_max(S):
+        return S.max()
+
+    check_func(impl_min, (S,))
+    check_func(impl_max, (S,))
+
+
+def test_time_series_min_max_none(memory_leak_check):
+    """
+    Test Series.min() and Series.max() with a bodo.Time Series
+    and a None entry. This isn't supported in Pandas but should work
+    in Bodo.
+    """
+    np.random.seed(1)
+    time_arr = [
+        bodo.Time(17, 33, 26, 91, 8, 79),
+        bodo.Time(0, 24, 43, 365, 18, 74),
+        bodo.Time(3, 59, 6, 25, 757, 3),
+        bodo.Time(),
+        bodo.Time(4),
+        bodo.Time(6, 41),
+        bodo.Time(22, 13, 57),
+        bodo.Time(17, 34, 29, 90),
+        bodo.Time(7, 3, 45, 876, 234),
+        None,
+    ]
+    np.random.shuffle(time_arr)
+    S = pd.Series(time_arr)
+
+    def impl_min(S):
+        return S.min()
+
+    def impl_max(S):
+        return S.max()
+
+    py_output = S.dropna().min()
+    check_func(impl_min, (S,), py_output=py_output)
+    py_output = S.dropna().max()
+    check_func(impl_max, (S,), py_output=py_output)
