@@ -67,11 +67,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private final Stack<String> varGenStack = new Stack<>();
   /* Reserved column name for generating dummy columns. */
   // TODO: Add this to the docs as banned
-  private Module.Builder generatedCode = new Module.Builder();
-  private int dfVarId = 1;
-  private int colVarId = 1;
-  private int groupByApplyFnId = 1;
-  private int globalVarId = 1;
+  private final Module.Builder generatedCode = new Module.Builder();
 
   // Note that a given query can only have one MERGE INTO statement. Therefore,
   // we can statically define the variable names we'll use for the iceberg file list and snapshot
@@ -173,7 +169,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return variable name
    */
   private String genDfVar() {
-    return "df" + this.dfVarId++;
+    return generatedCode.getSymbolTable().genDfVar().getName();
   }
 
   /**
@@ -182,7 +178,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return variable name
    */
   public String genTableVar() {
-    return "T" + this.dfVarId++;
+    return generatedCode.getSymbolTable().genTableVar().getName();
   }
 
   /**
@@ -191,7 +187,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return variable name
    */
   public String genSeriesVar() {
-    return "S" + this.dfVarId++;
+    return generatedCode.getSymbolTable().genSeriesVar().getName();
   }
 
   /**
@@ -200,7 +196,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return variable name
    */
   public String genGenericTempVar() {
-    return "_temp" + this.dfVarId++;
+    return generatedCode.getSymbolTable().genGenericTempVar().getName();
   }
 
   /**
@@ -209,7 +205,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return variable name
    */
   private String genTempColumnVar() {
-    return "__bodo_generated_column__" + this.colVarId++;
+    return generatedCode.getSymbolTable().genTempColumnVar().getName();
   }
 
   /**
@@ -218,7 +214,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return variable name
    */
   private String genWindowedAggDfName() {
-    return "__bodo_windowfn_generated_df_" + this.dfVarId++;
+    return generatedCode.getSymbolTable().genWindowedAggDfName().getName();
   }
 
   /**
@@ -227,7 +223,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return variable name
    */
   private String genWindowedAggFnName() {
-    return getDummyColNameBase() + "_sql_windowed_apply_fn_" + this.groupByApplyFnId++;
+    return generatedCode.getSymbolTable().genWindowedAggFnName().getName();
   }
 
   /**
@@ -236,7 +232,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return variable name
    */
   private String genGroupbyApplyAggFnName() {
-    return getDummyColNameBase() + "_sql_groupby_apply_fn_" + this.groupByApplyFnId++;
+    return generatedCode.getSymbolTable().genGroupbyApplyAggFnName().getName();
   }
 
   /**
@@ -247,7 +243,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *     supplied expression
    */
   public String lowerAsGlobal(String expression) {
-    String global_var_name = "global_" + this.globalVarId++;
+    String global_var_name = generatedCode.getSymbolTable().genGlobalVar().getName();
     this.loweredGlobals.put(global_var_name, expression);
     return global_var_name;
   }
@@ -1422,7 +1418,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // since we only add columns to the colsToAddList when inside an apply.
       assert ctx.getColsToAddList().size() == 0;
       // If we generate an apply we need to write the generated if/else
-      innerBuilder = new Module.Builder();
+      innerBuilder = new Module.Builder(generatedCode.getSymbolTable());
     }
 
     List<String> args = new ArrayList<>();
