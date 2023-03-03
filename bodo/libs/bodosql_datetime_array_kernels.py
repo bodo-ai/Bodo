@@ -283,6 +283,10 @@ def diff_microsecond(arr0, arr1):  # pragma: no cover
     return
 
 
+def diff_millisecond(arr0, arr1):  # pragma: no cover
+    return
+
+
 def diff_minute(arr0, arr1):  # pragma: no cover
     return
 
@@ -1030,6 +1034,10 @@ def diff_microsecond_util(arr0, arr1):  # pragma: no cover
     return
 
 
+def diff_millisecond_util(arr0, arr1):  # pragma: no cover
+    return
+
+
 def diff_minute_util(arr0, arr1):  # pragma: no cover
     return
 
@@ -1128,13 +1136,21 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
     """
 
     def overload_dt_diff_fn(arr0, arr1):
-        verify_datetime_arg_allow_tz(arr0, "diff_" + unit, "arr0")
-        verify_datetime_arg_allow_tz(arr1, "diff_" + unit, "arr1")
-        tz = get_tz_if_exists(arr0)
-        if get_tz_if_exists(arr1) != tz and not (
-            is_overload_none(arr0) or is_overload_none(arr1)
-        ):
-            raise_bodo_error(f"diff_{unit}: both arguments must have the same timezone")
+        scalar_text = ""
+        if is_valid_time_arg(arr0):
+            assert is_valid_time_arg(arr1)
+        else:
+            verify_datetime_arg_allow_tz(arr0, "diff_" + unit, "arr0")
+            verify_datetime_arg_allow_tz(arr1, "diff_" + unit, "arr1")
+            tz = get_tz_if_exists(arr0)
+            if get_tz_if_exists(arr1) != tz and not (
+                is_overload_none(arr0) or is_overload_none(arr1)
+            ):
+                raise_bodo_error(f"diff_{unit}: both arguments must have the same timezone")
+            scalar_text = ""
+            if tz == None:
+                scalar_text += "arg0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
+                scalar_text += "arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
 
         arg_names = ["arr0", "arr1"]
         arg_types = [arr0, arr1]
@@ -1163,19 +1179,12 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
             "nanosecond": ["ns_diff"],
         }
 
-        scalar_text = ""
-        if tz == None:
-            scalar_text += "arg0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
-            scalar_text += "arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
 
         # Load in all of the required definitions
         for req_defn in req_defns.get(unit, []):
             scalar_text += f"{req_defn} = {diff_defns[req_defn]}\n"
 
-        if unit == "nanosecond":
-            out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
-        else:
-            out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+        out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
 
         if unit == "year":
             scalar_text += "res[i] = yr_diff"
@@ -1196,6 +1205,8 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
                 divisor = 60000000000
             if unit == "second":
                 divisor = 1000000000
+            if unit == "millisecond":
+                divisor = 1000000
             if unit == "microsecond":
                 divisor = 1000
             scalar_text += f"res[i] = np.floor_divide((arg1.value), ({divisor})) - np.floor_divide((arg0.value), ({divisor}))\n"
@@ -1218,6 +1229,7 @@ def _install_dt_diff_fn_overload():
         ("day", diff_day, diff_day_util),
         ("hour", diff_hour, diff_hour_util),
         ("microsecond", diff_microsecond, diff_microsecond_util),
+        ("millisecond", diff_millisecond, diff_millisecond_util),
         ("minute", diff_minute, diff_minute_util),
         ("month", diff_month, diff_month_util),
         ("nanosecond", diff_nanosecond, diff_nanosecond_util),

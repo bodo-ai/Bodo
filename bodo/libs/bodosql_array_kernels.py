@@ -90,6 +90,7 @@ broadcasted_fixed_arg_functions = {
     "diff_day",
     "diff_hour",
     "diff_microsecond",
+    "diff_millisecond",
     "diff_minute",
     "diff_month",
     "diff_nanosecond",

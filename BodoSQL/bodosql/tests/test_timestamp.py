@@ -76,17 +76,17 @@ def test_datediff_literals(basic_df, spark_info, memory_leak_check):
             id="year",
         ),
         pytest.param(
-            "SELECT DATEDIFF('QUARTER', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            "SELECT TIMEDIFF('QUARTER', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
             pd.DataFrame({"A": pd.Series([-21])}),
             id="quarter",
         ),
         pytest.param(
-            "SELECT DATEDIFF('MONTH', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            "SELECT TIMESTAMPDIFF('MONTH', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
             pd.DataFrame({"A": pd.Series([-62])}),
             id="month",
         ),
         pytest.param(
-            "SELECT DATEDIFF('WEEK', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            "SELECT TIMEDIFF('WEEK', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
             pd.DataFrame({"A": pd.Series([-271])}),
             id="week",
         ),
@@ -96,7 +96,7 @@ def test_datediff_literals(basic_df, spark_info, memory_leak_check):
             id="day",
         ),
         pytest.param(
-            "SELECT DATEDIFF('HOUR', TIMESTAMP '2017-02-28 10:10:10', TIMESTAMP '2011-12-25 22:33:33')",
+            "SELECT TIMESTAMPDIFF('HOUR', TIMESTAMP '2017-02-28 10:10:10', TIMESTAMP '2011-12-25 22:33:33')",
             pd.DataFrame({"A": pd.Series([-45396])}),
             id="hour",
         ),
@@ -106,7 +106,7 @@ def test_datediff_literals(basic_df, spark_info, memory_leak_check):
             id="minute",
         ),
         pytest.param(
-            "SELECT DATEDIFF('SECOND', TIMESTAMP '2011-02-28 22:33:33', TIMESTAMP '2017-12-25 12:10:05')",
+            "SELECT TIMESTAMPDIFF('SECOND', TIMESTAMP '2011-02-28 22:33:33', TIMESTAMP '2017-12-25 12:10:05')",
             pd.DataFrame({"A": pd.Series([215271392])}),
             id="second",
         ),
@@ -115,7 +115,7 @@ def test_datediff_literals(basic_df, spark_info, memory_leak_check):
 @pytest.mark.slow
 def test_datediff_args3_literals(query, expected_output, basic_df, memory_leak_check):
     """
-    Checks that calling DATEDIFF on timestamp literals behaves as expected.
+    Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF on timestamp literals behaves as expected.
     Tests all possible datetime parts except for subsecond units.
 
     Timestamp precision for literals in Calcite is currently limited to seconds
@@ -147,22 +147,22 @@ def test_datediff_args3_literals(query, expected_output, basic_df, memory_leak_c
             id="minute",
         ),
         pytest.param(
-            "SELECT DATEDIFF('SECOND', TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
+            "SELECT TIMESTAMPDIFF('SECOND', TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
             pd.DataFrame({"A": pd.Series([-37408])}),
             id="second",
         ),
         pytest.param(
-            "SELECT TIMEDIFF('MILLISECOND', TO_TIME('10:10:10'), TO_TIME('12:10:05'))",
+            "SELECT DATEDIFF('MILLISECOND', TO_TIME('10:10:10'), TO_TIME('12:10:05'))",
             pd.DataFrame({"A": pd.Series([7195000])}),
             id="millisecond",
         ),
         pytest.param(
-            "SELECT DATEDIFF('MICROSECOND', TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
+            "SELECT TIMEDIFF('MICROSECOND', TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
             pd.DataFrame({"A": pd.Series([-37408000000])}),
             id="microsecond",
         ),
         pytest.param(
-            "SELECT TIMEDIFF('NANOSECOND', TO_TIME('22:33:33'), TO_TIME('10:10:10'))",
+            "SELECT TIMESTAMPDIFF('NANOSECOND', TO_TIME('22:33:33'), TO_TIME('10:10:10'))",
             pd.DataFrame({"A": pd.Series([-44603000000000])}),
             id="nanosecond",
         ),
@@ -171,7 +171,7 @@ def test_datediff_args3_literals(query, expected_output, basic_df, memory_leak_c
 @pytest.mark.slow
 def test_datediff_time_literals(query, expected_output, basic_df, memory_leak_check):
     """
-    Checks that calling DATEDIFF/TIMEDIFF on bodo.Time literals behaves as expected.
+    Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF on bodo.Time literals behaves as expected.
     Tests all possible datetime parts except for time units.
     """
 
@@ -311,7 +311,7 @@ def test_datediff_args3_multitable_columns_date(
             id="second",
         ),
         pytest.param(
-            "select DATEDIFF('MILLISECOND', table1.A, table2.B) from table1, table2",
+            "select TIMEDIFF('MILLISECOND', table1.A, table2.B) from table1, table2",
             "select ((bigint(to_timestamp(table2.B))-bigint(to_timestamp(table1.A))) * 1000) from table1, table2",
             id="millisecond",
         ),
@@ -321,7 +321,7 @@ def test_datediff_args3_multitable_columns_date(
             id="microsecond",
         ),
         pytest.param(
-            "select DATEDIFF('NANOSECOND', table1.A, table2.B) from table1, table2",
+            "select TIMESTAMPDIFF('NANOSECOND', table1.A, table2.B) from table1, table2",
             "select ((bigint(to_timestamp(table2.B))-bigint(to_timestamp(table1.A))) * 1000 * 1000 * 1000) from table1, table2",
             id="nanosecond",
         ),
@@ -332,7 +332,7 @@ def test_datediff_args3_multitable_columns_time(
     query, spark_query, bodosql_datetime_types_small, spark_info, memory_leak_check
 ):
     """
-    Checks that calling DATEDIFF with time parts on columns behaves as expected.
+    Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF with time parts on columns behaves as expected.
 
     Used https://kontext.tech/article/830/spark-date-difference-in-seconds-minutes-hours
     for defining equivalent Spark queries

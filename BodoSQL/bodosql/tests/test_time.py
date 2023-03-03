@@ -5,6 +5,8 @@ Test SQL `time` support
 import numpy as np
 import pandas as pd
 import pytest
+from bodo.tests.conftest import time_df, time_part_strings, day_part_strings
+from bodo.tests.timezone_common import date_sub_unit_time_fn
 from bodosql.context import BodoSQLContext
 from bodosql.tests.utils import check_query
 
@@ -412,4 +414,45 @@ def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
         expected_output = pd.DataFrame({"U": answer})
         check_query(
             query, ctx, None, expected_output=expected_output, check_dtype=False
+        )
+
+
+def test_timestampdiff_time_columns(time_df, time_part_strings, memory_leak_check):
+    """
+    Checks that calling TIMESTAMPDIFF on columns behaves as expected
+    """
+    query = (
+        f"SELECT TIMESTAMPDIFF('{time_part_strings}', A, B) as output from table1"
+    )
+    output = pd.DataFrame(
+        {"output": [
+            date_sub_unit_time_fn(time_part_strings,
+                                  time_df["table1"]["A"][i],
+                                  time_df["table1"]["B"][i]
+                                  ) for i in range(len(time_df["table1"]["A"]))]}
+    )
+    check_query(
+        query, time_df, None, check_names=False, check_dtype=False, expected_output=output
+    )
+
+
+def test_timestampdiff_time_day_part_handling(time_df, day_part_strings, memory_leak_check):
+    """
+    Checks that TIMESTAMPDIFF throws an error when a date part is passed in as the unit
+    """
+    query = (
+        f"SELECT TIMESTAMPDIFF('{day_part_strings}', A, B) as output from table1"
+    )
+    output = pd.DataFrame(
+        {"output": []}
+    )
+    with pytest.raises(Exception, match=
+        f"Unsupported TIMESTAMPDIFF unit for TIME input: \"{day_part_strings}\""):
+        check_query(
+            query,
+            time_df,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=output
         )
