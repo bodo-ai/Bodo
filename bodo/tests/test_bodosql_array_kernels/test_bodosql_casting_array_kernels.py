@@ -499,7 +499,8 @@ def test_cast_char_other(args, memory_leak_check):
         if pd.isna(elem):
             return None
         elif isinstance(elem, (bodo.Time, bodo.TimeType)):
-            return str(pd.Timestamp(elem.value)).split(" ")[1]
+            # Using Snowflake's default TIME format: HH:MM:SS
+            return "{:02}:{:02}:{:02}".format(elem.hour, elem.minute, elem.second)
         elif isinstance(elem, bytes):
             return elem.hex()
         else:

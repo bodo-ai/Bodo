@@ -9,6 +9,7 @@ import pytest
 from bodosql.tests.utils import check_query
 from pandas.api.types import is_bool_dtype, is_float_dtype
 
+from bodo import Time
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_conversion_array_kernels import (
     _dates,
     _dates_nans,
@@ -404,6 +405,52 @@ def test_datetime_to_char(memory_leak_check):
     expected_output = pd.DataFrame({"A": dt_series.dt.strftime("%Y-%m-%d %X%z")})
 
     ctx = {"table1": df}
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output,
+    )
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(
+            True,
+            id="with_case",
+        ),
+    ],
+)
+def test_time_to_char(use_case, memory_leak_check):
+    """Test TO_CHAR on TIME data using the default format: 'HH:MM:SS'"""
+    if use_case:
+        query = "SELECT TO_CHAR(T) from table1"
+    else:
+        query = (
+            "SELECT CASE WHEN HOUR(T) = 0 THEN 'x' ELSE TO_VARCHAR(T) END from table1"
+        )
+
+    T = pd.Series(
+        [
+            Time(0, 1, 2),
+            None,
+            Time(12, 30, 0),
+            Time(1, 45, 59, nanosecond=999999999),
+            Time(23, 59, 5, microsecond=250),
+        ]
+    )
+    if use_case:
+        S = pd.Series(["00:01:02", None, "12:30:00", "01:45:59", "23:59:05"])
+    else:
+        S = pd.Series(["x", None, "12:30:00", "01:45:59", "23:59:05"])
+
+    ctx = {"table1": pd.DataFrame({"T": T})}
+    expected_output = pd.DataFrame({0: S})
+
     check_query(
         query,
         ctx,
