@@ -422,7 +422,7 @@ def bodosql_datetime_types_small(request):
                     "C": [
                         datetime.date(2021, 11, 21),
                         None,
-                        pd.Timestamp(2021, 3, 3),
+                        datetime.date(2021, 3, 3),
                     ]
                     * 4,
                 }
