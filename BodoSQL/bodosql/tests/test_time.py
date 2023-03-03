@@ -456,3 +456,33 @@ def test_timestampdiff_time_day_part_handling(time_df, day_part_strings, memory_
             check_dtype=False,
             expected_output=output
         )
+
+
+def test_max_time_types(time_df, memory_leak_check):
+    """
+    Simple test to ensure that max is working on time types
+    """
+    query = "SELECT MAX(A) FROM table1"
+    check_query(
+        query,
+        time_df,
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({"A": [bodo.Time(22, 13, 57)]}),
+        is_out_distributed=False
+    )
+
+
+def test_min_time_types(time_df, memory_leak_check):
+    """
+    Simple test to ensure that max is working on time types
+    """
+    query = "SELECT MIN(A) FROM table1"
+    check_query(
+        query,
+        time_df,
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({"A": [bodo.Time()]}),
+        is_out_distributed=False
+    )
