@@ -189,7 +189,7 @@ public class CondOpCodeGen {
       //   IntegerArrayType(int64),
       //   '_temp4'
       // )
-      Module.Builder initModule = new Module.Builder();
+      Module.Builder initModule = new Module.Builder(outerBuilder.getSymbolTable());
 
       List<Expr.Call> inputDataArgs = new ArrayList<>();
 
