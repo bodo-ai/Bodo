@@ -27,6 +27,7 @@ from bodo import objmode
 from bodo.hiframes.table import Table, TableType
 from bodo.io.helpers import PyArrowTableSchemaType, is_nullable
 from bodo.io.parquet_pio import ParquetPredicateType
+from bodo.ir.filter import string_funcs_no_arg_map
 from bodo.libs.array import (
     cpp_table_to_py_table,
     delete_table,
@@ -295,7 +296,7 @@ def _get_sql_column_str(p0, converted_colnames, filter_map):  # pragma: no cover
                 else p0[2]
             )
             return f"coalesce({col_name}, {scalar_val})"
-        elif sql_op in ("lower", "upper", "length"):
+        elif sql_op in string_funcs_no_arg_map.keys():
             return f"{sql_op}({col_name})"
         else:
             raise BodoError(

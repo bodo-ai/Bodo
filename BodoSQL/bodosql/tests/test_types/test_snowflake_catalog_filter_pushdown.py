@@ -197,56 +197,29 @@ def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
     "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
-def test_snowflake_lower_pushdown(test_db_snowflake_catalog, memory_leak_check):
-    """
-    Test filter pushdown with lower on a column.
-    """
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    db = test_db_snowflake_catalog.database
-    schema = test_db_snowflake_catalog.connection_params["schema"]
-
-    def impl(bc, query):
-        return bc.sql(query)
-
-    new_df = pd.DataFrame(
-        {
-            "A": ["LoWeR", "LOWER", "lower", "loweR", "lover", "rover"] * 10,
-        }
-    )
-
-    with create_snowflake_table(
-        new_df, "lower_pushdown_table", db, schema
-    ) as table_name:
-        conn_str = get_snowflake_connection_string(db, schema)
-        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
-        query = f"select a from {table_name} where lower(a) = 'lower'"
-
-        # make sure filter pushdown worked
-        stream = io.StringIO()
-        logger = create_string_io_logger(stream)
-        with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.lower() == "lower"]
-            check_func(
-                impl,
-                (bc, query),
-                py_output=expected_output,
-                sort_output=True,
-                reset_index=True,
-                check_dtype=False,
-            )
-            check_logger_msg(stream, "Columns loaded ['a']")
-            check_logger_msg(stream, "Filter pushdown successfully performed")
-            check_logger_msg(stream, r"WHERE  ( ( lower(\"A\") = {f1} ) )")
-
-
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
+@pytest.mark.parametrize(
+    "func_args",
+    [
+        pytest.param(("lower", "lower"), id="lower"),
+        pytest.param(("upper", "upper"), id="upper"),
+        pytest.param(
+            ("initcap", "capitalize"),
+            id="capitalize",
+            marks=pytest.mark.skip(
+                "[BE-4445] Additional arg in filter pushdown not supported"
+            ),
+        ),
+    ],
 )
-def test_snowflake_upper_pushdown(test_db_snowflake_catalog, memory_leak_check):
+def test_snowflake_case_conversion_filter_pushdown(
+    test_db_snowflake_catalog, func_args, memory_leak_check
+):
     """
-    Test filter pushdown with upper on a column.
+    Test upper, lower, initcap support in Snowflake filter pushdown
     """
+    sql_func, pd_func_name = func_args
+    test_str_val = getattr("macedonia", pd_func_name)()
+
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
@@ -254,24 +227,32 @@ def test_snowflake_upper_pushdown(test_db_snowflake_catalog, memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
 
-    new_df = pd.DataFrame(
+    df = pd.DataFrame(
         {
-            "A": ["UppER", "UPPER", "upper", "uppeR", "uvver", "utter"] * 10,
+            "A": [
+                "macedonia",
+                "MACEDONIA",
+                "MaCedOnIA",
+                None,
+                "not_macedonia",
+                "NOT_MACEDONIA",
+                None,
+            ]
+            * 10,
         }
     )
 
     with create_snowflake_table(
-        new_df, "upper_pushdown_table", db, schema
+        df, f"{sql_func}_pushdown_table", db, schema
     ) as table_name:
-        conn_str = get_snowflake_connection_string(db, schema)
-        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
-        query = f"select a from {table_name} where upper(a) = 'UPPER'"
+        query = f"select a from {table_name} where {sql_func}(a) = '{test_str_val}'"
 
         # make sure filter pushdown worked
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.upper() == "UPPER"]
+            expected_output = df[getattr(df.A.str, pd_func_name)() == test_str_val]
+            expected_output.columns = [x.lower() for x in expected_output.columns]
             check_func(
                 impl,
                 (bc, query),
@@ -282,7 +263,7 @@ def test_snowflake_upper_pushdown(test_db_snowflake_catalog, memory_leak_check):
             )
             check_logger_msg(stream, "Columns loaded ['a']")
             check_logger_msg(stream, "Filter pushdown successfully performed")
-            check_logger_msg(stream, r"WHERE  ( ( upper(\"A\") = {f1} ) )")
+            check_logger_msg(stream, f"WHERE  ( ( {sql_func}" r"(\"A\") = {f1} ) )")
 
 
 @pytest.mark.skipif(
@@ -1733,3 +1714,139 @@ def test_snowflake_length_filter_pushdown(test_db_snowflake_catalog, memory_leak
                     "Filter pushdown successfully performed. Moving filter step:",
                 )
                 check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.parametrize(
+    "func_args",
+    [
+        pytest.param(
+            ("LTRIM", "lstrip"),
+            id="LTRIM",
+        ),
+        pytest.param(
+            ("RTRIM", "rstrip"),
+            id="RTRIM",
+        ),
+        pytest.param(
+            ("TRIM", "strip"),
+            id="TRIM",
+        ),
+    ],
+)
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+@pytest.mark.skip("[BE-4445] Extra arg in filter pushdown not supported")
+def test_snowflake_trim_filter_pushdown(
+    func_args, test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that queries with all variations of TRIM work with
+    filter pushdown (no optional chars).
+    """
+    sql_func_name, pd_func_name = func_args
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    df = pd.DataFrame(
+        {
+            "L_SHIPMODE": [
+                "   SHIP       ",
+                "  ship ",
+                None,
+                "qwerSHIP   ",
+                "asdfSHIPSdfasdfasdf",
+            ]
+            * 10,
+            "L_ORDERKEY": [1230, 4100, None, 9999, 0] * 10,
+        }
+    )
+
+    with create_snowflake_table(df, "trim_pushdown_table", db, schema) as table_name:
+        shipmode_col = getattr(df.L_SHIPMODE.str, pd_func_name)()
+        expected_output = df[shipmode_col == "SHIP"][["L_ORDERKEY"]]
+        expected_output.columns = [x.lower() for x in expected_output.columns]
+
+        test_query = f"""
+            select l_orderkey from {table_name}
+            WHERE {sql_func_name}({table_name}.l_shipmode) = 'SHIP'
+        """
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, test_query),
+                py_output=expected_output,
+                is_out_distributed=False,
+                reset_index=True,
+                sort_output=True,
+                # Pandas output is non-nullable
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "Filter pushdown successfully performed.")
+            check_logger_msg(stream, "Columns loaded ['l_orderkey']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_reverse_filter_pushdown(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that queries with REVERSE work with
+    filter pushdown.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    df = pd.DataFrame(
+        {
+            "L_SHIPMODE": [
+                "   SHIP       ",
+                "  ship ",
+                " blah",
+                "qwerSHIP   ",
+                "asdfSHIPSdfasdfasdf",
+            ]
+            * 10,
+            "L_ORDERKEY": [1230, 4100, None, 9999, 0] * 10,
+        }
+    )
+
+    with create_snowflake_table(df, "reverse_pushdown_table", db, schema) as table_name:
+        # Load the whole table in pandas.
+        shipmode_col = df.L_SHIPMODE.apply(lambda x: x[::-1])
+        expected_output = df[shipmode_col == "PIHS"][["l_orderkey"]]
+        expected_output.columns = [x.lower() for x in expected_output.columns]
+
+        test_query = f"""
+            select l_orderkey from {table_name}
+            WHERE REVERSE({table_name}.l_shipmode) = 'PIHS'
+        """
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, test_query),
+                py_output=expected_output,
+                is_out_distributed=False,
+                reset_index=True,
+                sort_output=True,
+                # Pandas output is non-nullable
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "Filter pushdown successfully performed.")
+            check_logger_msg(stream, "Columns loaded ['l_orderkey']")
