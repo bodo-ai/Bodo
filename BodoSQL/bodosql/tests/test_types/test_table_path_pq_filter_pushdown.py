@@ -340,14 +340,30 @@ def test_coalesce_filter_pushdown(datapath, memory_leak_check):
         )
 
 
-def test_lower_filter_pushdown(datapath, memory_leak_check):
+@pytest.mark.parametrize(
+    "func_args",
+    [
+        pytest.param(("LOWER", "lower", "utf8_lower"), id="lower"),
+        pytest.param(("UPPER", "upper", "utf8_upper"), id="upper"),
+        pytest.param(
+            ("INITCAP", "capitalize", "utf8_capitalize"),
+            id="capitalize",
+            marks=pytest.mark.skip(
+                "[BE-4445] Additional arg in filter pushdown not supported"
+            ),
+        ),
+    ],
+)
+def test_case_conversion_filter_pushdown(func_args, datapath, memory_leak_check):
     """
-    Test lower support in Parquet filter pushdown
+    Test upper, lower, initcap support in Parquet filter pushdown
     """
+    sql_func, pd_func_name, arrow_func_name = func_args
     filename = datapath("string_lower_upper.pq")
-    test_str_val = "macedonia"
+    test_str_val = getattr("macedonia", pd_func_name)()
+
     df = pd.read_parquet(filename)
-    py_output = df[df.A.str.lower() == test_str_val]
+    py_output = df[getattr(df.A.str, pd_func_name)() == test_str_val]
 
     bc = bodosql.BodoSQLContext(
         {
@@ -356,17 +372,19 @@ def test_lower_filter_pushdown(datapath, memory_leak_check):
     )
 
     def impl(bc):
-        return bc.sql(f"select * from table1 where lower(A) = '{test_str_val}'")
+        return bc.sql(f"select * from table1 where {sql_func}(A) = '{test_str_val}'")
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
+
     with set_logging_stream(logger, 1):
         check_func(impl, (bc,), py_output=py_output, reset_index=True, sort_output=True)
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
         )
         check_logger_msg(
-            stream, "(((pa.compute.utf8_lower(ds.field('A')) == ds.scalar(f1))))"
+            stream,
+            f"(((pa.compute.{arrow_func_name}(ds.field('A')) == ds.scalar(f1))))",
         )
 
 
@@ -400,38 +418,6 @@ def test_coalesce_lower_filter_pushdown(datapath, memory_leak_check):
         check_logger_msg(
             stream,
             "(((pa.compute.coalesce(pa.compute.utf8_lower(ds.field('A')), ds.scalar(f1)) == ds.scalar(f2))))",
-        )
-
-
-def test_upper_filter_pushdown(datapath, memory_leak_check):
-    """
-    Test upper support in Parquet filter pushdown
-    """
-    filename = datapath("string_lower_upper.pq")
-    test_str_val = "macedonia"
-    bc = bodosql.BodoSQLContext(
-        {
-            "table1": bodosql.TablePath(filename, "parquet"),
-        }
-    )
-
-    def impl(bc):
-        return bc.sql(f"select * from table1 where upper(A) = '{test_str_val.upper()}'")
-
-    df = pd.read_parquet(filename)
-    py_output = df[df.A.str.upper() == test_str_val.upper()]
-
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-
-        check_func(impl, (bc,), py_output=py_output, reset_index=True, sort_output=True)
-        check_logger_msg(
-            stream, "Filter pushdown successfully performed. Moving filter step:"
-        )
-        check_logger_msg(
-            stream,
-            "(((pa.compute.utf8_upper(ds.field('A')) == ds.scalar(f1))))",
         )
 
 
@@ -1440,7 +1426,7 @@ def test_multiple_loads_filter_pushdown(datapath, memory_leak_check):
     assert generate_code.count("pd.read_parquet") == 2, "Expected 2 read parquet calls"
 
 
-def test_pq_length_filter_pushdown(datapath, memory_leak_check):
+def test_length_filter_pushdown(datapath, memory_leak_check):
     """
     Tests that queries with all aliases of LENGTH work with
     filter pushdown.
@@ -1478,3 +1464,115 @@ def test_pq_length_filter_pushdown(datapath, memory_leak_check):
             )
             check_logger_msg(stream, "Filter pushdown successfully performed.")
             check_logger_msg(stream, "Columns loaded ['L_LINENUMBER']")
+
+
+@pytest.mark.parametrize(
+    "func_args",
+    [
+        pytest.param(
+            ("LTRIM", "lstrip", "utf8_ltrim_whitespace"),
+            id="LTRIM",
+        ),
+        pytest.param(
+            ("RTRIM", "rstrip", "utf8_rtrim_whitespace"),
+            id="RTRIM",
+        ),
+        pytest.param(
+            ("TRIM", "strip", "utf8_trim_whitespace"),
+            id="TRIM",
+        ),
+    ],
+)
+@pytest.mark.skip(
+    "[BE-4445] Extra arg in compute func not supported for filter pushdown"
+)
+def test_trim_filter_pushdown(func_args, datapath, memory_leak_check):
+    """
+    Tests that queries with all variations of TRIM work with
+    filter pushdown (no optional chars).
+    """
+    sql_func_name, pd_func_name, arrow_func_name = func_args
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    filename = datapath("tpch-test-data/parquet/lineitem.parquet")
+    read_df = pd.read_parquet(filename)
+
+    shipmode_col = getattr(read_df.L_SHIPMODE.str, pd_func_name)()
+    expected_output = read_df[shipmode_col == "SHIP"][["L_ORDERKEY"]]
+
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    test_query = f"""
+        select L_ORDERKEY from table1 t1
+        WHERE {sql_func_name}(t1.L_SHIPMODE) = 'SHIP'
+    """
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, test_query),
+            py_output=expected_output,
+            is_out_distributed=False,
+            reset_index=True,
+            sort_output=True,
+            # Pandas output is non-nullable
+            check_dtype=False,
+        )
+        check_logger_msg(stream, "Filter pushdown successfully performed.")
+        check_logger_msg(stream, "Columns loaded ['L_ORDERKEY']")
+        check_logger_msg(
+            stream,
+            f"(((pa.compute.{arrow_func_name}(ds.field('L_SHIPMODE')) == ds.scalar(f1))))",
+        )
+
+
+def test_reverse_filter_pushdown(datapath, memory_leak_check):
+    """
+    Test reverse support in Parquet filter pushdown
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    filename = datapath("tpch-test-data/parquet/lineitem.parquet")
+    read_df = pd.read_parquet(filename)
+
+    shipmode_col = read_df.L_SHIPMODE.apply(lambda x: x[::-1])
+    expected_output = read_df[shipmode_col == "PIHS"][["L_ORDERKEY"]]
+
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    test_query = f"""
+        select L_ORDERKEY from table1 t1
+        WHERE REVERSE(t1.L_SHIPMODE) = 'PIHS'
+    """
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, test_query),
+            py_output=expected_output,
+            is_out_distributed=False,
+            reset_index=True,
+            sort_output=True,
+            # Pandas output is non-nullable
+            check_dtype=False,
+        )
+        check_logger_msg(stream, "Filter pushdown successfully performed.")
+        check_logger_msg(stream, "Columns loaded ['L_ORDERKEY']")
+        check_logger_msg(
+            stream,
+            "(((pa.compute.utf8_reverse(ds.field('L_SHIPMODE')) == ds.scalar(f1))))",
+        )

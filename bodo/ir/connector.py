@@ -13,6 +13,7 @@ from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 
 import bodo
 from bodo.hiframes.table import TableType
+from bodo.ir.filter import string_funcs_no_arg_map, string_funcs_one_arg_map
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import get_live_column_nums_block
 from bodo.utils.py_objs import install_py_obj_class
@@ -570,12 +571,10 @@ def _get_filter_column_arrow_expr(col_val, filter_map):
             else col_val[2]
         )
         return f"pa.compute.coalesce({filter}, ds.scalar({scalar_val}))"
-    elif column_compute_func == "lower":
-        return f"pa.compute.utf8_lower({filter})"
-    elif column_compute_func == "upper":
-        return f"pa.compute.utf8_upper({filter})"
-    elif column_compute_func == "length":
-        return f"pa.compute.utf8_length({filter})"
+
+    elif column_compute_func in string_funcs_no_arg_map:  # pragma: no cover
+        arrow_func_name = string_funcs_no_arg_map[column_compute_func]
+        return f"pa.compute.{arrow_func_name}({filter})"
 
 
 def generate_arrow_filters(
@@ -963,35 +962,16 @@ def _generate_column_expr_filter(
                 # by ilike
                 expr_val = f"(pa.compute.ascii_lower({col_expr}{column_cast}) == pa.compute.ascii_lower(ds.scalar({filter_var}){scalar_cast}))"
 
-            elif p1 in (
-                "startswith",
-                "endswith",
-                "contains",
-                "case_insensitive_startswith",
-                "case_insensitive_endswith",
-                "case_insensitive_contains",
-            ):
+            elif p1 in string_funcs_one_arg_map.keys():  # pragma: no cover
                 op = p1
-                # Handle if its case insensitive
-                prefix = "case_insensitive_"
-                if op.startswith(prefix):
-                    ignore_case = True
-                    # These functions have the form case_insensitive_funcname.
-                    # Extract just func name.
-                    op = op[len(prefix) :]
-                else:
-                    ignore_case = False
-                if op == "startswith":
-                    func_name = "starts_with"
-                elif op == "endswith":
-                    func_name = "ends_with"
-                elif op == "contains":
-                    func_name = "match_substring"
-                # All of these functions require no scalar.
+                func_name = string_funcs_one_arg_map[p1]
                 scalar_arg = filter_var
-                # Expected output for this format should look like
-                # pa.compute.func(ds.field('A'), scalar, ignore_case=var)
-                expr_val = f"(pa.compute.{func_name}({col_expr}, {scalar_arg}, ignore_case={ignore_case}))"
+
+                # Handle if its case insensitive
+                if op.startswith("case_insensitive_"):
+                    expr_val = f"(pa.compute.{func_name}({col_expr}, {scalar_arg}, ignore_case=True))"
+                else:
+                    expr_val = f"(pa.compute.{func_name}({col_expr}, {scalar_arg}))"
             else:
                 # Expected output for this format should like
                 # (ds.field('A') > ds.scalar(py_var))
