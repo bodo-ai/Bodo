@@ -4,6 +4,7 @@ Tests various components of the SnowflakeCatalog type both inside and outside a
 direct BodoSQLContext.
 """
 
+import datetime
 import io
 import os
 
@@ -315,6 +316,61 @@ def test_snowflake_catalog_insert_into_null_literal(
             only_1D=True,
             py_output=py_output,
         )
+
+
+def test_snowflake_catalog_insert_into_date(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests insert into in a snowflake catalog with a datetime.date column.
+    """
+    comm = MPI.COMM_WORLD
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {
+            "A": [
+                datetime.date(2022, 11, 1),
+                datetime.date(2023, 12, 1),
+                datetime.date(2025, 1, 1),
+            ]
+        }
+    )
+
+    def impl(bc, write_query):
+        bc.sql(write_query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    date_table = pd.DataFrame({"A": [datetime.date(2023, 12, 12)] * 12})
+    bc = bc.add_or_replace_view("table1", date_table)
+    # Create the table
+    with create_snowflake_table(
+        new_df, "bodosql_catalog_write_test_nulls", db, schema
+    ) as table_name:
+        write_query = (
+            f"INSERT INTO {schema}.{table_name}(A) Select A from __bodolocal__.table1"
+        )
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(
+            impl,
+            (bc, write_query),
+            sort_output=True,
+            reset_index=True,
+            only_1D=True,
+            py_output=5,
+        )
+        if bodo.get_rank() == 0:
+            conn_str = get_snowflake_connection_string(db, schema)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            # Reset the columns to the original names for simpler testing.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+        output_df = comm.bcast(output_df)
+        # Recreate the expected output by manually doing an append.
+        result_df = pd.concat((new_df, date_table))
+        assert_tables_equal(output_df, result_df)
 
 
 def test_snowflake_catalog_default(
@@ -677,12 +733,13 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
 
 
 def test_snowflake_catalog_create_table_already_exists_error(
-    test_db_snowflake_catalog, use_default_schema,
+    test_db_snowflake_catalog,
+    use_default_schema,
 ):
     """
     Test that Snowflake CREATE TABLE errors with a pre-existing table, when we expect an error.
     """
-    #Note: we have memory leak
+    # Note: we have memory leak
 
     comm = MPI.COMM_WORLD
     db = test_db_snowflake_catalog.database
@@ -712,12 +769,13 @@ def test_snowflake_catalog_create_table_already_exists_error(
         with pytest.raises(RuntimeError, match=".*Object .* already exists.*"):
             check_func(impl, (bc, fail_query), only_1D=True, py_output=5)
 
-        #Default behavior is IF NOT EXISTS, if it is not explicitly specified
+        # Default behavior is IF NOT EXISTS, if it is not explicitly specified
         fail_query_2 = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select 'literal' as columnA, A + 1 as columnB, '2023-02-21'::date as columnC from __bodolocal__.table1"
 
         with pytest.raises(RuntimeError, match=".*Object .* already exists.*"):
             check_func(impl, (bc, fail_query_2), only_1D=True, py_output=5)
         # create_snowflake_table handles dropping the table for us
+
 
 def test_snowflake_catalog_create_table_already_exists(
     test_db_snowflake_catalog, use_default_schema, memory_leak_check
