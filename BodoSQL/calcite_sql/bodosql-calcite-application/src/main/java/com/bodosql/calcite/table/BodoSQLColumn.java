@@ -246,9 +246,7 @@ public interface BodoSQLColumn {
           temp = typeFactory.createSqlType(SqlTypeName.BOOLEAN);
           break;
         case DATE:
-          // NOTE: BodoSQL doesn't support the date type yet, so all
-          // date values are converted to timestamp.
-          temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);
+          temp = typeFactory.createSqlType(SqlTypeName.DATE);
           break;
         case TIME:
           temp = typeFactory.createSqlType(SqlTypeName.TIME, precision);
