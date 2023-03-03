@@ -558,6 +558,11 @@ def to_char_util(arr):
         scalar_text = "with bodo.objmode(r=bodo.string_type):\n"
         scalar_text += "  r = arg0.hex()\n"
         scalar_text += "res[i] = r"
+    elif is_valid_time_arg(arr):
+        # Currently, time -> string conversions always use the default format
+        # of HH:MM:SS (1 digits are always extended to 2, and sub-second units
+        # are ignored)
+        scalar_text = "res[i] = format(arg0.hour, '0>2') + ':' + format(arg0.minute, '0>2') + ':' + format(arg0.second, '0>2')"
     elif isinstance(arr, bodo.TimeType) or (
         bodo.utils.utils.is_array_typ(arr) and isinstance(arr.dtype, bodo.TimeType)
     ):
