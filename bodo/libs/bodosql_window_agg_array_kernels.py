@@ -347,6 +347,8 @@ def windowed_mode(S, lower_bound, upper_bound):
         constant_block = "counts = {arr0[0]: 0}\n"
         constant_block += "nan_count = 0\n"
         constant_block += "for i in range(len(arr0)):\n"
+        constant_block += "   if bodo.libs.array_kernels.isna(arr0, i):\n"
+        constant_block += "      continue\n"
         constant_block += "   if np.isnan(arr0[i]):\n"
         constant_block += "      nan_count += 1\n"
         constant_block += "   elif not bodo.libs.array_kernels.isna(arr0, i):\n"
