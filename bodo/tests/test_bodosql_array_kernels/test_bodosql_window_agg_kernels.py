@@ -358,7 +358,7 @@ def window_kernel_all_types_data():
             ]
         ),
         "float64_nan": nullable_float_arr_maker(
-            [i % 13 for i in range(100)],
+            [float(i % 13) for i in range(100)],
             [i**2 for i in range(10)],
             [i**3 + 5 for i in range(5)],
         ),
@@ -473,7 +473,6 @@ def window_kernel_two_arg_data():
             -10000,
             10000,
             id="float64_nan-entire_window",
-            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -600,19 +599,14 @@ def test_windowed_kernels_numeric(
             id="float64_nonan-too_large",
             marks=pytest.mark.slow,
         ),
-        pytest.param(
-            "float64_nan", -1000, 0, id="float64_nan-prefix", marks=pytest.mark.slow
-        ),
+        pytest.param("float64_nan", -1000, 0, id="float64_nan-prefix"),
         pytest.param(
             "float64_nan",
             -1000,
             1000,
             id="float64_nan-entire_window",
-            marks=pytest.mark.slow,
         ),
-        pytest.param(
-            "string", -1000, 0, id="string-suffix_exclusive", marks=pytest.mark.slow
-        ),
+        pytest.param("string", -1000, 0, id="string-suffix_exclusive"),
         pytest.param(
             "string", -1000, 1000, id="string-entire_window", marks=pytest.mark.slow
         ),
@@ -639,7 +633,6 @@ def test_windowed_kernels_numeric(
         pytest.param("datetime", 3, -3, id="datetime-backward", marks=pytest.mark.slow),
     ],
 )
-@pytest.mark.skip("[BE-2457] Fails only on Azure Nightly, works on platform and on M1")
 def test_windowed_mode(
     dataset,
     window_kernel_all_types_data,
@@ -690,21 +683,21 @@ def test_windowed_mode(
                     else:
                         bestVal, bestCount = None, 0
                     for elem in elems:
+                        if use_nans and np.isnan(elem):
+                            continue
                         counts[elem] = counts.get(elem, 0) + 1
                         if counts[elem] > bestCount or (
-                            (bestVal is not np.nan)
+                            (not (use_nans and np.isnan(bestVal)))
                             and counts[elem] == bestCount
                             and S[S == elem].index[0] < S[S == bestVal].index[0]
                         ):
                             bestCount = counts[elem]
                             bestVal = elem
-
                     if bestVal is np.nan:
                         L.append(0.0)
                         to_nan.append(i)
                     else:
                         L.append(bestVal)
-
         if use_nans:
             return nullable_float_arr_maker(L, to_null, to_nan)
         else:
@@ -810,11 +803,6 @@ def test_windowed_kernels_two_arg(
         "corr": impl3,
     }
     impl = implementations[func]
-    # breakpoint()
-    #        B     P
-    # 129  NaN  <NA>
-    # 162  NaN  <NA>
-    # 332  0.0  <NA>
 
     check_func(
         impl,
