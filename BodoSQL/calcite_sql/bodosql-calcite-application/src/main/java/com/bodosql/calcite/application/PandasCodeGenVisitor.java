@@ -392,7 +392,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Visitor for Logical Union node. Code generation for UNION and UNION ALL clauses in SQL
+   * Visitor for Logical Union node. Code generation for UNION [ALL/DISTINCT] in SQL
    *
    * @param node LogicalUnion node to be visited
    */
@@ -415,7 +415,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Visitor for Logical Intersect node. Code generation for Intersect clause in SQL
+   * Visitor for Logical Intersect node. Code generation for INTERSECT [ALL/DISTINCT] in SQL
    *
    * @param node LogicalIntersect node to be visited
    */
@@ -447,7 +447,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Visitor for Logical Minus node, equivalent to Except clause in SQL
+   * Visitor for Logical Minus node. Code generation for EXCEPT/MINUS in SQL
    *
    * @param node LogicalMinus node to be visited
    */
@@ -2097,7 +2097,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     return result;
   }
 
-
   /**
    * Return a pandas expression that replicates an SQL function call
    *
@@ -2225,26 +2224,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
             operandsInfo.get(1).getExprCode());
       case TIMESTAMP_ADD:
         // Uses Calcite parser, accepts both quoted and unquoted time units
-        isTime = fnOperation
-            .getOperands()
-            .get(1)
-            .getType()
-            .getSqlTypeName()
-            .toString()
-            .equals("TIME");
+        isTime =
+            fnOperation.getOperands().get(1).getType().getSqlTypeName().toString().equals("TIME");
         unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
         assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
         return generateSnowflakeDateAddCode(operandsInfo, unit);
       case TIMESTAMP_DIFF:
         assert operandsInfo.size() == 3;
         isTime =
-            fnOperation
-                .getOperands()
-                .get(1)
-                .getType()
-                .getSqlTypeName()
-                .toString()
-                .equals("TIME");
+            fnOperation.getOperands().get(1).getType().getSqlTypeName().toString().equals("TIME");
         unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
         return generateTimestampDiffInfo(operandsInfo, unit);
       case TRIM:
@@ -2337,13 +2325,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
             // Otherwise, fall back to the normal DATEADD. TIMEADD and TIMESTAMPADD are aliases.
             if (operandsInfo.size() == 3) {
-              isTime = fnOperation
-                  .getOperands()
-                  .get(1)
-                  .getType()
-                  .getSqlTypeName()
-                  .toString()
-                  .equals("TIME");
+              isTime =
+                  fnOperation
+                      .getOperands()
+                      .get(1)
+                      .getType()
+                      .getSqlTypeName()
+                      .toString()
+                      .equals("TIME");
               unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
               assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
               return generateSnowflakeDateAddCode(operandsInfo, unit);

@@ -183,7 +183,6 @@ def test_intersect_numeric_cols(
     check_query(query, basic_df, spark_info, check_dtype=False)
 
 
-@pytest.mark.skip("[BE-4414] Intersect fails with many columns")
 def test_intersect_nullable_numeric_many_cols(
     null_set_df, intersect_cmds, spark_info, memory_leak_check
 ):
