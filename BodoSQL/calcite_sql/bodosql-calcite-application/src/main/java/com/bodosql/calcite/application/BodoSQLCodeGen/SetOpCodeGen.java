@@ -63,9 +63,9 @@ public class SetOpCodeGen {
    *
    * @param outVar The output variable.
    * @param lhsExpr The expression of the left hand table
-   * @param rhsExpr The expression of the left right hand table
-   * @param rhsColNames The names of columns of the left hand table
    * @param lhsColNames The names of columns of the left hand table
+   * @param rhsExpr The expression of the right hand table
+   * @param rhsColNames The names of columns of the right hand table
    * @param columnNames a list containing the expected output column names
    * @param isAll Is the intersect an IntersectAll Expression.
    * @return The code generated for the Intersect expression.
@@ -81,7 +81,7 @@ public class SetOpCodeGen {
     if (isAll) {
       throw new BodoSQLCodegenException("Intersect All is not supported yet");
     }
-    // we need there to be at least one column, in the right/left table, so we can perform the merge
+    // We need there to be at least one column, in the right/left table, so we can perform the merge
     // This may be incorrect if Calcite does not optimize out empty intersects
     assert lhsColNames.size() == rhsColNames.size()
         && lhsColNames.size() == columnNames.size()
@@ -95,7 +95,7 @@ public class SetOpCodeGen {
     HashMap<String, String> lhsRenameMap = new HashMap<>();
     HashMap<String, String> rhsRenameMap = new HashMap<>();
     for (int i = 0; i < lhsColNames.size(); i++) {
-      lhsRenameMap.put(rhsColNames.get(i), columnNames.get(i));
+      lhsRenameMap.put(lhsColNames.get(i), columnNames.get(i));
       rhsRenameMap.put(rhsColNames.get(i), columnNames.get(i));
     }
 
@@ -109,7 +109,8 @@ public class SetOpCodeGen {
         .append(", copy=False)")
         .append(".merge(")
         .append(rhsExpr);
-    /* IntersectAll includes duplicates, Intersect doesn't. preemptively dropping duplicate here to reduce size of the concat */
+    // IntersectAll includes duplicates, Intersect doesn't. preemptively dropping duplicate
+    // here to reduce size of the concat
     if (!isAll) {
       intersectBuilder.append(".drop_duplicates()");
     }
@@ -122,7 +123,7 @@ public class SetOpCodeGen {
       intersectBuilder.append(makeQuoted(columnNames.get(i))).append(", ");
     }
     intersectBuilder.append("])");
-    /* Need to perform a final drop to account for values in both tables */
+    // Need to perform a final drop to account for values in both tables
     if (!isAll) {
       intersectBuilder.append(".drop_duplicates()");
     }
