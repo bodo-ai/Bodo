@@ -12,6 +12,7 @@ import bodosql
 import numpy as np
 import pandas as pd
 import pytest
+import random
 from bodosql.tests.test_datetime_fns import compute_valid_times
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     test_db_snowflake_catalog,
@@ -828,3 +829,152 @@ def test_snowflake_catalog_create_table_already_exists(
         result_df.columns = result_df.columns.str.upper()
         assert_tables_equal(output_df, result_df)
         # create_snowflake_table handles dropping the table for us
+
+
+def test_snowflake_catalog_simple_rewrite(
+    test_db_snowflake_catalog, use_default_schema, memory_leak_check):
+    """tests that create table can handle simple queries that require some amount of re-write during validation."""
+
+    comm = MPI.COMM_WORLD
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    local_table = pd.DataFrame({"A": np.arange(10)})
+    bc = bc.add_or_replace_view("table1", local_table)
+
+    comm = MPI.COMM_WORLD
+    table_name = None
+    if bodo.get_rank() == 0:
+        table_name = gen_unique_table_id(
+            "bodosql_ctas_test_rewrite"
+        )
+    table_name = comm.bcast(table_name)
+
+    # Write to Snowflake
+    insert_table = table_name if use_default_schema else f"{schema}.{table_name}"
+
+    # Limit does nothing in this case, since the table has less than 100 values
+    # but the clause does require a re-write
+    query = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select * from __bodolocal__.table1 limit 100"
+
+    exception_occured_in_test_body = False
+    try:
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(impl, (bc, query), only_1D=True, py_output=5)
+        output_df = None
+        # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+        # to reduce the demand on Snowflake.
+        if bodo.get_rank() == 0:
+            conn_str = get_snowflake_connection_string(db, schema)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            # Reset the columns to the original names for simpler testing.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+
+        output_df = comm.bcast(output_df)
+        result_df = local_table
+        output_df.columns = output_df.columns.str.upper()
+        result_df.columns = result_df.columns.str.upper()
+        assert_tables_equal(output_df, result_df)
+    except Exception as e:
+        #In the case that another exception ocurred within the body of the try,
+        #We may not have created a table to drop.
+        #because of this, we call drop_snowflake_table in a try/except, to avoid
+        #masking the original exception
+        exception_occured_in_test_body=True
+        raise e
+    finally:
+        if exception_occured_in_test_body:
+            try:
+                drop_snowflake_table(table_name, db, schema)
+            except:
+                pass
+        else:
+            drop_snowflake_table(table_name, db, schema)
+
+
+
+def test_snowflake_catalog_simple_rewrite_2(
+    test_db_snowflake_catalog, use_default_schema, memory_leak_check):
+    """tests that create table can handle simple queries that require some amount of re-write during validation.
+    This is a secondary test that covers a subset of Q7"""
+
+    comm = MPI.COMM_WORLD
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    random.seed(42)
+    local_table = pd.DataFrame({
+        "r_name": random.choices(['abc gobrandon', 'xyz bong', 'gobrandon', 'bong', 'a98y7guhb'], k = 20)})
+
+    def row_fn(v):
+        if v == 'abc gobrandon':
+            return 'gobrandon'
+        elif v == 'xyz bong':
+            return 'bong'
+        else:
+            return None
+
+
+    expected_output_col = local_table["r_name"].apply(lambda x: row_fn(x))
+    expected_output_col = expected_output_col.dropna()
+    expected_output = pd.DataFrame({"output_case": expected_output_col})
+
+    bc = bc.add_or_replace_view("table1", local_table)
+
+    comm = MPI.COMM_WORLD
+    table_name = None
+    if bodo.get_rank() == 0:
+        table_name = gen_unique_table_id(
+            "bodosql_ctas_test_rewrite"
+        )
+    table_name = comm.bcast(table_name)
+
+    # Write to Snowflake
+    insert_table = table_name if use_default_schema else f"{schema}.{table_name}"
+
+    # Limit does nothing in this case, since the table has less than 100 values
+    # but the clause does require a re-write
+    query = f"""CREATE TABLE {insert_table} as SELECT
+                case
+                    when endswith(r_name, ' gobrandon') then 'gobrandon'
+                    when endswith(r_name, ' bong') then 'bong'
+                    else null end as output_case
+                FROM __bodolocal__.table1
+                WHERE output_case is not null
+    """
+
+    try:
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(impl, (bc, query), only_1D=True, py_output=5)
+        output_df = None
+        # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+        # to reduce the demand on Snowflake.
+        if bodo.get_rank() == 0:
+            conn_str = get_snowflake_connection_string(db, schema)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            # Reset the columns to the original names for simpler testing.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+
+        output_df = comm.bcast(output_df)
+        expected_result_df = expected_output
+        output_df.columns = output_df.columns.str.upper()
+        expected_result_df.columns = expected_result_df.columns.str.upper()
+        assert_tables_equal(output_df, expected_result_df)
+    finally:
+        # dropping the table
+        drop_snowflake_table(table_name, db, schema)
