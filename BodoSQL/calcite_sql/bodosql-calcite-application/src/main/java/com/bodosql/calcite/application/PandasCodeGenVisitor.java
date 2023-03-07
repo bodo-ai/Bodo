@@ -2207,8 +2207,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
         };
 
     String expr;
-    BodoSQLExprType.ExprType exprType;
     String strExpr;
+    DateTimeType dateTimeExprType;
     boolean isTime;
     String unit;
     String tzStr;
@@ -2224,16 +2224,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
             operandsInfo.get(1).getExprCode());
       case TIMESTAMP_ADD:
         // Uses Calcite parser, accepts both quoted and unquoted time units
-        isTime =
-            fnOperation.getOperands().get(1).getType().getSqlTypeName().toString().equals("TIME");
-        unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
+        dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(2));
+        unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), dateTimeExprType);
         assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
         return generateSnowflakeDateAddCode(operandsInfo, unit);
       case TIMESTAMP_DIFF:
         assert operandsInfo.size() == 3;
-        isTime =
-            fnOperation.getOperands().get(1).getType().getSqlTypeName().toString().equals("TIME");
-        unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
+        dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
+        if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
+          throw new BodoSQLCodegenException(
+              "Invalid type of arguments to TIMESTAMPDIFF: arg1 and arg2 must be the same type."
+          );
+        unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), dateTimeExprType);
         return generateTimestampDiffInfo(operandsInfo, unit);
       case TRIM:
         assert operandsInfo.size() == 3;
@@ -2325,15 +2327,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
             // Otherwise, fall back to the normal DATEADD. TIMEADD and TIMESTAMPADD are aliases.
             if (operandsInfo.size() == 3) {
-              isTime =
-                  fnOperation
-                      .getOperands()
-                      .get(1)
-                      .getType()
-                      .getSqlTypeName()
-                      .toString()
-                      .equals("TIME");
-              unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
+              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(2));
+              unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), dateTimeExprType);
               assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
               return generateSnowflakeDateAddCode(operandsInfo, unit);
             }
@@ -2375,35 +2370,34 @@ public class PandasCodeGenVisitor extends RelVisitor {
             if (operandsInfo.size() == 2) {
               arg1 = operandsInfo.get(1);
               arg2 = operandsInfo.get(0);
+              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
+              if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(0)))
+                throw new BodoSQLCodegenException(
+                    "Invalid type of arguments to DATEDIFF: arg0 and arg1 must be the same type."
+                );
             } else if (operandsInfo.size() == 3) { // this is the Snowflake option
               unit = operandsInfo.get(0).getExprCode();
               arg1 = operandsInfo.get(1);
               arg2 = operandsInfo.get(2);
+              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
+              if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
+                throw new BodoSQLCodegenException(
+                    "Invalid type of arguments to DATEDIFF: arg1 and arg2 must be the same type."
+                );
             } else {
               throw new BodoSQLCodegenException(
                   "Invalid number of arguments to DATEDIFF: must be 2 or 3.");
             }
-            isTime =
-                fnOperation
-                    .getOperands()
-                    .get(1)
-                    .getType()
-                    .getSqlTypeName()
-                    .toString()
-                    .equals("TIME");
-            unit = standardizeTimeUnit(fnName, unit, isTime);
+            unit = standardizeTimeUnit(fnName, unit, dateTimeExprType);
             return generateDateDiffFnInfo(unit, arg1, arg2);
           case "TIMEDIFF":
             assert operandsInfo.size() == 3;
-            isTime =
-                fnOperation
-                    .getOperands()
-                    .get(1)
-                    .getType()
-                    .getSqlTypeName()
-                    .toString()
-                    .equals("TIME");
-            unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
+            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
+            if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
+              throw new BodoSQLCodegenException(
+                  "Invalid type of arguments to TIMEDIFF: arg1 and arg2 must be the same type."
+              );
+            unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), dateTimeExprType);
             arg1 = operandsInfo.get(1);
             arg2 = operandsInfo.get(2);
             return generateDateDiffFnInfo(unit, arg1, arg2);
@@ -2583,10 +2577,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "YEAROFWEEK":
           case "YEAROFWEEKISO":
             assert operandsInfo.size() == 1;
+            if (getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.TIME)
+              throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             return getSingleArgDatetimeFnInfo(fnName, operandsInfo.get(0).getExprCode());
           case "NEXT_DAY":
           case "PREVIOUS_DAY":
             assert operandsInfo.size() == 2;
+            if (getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.TIME)
+              throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             return getDoubleArgDatetimeFnInfo(
                 fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(1).getExprCode());
           case "DATE_PART":
@@ -2763,15 +2761,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "INITCAP":
             return generateInitcapInfo(operandsInfo);
           case "DATE_TRUNC":
-            isTime =
-                fnOperation
-                    .getOperands()
-                    .get(1)
-                    .getType()
-                    .getSqlTypeName()
-                    .toString()
-                    .equals("TIME");
-            unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), isTime);
+            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
+            unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), dateTimeExprType);
             return generateDateTruncCode(unit, operandsInfo.get(1));
           case "MICROSECOND":
           case "SECOND":

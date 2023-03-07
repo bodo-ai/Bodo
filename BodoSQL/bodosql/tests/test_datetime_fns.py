@@ -2298,7 +2298,7 @@ def test_to_date_scalar(
     )
 
 
-def test_date_trunc_time_small_unit(time_df, time_part_strings, memory_leak_check):
+def test_date_trunc_time_part(time_df, time_part_strings, memory_leak_check):
     query = f"SELECT DATE_TRUNC('{time_part_strings}', A) as output from table1"
     scalar_func = generate_date_trunc_time_func(time_part_strings)
     output = pd.DataFrame({"output": time_df["table1"]["A"].map(scalar_func)})
@@ -2312,12 +2312,12 @@ def test_date_trunc_time_small_unit(time_df, time_part_strings, memory_leak_chec
     )
 
 
-def test_date_trunc_time_large_unit(time_df, day_part_strings, memory_leak_check):
+def test_date_trunc_day_part_handling(time_df, day_part_strings, memory_leak_check):
     query = f"SELECT DATE_TRUNC('{day_part_strings}', A) as output from table1"
     output = pd.DataFrame({"output": []})
     with pytest.raises(
         Exception,
-        match=f"Unsupported DATE_TRUNC unit for TIME input: \"{day_part_strings}\""
+        match=f"Unsupported unit for DATE_TRUNC with TIME input: \"{day_part_strings}\""
     ):
         check_query(
             query,
@@ -3530,3 +3530,57 @@ def test_timestamp_from_parts(
     ctx = {"table1": df}
     py_output = pd.DataFrame({0: pd.Series([pd.Timestamp(s, tz=tz) for s in answer])})
     check_query(query, ctx, None, expected_output=py_output, check_names=False)
+
+
+@pytest.fixture(
+    params=[
+        "MONTHNAME",
+        "MONTH_NAME",
+        "DAYNAME",
+        "WEEKDAY",
+        "LAST_DAY",
+        "YEAROFWEEK",
+        "YEAROFWEEKISO",
+    ]
+)
+def date_only_single_arg_fns(request):
+    return request.param
+
+
+def date_only_single_arg_fns_time_input_handling(date_only_single_arg_fns, time_df):
+    query = (
+        f"SELECT {date_only_single_arg_fns}(A) as output from table1"
+    )
+    output = pd.DataFrame(
+        {"output": []}
+    )
+    with pytest.raises(Exception, match=
+    f"Time object is not supported by {date_only_single_arg_fns}"):
+        check_query(
+            query,
+            time_df,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=output
+        )
+
+
+@pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
+def next_previous_day_time_input_handling(next_or_prev, time_df):
+    query = (
+        f"SELECT {next_or_prev}_DAY(A, 'mo') as output from table1"
+    )
+    output = pd.DataFrame(
+        {"output": []}
+    )
+    with pytest.raises(Exception, match=
+    f"Time object is not supported by {next_or_prev}_DAY"):
+        check_query(
+            query,
+            time_df,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=output
+        )

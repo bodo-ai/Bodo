@@ -231,7 +231,7 @@ def test_datediff_time_columns(time_df, time_part_strings, memory_leak_check):
     )
 
 
-def test_datediff_time_large_unit(time_df, day_part_strings, memory_leak_check):
+def test_datediff_time_day_part_handling(time_df, day_part_strings, memory_leak_check):
     """
     Checks that calling DATEDIFF/TIMEDIFF throws correct error when input time is large
     """
@@ -242,7 +242,7 @@ def test_datediff_time_large_unit(time_df, day_part_strings, memory_leak_check):
         {"output": []}
     )
     with pytest.raises(Exception, match=
-        f"Unsupported TIMEDIFF unit for TIME input: \"{day_part_strings}\""):
+        f"Unsupported unit for TIMEDIFF with TIME input: \"{day_part_strings}\""):
         check_query(
             query,
             time_df,

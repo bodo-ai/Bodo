@@ -447,7 +447,7 @@ def test_timestampdiff_time_day_part_handling(time_df, day_part_strings, memory_
         {"output": []}
     )
     with pytest.raises(Exception, match=
-        f"Unsupported TIMESTAMPDIFF unit for TIME input: \"{day_part_strings}\""):
+        f"Unsupported unit for TIMESTAMPDIFF with TIME input: \"{day_part_strings}\""):
         check_query(
             query,
             time_df,

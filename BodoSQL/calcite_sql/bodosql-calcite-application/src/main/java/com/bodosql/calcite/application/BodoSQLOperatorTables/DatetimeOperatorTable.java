@@ -721,7 +721,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.TIMESTAMP,
+          OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -740,7 +740,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.TIMESTAMP,
+          OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -756,7 +756,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.TIMESTAMP,
+          OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -825,7 +825,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.TIMESTAMP,
+          OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -876,7 +876,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.TIMESTAMP,
+          OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
   public static final SqlFunction YEAROFWEEKISO =
@@ -891,7 +891,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.TIMESTAMP,
+          OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
