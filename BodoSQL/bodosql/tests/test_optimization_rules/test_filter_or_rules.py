@@ -38,8 +38,8 @@ def test_logical_filter_rule(basic_df, spark_info, memory_leak_check):
     assert gen_code2.count("boolor") == 2, "Expected 2 boolor after optimization"
     result3 = check_query(query3, basic_df, spark_info, return_codegen=True)
     gen_code3 = result3["pandas_code"]
-    assert gen_code3.count("booland") == 1, "Expected 1 booland after optimization"
-    assert gen_code3.count("boolor") == 1, "Expected 1 boolor after optimization"
+    assert gen_code3.count("booland") == 0, "Expected 0 booland after optimization"
+    assert gen_code3.count("boolor") == 0, "Expected 0 boolor after optimization"
     result4 = check_query(query4, basic_df, spark_info, return_codegen=True)
     gen_code4 = result4["pandas_code"]
     assert gen_code4.count("booland") == 2, "Expected 2 booland after optimization"
@@ -97,7 +97,7 @@ def test_join_filter_rule(spark_info, memory_leak_check):
     result3 = check_query(query3, ctx, spark_info, return_codegen=True)
     gen_code3 = result3["pandas_code"]
     assert gen_code3.count("booland") == 0, "Expected 0 booland after optimization"
-    assert gen_code3.count("|") == 1, "Expected 1 | after optimization"
+    assert gen_code3.count("|") == 0, "Expected 0 | after optimization"
     result4 = check_query(query4, ctx, spark_info, return_codegen=True)
     gen_code4 = result4["pandas_code"]
     assert gen_code4.count("booland") == 0, "Expected 0 booland after optimization"

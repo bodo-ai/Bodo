@@ -59,20 +59,18 @@ public class FilterRulesCommon {
       RexCall callCond = (RexCall) cond;
       for (int i = 0; i < callCond.operands.size(); i++) {
         RexNode newNode = pruneConditionExtractCommon(builder, callCond.operands.get(i), commonOps);
-        if (newNode != null) {
-          operands.add(newNode);
-        }
+        operands.add(newNode);
       }
       if (operands.size() > 0) {
         // AND together operands
         return builder.and(operands);
       } else {
-        // If no nodes are kept return null. We will prune
-        // the whole condition.
-        return null;
+        // If no nodes are kept return true. We will prune
+        // the whole condition in another optimization.
+        return builder.literal(true);
       }
     } else if (commonOps.contains(cond)) {
-      return null;
+      return builder.literal(true);
     } else {
       return cond;
     }
@@ -145,9 +143,7 @@ public class FilterRulesCommon {
         List<RexNode> keptNodes = new ArrayList<>();
         for (RexNode node : nodes) {
           RexNode updatedNode = pruneConditionExtractCommon(builder, node, sharedOps);
-          if (updatedNode != null) {
-            keptNodes.add(updatedNode);
-          }
+          keptNodes.add(updatedNode);
         }
         List<RexNode> totalNodes = new ArrayList<>();
         // Create an OR with the leftover nodes
