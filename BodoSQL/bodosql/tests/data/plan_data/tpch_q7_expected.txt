@@ -13,7 +13,7 @@ LogicalSort(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC-nulls-first], dir1=[AS
                         LogicalProject(S_SUPPKEY=[$0], S_NATIONKEY=[$3])
                           LogicalTableScan(table=[[__bodolocal__, supplier]])
                         LogicalProject(L_ORDERKEY=[$0], L_SUPPKEY=[$2], L_EXTENDEDPRICE=[$5], L_DISCOUNT=[$6], L_SHIPDATE=[$10])
-                          LogicalFilter(condition=[AND(>=($10, CAST(1995-01-01):TIMESTAMP(0) NOT NULL), <=($10, CAST(1996-12-31):TIMESTAMP(0) NOT NULL))])
+                          LogicalFilter(condition=[SEARCH($10, Sarg[[1995-01-01..1996-12-31]])])
                             LogicalTableScan(table=[[__bodolocal__, lineitem]])
                     LogicalProject(O_ORDERKEY=[$0], O_CUSTKEY=[$1])
                       LogicalTableScan(table=[[__bodolocal__, orders]])

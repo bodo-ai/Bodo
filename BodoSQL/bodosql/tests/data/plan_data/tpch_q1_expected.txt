@@ -2,5 +2,5 @@ LogicalSort(sort0=[$0], sort1=[$1], dir0=[ASC-nulls-first], dir1=[ASC-nulls-firs
   LogicalAggregate(group=[{0, 1}], sum_qty=[SUM($2)], sum_base_price=[SUM($3)], sum_disc_price=[SUM($4)], sum_charge=[SUM($5)], avg_qty=[AVG($2)], avg_price=[AVG($3)], avg_disc=[AVG($6)], count_order=[COUNT()])
     LogicalProject(l_returnflag=[$0], l_linestatus=[$1], L_QUANTITY=[$2], L_EXTENDEDPRICE=[$3], $f4=[$4], $f5=[*($4, +(1, $6))], L_DISCOUNT=[$5])
       LogicalProject(l_returnflag=[$8], l_linestatus=[$9], L_QUANTITY=[$4], L_EXTENDEDPRICE=[$5], $f4=[*($5, -(1, $6))], L_DISCOUNT=[$6], $f6=[$7])
-        LogicalFilter(condition=[<=($10, CAST(1998-12-01):TIMESTAMP(0) NOT NULL)])
+        LogicalFilter(condition=[<=($10, 1998-12-01)])
           LogicalTableScan(table=[[__bodolocal__, lineitem]])

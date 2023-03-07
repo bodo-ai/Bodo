@@ -379,7 +379,7 @@ def test_plan(plan_tests, tpch_data_schema_only, engage3_ctx, dummy_test_ctx, da
 
     # Extract the relevant context dictionary based on the name
     if ctx_str == "TPCH":
-        ctx = tpch_data_schema_only[0]
+        ctx = tpch_data_schema_only
     elif ctx_str == "engage3":
         ctx = engage3_ctx
     elif ctx_str == "dummy_test":

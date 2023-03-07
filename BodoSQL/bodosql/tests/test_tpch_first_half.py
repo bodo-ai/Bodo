@@ -45,13 +45,11 @@ def test_tpch_q1(tpch_data, spark_info, memory_leak_check):
                       l_returnflag,
                       l_linestatus
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -105,13 +103,11 @@ def test_tpch_q2(tpch_data, spark_info, memory_leak_check):
                        s_name,
                        p_partkey
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -142,13 +138,11 @@ def test_tpch_q3(tpch_data, spark_info, memory_leak_check):
                       l_orderkey
                     limit 10
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -180,14 +174,13 @@ def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
                     limit 10
 
     """
-    bodosql_df_dict, _ = tpch_data
     # Adding an secondary test to tpch3 to
     # double check logging information is correct for the
     # rel node timing information,
     # since this TPCH uses most of the rel nodes we would need to support
     # (Join, Filter, Project, Groupby/Order by)
 
-    bc = bodosql.BodoSQLContext(bodosql_df_dict)
+    bc = bodosql.BodoSQLContext(tpch_data)
 
     def impl(bc):
         return bc.sql(tpch_query)
@@ -230,13 +223,11 @@ def test_tpch_q4(tpch_data, spark_info, memory_leak_check):
                        o_orderpriority
 
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -268,13 +259,11 @@ def test_tpch_q5(tpch_data, spark_info, memory_leak_check):
                     order by
                       revenue desc
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -290,12 +279,10 @@ def test_tpch_q6(tpch_data, spark_info, memory_leak_check):
                       and l_discount between 0.05 and 0.07
                       and l_quantity < 24
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
-        spark_dataframe_dict=spark_df_dict,
         is_out_distributed=False,
         check_dtype=False,
     )
@@ -344,13 +331,11 @@ def test_tpch_q7(tpch_data, spark_info, memory_leak_check):
                        cust_nation,
                        l_year
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -398,13 +383,11 @@ def test_tpch_q8(tpch_data, spark_info, memory_leak_check):
                      order by
                        o_year
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -443,13 +426,11 @@ def test_tpch_q9(tpch_data, spark_info, memory_leak_check):
                        nation,
                        o_year desc
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -489,13 +470,11 @@ def test_tpch_q10(tpch_data, spark_info, memory_leak_check):
                       c_custkey
                     limit 20
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -532,11 +511,9 @@ def test_tpch_q11(tpch_data, spark_info, memory_leak_check):
                   order by
                     val desc
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
