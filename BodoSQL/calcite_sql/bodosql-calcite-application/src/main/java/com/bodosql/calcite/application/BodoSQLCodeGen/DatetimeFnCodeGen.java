@@ -7,6 +7,8 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import java.util.*;
+
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.*;
 
 public class DatetimeFnCodeGen {
@@ -316,15 +318,49 @@ public class DatetimeFnCodeGen {
     return new RexNodeVisitorInfo(code.toString());
   }
 
+
+  public enum DateTimeType {
+    TIMESTAMP,
+    TIME,
+    DATE,
+  }
+
+  /**
+   * Helper function that verifies and determines the type of date or time expression
+   * @param rexNode RexNode of the expression
+   * @return The expression is a timestamp, time or date object
+   */
+  public static DateTimeType getDateTimeExprType(RexNode rexNode) {
+    if (rexNode
+        .getType()
+        .getSqlTypeName()
+        .toString()
+        .equals("TIME")) {
+      return DateTimeType.TIME;
+    }
+    if (rexNode
+        .getType()
+        .getSqlTypeName()
+        .toString()
+        .equals("DATE")) {
+      return DateTimeType.DATE;
+    }
+    return DateTimeType.TIMESTAMP;
+  }
+
+
   /**
    * Helper function that verifies and standardizes the time unit input
    *
    * @param fnName the function which takes this time unit as input
    * @param inputTimeStr the input time unit string
-   * @param isTime if this time unit should fit with Bodo.Time, which means smaller or equal to hour
+   * @param dateTimeExprType if the time expression is Bodo.Time object,
+   *                         the time unit should be smaller or equal to hour
+   *                         if the time expression is date object,
+   *                         the time unit should be larger or equal to day
    * @return the standardized time unit string
    */
-  public static String standardizeTimeUnit(String fnName, String inputTimeStr, boolean isTime) {
+  public static String standardizeTimeUnit(String fnName, String inputTimeStr, DateTimeType dateTimeExprType) {
     String unit;
     switch (inputTimeStr.toLowerCase()) {
       case "\"year\"":
@@ -343,9 +379,9 @@ public class DatetimeFnCodeGen {
       case "yr":
       case "years":
       case "yrs":
-        if (isTime)
+        if (dateTimeExprType == DateTimeType.TIME)
           throw new BodoSQLCodegenException(
-              "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+              "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
         unit = "year";
         break;
 
@@ -359,9 +395,9 @@ public class DatetimeFnCodeGen {
       case "mon":
       case "mons":
       case "months":
-        if (isTime)
+        if (dateTimeExprType == DateTimeType.TIME)
           throw new BodoSQLCodegenException(
-              "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+              "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
         unit = "month";
         break;
 
@@ -375,9 +411,9 @@ public class DatetimeFnCodeGen {
       case "dd":
       case "days":
       case "dayofmonth":
-        if (isTime)
+        if (dateTimeExprType == DateTimeType.TIME)
           throw new BodoSQLCodegenException(
-              "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+              "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
         unit = "day";
         break;
 
@@ -393,9 +429,9 @@ public class DatetimeFnCodeGen {
       case "weekofyear":
       case "woy":
       case "wy":
-        if (isTime)
+        if (dateTimeExprType == DateTimeType.TIME)
           throw new BodoSQLCodegenException(
-              "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+              "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
         unit = "week";
         break;
 
@@ -409,9 +445,9 @@ public class DatetimeFnCodeGen {
       case "qtr":
       case "qtrs":
       case "quarters":
-        if (isTime)
+        if (dateTimeExprType == DateTimeType.TIME)
           throw new BodoSQLCodegenException(
-              "Unsupported " + fnName + " unit for TIME input: " + inputTimeStr);
+              "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
         unit = "quarter";
         break;
 
@@ -427,6 +463,9 @@ public class DatetimeFnCodeGen {
       case "hr":
       case "hours":
       case "hrs":
+        if (dateTimeExprType == DateTimeType.DATE)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "hour";
         break;
 
@@ -442,6 +481,9 @@ public class DatetimeFnCodeGen {
       case "min":
       case "minutes":
       case "mins":
+        if (dateTimeExprType == DateTimeType.DATE)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "minute";
         break;
 
@@ -455,6 +497,9 @@ public class DatetimeFnCodeGen {
       case "sec":
       case "seconds":
       case "secs":
+        if (dateTimeExprType == DateTimeType.DATE)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "second";
         break;
 
@@ -466,6 +511,9 @@ public class DatetimeFnCodeGen {
       case "ms":
       case "msec":
       case "milliseconds":
+        if (dateTimeExprType == DateTimeType.DATE)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "millisecond";
         break;
 
@@ -477,6 +525,9 @@ public class DatetimeFnCodeGen {
       case "us":
       case "usec":
       case "microseconds":
+        if (dateTimeExprType == DateTimeType.DATE)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "microsecond";
         break;
 
@@ -496,11 +547,14 @@ public class DatetimeFnCodeGen {
       case "nanoseconds":
       case "nanosecs":
       case "nseconds":
+        if (dateTimeExprType == DateTimeType.DATE)
+          throw new BodoSQLCodegenException(
+              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "nanosecond";
         break;
 
       default:
-        throw new BodoSQLCodegenException("Unsupported " + fnName + " unit: " + inputTimeStr);
+        throw new BodoSQLCodegenException("Unsupported unit for" + fnName + ": " + inputTimeStr);
     }
     return unit;
   }

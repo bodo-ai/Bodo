@@ -9,7 +9,7 @@ public class DateDiffCodeGen {
   public static String generateDateDiffCode(String arg0, String arg1, String arg2) {
     StringBuilder diffExpr = new StringBuilder();
     // Create dummy visitors to reuse date trunc code.
-    String unit = standardizeTimeUnit("DATEDIFF", arg0, false);
+    String unit = standardizeTimeUnit("DATEDIFF", arg0, DatetimeFnCodeGen.DateTimeType.TIMESTAMP);
     diffExpr.append("bodo.libs.bodosql_array_kernels.date_sub_date_unit(\"");
     diffExpr.append(arg0).append("\", ");
     diffExpr.append(
