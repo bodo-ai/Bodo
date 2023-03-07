@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-Test correctness of SQL SOME and ALL clauses.
+Test correctness of SQL ANY and ALL clauses.
 """
 import pytest
 from bodosql.tests.string_ops_common import *  # noqa
@@ -9,9 +9,8 @@ from bodosql.tests.utils import check_query
 
 @pytest.fixture(
     params=[
-        pytest.param("SOME", marks=pytest.mark.skip),
-        pytest.param("ANY", marks=pytest.mark.skip),
-        pytest.param("ALL", marks=pytest.mark.skip),
+        pytest.param("ANY"),
+        pytest.param("ALL"),
     ]
 )
 def some_any_all(request):
@@ -20,7 +19,7 @@ def some_any_all(request):
 
 
 def test_some_any_all_numeric_non_null_tuples(
-    bodosql_numeric_types, some_any_all, comparison_ops, spark_info, memory_leak_check
+    basic_df, some_any_all, comparison_ops, spark_info, memory_leak_check
 ):
     """Tests that SOME and ALL work with numeric value tuples"""
 
@@ -37,7 +36,7 @@ def test_some_any_all_numeric_non_null_tuples(
 
     check_query(
         query,
-        bodosql_numeric_types,
+        basic_df,
         spark_info,
         check_names=False,
         check_dtype=False,
@@ -160,4 +159,110 @@ def test_some_any_all_null_tuples(
         check_names=False,
         check_dtype=False,
         equivalent_spark_query=spark_query,
+    )
+
+
+def test_some_any_all_subquery(
+    simple_join_fixture, some_any_all, comparison_ops, memory_leak_check
+):
+    """Tests that SOME and ALL work with subqueries"""
+
+    if comparison_ops == "<=>":
+        pytest.skip("<=> is not compatible with subqueries")
+
+    expected_output = {
+        ("ANY", "="): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([2, 3], dtype="Int64"),
+                "D": pd.Series([5, 6], dtype="Int64"),
+            }
+        ),
+        ("ALL", "="): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([], dtype="Int64"),
+                "D": pd.Series([], dtype="Int64"),
+            }
+        ),
+        ("ANY", "<>"): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([1, 2, 3], dtype="Int64"),
+                "D": pd.Series([4, 5, 6], dtype="Int64"),
+            }
+        ),
+        ("ALL", "<>"): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([1], dtype="Int64"),
+                "D": pd.Series([4], dtype="Int64"),
+            }
+        ),
+        ("ANY", "!="): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([1, 2, 3], dtype="Int64"),
+                "D": pd.Series([4, 5, 6], dtype="Int64"),
+            }
+        ),
+        ("ALL", "!="): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([1], dtype="Int64"),
+                "D": pd.Series([4], dtype="Int64"),
+            }
+        ),
+        ("ANY", "<="): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([1, 2, 3], dtype="Int64"),
+                "D": pd.Series([4, 5, 6], dtype="Int64"),
+            }
+        ),
+        ("ALL", "<="): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([1, 2], dtype="Int64"),
+                "D": pd.Series([4, 5], dtype="Int64"),
+            }
+        ),
+        ("ANY", "<"): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([1, 2, 3], dtype="Int64"),
+                "D": pd.Series([4, 5, 6], dtype="Int64"),
+            }
+        ),
+        ("ALL", "<"): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([1], dtype="Int64"),
+                "D": pd.Series([4], dtype="Int64"),
+            }
+        ),
+        ("ANY", ">="): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([2, 3], dtype="Int64"),
+                "D": pd.Series([5, 6], dtype="Int64"),
+            }
+        ),
+        ("ALL", ">="): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([], dtype="Int64"),
+                "D": pd.Series([], dtype="Int64"),
+            }
+        ),
+        ("ANY", ">"): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([3], dtype="Int64"),
+                "D": pd.Series([6], dtype="Int64"),
+            }
+        ),
+        ("ALL", ">"): lambda: pd.DataFrame(
+            {
+                "A": pd.Series([], dtype="Int64"),
+                "D": pd.Series([], dtype="Int64"),
+            }
+        ),
+    }[some_any_all, comparison_ops]()
+
+    query = f"SELECT A, D FROM table1 WHERE (A + 2) {comparison_ops} {some_any_all} (SELECT C FROM table2)"
+    check_query(
+        query,
+        simple_join_fixture,
+        spark=None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
     )
