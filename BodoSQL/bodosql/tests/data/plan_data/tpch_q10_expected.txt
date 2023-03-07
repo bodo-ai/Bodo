@@ -10,7 +10,7 @@ LogicalSort(sort0=[$2], sort1=[$0], dir0=[DESC-nulls-last], dir1=[ASC-nulls-firs
                   LogicalProject(C_CUSTKEY=[$0], C_NAME=[$1], C_ADDRESS=[$2], C_NATIONKEY=[$3], C_PHONE=[$4], C_ACCTBAL=[$5], C_COMMENT=[$7])
                     LogicalTableScan(table=[[__bodolocal__, customer]])
                   LogicalProject(O_ORDERKEY=[$0], O_CUSTKEY=[$1])
-                    LogicalFilter(condition=[AND(>=($4, CAST('1993-10-01'):TIMESTAMP(0) NOT NULL), <($4, CAST('1994-01-01'):TIMESTAMP(0) NOT NULL))])
+                    LogicalFilter(condition=[AND(>=($4, CAST('1993-10-01'):DATE NOT NULL), <($4, CAST('1994-01-01'):DATE NOT NULL))])
                       LogicalTableScan(table=[[__bodolocal__, orders]])
               LogicalProject(L_ORDERKEY=[$0], L_EXTENDEDPRICE=[$5], L_DISCOUNT=[$6])
                 LogicalFilter(condition=[=($8, 'R')])

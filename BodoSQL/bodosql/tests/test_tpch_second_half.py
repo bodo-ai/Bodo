@@ -46,13 +46,11 @@ def test_tpch_q12(tpch_data, spark_info, memory_leak_check):
                      order by
                        l_shipmode
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -79,13 +77,11 @@ def test_tpch_q13(tpch_data, spark_info, memory_leak_check):
                        custdist desc,
                        c_count desc
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -106,13 +102,11 @@ def test_tpch_q14(tpch_data, spark_info, memory_leak_check):
                       and l_shipdate >= date '{DATE}'
                       and l_shipdate < date '{DATE}' +  interval '1' month
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
         is_out_distributed=False,
     )
 
@@ -156,13 +150,11 @@ def test_tpch_q15_blazingsql(tpch_data, spark_info, memory_leak_check):
                     order by
                       s_suppkey
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -212,17 +204,14 @@ def test_tpch_q16(tpch_data, spark_info, memory_leak_check):
                        p_type,
                        p_size
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     # We seem to be encountering memory errors on nightly, shrinking the input DataFrames
     # to see if this fixes the issue.
-    bodosql_df_dict = shrink_data(bodosql_df_dict, 1000)
-    spark_df_dict = shrink_data(spark_df_dict, 1000)
+    tpch_data = shrink_data(tpch_data, 1000)
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -248,13 +237,11 @@ def test_tpch_q17(tpch_data, spark_info, memory_leak_check):
                            l_partkey = p_partkey
                        )
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
         is_out_distributed=False,
     )
 
@@ -298,14 +285,12 @@ def test_tpch_q18(tpch_data, spark_info, memory_leak_check):
                        o_totalprice desc,
                        o_orderdate
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
         check_names=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -354,13 +339,11 @@ def test_tpch_q19(tpch_data, spark_info, memory_leak_check):
                          and l_shipinstruct = 'DELIVER IN PERSON'
                        )
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
         is_out_distributed=False,
     )
 
@@ -407,13 +390,11 @@ def test_tpch_q20(tpch_data, spark_info, memory_leak_check):
                      order by
                        s_name
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -461,13 +442,11 @@ def test_tpch_q21(tpch_data, spark_info, memory_leak_check):
                        numwait desc,
                        s_name
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )
 
 
@@ -518,11 +497,9 @@ def test_tpch_q22(tpch_data, spark_info, memory_leak_check):
                     order by
                       cntrycode
     """
-    bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
         tpch_query,
-        bodosql_df_dict,
+        tpch_data,
         spark_info,
         check_dtype=False,
-        spark_dataframe_dict=spark_df_dict,
     )

@@ -1094,7 +1094,7 @@ def tpch_data(datapath):
 @pytest.fixture(scope="module")
 def tpch_data_schema_only(datapath):
     """
-    Fixture with TPCH data for BodoSQL Contexts, but only feteches 1 row
+    Fixture with TPCH data for BodoSQL Contexts, but only fetches 1 row
     per DataFrame
     """
     return tpch_data_helper(datapath, 1)
@@ -1111,16 +1111,7 @@ def tpch_data_helper(datapath, rows):
         part_df,
         partsupp_df,
     ) = load_tpch_data(datapath("tpch-test-data/parquet"), rows)
-    # BodoSQL doesn't support Date datatypes yet. Convert the input
-    # data to datetime64 for BodoSQL. Spark has correctness issues
-    # if this is converted though, so keep Spark data types separate.
-    spark_lineitem_df = lineitem_df.copy(deep=True)
-    spark_orders_df = orders_df.copy(deep=True)
-    lineitem_df["L_SHIPDATE"] = lineitem_df["L_SHIPDATE"].astype("datetime64[ns]")
-    lineitem_df["L_COMMITDATE"] = lineitem_df["L_COMMITDATE"].astype("datetime64[ns]")
-    lineitem_df["L_RECEIPTDATE"] = lineitem_df["L_RECEIPTDATE"].astype("datetime64[ns]")
-    orders_df["O_ORDERDATE"] = orders_df["O_ORDERDATE"].astype("datetime64[ns]")
-    bodo_dataframe_dict = {
+    dataframe_dict = {
         "customer": customer_df,
         "orders": orders_df,
         "lineitem": lineitem_df,
@@ -1130,17 +1121,7 @@ def tpch_data_helper(datapath, rows):
         "part": part_df,
         "partsupp": partsupp_df,
     }
-    spark_dataframe_dict = {
-        "customer": customer_df,
-        "orders": spark_orders_df,
-        "lineitem": spark_lineitem_df,
-        "nation": nation_df,
-        "region": region_df,
-        "supplier": supplier_df,
-        "part": part_df,
-        "partsupp": partsupp_df,
-    }
-    return bodo_dataframe_dict, spark_dataframe_dict
+    return dataframe_dict
 
 
 @bodo.jit(returns_maybe_distributed=False, cache=True)
