@@ -157,7 +157,7 @@ public class TPCHSchemaTest {
     table = new LocalTableImpl("part", schema, arr, false, "part", "", false, "MEMORY");
     schema.addTable(table);
 
-    RelationalAlgebraGenerator generator = new RelationalAlgebraGenerator(schema, "", 0);
+    RelationalAlgebraGenerator generator = new RelationalAlgebraGenerator(schema, "", 0, false);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String planStr = generator.getRelationalAlgebraString(sql, true);

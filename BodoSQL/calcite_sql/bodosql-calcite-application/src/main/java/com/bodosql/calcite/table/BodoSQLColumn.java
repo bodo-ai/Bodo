@@ -35,10 +35,10 @@ public interface BodoSQLColumn {
    * Does reading this column type need to be cast to another Bodo type to match the generated Java
    * type.
    */
-  boolean requiresReadCast();
+  boolean requiresReadCast(boolean useDateRuntime);
 
   /** Does write this column type need to be cast back to the original table type. */
-  boolean requiresWriteCast();
+  boolean requiresWriteCast(boolean useDateRuntime);
 
   /**
    * Generate the expression to cast this column to its BodoSQL type with a read.
@@ -47,7 +47,7 @@ public interface BodoSQLColumn {
    * @return The string passed to __bodosql_replace_columns_dummy to cast this column to its BodoSQL
    *     supported type with a read.
    */
-  String getReadCastExpr(String varName);
+  String getReadCastExpr(String varName, boolean useDateRuntime);
 
   /**
    * Generate the expression to cast this column to its BodoSQL type with a write.
@@ -287,29 +287,34 @@ public interface BodoSQLColumn {
       return typeFactory.createTypeWithNullability(temp, nullable);
     }
 
-    public boolean requiresReadCast() {
+    public boolean requiresReadCast(boolean useDateRuntime) {
       switch (this) {
         case CATEGORICAL:
-        case DATE:
           return true;
+        case DATE:
+          return !useDateRuntime;
         default:
           return false;
       }
     }
 
-    public boolean requiresWriteCast() {
+    public boolean requiresWriteCast(boolean useDateRuntime) {
       switch (this) {
         case DATE:
-          return true;
+          return !useDateRuntime;
         default:
           return false;
       }
     }
 
     /** @return The type used to cast an individual type to the supported BodoSQL type. */
-    public BodoSQLColumnDataType getCastType() {
+    public BodoSQLColumnDataType getCastType(boolean useDateRuntime) {
       if (this == DATE) {
-        return DATETIME;
+        if (useDateRuntime) {
+          return this;
+        } else {
+          return DATETIME;
+        }
       }
       return this;
     }

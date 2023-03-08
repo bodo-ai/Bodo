@@ -267,13 +267,13 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   }
 
   @Override
-  public boolean requiresReadCast() {
-    return this.dataType.requiresReadCast();
+  public boolean requiresReadCast(boolean useDateRuntime) {
+    return this.dataType.requiresReadCast(useDateRuntime);
   }
 
   @Override
-  public boolean requiresWriteCast() {
-    return this.dataType.requiresWriteCast();
+  public boolean requiresWriteCast(boolean useDateRuntime) {
+    return this.dataType.requiresWriteCast(useDateRuntime);
   }
 
   @Override
@@ -299,14 +299,14 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
    *     original data type with a read.
    */
   @Override
-  public String getReadCastExpr(String varName) {
+  public String getReadCastExpr(String varName, boolean useDateRuntime) {
     String dtype;
     if (this.dataType == BodoSQLColumnDataType.CATEGORICAL) {
       // Categorical data should be cast to the elem type. This cannot
       // be described in a single BodoSQLColumnDataType yet.
-      dtype = this.elemType.getCastType().getTypeString();
+      dtype = this.elemType.getCastType(useDateRuntime).getTypeString();
     } else {
-      dtype = this.dataType.getCastType().getTypeString();
+      dtype = this.dataType.getCastType(useDateRuntime).getTypeString();
     }
     return getCommonCastExpr(varName, String.format("'%s'", dtype));
   }

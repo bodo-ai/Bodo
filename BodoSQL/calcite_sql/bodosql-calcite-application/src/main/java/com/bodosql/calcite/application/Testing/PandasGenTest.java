@@ -70,7 +70,7 @@ public class PandasGenTest {
     schema.addTable(paramTable);
 
     RelationalAlgebraGenerator generator =
-        new RelationalAlgebraGenerator(schema, paramTableName, 0);
+        new RelationalAlgebraGenerator(schema, paramTableName, 0, false);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);

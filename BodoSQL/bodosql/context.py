@@ -1,3 +1,4 @@
+import datetime
 import os
 import re
 import time
@@ -19,7 +20,7 @@ from bodo.ir.sql_ext import parse_dbtype, remove_iceberg_prefix
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError
 
-# Name for paramter table
+# Name for parameter table
 NAMED_PARAM_TABLE_NAME = "__$bodo_named_param_table__"
 
 
@@ -601,6 +602,7 @@ class BodoSQLContext:
             "import numpy as np",
             "import pandas as pd",
             "import time",
+            "import datetime",
             "import numba",
             "import bodo",
             "import bodosql",
@@ -716,6 +718,7 @@ class BodoSQLContext:
                     "numba": numba,
                     "time": time,
                     "pd": pd,
+                    "datetime": datetime,
                 },
                 locs,
             )
@@ -748,6 +751,7 @@ class BodoSQLContext:
             "MetaType": bodo.utils.typing.MetaType,
             "numba": numba,
             "time": time,
+            "datetime": datetime,
             "pd": pd,
         }
 
@@ -907,9 +911,13 @@ class BodoSQLContext:
                 self.schema,
                 NAMED_PARAM_TABLE_NAME,
                 verbose_level,
+                bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE,
             )
         generator = RelationalAlgebraGeneratorClass(
-            self.schema, NAMED_PARAM_TABLE_NAME, verbose_level
+            self.schema,
+            NAMED_PARAM_TABLE_NAME,
+            verbose_level,
+            bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE,
         )
         return generator
 

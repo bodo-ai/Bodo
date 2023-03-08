@@ -3,6 +3,7 @@
 Common utilities for all BodoSQL array kernels
 """
 
+import datetime
 import math
 import re
 
@@ -483,6 +484,7 @@ def gen_vectorized(
         "np": np,
         "out_dtype": out_dtype,
         "pd": pd,
+        "datetime": datetime,
     }
 
     if not (extra_globals is None):
@@ -1296,11 +1298,11 @@ def gen_windowed(
                     has_non_null = True
                 if np.isnan(arr0[i]):
                     has_nan = True
-            
+
             if has_nan:
                 for i in range(n):
                     res[i] = np.nan
-                
+
             else if not has_non_null:
                 for i in range(n):
                     bodo.libs.array_kernels.setna(res, i)

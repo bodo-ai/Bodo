@@ -1,7 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTruncCode;
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 import static com.bodosql.calcite.application.Utils.Utils.sqlTypenameToPandasTypename;
 import static org.apache.calcite.sql.type.SqlTypeName.DATE;
 import static org.apache.calcite.sql.type.SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
@@ -22,7 +21,11 @@ public class CastCodeGen {
    * @return The code generated that matches the Cast call.
    */
   public static String generateCastCode(
-      String arg, RelDataType inputType, RelDataType outputType, boolean outputScalar) {
+      String arg,
+      RelDataType inputType,
+      RelDataType outputType,
+      boolean outputScalar,
+      boolean useDateRuntime) {
     StringBuilder codeBuilder = new StringBuilder();
     SqlTypeName inputTypeName = inputType.getSqlTypeName();
     SqlTypeName outputTypeName = outputType.getSqlTypeName();
@@ -79,7 +82,7 @@ public class CastCodeGen {
       default:
         StringBuilder asTypeBuilder = new StringBuilder();
         SqlTypeName typeName = outputType.getSqlTypeName();
-        String dtype = sqlTypenameToPandasTypename(typeName, outputScalar);
+        String dtype = sqlTypenameToPandasTypename(typeName, outputScalar, useDateRuntime);
         if (outputScalar) {
           asTypeBuilder.append(dtype).append("(").append(arg).append(")");
         } else {
