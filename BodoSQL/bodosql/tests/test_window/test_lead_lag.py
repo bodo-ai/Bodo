@@ -45,6 +45,7 @@ def gen_lead_lag_queries(
     return lead_lag_queries, lead_lag_names
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.parametrize(
     "cols_to_use, window_frame",
     [
