@@ -100,9 +100,10 @@
 
 		<dependency>
 			<groupId>com.github.Bodo-inc.calcite</groupId>
-			<artifactId>calcite-bodo</artifactId>
+			<artifactId>calcite-testkit</artifactId>
 			<!-- Test here by changing the branch version -->
 			<version>bodo-calcite-1.30.0-dev-SNAPSHOT</version>
+			<scope>test</scope>
 		</dependency>
 
 		<!-- https://mvnrepository.com/artifact/net.snowflake/snowflake-jdbc -->
@@ -134,7 +135,7 @@
 	</dependencies>
 
 	<build>
-		<testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
+		<testSourceDirectory>${project.basedir}/src/test</testSourceDirectory>
 
 		<plugins>
 			<plugin>
@@ -153,6 +154,7 @@
 						<configuration>
 							<sourceDirs>
 								<source>target/generated-sources/annotations</source>
+								<source>target/generated-sources</source>
 								<source>src/main/java</source>
 							</sourceDirs>
 						</configuration>
@@ -167,6 +169,7 @@
 						<configuration>
 							<sourceDirs>
 								<source>src/test/kotlin</source>
+								<source>src/test/java</source>
 							</sourceDirs>
 						</configuration>
 					</execution>
@@ -174,6 +177,57 @@
 				<configuration>
 					<jvmTarget>1.8</jvmTarget>
 				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.drill.tools</groupId>
+				<artifactId>drill-fmpp-maven-plugin</artifactId>
+				<version>1.21.0</version>
+				<executions>
+					<execution>
+						<id>generate-parser</id>
+						<goals>
+							<goal>generate</goal>
+						</goals>
+						<configuration>
+							<config>src/main/codegen/config.fmpp</config>
+							<templates>src/main/codegen/templates</templates>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>javacc-maven-plugin</artifactId>
+				<!--
+				The version here is weird and old because the version of javacc used depends
+				on the plugin version and this plugin version matches the specific javacc version
+				that calcite uses.
+
+				Upgrading this seems to cause some tests to fail. Since the javacc version isn't
+				very important, this is left at the newest version with the specific javacc version
+				we need (which is 4.0).
+				-->
+				<version>2.4.1</version>
+				<executions>
+					<execution>
+						<phase>generate-sources</phase>
+						<id>javacc</id>
+						<goals>
+							<goal>javacc</goal>
+						</goals>
+						<configuration>
+							<sourceDirectory>${project.build.directory}/generated-sources/</sourceDirectory>
+							<includes>
+								<include>**/Parser.jj</include>
+							</includes>
+							<outputDirectory>${project.build.directory}/generated-sources/</outputDirectory>
+							<lookAhead>2</lookAhead>
+							<isStatic>false</isStatic>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 
 			<plugin>
