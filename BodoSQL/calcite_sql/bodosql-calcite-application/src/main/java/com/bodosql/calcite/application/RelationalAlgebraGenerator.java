@@ -103,6 +103,10 @@ public class RelationalAlgebraGenerator {
   /** The Bodo verbose level. This is used to control code generated and/or compilation info. * */
   private final int verboseLevel;
 
+  // Java equivalent for _BODOSQL_USE_DATE_TYPE that controls if we use the date runtime value
+  // or the old datetime64ns implementation.
+  private final boolean useDateRuntime;
+
   /**
    * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
    * SQL queries can be executed within its context.
@@ -248,9 +252,13 @@ public class RelationalAlgebraGenerator {
    *     gets stored in the {@link #config}
    */
   public RelationalAlgebraGenerator(
-      BodoSqlSchema newSchema, String namedParamTableName, int verboseLevel) {
+      BodoSqlSchema newSchema,
+      String namedParamTableName,
+      int verboseLevel,
+      boolean useDateRuntime) {
     this.catalog = null;
     this.verboseLevel = verboseLevel;
+    this.useDateRuntime = useDateRuntime;
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
     List<BodoSqlSchema> newSchemas = new ArrayList<BodoSqlSchema>();
@@ -274,9 +282,11 @@ public class RelationalAlgebraGenerator {
       BodoSQLCatalog catalog,
       BodoSqlSchema newSchema,
       String namedParamTableName,
-      int verboseLevel) {
+      int verboseLevel,
+      boolean useDateRuntime) {
     this.catalog = catalog;
     this.verboseLevel = verboseLevel;
+    this.useDateRuntime = useDateRuntime;
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
     Set<String> schemaNames = catalog.getSchemaNames();
@@ -736,7 +746,8 @@ public class RelationalAlgebraGenerator {
             originalSQL,
             this.typeSystem,
             debugDeltaTable,
-            this.verboseLevel);
+            this.verboseLevel,
+            this.useDateRuntime);
     codegen.go(plan);
     String pandas_code = codegen.getGeneratedCode();
     return pandas_code;

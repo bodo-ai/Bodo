@@ -142,6 +142,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   private static int RelNodeTimingVerboseLevel = 2;
 
+  // Java equivalent for _BODOSQL_USE_DATE_TYPE that controls if we use the date runtime value
+  // or the old datetime64ns implementation.
+  private final boolean useDateRuntime;
+
   public PandasCodeGenVisitor(
       HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
       HashMap<String, RexNode> searchMap,
@@ -149,7 +153,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String originalSQLQuery,
       RelDataTypeSystem typeSystem,
       boolean debuggingDeltaTable,
-      int verboseLevel) {
+      int verboseLevel,
+      boolean useDateRuntime) {
     super();
     this.exprTypesMap = exprTypesMap;
     this.searchMap = searchMap;
@@ -161,6 +166,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.targetTableDf = null;
     this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
+    this.useDateRuntime = useDateRuntime;
   }
 
   /**
@@ -346,7 +352,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
     this.genRelnodeTimerStart(node);
     this.generatedCode.append(
-        generateLogicalValuesCode(outVar, exprCodes, node.getRowType(), this));
+        generateLogicalValuesCode(outVar, exprCodes, node.getRowType(), this, useDateRuntime));
     this.varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
   }
@@ -511,7 +517,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           && (typeName != SqlTypeName.BIGINT)) {
         throw new BodoSQLCodegenException(
             "Limit value must be an integer, value is of type: "
-                + sqlTypenameToPandasTypename(typeName, true));
+                + sqlTypenameToPandasTypename(typeName, true, useDateRuntime));
       }
 
       // fetch is either a named Parameter or a literal from parsing.
@@ -532,7 +538,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           && (typeName != SqlTypeName.BIGINT)) {
         throw new BodoSQLCodegenException(
             "Offset value must be an integer, value is of type: "
-                + sqlTypenameToPandasTypename(typeName, true));
+                + sqlTypenameToPandasTypename(typeName, true, useDateRuntime));
       }
 
       // Offset is either a named Parameter or a literal from parsing.
@@ -700,7 +706,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 exprTypes,
                 sqlTypes,
                 this,
-                colNames.size());
+                colNames.size(),
+                useDateRuntime);
       }
     }
     this.generatedCode.append(outputCode);
@@ -888,7 +895,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public String handleCastAndRenameBeforeWrite(
       String outVar, List<String> colNames, BodoSqlTable bodoSqlTable) {
     StringBuilder outputCode = new StringBuilder();
-    String castExpr = bodoSqlTable.generateWriteCastCode(outVar);
+    String castExpr = bodoSqlTable.generateWriteCastCode(outVar, useDateRuntime);
     if (castExpr != "") {
       outputCode.append(getBodoIndent()).append(outVar).append(" = ").append(castExpr).append("\n");
     }
@@ -1468,7 +1475,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             node.getType(),
             pdVisitorClass,
             oldBuilder,
-            innerBuilder);
+            innerBuilder,
+            useDateRuntime);
 
     return new RexNodeVisitorInfo(codeExpr);
   }
@@ -2022,7 +2030,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
               upperBoundsList,
               zeroExpr,
               argsListList,
-              isRespectNulls);
+              isRespectNulls,
+              useDateRuntime);
       String fn_text = out.getKey();
       outputColList = out.getValue();
 
@@ -2352,7 +2361,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
                       operandsInfo.get(0).getExprCode(),
                       inputType,
                       outputType,
-                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow,
+                      useDateRuntime);
               operandsInfo.set(0, new RexNodeVisitorInfo(casted_expr));
             }
 
@@ -3158,7 +3168,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 == BodoSQLExprType.ExprType.SCALAR);
     RexNodeVisitorInfo child =
         visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
-    String exprCode = generateCastCode(child.getExprCode(), inputType, outputType, outputScalar);
+    String exprCode =
+        generateCastCode(child.getExprCode(), inputType, outputType, outputScalar, useDateRuntime);
     return new RexNodeVisitorInfo(exprCode);
   }
 
@@ -3222,7 +3233,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *     relational expression.
    */
   public RexNodeVisitorInfo visitLiteralScan(RexLiteral node, boolean isSingleRow) {
-    String literal = generateLiteralCode(node, isSingleRow, this);
+    String literal = generateLiteralCode(node, isSingleRow, this, useDateRuntime);
     return new RexNodeVisitorInfo(literal);
   }
 
@@ -3261,7 +3272,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               "Insert Into is only supported with Iceberg table destinations provided via"
                   + " the the SQL TablePath API");
         }
-        readCode = table.generateReadCode("_bodo_merge_into=True,");
+        readCode = table.generateReadCode("_bodo_merge_into=True,", useDateRuntime);
         this.fileListAndSnapshotIdArgs =
             String.format(
                 "snapshot_id=%s, old_fnames=%s,", icebergSnapshotIDName, icebergFileListVarName);
@@ -3271,7 +3282,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 outVar, icebergFileListVarName, icebergSnapshotIDName, readCode);
         targetTableDf = outVar;
       } else {
-        readCode = table.generateReadCode();
+        readCode = table.generateReadCode(useDateRuntime);
         readAssign = String.format("  %s = %s\n", outVar, readCode);
       }
 
@@ -3293,7 +3304,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         this.generatedCode.append(readAssign);
       }
 
-      String castExpr = table.generateReadCastCode(outVar);
+      String castExpr = table.generateReadCastCode(outVar, useDateRuntime);
       if (castExpr != "") {
         this.generatedCode.append(String.format("  %s = %s\n", outVar, castExpr));
       }

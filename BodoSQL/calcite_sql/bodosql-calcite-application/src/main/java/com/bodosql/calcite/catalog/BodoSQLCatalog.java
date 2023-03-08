@@ -82,8 +82,11 @@ public interface BodoSQLCatalog {
    * @param tableName Name of the table to use when writing.
    * @return The generated code to produce a write.
    */
-  String generateWriteCode(String varName, String schemaName, String tableName,
-                           BodoSQLCatalog.ifExistsBehavior ifExists);
+  String generateWriteCode(
+      String varName,
+      String schemaName,
+      String tableName,
+      BodoSQLCatalog.ifExistsBehavior ifExists);
 
   /**
    * Generates the code necessary to produce a read expression from the given catalog.
@@ -92,7 +95,7 @@ public interface BodoSQLCatalog {
    * @param tableName Name of the table to use when reading.
    * @return The generated code to produce a read.
    */
-  String generateReadCode(String schemaName, String tableName);
+  String generateReadCode(String schemaName, String tableName, boolean useDateRuntime);
 
   /**
    * Close any connections to the remote DataBase. If there are no connections this should be a

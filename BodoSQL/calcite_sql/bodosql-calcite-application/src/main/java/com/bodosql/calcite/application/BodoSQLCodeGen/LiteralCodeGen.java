@@ -7,7 +7,7 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.google.common.collect.Range;
 import java.math.BigDecimal;
-import java.util.Iterator;
+import java.util.*;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
@@ -28,7 +28,7 @@ public class LiteralCodeGen {
    * @return The code generated that matches the Literal.
    */
   public static String generateLiteralCode(
-      RexLiteral node, boolean isSingleRow, PandasCodeGenVisitor visitor) {
+      RexLiteral node, boolean isSingleRow, PandasCodeGenVisitor visitor, boolean useDateRuntime) {
     StringBuilder codeBuilder = new StringBuilder();
     SqlTypeName typeName = node.getType().getSqlTypeName();
     String out = "";
@@ -147,9 +147,20 @@ public class LiteralCodeGen {
             codeBuilder.append(node.getValue().toString());
             break;
           case DATE:
-            // TODO: Parse string into fields to avoid objmode in Bodo
-            codeBuilder.append("pd.Timestamp(" + makeQuoted(node.toString()) + ")");
-            break;
+            {
+              GregorianCalendar calendar = (GregorianCalendar) node.getValue();
+              int year = calendar.get(Calendar.YEAR);
+              // Month is 0-indexed in GregorianCalendar
+              int month = calendar.get(Calendar.MONTH) + 1;
+              int day = calendar.get(Calendar.DAY_OF_MONTH);
+              if (useDateRuntime) {
+                codeBuilder.append(String.format("datetime.date(%d, %d, %d)", year, month, day));
+              } else {
+                codeBuilder.append(
+                    String.format("pd.Timestamp(year=%d, month=%d, day=%d)", year, month, day));
+              }
+              break;
+            }
           case CHAR:
           case VARCHAR:
             codeBuilder.append(
@@ -159,19 +170,13 @@ public class LiteralCodeGen {
                             .toString()))); // extract value without specific sql type info.
             break;
           case TIMESTAMP:
-            // TODO: Parse string into fields to avoid objmode in Bodo
-            // Note this can possibly be done via node.getValue()
-
-            // Currently, node.toString will contain the precision of the TIMESTAMP type.
-            // We workaround this by simply splitting the string when needed.
-            // TODO: have some more robust code here using getValue
-            String tsString = node.toString();
-            int precision_string_length = 13;
-            if (tsString.contains("TIMESTAMP")) {
-              tsString = tsString.substring(0, tsString.length() - precision_string_length);
+            {
+              GregorianCalendar calendar = (GregorianCalendar) node.getValue();
+              // TODO: How do we represent microseconds and nanoseconds?
+              long nanoseconds = calendar.getTimeInMillis() * 1000 * 1000;
+              codeBuilder.append(String.format("pd.Timestamp(%d)", nanoseconds));
+              break;
             }
-            codeBuilder.append("pd.Timestamp(" + makeQuoted(tsString) + ")");
-            break;
           case BOOLEAN:
             String boolName = node.toString();
             codeBuilder.append(boolName.substring(0, 1).toUpperCase() + boolName.substring(1));

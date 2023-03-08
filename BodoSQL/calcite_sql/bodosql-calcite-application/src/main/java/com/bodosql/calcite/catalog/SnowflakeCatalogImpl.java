@@ -523,14 +523,20 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The generated code to produce a read.
    */
   @Override
-  public String generateReadCode(String schemaName, String tableName) {
+  public String generateReadCode(String schemaName, String tableName, boolean useDateRuntime) {
     // _bodo_read_date_as_dt64=True to convert date columns to datetime64
     // without astype() calls in the IR which cause issues for limit pushdown.
     // see BE-4238
     // TODO[BE-2954]: support a proper date type and remove this flag
+    final String dateAsInt64;
+    if (useDateRuntime) {
+      dateAsInt64 = "False";
+    } else {
+      dateAsInt64 = "True";
+    }
     return String.format(
-        "pd.read_sql('%s', '%s', _bodo_read_date_as_dt64=True, _bodo_is_table_input=True)",
-        tableName, generatePythonConnStr(schemaName));
+        "pd.read_sql('%s', '%s', _bodo_read_date_as_dt64=%s, _bodo_is_table_input=True)",
+        tableName, generatePythonConnStr(schemaName), dateAsInt64);
   }
 
   /**

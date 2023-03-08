@@ -1828,7 +1828,7 @@ def test_snowflake_reverse_filter_pushdown(
     with create_snowflake_table(df, "reverse_pushdown_table", db, schema) as table_name:
         # Load the whole table in pandas.
         shipmode_col = df.L_SHIPMODE.apply(lambda x: x[::-1])
-        expected_output = df[shipmode_col == "PIHS"][["l_orderkey"]]
+        expected_output = df[shipmode_col == "PIHS"][["L_ORDERKEY"]]
         expected_output.columns = [x.lower() for x in expected_output.columns]
 
         test_query = f"""

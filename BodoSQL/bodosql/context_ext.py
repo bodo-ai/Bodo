@@ -2,6 +2,7 @@
 Assumes an immutable context where table names and DataFrames are not modified inplace,
 which allows typing and optimization.
 """
+import datetime
 import re
 import time
 
@@ -370,10 +371,14 @@ def _gen_pd_func_text_and_lowered_globals(
                     schema,
                     NAMED_PARAM_TABLE_NAME,
                     verbose_level,
+                    bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE,
                 )
             else:
                 generator = RelationalAlgebraGeneratorClass(
-                    schema, NAMED_PARAM_TABLE_NAME, verbose_level
+                    schema,
+                    NAMED_PARAM_TABLE_NAME,
+                    verbose_level,
+                    bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE,
                 )
         except Exception as e:
             # Raise BodoError outside except to avoid stack trace
@@ -435,6 +440,7 @@ def _gen_pd_func_text_and_lowered_globals(
                 "bodo": bodo,
                 "time": time,
                 "pd": pd,
+                "datetime": datetime,
             },
             locs,
         )
@@ -457,7 +463,15 @@ def _gen_pd_func_and_glbls_for_query(
     loc_vars = {}
     exec(
         func_text,
-        {"pd": pd, "np": np, "bodo": bodo, "re": re, "bodosql": bodosql, "time": time},
+        {
+            "pd": pd,
+            "np": np,
+            "bodo": bodo,
+            "re": re,
+            "bodosql": bodosql,
+            "time": time,
+            "datetime": datetime,
+        },
         loc_vars,
     )
     impl = loc_vars["impl"]
