@@ -101,8 +101,8 @@ public class CatalogTableImpl extends BodoSqlTable {
    * @return The generated code to read the table.
    */
   @Override
-  public String generateReadCode() {
-    return this.getCatalogSchema().generateReadCode(this.getName());
+  public String generateReadCode(boolean useDateRuntime) {
+    return this.getCatalogSchema().generateReadCode(this.getName(), useDateRuntime);
   }
 
   /**
@@ -114,12 +114,12 @@ public class CatalogTableImpl extends BodoSqlTable {
    * @return The generated code to read the table.
    */
   @Override
-  public String generateReadCode(String extraArgs) {
+  public String generateReadCode(String extraArgs, boolean useDateRuntime) {
     throw new UnsupportedOperationException("Catalog APIs do not support additional arguments");
   }
 
   @Override
-  public String generateReadCastCode(String varName) {
+  public String generateReadCastCode(String varName, boolean useDateRuntime) {
     // Snowflake catalog uses _bodo_read_date_as_dt64=True to convert date columns to datetime64
     // without astype() calls in the IR which cause issues for limit pushdown.
     // see BE-4238

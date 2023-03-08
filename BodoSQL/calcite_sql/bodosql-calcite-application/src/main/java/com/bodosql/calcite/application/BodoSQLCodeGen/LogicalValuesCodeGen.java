@@ -23,7 +23,8 @@ public class LogicalValuesCodeGen {
       String outVar,
       List<String> argExprs,
       RelDataType rowType,
-      PandasCodeGenVisitor pdVisitorClass) {
+      PandasCodeGenVisitor pdVisitorClass,
+      boolean useDateRuntime) {
 
     final String indent = getBodoIndent();
 
@@ -44,7 +45,8 @@ public class LogicalValuesCodeGen {
     for (int i = 0; i < columnNames.size(); i++) {
       // Scalars require separate code path to handle null.
       String globalName =
-          pdVisitorClass.lowerAsGlobal(sqlTypeToBodoArrayType(sqlTypes.get(i).getType(), true));
+          pdVisitorClass.lowerAsGlobal(
+              sqlTypeToBodoArrayType(sqlTypes.get(i).getType(), true, useDateRuntime));
       String colName = columnNames.get(i);
       outputStr
           .append(makeQuoted(colName))

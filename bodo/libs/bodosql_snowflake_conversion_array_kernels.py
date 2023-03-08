@@ -10,6 +10,7 @@ from numba.core import types
 from numba.extending import overload, register_jitable
 
 import bodo
+from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     get_literal_value,
@@ -140,7 +141,7 @@ def create_date_cast_util(func, error_on_fail):
     have an error when it has a failure (as opposed to outputting null),
 
     Returns an overload that accepts 2 arguments: the value to be converted
-    (a series or scalar of mulitiple possible types), and an optional format string
+    (a series or scalar of multiple possible types), and an optional format string
     for cases where the input is a string.
 
     The full specification is noted here:
@@ -153,6 +154,11 @@ def create_date_cast_util(func, error_on_fail):
 
     def overload_impl(conversionVal, format_str):
         verify_string_arg(format_str, func, "format_str")
+
+        # Determine wether to use datetime.date or pd.Timestamp
+        extraction_fn = (
+            "date" if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE else "normalize"
+        )
 
         # When returning a scalar we return a pd.Timestamp type.
         is_out_arr = bodo.utils.utils.is_array_typ(
@@ -170,7 +176,7 @@ def create_date_cast_util(func, error_on_fail):
             scalar_text += "if not was_successful:\n"
             scalar_text += f"  {error_str}\n"
             scalar_text += "else:\n"
-            scalar_text += f"  res[i] = {unbox_str}(tmp_val.normalize())\n"
+            scalar_text += f"  res[i] = {unbox_str}(tmp_val.{extraction_fn}())\n"
 
         # NOTE: gen_vectorized will automatically map this function over the values dictionary
         # of a dict encoded string array instead of decoding it whenever possible
@@ -180,12 +186,20 @@ def create_date_cast_util(func, error_on_fail):
             https://docs.snowflake.com/en/user-guide/date-time-input-output.html#date-formats. All of the examples listed are
             handled by pd.to_datetime() in Bodo jit code.
 
-            It will also check if the string is convertable to int, IE '12345' or '-4321'"""
+            It will also check if the string is convertible to int, IE '12345' or '-4321'"""
 
             # Conversion needs to be done incase arg0 is unichr array
             scalar_text = "arg0 = str(arg0)\n"
             scalar_text += "if (arg0.isnumeric() or (len(arg0) > 1 and arg0[0] == '-' and arg0[1:].isnumeric())):\n"
-            scalar_text += f"   res[i] = {unbox_str}(number_to_datetime(np.int64(arg0)).normalize())\n"
+            scalar_text += "   int_val = np.int64(arg0)\n"
+            scalar_text += "   if int_val < 31536000000:\n"
+            scalar_text += f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='s').{extraction_fn}())\n"
+            scalar_text += "   elif int_val < 31536000000000:\n"
+            scalar_text += f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='ms').{extraction_fn}())\n"
+            scalar_text += "   elif int_val < 31536000000000000:\n"
+            scalar_text += f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='us').{extraction_fn}())\n"
+            scalar_text += "   else:\n"
+            scalar_text += f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='ns').{extraction_fn}())\n"
 
             scalar_text += "else:\n"
             scalar_text += (
@@ -194,17 +208,19 @@ def create_date_cast_util(func, error_on_fail):
             scalar_text += "   if not was_successful:\n"
             scalar_text += f"      {error_str}\n"
             scalar_text += "   else:\n"
-            scalar_text += f"      res[i] = {unbox_str}(tmp_val.normalize())\n"
+            scalar_text += f"      res[i] = {unbox_str}(tmp_val.{extraction_fn}())\n"
 
         # If a tz-aware timestamp, construct a tz-naive timestamp with the same date
         elif is_valid_tz_aware_datetime_arg(conversionVal):
-            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day))\n"
+            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day).{extraction_fn}())\n"
 
         # If a non-tz timestamp/datetime, round it down to the nearest day
         elif is_valid_datetime_or_date_arg(
             conversionVal
         ) or is_valid_tz_naive_datetime_arg(conversionVal):
-            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).normalize())\n"
+            scalar_text = (
+                f"res[i] = {unbox_str}(pd.Timestamp(arg0).{extraction_fn}())\n"
+            )
 
         else:  # pragma: no cover
             raise raise_bodo_error(
@@ -215,7 +231,11 @@ def create_date_cast_util(func, error_on_fail):
         arg_types = [conversionVal, format_str]
         propagate_null = [True, False]
 
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+        out_dtype = (
+            DatetimeDateArrayType
+            if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
+            else types.Array(bodo.datetime64ns, 1, "C")
+        )
 
         extra_globals = {
             "pd_to_datetime_error_checked": pd_to_datetime_error_checked,

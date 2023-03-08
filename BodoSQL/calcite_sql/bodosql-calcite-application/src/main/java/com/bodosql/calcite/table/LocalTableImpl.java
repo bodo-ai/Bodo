@@ -129,7 +129,7 @@ public class LocalTableImpl extends BodoSqlTable {
    * @return The generated code to read the table.
    */
   @Override
-  public String generateReadCode() {
+  public String generateReadCode(boolean useDateRuntime) {
     return String.format(this.readCode, "");
   }
 
@@ -142,7 +142,7 @@ public class LocalTableImpl extends BodoSqlTable {
    * @return The generated code to read the table.
    */
   @Override
-  public String generateReadCode(String extraArgs) {
+  public String generateReadCode(String extraArgs, boolean useDateRuntime) {
     return String.format(this.readCode, extraArgs);
   }
 

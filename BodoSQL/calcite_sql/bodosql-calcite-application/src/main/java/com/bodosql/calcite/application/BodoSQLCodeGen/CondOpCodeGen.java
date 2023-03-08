@@ -134,7 +134,8 @@ public class CondOpCodeGen {
       RelDataType outputType,
       PandasCodeGenVisitor pdVisitorClass,
       Module.Builder outerBuilder,
-      Module.Builder innerBuilder) {
+      Module.Builder innerBuilder,
+      boolean useDateRuntime) {
     // We will unify the output of each block into a single variable.
     // TODO: Move variable generation to the Module.Builder
     if (outputsArray) {
@@ -218,7 +219,9 @@ public class CondOpCodeGen {
       Expr.Raw bodyGlobal = new Expr.Raw(pdVisitorClass.lowerAsGlobal(loopBody.emit()));
 
       Expr.Raw outputArrayTypeGlobal =
-          new Expr.Raw(pdVisitorClass.lowerAsGlobal(sqlTypeToBodoArrayType(outputType, false)));
+          new Expr.Raw(
+              pdVisitorClass.lowerAsGlobal(
+                  sqlTypeToBodoArrayType(outputType, false, useDateRuntime)));
       // Add a new assignment for the case
       Variable arrVar = new Variable(pdVisitorClass.genGenericTempVar());
       Expr.Call functionCall =
