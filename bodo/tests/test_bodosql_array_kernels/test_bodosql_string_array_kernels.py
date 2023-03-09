@@ -587,7 +587,60 @@ def test_string_one_arg_fns(arg, memory_leak_check):
     )
 
 
-# TODO: test with negatives once that behavior is properly defined ([BE-3719])
+@pytest.mark.parametrize(
+    "inputs, answer",
+    [
+        pytest.param(("bodo.ai", 1, 3, ""), "o.ai", id="delete_start"),
+        pytest.param(("bodo.ai", 5, 3, ""), "bodo", id="delete_end"),
+        pytest.param(("bodo.ai", 1, 0, ""), "bodo.ai", id="delete_none"),
+        pytest.param(("bodo.ai", 1, 7, ""), "", id="delete_all"),
+        pytest.param(("bodo", 1, 4, "ai"), "ai", id="replace_1"),
+        pytest.param(("bodo", 3, 2, "ai"), "boai", id="replace_2"),
+        pytest.param(("bodo", 1, 0, "ai"), "aibodo", id="append_start"),
+        pytest.param(("bodo", 3, 0, "ai"), "boaido", id="append_middle"),
+        pytest.param(("bodo", 5, 2, "ai"), "bodoai", id="append_end"),
+        pytest.param((b"bar", 1, 0, b"foo"), b"foobar", id="append_end_binary"),
+        pytest.param((b"The quick brown fox", 11, 5, b"red"), b"The quick red fox", id="delete_start_binary"),
+        pytest.param((b"the fast fox", 5, 4, b"foo"), b"the foo fox", id="replace_binary"),
+    ],
+)
+def test_insert_scalar(inputs, answer, memory_leak_check):
+    impl = lambda source, pos, len, inject: bodo.libs.bodosql_array_kernels.insert(
+        source, pos, len, inject
+    )
+    check_func(
+        impl,
+        inputs,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "inputs",
+    [
+        pytest.param(("bodo.ai", 0, 3, ""), id="string_error_1"),
+        pytest.param(("bodo.ai", 1, -3, ""), id="string_error_2"),
+        pytest.param(("bodo.ai", -1, -3, ""), id="string_error_3"),
+        pytest.param((b"the fast fox", 0, 4, b"foo"), id="binary_error_1"),
+        pytest.param((b"the fast fox", 5, -1, b"foo"), id="binary_error_2"),
+        pytest.param((b"the fast fox", -1, 2, b"foo"), id="binary_error_3"),
+    ],
+)
+def test_insert_scalar_error(inputs):
+    impl = lambda source, pos, len, inject: bodo.libs.bodosql_array_kernels.insert(
+        source, pos, len, inject
+    )
+    source, pos, len, inject = inputs
+    if pos < 1:
+        with pytest.raises(AssertionError, match="<pos> argument must be at least 1!"):
+            bodo.jit(impl)(source, pos, len, inject)
+    elif len < 0:
+        with pytest.raises(AssertionError, match="<len> argument must be at least 0!"):
+            bodo.jit(impl)(source, pos, len, inject)
+
+
 @pytest.mark.parametrize(
     "args, answer",
     [
@@ -674,10 +727,6 @@ def test_string_one_arg_fns(arg, memory_leak_check):
             ),
             id="scalar_scalar_scalar_vector_binary",
         ),
-        pytest.param(
-            ("alphabet", 10, 5, " soup"), "alphabet soup", id="all_scalar_string"
-        ),
-        pytest.param((b"bar", 1, 0, b"foo"), b"foobar", id="all_scalar_binary"),
     ],
 )
 def test_insert(args, answer, memory_leak_check):
