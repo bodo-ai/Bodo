@@ -1136,7 +1136,6 @@ def test_insert(calculation, table, answer, case, spark_info, memory_leak_check)
         pytest.param(
             "POSITION(A, B)",
             id="position_normal-2_args",
-            marks=pytest.mark.skip("[BE-3718] Support POSITION without 'IN' syntax"),
         ),
         pytest.param(
             "POSITION(A IN B)",
@@ -1145,7 +1144,6 @@ def test_insert(calculation, table, answer, case, spark_info, memory_leak_check)
         pytest.param(
             "POSITION(A, B, C)",
             id="position_normal-3_args",
-            marks=pytest.mark.skip("[BE-3718] Support POSITION without 'IN' syntax"),
         ),
         pytest.param(
             "CHARINDEX(A, B)",
