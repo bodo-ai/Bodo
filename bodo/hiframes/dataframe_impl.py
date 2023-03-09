@@ -11,6 +11,11 @@ from typing import Tuple
 import numba
 import numpy as np
 import pandas as pd
+import pandas.core.computation.expr
+import pandas.core.computation.ops
+import pandas.core.computation.parsing
+import pandas.core.computation.scope
+import pandas.io.formats.printing
 from numba.core import cgutils, ir, types
 from numba.core.imputils import (
     RefType,
@@ -3111,8 +3116,8 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
     # create fake environment for Expr to enable parsing
     # include NOT_NA for the checks we insert
     resolver = {"left": 0, "right": 0, "NOT_NA": 0}
-    env = pd.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
-    clean_func = pd.core.computation.parsing.clean_column_name
+    env = pandas.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
+    clean_func = pandas.core.computation.parsing.clean_column_name
 
     def append_null_checks(expr_node, null_set):
         """Create a new expr appending by append NOTNA & checks
@@ -3133,15 +3138,17 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
         )
         # _disallow_scalar_only_bool_ops accesses actual value which is not possible
         saved__disallow_scalar_only_bool_ops = (
-            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
+            pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
         )
-        pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: None
+        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
+            lambda self: None
+        )
 
         try:
-            binop = pd.core.computation.ops.BinOp("&", null_expr, expr_node)
+            binop = pandas.core.computation.ops.BinOp("&", null_expr, expr_node)
         finally:
             # Restore _disallow_scalar_only_bool_ops
-            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
+            pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
                 saved__disallow_scalar_only_bool_ops
             )
         return binop
@@ -3152,7 +3159,7 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
         of all column checks (i.e. right.A) that need a null value
         inserted.
         """
-        if isinstance(expr_node, pd.core.computation.ops.BinOp):
+        if isinstance(expr_node, pandas.core.computation.ops.BinOp):
             if expr_node.op == "|":
                 # If we encounter OR we need special handling because
                 # a null value may only impact the lhs or rhs.
@@ -3268,7 +3275,7 @@ def _parse_merge_cond(on_str, left_columns, left_data, right_columns, right_data
     """
     resolver = {"left": 0, "right": 0}
     # create fake environment for Expr to enable parsing
-    env = pd.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
+    env = pandas.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
     col_map = dict()
     # When Pandas parses the query expression, all column names
     # that are not valid identifiers will be "cleaned" to become a
@@ -3283,7 +3290,7 @@ def _parse_merge_cond(on_str, left_columns, left_data, right_columns, right_data
     # because we cannot tell what column is being referenced.
     #
     # https://github.com/pandas-dev/pandas/blob/cd13e3a42d03f2c3f93b1de3e04352d01aac2241/pandas/core/computation/parsing.py#L96
-    clean_func = pd.core.computation.parsing.clean_column_name
+    clean_func = pandas.core.computation.parsing.clean_column_name
     for name, col_list in (
         ("left", left_columns),
         ("right", right_columns),
@@ -4869,6 +4876,7 @@ def overload_dataframe_sort_values(
     ignore_index=False,
     key=None,
     _bodo_chunk_bounds=None,
+    _bodo_interval_sort=False,
     _bodo_transformed=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.sort_values()")
@@ -4886,7 +4894,15 @@ def overload_dataframe_sort_values(
     handle_inplace_df_type_change(inplace, _bodo_transformed, "sort_values")
 
     validate_sort_values_spec(
-        df, by, axis, ascending, inplace, kind, na_position, _bodo_chunk_bounds
+        df,
+        by,
+        axis,
+        ascending,
+        inplace,
+        kind,
+        na_position,
+        _bodo_chunk_bounds,
+        _bodo_interval_sort,
     )
 
     def _impl(
@@ -4900,18 +4916,33 @@ def overload_dataframe_sort_values(
         ignore_index=False,
         key=None,
         _bodo_chunk_bounds=None,
+        _bodo_interval_sort=False,
         _bodo_transformed=False,
     ):  # pragma: no cover
 
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, by, ascending, inplace, na_position, _bodo_chunk_bounds
+            df,
+            by,
+            ascending,
+            inplace,
+            na_position,
+            _bodo_chunk_bounds,
+            _bodo_interval_sort,
         )
 
     return _impl
 
 
 def validate_sort_values_spec(
-    df, by, axis, ascending, inplace, kind, na_position, _bodo_chunk_bounds
+    df,
+    by,
+    axis,
+    ascending,
+    inplace,
+    kind,
+    na_position,
+    _bodo_chunk_bounds,
+    _bodo_interval_sort,
 ):
     """validates sort_values spec
     Note that some checks are due to unsupported functionalities
@@ -4940,11 +4971,24 @@ def validate_sort_values_spec(
         invalid_keys = list(set(get_overload_const_list(by)).difference(valid_keys_set))
         raise_bodo_error(f"sort_values(): invalid keys {invalid_keys} for by.")
 
-    # make sure there is only one key when bounds are passed (as currently supported)
-    if not is_overload_none(_bodo_chunk_bounds) and len(key_names) != 1:
+    # _bodo_interval_sort cannot be used without _bodo_chunk_bounds
+    if is_overload_true(_bodo_interval_sort) and is_overload_none(_bodo_chunk_bounds):
         raise_bodo_error(
-            f"sort_values(): _bodo_chunk_bounds only supported when there is a single key."
+            f"sort_values(): _bodo_chunk_bounds with at most 2 keys must be provided when _bodo_interval_sort=True."
         )
+
+    if not is_overload_none(_bodo_chunk_bounds):
+        if is_overload_true(_bodo_interval_sort):
+            # If _bodo_interval_sort, at most 2 keys should be provided.
+            if len(key_names) > 2:
+                raise_bodo_error(
+                    f"sort_values(): When using _bodo_interval_sort, you must specify at most 2 keys"
+                )
+        elif len(key_names) != 1:
+            # make sure there is only one key when bounds are passed and not _bodo_interval_sort (as currently supported)
+            raise_bodo_error(
+                f"sort_values(): _bodo_chunk_bounds only supported when there is a single key."
+            )
 
     # make sure axis has default value 0
     if not is_overload_zero(axis):
@@ -4958,6 +5002,19 @@ def validate_sort_values_spec(
             "sort_values(): 'ascending' parameter must be of type bool or list of bool, "
             "not {}.".format(ascending)
         )
+
+    if is_overload_true(_bodo_interval_sort):
+        if is_overload_bool(ascending) and not get_overload_const_bool(ascending):
+            raise_bodo_error(
+                "sort_values(): 'ascending' parameter must be true when using _bodo_interval_sort"
+            )
+        if is_overload_bool_list(ascending):
+            ascending_list = get_overload_const_list(ascending)
+            for asc in ascending_list:
+                if not asc:
+                    raise_bodo_error(
+                        "sort_values(): Every value in 'ascending' must be true when using _bodo_interval_sort"
+                    )
 
     # make sure 'inplace' is of type bool
     if not is_overload_bool(inplace):
@@ -4983,6 +5040,10 @@ def validate_sort_values_spec(
             raise BodoError(
                 "sort_values(): na_position should either be 'first' or 'last'"
             )
+        if is_overload_true(_bodo_interval_sort) and na_position != "last":
+            raise_bodo_error(
+                "sort_values(): na_position must be 'last' when using _bodo_interval_sort"
+            )
     elif is_overload_constant_list(na_position):
         # Bodo supports a list to sort DataFrame column orders differently
         na_position_list = get_overload_const_list(na_position)
@@ -4991,15 +5052,15 @@ def validate_sort_values_spec(
                 raise BodoError(
                     "sort_values(): Every value in na_position should either be 'first' or 'last'"
                 )
+            if is_overload_true(_bodo_interval_sort) and na_position != "last":
+                raise_bodo_error(
+                    "sort_values(): Every value in na_position must be 'last' when using _bodo_interval_sort"
+                )
     else:
         raise_bodo_error(
             "sort_values(): na_position parameter must be a literal constant of type str or a constant "
             f"list of str with 1 entry per key column, not {na_position}"
         )
-
-    na_position = get_overload_const_str(na_position)
-    if na_position not in ["first", "last"]:
-        raise BodoError("sort_values(): na_position should either be 'first' or 'last'")
 
 
 @overload_method(DataFrameType, "sort_index", inline="always", no_unliteral=True)
@@ -6119,7 +6180,7 @@ BodoSQLReplaceColsInfer.prefer_literal = True
 
 
 def _parse_query_expr(
-    expr,
+    expr: str,
     env,
     columns,
     cleaned_columns,
@@ -6158,13 +6219,13 @@ def _parse_query_expr(
     # intrinsic functions like sqrt instead of evaluation.
     new_funcs = []
 
-    class NewFuncNode(pd.core.computation.ops.FuncNode):
+    class NewFuncNode(pandas.core.computation.ops.FuncNode):
         def __init__(self, name):
 
-            if name not in pd.core.computation.ops.MATHOPS or (
-                pd.core.computation.check._NUMEXPR_INSTALLED
-                and pd.core.computation.check_NUMEXPR_VERSION
-                < pd.core.computation.ops.LooseVersion("2.6.9")
+            if name not in pandas.core.computation.ops.MATHOPS or (
+                pandas.core.computation.check._NUMEXPR_INSTALLED
+                and pandas.core.computation.check_NUMEXPR_VERSION
+                < pandas.core.computation.ops.LooseVersion("2.6.9")
                 and name in ("floor", "ceil")
             ):
                 if name not in new_funcs:
@@ -6177,14 +6238,14 @@ def _parse_query_expr(
                 self.func = getattr(np, name)
 
         def __call__(self, *args):
-            return pd.core.computation.ops.MathCall(self, args)
+            return pandas.core.computation.ops.MathCall(self, args)
 
         # __repr__ is needed if this attr node is not called, e.g. A.dt.year
         def __repr__(self):
             # _replace_column_accesses expects column access to be wraped in parenthesis,
             # so we wrap everything in parenthesis when converting to string,
             # since we can't distinguish a column access from any other type of expression
-            return pd.io.formats.printing.pprint_thing("(" + self.name + ")")
+            return pandas.io.formats.printing.pprint_thing("(" + self.name + ")")
 
     def visit_Attribute(self, node, **kwargs):
         """handles value.attr cases such as C.str.contains()
@@ -6193,13 +6254,13 @@ def _parse_query_expr(
         """
         attr = node.attr
         value = node.value
-        sentinel = pd.core.computation.ops.LOCAL_TAG
+        sentinel = pandas.core.computation.ops.LOCAL_TAG
 
         if attr in ("str", "dt"):
             # check the case where df.column.str where column is not in df
             try:
                 value_str = str(self.visit(value))
-            except pd.core.computation.ops.UndefinedVariableError as e:
+            except pandas.core.computation.ops.UndefinedVariableError as e:
                 col_name = e.args[0].split("'")[1]
                 raise BodoError(
                     "df.query(): column {} is not found in dataframe columns {}".format(
@@ -6236,14 +6297,14 @@ def _parse_query_expr(
             return "{}".format(self.value)
         if isinstance(self.value, str):
             return "'{}'".format(self.value)
-        return pd.io.formats.printing.pprint_thing(self.name)
+        return pandas.io.formats.printing.pprint_thing(self.name)
 
     # handle math calls
     def math__str__(self):
         """makes math calls compilable by adding "np." and Series functions"""
         # avoid change if it is a dummy attribute call
         if self.op in new_funcs:
-            return pd.io.formats.printing.pprint_thing(
+            return pandas.io.formats.printing.pprint_thing(
                 "{0}({1})".format(self.op, ",".join(map(str, self.operands)))
             )
 
@@ -6255,7 +6316,7 @@ def _parse_query_expr(
         ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
             str(self.operands[0])
         )
-        return pd.io.formats.printing.pprint_thing(
+        return pandas.io.formats.printing.pprint_thing(
             "bodo.hiframes.pd_series_ext.init_series({0}({1}), {2})".format(
                 op, ",".join(operands), ind
             )
@@ -6264,64 +6325,62 @@ def _parse_query_expr(
     # replace 'in' operator with dummy function to convert to prange later
     def op__str__(self):
         parened = (
-            "({0})".format(pd.io.formats.printing.pprint_thing(opr))
+            "({0})".format(pandas.io.formats.printing.pprint_thing(opr))
             for opr in self.operands
         )
         if self.op == "in":
-            return pd.io.formats.printing.pprint_thing(
+            return pandas.io.formats.printing.pprint_thing(
                 "bodo.hiframes.pd_dataframe_ext.val_isin_dummy({})".format(
                     ", ".join(parened)
                 )
             )
         if self.op == "not in":
-            return pd.io.formats.printing.pprint_thing(
+            return pandas.io.formats.printing.pprint_thing(
                 "bodo.hiframes.pd_dataframe_ext.val_notin_dummy({})".format(
                     ", ".join(parened)
                 )
             )
-        return pd.io.formats.printing.pprint_thing(
+        return pandas.io.formats.printing.pprint_thing(
             " {0} ".format(self.op).join(parened)
         )
 
     saved_rewrite_membership_op = (
-        pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op
+        pandas.core.computation.expr.BaseExprVisitor._rewrite_membership_op  # type: ignore
     )
     saved_maybe_evaluate_binop = (
-        pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
+        pandas.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop  # type: ignore
     )
-    saved_visit_Attribute = pd.core.computation.expr.BaseExprVisitor.visit_Attribute
+    saved_visit_Attribute = pandas.core.computation.expr.BaseExprVisitor.visit_Attribute
     saved__maybe_downcast_constants = (
-        pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants
+        pandas.core.computation.expr.BaseExprVisitor._maybe_downcast_constants  # type: ignore
     )
-    saved__str__ = pd.core.computation.ops.Term.__str__
-    saved_math__str__ = pd.core.computation.ops.MathCall.__str__
-    saved_op__str__ = pd.core.computation.ops.Op.__str__
+    saved__str__ = pandas.core.computation.ops.Term.__str__
+    saved_math__str__ = pandas.core.computation.ops.MathCall.__str__
+    saved_op__str__ = pandas.core.computation.ops.Op.__str__
     saved__disallow_scalar_only_bool_ops = (
-        pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
+        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops  # type: ignore
     )
     try:
-        pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
+        pandas.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (  # type: ignore
             _rewrite_membership_op
         )
-        pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (
+        pandas.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (  # type: ignore
             _maybe_evaluate_binop
         )
-        pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
+        pandas.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
         # _maybe_downcast_constants accesses actual value which is not possible
-        pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
-            lambda self, left, right: (
-                left,
-                right,
-            )
+        pandas.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = lambda self, left, right: (  # type: ignore
+            left,
+            right,
         )
-        pd.core.computation.ops.Term.__str__ = __str__
-        pd.core.computation.ops.MathCall.__str__ = math__str__
-        pd.core.computation.ops.Op.__str__ = op__str__
+        pandas.core.computation.ops.Term.__str__ = __str__
+        pandas.core.computation.ops.MathCall.__str__ = math__str__
+        pandas.core.computation.ops.Op.__str__ = op__str__
         # _disallow_scalar_only_bool_ops accesses actual value which is not possible
-        pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: None
-        parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
+        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: None  # type: ignore
+        parsed_expr = pandas.core.computation.expr.Expr(expr, env=env)
         parsed_expr_str = str(parsed_expr)
-    except pd.core.computation.ops.UndefinedVariableError as e:
+    except pandas.core.computation.ops.UndefinedVariableError as e:
         # catch undefined variable error
 
         if (
@@ -6341,24 +6400,26 @@ def _parse_query_expr(
             #                undefined local variable using @
             raise BodoError(f"df.query(): undefined variable, {e}")
     finally:
-        pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
+        pandas.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (  # type: ignore
             saved_rewrite_membership_op
         )
-        pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (
+        pandas.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (  # type: ignore
             saved_maybe_evaluate_binop
         )
-        pd.core.computation.expr.BaseExprVisitor.visit_Attribute = saved_visit_Attribute
-        pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
+        pandas.core.computation.expr.BaseExprVisitor.visit_Attribute = (
+            saved_visit_Attribute
+        )
+        pandas.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (  # type: ignore
             saved__maybe_downcast_constants
         )
-        pd.core.computation.ops.Term.__str__ = saved__str__
-        pd.core.computation.ops.MathCall.__str__ = saved_math__str__
-        pd.core.computation.ops.Op.__str__ = saved_op__str__
-        pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
+        pandas.core.computation.ops.Term.__str__ = saved__str__
+        pandas.core.computation.ops.MathCall.__str__ = saved_math__str__
+        pandas.core.computation.ops.Op.__str__ = saved_op__str__
+        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (  # type: ignore
             saved__disallow_scalar_only_bool_ops
         )
 
-    clean_name = pd.core.computation.parsing.clean_column_name
+    clean_name = pandas.core.computation.parsing.clean_column_name
     used_cols.update(
         {c: clean_name(c) for c in columns if clean_name(c) in parsed_expr.names}
     )

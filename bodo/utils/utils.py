@@ -6,6 +6,7 @@ import hashlib
 import inspect
 import keyword
 import re
+import sys
 import warnings
 from enum import Enum
 
@@ -1494,6 +1495,18 @@ def synchronize_error_njit(exception_str, error_message):
     """
     with numba.objmode():
         synchronize_error(exception_str, error_message)
+
+
+def _remove_prefix(input: str, prefix: str) -> str:
+    """
+    Remove Prefix from String if Available
+    This is part of Python's Standard Library starting from 3.9
+    TODO: Remove once Python 3.8 is deprecated
+    """
+    if sys.version_info.minor < 9:
+        return input[len(prefix) :] if input.startswith(prefix) else input
+    else:
+        return input.removeprefix(prefix)
 
 
 def get_filter_predicate_compute_func(col_val):

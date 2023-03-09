@@ -658,10 +658,13 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     // Sort dictionary locally
     // XXX Should we always sort?
     if (sort_dictionary) {
-        // sort_values_array_local deletes the input array_info and returns
-        // a new one
-        global_dictionary =
+        // sort_values_array_local decrefs the input array_info (but doesn't
+        // delete it). It returns a new array_info.
+        array_info* new_global_dictionary =
             sort_values_array_local(global_dictionary, false, 1, 1);
+        delete global_dictionary;
+
+        global_dictionary = new_global_dictionary;
         dict_array->has_sorted_dictionary = true;
     }
 
@@ -2249,7 +2252,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
 
     std::vector<array_info*> out_arrs;
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
-        int64_t arr_bcast[6];
+        int64_t arr_bcast[7];
         array_info* in_arr = nullptr;
         if (myrank == mpi_root) {
             in_arr = in_table->columns[i_col];
@@ -2272,8 +2275,9 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             arr_bcast[3] = in_arr->n_sub_elems;
             arr_bcast[4] = in_arr->n_sub_sub_elems;
             arr_bcast[5] = in_arr->num_categories;
+            arr_bcast[6] = (int64_t)in_arr->precision;
         }
-        MPI_Bcast(arr_bcast, 6, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
+        MPI_Bcast(arr_bcast, 7, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
         int64_t n_rows = arr_bcast[0];
         Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::CTypeEnum(arr_bcast[1]);
         bodo_array_type::arr_type_enum arr_type =
@@ -2281,6 +2285,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
         int64_t n_sub_elems = arr_bcast[3];
         int64_t n_sub_sub_elems = arr_bcast[4];
         int64_t num_categories = arr_bcast[5];
+        int32_t precision = (int32_t)arr_bcast[6];
         //
         array_info* out_arr = nullptr;
         if (arr_type == bodo_array_type::ARROW) {
@@ -2292,9 +2297,10 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 broadcast_arrow_array(ref_array, in_array);
             uint64_t n_rows = array->length();
             NRT_MemInfo* meminfo = NULL;
-            out_arr = new array_info(
-                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows, -1,
-                -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, array);
+            out_arr = new array_info(bodo_array_type::ARROW,
+                                     Bodo_CTypes::INT8 /*dummy*/, n_rows, -1,
+                                     -1, NULL, NULL, NULL, NULL, NULL, meminfo,
+                                     NULL, array, /*precision=*/precision);
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||
@@ -2304,6 +2310,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 out_arr = copy_array(in_arr);
             else
                 out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype, 0, 0);
+            out_arr->precision = precision;
             MPI_Bcast(out_arr->data1, n_rows, mpi_typ, mpi_root,
                       MPI_COMM_WORLD);
         }

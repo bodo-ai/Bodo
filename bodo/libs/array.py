@@ -108,8 +108,10 @@ ll.add_symbol("delete_shuffle_info", array_ext.delete_shuffle_info)
 ll.add_symbol("reverse_shuffle_table", array_ext.reverse_shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
 ll.add_symbol("cross_join_table", array_ext.cross_join_table)
+ll.add_symbol("interval_join_table", array_ext.interval_join_table)
 ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
 ll.add_symbol("sort_values_table", array_ext.sort_values_table)
+ll.add_symbol("sort_table_for_interval_join", array_ext.sort_table_for_interval_join)
 ll.add_symbol("sample_table", array_ext.sample_table)
 ll.add_symbol("shuffle_renormalization", array_ext.shuffle_renormalization)
 ll.add_symbol("shuffle_renormalization_group", array_ext.shuffle_renormalization_group)
@@ -2611,6 +2613,97 @@ def cross_join_table(
 
 
 @intrinsic
+def interval_join_table(
+    typingctx,
+    left_table_t,
+    right_table_t,
+    left_parallel_t,
+    right_parallel_t,
+    is_left_t,
+    is_right_t,
+    is_left_point_t,
+    is_strict_contains_t,
+    is_strict_left_t,
+    point_col_id_t,
+    interval_start_col_id_t,
+    interval_end_col_id_t,
+    key_in_output_t,
+    need_typechange_t,
+    cond_func,
+    left_col_nums,
+    left_col_nums_len,
+    right_col_nums,
+    right_col_nums_len,
+    num_rows_ptr_t,
+):
+    """
+    Call cpp function for optimized interval join of two tables.
+    Point in interval and interval overlap joins are supported.
+    """
+    assert left_table_t == table_type, "interval_join_table: cpp table type expected"
+    assert right_table_t == table_type, "interval_join_table: cpp table type expected"
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="interval_join_table"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        table_type(
+            left_table_t,
+            right_table_t,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.uint64,
+            types.uint64,
+            types.uint64,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.uint64,
+            types.voidptr,
+            types.uint64,
+            types.voidptr,
+        ),
+        codegen,
+    )
+
+
+@intrinsic
 def sort_values_table(
     typingctx,
     table_t,
@@ -2659,6 +2752,51 @@ def sort_values_table(
             types.voidptr,
             types.voidptr,
             types.voidptr,
+            types.boolean,
+        ),
+        codegen,
+    )
+
+
+@intrinsic
+def sort_table_for_interval_join(
+    typingctx,
+    table_t,
+    bounds_arr_t,
+    is_table_point_side_t,
+    parallel_t,
+):
+    """
+    Interface to the sorting of a table for interval join.
+    Bounds must be provided.
+    """
+    assert table_t == table_type, "C++ table type expected"
+    assert bounds_arr_t == array_info_type, "C++ Array Info type expected"
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="sort_table_for_interval_join"
+        )
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
+
+    return (
+        table_type(
+            table_t,
+            bounds_arr_t,
+            types.boolean,
             types.boolean,
         ),
         codegen,

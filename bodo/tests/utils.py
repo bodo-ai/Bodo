@@ -12,7 +12,7 @@ import warnings
 from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
-from typing import Dict, Generator, TypeVar
+from typing import Dict, Generator, List, Optional, Tuple, TypeVar, Union
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -138,6 +138,7 @@ def check_func(
     func,
     args,
     is_out_distributed=None,
+    distributed: Union[List[Tuple[str, int]], bool, None] = None,
     sort_output=False,
     check_names=True,
     copy_input=False,
@@ -154,8 +155,8 @@ def check_func(
     only_1D=False,
     only_1DVar=None,
     check_categorical=False,
-    atol=1e-08,
-    rtol=1e-05,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
     use_table_format=None,
     use_dict_encoded_strings=None,
     convert_to_nullable_float=True,
@@ -166,6 +167,8 @@ def check_func(
     Rationale of the functionalities:
     - is_out_distributed: By default to None and is adjusted according to the REP/1D/1D_Var
     If the is_out_distributed is selected then it is hardcoded here.
+    - distributed: Arguments expected to be distributed input. Default to None where all
+    arguments are allowed to be distributed (for 1D and 1D Var tests)
     - sort_output: The order of the data produced may not match pandas (e.g. groupby/join).
     In that case, set sort_output=True
     - reset_index: The index produced by pandas may not match the one produced by Bodo for good
@@ -239,6 +242,7 @@ def check_func(
         n_pes > 1
         and not numba.core.config.DEVELOPER_MODE
         and is_out_distributed is not False
+        and distributed is not None
     ):
         run_seq = False
 
@@ -339,6 +343,7 @@ def check_func(
         if (
             w is not None  # if no parallelism is found
             and not is_out_distributed  # if output is not distributable
+            and not distributed  # If some inputs are required to be distributable
             and not any(
                 is_distributable_typ(_typeof(a))
                 or is_distributable_tuple_typ(_typeof(a))
@@ -353,6 +358,7 @@ def check_func(
                 args,
                 py_output,
                 is_out_distributed,
+                distributed,
                 copy_input,
                 sort_output,
                 check_names,
@@ -375,6 +381,7 @@ def check_func(
                 args,
                 py_output,
                 is_out_distributed,
+                distributed,
                 copy_input,
                 sort_output,
                 check_names,
@@ -402,6 +409,7 @@ def check_func(
             func,
             args,
             is_out_distributed,
+            distributed,
             sort_output,
             check_names,
             copy_input,
@@ -433,6 +441,7 @@ def check_func(
             func,
             args,
             is_out_distributed,
+            distributed,
             sort_output,
             check_names,
             copy_input,
@@ -585,6 +594,7 @@ def check_func_1D(
     args,
     py_output,
     is_out_distributed,
+    distributed: Union[List[Tuple[str, int]], bool, None],
     copy_input,
     sort_output,
     check_names,
@@ -603,17 +613,28 @@ def check_func_1D(
     """Check function output against Python while setting the inputs/outputs as
     1D distributed
     """
-    # 1D distributed
-    kwargs = {
-        "all_args_distributed_block": True,
-        "all_returns_distributed": is_out_distributed,
-    }
+    kwargs = {}
+    if distributed is None:
+        kwargs["all_returns_distributed"] = is_out_distributed
+        kwargs["all_args_distributed_block"] = True
+        dist_map = [True] * len(args)
+    elif isinstance(distributed, bool):
+        kwargs["distributed"] = distributed
+        dist_map = [distributed] * len(args)
+    else:
+        kwargs["distributed"] = [a for a, _ in distributed]
+        args_to_dist = {i for _, i in distributed}
+        dist_map = [i in args_to_dist for i in range(len(args))]
+
     if additional_compiler_arguments != None:
         kwargs.update(additional_compiler_arguments)
-    bodo_func = bodo.jit(func, **kwargs)
+
     dist_args = tuple(
-        _get_dist_arg(a, copy_input, False, check_typing_issues) for a in args
+        _get_dist_arg(a, copy_input, False, check_typing_issues) if to_dist else a
+        for a, to_dist in zip(args, dist_map)
     )
+
+    bodo_func = bodo.jit(func, **kwargs)
     bodo_output = bodo_func(*dist_args)
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
@@ -649,6 +670,7 @@ def check_func_1D_var(
     args,
     py_output,
     is_out_distributed,
+    distributed: Union[List[str], bool, None],
     copy_input,
     sort_output,
     check_names,
@@ -667,16 +689,28 @@ def check_func_1D_var(
     """Check function output against Python while setting the inputs/outputs as
     1D distributed variable length
     """
-    kwargs = {
-        "all_args_distributed_varlength": True,
-        "all_returns_distributed": is_out_distributed,
-    }
+    kwargs = {}
+    if distributed is None:
+        kwargs["all_returns_distributed"] = is_out_distributed
+        kwargs["all_args_distributed_varlength"] = True
+        dist_map = [True] * len(args)
+    elif isinstance(distributed, bool):
+        kwargs["distributed"] = distributed
+        dist_map = [distributed] * len(args)
+    else:
+        kwargs["distributed"] = [a for a, _ in distributed]
+        args_to_dist = {i for _, i in distributed}
+        dist_map = [i in args_to_dist for i in range(len(args))]
+
     if additional_compiler_arguments != None:
         kwargs.update(additional_compiler_arguments)
-    bodo_func = bodo.jit(func, **kwargs)
+
     dist_args = tuple(
-        _get_dist_arg(a, copy_input, True, check_typing_issues) for a in args
+        _get_dist_arg(a, copy_input, False, check_typing_issues) if to_dist else a
+        for a, to_dist in zip(args, dist_map)
     )
+
+    bodo_func = bodo.jit(func, **kwargs)
     bodo_output = bodo_func(*dist_args)
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
@@ -713,8 +747,10 @@ def _get_arg(a, copy=False):
 T = TypeVar("T", pytypes.FunctionType, pd.Series, pd.DataFrame)
 
 
-def _get_dist_arg(a: T, copy=False, var_length=False, check_typing_issues=True) -> T:
-    """get distributed chunk for 'a' on current rank (for input to test functions)"""
+def _get_dist_arg(
+    a: T, copy: bool = False, var_length: bool = False, check_typing_issues: bool = True
+) -> T:
+    """Get distributed chunk for 'a' on current rank (for input to test functions)"""
     if copy and hasattr(a, "copy"):
         a = a.copy()
 
@@ -836,9 +872,9 @@ def _test_equal(
     check_dtype=True,
     reset_index=False,
     check_categorical=False,
-    atol=1e-08,
-    rtol=1e-05,
-):
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
+) -> None:
     try:
         from scipy.sparse import csr_matrix
     except ImportError:
@@ -2141,7 +2177,9 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
 
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
 # are stored there (to avoid failing on AWS or our local machines)
-def get_snowflake_connection_string(db, schema, conn_params=None, user=1):
+def get_snowflake_connection_string(
+    db: str, schema: str, conn_params: Optional[Dict[str, str]] = None, user: int = 1
+) -> str:
     """
     Generates a common snowflake connection string. Some details (how to determine
     username and password) seem unlikely to change, whereas as some tests could require
@@ -2169,7 +2207,7 @@ def get_snowflake_connection_string(db, schema, conn_params=None, user=1):
     return conn
 
 
-def snowflake_cred_env_vars_present(user=1) -> bool:
+def snowflake_cred_env_vars_present(user: int = 1) -> bool:
     """
     Simple function to check if environment variables for the
     snowflake credentials are set or not. Goes along with
@@ -2231,14 +2269,14 @@ def gen_unique_table_id(base_table_name):
     return f"{base_table_name}_{unique_name}".lower()
 
 
-def drop_snowflake_table(table_name: str, db: str, schema: str):
+def drop_snowflake_table(table_name: str, db: str, schema: str) -> None:
     """Drops a table from snowflake with the given table_name.
     The db and schema are also provided to connect to Snowflake.
 
     Args:
-        table_name (str): Table Name inside Snowflake.
-        db (str): Snowflake database name
-        schema (str): Snowflake schema name.
+        table_name: Table Name inside Snowflake.
+        db: Snowflake database name
+        schema: Snowflake schema name.
     """
     comm = MPI.COMM_WORLD
     drop_err = None

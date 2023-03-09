@@ -86,8 +86,18 @@ inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
     return false;
 }
 
+/**
+ * @brief Check if typ is FLOAT32 or FLOAT64.
+ */
 inline bool is_float(Bodo_CTypes::CTypeEnum typ) {
     return ((typ == Bodo_CTypes::FLOAT32) || (typ == Bodo_CTypes::FLOAT64));
+}
+
+/**
+ * @brief Check if typ is an integer, floating or decimal type.
+ */
+inline bool is_numerical(Bodo_CTypes::CTypeEnum typ) {
+    return (is_integer(typ) || is_float(typ) || (typ == Bodo_CTypes::DECIMAL));
 }
 
 /** Getting the expression of a T value as a vector of characters
