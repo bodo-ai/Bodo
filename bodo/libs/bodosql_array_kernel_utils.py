@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 from numba.core import types
+from numba.extending import overload
 
 import bodo
 from bodo.hiframes.datetime_timedelta_ext import PDTimeDeltaType
@@ -1530,5 +1531,16 @@ def gen_windowed(
         loc_vars,
     )
     impl = loc_vars["impl"]
+
+    return impl
+
+def check_insert_args(pos, len): # pragma: no cover
+    pass
+
+@overload(check_insert_args)
+def overload_check_insert_args(pos, len):
+    def impl(pos, len): # pragma: no cover
+        assert pos >= 1, "<pos> argument must be at least 1!"
+        assert len >= 0, "<len> argument must be at least 0!"
 
     return impl

@@ -950,7 +950,6 @@ def test_startswith_endswith(
     )
 
 
-# TODO: test with negatives once that behavior is properly defined ([BE-3719])
 @pytest.mark.parametrize(
     "case",
     [

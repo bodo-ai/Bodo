@@ -906,7 +906,11 @@ def insert_util(arr, pos, length, inject):
     arg_names = ["arr", "pos", "length", "inject"]
     arg_types = [arr, pos, length, inject]
     propagate_null = [True] * 4
-    scalar_text = "prefixIndex = max(arg1-1, 0)\n"
+
+    # Assertions create control flow with raise nodes, so we
+    # raise runtime errors in a helper function.
+    scalar_text = "bodo.libs.bodosql_array_kernel_utils.check_insert_args(arg1, arg2)\n"
+    scalar_text += "prefixIndex = max(arg1-1, 0)\n"
     scalar_text += "suffixIndex = prefixIndex + max(arg2, 0)\n"
     scalar_text += "res[i] = arg0[:prefixIndex] + arg3 + arg0[suffixIndex:]"
 
