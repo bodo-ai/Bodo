@@ -1121,12 +1121,14 @@ def position_util(substr, source, start):
         raise BodoError("Substring and source must be both strings or both binary")
     verify_int_arg(start, "POSITION", "start")
 
-    assert is_str, "[BE-3717] Support binary find with 3 args"
-
     arg_names = ["substr", "source", "start"]
     arg_types = [substr, source, start]
     propagate_null = [True] * 3
-    scalar_text = "res[i] = arg1.find(arg0, arg2 - 1) + 1"
+
+    if is_str:
+        scalar_text = "res[i] = arg1.find(arg0, arg2 - 1) + 1"
+    else:
+        scalar_text = "res[i] = arg1._to_str().find(arg0._to_str(), arg2 - 1) + 1"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 

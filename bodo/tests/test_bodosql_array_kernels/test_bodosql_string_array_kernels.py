@@ -1107,11 +1107,11 @@ def test_ord_ascii(s, memory_leak_check):
     [
         pytest.param(
             (
-                pd.Series(["a", None, "l", "a", "D", "e"]),
-                pd.Series(["alpha", "beta", None, "gamma", "delta", "epsilon"]),
-                pd.Series([1, 1, 1, 3, 1, None], dtype=pd.Int32Dtype()),
+                pd.Series(["a", None, "l", "a", "D", "e"] * 3),
+                pd.Series(["alpha", "beta", None, "gamma", "delta", "epsilon"] * 3),
+                pd.Series([1, 1, 1, 3, 1, None] * 3, dtype=pd.Int32Dtype()),
             ),
-            pd.Series([1, None, None, 5, 0, None], dtype=pd.Int32Dtype()),
+            pd.Series([1, None, None, 5, 0, None] * 3, dtype=pd.Int32Dtype()),
             id="all_vector_string",
         ),
         pytest.param(
@@ -1122,9 +1122,8 @@ def test_ord_ascii(s, memory_leak_check):
                 ),
                 pd.Series([5, None, 1, 0, 6, 1, 4], dtype=pd.Int32Dtype()),
             ),
-            pd.Series([1, None, 1, 1, 6, None, 1], dtype=pd.Int32Dtype()),
+            pd.Series([5, None, 1, 0, 6, None, 4], dtype=pd.Int32Dtype()),
             id="all_vector_binary",
-            marks=pytest.mark.skip("[BE-3717] Support binary find with 3 args"),
         ),
         pytest.param(
             (
@@ -1143,14 +1142,12 @@ def test_ord_ascii(s, memory_leak_check):
             ),
             pd.Series([9, 10, 21, None, 40], dtype=pd.Int32Dtype()),
             id="vector_scalar_scalar_binary",
-            marks=pytest.mark.skip("[BE-3717] Support binary find with 3 args"),
         ),
         pytest.param(("a", "darkness and light", 5), 10, id="all_scalar_string"),
         pytest.param(
             (b"i", b"rainbow", 1),
             3,
             id="all_scalar_binary",
-            marks=pytest.mark.skip("[BE-3717] Support binary find with 3 args"),
         ),
     ],
 )
