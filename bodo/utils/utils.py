@@ -33,6 +33,7 @@ from numba.np.numpy_support import as_dtype
 
 import bodo
 from bodo.hiframes.time_ext import TimeArrayType
+from bodo.ir.filter import supported_compute_funcs
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
@@ -52,7 +53,6 @@ from bodo.utils.typing import (
     MetaType,
     is_str_arr_type,
 )
-from bodo.ir.filter import supported_compute_funcs
 
 int128_type = types.Integer("int128", 128)
 
