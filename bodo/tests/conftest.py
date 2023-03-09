@@ -74,8 +74,13 @@ def memory_leak_check():
     total_free = sum([m[1] for m in new_stats]) - sum([m[1] for m in old_stats])
     total_mi_alloc = sum([m[2] for m in new_stats]) - sum([m[2] for m in old_stats])
     total_mi_free = sum([m[3] for m in new_stats]) - sum([m[3] for m in old_stats])
-    assert total_alloc == total_free
-    assert total_mi_alloc == total_mi_free
+    
+    # Don't check for memory leaks if the test is being re-run by flaky
+    if bodo.tests.utils.pytest_snowflake_is_rerunning:
+        bodo.tests.utils.pytest_snowflake_is_rerunning = False
+    else:
+        assert total_alloc == total_free
+        assert total_mi_alloc == total_mi_free
 
 
 def pytest_collection_modifyitems(items):
