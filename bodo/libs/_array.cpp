@@ -1643,10 +1643,16 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&hash_join_table)));
     PyObject_SetAttrString(m, "cross_join_table",
                            PyLong_FromVoidPtr((void*)(&cross_join_table)));
+    PyObject_SetAttrString(m, "interval_join_table",
+                           PyLong_FromVoidPtr((void*)(&interval_join_table)));
     PyObject_SetAttrString(m, "sample_table",
                            PyLong_FromVoidPtr((void*)(&sample_table)));
     PyObject_SetAttrString(m, "sort_values_table",
                            PyLong_FromVoidPtr((void*)(&sort_values_table)));
+    PyObject_SetAttrString(
+        m, "sort_table_for_interval_join",
+        PyLong_FromVoidPtr(
+            (void*)(&sort_table_for_interval_join_py_entrypoint)));
     PyObject_SetAttrString(m, "drop_duplicates_table",
                            PyLong_FromVoidPtr((void*)(&drop_duplicates_table)));
     PyObject_SetAttrString(m, "union_tables",

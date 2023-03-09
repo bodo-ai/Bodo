@@ -141,7 +141,7 @@ table_info* hash_join_table(
  * all cond columns of the left table and then the right table.
  * @param vect_need_typechange : a vector specifying whether a column's type
  * needs to be changed to nullable or not. Only application to Numpy
- integer/float columns currently.
+ * integer/float columns currently.
  * @param cond_func function generated in Python to evaluate general join
  * conditions. It takes data pointers for left/right tables and row indices.
  * @param cond_func_left_columns: Array of column numbers in the left table
@@ -162,5 +162,58 @@ table_info* cross_join_table(
     uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
     uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
     uint64_t* num_rows_ptr);
+
+/**
+ * @brief Point-in-interval or interval-overlap join of two tables (parallel if
+ * any input is parallel).
+ * Design doc: https://bodo.atlassian.net/l/cp/1JCnntP1
+ *
+ * @param left_table left input table
+ * @param right_table right input table
+ * @param left_parallel whether the left table is parallel or not
+ * @param right_parallel whether the right table is parallel or not
+ * @param is_left whether we do an inner or outer merge on the left. Can only be
+ * outer in case of point-in-interval join where the point side is on the left.
+ * @param is_right whether we do an inner or outer merge on the right. Can only
+ * be outer in case of point-in-interval join where the point side is on the
+ * right.
+ * @param is_left_point Is the point side on the left side. Only applicable if
+ * point-in-interval join.
+ * @param strict_start Does the point need to be strictly right of the interval
+ * start
+ * @param strict_end Does the point need to strictly left of the interval end
+ * @param point_col_id Column id of the point column. Only applicable if
+ * point-in-interval join.
+ * @param interval_start_col_id Column id of the interval start column. Only
+ * applicable if point-in-interval join.
+ * @param interval_end_col_id Column id of the interval end column. Only
+ * applicable if point-in-interval join.
+ * @param key_in_output a vector of booleans specifying if cond
+ * func columns are included in the output table. The booleans first contain
+ * all cond columns of the left table and then the right table.
+ * @param use_nullable_arr_type a vector specifying whether a column's type
+ * needs to be changed to nullable or not. Only application to Numpy integer
+ * columns currently.
+ * @param cond_func function generated in Python to evaluate general join
+ * conditions. It takes data pointers for left/right tables and row indices.
+ * @param cond_func_left_columns Array of column numbers in the left table
+ * used by cond_func.
+ * @param cond_func_left_column_len Length of cond_func_left_columns.
+ * @param cond_func_right_columns Array of column numbers in the right table
+ * used by cond_func.
+ * @param cond_func_right_column_len Length of cond_func_right_columns.
+ * @param num_rows_ptr Pointer used to store the number of rows in the
+ * output to return to Python. This enables marking all columns as dead.
+ * @return table_info* interval join output table
+ */
+table_info* interval_join_table(
+    table_info* left_table, table_info* right_table, bool left_parallel,
+    bool right_parallel, bool is_left, bool is_right, bool is_left_point,
+    bool strict_start, bool strict_end, uint64_t point_col_id,
+    uint64_t interval_start_col_id, uint64_t interval_end_col_id,
+    bool* key_in_output, int64_t* use_nullable_arr_type,
+    cond_expr_fn_batch_t cond_func, uint64_t* cond_func_left_columns,
+    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr);
 
 #endif  // _JOIN_H_INCLUDED

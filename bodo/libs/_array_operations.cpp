@@ -155,6 +155,114 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     }
 }
 
+//
+// UTILS FOR SORT
+//
+
+/**
+ * @brief Get n_loc_sample many samples from a locally sorted table.
+ * This function splits the input table into roughly n_loc_sample blocks, and
+ * then picks a row randomly from each block.
+ *
+ * @param local_sort Locally sorted table
+ * @param n_key_t Number of sort keys
+ * @param n_loc_sample Number of samples to get
+ * @param n_local Length of the table
+ * @param parallel Only for tracing purposes
+ * @return table_info* Table with samples. Shape: n_loc_sample rows, n_key_t
+ * columns
+ */
+table_info* get_samples_from_table_local(table_info* local_sort,
+                                         int64_t n_key_t, int64_t n_loc_sample,
+                                         int64_t n_local, bool parallel) {
+    tracing::Event ev("get_samples_from_table_local", parallel);
+    std::mt19937 gen(1234567890);
+    double block_size = double(n_local) / n_loc_sample;
+    std::vector<int64_t> ListIdx(n_loc_sample);
+    double cur_lo = 0;
+    for (int64_t i = 0; i < n_loc_sample; i++) {
+        int64_t lo = round(cur_lo);
+        int64_t hi = round(cur_lo + block_size) - 1;
+        ListIdx[i] = std::uniform_int_distribution<int64_t>(lo, hi)(gen);
+        cur_lo += block_size;
+    }
+    // Incref since RetrieveTable will steal a reference.
+    for (int64_t i_key = 0; i_key < n_key_t; i_key++) {
+        incref_array(local_sort->columns[i_key]);
+    }
+    table_info* samples = RetrieveTable(local_sort, ListIdx, n_key_t);
+    return samples;
+}
+
+/**
+ * @brief Get samples from locally sorted chunks of a distributed table.
+ * Number of samples required for a reasonable sampling is determined
+ * based on the total length of the table, number of ranks.
+ *
+ * @param local_sort Locally sorted table chunk.
+ * @param n_key_t Number of sort keys.
+ * @param n_pes Number of MPI ranks.
+ * @param n_total Global table length.
+ * @param n_local Local table length (=> length of local_sort)
+ * @param parallel Whether the execution is happening in parallel. Passed for
+ * consistency and tracing purposes.
+ * @return table_info* Table of samples on rank 0, empty table on all other
+ * ranks.
+ */
+table_info* get_samples_from_table_parallel(table_info* local_sort,
+                                            int64_t n_key_t, int n_pes,
+                                            int64_t n_total, int64_t n_local,
+                                            bool parallel) {
+    tracing::Event ev("get_samples_from_table_parallel", parallel);
+    ev.add_attribute("n_key_t", n_key_t);
+    ev.add_attribute("n_local", n_local);
+    ev.add_attribute("n_total", n_total);
+    // Sample sort with random sampling (we use a fixed seed for the random
+    // generator for deterministic results across runs).
+    // With random sampling as described by Blelloch et al. [1], each
+    // processor divides its local sorted input into s blocks of size (N/ps)
+    // (where N is the global number of rows, p the number of processors,
+    // s is the oversampling ratio) and samples a random key in each block.
+    // The samples are gathered on rank 0 and rank 0 chooses the splitters
+    // by picking evenly spaced keys from the overall sample of size ps.
+    // We choose the global of number of samples according to this theorem:
+    // "With O(p log N / epsilon^2) samples overall, sample sort with
+    // random sampling achieves (1 + epsilon) load balance with high
+    // probability." [1] Guy E. Blelloch, Charles E. Leiserson, Bruce M
+    // Maggs, C Greg Plaxton, Stephen J
+    //     Smith, and Marco Zagha. 1998. An experimental analysis of
+    //     parallel sorting algorithms. Theory of Computing Systems 31, 2
+    //     (1998), 135-167.
+    double epsilon = 0.1;
+    char* bodo_sort_epsilon = std::getenv("BODO_SORT_EPSILON");
+    if (bodo_sort_epsilon) {
+        epsilon = std::stod(bodo_sort_epsilon);
+    }
+    if (epsilon < 0) {
+        throw std::runtime_error("sort_values: epsilon < 0");
+    }
+
+    double n_global_sample = n_pes * log(n_total) / pow(epsilon, 2.0);
+    n_global_sample =
+        std::min(std::max(n_global_sample, double(n_pes)), double(n_total));
+    int64_t n_loc_sample = std::min(n_global_sample / n_pes, double(n_local));
+
+    // Get n_loc_sample many local samples from the local sorted chunk
+    table_info* samples = get_samples_from_table_local(
+        local_sort, n_key_t, n_loc_sample, n_local, parallel);
+
+    // Collecting all samples
+    bool all_gather = false;
+    table_info* all_samples =
+        gather_table(samples, n_key_t, all_gather, parallel);
+    delete_table(samples);
+    return all_samples;
+}
+
+//
+// PARALLEL SORT
+//
+
 /**
  *   SORT VALUES
  *
@@ -236,77 +344,36 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
 }
 
 /**
- * @brief Compute data redistribution boundaries for parallel sort using a
- * sample of the data
+ * @brief Compute bounds for the ranks based on the collected samples.
+ * All samples are assumed to be on rank 0. Tables on the rest of the
+ * ranks are assumed to be empty.
+ * The samples are first sorted, and then the bounds are computed
+ * by picking the elements at the appropriate location for the rank.
  *
- * @param local_sort locally sorted table
- * @param n_key_t number of sort keys
- * @param vect_ascending ascending/descending order for each key
- * @param na_position NA behavior (first or last) for each key
- * @param n_local number of local rows
- * @param n_total number of global rows
- * @param myrank MPI rank
- * @param n_pes total MPI ranks
- * @param parallel parallel flag (should be true here but passing around for
- * code consistency)
- * @return table_info*
+ * @param all_samples Table with all samples (gathered on rank 0). It is assumed
+ * to be unsorted. NOTE: All arrays get decref-ed.
+ * @param ref_table Reference table to use for the broadcast step. This is
+ * mainly needed for dict encoded string arrays. In those cases, it is important
+ * for the dictionary in this reference table to be same as the dictionary of
+ * the actual array.
+ * @param n_key_t Number of key columns.
+ * @param vect_ascending Vector of booleans (one for each key column) describing
+ * whether to sort in ascending order on the key columns.
+ * @param na_position Vector of booleans (one for each key column) describing
+ * where to put the NAs (last or first) in the key columns.
+ * @param myrank MPI rank of the calling process.
+ * @param n_pes Total number of MPI ranks.
+ * @param parallel Is the process parallel.
+ * @return table_info* Bounds table with n_pes-1 rows. A full bounds table is
+ * computed on rank 0, broadcasted to all ranks and returned.
  */
-table_info* get_parallel_sort_bounds(table_info* local_sort, int64_t n_key_t,
-                                     int64_t* vect_ascending,
-                                     int64_t* na_position, int64_t n_local,
-                                     int64_t n_total, int myrank, int n_pes,
-                                     bool parallel) {
+table_info* compute_bounds_from_samples(table_info* all_samples,
+                                        table_info* ref_table, int64_t n_key_t,
+                                        int64_t* vect_ascending,
+                                        int64_t* na_position, int myrank,
+                                        int n_pes, bool parallel) {
+    tracing::Event ev("compute_bounds_from_samples", parallel);
     int mpi_root = 0;
-
-    // Sample sort with random sampling (we use a fixed seed for the random
-    // generator for deterministic results across runs).
-    // With random sampling as described by Blelloch et al. [1], each
-    // processor divides its local sorted input into s blocks of size (N/ps)
-    // (where N is the global number of rows, p the number of processors,
-    // s is the oversampling ratio) and samples a random key in each block.
-    // The samples are gathered on rank 0 and rank 0 chooses the splitters
-    // by picking evenly spaced keys from the overall sample of size ps.
-    // We choose the global of number of samples according to this theorem:
-    // "With O(p log N / epsilon^2) samples overall, sample sort with
-    // random sampling achieves (1 + epsilon) load balance with high
-    // probability." [1] Guy E. Blelloch, Charles E. Leiserson, Bruce M
-    // Maggs, C Greg Plaxton, Stephen J
-    //     Smith, and Marco Zagha. 1998. An experimental analysis of
-    //     parallel sorting algorithms. Theory of Computing Systems 31, 2
-    //     (1998), 135-167.
-    std::mt19937 gen(1234567890);
-    double epsilon = 0.1;
-    char* bodo_sort_epsilon = std::getenv("BODO_SORT_EPSILON");
-    if (bodo_sort_epsilon) {
-        epsilon = std::stod(bodo_sort_epsilon);
-    }
-    if (epsilon < 0) {
-        throw std::runtime_error("sort_values: epsilon < 0");
-    }
-
-    double n_global_sample = n_pes * log(n_total) / pow(epsilon, 2.0);
-    n_global_sample =
-        std::min(std::max(n_global_sample, double(n_pes)), double(n_total));
-    int64_t n_loc_sample = std::min(n_global_sample / n_pes, double(n_local));
-    double block_size = double(n_local) / n_loc_sample;
-    std::vector<int64_t> ListIdx(n_loc_sample);
-    double cur_lo = 0;
-    for (int64_t i = 0; i < n_loc_sample; i++) {
-        int64_t lo = round(cur_lo);
-        int64_t hi = round(cur_lo + block_size) - 1;
-        ListIdx[i] = std::uniform_int_distribution<int64_t>(lo, hi)(gen);
-        cur_lo += block_size;
-    }
-    for (int64_t i_key = 0; i_key < n_key_t; i_key++)
-        incref_array(local_sort->columns[i_key]);
-    table_info* samples = RetrieveTable(local_sort, ListIdx, n_key_t);
-
-    // Collecting all samples
-    bool all_gather = false;
-    table_info* all_samples =
-        gather_table(samples, n_key_t, all_gather, parallel);
-    delete_table(samples);
-
     // Computing the bounds (splitters) on root
     table_info* pre_bounds = nullptr;
     if (myrank == mpi_root) {
@@ -328,7 +395,6 @@ table_info* get_parallel_sort_bounds(table_info* local_sort, int64_t n_key_t,
         // an empty table
         tracing::Event ev_dummy("sort_values_table_local", parallel);
     }
-    delete_table(all_samples);
 
     // broadcasting the bounds
     // The local_sort is used as reference for the data type of the array.
@@ -336,11 +402,49 @@ table_info* get_parallel_sort_bounds(table_info* local_sort, int64_t n_key_t,
     // The underlying dictionary is the same for local_sort and pre_bounds
     // for the dict columns, as needed for broadcast_table.
     table_info* bounds =
-        broadcast_table(local_sort, pre_bounds, n_key_t, parallel, mpi_root);
+        broadcast_table(ref_table, pre_bounds, n_key_t, parallel, mpi_root);
 
     if (myrank == mpi_root) {
         delete_table(pre_bounds);
     }
+
+    return bounds;
+}
+
+/**
+ * @brief Compute data redistribution boundaries for parallel sort using a
+ * sample of the data.
+ *
+ * @param local_sort locally sorted table
+ * @param n_key_t number of sort keys
+ * @param vect_ascending ascending/descending order for each key
+ * @param na_position NA behavior (first or last) for each key
+ * @param n_local number of local rows
+ * @param n_total number of global rows
+ * @param myrank MPI rank
+ * @param n_pes total MPI ranks
+ * @param parallel parallel flag (should be true here but passing around for
+ * code consistency)
+ * @return table_info* Bounds table with n_pes-1 rows.
+ */
+table_info* get_parallel_sort_bounds(table_info* local_sort, int64_t n_key_t,
+                                     int64_t* vect_ascending,
+                                     int64_t* na_position, int64_t n_local,
+                                     int64_t n_total, int myrank, int n_pes,
+                                     bool parallel) {
+    tracing::Event ev("get_parallel_sort_bounds", parallel);
+    // Compute samples from the locally sorted table.
+    // (Filled on rank 0, empty on all other ranks)
+    table_info* all_samples = get_samples_from_table_parallel(
+        local_sort, n_key_t, n_pes, n_total, n_local, parallel);
+
+    // Compute split bounds from the samples.
+    // Output is broadcasted to all ranks.
+    table_info* bounds = compute_bounds_from_samples(
+        all_samples, local_sort, n_key_t, vect_ascending, na_position, myrank,
+        n_pes, parallel);
+
+    delete_table(all_samples);
 
     return bounds;
 }
@@ -412,22 +516,22 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         // Now computing to which process it all goes.
         tracing::Event ev_hashes("compute_destinations", parallel);
         std::vector<uint32_t> hashes_v(n_local);
-        uint32_t node_id = 0;
+        uint32_t rank_id = 0;
         for (int64_t i = 0; i < n_local; i++) {
             size_t shift_key1 = 0, shift_key2 = 0;
             // using 'while' since a partition can be empty which needs to be
             // skipped
             // Go to next destination rank if bound of current destination rank
             // is less than the current key. All destination keys should be less
-            // than or equal its bound (k <= bounds[node_id])
-            while (node_id < uint32_t(n_pes - 1) &&
+            // than or equal its bound (k <= bounds[rank_id])
+            while (rank_id < uint32_t(n_pes - 1) &&
                    KeyComparisonAsPython(n_key_t, vect_ascending,
-                                         bounds->columns, shift_key2, node_id,
+                                         bounds->columns, shift_key2, rank_id,
                                          local_sort->columns, shift_key1, i,
                                          na_position)) {
-                node_id++;
+                rank_id++;
             }
-            hashes_v[i] = node_id;
+            hashes_v[i] = rank_id;
         }
         delete_table_decref_arrays(bounds);
 
@@ -464,12 +568,715 @@ array_info* sort_values_array_local(array_info* in_arr, bool is_parallel,
     std::vector<array_info*> cols = {in_arr};
     table_info* dummy_table = new table_info(cols);
     int64_t zero = 0;
+    // sort_values_table_local will decref all arrays in dummy_table (i.e.
+    // in_arr) by 1.
     table_info* sorted_table = sort_values_table_local(
         dummy_table, 1, &ascending, &na_position, &zero, is_parallel);
-    delete_table(dummy_table);
+    // We don't want to call `delete` on `in_arr` (since we don't own it), which
+    // is what `delete_table` would do.
+    delete dummy_table;
     array_info* sorted_arr = sorted_table->columns[0];
     delete sorted_table;
     return sorted_arr;
+}
+
+//
+// UTILS FOR SORT STEP IN INTERVAL JOIN
+//
+
+/**
+ * @brief Validate inputs to get_parallel_sort_bounds_for_domain.
+ * In particular we check that the key columns all have the same array and data
+ * type, and that it's one of the supported ones.
+ *
+ * @param tables Tables to validate.
+ * @param n_keys Number of keys to validate in each table.
+ * @param n_local Number of local rows for each of the tables.
+ * @param n_total Number of global rows for each of the tables.
+ */
+void validate_inputs_for_get_parallel_sort_bounds_for_domain(
+    std::vector<table_info*> tables, std::vector<uint64_t> n_keys,
+    std::vector<uint64_t> n_local, std::vector<uint64_t> n_total) {
+    // Basic validation
+    if (n_keys.size() == 0) {
+        throw std::runtime_error(
+            "No tables provided to get_parallel_sort_bounds_for_domain.");
+    }
+    if (!((tables.size() == n_keys.size()) &&
+          (n_keys.size() == n_local.size()) &&
+          (n_local.size() == n_total.size()))) {
+        throw std::runtime_error(
+            "Inconsistent size inputs provided to "
+            "get_parallel_sort_bounds_for_domain.");
+    }
+    if (n_keys[0] <= 0) {
+        throw std::runtime_error(
+            "No keys specified for the first table in "
+            "get_parallel_sort_bounds_for_domain.");
+    }
+
+    // Check that the arr and dtype are supported
+    bodo_array_type::arr_type_enum common_arr_type =
+        tables[0]->columns[0]->arr_type;
+    Bodo_CTypes::CTypeEnum common_dtype = tables[0]->columns[0]->dtype;
+
+    if ((common_arr_type != bodo_array_type::arr_type_enum::NUMPY) &&
+        (common_arr_type !=
+         bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL)) {
+        throw std::runtime_error(
+            "get_parallel_sort_bounds_for_domain not supported for "
+            "array "
+            "type " +
+            GetArrType_as_string(common_arr_type));
+    }
+
+    if (!is_numerical(common_dtype) &&
+        (common_dtype != Bodo_CTypes::CTypeEnum::DATE) &&
+        (common_dtype != Bodo_CTypes::CTypeEnum::DATETIME) &&
+        (common_dtype != Bodo_CTypes::CTypeEnum::TIME) &&
+        (common_dtype != Bodo_CTypes::CTypeEnum::TIMEDELTA)) {
+        throw std::runtime_error(
+            "get_parallel_sort_bounds_for_domain not supported for "
+            "dtype " +
+            GetDtype_as_string(common_dtype));
+    }
+
+    // Validate that all involved columns have the same arr type and dtype
+    for (size_t table_idx = 0; table_idx < tables.size(); table_idx++) {
+        for (uint64_t key_idx = 0; key_idx < n_keys[table_idx]; key_idx++) {
+            if (tables[table_idx]->columns[key_idx]->arr_type !=
+                common_arr_type) {
+                throw std::runtime_error(
+                    "Array type of array at index " + std::to_string(key_idx) +
+                    " of table " + std::to_string(table_idx) + ": " +
+                    GetArrType_as_string(
+                        tables[table_idx]->columns[key_idx]->arr_type) +
+                    " doesn't match expected type: " +
+                    GetArrType_as_string(common_arr_type));
+            };
+            if (tables[table_idx]->columns[key_idx]->dtype != common_dtype) {
+                throw std::runtime_error(
+                    "Data type of array at index " + std::to_string(key_idx) +
+                    " of table " + std::to_string(table_idx) + " :" +
+                    GetDtype_as_string(
+                        tables[table_idx]->columns[key_idx]->dtype) +
+                    " doesn't match expected type: " +
+                    GetDtype_as_string(common_dtype));
+            }
+        }
+    }
+
+    // For decimals, check that precision and scale
+    // also match.
+    if (common_dtype == Bodo_CTypes::DECIMAL) {
+        int32_t common_precision = tables[0]->columns[0]->precision;
+        int32_t common_scale = tables[0]->columns[0]->scale;
+        for (size_t table_idx = 0; table_idx < tables.size(); table_idx++) {
+            for (uint64_t key_idx = 0; key_idx < n_keys[table_idx]; key_idx++) {
+                // Check against the first array
+                if (tables[table_idx]->columns[key_idx]->precision !=
+                    common_precision) {
+                    throw std::runtime_error(
+                        "Decimal precision of array at index " +
+                        std::to_string(key_idx) + " of table " +
+                        std::to_string(table_idx) + " :" +
+                        std::to_string(
+                            tables[table_idx]->columns[key_idx]->precision) +
+                        " doesn't match expected precision: " +
+                        std::to_string(common_precision));
+                }
+                // Check against the first array
+                if (tables[table_idx]->columns[key_idx]->scale !=
+                    common_scale) {
+                    throw std::runtime_error(
+                        "Decimal scale of array at index " +
+                        std::to_string(key_idx) + " of table " +
+                        std::to_string(table_idx) + " :" +
+                        std::to_string(
+                            tables[table_idx]->columns[key_idx]->scale) +
+                        " doesn't match expected scale: " +
+                        std::to_string(common_scale));
+                }
+            }
+        }
+    }
+}
+
+//
+// SORT FOR INTERVAL JOIN
+//
+
+/**
+ * @brief Construct a new table from the rank_to_row_ids vector.
+ * In this new table, the rows are ordered by ranks, and may be
+ * repeated in case they are going to multiple ranks.
+ * e.g. If rank_to_row_ids =
+ * [[0, 1], [0, 1, 2, 3], [1, 2]].
+ * Then we will construct the table:
+ * row-0, row-1, row-0, row-1, row-2, row-3, row-1, row-2.
+ * This table can now be shuffled since the row boundaries
+ * are clear.
+ *
+ * @param table Table to construct the new table from. (NOTE: All arrays will
+ * get decref-ed)
+ * @param rank_to_row_ids Vector of length `n_pes`. Each element is a vector
+ * containing the rows that must go to that rank.
+ * @param[out] hashes_v Reference to a vector to fill the hashes in. In this
+ * case, we directly fill the ranks (and can treat them as hashes).
+ * @param parallel Only for tracing purposes
+ * @return table_info* The new table and the
+ * destination rank ids for rows in the new table.
+ */
+table_info* create_send_table_and_hashes_from_rank_to_row_ids(
+    table_info* table, const std::vector<std::vector<int64_t>> rank_to_row_ids,
+    std::vector<uint32_t>& hashes_v, bool parallel) {
+    tracing::Event ev("create_send_table_and_hashes_from_rank_to_row_ids",
+                      parallel);
+    std::vector<uint64_t> rank_to_num_rows(rank_to_row_ids.size());
+
+    // Calculate number of rows for each rank and total number of rows
+    uint64_t total_rows = 0;
+    size_t i = 0;
+    for (auto& vec : rank_to_row_ids) {
+        total_rows += vec.size();
+        rank_to_num_rows[i] = vec.size();
+        i++;
+    }
+
+    // Get indices for new table by flattening rank_to_row_ids
+    // TODO Change to use uint64_t when possible. Initial attempt
+    // had issues at linking time (symbol not found, etc.).
+    std::vector<int64_t> indices =
+        flatten<int64_t>(rank_to_row_ids, total_rows);
+    // Create new table using the indices.
+    // NOTE: RetrieveTable decrefs all arrays.
+    table_info* new_table = RetrieveTable(table, indices, -1);
+
+    // Fill hashes array (i.e. the rank that rows in the new_table should go to)
+    hashes_v.resize(total_rows);
+    uint64_t idx = 0;
+    for (size_t i = 0; i < rank_to_row_ids.size(); i++) {
+        std::fill(hashes_v.begin() + idx,
+                  hashes_v.begin() + idx + rank_to_num_rows[i], i);
+        idx += rank_to_num_rows[i];
+    }
+
+    return new_table;
+}
+
+/**
+ * @brief Compute the destination rank(s) based on the provided bounds, for each
+ * of the rows of a locally sorted table. We assume that the first column is the
+ * start of the interval and the second column is the end of the interval.
+ * Note that all "bad" intervals (i.e. start > end) are skipped.  In point in
+ * interval joins, bad intervals cannot match with a point, and hence are safe
+ * to skip. Also, including them would break the assumptions this algorithm
+ * needs to assign the ranks correctly to the sorted rows.
+ *
+ * @param table Locally sorted table for whose rows we need to calculate the
+ * destination rank(s).
+ * @param bounds_arr Boundaries for the ranks. Should be n_pes - 1 long.
+ * @param myrank MPI rank of the calling process.
+ * @param n_pes Total number of MPI ranks.
+ * @param parallel Only for tracing purposes.
+ * @param strict Only filter strict bad intervals (where A > B instead of A >=
+ * B)
+ * @return const std::vector<std::vector<uint64_t>> Vector of length n_pes. i'th
+ * element is a vector of row ids that must be sent to the i'th rank. Due to the
+ * nature of the algorithm, each vector will be sorted.
+ */
+const std::vector<std::vector<int64_t>> compute_destinations_for_interval(
+    table_info* table, array_info* bounds_arr, int n_pes, bool parallel,
+    bool strict) {
+    tracing::Event ev("compute_destinations_for_interval", parallel);
+    // TODO XXX Convert to use uint64_t
+    std::vector<std::vector<int64_t>> rank_to_row_ids(n_pes);
+    uint32_t rank_id = 0;
+    uint32_t rank_id_i = 0;
+    for (uint64_t i = 0; i < table->nrows(); i++) {
+        // Start at rank_id
+        rank_id_i = rank_id;
+
+        // Check if it's a bad interval, and if it is, then skip it and move to
+        // the next row.
+        if (is_bad_interval(table->columns[0], table->columns[1], i, strict)) {
+            continue;
+        }
+
+        // Increment rank_id_i until we find the first rank that the
+        // interval is within the bounds of.
+        while ((rank_id_i < uint32_t(n_pes - 1)) &&
+               !within_bounds_of_rank(bounds_arr, rank_id_i, n_pes,
+                                      table->columns[0], table->columns[1],
+                                      i)) {
+            rank_id_i++;
+        }
+
+        // Update rank_id. rank_id_i rank is the first match for this row.
+        // The next row can use this as its starting point since its first
+        // rank cannot be lower than this.
+        rank_id = rank_id_i;
+
+        // Find all the ranks that this interval is within bounds of.
+        // These ranks must be consecutive, so we can stop once we find
+        // the first one where there isn't a match. We can be sure that
+        // rank_id_i is a match, hence the do...while loop.
+        do {
+            // Add this row to the list of rows for rank rank_id_i.
+            rank_to_row_ids[rank_id_i].push_back(i);
+            rank_id_i++;
+        } while ((rank_id_i < uint32_t(n_pes)) &&
+                 within_bounds_of_rank(bounds_arr, rank_id_i, n_pes,
+                                       table->columns[0], table->columns[1],
+                                       i));
+    }
+    // C++ 11 onwards returns locally allocated vectors efficiently, i.e.
+    // doesn't copy or re-allocate memory. Verified by checking the memory
+    // address of the return value at the caller.
+    return rank_to_row_ids;
+}
+
+/**
+ * @brief Compute the destination rank based on the provided bounds, for each
+ * of the rows of a locally sorted table. We assume that the first column
+ * is the key column.
+ *
+ * @param table Locally sorted table for whose rows we need to calculate the
+ * destination rank.
+ * @param bounds_arr Boundaries for the ranks. Should be n_pes - 1 long.
+ * @param n_pes Total number of MPI ranks.
+ * @param parallel Only for tracing purposes
+ * @return std::vector<uint32_t> Vector with destination ranks for each of the
+ * rows in the input table.
+ */
+std::vector<uint32_t> compute_destinations_for_point_table(
+    table_info* table, array_info* bounds_arr, int n_pes, bool parallel) {
+    tracing::Event ev("compute_destinations_for_point_table", parallel);
+    uint64_t n_local = table->nrows();
+    // We call them hashes for consistency, but in this case, they're actually
+    // the ranks themselves.
+    std::vector<uint32_t> hashes_v(n_local);
+    uint32_t rank_id = 0;
+    for (uint64_t i = 0; i < n_local; i++) {
+        // Keep incrementing rank_id while the bound for rank_id
+        // is less than the point value.
+        // na_position_bis is true in our case since asc = true and na_last =
+        // true which means that na_bis = (!na_last) ^ asc = true
+        while (rank_id < uint32_t(n_pes - 1) &&
+               (KeyComparisonAsPython_Column(true, bounds_arr, rank_id,
+                                             table->columns[0], i) > 0)) {
+            rank_id++;
+        }
+
+        // At this point, (point <= bounds[rank_id])
+        hashes_v[i] = rank_id;
+    }
+    // C++ onwards vectors get returned without copying the buffers. Verified
+    // manually by checking the memory addresses.
+    return hashes_v;
+}
+
+/**
+ * @brief Convert all local dictionaries to global for dict columns.
+ * Sorting the dictionaries is not required since the string/dict columns
+ * can never be keys.
+ * Similarly, we only need the data to be global. De-duplication
+ * is not necessary since the string/dict columns cannot
+ * be the keys and hence will never be compared directly.
+ *
+ * @param tables Tables to apply the above transformations to.
+ * @param parallel Whether the process is being done in parallel.
+ */
+inline void handle_dict_encoded_arrays_for_interval_join_sort(
+    const std::vector<table_info*> tables, const std::vector<bool> parallel) {
+    for (size_t i = 0; i < tables.size(); i++) {
+        table_info* table = tables[i];
+        for (array_info* arr : table->columns) {
+            if (arr->arr_type == bodo_array_type::DICT) {
+                convert_local_dictionary_to_global(arr, parallel[i]);
+            }
+        }
+    }
+}
+
+/**
+ * @brief Compute bounds for data distribution by treating all key columns in
+ * all tables as a single domain. This means that we get samples from each
+ * column, concatenate them all together, and then compute the split points.
+ * This gives us split bounds that are useful for cases like interval joins.
+ * The number of samples taken from each column are based on its length, so
+ * longer columns are weighted higher than shorter ones.
+ * We assume that the input tables are sorted on the key columns.
+ *
+ * @param tables Tables with domain columns.
+ * @param n_keys Number of domain columns in each of the tables.
+ * @param n_local Number of local rows in each of the tables.
+ * @param n_total Total number of global rows in each of the tables.
+ * @param myrank MPI rank of this process.
+ * @param n_pes Total number of MPI processes.
+ * @param parallel Whether the process is being done in parallel. This should
+ * always be true. The variable is passed for consistency.
+ * @return array_info* Array of bounds computed based on the domain columns. It
+ * will be of length n_pes-1.
+ */
+array_info* get_parallel_sort_bounds_for_domain(
+    std::vector<table_info*>& tables, std::vector<uint64_t>& n_keys,
+    std::vector<uint64_t>& n_local, std::vector<uint64_t>& n_total, int myrank,
+    int n_pes, bool parallel) {
+    tracing::Event ev("get_parallel_sort_bounds_for_domain", parallel);
+    // Validate input values
+    validate_inputs_for_get_parallel_sort_bounds_for_domain(tables, n_keys,
+                                                            n_local, n_total);
+    int64_t ascending = 1, na_pos = 1;
+    int mpi_root = 0;
+
+    uint64_t total_cols = std::accumulate(n_keys.begin(), n_keys.end(), 0);
+    std::vector<array_info*> sample_cols;
+    sample_cols.reserve(total_cols);
+    for (size_t table_idx = 0; table_idx < tables.size(); table_idx++) {
+        for (uint64_t key_idx = 0; key_idx < n_keys[table_idx]; key_idx++) {
+            array_info* col = tables[table_idx]->columns[key_idx];
+            array_info* sorted_col = col;
+            bool free_sorted_col = false;
+            if (key_idx > 0) {
+                // If it's not the first key, we need to sort it.
+                // In this case, we'll need to free this array at the
+                // end.
+                // sort_values_array_local decrefs the array, so we need
+                // to incref first.
+                // If it's the first key, then we can use it as is (already
+                // sorted)
+                incref_array(col);
+                sorted_col =
+                    sort_values_array_local(col, parallel, ascending, na_pos);
+                free_sorted_col = true;
+            }
+            // Create a dummy single column table
+            table_info* dummy_table = new table_info();
+            dummy_table->columns.push_back(sorted_col);
+
+            // Output of get_samples_from_table_parallel is output of
+            // gather_table, which means that on non-root ranks, the table
+            // columns are just NULLs.
+            table_info* all_samples = get_samples_from_table_parallel(
+                dummy_table, /*n_key_t*/ 1, n_pes, n_total[table_idx],
+                n_local[table_idx], parallel);
+            array_info* all_samples_arr = all_samples->columns[0];
+            sample_cols.push_back(all_samples_arr);
+
+            if (free_sorted_col) {
+                decref_array(sorted_col);
+            }
+            // Not using delete_table since we need the pointers in sample_cols
+            // to stick around.
+            delete all_samples;
+            all_samples = NULL;
+            delete dummy_table;
+            dummy_table = NULL;
+        }
+    }
+
+    array_info* concatenated_samples = NULL;
+    if (myrank == mpi_root) {
+        // Concatenate locally_sorted_cols into a single array_info, sort it and
+        // then compute the split bounds on this.
+        concatenated_samples = concat_arrays(sample_cols);
+    }
+
+    table_info* concatenated_samples_table = new table_info();
+    concatenated_samples_table->columns.push_back(concatenated_samples);
+
+    // Create a reference table for broadcast step in
+    // compute_bounds_from_samples using the first column of the first
+    // table.
+    table_info* dummy_table = new table_info();
+    dummy_table->columns.push_back(tables[0]->columns[0]);
+
+    table_info* bounds = compute_bounds_from_samples(
+        concatenated_samples_table, dummy_table, 1, &ascending, &na_pos, myrank,
+        n_pes, parallel);
+
+    delete dummy_table;
+    dummy_table = NULL;
+    // concatenated_samples will get decref-ed as part of
+    // compute_bounds_from_samples, so we just need to delete the table
+    delete_table(concatenated_samples_table);
+
+    // We don't need to free arrays in sample_cols since
+    // concat_arrays will already do that.
+
+    array_info* bounds_arr = bounds->columns[0];
+    // Not using delete_table since we want the bounds_arr
+    // pointer to stick around.
+    delete bounds;
+    bounds = NULL;
+
+    return bounds_arr;
+}
+
+/**
+ * @brief Sort a table for interval join using the provided bounds.
+ *
+ * @param table Table to sort. NOTE: All arrays will be decref-ed, unless not
+ * parallel and table_already_sorted.
+ * @param table_already_sorted Whether the table is already locally sorted. This
+ * should be true in case of interval join, but is needed for the Python API
+ * which is used for testing this sort functionality more directly.
+ * @param bounds_arr Bounds to use for data distribution. Must be of length
+ * n_pes - 1.
+ * @param is_table_point_side Is the table the point side in a point in interval
+ * join. If so, the table is assumed to have one key, else two.
+ * @param myrank MPI rank of this process.
+ * @param n_pes Total number of MPI processes.
+ * @param parallel Whether the table is distributed.
+ * @param strict Only filter strict bad intervals (where A > B instead of A >=
+ * B)
+ * @return table_info* sorted table.
+ */
+table_info* sort_table_for_interval_join(table_info* table,
+                                         bool table_already_sorted,
+                                         array_info* bounds_arr,
+                                         bool is_table_point_side, int myrank,
+                                         int n_pes, bool parallel,
+                                         bool strict = false) {
+    tracing::Event ev("sort_table_for_interval_join", parallel);
+    ev.add_attribute("is_table_point_side", is_table_point_side);
+    ev.add_attribute("table_len_local", table->nrows());
+
+    int64_t asc[2] = {1, 1};
+    int64_t na_pos[2] = {1, 1};
+
+    table_info* local_sort_table = table;
+    if (!table_already_sorted) {
+        local_sort_table =
+            sort_values_table_local(table, (is_table_point_side ? 1 : 2), asc,
+                                    na_pos, nullptr, parallel);
+    }
+
+    if (!parallel) {
+        return local_sort_table;
+    }
+
+    //
+    // 1. Compute destination ranks for each row in both tables
+    //
+
+    table_info* table_to_send = NULL;
+    // In this case, we compute the ranks directly, and treat them as the hashes
+    // (the modulo step later doesn't end up changing these values since they're
+    // all already between 0 and n_pes-1).
+    std::vector<uint32_t> table_to_send_hashes;
+
+    if (is_table_point_side) {
+        table_to_send = local_sort_table;
+        table_to_send_hashes = compute_destinations_for_point_table(
+            local_sort_table, bounds_arr, n_pes, parallel);
+    } else {
+        // NOTE: This will skip bad intervals.
+        std::vector<std::vector<int64_t>> rank_to_row_ids_for_table =
+            compute_destinations_for_interval(local_sort_table, bounds_arr,
+                                              n_pes, parallel, strict);
+
+        // create_send_table_and_hashes_from_rank_to_row_ids will decref
+        // all arrays in local_sort_table.
+        table_to_send = create_send_table_and_hashes_from_rank_to_row_ids(
+            local_sort_table, rank_to_row_ids_for_table, table_to_send_hashes,
+            parallel);
+    }
+
+    //
+    // 2. Shuffle data
+    //
+
+    mpi_comm_info comm_info_table(table_to_send->columns);
+    comm_info_table.set_counts(table_to_send_hashes.data(), parallel);
+    // NOTE: shuffle_table_kernel decrefs input arrays
+    table_info* collected_table = shuffle_table_kernel(
+        table_to_send, table_to_send_hashes.data(), comm_info_table, parallel);
+
+    // There are a few cases for cleanup:
+    // 1. Table was already sorted: In this case, local_sort_table = table, so
+    // we don't own local_sort_table and can't delete it.
+    // 1.1 If point table --> table_to_send = local_sort_table = table.
+    // Shuffle will decref table_to_send (and hence local_sort_table and table),
+    // so no additional clean up should be needed.
+    // 1.2 If interval table -->
+    // create_send_table_and_hashes_from_rank_to_row_ids will decref
+    // local_sort_table (and hence table), and then shuffle will decref
+    // table_to_send. We own table_to_send and will delete it.
+    // 2. Table was not already sorted: sort_values_table_local will decref
+    // table.
+    // 2.1 If point table --> table_to_send = local_sort_table, Shuffle
+    // will decref table_to_send (and hence local_sort_table). Deleting
+    // local_sort_table is sufficient for cleanup.
+    // 2.2 If interval table -->
+    // create_send_table_and_hashes_from_rank_to_row_ids will decref
+    // local_sort_table. Shuffle will decref table_to_send.
+    // We own both local_sort_table and table_to_send, and can delete both.
+    if (!table_already_sorted) {
+        delete_table(local_sort_table);
+    }
+    if (!is_table_point_side) {
+        delete_table(table_to_send);
+    }
+
+    //
+    // 3. Sort the shuffled tables locally
+    //
+
+    table_info* ret_table =
+        sort_values_table_local(collected_table, (is_table_point_side ? 1 : 2),
+                                asc, na_pos, nullptr, parallel);
+    delete_table(collected_table);
+    return ret_table;
+}
+
+table_info* sort_table_for_interval_join_py_entrypoint(table_info* table,
+                                                       array_info* bounds_arr,
+                                                       bool is_table_point_side,
+                                                       bool parallel) {
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    try {
+        table_info* sorted_table = sort_table_for_interval_join(
+            table, false, bounds_arr, is_table_point_side, myrank, n_pes,
+            parallel);
+        delete_info_decref_array(bounds_arr);
+        return sorted_table;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
+}
+
+/**
+ * @brief Sort the tables in a point in interval or interval overlap join.
+ *
+ * @param table_1 First table. Could be either point side or interval side.
+ * @param table_2 Second table. Always interval side.
+ * @param table_1_parallel Whether the first table is distributed.
+ * @param table_2_parallel Whether the second table is distributed.
+ * @param is_table_1_point_side Whether the first table is the point side table
+ * in a point in interval join.
+ * @return std::tuple<table_info*, table_info*, array_info*> sorted table 1,
+ * sorted table 2, and bounds for the ranks.
+ */
+std::tuple<table_info*, table_info*, array_info*>
+sort_both_tables_for_interval_join(table_info* table_1, table_info* table_2,
+                                   bool table_1_parallel, bool table_2_parallel,
+                                   bool is_table_1_point_side, bool strict) {
+    bool parallel_trace = (table_1_parallel || table_2_parallel);
+    tracing::Event ev("sort_both_tables_for_interval_join", parallel_trace);
+    ev.add_attribute("table_1_len", table_1->nrows());
+    ev.add_attribute("table_2_len", table_2->nrows());
+
+    tracing::Event ev_dict(
+        "sort_both_tables_for_interval_join_handle_dict_encoded_arrays",
+        parallel_trace);
+    handle_dict_encoded_arrays_for_interval_join_sort(
+        std::vector<table_info*>{table_1, table_2},
+        std::vector<bool>{table_1_parallel, table_2_parallel});
+    ev_dict.finalize();
+
+    std::vector<uint64_t> n_local_vec{table_1->nrows(), table_2->nrows()};
+    std::vector<uint64_t> n_total_vec{n_local_vec[0], n_local_vec[1]};
+    if (table_1_parallel) {
+        MPI_Allreduce(n_local_vec.data(), n_total_vec.data(), 1,
+                      MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+    }
+    if (table_2_parallel) {
+        MPI_Allreduce(n_local_vec.data() + 1, n_total_vec.data() + 1, 1,
+                      MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+    }
+
+    //
+    // 1. Sort the tables locally
+    //
+
+    int64_t asc[2] = {1, 1};
+    int64_t na_pos[2] = {1, 1};
+
+    // sort_values_table_local will decref all arrays in table_1
+    // and table_2.
+    table_info* local_sort_table_1 =
+        sort_values_table_local(table_1, (is_table_1_point_side ? 1 : 2), asc,
+                                na_pos, nullptr, table_1_parallel);
+    table_info* local_sort_table_2 = sort_values_table_local(
+        table_2, 2, asc, na_pos, nullptr, table_2_parallel);
+
+    // Return the local sort output in the non-parallel case,
+    // or if both tables are empty.
+    // If either table is replicated, we can return the local sort
+    // directly since each rank has all the information to construct
+    // its output.
+    if (!table_1_parallel || !table_2_parallel ||
+        (n_total_vec[0] == 0 && n_total_vec[1] == 0)) {
+        return {local_sort_table_1, local_sort_table_2, nullptr};
+    }
+
+    // For all subsequent actions, we set `parallel` as true because at this
+    // point both tables are guaranteed to be parallel.
+    bool parallel = true;
+
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    //
+    // 2. Compute the split bounds
+    //
+
+    std::vector<table_info*> tables_vec{local_sort_table_1, local_sort_table_2};
+    std::vector<uint64_t> n_keys_vec{
+        static_cast<uint64_t>(is_table_1_point_side ? 1 : 2), 2};
+    array_info* bounds_arr = get_parallel_sort_bounds_for_domain(
+        tables_vec, n_keys_vec, n_local_vec, n_total_vec, myrank, n_pes,
+        parallel);
+
+    //
+    // 3. Compute destination ranks for each row in both tables, shuffle the
+    // data and then do local sort on the shuffled tables. Note that "bad"
+    // intervals (i.e. start > end) will be filtered out.
+    //
+
+    // All arrays in local_sort_table_1 will be decref-ed
+    table_info* ret_table_1 = sort_table_for_interval_join(
+        local_sort_table_1, true, bounds_arr, is_table_1_point_side, myrank,
+        n_pes, parallel, strict);
+    delete_table(local_sort_table_1);
+
+    // All arrays in local_sort_table_2 will be decref-ed
+    table_info* ret_table_2 =
+        sort_table_for_interval_join(local_sort_table_2, true, bounds_arr,
+                                     false, myrank, n_pes, parallel, strict);
+    delete_table(local_sort_table_2);
+
+    return {ret_table_1, ret_table_2, bounds_arr};
+}
+
+std::pair<table_info*, table_info*> sort_tables_for_point_in_interval_join(
+    table_info* table_point, table_info* table_interval,
+    bool table_point_parallel, bool table_interval_parallel, bool strict) {
+    table_info *sorted_point, *sorted_interval;
+    array_info* bounds_arr;
+
+    std::tie(sorted_point, sorted_interval, bounds_arr) =
+        sort_both_tables_for_interval_join(
+            table_point, table_interval, table_point_parallel,
+            table_interval_parallel, true, strict);
+
+    if (bounds_arr != nullptr) delete_info_decref_array(bounds_arr);
+    return {sorted_point, sorted_interval};
+}
+
+std::tuple<table_info*, table_info*, array_info*>
+sort_tables_for_interval_overlap_join(table_info* table_1, table_info* table_2,
+                                      bool table_1_parallel,
+                                      bool table_2_parallel) {
+    return sort_both_tables_for_interval_join(
+        table_1, table_2, table_1_parallel, table_2_parallel, false, true);
 }
 
 //

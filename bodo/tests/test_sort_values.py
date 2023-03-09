@@ -13,6 +13,10 @@ import os
 import random
 import re
 import string
+import traceback
+from datetime import date, datetime
+from decimal import Decimal
+from typing import List
 
 import numba
 import numpy as np
@@ -22,6 +26,7 @@ import pytest
 import bodo
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
+    _get_dist_arg,
     check_func,
     check_parallel_coherency,
     gen_nonascii_list,
@@ -33,6 +38,7 @@ from bodo.tests.utils import (
     gen_random_decimal_array,
     gen_random_list_string_array,
     is_bool_object_series,
+    reduce_sum,
 )
 from bodo.utils.typing import BodoError, BodoWarning
 
@@ -1281,6 +1287,697 @@ def test_sort_values_input_boundaries(memory_leak_check):
         )
         A = np.array([5])
         impl(df, A)
+
+
+@pytest.mark.skipif(bodo.get_size() > 3, reason="Only implemented for up to 3 ranks.")
+@pytest.mark.parametrize(
+    "dfs, bounds_list, min_val, max_val",
+    [
+        ## Edge Cases
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": [0, 6, 7, 7] * 10,
+                        "B": [10, 7, 7, 8] * 10,
+                    }
+                )
+            ],
+            [
+                np.array([0, 5, 10]),
+            ],
+            float("-inf"),
+            float("inf"),
+        ),
+        ## Very simple test
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": np.arange(0, 100, 5, dtype=np.int64),
+                        "B": np.arange(0, 200, 10, dtype=np.int64),
+                    }
+                ),
+            ],
+            [
+                np.array([0, 100, 200], dtype=np.int64),
+            ],
+            float("-inf"),
+            float("inf"),
+        ),
+        ## Test that it works in the empty table case
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": np.arange(0, dtype=np.int64),
+                        "B": np.arange(0, dtype=np.int64),
+                    }
+                ),
+            ],
+            [
+                np.array([0, 100, 200], dtype=np.int64),
+            ],
+            float("-inf"),
+            float("inf"),
+        ),
+        ## Integers: Data x bounds ([10, NA], [NA, NA], [10, 20], [20, 20])
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": np.arange(0, 100, 5, dtype=np.int64),
+                        "B": np.arange(0, 200, 10, dtype=np.int64),
+                    }
+                ),
+            ],
+            [
+                np.array([-10, 20], dtype=np.int64),
+                np.array([10, 20], dtype=np.int64),
+                np.array([20, 20], dtype=np.int64),
+                np.array([20, 2000], dtype=np.int64),
+            ],
+            float("-inf"),
+            float("inf"),
+        ),
+        ## Nullable Integers: Data (with nulls, without nulls)  x bounds ([10, NA], [NA, NA], [10, 20], [20, 20])
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": pd.array(
+                            [pd.NA, pd.NA, pd.NA, pd.NA, pd.NA, 0, 4, 8, 12, 16],
+                            dtype="Int64",
+                        ),
+                        "B": pd.array(
+                            [pd.NA, pd.NA, 20, 24, 28, 32, 36, pd.NA, pd.NA, pd.NA],
+                            dtype="Int64",
+                        ),
+                    }
+                ),
+            ],
+            [
+                pd.array([10, 20], dtype="Int64"),
+                pd.array([10, pd.NA], dtype="Int64"),
+                pd.array([pd.NA, pd.NA], dtype="Int64"),
+                pd.array([20, 20], dtype="Int64"),
+            ],
+            np.iinfo(np.int64).min,
+            np.iinfo(np.int64).max,
+        ),
+        ## Floats: Data (with NAs, without NAs)  x bounds ([10.5, NA], [NA, NA], [10, 20.4], [10, 20], [20, 20])
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": np.arange(0, 20, 4, dtype=np.float64),
+                        "B": np.arange(20, 40, 4, dtype=np.float64),
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": np.concatenate(
+                            (
+                                np.array([np.nan] * 5, dtype=np.float64),
+                                np.arange(0, 20, 4, dtype=np.float64),
+                            )
+                        ),
+                        "B": np.concatenate(
+                            (
+                                np.array([np.nan] * 2, dtype=np.float64),
+                                np.arange(20, 40, 4, dtype=np.float64),
+                                np.array([np.nan] * 3, dtype=np.float64),
+                            )
+                        ),
+                    }
+                ),
+            ],
+            [
+                np.array([10.5, np.nan], dtype=np.float64),
+                np.array([np.nan, np.nan], dtype=np.float64),
+                np.array([10, 20.4], dtype=np.float64),
+                np.array([10, 20], dtype=np.float64),
+                np.array([20, 20], dtype=np.float64),
+            ],
+            float("-inf"),
+            float("inf"),
+        ),
+        ## Date: Data (with nulls, without nulls)  x bounds ([D1, NA], [NA, NA], [D1, D2], [D2, D2])
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": pd.date_range(
+                            start="2016-01-01", end="2022-12-12", periods=15
+                        ).date,
+                        "B": pd.date_range(
+                            start="2018-01-01", end="2024-12-12", periods=15
+                        ).date,
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": np.concatenate(
+                            (
+                                np.array([pd.NA] * 5),
+                                pd.date_range(
+                                    start="2016-01-01", end="2022-12-12", periods=15
+                                ).date,
+                            )
+                        ),
+                        "B": np.concatenate(
+                            (
+                                np.array([pd.NA] * 3),
+                                pd.date_range(
+                                    start="2016-01-01", end="2022-12-12", periods=15
+                                ).date,
+                                np.array([pd.NA] * 2),
+                            )
+                        ),
+                    }
+                ),
+            ],
+            [
+                np.array([date(2018, 12, 12), None]),
+                np.array([date(2018, 12, 12), pd.NA]),
+                np.array([pd.NA, pd.NA]),
+                np.array([None, None]),
+                np.array([date(2018, 12, 12), date(2019, 12, 12)]),
+                np.array([date(2019, 12, 12), date(2019, 12, 12)]),
+            ],
+            date.min,
+            date.max,
+        ),
+        ## Datetime: Data (with NAs, without NAs)  x bounds ([T1, NA], [NA, NA], [T1, T2], [T2, T2])
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": np.array(
+                            pd.date_range(
+                                start="2016-01-01", end="2022-12-12", periods=15
+                            ),
+                            dtype="datetime64[ns]",
+                        ),
+                        "B": np.array(
+                            pd.date_range(
+                                start="2018-01-01", end="2024-12-12", periods=15
+                            ),
+                            dtype="datetime64[ns]",
+                        ),
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": np.concatenate(
+                            (
+                                np.array([None] * 5, dtype="datetime64[ns]"),
+                                np.array(
+                                    pd.date_range(
+                                        start="2016-01-01",
+                                        end="2022-12-12",
+                                        periods=15,
+                                    ),
+                                    dtype="datetime64[ns]",
+                                ),
+                            ),
+                            dtype="datetime64[ns]",
+                        ),
+                        "B": np.concatenate(
+                            (
+                                np.array([None] * 3, dtype="datetime64[ns]"),
+                                np.array(
+                                    pd.date_range(
+                                        start="2016-01-01",
+                                        end="2022-12-12",
+                                        periods=15,
+                                    ),
+                                    dtype="datetime64[ns]",
+                                ),
+                                np.array([None] * 2, dtype="datetime64[ns]"),
+                            ),
+                            dtype="datetime64[ns]",
+                        ),
+                    }
+                ),
+            ],
+            [
+                np.array(
+                    [datetime(2018, 12, 12, 15, 23, 45), None], dtype="datetime64[ns]"
+                ),
+                np.array([None, None], dtype="datetime64[ns]"),
+                np.array(
+                    [
+                        datetime(2018, 12, 12, 15, 23, 45),
+                        datetime(2019, 12, 12, 21, 34, 21),
+                    ],
+                    dtype="datetime64[ns]",
+                ),
+                np.array(
+                    [
+                        datetime(2019, 12, 12, 21, 34, 21),
+                        datetime(2019, 12, 12, 21, 34, 21),
+                    ],
+                    dtype="datetime64[ns]",
+                ),
+            ],
+            pd.Timestamp.min,
+            pd.Timestamp.max,
+        ),
+        ## Timedelta: Data (with NAs, without NAs)  x bounds ([T1, NA], [NA, NA], [T1, T2], [T2, T2])
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": np.array(
+                            pd.timedelta_range(
+                                start="1 day", end="500 day", periods=15
+                            ),
+                            dtype="timedelta64[ns]",
+                        ),
+                        "B": np.array(
+                            pd.timedelta_range(
+                                start="10 days", end="300 day", periods=15
+                            ),
+                            dtype="timedelta64[ns]",
+                        ),
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": np.concatenate(
+                            (
+                                np.array([None] * 5, dtype="timedelta64[ns]"),
+                                np.array(
+                                    pd.timedelta_range(
+                                        start="1 day", end="500 day", periods=15
+                                    ),
+                                    dtype="timedelta64[ns]",
+                                ),
+                            ),
+                            dtype="timedelta64[ns]",
+                        ),
+                        "B": np.concatenate(
+                            (
+                                np.array([None] * 2, dtype="timedelta64[ns]"),
+                                np.array(
+                                    pd.timedelta_range(
+                                        start="10 days", end="300 day", periods=15
+                                    ),
+                                    dtype="timedelta64[ns]",
+                                ),
+                                np.array([None] * 3, dtype="timedelta64[ns]"),
+                            ),
+                            dtype="timedelta64[ns]",
+                        ),
+                    }
+                ),
+            ],
+            [
+                np.array([pd.Timedelta("5 day"), None], dtype="timedelta64[ns]"),
+                np.array([None, None], dtype="timedelta64[ns]"),
+                np.array(
+                    [pd.Timedelta("5 day"), pd.Timedelta("600 day")],
+                    dtype="timedelta64[ns]",
+                ),
+                np.array(
+                    [pd.Timedelta("400 day"), pd.Timedelta("400 day")],
+                    dtype="timedelta64[ns]",
+                ),
+            ],
+            pd.Timedelta.min,
+            pd.Timedelta.max,
+        ),
+        ## Time: Data (with NAs, without NAs)  x bounds ([T1, NA], [NA, NA], [T1, T2], [T2, T2])
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": [
+                            bodo.Time(12, 0),
+                            bodo.Time(1, 1, 3),
+                            bodo.Time(2),
+                            bodo.Time(12, 0),
+                            bodo.Time(6, 7, 13),
+                            bodo.Time(2),
+                            bodo.Time(17, 1, 3),
+                        ],
+                        "B": [
+                            bodo.Time(15, 10),
+                            bodo.Time(1, 2, 3),
+                            bodo.Time(5),
+                            bodo.Time(12, 10),
+                            bodo.Time(6, 7, 13),
+                            bodo.Time(20),
+                            bodo.Time(19, 1, 10),
+                        ],
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": [
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            bodo.Time(12, 0),
+                            bodo.Time(1, 1, 3),
+                            bodo.Time(2),
+                            bodo.Time(12, 0),
+                            bodo.Time(6, 7, 13),
+                            bodo.Time(2),
+                            bodo.Time(17, 1, 3),
+                        ],
+                        "B": [
+                            None,
+                            None,
+                            None,
+                            bodo.Time(15, 10),
+                            bodo.Time(1, 2, 3),
+                            bodo.Time(5),
+                            bodo.Time(12, 10),
+                            bodo.Time(6, 7, 13),
+                            bodo.Time(20),
+                            bodo.Time(19, 1, 10),
+                            None,
+                            None,
+                        ],
+                    }
+                ),
+            ],
+            [
+                np.array([bodo.Time(4, 10, 45), None]),
+                np.array([None, None]),
+                np.array([bodo.Time(4, 10, 45), bodo.Time(18, 14, 59)]),
+                np.array([bodo.Time(18, 10, 45), bodo.Time(18, 10, 45)]),
+            ],
+            bodo.Time(0, 0, 0, 0, 0, 0, 9),
+            bodo.Time(23, 59, 59, 999, 999, 999, 9),
+        ),
+        ## Decimals: Data (with NAs, without NAs)  x bounds ([10.5, NA], [NA, NA], [10, 20.5], [10, 20], [20, 20])
+        (
+            [
+                pd.DataFrame(
+                    {
+                        "A": np.array(
+                            [Decimal(d) for d in np.arange(0, 20, 4, dtype=np.float64)]
+                        ),
+                        "B": np.array(
+                            [Decimal(d) for d in np.arange(20, 40, 4, dtype=np.float64)]
+                        ),
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": np.concatenate(
+                            (
+                                np.array([None] * 5),
+                                np.array(
+                                    [
+                                        Decimal(d)
+                                        for d in np.arange(0, 20, 4, dtype=np.float64)
+                                    ]
+                                ),
+                            )
+                        ),
+                        "B": np.concatenate(
+                            (
+                                np.array([None] * 2),
+                                np.array(
+                                    [
+                                        Decimal(d)
+                                        for d in np.arange(20, 40, 4, dtype=np.float64)
+                                    ]
+                                ),
+                                np.array([None] * 3),
+                            )
+                        ),
+                    }
+                ),
+            ],
+            [
+                np.array([Decimal(10.5), None]),
+                np.array([None, None]),
+                np.array([Decimal(10.0), Decimal(20.5)]),
+                np.array([Decimal(10.0), Decimal(20.0)]),
+                np.array([Decimal(20.0), Decimal(20.0)]),
+            ],
+            # Using Decimal("-Infinity") and Decimal("Infinity") leads to unrelated issues.
+            # For our purposes, just using large values should be sufficient.
+            Decimal(-99999999),
+            Decimal(99999999),
+        ),
+    ],
+)
+def test_sort_table_for_interval_join(
+    dfs: List[pd.DataFrame], bounds_list, min_val, max_val, memory_leak_check
+):
+    """
+    Test the sort_table_for_interval_join for multiple data types.
+    Tests both the point (n_keys=1) and interval (n_keys=2) cases.
+    """
+
+    @bodo.jit(distributed=["df"])
+    def impl_point(df, bounds):
+        return df.sort_values(
+            by="A",
+            _bodo_chunk_bounds=bounds,
+            _bodo_interval_sort=True,
+        )
+
+    @bodo.jit(distributed=["df"])
+    def impl_interval(df, bounds):
+        return df.sort_values(
+            by=["A", "B"],
+            _bodo_chunk_bounds=bounds,
+            _bodo_interval_sort=True,
+        )
+
+    myrank = bodo.get_rank()
+    n_pes = bodo.get_size()
+
+    def check_correctness_point(in_df, out, bounds, myrank, n_pes):
+        left_bound = bounds[myrank - 1] if myrank > 0 else min_val
+        right_bound = bounds[myrank] if myrank < (n_pes - 1) else max_val
+        # We treat NAs as +inf.
+        if pd.isna(left_bound):
+            left_bound = max_val
+        if pd.isna(right_bound):
+            right_bound = max_val
+        if (left_bound == right_bound) and (myrank != 0):
+            # If the bound of this rank is the same as that of the previous rank,
+            # all points should have gone to the previous rank and this rank should
+            # be empty (except if it's rank 0, since the data has to go somewhere in
+            # case all bounds are the same).
+            assert out.shape[0] == 0
+        else:
+            for _, row in out.iterrows():
+                val = row["A"]
+                if pd.isna(val):
+                    val = max_val
+                assert left_bound < val <= right_bound
+
+        # Verify that it's sorted:
+        sorted_py = out.sort_values(by="A")
+        pd.testing.assert_series_equal(
+            out["A"].reset_index(drop=True), sorted_py["A"].reset_index(drop=True)
+        )
+
+        # Verify that it has all the expected rows:
+        out_len_g = reduce_sum(out.shape[0])
+        assert (
+            out_len_g == in_df.shape[0]
+        ), f"Expected total length to be the same before and after sorting the points. Expected: {in_df.shape[0]}. Got: {out_len_g}"
+
+    def check_correctness_interval(
+        in_df: pd.DataFrame,
+        out: pd.DataFrame,
+        bounds: np.ndarray,
+        myrank: int,
+        n_pes: int,
+    ):
+        left_bound = bounds[myrank - 1] if myrank > 0 else min_val
+        right_bound = bounds[myrank] if myrank < (n_pes - 1) else max_val
+        # We treat NAs as +inf.
+        if pd.isna(left_bound):
+            left_bound = max_val
+        if pd.isna(right_bound):
+            right_bound = max_val
+
+        for i, _ in out.iterrows():
+            # Note that this will replace the values in-place in the
+            # out dataframe, which is what we want.
+            if pd.isna(out["B"][i]):
+                out["B"][i] = max_val
+            if pd.isna(out["A"][i]):
+                out["A"][i] = max_val
+            assert (
+                out["A"][i] <= out["B"][i]
+            ), f"Interval sort should skip bad rows. Found ({out['A'][i]}, {out['B'][i]})."
+            assert left_bound <= out["B"][i], f"Expected {left_bound} <= {out['B'][i]}"
+            assert (
+                out["A"][i] <= right_bound
+            ), f"Expected {out['A'][i]} <= {right_bound}"
+
+        # Verify that it's sorted correctly:
+        sorted_py = out.sort_values(by=["A", "B"])
+        pd.testing.assert_frame_equal(
+            out.reset_index(drop=True), sorted_py.reset_index(drop=True)
+        )
+
+        # Verify that all the rows that are expected to be sent to this rank,
+        # indeed are.
+        for i, _ in in_df.iterrows():
+            if pd.isna(in_df["B"][i]):
+                in_df["B"][i] = max_val
+            if pd.isna(in_df["A"][i]):
+                in_df["A"][i] = max_val
+        exp_df = in_df[
+            (in_df["A"] <= in_df["B"])  # Remove bad intervals
+            & (in_df["A"] <= right_bound)
+            & (in_df["B"] >= left_bound)
+        ]
+
+        exp_df = exp_df.sort_values(by=["A", "B"])
+        pd.testing.assert_frame_equal(
+            out.reset_index(drop=True), exp_df.reset_index(drop=True)
+        )
+
+    for df in dfs:
+        # Set the seed so the shuffle is consistent across ranks
+        np.random.seed(1024)
+        df = df.sample(frac=1)
+
+        for bounds in bounds_list:
+            # Create a copy since we modify it during the tests
+            in_df = df.copy(deep=True)
+            # Make bounds the correct length
+            bounds = bounds[: (n_pes - 1)]
+
+            point_sort_out = impl_point(_get_dist_arg(in_df), bounds)
+            passed = 1
+            try:
+                check_correctness_point(in_df, point_sort_out, bounds, myrank, n_pes)
+            except Exception as e:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                passed = 0
+            n_passed = reduce_sum(passed)
+            assert n_passed == n_pes
+
+            interval_sort_out = impl_interval(_get_dist_arg(in_df), bounds)
+            passed = 1
+            try:
+                check_correctness_interval(
+                    in_df, interval_sort_out, bounds, myrank, n_pes
+                )
+            except Exception as e:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                passed = 0
+            n_passed = reduce_sum(passed)
+            assert n_passed == n_pes
+
+
+def test_sort_for_interval_join_err_checking():
+    """
+    Tests that simple compile time checks are enforced when using
+    _bodo_interval_sort = True.
+    """
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, by, bounds):
+        return df.sort_values(
+            by=by,
+            _bodo_chunk_bounds=bounds,
+            _bodo_interval_sort=True,
+        )
+
+    # 1. _bodo_chunk_bounds not provided with _bodo_interval_sort
+    df = pd.DataFrame({"A": np.arange(10)})
+    bounds = None
+
+    with pytest.raises(
+        BodoError,
+        match=r"sort_values\(\): _bodo_chunk_bounds with at most 2 keys must be provided when _bodo_interval_sort=True",
+    ):
+        out = impl(_get_dist_arg(df), "A", bounds)
+
+    # 2. Number of keys is >2
+    df = pd.DataFrame(
+        {
+            "A": np.arange(10, dtype=np.int64),
+            "B": np.arange(10, 20, dtype=np.int64),
+            "C": np.arange(20, 30, dtype=np.int64),
+        }
+    )
+    bounds = np.array([0, 10, 20], dtype=np.int64)
+    with pytest.raises(
+        BodoError,
+        match=r"sort_values\(\): When using _bodo_interval_sort, you must specify at most 2 keys",
+    ):
+        out = impl(_get_dist_arg(df), ["A", "B", "C"], bounds)
+
+    # 3. ascending is not true (both singular and list case)
+    @bodo.jit(distributed=["df"])
+    def impl2(df, by, bounds):
+        return df.sort_values(
+            by=by,
+            ascending=False,
+            _bodo_chunk_bounds=bounds,
+            _bodo_interval_sort=True,
+        )
+
+    with pytest.raises(
+        BodoError,
+        match=r"sort_values\(\): 'ascending' parameter must be true when using _bodo_interval_sort",
+    ):
+        out = impl2(_get_dist_arg(df), ["A", "B"], bounds)
+
+    @bodo.jit(distributed=["df"])
+    def impl3(df, by, bounds):
+        return df.sort_values(
+            by=by,
+            ascending=[True, False],
+            _bodo_chunk_bounds=bounds,
+            _bodo_interval_sort=True,
+        )
+
+    with pytest.raises(
+        BodoError,
+        match=r"sort_values\(\): Every value in 'ascending' must be true when using _bodo_interval_sort",
+    ):
+        out = impl3(_get_dist_arg(df), ["A", "B"], bounds)
+
+    # 4. na_position is not 'last' (both singular and list case)
+    @bodo.jit(distributed=["df"])
+    def impl4(df, by, bounds):
+        return df.sort_values(
+            by=by,
+            na_position="first",
+            _bodo_chunk_bounds=bounds,
+            _bodo_interval_sort=True,
+        )
+
+    with pytest.raises(
+        BodoError,
+        match=r"sort_values\(\): na_position must be 'last' when using _bodo_interval_sort",
+    ):
+        out = impl4(_get_dist_arg(df), ["A", "B"], bounds)
+
+    @bodo.jit(distributed=["df"])
+    def impl5(df, by, bounds):
+        return df.sort_values(
+            by=by,
+            na_position=["last", "first"],
+            _bodo_chunk_bounds=bounds,
+            _bodo_interval_sort=True,
+        )
+
+    with pytest.raises(
+        BodoError,
+        match=r"sort_values\(\): Every value in na_position must be 'last' when using _bodo_interval_sort",
+    ):
+        out = impl5(_get_dist_arg(df), ["A", "B"], bounds)
 
 
 @pytest.mark.slow

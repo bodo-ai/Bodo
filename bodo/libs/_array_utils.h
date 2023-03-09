@@ -2,6 +2,7 @@
 #ifndef _ARRAY_UTILS_H_INCLUDED
 #define _ARRAY_UTILS_H_INCLUDED
 
+#include <set>
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
 #include "hyperloglog.hpp"
@@ -231,13 +232,13 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
  *
  * @param in_table     : the input table.
  * @param ListIdx      : is the vector of indices to be selected.
- * @param n_col        : The number of columns selected. If -1 then all are
+ * @param n_cols_arg   : The number of columns selected. If -1 then all are
  * selected
  * @return the table output.
  */
 table_info* RetrieveTable(table_info* const& in_table,
                           std::vector<int64_t> const& ListIdx,
-                          int const& n_col);
+                          int const& n_cols_arg = -1);
 
 /**
  * @brief select rows and columns in input table specified by list of indices
@@ -668,6 +669,24 @@ void DEBUG_PrintColumn(std::ostream& os, const array_info* arr);
 void DEBUG_PrintSetOfColumn(std::ostream& os,
                             std::vector<array_info*> const& ListArr);
 
+/**
+ * @brief Print the contents of a table to the output stream.
+ * See DEBUG_PrintSetOfColumn for more details
+ */
+void DEBUG_PrintTable(std::ostream& os, table_info* table);
+
+/**
+ * @brief Prints contents of a std::unordered_map to the output stream.
+ * Only the case where both the key and value type is uint64_t is supported
+ * at this point.
+ *
+ * @param os the output stream (e.g. std::cerr or std::cout)
+ * @param map the unordered_map to print
+ * @return Nothing. Everything is put in the stream
+ */
+void DEBUG_PrintUnorderedMap(std::ostream& os,
+                             std::unordered_map<uint64_t, uint64_t> map);
+
 /** This is a function used for debugging.
  * It prints the nature of the columns of the tables
  *
@@ -761,5 +780,156 @@ std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type);
  * @return table_info* concatenated table
  */
 table_info* concat_tables(const std::vector<table_info*>& table_chunks);
+
+/**
+ * @brief Concatenate the arrays into a single array.
+ *
+ * For now, we're just wrapping it around concat_tables.
+ * Data types for our use case are integers, floats, decimal, date and
+ * datetime. For all of these, excluding Date, we re-use the Bodo buffers
+ * when creating the intermediate Arrow array, so it should be fairly
+ * efficient.
+ *
+ * XXX Switch to a different implementation later if needed for performance.
+ *
+ * Function assumes that all array-infos have the same array type and dtype.
+ * All input arrays will be fully decref-ed and deleted (due to behavior of
+ * concat_tables)
+ *
+ * @param arrays Vector of arrays to concatenate together.
+ * @return array_info* Concatenated array.
+ */
+array_info* concat_arrays(std::vector<array_info*>& arrays);
+
+/**
+ * @brief Check if the interval (arr1[idx], arr2[idx]) is within
+ * the bounds for a certain rank.
+ * We consider a row within the bounds of a rank if bounds[rank-1] <=
+ * arr2[idx] AND arr1[idx] <= bounds[rank]. When rank == 0, we skip the
+ * first check (and consider it true), since bounds[-1] is essentially
+ * -infinity. When rank == n_pes - 1, we skip the second check (and consider
+ * it true), since bounds[n_pes - 1] is essentially +infinity.
+ *
+ * @param bounds_arr Array of length n_pes - 1 with bounds for the ranks.
+ * @param rank Rank to check the bound for
+ * @param n_pes Total number of processes
+ * @param arr1 Array for the start of the interval
+ * @param arr2 Array for the end of the interval
+ * @param idx Index to check
+ */
+inline bool within_bounds_of_rank(array_info* bounds_arr, uint32_t rank,
+                                  int n_pes, array_info* arr1, array_info* arr2,
+                                  uint64_t idx) {
+    // na_position_bis is true in our case since asc = true and na_last = true
+    // which means that na_bis = (!na_last) ^ asc = true
+    return ((rank == 0) || (KeyComparisonAsPython_Column(
+                                true, bounds_arr, rank - 1, arr2, idx) >= 0)) &&
+           ((rank == uint32_t(n_pes - 1)) ||
+            (KeyComparisonAsPython_Column(true, arr1, idx, bounds_arr, rank) >=
+             0));
+}
+
+/**
+ * @brief Determine if an interval pair in a row is a bad interval.
+ *
+ * A bad interval is an interval [A, B] where A > B or when A == B
+ * in the case when strict == true
+ *
+ * @param arr1 The array containing the start of the interval
+ * @param arr2 The array containing the end of the interval
+ * @param idx The row index of the interval in both arrays
+ * @param strict Whether to consider [A, A] to be a bad interval
+ * @return If the interval [arr1[idx], arr2[idx]] is bad
+ */
+inline bool is_bad_interval(array_info* arr1, array_info* arr2, uint64_t idx,
+                            bool strict = true) {
+    auto comp = KeyComparisonAsPython_Column(true, arr1, idx, arr2, idx);
+    // strict == true: comp == -1 (A > B) or comp == 0 (A == B)
+    // strict == false: comp == -1 (A > B)
+    return strict ? comp <= 0 : comp < 0;
+}
+
+/**
+ * @brief Flatten a vector of vectors into a single vector.
+ * The vectors are placed in the order that they occur in vec.
+ *
+ * @tparam T Data type of the vector.
+ * @param vec Vector of vectors to flatten
+ * @param total_size Total length of all the vectors.
+ * @return std::vector<T> Flattened vector.
+ */
+template <typename T>
+inline std::vector<T> flatten(std::vector<std::vector<T>> const& vec,
+                              uint64_t total_size) {
+    std::vector<T> flattened;
+    flattened.reserve(total_size);
+    for (auto const& v : vec) {
+        flattened.insert(flattened.end(), v.begin(), v.end());
+    }
+    return flattened;
+}
+
+/**
+ * @brief Move columns specified in col_ids to the front of the table.
+ * This is done by creating a new vector of array_info's where the
+ * specified columns are put in the front, and then the rest of the columns
+ * are put afterwards.
+ *
+ * e.g. If there are 5 columns (A, B, C, D, E; in that order)
+ * and col_ids = [1,2],
+ * we will re-arrange it so that the columns are [B, C, A, D, E].
+ *
+ * To enable putting the columns back in the correct order using
+ * restore_col_order function, we return a map which maps the old index to the
+ * new index.
+ *
+ * @param table Table to modify
+ * @param col_ids Column ids to move to the front
+ * @return const std::unordered_map<uint64_t, uint64_t> Map of new index to old
+ * index that can be used in restore_col_order to restore the original ordering.
+ */
+inline const std::unordered_map<uint64_t, uint64_t> move_cols_to_front(
+    table_info* table, std::vector<uint64_t> col_ids) {
+    std::vector<array_info*> new_columns(table->columns.size());
+    std::set<uint64_t> col_ids_set(col_ids.begin(), col_ids.end());
+    std::unordered_map<uint64_t, uint64_t> col_mapping;
+    uint64_t itr = 0;
+    // Move specified ones to the front
+    for (size_t i = 0; i < col_ids.size(); i++) {
+        new_columns[itr] = table->columns[col_ids[i]];
+        col_mapping[col_ids[i]] = itr;
+        itr++;
+    }
+    // Add the rest
+    for (size_t i = 0; i < table->columns.size(); i++) {
+        if (!col_ids_set.contains(i)) {  // If not already added
+            new_columns[itr] = table->columns[i];
+            col_mapping[i] = itr;
+            itr++;
+        }
+    }
+    table->columns.clear();
+    table->columns = new_columns;
+    // TODO Verify that it's returned without copy
+    return col_mapping;
+}
+
+/**
+ * @brief Restore the original column ordering using the map returned by
+ * move_cols_to_front.
+ *
+ * @param table Table to restore the order of.
+ * @param col_mapping Map of old column id to new column id. This is the output
+ * of move_cols_to_front.
+ */
+inline void restore_col_order(
+    table_info* table, std::unordered_map<uint64_t, uint64_t>& col_mapping) {
+    std::vector<array_info*> new_columns(table->columns.size());
+    for (auto it = col_mapping.begin(); it != col_mapping.end(); it++) {
+        new_columns[it->first] = table->columns[it->second];
+    }
+    table->columns.clear();
+    table->columns = new_columns;
+}
 
 #endif  // _ARRAY_UTILS_H_INCLUDED

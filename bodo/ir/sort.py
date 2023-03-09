@@ -24,6 +24,7 @@ from bodo.libs.array import (
     info_from_table,
     info_to_array,
     py_data_to_cpp_table,
+    sort_table_for_interval_join,
     sort_values_table,
 )
 from bodo.transforms import distributed_analysis, distributed_pass
@@ -51,6 +52,7 @@ class Sort(ir.Stmt):
         ascending_list: Union[List[bool], bool] = True,
         na_position: Union[List[str], str] = "last",
         _bodo_chunk_bounds: Union[ir.Var, None] = None,
+        _bodo_interval_sort: bool = False,
         is_table_format: bool = False,
         num_table_arrays: int = 0,
     ):
@@ -78,7 +80,15 @@ class Sort(ir.Stmt):
                 output array. Can be set per key. Defaults to "last".
             _bodo_chunk_bounds (ir.Var|None): parallel chunk bounds for data
                 redistribution during the parallel algorithm (optional).
-                Currently only used for Iceberg MERGE INTO.
+                Currently only used for Iceberg MERGE INTO and with _bodo_interval_sort.
+            _bodo_interval_sort (bool): Use sort_table_for_interval_join instead of regular
+                sort_values. This is only exposed for internal testing purposes.
+                When this is true, _bodo_chunk_bounds must not be None and be of length
+                (#ranks - 1). If number of keys is 1, we treat it as a point column
+                and if it's 2, we treat it as an interval where the first key is the start
+                of the interval and the second key is the end of the interval.
+                `validate_sort_values_spec` ensures that the number of keys is either 1 or 2
+                and _bodo_chunk_bounds is not None.
             is_table_format (bool): flag for table format case (first variable is a
                 table in in_vars/out_vars)
             num_table_arrays: number of columns in the table in case of table format
@@ -91,6 +101,7 @@ class Sort(ir.Stmt):
         self.key_inds = key_inds
         self.inplace = inplace
         self._bodo_chunk_bounds = _bodo_chunk_bounds
+        self._bodo_interval_sort = _bodo_interval_sort
         self.is_table_format = is_table_format
         self.num_table_arrays = num_table_arrays
         # Logical indices of dead columns in input/output (excluding keys), updated in
@@ -524,6 +535,7 @@ def sort_distributed_run(
             "info_to_array": info_to_array,
             "info_from_table": info_from_table,
             "sort_values_table": sort_values_table,
+            "sort_table_for_interval_join": sort_table_for_interval_join,
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_to_info": array_to_info,
             "py_data_to_cpp_table": py_data_to_cpp_table,
@@ -682,7 +694,13 @@ def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
         if bounds_in is None or is_overload_none(typemap[bounds_in.name])
         else "arr_info_list_to_table([array_to_info(bounds_in)])"
     )
-    func_text += f"  out_cpp_table = sort_values_table(in_cpp_table, {key_count}, vect_ascending.ctypes, na_position.ctypes, dead_keys.ctypes, total_rows_np.ctypes, {bounds_table}, {parallel})\n"
+
+    if sort_node._bodo_interval_sort:
+        # bounds_in must exist if _bodo_interval_sort
+        bounds_arr = "array_to_info(bounds_in)"
+        func_text += f"  out_cpp_table = sort_table_for_interval_join(in_cpp_table, {bounds_arr}, {bool(key_count == 1)}, {parallel})\n"
+    else:
+        func_text += f"  out_cpp_table = sort_values_table(in_cpp_table, {key_count}, vect_ascending.ctypes, na_position.ctypes, dead_keys.ctypes, total_rows_np.ctypes, {bounds_table}, {parallel})\n"
 
     if sort_node.is_table_format:
         comma = "," if n_out_vars == 1 else ""

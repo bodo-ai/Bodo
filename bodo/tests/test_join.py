@@ -7,6 +7,7 @@ import random
 import string
 import unittest
 from decimal import Decimal
+from typing import List, Tuple, Union
 
 import numba
 import numpy as np
@@ -18,6 +19,7 @@ import bodo
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
+    check_logger_no_msg,
     create_string_io_logger,
     set_logging_stream,
 )
@@ -956,6 +958,397 @@ def test_merge_cross_dead_input(memory_leak_check):
             reset_index=True,
             check_dtype=False,
         )
+
+
+def test_interval_join_detection(memory_leak_check):
+    """
+    Make sure interval join detection works as expected (no false positives or false
+    negatives)
+    """
+
+    def impl1(df1, df2, on_str):
+        df3 = df1.merge(df2, on=on_str, how="inner")
+        return df3
+
+    def impl1_one_col(df1, df2, on_str):
+        df3 = df1.merge(df2, on=on_str, how="inner")
+        return df3[["B"]]
+
+    def impl2(df1, df2, on_str, how):
+        df3 = df1.merge(df2, on=on_str, how=how)
+        return df3
+
+    df1 = pd.DataFrame(
+        {"C": ["a1", "b1"], "P": [3, 1], "E": [2, 3], "F": [3.3, 4.4], "G": [4.6, 9]}
+    )
+    df2 = pd.DataFrame(
+        {"B": [12, 2, 4, 10], "A": [11, 2, 8, 0], "D": [1.1, 2.2, 3.3, 4.4]}
+    )
+    df1_type = bodo.typeof(df1)
+    df2_type = bodo.typeof(df2)
+
+    # detect interval join cases
+    on_interval = [
+        # point in interval
+        "((left.`P` >= right.`A`) & (left.`P` < right.`B`))",
+        "((right.`D` < left.`G`) & (left.`F` < right.`D`))",
+    ]
+
+    for on_str in on_interval:
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        lit_type = numba.types.literal(on_str)
+        with set_logging_stream(logger, 1):
+            # Only Compile with Given Types
+            bodo.jit((df1_type, df2_type, lit_type))(impl1)
+            check_logger_msg(stream, "Using optimized interval range join")
+        with set_logging_stream(logger, 1):
+            bodo.jit((df1_type, df2_type, lit_type))(impl1_one_col)
+            check_logger_msg(stream, "Using optimized interval range join")
+
+    # avoid non-interval join cases
+    on_not_interval = [
+        # equality condition
+        "((left.`P` >= right.`A`) & (left.`P` < right.`B`) & (left.`E` == right.`B`))",
+        # extra condition
+        "((left.`P` >= right.`A`) & (left.`P` < right.`B`) & (left.`F` > right.`D`))",
+        # different data types
+        "((left.`P` >= right.`A`) & (left.`P` < right.`D`))",
+        # not AND
+        "((left.`P` >= right.`A`) | (left.`P` < right.`B`))",
+        # not direct column access
+        "((left.`P` >= right.`A`) | (left.`P` < right.`B` + 1))",
+        # invalid point comparison case (less-than two other columns)
+        "((left.`P` <= right.`A`) | (left.`P` < right.`B`))",
+        # invalid interval comparison case (both left less-than right)
+        "((left.`P` <= right.`A`) & (left.`E` < right.`B`))",
+    ]
+
+    for on_str in on_not_interval:
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        lit_type = numba.types.literal(on_str)
+        with set_logging_stream(logger, 1):
+            # Only Compile with Given Types
+            bodo.jit((df1_type, df2_type, lit_type))(impl1)
+            check_logger_no_msg(stream, "Using optimized interval range join")
+        with set_logging_stream(logger, 1):
+            bodo.jit((df1_type, df2_type, lit_type))(impl1_one_col)
+            check_logger_no_msg(stream, "Using optimized interval range join")
+
+    # outer not on the points side
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        on_str = "((left.`P` >= right.`A`) & (left.`P` < right.`B`))"
+        lit_on_str = numba.types.literal(on_str)
+        lit_right = numba.types.literal("right")
+        bodo.jit((df1_type, df2_type, lit_on_str, lit_right))(impl2)
+        check_logger_no_msg(stream, "Using optimized interval range join")
+
+    # outer join -- should not pick interval join
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        on_str = "((left.`P` >= right.`A`) & (left.`P` < right.`B`))"
+        lit_on_str = numba.types.literal(on_str)
+        lit_right = numba.types.literal("outer")
+        bodo.jit((df1_type, df2_type, lit_on_str, lit_right))(impl2)
+        check_logger_no_msg(stream, "Using optimized interval range join")
+
+
+@pytest.fixture(
+    ids=["int", "double", "decimal", "time", "datetime", "date", "timedelta"],
+    params=[
+        (
+            pd.DataFrame(
+                {
+                    "C": ["a1", "b1"] * 5,
+                    "P": pd.Series([3, 1, 3, 1, None] * 2, dtype="Int64"),
+                    "E": pd.Series([2, 3] * 5, dtype="Int64"),
+                    "F": [3.3, 4.4] * 5,
+                    "G": [4.6, 9] * 5,
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "B": pd.Series([12, 2, 8, 10] * 5, dtype="Int64"),
+                    "A": pd.Series([11, 2, 4, 0] * 5, dtype="Int64"),
+                    "D": [1.1, 2.2, 3.3, 4.4] * 5,
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "P": np.array([1.21, 2.37, np.NaN] * 3),
+                    "E": np.array(
+                        [np.NaN, -1.0, 2.4, np.NaN, 6.0, 7.3, 1.1, np.NaN, np.NaN]
+                    ),
+                    "G": ["some", "string", "."] * 3,
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": np.array([1.0, 2.0, 3.0, 4.0] * 5),
+                    "B": np.array([1.1, 2.2, 3.3, 4.4, 5.5] * 4),
+                }
+            ),
+        ),
+        # TODO: General Join does not support Decimal128 yet
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "P": np.array([Decimal(1.21), Decimal(2.37), None] * 3),
+                        "E": np.array(
+                            [
+                                None,
+                                Decimal(-1.0),
+                                Decimal(2.4),
+                                None,
+                                Decimal(6.0),
+                                Decimal(7.3),
+                                Decimal(1.1),
+                                None,
+                                None,
+                            ]
+                        ),
+                        "G": [1.1, 2.3, 4.5] * 3,
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": np.array(
+                            [Decimal(1.0), Decimal(2.0), Decimal(3.0), Decimal(4.0)] * 5
+                        ),
+                        "B": np.array(
+                            [
+                                Decimal(1.1),
+                                Decimal(2.2),
+                                Decimal(3.3),
+                                Decimal(4.4),
+                                Decimal(5.5),
+                            ]
+                            * 4
+                        ),
+                    }
+                ),
+            ),
+            marks=pytest.mark.skip("[BE-4251] Support Decimal in Joins"),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "P": [bodo.Time(x, 0, 0, x, precision=9) for x in range(8)]
+                    + [None, None],
+                    "E": (
+                        [bodo.Time(4 * x, 0, 0, precision=9) for x in range(4)] + [None]
+                    )
+                    * 2,
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": [bodo.Time(x, 0, 0, precision=9) for x in range(4)] * 5,
+                    "B": [None, None]
+                    + [bodo.Time(x % 24, 0, 0, precision=9) for x in range(18)],
+                    "D": [1.1, 2.2, 3.3, 4.4] * 5,
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "P": pd.date_range(
+                        start="2018-04-24", end="2018-04-27", periods=10
+                    ),
+                    "E": pd.date_range("2018-04-23", periods=10, freq="D"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.date_range(start="2018-04-24", freq="D", periods=4).tolist()
+                    * 5,
+                    "B": pd.date_range(
+                        start="2018-04-24", end="2018-04-27", periods=5
+                    ).tolist()
+                    * 4,
+                    "D": [1.1, 2.2, 3.3, 4.4] * 5,
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "P": [None, None]
+                    + pd.date_range(
+                        start="2018-04-20", freq="2D", periods=10
+                    ).date.tolist(),
+                    "E": pd.date_range(
+                        "2018-04-10", periods=10, freq="10D"
+                    ).date.tolist()
+                    + [None, None],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.date_range(
+                        start="2018-04-24", freq="D", periods=4
+                    ).date.tolist()
+                    * 5,
+                    "B": pd.date_range(
+                        start="2018-04-24", freq="2D", periods=5
+                    ).date.tolist()
+                    * 4,
+                    "D": [1.1, 2.2, 3.3, 4.4] * 5,
+                }
+            ),
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "P": pd.timedelta_range(start="1 day", periods=8).tolist()
+                        + [None, None],
+                        "E": pd.timedelta_range(start="1 day", freq="18H", periods=10),
+                        "G": [1, 2, 3, 4, 5] * 2,
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": pd.Series(
+                            ["5D", None, "1D", "0D", None, "7D"] * 3,
+                            dtype="timedelta64[D]",
+                        ),
+                        "B": pd.Series(
+                            ["6D", None, "0D", "10D", "4D", "7D"] * 3,
+                            dtype="timedelta64[D]",
+                        ),
+                        "C": ["hello", "world"] * 9,
+                    }
+                ),
+            ),
+            marks=pytest.mark.skip(
+                "[BE-4102] Support Converting Timedelta to Arrow's Duration Type"
+            ),
+        ),
+    ],
+)
+def interval_join_test_tables(request):
+    ldf, rdf = request.param
+    cross_df = ldf.merge(rdf, how="cross")
+    return (ldf, rdf, cross_df)
+
+
+@pytest.mark.parametrize(
+    "lcond,rcond",
+    [
+        (">=", "<"),
+        (">", "<"),
+        (">", "<="),
+        (">=", "<="),
+    ],
+)
+@pytest.mark.parametrize(
+    "distributed", [None, [("point_df", 0)], [("range_df", 1)], False]
+)
+@pytest.mark.parametrize("how", ["inner", "left"])
+def test_point_in_interval_join(
+    interval_join_test_tables: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
+    lcond: str,
+    rcond: str,
+    distributed: Union[List[Tuple[str, int]], bool, None],
+    how: str,
+    memory_leak_check,
+):
+    """
+    Test Specialized Point-in-Interval Join Operation
+    The condition must be in the form A (< or <=) P (< or <=) B
+    where A, B in one table and P in the other table.
+    Tests different datatypes, condition equalities, and distributions
+    """
+    point_df, range_df, cross_df = interval_join_test_tables
+
+    def impl(point_df, range_df, on_str, how):
+        df3 = point_df.merge(range_df, on=on_str, how=how)
+        return df3
+
+    on_str = f"((left.`P` {lcond} right.`A`) & (left.`P` {rcond} right.`B`))"
+    on_str_py = f"P {lcond} A & P {rcond} B"
+    py_out = cross_df.query(on_str_py)
+    if how == "left":
+        unused_point_rows = point_df[~point_df["P"].isin(py_out["P"].unique())]
+        py_out = pd.concat([py_out, unused_point_rows], ignore_index=True)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    point_df_type = bodo.typeof(point_df)
+    range_df_type = bodo.typeof(range_df)
+    on_str_type = numba.types.literal(on_str)
+    how_type = numba.types.literal(how)
+    with set_logging_stream(logger, 2):
+        bodo.jit((point_df_type, range_df_type, on_str_type, how_type))(impl)
+        check_logger_msg(stream, "Using optimized interval range join")
+
+    check_func(
+        impl,
+        (point_df, range_df, on_str, how),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        distributed=distributed,
+        is_out_distributed=False if distributed is False else None,
+    )
+
+
+@pytest.mark.parametrize(
+    "lcond,rcond",
+    [
+        (">=", "<"),
+        (">", "<"),
+        (">", "<="),
+        (">=", "<="),
+    ],
+)
+@pytest.mark.parametrize(
+    "distributed", [None, [("left_df", 0)], [("right_df", 1)], False]
+)
+def test_interval_overlap_join(
+    interval_join_test_tables: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
+    lcond: str,
+    rcond: str,
+    distributed: Union[List[Tuple[str, int]], bool, None],
+    memory_leak_check: None,
+):
+    """
+    Test Specialized Interval Overlap Join Operation
+    The condition must be in the form A (< or <=) P and E (< or <=) B
+    where A, B in one table and P, E in the other table.
+    Tests different datatypes, condition equalities, and distributions
+    """
+
+    left_df, right_df, cross_df = interval_join_test_tables
+
+    def impl(left_df, right_df, on_str, how):
+        df3 = left_df.merge(right_df, on=on_str, how=how)
+        return df3
+
+    on_str = f"((left.`P` {lcond} right.`A`) & (left.`E` {rcond} right.`B`))"
+    on_str_py = f"P {lcond} A & E {rcond} B"
+    py_out = cross_df.query(on_str_py)
+
+    check_func(
+        impl,
+        (left_df, right_df, on_str, "inner"),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        distributed=distributed,
+        is_out_distributed=False if distributed is False else None,
+    )
 
 
 @pytest.mark.slow
