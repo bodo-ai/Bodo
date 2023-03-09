@@ -64,6 +64,7 @@ from bodo.utils.typing import (
     get_overload_const_int,
     get_overload_const_str,
     is_const_func_type,
+    is_immutable,
     is_list_like_index_type,
     is_literal_type,
     is_overload_constant_bool,
@@ -322,7 +323,7 @@ class TypingTransforms:
         func_ir,
         typingctx,
         targetctx,
-        typemap,
+        typemap: Dict[str, types.Type],
         calltypes,
         arg_types,
         _locals,
@@ -1017,8 +1018,8 @@ class TypingTransforms:
         used_dfs,
         skipped_vars,
         filters,
-        working_body,
-        func_ir,
+        working_body: List[ir.Stmt],
+        func_ir: ir.FunctionIR,
     ):
         """reorder nodes that are used for Parquet/SQL partition filtering to be before the
         Reader node (to be accessible when the Reader is run).
@@ -1035,7 +1036,9 @@ class TypingTransforms:
         Throws GuardException if not possible.
         """
         # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
-        filter_vars = {v.name for v in bodo.ir.connector.get_filter_vars(filters)}
+        filter_vars: Set[str] = {
+            v.name for v in bodo.ir.connector.get_filter_vars(filters)
+        }
 
         # data array/table variables should not be used in filter expressions directly
         non_filter_vars = {v.name for v in read_node.list_vars()}
@@ -1092,7 +1095,7 @@ class TypingTransforms:
             # avoid nodes before the reader
             if stmt is read_node:
                 break
-            stmt_vars = {v.name for v in stmt.list_vars()}
+            stmt_vars: Set[str] = {v.name for v in stmt.list_vars()}
 
             # make sure df is not used before filtering
             if not (stmt_vars & related_vars):
@@ -1102,22 +1105,31 @@ class TypingTransforms:
             else:
                 related_vars |= stmt_vars - df_names
 
-            # non-filter tuple variables can contain both filter and non-filter
-            # variables inside. For example, in tuple input to coalesce((A, c)), c can
-            # be a filter variable (that needs pushed before the read node) but A is not
-            if is_assign(stmt) and is_expr(stmt.value, "build_tuple"):
-                if stmt.target.name in filter_vars:
-                    filter_vars |= stmt_vars
-                else:
-                    for v in stmt_vars:
-                        if v not in filter_vars:
-                            non_filter_vars.add(v)
+            # If the target of an assignment is a filter_var, then
+            # the inputs are involved with computing filters so they must
+            # be filter_var's too
+            if is_assign(stmt) and stmt.target.name in filter_vars:
+                filter_vars |= stmt_vars
                 continue
 
-            if stmt_vars & filter_vars:
+            # For BoundFunction's, we need to check if the original bounded value
+            # is a filter var, so add it to stmt_vars
+            if is_call_assign(stmt) and isinstance(
+                self.typemap[stmt.value.func.name], types.BoundFunction
+            ):
+                def_loc = get_definition(self.func_ir, stmt.value.func)
+                stmt_vars.update(v.name for v in def_loc.list_vars())
+
+            # Otherwise, if the stmt uses a filter var and the filter_var is
+            # not immutable, assume that all vars are involved and must be filter_var's
+            # If filter_var is immutable, then don't need to assume that
+            used_filter_vars: Set[str]
+            if (used_filter_vars := stmt_vars & filter_vars) and any(
+                not is_immutable(self.typemap[fvar]) for fvar in used_filter_vars
+            ):
                 filter_vars |= stmt_vars
             else:
-                non_filter_vars |= stmt_vars
+                non_filter_vars |= stmt_vars - filter_vars
 
         require(not (filter_vars & non_filter_vars))
 
@@ -1132,8 +1144,14 @@ class TypingTransforms:
                 non_filter_nodes.append(stmt)
                 continue
 
-            stmt_vars = {v.name for v in stmt.list_vars()}
-            if stmt_vars & filter_vars:
+            # Should only be true if:
+            # - Target of stmt is a filter_var
+            # - A mutable filter var was used in stmt
+            # In both cases, we all all used vars as filter_vars
+            # In the case that an immutable filter var is used in the stmt
+            # we don't need to move the stmt. The definition will be moved up
+            # but that should be safe
+            if all(v.name in filter_vars for v in stmt.list_vars()):
                 new_body.append(stmt)
             else:
                 non_filter_nodes.append(stmt)

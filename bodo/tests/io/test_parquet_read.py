@@ -2633,3 +2633,157 @@ def test_python_not_filter_pushdown(memory_leak_check):
     finally:
         if bodo.get_rank() == 0:
             os.remove("pq_data")
+
+
+def test_filter_pushdown_string(datapath, memory_leak_check):
+    def impl(path):
+        df = pd.read_parquet(path)
+        val = "f"
+        val += "Oo"
+        val = val.lower()
+        return df[df["two"] == val]
+
+    path = datapath("parquet_data_nonascii1.parquet")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(impl, (path,), check_dtype=False, reset_index=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "(((ds.field('two') == ds.scalar(f0))))")
+
+
+def test_filter_pushdown_timestamp(datapath, memory_leak_check):
+    def impl(path):
+        df = pd.read_parquet(path)
+        d = datetime.date(2015, 1, 1)
+        d2 = d.replace(year=1992)
+        return df[df["DT64"] < pd.Timestamp(d2)]
+
+    path = datapath("pandas_dt.pq")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(impl, (path,), check_dtype=False, reset_index=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "(((ds.field('DT64') < ds.scalar(f0))))")
+
+
+def test_filter_pushdown_mutated_list(datapath, memory_leak_check):
+    def impl(path):
+        df = pd.read_parquet(path)
+        lst = [0]
+        tup = (lst, 1)
+        new_lst, val = tup
+        new_lst.append(val)
+        return df[df["A"].isin(new_lst)]
+
+    path = datapath("int_nulls_single.pq")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(impl, (path,), check_dtype=False, reset_index=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "(((ds.field('A').isin(f0))))")
+
+
+def test_filter_pushdown_tuple(datapath, memory_leak_check):
+    def impl(path):
+        df = pd.read_parquet(path)
+        x = 1 + 1
+        y = x * 5
+        tup = (3, 4)
+        tup = (x, y)
+        m = tup[0]
+        n = tup[1]
+        return df[df["A"].isin([m, n])]
+
+    path = datapath("int_nulls_single.pq")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(impl, (path,), check_dtype=False, reset_index=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "(((ds.field('A').isin(f0))))")
+
+
+def test_filter_pushdown_tuple_function(datapath, memory_leak_check):
+    @bodo.jit
+    def comp(val):
+        return val[0] + val[1][0]
+
+    def impl(path):
+        df = pd.read_parquet(path)
+        tup = (3 * 4, (7, "hello"))
+        comp(tup)
+        return df[~(df["A"] == tup[1][1])]
+
+    path = datapath("small_strings.pq")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(impl, (path,), check_dtype=False, reset_index=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "((~((ds.field('A') == ds.scalar(f0)))))")
+
+
+def test_filter_pushdown_intermediate_comp_func(datapath, memory_leak_check):
+    @bodo.jit
+    def unused(x, test=None):
+        return x
+
+    @bodo.jit
+    def used(x, test=None):
+        return x - 1
+
+    def impl(path):
+        df = pd.read_parquet(path)
+        c = None
+        unused_val = unused(20, c)
+        y = used(10, c)
+        return df[df["A"] == y]
+
+    path = datapath("int_nulls_single.pq")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(impl, (path,), check_dtype=False, reset_index=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "(((ds.field('A') == ds.scalar(f0))))")
+
+
+@pytest.mark.skip("[BE-4498] Dictionaries are not passed-by-reference")
+def test_filter_pushdown_dictionary(datapath, memory_leak_check):
+    @bodo.jit
+    def comp(d, v):
+        d["test"] = v
+
+    def impl(path):
+        df = pd.read_parquet(path)
+        c = {"a": 1, "b": 2, "c": 3}
+        comp(c, c["c"] + c["a"])
+        return df[(df["A"] == c["test"] + c["a"]) | (df["A"] == c["c"])]
+
+    path = datapath("int_nulls_single.pq")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(impl, (path,), check_dtype=False, reset_index=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(
+            stream,
+            "(((ds.field('A') == ds.scalar(f0))) | ((ds.field('A') == ds.scalar(f1))))",
+        )
