@@ -6737,7 +6737,7 @@ def test_boolagg_or_invalid(data_col, memory_leak_check):
         impl(df)
 
 
-@pytest.mark.tz_awware
+@pytest.mark.tz_aware
 def test_tz_aware_gb_apply(memory_leak_check):
     """
     Tests using groupby.apply with a tz-aware column as a data column on a
