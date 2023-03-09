@@ -1689,15 +1689,17 @@ def is_iterable_type(t):
     )
 
 
-def is_scalar_type(t):
+def is_scalar_type(t: types.Type) -> bool:
     """
-    returns True if 't' is a scalar type like integer, boolean, string, ...
+    Returns True if 't' is a scalar type like integer, boolean, string, ...
     """
     return isinstance(
         t,
         (
             types.Boolean,
             types.Number,
+            types.IntegerLiteral,
+            types.BooleanLiteral,
             types.StringLiteral,
             bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
             bodo.TimeType,
@@ -1795,6 +1797,16 @@ def find_common_np_dtype(arr_types):
             [numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types], []
         )
     )
+
+
+def is_immutable(typ: types.Type) -> bool:
+    """
+    Returns True if typ is an immutable type, like a scalar or
+    tuple of immutable types
+    """
+    if is_tuple_like_type(typ):
+        return all(is_immutable(t) for t in typ.types)
+    return is_scalar_type(typ)
 
 
 def is_immutable_array(typ):
