@@ -2416,6 +2416,18 @@ def compose_decos(decos):
     return composition
 
 
+# Determine if we are re-running a test due to a flaky failure.
+pytest_snowflake_is_rerunning = False
+
+# Determine wether we want to re-run a test due to a flaky failure,
+# and set the pytest_snowflake_is_rerunning flag.
+def _pytest_snowflake_rerun_filter(err, *args):
+    should_rerun = "HTTP 503: Service Unavailable" in str(err)
+    if should_rerun:
+        pytest_snowflake_is_rerunning = True
+    return should_rerun
+
+
 # This is for use as a decorator for a single test function.
 # (@pytest_mark_snowflake)
 pytest_mark_snowflake = compose_decos(
@@ -2423,9 +2435,7 @@ pytest_mark_snowflake = compose_decos(
         pytest.mark.skipif(
             "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
         ),
-        pytest.mark.flaky(
-            rerun_filter=lambda err, *args: "HTTP 503: Service Unavailable" in str(err)
-        ),
+        pytest.mark.flaky(rerun_filter=_pytest_snowflake_rerun_filter),
     )
 )
 
@@ -2435,7 +2445,5 @@ pytest_snowflake = [
     pytest.mark.skipif(
         "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
     ),
-    pytest.mark.flaky(
-        rerun_filter=lambda err, *args: "HTTP 503: Service Unavailable" in str(err)
-    ),
+    pytest.mark.flaky(rerun_filter=_pytest_snowflake_rerun_filter),
 ]
