@@ -1,18 +1,34 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the join and merge"""
 from collections import defaultdict
-from typing import Dict, List, Literal, Optional, Set, Tuple, Union
+from itertools import chain
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
 import numba
 import numpy as np
 import pandas as pd
+import pandas.core.computation.expr
+import pandas.core.computation.ops
+import pandas.core.computation.parsing
+import pandas.core.computation.scope
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
+    guard,
     next_label,
     replace_arg_nodes,
     replace_vars_inner,
+    require,
     visit_vars_inner,
 )
 from numba.extending import intrinsic
@@ -27,6 +43,7 @@ from bodo.libs.array import (
     cross_join_table,
     delete_table,
     hash_join_table,
+    interval_join_table,
     py_data_to_cpp_table,
 )
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
@@ -49,7 +66,11 @@ from bodo.utils.typing import (
     is_str_arr_type,
     to_nullable_type,
 )
-from bodo.utils.utils import alloc_arr_tup, is_null_pointer
+from bodo.utils.utils import _remove_prefix, alloc_arr_tup, is_null_pointer
+
+if TYPE_CHECKING:
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
+
 
 # TODO: it's probably a bad idea for these to be global. Maybe try moving them
 # to a context or dispatcher object somehow
@@ -141,11 +162,11 @@ class Join(ir.Stmt):
         left_keys: Union[List[str], str],
         right_keys: Union[List[str], str],
         out_data_vars: List[ir.Var],
-        out_df_type: bodo.DataFrameType,
+        out_df_type: "DataFrameType",
         left_vars: List[ir.Var],
-        left_df_type: bodo.DataFrameType,
+        left_df_type: "DataFrameType",
         right_vars: List[ir.Var],
-        right_df_type: bodo.DataFrameType,
+        right_df_type: "DataFrameType",
         how: HOW_OPTIONS,
         suffix_left: str,
         suffix_right: str,
@@ -706,6 +727,24 @@ def visit_vars_join(join_node, callback, cbdata):
 
 # add call to visit Join variable
 ir_utils.visit_vars_extensions[Join] = visit_vars_join
+
+
+def check_cross_join_coltypes(
+    left_col_types: List[types.Array], right_col_types: List[types.Array]
+):
+    """
+    Check the Columns of Cross Join or Interval Join tables to
+    make sure that they don't use unsupported column types.
+    Currently, we don not support cases where a timedelta
+    column is used in the condition.
+    """
+    for col_type in chain(left_col_types, right_col_types):
+        if col_type == bodo.datetime_timedelta_array_type or (
+            isinstance(col_type, types.Array) and col_type.dtype == bodo.timedelta64ns
+        ):
+            raise BodoError(
+                "The Timedelta column data type is not supported for Cross Joins or Joins with Inequality Conditions"
+            )
 
 
 def _is_cross_join_len(join_node):
@@ -1885,6 +1924,8 @@ def join_distributed_run(
             right_col_nums,
             left_physical_to_logical_list,
             right_physical_to_logical_list,
+            left_logical_physical_map,
+            right_logical_physical_map,
         )
     # TODO: Update asof
     # Set the output variables.
@@ -1911,6 +1952,7 @@ def join_distributed_run(
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
             "cross_join_table": cross_join_table,
+            "interval_join_table": interval_join_table,
             "hash_join_table": hash_join_table,
             "delete_table": delete_table,
             "add_join_gen_cond_cfunc_sym": add_join_gen_cond_cfunc_sym,
@@ -2172,7 +2214,7 @@ def _replace_column_accesses(
             ] = bodo.libs.array._gen_row_na_check_intrinsic(array_typ, physical_ind)
             expr = expr.replace(na_cname, na_val_varname)
 
-        # only append the column if it is not a key
+        # only append the column if it is not an (equality) key
         if c_ind not in key_set:
             col_nums.append(physical_ind)
     return expr, func_text, col_nums
@@ -2245,7 +2287,7 @@ def _get_table_parallel_flags(join_node, array_dists):
 
 
 def _gen_join_cpp_call(
-    join_node,
+    join_node: Join,
     left_key_types,
     right_key_types,
     matched_key_types,
@@ -2269,6 +2311,8 @@ def _gen_join_cpp_call(
     right_col_nums,
     left_physical_to_logical_list,
     right_physical_to_logical_list,
+    left_logical_physical_map,
+    right_logical_physical_map,
 ):
     """
     Generate the code need to compute a hash join in C++
@@ -2430,8 +2474,96 @@ def _gen_join_cpp_call(
     # single-element numpy array to return number of global rows from C++
     func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
 
-    # joins without equality condition should use nested loop implementation
-    if join_node.how == "cross" or not join_node.left_keys:
+    # pattern match point in interval joins
+    point_interval_join_info: Optional[Tuple[bool, str, str, str]] = guard(
+        _get_interval_join_info,
+        join_node,
+        left_col_nums,
+        right_col_nums,
+        left_other_types,
+        right_other_types,
+        left_physical_to_logical_list,
+        right_physical_to_logical_list,
+    )
+    if point_interval_join_info is not None:
+        left_col_types = [left_other_types[k] for k in left_col_nums]
+        right_col_types = [right_other_types[k] for k in right_col_nums]
+        check_cross_join_coltypes(left_col_types, right_col_types)
+
+        # Add log msg indicating interval join was detected and used
+        if bodo.user_logging.get_verbose_level() >= 1:
+            join_source = join_node.loc.strformat()
+            msg = "Using optimized interval range join implementation:\n%s"
+            bodo.user_logging.log_message(
+                "Join Optimization",
+                msg,
+                join_source,
+            )
+            # TODO: Add more information about the type of join and relevant columns in logging level 2
+
+        if point_interval_join_info[
+            0
+        ]:  # i.e. point is on the left side and interval is on the right side
+            # point_interval_join_info[2,3] are the column names, right_var_map gives us the logical location,
+            # and then we map it to the physical location using right_logical_physical_map
+            start_col_id_interval_side = right_logical_physical_map[
+                join_node.right_var_map[point_interval_join_info[2]]
+            ]
+            end_col_id_interval_side = right_logical_physical_map[
+                join_node.right_var_map[point_interval_join_info[3]]
+            ]
+            point_col_id_point_side = left_logical_physical_map[
+                join_node.left_var_map[point_interval_join_info[1]]
+            ]
+        else:  # i.e. vice-versa
+            start_col_id_interval_side = left_logical_physical_map[
+                join_node.left_var_map[point_interval_join_info[2]]
+            ]
+            end_col_id_interval_side = left_logical_physical_map[
+                join_node.left_var_map[point_interval_join_info[3]]
+            ]
+            point_col_id_point_side = right_logical_physical_map[
+                join_node.right_var_map[point_interval_join_info[1]]
+            ]
+
+        func_text += (
+            f"    out_table = interval_join_table("
+            "table_left, "
+            "table_right, "
+            f"{left_parallel}, "
+            f"{right_parallel}, "
+            f"{join_node.is_left}, "
+            f"{join_node.is_right}, "
+            # Is point on the left side
+            f"{point_interval_join_info[0]}, "
+            # Does the point need to be strictly greater than the interval start
+            f"{point_interval_join_info[4]}, "
+            # Does the point need to be strictly less than the interval end
+            f"{point_interval_join_info[5]}, "
+            # Column ID of point column on point side in point in interval join.
+            f"{point_col_id_point_side}, "
+            # Column ID of start column on interval side in point in interval join.
+            f"{start_col_id_interval_side}, "
+            # Column ID of end column on interval side in point in interval join.
+            f"{end_col_id_interval_side}, "
+            f"key_in_output.ctypes, "
+            f"use_nullable_arr_type.ctypes, "
+            f"cfunc_cond, "
+            f"left_table_cond_columns.ctypes, "
+            f"{len(left_col_nums)}, "
+            f"right_table_cond_columns.ctypes, "
+            f"{len(right_col_nums)}, "
+            f"total_rows_np.ctypes)\n"
+        )
+
+    # Joins without equality condition should use nested loop implementation
+    # For now, we are having all interval-overlap joins go through cross join
+    # as well.
+    elif join_node.how == "cross" or not join_node.left_keys:
+        left_col_types = [left_other_types[k] for k in left_col_nums]
+        right_col_types = [right_other_types[k] for k in right_col_nums]
+        check_cross_join_coltypes(left_col_types, right_col_types)
+
         func_text += (
             f"    out_table = cross_join_table("
             "table_left, "
@@ -2619,6 +2751,230 @@ def determine_table_cast_map(
                 cast_map[idx] = matched_key_types[i]
 
     return cast_map
+
+
+def _get_interval_join_info(
+    join_node: Join,
+    left_col_nums: List[int],
+    right_col_nums: List[int],
+    left_other_types,
+    right_other_types,
+    left_physical_to_logical_list: List[int],
+    right_physical_to_logical_list: List[int],
+) -> Tuple[bool, str, str, str]:
+    """Detect and return relevant info for point in interval join
+
+    Args:
+        join_node (Join): Join IR node
+        left_col_nums (list(int))): left column numbers in join condition (physical)
+        right_col_nums (list(int)): right column numbers in join condition (physical)
+        left_other_types (list(types.Type)): data types of left columns in condition
+        right_other_types (list(types.Type)): data types of right columns in condition
+        left_physical_to_logical_list (list(int)): map physical left column numbers
+            (C++ table) to logical (input Python data)
+        right_physical_to_logical_list (list(int)): map physical right column numbers
+            (C++ table) to logical (input Python data)
+
+    Returns:
+        - (bool, string, string, string):
+            - bool: True if point is on the left side
+            - string: Name of the point col on the point side
+            - string: Name of the start col on the interval side
+            - string: Name of the end col on the interval side
+    """
+    from bodo.hiframes.dataframe_impl import _is_col_access, _parse_query_expr
+    from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
+
+    # check for no equality condition
+    require(not join_node.left_keys)
+    # Point join has 1 key on one side, 2 keys other. Interval has 2 keys both sides.
+    require(
+        (len(left_col_nums) == 2 and len(right_col_nums) in (1, 2))
+        or (len(right_col_nums) == 2 and len(left_col_nums) in (1, 2))
+    )
+    # inner join, or point join with outer on the point side
+    require(
+        join_node.how == "inner"
+        or (join_node.how == "left" and len(left_col_nums) == 1)
+        or (join_node.how == "right" and len(right_col_nums) == 1)
+    )
+
+    # make sure keys are numerical/date/time and the same type
+    assert (len(left_other_types) >= left_col_nums[0]) and (
+        len(left_other_types) > 0
+    ), "_get_interval_join_info: invalid column types"
+    key_type = left_other_types[left_col_nums[0]]
+    dtype = key_type.dtype
+    require(
+        isinstance(
+            dtype,
+            (
+                types.Integer,
+                types.Float,
+                PandasDatetimeTZDtype,
+                bodo.TimeType,
+                bodo.Decimal128Type,
+            ),
+        )
+        or dtype
+        in (bodo.datetime64ns, bodo.datetime_date_type, bodo.datetime_timedelta_type)
+    )
+    # TODO: We should eventually handle joins between nullable and non-nullable arrays
+    require(all(left_other_types[k] == key_type for k in left_col_nums))
+    require(all(right_other_types[k] == key_type for k in right_col_nums))
+
+    # parse expr and check for interval join comparison patterns
+    resolver = {"left": 0, "right": 0, "NOT_NA": 0}
+    # create fake environment for Expr to enable parsing
+    env = pandas.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
+    parsed_expr_tree, _, _ = _parse_query_expr(
+        join_node.gen_cond_expr,
+        env,
+        [],
+        [],
+        None,
+    )
+    terms = parsed_expr_tree.terms
+
+    # pattern match Bodo generated NA checks for some types like float and ignore them
+    if _all_na_check(terms.lhs):
+        terms = terms.rhs
+
+    # condition should be AND of two comparisons
+    require(isinstance(terms, pandas.core.computation.ops.BinOp) and terms.op == "&")
+    cond1 = terms.lhs
+    cond2 = terms.rhs
+    require(
+        isinstance(cond1, pandas.core.computation.ops.BinOp)
+        and isinstance(cond2, pandas.core.computation.ops.BinOp)
+    )
+    require(_is_col_access(cond1.lhs) and _is_col_access(cond1.rhs))
+    require(_is_col_access(cond2.lhs) and _is_col_access(cond2.rhs))
+
+    # normalize to less-than comparisons
+    _normalize_expr_cond(cond1)
+    _normalize_expr_cond(cond2)
+
+    # check for point interval join
+    if len(left_col_nums) == 1:
+        point_colname = join_node.left_col_names[
+            left_physical_to_logical_list[left_col_nums[0]]
+        ]
+        (start_col, strict_start_comp), (end_col, strict_end_comp) = _check_point_cases(
+            point_colname, cond1, cond2, True
+        )
+        return (
+            True,
+            point_colname,
+            start_col,
+            end_col,
+            strict_start_comp,
+            strict_end_comp,
+        )
+    elif len(right_col_nums) == 1:
+        point_colname = join_node.right_col_names[
+            right_physical_to_logical_list[right_col_nums[0]]
+        ]
+        (start_col, strict_start_comp), (end_col, strict_end_comp) = _check_point_cases(
+            point_colname, cond1, cond2, False
+        )
+        return (
+            False,
+            point_colname,
+            start_col,
+            end_col,
+            strict_start_comp,
+            strict_end_comp,
+        )
+
+
+def _all_na_check(expr_node) -> bool:
+    """Return True if expression node is just NA checks for columns
+    (e.g. '((((NOT_NA.left).F)) & (((NOT_NA.left).G))) & (((NOT_NA.right).D))')
+
+    Args:
+        expr_node (pd.core.computation.ops.BinOp): input expr node
+
+    Returns:
+        bool: True if all NA check
+    """
+    if isinstance(expr_node, pandas.core.computation.ops.BinOp):
+        return _all_na_check(expr_node.lhs) and _all_na_check(expr_node.rhs)
+
+    return str(expr_node).startswith("((NOT_NA.")
+
+
+def _check_point_cases(
+    point_colname: str,
+    cond1: pandas.core.computation.ops.BinOp,
+    cond2: pandas.core.computation.ops.BinOp,
+    is_left: bool,
+) -> Tuple[Tuple[str, bool], Tuple[str, bool]]:
+    """Check for point interval join in conditions
+
+    Args:
+        point_colname: column name of points
+        cond1: first condition term in join
+        cond2: second condition term in join
+        is_left: is left table the points table
+
+    Returns:
+        - Name of the interval start column and whether `start (<,<=) point` is a strict inequality
+        - Name of the interval end column and whether `point (<,<=) end` is a strict inequality
+    """
+    point_side = "left" if is_left else "right"
+    point_colname = f"{point_side}.{point_colname}"
+    # (A < P and P < B)
+    start_comp_first: bool = (
+        cond1.rhs.name == point_colname and cond2.lhs.name == point_colname
+    )
+    # (P < B and A < P)
+    end_comp_first: bool = (
+        cond1.lhs.name == point_colname and cond2.rhs.name == point_colname
+    )
+    require(start_comp_first or end_comp_first)
+    other_side_prefix = "right." if is_left else "left."
+
+    if start_comp_first:
+        # In the (A < P and P < B) case, cond1 refers to (A < P) and cond2 refers to (P < B).
+        # We want it to be the case that A (cond1.lhs) and B (cond2.rhs) come from the
+        # non-point side and that A != B. If this is not the case, it's not a point
+        # in interval join.
+        require(
+            cond1.lhs.name.startswith(other_side_prefix)
+            and cond2.rhs.name.startswith(other_side_prefix)
+            and cond1.lhs.name != cond2.rhs.name
+        )
+        return (
+            (_remove_prefix(cond1.lhs.name, other_side_prefix), cond1.op == "<"),
+            (_remove_prefix(cond2.rhs.name, other_side_prefix), cond2.op == "<"),
+        )
+    else:
+        # Similar logic, but for the (P < B and A < P) case.
+        require(
+            cond1.rhs.name.startswith(other_side_prefix)
+            and cond2.lhs.name.startswith(other_side_prefix)
+            and cond1.rhs.name != cond2.lhs.name
+        )
+        return (
+            (_remove_prefix(cond2.lhs.name, other_side_prefix), cond2.op == "<"),
+            (_remove_prefix(cond1.rhs.name, other_side_prefix), cond1.op == "<"),
+        )
+
+
+def _normalize_expr_cond(cond: pandas.core.computation.ops.BinOp) -> None:
+    """Normalize join condition comparison to use less-than instead of greater-than
+
+    Args:
+        cond: input comparison
+    """
+    if cond.op == ">":
+        cond.op = "<"
+        cond.lhs, cond.rhs = cond.operands = cond.rhs, cond.lhs
+
+    if cond.op == ">=":
+        cond.op = "<="
+        cond.lhs, cond.rhs = cond.operands = cond.rhs, cond.lhs
 
 
 @numba.njit

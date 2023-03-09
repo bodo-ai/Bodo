@@ -64,21 +64,87 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
 array_info* sort_values_array_local(array_info* in_arr, bool is_parallel,
                                     int64_t ascending, int64_t na_position);
 
+/**
+ * @brief Python entrypoint for sort_table_for_interval_join.
+ *
+ * When !is_table_point_side, the output table can have rows duplicated across
+ * consecutive ranks.
+ *
+ * @param table Table to sort.
+ * @param bounds_arr Bounds to use for distributing the data. Should have length
+ * (#ranks - 1).
+ * @param is_table_point_side Whether this is a point side table. If false, it's
+ * an interval side table where the first two columns are the start and end
+ * columns respectively.
+ * @param parallel Whether the table is distributed.
+ * @return table_info* Sorted table (after redistribution).
+ */
+table_info* sort_table_for_interval_join_py_entrypoint(table_info* table,
+                                                       array_info* bounds_arr,
+                                                       bool is_table_point_side,
+                                                       bool parallel);
+
+/**
+ * @brief Sort the tables involved in a point in interval join.
+ * We assume that the first column in the point table is the point column and
+ * the first two columns in the interval table are the interval start and end
+ * columns, respectively.
+ * It's a convenience wrapper around sort_both_tables_for_interval_join.
+ *
+ * NOTE: All arrays in table_point and table_interval will
+ * be decref-ed, same as sort-values.
+ *
+ * @param table_point Point side table
+ * @param table_interval Interval side table
+ * @param table_point_parallel Is the point side table distributed
+ * @param table_interval_parallel Is the interval side table distributed
+ * @param strict Only filter strict bad intervals (where A > B instead of A >=
+ * B)
+ * @return std::tuple<table_info*, table_info*>
+ * sorted point table, sorted interval table.
+ */
+std::pair<table_info*, table_info*> sort_tables_for_point_in_interval_join(
+    table_info* table_point, table_info* table_interval,
+    bool table_point_parallel, bool table_interval_parallel, bool strict);
+
+/**
+ * @brief Sort the tables involved in an interval overlap join.
+ * We assume that the first two columns in both tables are the start and end of
+ * the intervals respectively.
+ * It's a convenience wrapper around sort_both_tables_for_interval_join.
+ *
+ * NOTE: All arrays in table_1 and table_2 will be
+ * decref-ed, same as sort-values.
+ *
+ * @param table_1 First interval table.
+ * @param table_2 Second interval table.
+ * @param table_1_parallel True when the first interval table is distributed.
+ * @param table_2_parallel True when the second interval table is distributed.
+ * @return std::tuple<table_info*, table_info*, array_info*>
+ * Sorted first table, sorted second table and bounds array.
+ */
+std::tuple<table_info*, table_info*, array_info*>
+sort_tables_for_interval_overlap_join(table_info* table_1, table_info* table_2,
+                                      bool table_1_parallel,
+                                      bool table_2_parallel);
+
 /** This function is the function for the dropping of duplicated rows.
  * This C++ code should provide following functionality of pandas
  * drop_duplicates:
  * ---possibility of selecting columns for the identification
- * ---possibility of keeping first, last or removing all entries with duplicate
- * inplace operation for keeping the data in the same place is another problem.
+ * ---possibility of keeping first, last or removing all entries with
+ * duplicate inplace operation for keeping the data in the same place is
+ * another problem.
  *
  * @param in_table : the input table
- * @param is_parallel: the boolean specifying if the computation is parallel or
- * not.
+ * @param is_parallel: the boolean specifying if the computation is parallel
+ * or not.
  * @param num_keys: number of columns to use identifying duplicates
  * @param keep: integer specifying the expected behavior.
  *        keep = 0 corresponds to the case of keep="first" keep first entry
  *        keep = 1 corresponds to the case of keep="last" keep last entry
- *        keep = 2 corresponds to the case of keep=False : remove all duplicates
+ *        keep = 2 corresponds to the case of keep=False : remove all
+ * duplicates
  * @param dropna: Should NA be included in the final table
  * @param drop_local_first: Whether to drop duplicates in local data before
  * shuffling

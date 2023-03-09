@@ -980,7 +980,9 @@ TableBuilder::TableBuilder(table_info* table, const int64_t num_rows) {
         } else if (arr->arr_type == bodo_array_type::ARROW) {
             columns.push_back(new ArrowBuilder());
         } else {
-            throw std::runtime_error("TableBuilder: data type not supported");
+            throw std::runtime_error("TableBuilder: array type (" +
+                                     GetArrType_as_string(arr->arr_type) +
+                                     ") not supported");
         }
     }
 }

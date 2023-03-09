@@ -328,6 +328,7 @@ ext_decimal = Extension(
     library_dirs=np_compile_args["library_dirs"] + lid,
 )
 
+
 ext_arr = Extension(
     name="bodo.libs.array_ext",
     sources=[

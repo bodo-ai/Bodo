@@ -6,6 +6,7 @@
 #include <mpi.h>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 
 #include "_decimal_ext.h"
 
@@ -585,6 +586,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
                            nRowOut, -1, -1, NULL, NULL, NULL, NULL, NULL,
                            /*meminfo TODO*/ NULL, NULL, out_arrow_array);
     }
+    out_arr->precision = in_arr->precision;
     return out_arr;
 };
 
@@ -2021,6 +2023,17 @@ void DEBUG_PrintSetOfColumn(std::ostream& os,
     DEBUG_PrintVectorArrayInfo(os, ListArr);
 }
 
+void DEBUG_PrintTable(std::ostream& os, table_info* table) {
+    DEBUG_PrintSetOfColumn(os, table->columns);
+}
+
+void DEBUG_PrintUnorderedMap(std::ostream& os,
+                             std::unordered_map<uint64_t, uint64_t> map) {
+    for (auto it = map.begin(); it != map.end(); it++) {
+        os << it->first << ": " << it->second << "\n";
+    }
+}
+
 std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::INT8) return "INT8";
     if (dtype == Bodo_CTypes::UINT8) return "UINT8";
@@ -2052,7 +2065,7 @@ std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type) {
     if (arr_type == bodo_array_type::ARROW) return "ARROW";
     if (arr_type == bodo_array_type::CATEGORICAL) return "CATEGORICAL";
     if (arr_type == bodo_array_type::DICT) return "DICT";
-    return "Uncovered case of GetDtypeString\n";
+    return "Uncovered case of GetArrType_as_string\n";
 }
 
 void DEBUG_PrintRefct(std::ostream& os,
@@ -2065,10 +2078,22 @@ void DEBUG_PrintRefct(std::ostream& os,
     for (int iCol = 0; iCol < nCol; iCol++) {
         os << "iCol=" << iCol << " : "
            << GetArrType_as_string(ListArr[iCol]->arr_type)
-           << " dtype=" << GetDtype_as_string(ListArr[iCol]->dtype)
-           << " : meminfo=" << GetNRTinfo(ListArr[iCol]->meminfo)
-           << " meminfo_bitmask=" << GetNRTinfo(ListArr[iCol]->meminfo_bitmask)
-           << "\n";
+           << " dtype=" << GetDtype_as_string(ListArr[iCol]->dtype);
+        if (ListArr[iCol]->arr_type == bodo_array_type::DICT) {
+            // Print details from info1 and info2 in the dict case.
+            os << " : info1 meminfo="
+               << GetNRTinfo(ListArr[iCol]->info1->meminfo)
+               << " info1 meminfo_bitmask="
+               << GetNRTinfo(ListArr[iCol]->info1->meminfo_bitmask)
+               << " : info2 meminfo="
+               << GetNRTinfo(ListArr[iCol]->info2->meminfo)
+               << " info2 meminfo_bitmask="
+               << GetNRTinfo(ListArr[iCol]->info2->meminfo_bitmask) << "\n";
+        } else {
+            os << " : meminfo=" << GetNRTinfo(ListArr[iCol]->meminfo)
+               << " meminfo_bitmask="
+               << GetNRTinfo(ListArr[iCol]->meminfo_bitmask) << "\n";
+        }
     }
 }
 
@@ -2195,4 +2220,28 @@ table_info* concat_tables(const std::vector<table_info*>& table_chunks) {
         delete_table_decref_arrays(table);
     }
     return out_table;
+}
+
+array_info* concat_arrays(std::vector<array_info*>& arrays) {
+    // Create dummy tables to pass to concat_tables
+    std::vector<table_info*> dummy_tables(arrays.size());
+    for (size_t i = 0; i < arrays.size(); i++) {
+        dummy_tables[i] = new table_info();
+        dummy_tables[i]->columns.push_back(arrays[i]);
+    }
+
+    // Concat the dummy tables and retrieve the concatenated column
+    table_info* concatenated_table = concat_tables(dummy_tables);
+    array_info* concatenated_arr = concatenated_table->columns[0];
+
+    // Not using delete_table since we need the column pointer
+    // to stick around.
+    delete concatenated_table;
+    concatenated_table = NULL;
+
+    // tables in dummy_tables were destroyed in concat_tables,
+    // and the dummy_tables vector will get destroyed when we exit
+    // the function.
+
+    return concatenated_arr;
 }

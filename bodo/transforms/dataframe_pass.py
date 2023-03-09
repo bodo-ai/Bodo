@@ -949,6 +949,7 @@ class DataFramePass:
             inplace_var,
             na_position_var,
             _bodo_chunk_bounds,
+            _bodo_interval_sort_var,
         ) = rhs.args
         df_typ = self.typemap[df_var.name]
         is_table_format = self.typemap[lhs.name].is_table_format
@@ -961,6 +962,11 @@ class DataFramePass:
             self.func_ir,
             error_msg,
             typemap=self.typemap,
+        )
+        _bodo_interval_sort = get_const_value(
+            _bodo_interval_sort_var,
+            self.func_ir,
+            "df.sort_values(): '_bodo_interval_sort' must be a literal constant of type boolean.",
         )
 
         # find key array for sort ('by' arg)
@@ -1045,6 +1051,7 @@ class DataFramePass:
                 ascending_list,
                 na_position,
                 _bodo_chunk_bounds,
+                _bodo_interval_sort,
                 is_table_format=is_table_format,
                 num_table_arrays=len(df_typ.columns) if is_table_format else 0,
             )

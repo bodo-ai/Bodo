@@ -3095,7 +3095,13 @@ def concat_overload(
 
 
 def sort_values_dummy(
-    df, by, ascending, inplace, na_position, _bodo_chunk_bounds
+    df,
+    by,
+    ascending,
+    inplace,
+    na_position,
+    _bodo_chunk_bounds,
+    _bodo_interval_sort,
 ):  # pragma: no cover
     pass
 
