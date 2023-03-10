@@ -78,12 +78,7 @@ else:
 try:
     import pyarrow  # noqa
 except ImportError:
-    # currently, due to cross compilation, the import fails.
-    # building the extension modules still works though.
-    # TODO: resolve issue with pyarrow import
-    _has_pyarrow = False or is_m1_mac
-else:
-    _has_pyarrow = True
+    pass
 
 
 try:
@@ -619,10 +614,9 @@ else:
 
 if _has_h5py:
     _ext_mods.append(ext_hdf5)
-if _has_pyarrow:
-    _ext_mods.append(ext_parquet)
-    _ext_mods.append(ext_csv)
-    _ext_mods.append(ext_json)
+_ext_mods.append(ext_parquet)
+_ext_mods.append(ext_csv)
+_ext_mods.append(ext_json)
 
 
 setup(
