@@ -226,6 +226,7 @@ broadcasted_fixed_arg_functions = {
     "year_timestamp",
     "yearofweekiso",
     "time_from_parts",
+    "date_from_parts",
 }
 
 
