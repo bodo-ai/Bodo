@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     STRATEGY_MIN = -0.5
     STRATEGY_MAX = 1
-    STRATEGY_STEP = 0.01
+    STRATEGY_STEP = 0.02
     strategy_points = np.arange(STRATEGY_MIN, STRATEGY_MAX, STRATEGY_STEP)
 
     list_cat = list(df_prod.CAT_L3.unique())
