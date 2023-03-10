@@ -10,7 +10,7 @@ BUCKET_NAME = "s3://bodotest-customer-data/search_grid"
 
 
 def test_search(tmp_path):
-    s3_oracle = BUCKET_NAME + "/oracle_df_rec2.csv"
+    s3_oracle = BUCKET_NAME + "/oracle_df_rec3.csv"
     pytest_working_dir = os.getcwd()
     try:
         # change to directory of this file
