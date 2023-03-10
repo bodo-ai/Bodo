@@ -3,11 +3,13 @@
 """
 
 
+import datetime
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
+from BodoSQL.bodosql.tests.utils import bodosql_use_date_type
 from bodo.libs.bodosql_array_kernels import *
 from bodo.libs.bodosql_datetime_array_kernels import (
     standardize_snowflake_date_time_part_compile_time,
@@ -507,6 +509,39 @@ def dates_scalar_vector(request):
     return request.param
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.date(2017, 3, 26),
+                    datetime.date(2000, 12, 31),
+                    datetime.date(2003, 9, 6),
+                    datetime.date(2023, 3, 6),
+                    datetime.date(2020, 6, 26),
+                ]
+                + [None, None]
+                + [
+                    datetime.date(2024, 1, 1),
+                    datetime.date(1996, 4, 25),
+                    datetime.date(2022, 11, 17),
+                    datetime.date(1917, 7, 29),
+                    datetime.date(2007, 10, 14),
+                ]
+            ),
+            id="vector",
+        ),
+        pytest.param(datetime.date(2025, 5, 3), id="scalar"),
+    ],
+)
+def datetime_dates_scalar_vector(request):
+    """A fixture of either a single timestamp, or a series of timestamps from
+    various year/month ranges with some nulls inserted. Uses pd.Series on
+    concatenated lists instead of pd.concat since the date_range outputs
+    a DatetimeIndex with a potentially inconvenient dtype when combinined."""
+    return request.param
+
+
 def test_dayname(dates_scalar_vector, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.dayname(arr))
@@ -907,6 +942,35 @@ def test_monthname(dates_scalar_vector, memory_leak_check):
         check_dtype=False,
         reset_index=True,
     )
+
+
+def test_monthname_date(datetime_dates_scalar_vector, memory_leak_check):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.monthname(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(datetime_dates_scalar_vector, datetime.date):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.monthname(arr)
+
+    mons = ["January", "February", "March", "April",
+            "May", "June", "July", "August",
+            "September", "October", "November", "December"]
+    # Simulates MONTHNAME on a single row
+    def monthname_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return mons[elem.month - 1]
+
+    monthname_answer = vectorized_sol((datetime_dates_scalar_vector,), monthname_scalar_fn, None)
+    with bodosql_use_date_type():
+        check_func(
+            impl,
+            (datetime_dates_scalar_vector,),
+            py_output=monthname_answer,
+            check_dtype=False,
+            reset_index=True,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1889,6 +1953,68 @@ def test_construct_timestamp(
         check_dtype=False,
         reset_index=True,
     )
+
+
+@pytest.fixture(params=["scalar", "vector", "null"])
+def construct_date_data(request):
+    if request.param == "null":
+        return 2015, None, None, None
+    if request.param == "scalar":
+        return 2018, -1, 600, datetime.date(2019, 6, 24)
+    year = pd.Series([2025, 2020, 2022, 2020, 2027, 2020], dtype=pd.Int64Dtype())
+    month = pd.Series([7, None, 1, 53, -6, 0], dtype=pd.Int64Dtype())
+    day = pd.Series([4, 12, 100, 0, 20, 0], dtype=pd.Int64Dtype())
+    answer = pd.Series(
+        [
+            datetime.date(2025, 7, 4),
+            None,
+            datetime.date(2022, 4, 10),
+            datetime.date(2024, 4, 30),
+            datetime.date(2026, 10, 18),
+            datetime.date(2019, 11, 30),
+        ]
+    )
+    return year, month, day, answer
+def test_date_from_parts(construct_date_data, memory_leak_check):
+    """
+    Tests date_from_parts with array and scalar data.
+    """
+    def impl(year, month, day):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.date_from_parts(year, month, day)
+        )
+
+    (
+        year,
+        month,
+        day,
+        answer,
+    ) = construct_date_data
+    args = (year, month, day)
+
+    if not any(isinstance(arg, pd.Series) for arg in args):
+        impl = lambda year, month, day: bodo.libs.bodosql_array_kernels.date_from_parts(year, month, day)
+
+    def construct_date_scalar_fn(arg0, arg1, arg2):
+        if pd.isna(arg0) or pd.isna(arg1) or pd.isna(arg2):
+            return None
+        else:
+            months, month_overflow = 1 + ((arg1 - 1) % 12), (arg1 - 1) // 12
+            date = datetime.date(arg0+month_overflow, months, 1)
+            date = date + datetime.timedelta(days=int(arg2)-1)
+            return date
+    answer = vectorized_sol(
+        (year, month, day), construct_date_scalar_fn, None
+    )
+
+    with bodosql_use_date_type():
+        check_func(
+            impl,
+            args,
+            py_output=answer,
+            check_dtype=False,
+            reset_index=True,
+        )
 
 
 def test_add_interval_optional(memory_leak_check):

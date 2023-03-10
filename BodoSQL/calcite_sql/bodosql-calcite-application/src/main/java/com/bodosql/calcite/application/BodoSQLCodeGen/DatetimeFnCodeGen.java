@@ -283,7 +283,10 @@ public class DatetimeFnCodeGen {
 
     if (time_mode) {
       code.append("time_from_parts");
-    } else if (date_mode || timestamp_mode) {
+    } else if (date_mode) {
+      code.append("date_from_parts");
+    }
+    else { // timestamp_mode
       code.append("construct_timestamp");
     }
 
@@ -299,10 +302,6 @@ public class DatetimeFnCodeGen {
     // For time, add the nanosecond argument if necessary
     if (time_mode && numArgs == 3) {
       code.append(", 0");
-    }
-    // For date, fill in all the arguments only used for timestamp
-    if (date_mode) {
-      code.append(", 0, 0, 0, 0, None");
     }
     // For timestamp, fill in the nanosecond argument if necessary
     if (timestamp_mode && numArgs < 7) {

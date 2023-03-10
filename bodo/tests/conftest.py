@@ -1,4 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
+import datetime
 import functools
 import gc
 import glob
@@ -623,3 +624,41 @@ def time_part_strings(request):
     (smaller or equal to hour) for use in testing, including aliases.
     """
     return request.param
+
+
+@pytest.fixture
+def date_df():
+    """
+    Fixture containing a representative set of datetime.date object
+    for use in testing, including None object.
+    """
+    return {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series([
+                    datetime.date(2017, 3, 26),
+                    datetime.date(2000, 12, 31),
+                    datetime.date(2003, 9, 6),
+                    datetime.date(2023, 3, 6),
+                    datetime.date(2024, 1, 1),
+                    datetime.date(1996, 4, 25),
+                    datetime.date(2022, 11, 17),
+                    datetime.date(1917, 7, 29),
+                    datetime.date(2007, 10, 14),
+                    None,
+                ]),
+                "B": pd.Series([
+                    datetime.date(2020, 6, 26),
+                    datetime.date(2025, 5, 3),
+                    datetime.date(1987, 3, 15),
+                    datetime.date(2117, 8, 29),
+                    datetime.date(1822, 12, 7),
+                    datetime.date(1906, 4, 14),
+                    datetime.date(2004, 9, 13),
+                    datetime.date(1917, 7, 29),
+                    None,
+                    datetime.date(1700, 2, 4),
+                ])
+            }
+        )
+    }
