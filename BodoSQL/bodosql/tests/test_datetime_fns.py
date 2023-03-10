@@ -2,14 +2,16 @@
 """
 Test correctness of SQL datetime functions with BodoSQL
 """
+import datetime
 
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import check_query, bodosql_use_date_type
 
 from bodo import Time
 from bodo.tests.conftest import (  # noqa
+    date_df,
     day_part_strings,
     time_df,
     time_part_strings,
@@ -972,6 +974,57 @@ def test_monthname_scalars(fn_name, basic_df, spark_info, memory_leak_check):
         check_names=False,
         check_dtype=False,
         equivalent_spark_query=spark_query,
+    )
+
+
+@pytest.mark.parametrize(
+    "fn_name", ["MONTHNAME", pytest.param("MONTH_NAME", marks=pytest.mark.slow)]
+)
+@pytest.mark.parametrize("wrap_case", [True, False])
+def test_monthname_date_cols(
+    fn_name, wrap_case, date_df, memory_leak_check
+):
+    """tests the monthname function on column inputs of date objects."""
+
+    if wrap_case:
+        query = f"SELECT CASE WHEN A IS NULL THEN {fn_name}(A) else {fn_name}(A) END FROM table1"
+    else:
+        query = f"SELECT {fn_name}(A) from table1"
+
+    outputs = pd.DataFrame({"output": date_df["table1"]["A"].map(month_name_func)})
+
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=outputs
+    )
+
+
+def month_name_func(date):
+    if date is None:
+        return None
+    mons = ["January", "February", "March", "April",
+            "May", "June", "July", "August",
+            "September", "October", "November", "December"]
+    return mons[date.month - 1]
+
+@pytest.mark.parametrize("fn_name", ["MONTHNAME", "MONTH_NAME"])
+def test_monthname_date_scalars(fn_name, basic_df, memory_leak_check):
+    """tests the monthname function on scalar inputs of date objects."""
+
+    query = f"SELECT {fn_name}(DATE '2021-03-03'), {fn_name}(DATE '2021-05-13'), {fn_name}(DATE '2021-07-01')"
+    outputs = pd.DataFrame({"A": ["March"], "B": ["May"], "C": ["July"]})
+
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=outputs
     )
 
 
@@ -3365,13 +3418,13 @@ def date_from_parts_data():
     days = pd.Series([1, 12, 4, -5, 12, 1, 0], dtype=pd.Int64Dtype())
     answer = pd.Series(
         [
-            "2015-1-1",
+            datetime.date(2015, 1, 1),
             None,
-            "2021-7-4",
-            "2025-7-26",
-            "2024-11-12",
-            "2026-12-1",
-            "2030-6-30",
+            datetime.date(2021, 7, 4),
+            datetime.date(2025, 7, 26),
+            datetime.date(2024, 11, 12),
+            datetime.date(2026, 12, 1),
+            datetime.date(2030, 6, 30),
         ]
     )
     return years, months, days, answer
@@ -3398,34 +3451,16 @@ def test_date_from_parts(date_from_parts_data, use_case, memory_leak_check):
         }
     )
     ctx = {"table1": df}
-    py_output = pd.DataFrame({0: pd.Series([pd.Timestamp(s) for s in answer])})
-    check_query(
-        query,
-        ctx,
-        None,
-        expected_output=py_output,
-        check_dtype=False,
-        check_names=False,
-    )
-
-
-@pytest.fixture
-def date_from_parts_data():
-    years = pd.Series([2015, 2018, 2021, 2024, 2025, 2027, 2030], dtype=pd.Int64Dtype())
-    months = pd.Series([1, None, 7, 20, -1, 0, 7], dtype=pd.Int64Dtype())
-    days = pd.Series([1, 12, 4, -5, 12, 1, 0], dtype=pd.Int64Dtype())
-    answer = pd.Series(
-        [
-            "2015-1-1",
+    py_output = pd.DataFrame({0: pd.Series([s for s in answer])})
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
             None,
-            "2021-7-4",
-            "2025-7-26",
-            "2024-11-12",
-            "2026-12-1",
-            "2030-6-30",
-        ]
-    )
-    return years, months, days, answer
+            expected_output=py_output,
+            check_dtype=False,
+            check_names=False,
+        )
 
 
 @pytest.fixture(

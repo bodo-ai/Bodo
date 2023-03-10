@@ -2623,6 +2623,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 fnName);
           case "DATE_FROM_PARTS":
           case "DATEFROMPARTS":
+            tzStr = "None";
+            assert operandsInfo.size() == 3;
+            return generateDateTimeTypeFromPartsCode(fnName, operandsInfo, tzStr);
           case "TIMEFROMPARTS":
           case "TIME_FROM_PARTS":
           case "TIMESTAMP_FROM_PARTS":

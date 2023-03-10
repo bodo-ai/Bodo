@@ -11,6 +11,7 @@ from numba.core import types
 from numba.extending import overload, register_jitable
 
 import bodo
+from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     BodoError,
@@ -210,7 +211,7 @@ def add_interval_nanoseconds(amount, start_dt):  # pragma: no cover
 def construct_timestamp(
     year, month, day, hour, minute, second, nanosecond, time_zone
 ):  # pragma: no cover
-    """Handles cases where DATE_FROM_PARTS/TIMESTAMP_FROM_PARTS receives optional
+    """Handles cases where TIMESTAMP_FROM_PARTS receives optional
     arguments and forwards to the appropriate version of the real implementation"""
     args = [year, month, day, hour, minute, second, nanosecond, time_zone]
     for i in range(len(args)):
@@ -236,6 +237,25 @@ def construct_timestamp(
         return construct_timestamp_util(
             year, month, day, hour, minute, second, nanosecond, time_zone
         )
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def date_from_parts(year, month, day):  # pragma: no cover
+    """Handles cases where DATE_FROM_PARTS receives optional
+    arguments and forwards to the appropriate version of the real implementation"""
+    args = [year, month, day]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.date_from_parts",
+                ["year", "month","day"],
+                i,
+            )
+
+    def impl(year, month, day):  # pragma: no cover
+        return date_from_parts_util(year, month, day)
 
     return impl
 
@@ -1511,6 +1531,55 @@ def construct_timestamp_util(
 
 
 @numba.generated_jit(nopython=True)
+def date_from_parts_util(year, month, day):
+    """A dedicated kernel for building a date from the components
+
+    Args:
+        year (int array/series/scalar): the year of the new date
+        month (int array/series/scalar): the month of the new date
+        day (int array/series/scalar): the day of the new date
+
+    Returns:
+        datetime.date array/scalar: the date with the components specified above.
+
+    Note: this function allows cases where the arguments are outside of the "normal"
+    ranges, for example:
+
+    date_from_parts_util(2000, 0, 100) returns 2000-03-09
+
+    date_from_parts_util(2004, -1, -1) returns 2003-10-30
+    """
+
+    verify_int_arg(year, "date_from_parts", "year")
+    verify_int_arg(month, "date_from_parts", "month")
+    verify_int_arg(day, "date_from_parts", "day")
+
+    arg_names = [
+        "year",
+        "month",
+        "day",
+    ]
+    arg_types = [year, month, day]
+    propagate_null = [True] * 3
+
+    # Handle the overflow from months into years directly, then handle all remaining
+    # unit arguments by constructing a timedelta (which will take care of the
+    # overflow of the remaining units) and adding it to the year/month value
+    scalar_text = "months, month_overflow = 1 + ((arg1 - 1) % 12), (arg1 - 1) // 12\n"
+    scalar_text += "date = datetime.date(arg0+month_overflow, months, 1)\n"
+    scalar_text += "date = date + datetime.timedelta(days=arg2-1)\n"
+    scalar_text += f"res[i] = date"
+
+    out_dtype = (
+        DatetimeDateArrayType()
+        if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
+        else types.Array(bodo.datetime64ns, 1, "C")
+    )
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
 def dayname_util(arr):
     """A dedicated kernel for returning the name of the day of the week of
        a datetime (or column of datetimes).
@@ -1698,10 +1767,15 @@ def monthname_util(arr):
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    scalar_text = f"res[i] = {box_str}(arg0).month_name()"
+    if is_valid_date_arg(arr):
+        scalar_text = "mons = ('January', 'February', 'March', 'April', 'May', 'June', " \
+                      "'July', 'August', 'September', 'October', 'November', 'December')\n"
+        scalar_text += f"res[i] = mons[arg0.month - 1]"
+    else:
+        scalar_text = f"res[i] = {box_str}(arg0).month_name()"
     out_dtype = bodo.string_array_type
 
-    # If the input is an array, make the output dictionary encoded
+    # If the input is an array or date object, make the output dictionary encoded
     synthesize_dict_if_vector = ["V"]
     mons = pd.array(
         [
