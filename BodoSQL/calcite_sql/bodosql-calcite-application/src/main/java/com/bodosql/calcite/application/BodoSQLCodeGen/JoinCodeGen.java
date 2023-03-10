@@ -10,7 +10,7 @@ import java.util.*;
 public class JoinCodeGen {
 
   /* Counter used to generate dummy column names. */
-  private static int dummyCounter = 0;
+  public static int dummyCounter = 0;
   /**
    * Function that returns the necessary generated code for a Join expression, and fills the input
    * list, allColNames, with the column names of the table resulting from the join. If the join
