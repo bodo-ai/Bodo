@@ -7,12 +7,12 @@ direct BodoSQLContext.
 import datetime
 import io
 import os
+import random
 
 import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-import random
 from bodosql.tests.test_datetime_fns import compute_valid_times
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     test_db_snowflake_catalog,
@@ -363,6 +363,7 @@ def test_snowflake_catalog_insert_into_date(
             only_1D=True,
             py_output=5,
         )
+        output_df = None
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
@@ -832,7 +833,8 @@ def test_snowflake_catalog_create_table_already_exists(
 
 
 def test_snowflake_catalog_simple_rewrite(
-    test_db_snowflake_catalog, use_default_schema, memory_leak_check):
+    test_db_snowflake_catalog, use_default_schema, memory_leak_check
+):
     """tests that create table can handle simple queries that require some amount of re-write during validation."""
 
     comm = MPI.COMM_WORLD
@@ -852,9 +854,7 @@ def test_snowflake_catalog_simple_rewrite(
     comm = MPI.COMM_WORLD
     table_name = None
     if bodo.get_rank() == 0:
-        table_name = gen_unique_table_id(
-            "bodosql_ctas_test_rewrite"
-        )
+        table_name = gen_unique_table_id("bodosql_ctas_test_rewrite")
     table_name = comm.bcast(table_name)
 
     # Write to Snowflake
@@ -883,11 +883,11 @@ def test_snowflake_catalog_simple_rewrite(
         result_df.columns = result_df.columns.str.upper()
         assert_tables_equal(output_df, result_df)
     except Exception as e:
-        #In the case that another exception ocurred within the body of the try,
-        #We may not have created a table to drop.
-        #because of this, we call drop_snowflake_table in a try/except, to avoid
-        #masking the original exception
-        exception_occured_in_test_body=True
+        # In the case that another exception ocurred within the body of the try,
+        # We may not have created a table to drop.
+        # because of this, we call drop_snowflake_table in a try/except, to avoid
+        # masking the original exception
+        exception_occured_in_test_body = True
         raise e
     finally:
         if exception_occured_in_test_body:
@@ -899,9 +899,9 @@ def test_snowflake_catalog_simple_rewrite(
             drop_snowflake_table(table_name, db, schema)
 
 
-
 def test_snowflake_catalog_simple_rewrite_2(
-    test_db_snowflake_catalog, use_default_schema, memory_leak_check):
+    test_db_snowflake_catalog, use_default_schema, memory_leak_check
+):
     """tests that create table can handle simple queries that require some amount of re-write during validation.
     This is a secondary test that covers a subset of Q7"""
 
@@ -918,17 +918,21 @@ def test_snowflake_catalog_simple_rewrite_2(
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
 
     random.seed(42)
-    local_table = pd.DataFrame({
-        "r_name": random.choices(['abc gobrandon', 'xyz bong', 'gobrandon', 'bong', 'a98y7guhb'], k = 20)})
+    local_table = pd.DataFrame(
+        {
+            "r_name": random.choices(
+                ["abc gobrandon", "xyz bong", "gobrandon", "bong", "a98y7guhb"], k=20
+            )
+        }
+    )
 
     def row_fn(v):
-        if v == 'abc gobrandon':
-            return 'gobrandon'
-        elif v == 'xyz bong':
-            return 'bong'
+        if v == "abc gobrandon":
+            return "gobrandon"
+        elif v == "xyz bong":
+            return "bong"
         else:
             return None
-
 
     expected_output_col = local_table["r_name"].apply(lambda x: row_fn(x))
     expected_output_col = expected_output_col.dropna()
@@ -939,9 +943,7 @@ def test_snowflake_catalog_simple_rewrite_2(
     comm = MPI.COMM_WORLD
     table_name = None
     if bodo.get_rank() == 0:
-        table_name = gen_unique_table_id(
-            "bodosql_ctas_test_rewrite"
-        )
+        table_name = gen_unique_table_id("bodosql_ctas_test_rewrite")
     table_name = comm.bcast(table_name)
 
     # Write to Snowflake
