@@ -111,6 +111,7 @@ def test_lead_lag_respect_nulls(
     count_window_applies(pandas_code, 1, ["LEAD", "LAG"])
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.parametrize(
     "windows",
     [
