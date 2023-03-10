@@ -19,6 +19,8 @@ from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
 )
 from mpi4py import MPI
 
+from bodosql.tests.utils import check_query
+
 import bodo
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -596,7 +598,7 @@ def test_delete_bodosql_syntax(test_db_snowflake_catalog):
             impl(query, bc)
 
 
-def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame):
+def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame, check_dtype: bool = True):
     """Asserts df1 and df2 have the same data without regard
     for ordering or index.
 
@@ -610,7 +612,7 @@ def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame):
     # Drop the index
     df1 = df1.reset_index(drop=True)
     df2 = df2.reset_index(drop=True)
-    pd.testing.assert_frame_equal(df1, df2)
+    pd.testing.assert_frame_equal(df1, df2, check_dtype=check_dtype)
 
 
 def test_current_timestamp_case(
@@ -741,9 +743,8 @@ def test_snowflake_catalog_create_table_already_exists_error(
     """
     Test that Snowflake CREATE TABLE errors with a pre-existing table, when we expect an error.
     """
-    # Note: we have memory leak
+    # Note: we have a memory leak due to the runtime error case
 
-    comm = MPI.COMM_WORLD
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     new_df = pd.DataFrame(
@@ -980,3 +981,185 @@ def test_snowflake_catalog_simple_rewrite_2(
     finally:
         # dropping the table
         drop_snowflake_table(table_name, db, schema)
+
+
+
+
+@pytest.mark.slow
+def test_snowflake_catalog_create_table_tpch(
+    test_db_snowflake_catalog, tpch_data, memory_leak_check
+):
+    """
+    Test Snowflake CREATE TABLE, with a larger e2e example that is
+    a modified version of the TPCH benchmark.
+    """
+
+    SIZE = 15
+    TYPE = "BRASS"
+    REGION = "EUROPE"
+    base_tpch_query = f"""
+    with region_filtered as (
+        select * from region where r_name = '{REGION}'
+    )
+    select
+                       s_acctbal,
+                       s_name,
+                       n_name,
+                       p_partkey,
+                       p_mfgr,
+                       s_address,
+                       s_phone,
+                       s_comment
+                     from
+                       part,
+                       supplier,
+                       partsupp,
+                       nation,
+                       region_filtered
+                     where
+                       p_partkey = ps_partkey
+                       and s_suppkey = ps_suppkey
+                       and p_size = {SIZE}
+                       and p_type like '%{TYPE}'
+                       and s_nationkey = n_nationkey
+                       and n_regionkey = r_regionkey
+                       and ps_supplycost = (
+                         select
+                           min(ps_supplycost)
+                         from
+                           partsupp, supplier,
+                           nation, region_filtered
+                         where
+                           p_partkey = ps_partkey
+                           and s_suppkey = ps_suppkey
+                           and s_nationkey = n_nationkey
+                           and n_regionkey = r_regionkey
+                         )
+                     order by
+                       s_acctbal desc,
+                       n_name,
+                       s_name,
+                       p_partkey
+    """
+
+
+    comm = MPI.COMM_WORLD
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn_str = get_snowflake_connection_string(db, schema)
+    expected_output_table_name = "test_snowflake_catalog_create_table_tpch_expected_output"
+
+    # # Code for generating the expected output. Can be uncommented to regenerate
+    # # the expected output if the query changes, or the output table in SF is deleted
+    # output = check_query(
+    #     base_tpch_query,
+    #     tpch_data,
+    #     spark_info,
+    #     check_dtype=False,
+    #     return_seq_dataframe=True,
+    # )
+    # expected_output = output["output_df"]
+
+
+    # if bodo.get_rank() == 0:
+    #     expected_output.to_sql(
+    #         expected_output_table_name, conn_str, if_exists='replace', index=False)
+
+
+
+    # Now, run the query and push the results to SF
+    # NOTE: We don't use the snowflake_sample_data_snowflake_catalog fixture for reading
+    # the data from Snowflake. This is because whatever database we read from,
+    # we have to write to, and we don't have write permissions to the tpch sample database.
+    comm = MPI.COMM_WORLD
+    table_name = None
+    if bodo.get_rank() == 0:
+        table_name = gen_unique_table_id(
+            "bodosql_catalog_write_create_tpch_test"
+        )
+    table_name = comm.bcast(table_name)
+    ctas_tpch_query = f"CREATE OR REPLACE TABLE {table_name} AS (\n" + base_tpch_query + ")"
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    for (tpch_table_name, df) in tpch_data.items():
+        bc = bc.add_or_replace_view(tpch_table_name, df)
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    try_body_threw_error = False
+    try:
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(impl, (bc, ctas_tpch_query), only_1D=True, py_output=5)
+
+        output_df = None
+        expected_output = None
+        # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+        # to reduce the demand on Snowflake.
+        if bodo.get_rank() == 0:
+            expected_output = pd.read_sql(f"select * from {expected_output_table_name}", conn_str)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            # Reset the columns to the original names for simpler testing.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+            expected_output.columns = [colname.upper() for colname in expected_output.columns]
+
+        output_df = comm.bcast(output_df)
+        expected_output = comm.bcast(expected_output)
+        # Recreate the expected output by manually doing an append.
+        output_df.columns = output_df.columns.str.upper()
+        expected_output.columns = expected_output.columns.str.upper()
+        assert_tables_equal(output_df, expected_output, check_dtype=False)
+    except Exception as e:
+        try_body_threw_error = True
+        raise e
+    finally:
+        # Drop the table. In the case that the try body throws an error,
+        # we may not have succseeded in creating the table. Therefore, we
+        # need to try to drop the table, but we don't want to mask the
+        # original error, so we use a try/except block.
+        if try_body_threw_error:
+            try:
+                drop_snowflake_table(table_name, db, schema)
+            except:
+                pass
+        else:
+            drop_snowflake_table(table_name, db, schema)
+
+
+
+def test_snowflake_catalog_create_table_orderby_with():
+    """
+    Test Snowflake CREATE TABLE, for a specific edgecase found with handling WITH and
+    ORDER BY clauses simultaneously.
+    """
+
+    base_query = f"""
+    with part_two as (
+        select 'foo' as p_partkey from (VALUES (1, 2, 3))
+    )
+    select
+                       p_partkey
+                     from
+                       part_two
+                     order by
+                       p_partkey
+    """
+
+    ctas_query = f"CREATE OR REPLACE TABLE WILL_THROW_ERROR AS (\n" + base_query + ")"
+
+    bc = bodosql.BodoSQLContext(dict())
+
+    @bodo.jit
+    def bodo_impl(bc, query):
+        bc.sql(query)
+
+    # Note: we previously ran into a null pointer exception in validation.
+    # We still expect this to throw an error, because we only support CREATE TABLE for Snowflake Catalog Schemas.
+    # The full correctness test is test_snowflake_catalog_create_table_tpch. However, this is a slow test,
+    # so I included a smaller test that runs on PR CI to catch potential regressions earlier.
+    with pytest.raises(BodoError, match=".*CREATE TABLE is only supported for Snowflake Catalog Schemas.*"):
+        bodo_impl(bc, ctas_query)
+
