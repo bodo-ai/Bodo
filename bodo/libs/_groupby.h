@@ -5,9 +5,6 @@
 
 const int max_global_number_groups_exscan = 1000;
 
-/// Initialize C++ groupby module
-void groupby_init();
-
 /**
  * This operation groups rows in a distributed table based on keys, and applies
  * a function(s) to a set of columns in each group, producing one output column

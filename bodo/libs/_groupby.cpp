@@ -79,33 +79,20 @@ const char* get_name_for_Bodo_FTypes(int enumVal) {
     return Bodo_FTypes_names[enumVal];
 }
 
-static std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(
-    Bodo_FTypes::num_funcs);
-
-void groupby_init() {
-    static bool initialized = false;
-    if (initialized) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError, "groupby already initialized");
-        return;
-    }
-    initialized = true;
-
-    // this mapping is used by BasicColSet operations to know what combine (i.e.
-    // step (c)) function to use for a given aggregation function
-    combine_funcs[Bodo_FTypes::size] = Bodo_FTypes::sum;
-    combine_funcs[Bodo_FTypes::sum] = Bodo_FTypes::sum;
-    combine_funcs[Bodo_FTypes::count] = Bodo_FTypes::sum;
-    combine_funcs[Bodo_FTypes::mean] =
-        Bodo_FTypes::sum;  // sum totals and counts
-    combine_funcs[Bodo_FTypes::min] = Bodo_FTypes::min;
-    combine_funcs[Bodo_FTypes::max] = Bodo_FTypes::max;
-    combine_funcs[Bodo_FTypes::prod] = Bodo_FTypes::prod;
-    combine_funcs[Bodo_FTypes::first] = Bodo_FTypes::first;
-    combine_funcs[Bodo_FTypes::last] = Bodo_FTypes::last;
-    combine_funcs[Bodo_FTypes::nunique] =
-        Bodo_FTypes::sum;  // used in nunique_mode = 2
-    combine_funcs[Bodo_FTypes::boolor_agg] = Bodo_FTypes::boolor_agg;
-}
+// this mapping is used by BasicColSet operations to know what combine (i.e.
+// step (c)) function to use for a given aggregation function
+static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
+    {Bodo_FTypes::size, Bodo_FTypes::sum},
+    {Bodo_FTypes::sum, Bodo_FTypes::sum},
+    {Bodo_FTypes::count, Bodo_FTypes::sum},
+    {Bodo_FTypes::mean, Bodo_FTypes::sum},  // sum totals and counts
+    {Bodo_FTypes::min, Bodo_FTypes::min},
+    {Bodo_FTypes::max, Bodo_FTypes::max},
+    {Bodo_FTypes::prod, Bodo_FTypes::prod},
+    {Bodo_FTypes::first, Bodo_FTypes::first},
+    {Bodo_FTypes::last, Bodo_FTypes::last},
+    {Bodo_FTypes::nunique, Bodo_FTypes::sum},  // used in nunique_mode = 2
+    {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg}};
 
 /**
  * Function pointer for groupby update and combine operations that are
@@ -5538,7 +5525,8 @@ class BasicColSet {
      * @param grouping info calculated by GroupbyPipeline
      */
     virtual void combine(const grouping_info& grp_info) {
-        Bodo_FTypes::FTypeEnum combine_ftype = combine_funcs[ftype];
+        Bodo_FTypes::FTypeEnum combine_ftype =
+            static_cast<Bodo_FTypes::FTypeEnum>(combine_funcs[ftype]);
         std::vector<array_info*> aux_cols(combine_cols.begin() + 1,
                                           combine_cols.end());
         for (auto col : combine_cols)
