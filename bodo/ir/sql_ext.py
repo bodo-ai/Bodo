@@ -5,7 +5,7 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 import numba
@@ -27,7 +27,7 @@ from bodo import objmode
 from bodo.hiframes.table import Table, TableType
 from bodo.io.helpers import PyArrowTableSchemaType, is_nullable
 from bodo.io.parquet_pio import ParquetPredicateType
-from bodo.ir.filter import string_funcs_no_arg_map
+from bodo.ir.filter import Filter, supported_funcs_no_arg_map
 from bodo.libs.array import (
     cpp_table_to_py_table,
     delete_table,
@@ -165,7 +165,7 @@ class SqlReader(ir.Stmt):
         return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into}, sf_dt_to_ts_cols={self.sf_dt_to_ts_cols})"
 
 
-def parse_dbtype(con_str):
+def parse_dbtype(con_str) -> Tuple[str, str]:
     """
     Converts a constant string used for db_type to a standard representation
     for each database.
@@ -198,7 +198,7 @@ def parse_dbtype(con_str):
     return db_type, con_paswd
 
 
-def remove_iceberg_prefix(con):
+def remove_iceberg_prefix(con: str) -> str:
     import sys
 
     # Remove Iceberg Prefix when using Internally
@@ -272,32 +272,36 @@ def remove_dead_sql(
     return sql_node
 
 
-def _get_sql_column_str(p0, converted_colnames, filter_map):  # pragma: no cover
+def _get_sql_column_str(
+    p0: Union[str, Filter],
+    converted_colnames: Iterable[str],
+    filter_map: Dict[str, str],
+) -> str:  # pragma: no cover
     """get SQL code for representing a column in filter pushdown.
     E.g. WHERE  ( ( coalesce(\"L_COMMITDATE\", {f0}) >= {f1} ) )
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
 
     Args:
-        p0 (tuple|str): column name or tuple representing the computation for the column
-        converted_colnames (set(str)): column names that need converted to upper case
-        filter_map (dict(str,str)): map of IR variable names to read function variable
+        p0: column name or tuple representing the computation for the column
+        converted_colnames: column names that need converted to upper case
+        filter_map: map of IR variable names to read function variable
             names. E.g. {'_v14call_method_6_224': 'f0'}
-
 
     Returns:
         str: code representing the column (e.g. "A", "coalesce(\"L_COMMITDATE\", {f0})")
     """
     if isinstance(p0, tuple):
         col_name = _get_sql_column_str(p0[0], converted_colnames, filter_map)
-        sql_op = p0[1]
-        if sql_op == "coalesce":
+        kernel_func_name = p0[1]
+        if kernel_func_name == "coalesce":
             scalar_val = (
                 "{" + filter_map[p0[2].name] + "}"
                 if isinstance(p0[2], ir.Var)
                 else p0[2]
             )
             return f"coalesce({col_name}, {scalar_val})"
-        elif sql_op in string_funcs_no_arg_map.keys():
-            return f"{sql_op}({col_name})"
+        elif kernel_func_name in supported_funcs_no_arg_map:
+            return f"{supported_funcs_no_arg_map[kernel_func_name][0]}({col_name})"
         else:
             raise BodoError(
                 f"SQL Function {col_name} is not supported for filter pushdown!"
@@ -315,7 +319,7 @@ def sql_distributed_run(
     calltypes,
     typingctx,
     targetctx,
-    is_independent=False,
+    is_independent: bool = False,
     meta_head_only_info=None,
 ):
     # Add debug info about column pruning
@@ -608,7 +612,7 @@ def sql_distributed_run(
     return nodes
 
 
-def convert_col_name(col_name: str, converted_colnames: List[str]) -> str:
+def convert_col_name(col_name: str, converted_colnames: Iterable[str]) -> str:
     if col_name in converted_colnames:
         return col_name.upper()
     return col_name
@@ -667,12 +671,12 @@ def escape_column_names(col_names, db_type, converted_colnames):
 
 
 def _generate_column_filter(
-    filter: Tuple[Union[str, Tuple], str, Union[ir.Var, str]],
+    filter: Filter,
     scalars_to_unpack: List[str],
     converted_colnames: List[str],
     filter_map: Dict[str, str],
     typemap: Dict[str, types.Type],
-) -> List[str]:
+) -> List[str]:  # pragma: no cover
     """Generate a filter string
 
     Args:
@@ -680,29 +684,30 @@ def _generate_column_filter(
         scalars_to_unpack (List[str]): A list that will be appended to with any scalars that should be
             unpacked before converting to a Snowflake literal. This is to ensure we have a tuple of literals
             as opposed to a Tuple literal.
-        converted_colnames (List[str]): List of column names that must have their case converted.
-        filter_map (Dict[str, str]): Mapping of IR variable name to runtime variable name.
-        typemap (Dict[str, types.Type]): Dictionary used to determine scalar types for each variable name.
+        converted_colnames: List of column names that must have their case converted.
+        filter_map: Mapping of IR variable name to runtime variable name.
+        typemap: Dictionary used to determine scalar types for each variable name.
 
     Returns:
-        List[str]: The string components to be joined to generate a single filter without AND/OR.
+        The string components to be joined to generate a single filter without AND/OR.
     """
     p0, p1, p2 = filter
     if p1 == "ALWAYS_TRUE":
         # Special operator for True
-        single_filter = ["(TRUE)"]
+        return ["(TRUE)"]
     elif p1 == "ALWAYS_FALSE":
         # Special operators for False.
-        single_filter = ["(FALSE)"]
+        return ["(FALSE)"]
     elif p1 == "ALWAYS_NULL":
         # Special operators for NULL.
-        single_filter = ["(NULL)"]
+        return ["(NULL)"]
     elif p1 == "not":
+        assert not isinstance(p0, str)
         # Not recurses on another function operation.
         inner_filter = _generate_column_filter(
             p0, scalars_to_unpack, converted_colnames, filter_map, typemap
         )
-        single_filter = ["(", "NOT"] + inner_filter + [")"]
+        return ["(", "NOT"] + inner_filter + [")"]
     else:
         # These operators must operate on a column that we will load.
         p0 = _get_sql_column_str(p0, converted_colnames, filter_map)
@@ -717,15 +722,7 @@ def _generate_column_filter(
             "endswith",
             "contains",
         ):
-            single_filter = [
-                "(",
-                p1,
-                "(",
-                p0,
-                ",",
-                scalar_filter,
-                "))",
-            ]
+            return ["(", p1, "(", p0, ",", scalar_filter, "))"]
         elif p1 in (
             "case_insensitive_startswith",
             "case_insensitive_endswith",
@@ -736,7 +733,7 @@ def _generate_column_filter(
             if op == "equality":
                 comparison = "="
                 # Equality is just =, not a function
-                single_filter = [
+                return [
                     "(LOWER(",
                     p0,
                     ")",
@@ -746,7 +743,7 @@ def _generate_column_filter(
                     "))",
                 ]
             else:
-                single_filter = [
+                return [
                     "(",
                     op,
                     "(LOWER(",
@@ -756,6 +753,7 @@ def _generate_column_filter(
                     ")))",
                 ]
         elif p1 in ("like", "ilike"):
+            assert isinstance(p2, ir.Var)
             # You can't pass the empty string to escape. As a result we
             # must confirm its not the empty string
             has_escape = True
@@ -776,9 +774,9 @@ def _generate_column_filter(
             # Indicate the tuple variable is not directly passed to Snowflake, instead its
             # components are.
             scalars_to_unpack.append(p2.name)
+            return single_filter
         else:
-            single_filter = ["(", p0, p1, scalar_filter, ")"]
-    return single_filter
+            return ["(", p0, p1, scalar_filter, ")"]
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
