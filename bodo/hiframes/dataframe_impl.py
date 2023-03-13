@@ -6,7 +6,7 @@ import operator
 import re
 import warnings
 from collections import namedtuple
-from typing import Tuple
+from typing import Set, Tuple
 
 import numba
 import numpy as np
@@ -3119,7 +3119,7 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
     env = pandas.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
     clean_func = pandas.core.computation.parsing.clean_column_name
 
-    def append_null_checks(expr_node, null_set):
+    def append_null_checks(expr_node, null_set: Set[str]):
         """Create a new expr appending by append NOTNA & checks
         to the front of expr node for each element in null_set."""
 

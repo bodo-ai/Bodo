@@ -8,6 +8,7 @@ from typing import (
     List,
     Literal,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Union,
@@ -250,8 +251,8 @@ class Join(ir.Stmt):
         if self.out_data_vars[1] is not None:
             self.out_used_cols.add(self.n_out_table_cols)
 
-        left_col_names = left_df_type.columns
-        right_col_names = right_df_type.columns
+        left_col_names: Sequence[str] = left_df_type.columns  # type: ignore
+        right_col_names: Sequence[str] = right_df_type.columns  # type: ignore
         self.left_col_names = left_col_names
         self.right_col_names = right_col_names
         self.is_left_table = left_df_type.is_table_format
@@ -2823,16 +2824,36 @@ def _get_interval_join_info(
     require(all(left_other_types[k] == key_type for k in left_col_nums))
     require(all(right_other_types[k] == key_type for k in right_col_nums))
 
-    # parse expr and check for interval join comparison patterns
+    # Parse expr and check for interval join comparison patterns
     resolver = {"left": 0, "right": 0, "NOT_NA": 0}
     # create fake environment for Expr to enable parsing
     env = pandas.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
+
+    clean_cols = {}
+    # We need to wrap columns like EXPR$0 with ` for pandas to parse
+    # Previous step removed ` from cond_expr
+    formatted_expr = join_node.gen_cond_expr
+    for side, col_names in [
+        ("left", join_node.left_col_names),
+        ("right", join_node.right_col_names),
+    ]:
+        for col_name in col_names:
+            clean_col = pandas.core.computation.parsing.clean_column_name(col_name)
+            clean_cols[(side, clean_col)] = col_name
+
+            col_outer = f"{side}.{col_name}"
+            clean_outer = pandas.core.computation.parsing.clean_column_name(col_outer)
+            clean_cols[("NOT_NA", clean_outer)] = col_outer
+
+            formatted_expr = formatted_expr.replace(
+                f"{side}.{col_name}", f"{side}.`{col_name}`"
+            )
+            formatted_expr = formatted_expr.replace(
+                f"NOT_NA.{side}.`{col_name}`", f"NOT_NA.`{side}.{col_name}`"
+            )
+
     parsed_expr_tree, _, _ = _parse_query_expr(
-        join_node.gen_cond_expr,
-        env,
-        [],
-        [],
-        None,
+        formatted_expr, env, [], [], None, join_cleaned_cols=clean_cols
     )
     terms = parsed_expr_tree.terms
 
@@ -2901,6 +2922,8 @@ def _all_na_check(expr_node) -> bool:
     if isinstance(expr_node, pandas.core.computation.ops.BinOp):
         return _all_na_check(expr_node.lhs) and _all_na_check(expr_node.rhs)
 
+    if hasattr(expr_node, "name"):
+        return expr_node.name.startswith("NOT_NA.")
     return str(expr_node).startswith("((NOT_NA.")
 
 
