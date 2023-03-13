@@ -232,7 +232,7 @@ def create_date_cast_util(func, error_on_fail):
         propagate_null = [True, False]
 
         out_dtype = (
-            DatetimeDateArrayType
+            DatetimeDateArrayType()
             if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
             else types.Array(bodo.datetime64ns, 1, "C")
         )

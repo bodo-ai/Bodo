@@ -9,10 +9,12 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query, bodosql_use_date_type
 
+from BodoSQL.bodosql.tests.utils import bodosql_use_date_type
 from bodo import Time
 from bodo.tests.conftest import (  # noqa
     date_df,
     day_part_strings,
+    date_df,
     time_df,
     time_part_strings,
 )
@@ -20,6 +22,7 @@ from bodo.tests.timezone_common import (  # noqa
     generate_date_trunc_func,
     generate_date_trunc_time_func,
     representative_tz,
+    generate_date_trunc_date_func,
 )
 
 EQUIVALENT_SPARK_DT_FN_MAP = {
@@ -2420,6 +2423,41 @@ def test_date_trunc_day_part_handling(time_df, day_part_strings, memory_leak_che
             check_names=False,
             expected_output=output,
         )
+
+
+def test_date_trunc_date(date_df, day_part_strings, memory_leak_check):
+    """
+    test DATE_TRUNC works for datetime.date input
+    """
+    query = f"SELECT DATE_TRUNC('{day_part_strings}', A) as output from table1"
+    scalar_func = generate_date_trunc_date_func(day_part_strings)
+    output = pd.DataFrame({"output": date_df["table1"]["A"].map(scalar_func)})
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            date_df,
+            None,
+            check_names=False,
+            expected_output=output,
+        )
+
+
+def test_date_trunc_time_part_handling(date_df, time_part_strings, memory_leak_check):
+    """
+    test DATE_TRUNC can return the same date when date_or_time_expr is datetime.date
+    and date_or_time_part is smaller than day.
+    """
+    query = f"SELECT DATE_TRUNC('{time_part_strings}', A) as output from table1"
+    output = pd.DataFrame({"output": date_df["table1"]["A"]})
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            date_df,
+            None,
+            check_names=False,
+            expected_output=output,
+        )
+
 
 
 def test_date_trunc_timestamp(dt_fn_dataframe, date_trunc_literal, memory_leak_check):
