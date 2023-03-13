@@ -1544,8 +1544,6 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
         MPI_Type_commit(&decimal_mpi_type);
     }
 
-    groupby_init();
-
     // DEC_MOD_METHOD(string_array_to_info);
     PyObject_SetAttrString(
         m, "list_string_array_to_info",
