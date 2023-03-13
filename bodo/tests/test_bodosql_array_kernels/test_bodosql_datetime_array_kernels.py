@@ -1,7 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Test Bodo's array kernel utilities for BodoSQL date/time functions
 """
-
+import datetime
 
 import datetime
 import numpy as np
@@ -561,6 +561,35 @@ def test_dayname(dates_scalar_vector, memory_leak_check):
     check_func(
         impl,
         (dates_scalar_vector,),
+        py_output=dayname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_dayname_date(datetime_dates_scalar_vector, memory_leak_check):
+    """
+    test dayname kernel works for datetime.date input
+    """
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayname(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(datetime_dates_scalar_vector, datetime.date):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayname(arr)
+
+    # Simulates DAYNAME on a single row
+    def dayname_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            dows = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+            return dows[elem.weekday()]
+
+    dayname_answer = vectorized_sol((datetime_dates_scalar_vector,), dayname_scalar_fn, None)
+    check_func(
+        impl,
+        (datetime_dates_scalar_vector,),
         py_output=dayname_answer,
         check_dtype=False,
         reset_index=True,
