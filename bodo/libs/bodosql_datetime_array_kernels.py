@@ -1313,17 +1313,17 @@ def date_trunc_util(date_or_time_part, date_or_time_expr):  # pragma: no cover
 @overload(date_trunc_util)
 def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
     """
-    Truncates a given Timestamp argument to the provided
+    Truncates a given bodo.Time/datetime.date/Timestamp argument to the provided
     date_or_time_part. This corresponds to DATE_TRUNC inside snowflake
 
     Args:
         date_or_time_part (types.Type): A string scalar or array stating how to truncate
-            the timestamp
-        date_or_time_expr (types.Type): A bodo.Time object or bodo.Time array or tz-aware or tz-naive Timestamp or
-            Timestamp array to be truncated.
+            the bodo.Time/datetime.date/Timestamp.
+        date_or_time_expr (types.Type): bodo.Time/datetime.date/Timestamp object or array to be truncated.
 
     Returns:
-        types.Type: The bodo.Time/timestamp after being truncated, which has same type as date_or_time_expr
+        types.Type: The bodo.Time/datetime.date/Timestamp after being truncated,
+                    which has same type as date_or_time_expr.
     """
     verify_string_arg(date_or_time_part, "DATE_TRUNC", "date_or_time_part")
     arg_names = ["date_or_time_part", "date_or_time_expr"]
@@ -1354,6 +1354,30 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
         scalar_text += "    else:\n"
         scalar_text += "        raise ValueError('Invalid time part for DATE_TRUNC')\n"
         out_dtype = bodo.TimeArrayType(9)
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+        )
+    elif is_valid_date_arg(date_or_time_expr):
+        scalar_text += "if part_str == 'year':\n"
+        scalar_text += "    res[i] = datetime.date(arg1.year, 1, 1)\n"
+        scalar_text += "elif part_str == 'quarter':\n"
+        scalar_text += "    month = arg1.month - (arg1.month - 1) % 3\n"
+        scalar_text += "    res[i] = datetime.date(arg1.year, month, 1)\n"
+        scalar_text += "elif part_str == 'month':\n"
+        scalar_text += "    res[i] = datetime.date(arg1.year, arg1.month, 1)\n"
+        scalar_text += "elif part_str == 'week':\n"
+        scalar_text += "    res[i] = arg1 - datetime.timedelta(days=arg1.weekday())\n"
+        scalar_text += "else:\n" # when time unit is smaller than or equal to day, return the same date
+        scalar_text += "    res[i] = arg1\n"
+        out_dtype = (
+            DatetimeDateArrayType()
+            if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
+            else types.Array(bodo.datetime64ns, 1, "C")
+        )
         return gen_vectorized(
             arg_names,
             arg_types,
@@ -1414,13 +1438,11 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
         if tz_literal is None:
             # In the tz-naive array case we have to convert the Timestamp to dt64
             scalar_text += f"res[i] = {unbox_str}(out_val)\n"
-        else:
-            scalar_text += f"res[i] = out_val\n"
-
-        if tz_literal is None:
             out_dtype = types.Array(bodo.datetime64ns, 1, "C")
         else:
+            scalar_text += f"res[i] = out_val\n"
             out_dtype = bodo.DatetimeArrayType(tz_literal)
+
     return gen_vectorized(
         arg_names,
         arg_types,

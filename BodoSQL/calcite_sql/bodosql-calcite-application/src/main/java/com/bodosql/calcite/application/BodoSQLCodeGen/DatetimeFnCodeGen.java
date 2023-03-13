@@ -462,9 +462,6 @@ public class DatetimeFnCodeGen {
       case "hr":
       case "hours":
       case "hrs":
-        if (dateTimeExprType == DateTimeType.DATE)
-          throw new BodoSQLCodegenException(
-              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "hour";
         break;
 
@@ -480,9 +477,6 @@ public class DatetimeFnCodeGen {
       case "min":
       case "minutes":
       case "mins":
-        if (dateTimeExprType == DateTimeType.DATE)
-          throw new BodoSQLCodegenException(
-              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "minute";
         break;
 
@@ -496,9 +490,6 @@ public class DatetimeFnCodeGen {
       case "sec":
       case "seconds":
       case "secs":
-        if (dateTimeExprType == DateTimeType.DATE)
-          throw new BodoSQLCodegenException(
-              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "second";
         break;
 
@@ -510,9 +501,6 @@ public class DatetimeFnCodeGen {
       case "ms":
       case "msec":
       case "milliseconds":
-        if (dateTimeExprType == DateTimeType.DATE)
-          throw new BodoSQLCodegenException(
-              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "millisecond";
         break;
 
@@ -524,9 +512,6 @@ public class DatetimeFnCodeGen {
       case "us":
       case "usec":
       case "microseconds":
-        if (dateTimeExprType == DateTimeType.DATE)
-          throw new BodoSQLCodegenException(
-              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "microsecond";
         break;
 
@@ -546,9 +531,6 @@ public class DatetimeFnCodeGen {
       case "nanoseconds":
       case "nanosecs":
       case "nseconds":
-        if (dateTimeExprType == DateTimeType.DATE)
-          throw new BodoSQLCodegenException(
-              "Unsupported unit for " + fnName + " with DATE input: " + inputTimeStr);
         unit = "nanosecond";
         break;
 
