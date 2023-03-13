@@ -4,7 +4,7 @@ Common IR extension functions for connectors such as CSV, Parquet and JSON reade
 """
 import sys
 from collections import defaultdict
-from typing import Dict, List, Literal, Set, Tuple, Union
+from typing import Dict, List, Literal, Sequence, Set, Tuple, Union
 
 import numba
 import pandas as pd
@@ -13,7 +13,11 @@ from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 
 import bodo
 from bodo.hiframes.table import TableType
-from bodo.ir.filter import string_funcs_no_arg_map, string_funcs_one_arg_map
+from bodo.ir.filter import (
+    Filter,
+    supported_funcs_no_arg_map,
+    string_funcs_one_arg_map,
+)
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import get_live_column_nums_block
 from bodo.utils.py_objs import install_py_obj_class
@@ -572,8 +576,8 @@ def _get_filter_column_arrow_expr(col_val, filter_map):
         )
         return f"pa.compute.coalesce({filter}, ds.scalar({scalar_val}))"
 
-    elif column_compute_func in string_funcs_no_arg_map:  # pragma: no cover
-        arrow_func_name = string_funcs_no_arg_map[column_compute_func]
+    elif column_compute_func in supported_funcs_no_arg_map:  # pragma: no cover
+        arrow_func_name = supported_funcs_no_arg_map[column_compute_func][1]
         return f"pa.compute.{arrow_func_name}({filter})"
 
 
@@ -757,13 +761,17 @@ def generate_arrow_filters(
     return dnf_filter_str, expr_filter_str
 
 
-def _get_filter_column_type(col_val, col_types, orig_colname_map):
+def _get_filter_column_type(
+    col_val: Union[str, Filter],
+    col_types: Sequence[types.Type],
+    orig_colname_map: Dict[str, int],
+):
     """get column type for column representation in filter predicate
 
     Args:
-        col_val (str | tuple): column name or compute representation
-        col_types (list(types.Type)): output data types of read node
-        orig_colname_map (dict(str, int)): map of column name to its index in output
+        col_val: column name or compute representation
+        col_types: output data types of read node
+        orig_colname_map: map of column name to its index in output
 
     Returns:
         types.Type: data type of column
@@ -779,8 +787,13 @@ def _get_filter_column_type(col_val, col_types, orig_colname_map):
 
 
 def determine_filter_cast(
-    col_types, typemap, filter_val, orig_colname_map, partition_names, source
-):
+    col_types: Sequence[types.Type],
+    typemap,
+    filter_val: List[Union[str, Filter]],
+    orig_colname_map: Dict[str, int],
+    partition_names,
+    source: str,
+) -> Tuple[str, str]:
     """
     Function that generates text for casts that need to be included
     in the filter when not automatically handled by Arrow. For example
@@ -803,7 +816,7 @@ def determine_filter_cast(
     col_types -- Types of the original columns, including dead columns.
     typemap -- Maps variables name -> types.
     filter_val -- Filter value DNF expression
-    orig_colname_map -- Map index -> column name.
+    orig_colname_map -- Map column name -> index
     partition_names -- List of column names that can be used as partitions.
     source -- What is generating this filter. Either "parquet" or "iceberg".
     """
@@ -892,11 +905,11 @@ def determine_filter_cast(
 
 
 def _generate_column_expr_filter(
-    filter: Tuple[Union[str, Tuple], str, Union[ir.Var, str]],
+    filter: Filter,
     filter_map: Dict[str, str],
     original_out_types: Tuple,
     typemap: Dict[str, types.Type],
-    orig_colname_map: Dict[int, str],
+    orig_colname_map: Dict[str, int],
     partition_names: List[str],
     source: Literal["parquet", "iceberg"],
 ) -> str:
@@ -962,9 +975,9 @@ def _generate_column_expr_filter(
                 # by ilike
                 expr_val = f"(pa.compute.ascii_lower({col_expr}{column_cast}) == pa.compute.ascii_lower(ds.scalar({filter_var}){scalar_cast}))"
 
-            elif p1 in string_funcs_one_arg_map.keys():  # pragma: no cover
+            elif p1 in string_funcs_one_arg_map:  # pragma: no cover
                 op = p1
-                func_name = string_funcs_one_arg_map[p1]
+                func_name = string_funcs_one_arg_map[p1][1]
                 scalar_arg = filter_var
 
                 # Handle if its case insensitive

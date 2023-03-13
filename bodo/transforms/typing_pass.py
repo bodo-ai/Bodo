@@ -41,7 +41,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
-from bodo.ir.filter import string_funcs_no_arg_map
+from bodo.ir.filter import supported_funcs_no_arg_map
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (
@@ -1951,7 +1951,7 @@ class TypingTransforms:
                 # We currently only support functions that use only
                 # the column data (1-arg), rather than functions
                 # that also take in additional args.
-                require(fdef[0] in string_funcs_no_arg_map.keys())
+                require(fdef[0] in supported_funcs_no_arg_map)
                 require((len(var_def.args) == 1) and not var_def.kws)
 
                 arg0 = var_def.args[0]
