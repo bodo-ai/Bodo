@@ -1123,8 +1123,8 @@ class TypingTransforms:
             # Otherwise, if the stmt uses a filter var and the filter_var is
             # not immutable, assume that all vars are involved and must be filter_var's
             # If filter_var is immutable, then don't need to assume that
-            used_filter_vars: Set[str]
-            if (used_filter_vars := stmt_vars & filter_vars) and any(
+            used_filter_vars: Set[str] = stmt_vars & filter_vars
+            if used_filter_vars and any(
                 not is_immutable(self.typemap[fvar]) for fvar in used_filter_vars
             ):
                 filter_vars |= stmt_vars
