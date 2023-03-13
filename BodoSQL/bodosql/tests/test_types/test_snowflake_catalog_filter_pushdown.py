@@ -3,6 +3,8 @@
 Tests filter pushdown with a Snowflake Catalog object.
 """
 import io
+import numpy as np
+import math
 import os
 
 import bodosql
@@ -1835,6 +1837,7 @@ def test_snowflake_reverse_filter_pushdown(
             select l_orderkey from {table_name}
             WHERE REVERSE({table_name}.l_shipmode) = 'PIHS'
         """
+
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
@@ -1850,3 +1853,198 @@ def test_snowflake_reverse_filter_pushdown(
             )
             check_logger_msg(stream, "Filter pushdown successfully performed.")
             check_logger_msg(stream, "Columns loaded ['l_orderkey']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_abs_filter_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that queries with ABS work with
+    filter pushdown.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame({"A": [-1, -100, None, 100, 10] * 10})
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(new_df, "abs_pushdown_table", db, schema) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select A from {table_name}", conn_str)
+        expected_output = py_output[abs(py_output.a) == 100]
+        # equality test
+
+        query = f"Select a from {table_name} where abs(A) = 100"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream,
+                "Filter pushdown successfully performed. Moving filter step:",
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+
+
+num_to_pd_func = {
+    "abs": np.abs,
+    "sign": np.sign,
+    "ceil": np.ceil,
+    "floor": np.floor,
+}
+
+
+@pytest.mark.parametrize(
+    "func_args",
+    [
+        pytest.param(("abs", "int_col", 3), id="abs_int"),
+        pytest.param(("abs", "float_col", 3.2), id="abs_float"),
+        pytest.param(("sign", "int_col", 0), id="sign_int"),
+        pytest.param(("sign", "float_col", -1), id="sign_float"),
+        pytest.param(("ceil", "float_col", -4), id="ceil_float"),
+        pytest.param(("floor", "float_col", 3), id="floor_float"),
+    ],
+)
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_no_arg_numeric_functions(
+    test_db_snowflake_catalog, func_args, memory_leak_check
+):
+    """
+    Test no-arg numeric function support in Snowflake filter pushdown
+    """
+    sql_func, num_col, test_val = func_args
+    pd_func = num_to_pd_func[sql_func]
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    table_name = "NUMERIC_DATA"
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    conn_str = get_snowflake_connection_string(db, schema)
+    df = pd.read_sql(f"select {num_col} from {table_name}", conn_str)
+    expected_output = df[pd_func(df[num_col]) == test_val]
+    query = (
+        f"select {num_col} from {table_name} where {sql_func}({num_col}) = '{test_val}'"
+    )
+
+    # make sure filter pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=expected_output,
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
+
+        check_logger_msg(stream, f"Columns loaded ['{num_col}']")
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+        check_logger_msg(
+            stream, rf"WHERE  ( ( {sql_func}(\"{num_col.upper()}\") = {{f1}} ) )"
+        )
+
+
+@pytest.mark.parametrize(
+    "test_cases",
+    [
+        pytest.param(("hour", True, 0), id="hour"),
+        pytest.param(("minute", True, 30), id="minute"),
+        pytest.param(("second", True, 59), id="second"),
+        pytest.param(("year", False, 2022), id="year"),
+        pytest.param(("day", False, 1), id="day"),
+        pytest.param(("dayofweek", False, 6), id="dayofweek"),
+        pytest.param(("dayofyear", False, 15), id="dayofyear"),
+        pytest.param(("week", False, 2), id="week"),
+        pytest.param(("weekofyear", False, 22), id="weekofyear"),
+        pytest.param(("yearofweek", False, 10), id="yearofweek"),
+        pytest.param(("yearofweekiso", False, 30), id="yearofweekiso"),
+        pytest.param(("month", False, 6), id="month"),
+        pytest.param(("quarter", False, 0), id="quarter"),
+    ],
+)
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_no_arg_datetime_functions(
+    test_db_snowflake_catalog, test_cases, memory_leak_check
+):
+    """
+    Test no-arg datetime function support in Snowflake filter pushdown
+    """
+    sql_func, is_time_related, test_val = test_cases
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    table_name = "DATETIME_RELATED_DATA"
+    test_cols = ["timestamp_col"] if is_time_related else ["date_col", "timestamp_col"]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    conn_str = get_snowflake_connection_string(db, schema)
+    df = pd.read_sql(f"select * from {table_name}", conn_str)
+
+    pushdown_sql_func = sql_func
+
+    for test_col in test_cols:
+        datetime_test_col = df[test_col]
+        if test_col != "timestamp_col":
+            datetime_test_col = pd.to_datetime(datetime_test_col)
+
+        if sql_func == "dayofweek":
+            computed_col = (datetime_test_col.dt.dayofweek + 1) % 7
+        elif sql_func in ("week", "weekofyear"):
+            computed_col = datetime_test_col.dt.isocalendar().week
+        elif sql_func == "yearofweek":
+            computed_col = datetime_test_col.dt.isocalendar().year
+            pushdown_sql_func = "year"
+        elif sql_func == "yearofweekiso":
+            computed_col = datetime_test_col.dt.isocalendar().year
+        else:
+            computed_col = getattr(datetime_test_col.dt, sql_func)
+
+        expected_output = datetime_test_col[computed_col == test_val].to_frame()
+
+        query = f"select {test_col} from {table_name} where {sql_func}({test_col}) = '{test_val}'"
+
+        # make sure filter pushdown worked
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=expected_output,
+                sort_output=True,
+                reset_index=True,
+                check_dtype=False,
+            )
+
+            check_logger_msg(stream, f"Columns loaded ['{test_col}']")
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            check_logger_msg(
+                stream,
+                rf"WHERE  ( ( {pushdown_sql_func.upper()}(\"{test_col.upper()}\") = {{f1}} ) )",
+            )

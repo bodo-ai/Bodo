@@ -9,7 +9,10 @@ import java.util.List;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlKind;
 
-/** Class that returns the generated code for Extract after all inputs have been visited. */
+/**
+ * Class that returns the generated code for Extract after all inputs have been
+ * visited.
+ */
 public class ExtractCodeGen {
 
   // List of units that are unsupported for TIME inputs
@@ -33,18 +36,17 @@ public class ExtractCodeGen {
   }
 
   // Used for doing null checking binary operations
-  static SqlBinaryOperator addBinop =
-      new SqlBinaryOperator("PLUS", SqlKind.PLUS, 0, true, null, null, null);
-  static SqlBinaryOperator modBinop =
-      new SqlBinaryOperator("MOD", SqlKind.MOD, 0, true, null, null, null);
+  static SqlBinaryOperator addBinop = new SqlBinaryOperator("PLUS", SqlKind.PLUS, 0, true, null, null, null);
+  static SqlBinaryOperator modBinop = new SqlBinaryOperator("MOD", SqlKind.MOD, 0, true, null, null, null);
 
   /**
    * Function that return the necessary generated code for an Extract call.
    *
-   * @param datetimeVal The arg expr for selecting which datetime field to extract. This must be a
-   *     constant string.
-   * @param column The column arg expr.
-   * @param isTime Is the input TIME data?
+   * @param datetimeVal The arg expr for selecting which datetime field to
+   *                    extract. This must be a
+   *                    constant string.
+   * @param column      The column arg expr.
+   * @param isTime      Is the input TIME data?
    * @return The code generated that matches the Extract expression.
    */
   public static String generateExtractCode(String datetimeVal, String column, boolean isTime) {
@@ -62,8 +64,7 @@ public class ExtractCodeGen {
       case "MONTH":
       case "QUARTER":
       case "YEAR":
-        extractCode =
-            "bodo.libs.bodosql_array_kernels.get_" + datetimeVal.toLowerCase() + "(" + column + ")";
+        extractCode = "bodo.libs.bodosql_array_kernels.get_" + datetimeVal.toLowerCase() + "(" + column + ")";
         break;
       case "DAY":
       case "DAYOFMONTH":
@@ -81,6 +82,8 @@ public class ExtractCodeGen {
         extractCode = "bodo.libs.bodosql_array_kernels.dayofyear(" + column + ")";
         break;
       case "WEEK":
+        extractCode = "bodo.libs.bodosql_array_kernels.get_week(" + column + ")";
+        break;
       case "WEEKOFYEAR":
       case "WEEKISO":
         extractCode = "bodo.libs.bodosql_array_kernels.get_weekofyear(" + column + ")";
@@ -96,7 +99,7 @@ public class ExtractCodeGen {
    * Function that returns the generated name for an Extract call.
    *
    * @param datetimeName The name for selecting which datetime field to extract.
-   * @param columnName The name of the column arg.
+   * @param columnName   The name of the column arg.
    * @return The name generated that matches the Extract expression.
    */
   public static String generateExtractName(String datetimeName, String columnName) {
@@ -106,11 +109,12 @@ public class ExtractCodeGen {
   }
 
   /**
-   * Returns the RexNodeVisitorInfo for DATE_PART by mapping the string literals to the same code
+   * Returns the RexNodeVisitorInfo for DATE_PART by mapping the string literals
+   * to the same code
    * gen as EXTRACT
    *
    * @param operandsInfo The information about the arguments to the call
-   * @param isTime Is the input TIME data?
+   * @param isTime       Is the input TIME data?
    * @return The name generated that matches the Extract expression.
    */
   public static RexNodeVisitorInfo generateDatePart(
