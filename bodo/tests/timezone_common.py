@@ -1,5 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Common fixtures used for timezone testing."""
+import datetime
+
 import pandas as pd
 import pytest
 
@@ -132,12 +134,46 @@ def generate_date_trunc_time_func(part_str: str):
                 # date_or_time_part is too large, set everything to 0
                 return bodo.Time()
             else:
-                return trunc(time_input, standardized_part)
+                return trunc_time(time_input, standardized_part)
 
     return date_trunc_time_scalar_fn
 
 
-def trunc(time, time_part):
+def generate_date_trunc_date_func(part_str: str):
+    """
+    Generate a function that can be used in Series.map
+    to compute the expected output for date_trunc with date type input.
+
+    Args:
+        part (str): Part to truncate the input to.
+
+    Return:
+        Function: Function to use in Series.map to match
+            DATE_TRUNC behavior.
+    """
+
+    @bodo.jit
+    def standardize_part(part_str):
+        return bodo.libs.bodosql_array_kernels.standardize_snowflake_date_time_part(
+            part_str
+        )
+
+    # Standardize the part using our snowflake mapping kernel.
+    if part_str is not None:
+        standardized_part = standardize_part(part_str)
+    else:
+        standardized_part = part_str
+
+    def date_trunc_date_scalar_fn(date_input):
+        if pd.isna(part_str) or pd.isna(date_input):
+            return None
+        else:
+            return trunc_date(date_input, standardized_part)
+
+    return date_trunc_date_scalar_fn
+
+
+def trunc_time(time, time_part):
     time_args = []
     time_units = ('hour', 'minute', 'second', 'millisecond', 'microsecond', 'nanosecond')
     for unit in time_units:
@@ -146,6 +182,19 @@ def trunc(time, time_part):
             break
     return bodo.Time(*time_args)
 
+
+def trunc_date(date, date_part):
+    if date_part == 'year':
+        return datetime.date(date.year, 1, 1)
+    elif date_part == 'quarter':
+        month = date.month - (date.month - 1) % 3
+        return datetime.date(date.year, month, 1)
+    elif date_part == 'month':
+        return datetime.date(date.year, date.month, 1)
+    elif date_part == 'week':
+        return date - datetime.timedelta(date.weekday())
+    elif date_part == 'day':
+        return datetime.date(date.year, date.month, date.day)
 
 def date_sub_unit_time_fn(part_str, time1, time2):
     if pd.isna(part_str) or pd.isna(time1) or pd.isna(time2):
@@ -162,8 +211,8 @@ def date_sub_unit_time_fn(part_str, time1, time2):
     else:
         standardized_part = part_str
 
-    trunced_time1 = trunc(time1, standardized_part)
-    trunced_time2 = trunc(time2, standardized_part)
+    trunced_time1 = trunc_time(time1, standardized_part)
+    trunced_time2 = trunc_time(time2, standardized_part)
     return nanoseconds_to_other_time_units(
         trunced_time2.value - trunced_time1.value,
         standardized_part

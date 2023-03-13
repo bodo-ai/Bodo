@@ -14,7 +14,11 @@ from bodo.libs.bodosql_array_kernels import *
 from bodo.libs.bodosql_datetime_array_kernels import (
     standardize_snowflake_date_time_part_compile_time,
 )
-from bodo.tests.timezone_common import generate_date_trunc_func, generate_date_trunc_time_func
+from bodo.tests.timezone_common import (
+    generate_date_trunc_func,
+    generate_date_trunc_time_func,
+    generate_date_trunc_date_func,
+)
 from bodo.tests.utils import check_func, nanoseconds_to_other_time_units
 
 
@@ -1502,6 +1506,61 @@ def test_date_trunc_time(datetime_part_strings, time_input, memory_leak_check):
         check_dtype=False,
         reset_index=True,
     )
+
+
+@pytest.mark.parametrize(
+    "date_input",
+    [
+        pytest.param(
+            datetime.date(2007, 10, 14),
+            id="scalar-date",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.date(2025, 5, 3),
+                    datetime.date(1987, 3, 15),
+                    datetime.date(2117, 8, 29),
+                    None,
+                ]
+            ).values,
+            id="vector-date",
+        ),
+    ],
+)
+def test_date_trunc_date(day_part_strings, date_input, memory_leak_check):
+    """
+    Tests date_trunc array kernel on various bodo.Time inputs, testing all the different code paths
+    in the generated kernel.
+    """
+
+    def impl(day_part_strings, arr):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.date_trunc(day_part_strings, arr)
+        )
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(date_input, datetime.date):
+        impl = lambda day_part_strings, arr: bodo.libs.bodosql_array_kernels.date_trunc(
+            day_part_strings, arr
+        )
+
+    # Simulates date_trunc on a single row
+    def date_trunc_date_scalar_fn(datetime_part_strings, date_input):
+        return generate_date_trunc_date_func(datetime_part_strings)(date_input)
+
+    answer = vectorized_sol(
+        (day_part_strings, date_input), date_trunc_date_scalar_fn, None
+    )
+    with bodosql_use_date_type():
+        check_func(
+            impl,
+            (day_part_strings, date_input),
+            py_output=answer,
+            check_dtype=False,
+            reset_index=True,
+        )
+
 
 @pytest.mark.parametrize(
     "interval_input",
