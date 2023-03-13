@@ -1599,7 +1599,10 @@ def dayname_util(arr):
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    scalar_text = f"res[i] = {box_str}(arg0).day_name()"
+    if is_valid_date_arg(arr):
+        scalar_text = f"res[i] = day_of_week_dict_arr[arg0.weekday()]"
+    else:
+        scalar_text = f"res[i] = {box_str}(arg0).day_name()"
     out_dtype = bodo.string_array_type
 
     # If the input is an array, make the output dictionary encoded
@@ -1618,7 +1621,10 @@ def dayname_util(arr):
     extra_globals = {"day_of_week_dict_arr": dows}
 
     synthesize_dict_setup_text = "dict_res = day_of_week_dict_arr"
-    synthesize_dict_scalar_text = f"res[i] = {box_str}(arg0).dayofweek"
+    if is_valid_date_arg(arr):
+        synthesize_dict_scalar_text = f"res[i] = arg0.weekday()"
+    else:
+        synthesize_dict_scalar_text = f"res[i] = {box_str}(arg0).dayofweek"
 
     return gen_vectorized(
         arg_names,
