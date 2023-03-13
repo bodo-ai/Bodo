@@ -933,6 +933,46 @@ def test_dayname_scalars(basic_df, spark_info, memory_leak_check):
     )
 
 
+def test_dayname_date_cols(date_df, memory_leak_check):
+    """tests the dayname function on column inputs of date objects."""
+    query = "SELECT DAYNAME(A) from table1"
+    outputs = pd.DataFrame({"output": date_df["table1"]["A"].map(day_name_func)})
+
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=outputs,
+    )
+
+
+def day_name_func(date):
+    if date is None:
+        return None
+    dows = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    return dows[date.weekday()]
+
+
+def test_dayname_date_scalars(basic_df, spark_info, memory_leak_check):
+    """tests the dayname function on scalar inputs of date objects."""
+
+    # since dayname is a fn we defined, don't need to worry about calcite performing optimizations
+    # Use basic_df so the input is expanded and we don't have to worry about empty arrays
+    query = f"SELECT DAYNAME(TO_DATE('2021-03-03')), DAYNAME(TO_DATE('2021-05-13')), DAYNAME(TO_DATE('2021-07-03'))"
+    outputs = pd.DataFrame({"A": ["Wednesday"], "B": ["Thursday"], "C": ["Saturday"]})
+
+    check_query(
+        query,
+        basic_df,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=outputs,
+    )
+
+
 @pytest.mark.parametrize(
     "fn_name", ["MONTHNAME", pytest.param("MONTH_NAME", marks=pytest.mark.slow)]
 )
