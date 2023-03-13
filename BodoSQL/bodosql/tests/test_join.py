@@ -4,13 +4,23 @@ Test correctness of SQL join queries on BodoSQL
 """
 
 import copy
+import io
+from datetime import date
 
+import bodosql
+import numba
 import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_efficient_join, check_query
 
+import bodo
 from bodo.tests.timezone_common import representative_tz  # noqa
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 
 
 @pytest.fixture(params=["INNER", "LEFT", "RIGHT", "FULL OUTER"])
@@ -640,3 +650,38 @@ def test_join_pow(spark_info, join_type, memory_leak_check):
     }
     check_query(query1, ctx, spark_info, check_dtype=False, check_names=False)
     check_query(query2, ctx, spark_info, check_dtype=False, check_names=False)
+
+
+def test_interval_join_compilation(memory_leak_check):
+    """
+    Tests that the Interval Join detection code correctly determines that
+    Interval Join should be used in this case. This is useful for ensuring:
+        * That Bodo can handle BodoSQL column names (EXPR$1, ...)
+        * That BodoSQL performs the casts as a projection before the join.
+          Interval join currently does not support operations inside of the condition
+    """
+
+    df1 = pd.DataFrame(
+        {
+            "P": [date(2023, 1, 1)],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "L": pd.date_range(start="2023-01-01", periods=10, freq="D").to_series(),
+            "R": pd.date_range(start="2023-01-01", periods=10, freq="D").to_series(),
+        }
+    )
+    bc = bodosql.BodoSQLContext({"t1": df1, "t2": df2})
+    query = (
+        "select P, L from t1 inner join t2 on t1.P >= t2.L::date and t1.P < t2.R::date"
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        bodo.jit((bodo.typeof(bc), numba.types.literal(query)))(impl)
+        check_logger_msg(stream, "Using optimized interval range join")
