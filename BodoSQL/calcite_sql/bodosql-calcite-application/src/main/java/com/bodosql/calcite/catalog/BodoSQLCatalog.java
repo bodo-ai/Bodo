@@ -72,7 +72,7 @@ public interface BodoSQLCatalog {
    *
    * @return List of any default Schema that exist.
    */
-  List<BodoSqlSchema> getDefaultSchema();
+  List<String> getDefaultSchema();
 
   /**
    * Generates the code necessary to produce a write expression from the given catalog.

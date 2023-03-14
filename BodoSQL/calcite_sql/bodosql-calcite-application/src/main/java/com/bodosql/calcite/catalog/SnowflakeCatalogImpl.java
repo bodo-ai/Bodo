@@ -4,7 +4,6 @@ import static java.lang.Math.min;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.schema.BodoSqlSchema;
-import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
@@ -405,7 +404,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    *
    * @return List of default Schema if they exist.
    */
-  public List<BodoSqlSchema> getDefaultSchema() {
+  public List<String> getDefaultSchema() {
     return getDefaultSchemaImpl(isConnectionCached());
   }
 
@@ -415,8 +414,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @param shouldRetry Should we retry the connection if we see an exception?
    * @return List of default Schema if they exist.
    */
-  private List<BodoSqlSchema> getDefaultSchemaImpl(boolean shouldRetry) {
-    List<BodoSqlSchema> defaultSchema = new ArrayList<>();
+  private List<String> getDefaultSchemaImpl(boolean shouldRetry) {
+    List<String> defaultSchema = new ArrayList<>();
     try {
       Connection conn = getConnection();
       Statement stmt = conn.createStatement();
@@ -425,7 +424,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         // Output in column 1
         String schemaName = schemaInfo.getString(1);
         if (schemaName != null) {
-          defaultSchema.add(new CatalogSchemaImpl(schemaName, this));
+          defaultSchema.add(schemaName);
         }
       }
       // TODO: Cache the same connection if possible
@@ -573,10 +572,10 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     // we run an explain, which won't execute the query.
     executeExplainQuery(query);
     // We need to include the default schema to ensure the query works as intended
-    List<BodoSqlSchema> schemaList = getDefaultSchema();
+    List<String> schemaList = getDefaultSchema();
     String schemaName = "";
     if (schemaList.size() > 0) {
-      schemaName = schemaList.get(0).getName();
+      schemaName = schemaList.get(0);
     }
     return String.format("pd.read_sql('%s', '%s')", query, generatePythonConnStr(schemaName));
   }
