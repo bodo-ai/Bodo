@@ -1,47 +1,30 @@
 package com.bodosql.calcite.application;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.FilterCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.LikeCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.PrefixOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.TimestampDiffCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.*;
 import static com.bodosql.calcite.application.JoinCondVisitor.*;
 import static com.bodosql.calcite.application.Utils.AggHelpers.*;
 import static com.bodosql.calcite.application.Utils.Utils.*;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 
+import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.*;
 import com.bodosql.calcite.ir.Module;
+import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
-import com.google.common.collect.Range;
 import java.util.*;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.prepare.RelOptTableImpl;
@@ -58,7 +41,6 @@ import org.apache.calcite.sql.fun.*;
 import org.apache.calcite.sql.type.*;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
-import org.apache.calcite.util.Sarg;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Visitor class for parsed SQL nodes to generate Pandas code from SQL code. */
@@ -67,7 +49,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private final Stack<String> varGenStack = new Stack<>();
   /* Reserved column name for generating dummy columns. */
   // TODO: Add this to the docs as banned
-  private final Module.Builder generatedCode = new Module.Builder();
+  private final Module.Builder generatedCode;
 
   // Note that a given query can only have one MERGE INTO statement. Therefore,
   // we can statically define the variable names we'll use for the iceberg file list and snapshot
@@ -80,14 +62,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
 
   // Mapping from a unique key per node to exprTypes
-  private final HashMap<String, BodoSQLExprType.ExprType> exprTypesMap;
+  public final HashMap<String, BodoSQLExprType.ExprType> exprTypesMap;
 
   // Mapping from String Key of Search Nodes to the RexNodes expanded
   // TODO: Replace this code with something more with an actual
   // update to the plan.
   // Ideally we can use RexRules when they are available
   // https://issues.apache.org/jira/browse/CALCITE-4559
-  private final HashMap<String, RexNode> searchMap;
+  public final HashMap<String, RexNode> searchMap;
 
   // Map of RelNode ID -> <DataFrame variable name, Column Names>
   // Because the logical plan is a tree, Nodes that are at the bottom of
@@ -167,6 +149,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
     this.useDateRuntime = useDateRuntime;
+    this.generatedCode = new Module.Builder(this.useDateRuntime);
   }
 
   /**
@@ -377,19 +360,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inVar = varGenStack.pop();
       // The hashset is unused because the result should always be empty.
       // We assume filter is never within an apply.
-      RexNodeVisitorInfo filterPair =
-          visitRexNode(
-              node.getCondition(),
-              input.getRowType().getFieldNames(),
-              node.getId(),
-              inVar,
-              false,
-              new BodoCtx());
+      RexToPandasTranslator translator = getRexTranslator(node, inVar, input);
+      Expr expr = node.getCondition().accept(translator);
       this.generatedCode.append(
           generateFilterCode(
               inVar,
               outVar,
-              filterPair.getExprCode(),
+              expr.emit(),
               exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node.getCondition(), nodeId))));
       this.varCache.put(nodeId, outVar);
       this.genRelnodeTimerStop(node);
@@ -522,9 +499,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       // fetch is either a named Parameter or a literal from parsing.
       // We visit the node to resolve the name.
-      RexNodeVisitorInfo childExpr =
-          visitRexNode(fetch, colNames, node.getId(), inVar, false, new BodoCtx());
-      limitStr = childExpr.getExprCode();
+      RexToPandasTranslator translator = getRexTranslator(node, inVar, input);
+      limitStr = fetch.accept(translator).emit();
     }
     RexNode offset = node.offset;
     if (offset != null) {
@@ -543,9 +519,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       // Offset is either a named Parameter or a literal from parsing.
       // We visit the node to resolve the name.
-      RexNodeVisitorInfo childExpr =
-          visitRexNode(offset, colNames, node.getId(), inVar, false, new BodoCtx());
-      offsetStr = childExpr.getExprCode();
+      RexToPandasTranslator translator = getRexTranslator(node, inVar, input);
+      offsetStr = offset.accept(translator).emit();
     }
     this.generatedCode.append(
         generateSortCode(inVar, outVar, colNames, sortOrders, limitStr, offsetStr));
@@ -677,22 +652,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
           if (r instanceof RexInputRef) {
             childExpr = new RexNodeVisitorInfo("", ((RexInputRef) r).getIndex());
           } else {
-            childExpr = visitRexNode(r, colNames, nodeId, projectInVar, false, new BodoCtx());
-            childExpr = new RexNodeVisitorInfo(childExpr.getExprCode());
+            childExpr =
+                new RexNodeVisitorInfo(
+                    r.accept(getRexTranslator(node, projectInVar, node.getInput())).emit());
           }
           childExprs.add(childExpr);
         }
         // handle windowed Aggregations
-        List<RexNodeVisitorInfo> windowAggInfo =
-            visitAggOverOp(windowAggList, colNames, nodeId, projectInVar, false, new BodoCtx());
+        Dataframe dfInput = new Dataframe(projectInVar, node.getInput());
+        List<Expr> windowAggInfo =
+            visitAggOverOp(windowAggList, colNames, nodeId, dfInput, false, new BodoCtx());
         // check that these all have the same len
         assert windowAggInfo.size() == windowAggList.size()
             && windowAggInfo.size() == idx_list.size();
         for (int i = 0; i < windowAggList.size(); i++) {
           int origIdx = idx_list.get(i);
           // grab the original alias from the value stored value in childExprs
-          RexNodeVisitorInfo realChildExpr =
-              new RexNodeVisitorInfo(windowAggInfo.get(i).getExprCode());
+          RexNodeVisitorInfo realChildExpr = new RexNodeVisitorInfo(windowAggInfo.get(i).emit());
           // overwrite the dummy value that we stored earlier in childExpr
           childExprs.set(origIdx, realChildExpr);
         }
@@ -1187,301 +1163,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Visitor for RexNode
-   *
-   * @param node RexNode being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param isSingleRow flag for if table references refer to a single row or the whole table. This
-   *     is used for determining if an expr returns a scalar or a column. Only CASE statements set
-   *     this to True currently.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  public RexNodeVisitorInfo visitRexNode(
-      RexNode node,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    RexNodeVisitorInfo result;
-    // TODO: Add more RexNodes here
-    if (node instanceof RexInputRef) {
-      result = visitInputRef((RexInputRef) node, colNames, inputVar, isSingleRow, ctx);
-    } else if (node instanceof RexLiteral) {
-      result = visitLiteralScan((RexLiteral) node, isSingleRow);
-    } else if (node instanceof RexOver) {
-      // Windowed aggregation is special, since it needs to add generated
-      // code in order to define functions to be used with groupby apply.
-      // Note: RexOver is also a RexCall, so RexOver must be visited before RexCall.
-      List<RexOver> tmp = new ArrayList<>();
-      tmp.add((RexOver) node);
-      result = visitAggOverOp(tmp, colNames, id, inputVar, isSingleRow, ctx).get(0);
-    } else if (node instanceof RexCall
-        && ((RexCall) node).getOperator() instanceof SqlNullTreatmentOperator) {
-      result = visitNullTreatmentOp((RexCall) node, colNames, id, inputVar, isSingleRow, ctx);
-    } else if (node instanceof RexCall) {
-      result = visitRexCall((RexCall) node, colNames, id, inputVar, isSingleRow, ctx);
-    } else if (node instanceof RexNamedParam) {
-      result = visitRexNamedParam((RexNamedParam) node, ctx);
-    } else {
-      throw new BodoSQLCodegenException(
-          "Internal Error: Calcite Plan Produced an Unsupported RexNode");
-    }
-    return result;
-  }
-
-  /**
-   * Visitor for RexCalls IGNORE NULLS and RESPECT NULLS This function is only called if IGNORE
-   * NULLS and RESPECT NULLS is called without an associated window. Otherwise, it is included as a
-   * field in the REX OVER node.
-   *
-   * <p>Currently, we always throw an error when entering this call. Frankly, based on my reading of
-   * calcite's syntax, we only reach this node through invalid syntax in Calcite (LEAD/LAG
-   * RESPECT/IGNORE NULL's without a window)
-   *
-   * @param node RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  public RexNodeVisitorInfo visitNullTreatmentOp(
-      RexCall node,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-
-    SqlKind innerCallKind = node.getOperands().get(0).getKind();
-    switch (innerCallKind) {
-      case LEAD:
-      case LAG:
-      case NTH_VALUE:
-      case FIRST_VALUE:
-      case LAST_VALUE:
-        throw new BodoSQLCodegenException(
-            "Error during codegen: " + innerCallKind.toString() + " requires OVER clause.");
-      default:
-        throw new BodoSQLCodegenException(
-            "Error during codegen: Unreachable code entered while evaluating the following rex"
-                + " node in visitNullTreatmentOp: "
-                + node.toString());
-    }
-  }
-
-  /**
-   * Visitor for RexCall
-   *
-   * @param node RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  public RexNodeVisitorInfo visitRexCall(
-      RexCall node,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    RexNodeVisitorInfo result;
-    // TODO: Add more call nodes here
-    if (node.getOperator() instanceof SqlBinaryOperator
-        || node.getOperator() instanceof SqlDatetimePlusOperator
-        || node.getOperator() instanceof SqlDatetimeSubtractionOperator) {
-      result = visitBinOpScan(node, colNames, id, inputVar, isSingleRow, ctx);
-    } else if (node.getOperator() instanceof SqlPostfixOperator) {
-      result = visitPostfixOpScan(node, colNames, id, inputVar, isSingleRow, ctx);
-    } else if (node.getOperator() instanceof SqlPrefixOperator) {
-      result = visitPrefixOpScan(node, colNames, id, inputVar, isSingleRow, ctx);
-    } else if (node.getOperator() instanceof SqlInternalOperator) {
-      result = visitInternalOp(node, colNames, id, inputVar, isSingleRow, ctx);
-    } else if (node.getOperator() instanceof SqlLikeOperator) {
-      result = visitLikeOp(node, colNames, id, inputVar, isSingleRow, ctx);
-    } else if (node.getOperator() instanceof SqlCaseOperator) {
-      result = visitCaseOp(node, colNames, id, inputVar, isSingleRow, ctx, this);
-    } else if (node.getOperator() instanceof SqlCastFunction) {
-      result = visitCastScan(node, colNames, id, inputVar, isSingleRow, ctx);
-    } else if (node.getOperator() instanceof SqlExtractFunction) {
-      result = visitExtractScan(node, colNames, id, inputVar, isSingleRow, ctx);
-    } else if (node.getOperator() instanceof SqlSubstringFunction) {
-      result = visitSubstringScan(node, colNames, id, inputVar, isSingleRow, ctx);
-    } else if (node.getOperator() instanceof SqlFunction) {
-      result = visitGenericFuncOp(node, colNames, id, inputVar, isSingleRow, ctx);
-    } else {
-      throw new BodoSQLCodegenException(
-          "Internal Error: Calcite Plan Produced an Unsupported RexCall:" + node.getOperator());
-    }
-    return result;
-  }
-
-  /**
-   * Return a pandas expression that replicates EXTRACT. Currently only tested for year extraction.
-   *
-   * @param node Internal operator RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  private RexNodeVisitorInfo visitExtractScan(
-      RexCall node,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    RexNodeVisitorInfo dateVal =
-        visitRexNode(node.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
-    RexNodeVisitorInfo column =
-        visitRexNode(node.operands.get(1), colNames, id, inputVar, isSingleRow, ctx);
-    boolean isTime = node.operands.get(1).getType().getSqlTypeName().toString().equals("TIME");
-    String codeExpr = generateExtractCode(dateVal.getExprCode(), column.getExprCode(), isTime);
-    return new RexNodeVisitorInfo(codeExpr);
-  }
-
-  /**
-   * Use DataFrame.apply to recreate the functionality of CASE.
-   *
-   * @param node Internal operator RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  private RexNodeVisitorInfo visitCaseOp(
-      RexCall node,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx,
-      PandasCodeGenVisitor pdVisitorClass) {
-
-    // TODO: Technical debt, this should be done in our fork of calcite
-    // Calcite optimizes a large number of windowed aggregation functions into case statements,
-    // which check if the window is valid. This can be during the parsing step by setting the
-    // "allowPartial" variable to be true.
-
-    if (isWindowedAggFn(node)) {
-      return visitRexNode(node.getOperands().get(1), colNames, id, inputVar, isSingleRow, ctx);
-    }
-
-    List<RexNode> operands = node.getOperands();
-    // Even if the contents are scalars, we will always have a dataframe unless we
-    // are inside another apply. We choose to generate apply code in this case because
-    // we only compile single basic blocks.
-    boolean generateApply = !isSingleRow;
-
-    // The body of case may require wrapping everything inside a global variable.
-    // In the future this all needs to be wrapped inside the original builder, but we
-    // can't support that yet.
-    Module.Builder oldBuilder = this.generatedCode;
-    Module.Builder innerBuilder = this.generatedCode;
-
-    if (generateApply) {
-      // If we're generating an apply, the input set of columns to add should be empty,
-      // since we only add columns to the colsToAddList when inside an apply.
-      assert ctx.getColsToAddList().size() == 0;
-      // If we generate an apply we need to write the generated if/else
-      innerBuilder = new Module.Builder(generatedCode.getSymbolTable());
-    }
-
-    List<String> args = new ArrayList<>();
-
-    BodoCtx localCtx = new BodoCtx();
-
-    for (int i = 0; i < operands.size(); i++) {
-      RexNodeVisitorInfo visitorInfo =
-          visitRexNode(node.operands.get(i), colNames, id, inputVar, true, localCtx);
-      args.add(visitorInfo.getExprCode());
-    }
-
-    if (generateApply && localCtx.getColsToAddList().size() > 0) {
-      // If we do generate an apply, add the columns that we need to the dataframe
-      // and change the variables to reference the new dataframe
-      final String indent = getBodoIndent();
-      String tmp_case_name = "tmp_case_" + genDfVar();
-      this.generatedCode.append(
-          indent
-              + tmp_case_name
-              + " = "
-              + generateCombinedDf(inputVar, colNames, localCtx.getColsToAddList())
-              + "\n");
-      args = renameExprsList(args, inputVar, tmp_case_name);
-      inputVar = tmp_case_name;
-      // get column names including the added columns
-      List<String> newColNames = new ArrayList<>();
-      for (String col : colNames) newColNames.add(col);
-      for (String col : localCtx.getColsToAddList()) newColNames.add(col);
-      colNames = newColNames;
-    } else if (!generateApply) {
-      // If we're not the top level apply, we need to pass back the information so that it is
-      // properly handled
-      // by the actual top level apply
-      // null columns are handled by the cond itself, so don't need to pass those back
-      ctx.getNamedParams().addAll(localCtx.getNamedParams());
-      ctx.getColsToAddList().addAll(localCtx.getColsToAddList());
-      ctx.getUsedColumns().addAll(localCtx.getUsedColumns());
-    }
-
-    String codeExpr =
-        generateCaseCode(
-            args,
-            generateApply,
-            localCtx,
-            inputVar,
-            node.getType(),
-            pdVisitorClass,
-            oldBuilder,
-            innerBuilder,
-            useDateRuntime);
-
-    return new RexNodeVisitorInfo(codeExpr);
-  }
-
-  /**
    * Return a pandas expression that replicates a SQL windowed aggregation function.
    *
    * @param aggOperations List of internal operator RexCall being visited
@@ -1498,11 +1179,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  private List<RexNodeVisitorInfo> visitAggOverOp(
+  public List<Expr> visitAggOverOp(
       List<RexOver> aggOperations,
       List<String> colNames,
       int id,
-      String inputVar,
+      Dataframe inputVar,
       boolean isSingleRow,
       BodoCtx ctx) {
 
@@ -1510,6 +1191,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     if (aggOperations.size() == 0) {
       return new ArrayList<>();
     }
+
+    RexToPandasTranslator translator = getRexTranslator(id, inputVar);
 
     // Check if we can use the optimized groupby.window C++ kernel. If so
     // we directly to that codegen path.
@@ -1520,27 +1203,32 @@ public class PandasCodeGenVisitor extends RelVisitor {
       RexWindow window = windowFunc.getWindow();
       // We need to visit all partition keys before generating
       // code for the kernel
-      List<RexNodeVisitorInfo> childExprs = new ArrayList<>();
+      List<Expr> childExprs = new ArrayList<>();
       List<BodoSQLExprType.ExprType> childExprTypes = new ArrayList<>();
       for (int i = 0; i < window.partitionKeys.size(); i++) {
         RexNode node = window.partitionKeys.get(i);
-        RexNodeVisitorInfo curInfo = visitRexNode(node, colNames, id, inputVar, false, ctx);
-        childExprs.add(new RexNodeVisitorInfo(curInfo.getExprCode()));
+        Expr curInfo = node.accept(translator);
+        childExprs.add(curInfo);
         childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
       }
       // Visit the order by key. This is required to be a single column.
       // The RHS of order keys is a set of SqlKind Values. These are used to stored information
       // about ascending and nulls first/last
       RexNode node = window.orderKeys.get(0).left;
-      RexNodeVisitorInfo curRexInfo = visitRexNode(node, colNames, id, inputVar, false, ctx);
-      childExprs.add(new RexNodeVisitorInfo(curRexInfo.getExprCode()));
+      Expr curRexInfo = node.accept(translator);
+      childExprs.add(curRexInfo);
       childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
       Variable outputVar = new Variable(this.genWindowedAggDfName());
       Expr outputCode =
           generateOptimizedEngineKernelCode(
-              inputVar, outputVar, aggOperations, childExprs, childExprTypes, this.generatedCode);
+              inputVar.getVariable().getName(),
+              outputVar,
+              aggOperations,
+              childExprs,
+              childExprTypes,
+              this.generatedCode);
 
-      return List.of(new RexNodeVisitorInfo(outputCode.emit()));
+      return Collections.singletonList(outputCode);
     }
 
     // Used to store each distinct window and the list of corresponding
@@ -1616,8 +1304,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
               fnNameList,
               respectNullsList,
               id,
-              inputVar,
-              ctx);
+              inputVar.getVariable().getName(),
+              translator);
 
       // Extract the dataframe whose columns contain the output(s) of the
       // window aggregation
@@ -1651,7 +1339,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Verify that all of the output columns were set
     assert !outputColExprs.contains(null);
 
-    List<RexNodeVisitorInfo> outputRexInfoList = new ArrayList<>();
+    List<Expr> outputRexInfoList = new ArrayList<>();
 
     for (int i = 0; i < outputColExprs.size(); i++) {
       if (isSingleRow) {
@@ -1677,9 +1365,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         // (e.g. bodo.utils.indexing.scalar_optional_getitem(T1_1, i))
         String returnExpr =
             "bodo.utils.indexing.scalar_optional_getitem(" + inputVar + "_" + colInd + ", i)";
-        outputRexInfoList.add(new RexNodeVisitorInfo(returnExpr));
+        outputRexInfoList.add(new Expr.Raw(returnExpr));
       } else {
-        outputRexInfoList.add(new RexNodeVisitorInfo(outputColExprs.get(i)));
+        outputRexInfoList.add(new Expr.Raw(outputColExprs.get(i)));
       }
     }
 
@@ -1699,8 +1387,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param names the names of the window functions.
    * @param id The RelNode id used to uniquely identify the table.
    * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
+   * @param translator A ctx object containing the Hashset of columns used that need null handling,
+   *     the List of precomputed column variables that need to be added to the dataframe before an
    *     apply, and the list of named parameters that need to be passed to an apply function as
    *     arguments.
    * @return A pair of arguments. The first is the string expression of the manipulated dataframe,
@@ -1716,7 +1404,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       List<Boolean> isRespectNulls,
       int id,
       String inputVar,
-      BodoCtx ctx) {
+      RexToPandasTranslator translator) {
 
     /*
     BASIC STEPS:
@@ -1749,7 +1437,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // All of these columns will be added to childExprs, and their expression types will be added to
     // exprTypes
     List<String> childExprNames = new ArrayList<>();
-    List<RexNodeVisitorInfo> childExprs = new ArrayList<>();
+    List<Expr> childExprs = new ArrayList<>();
     List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
     List<String> groupbyCols = new ArrayList<>();
 
@@ -1782,10 +1470,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // function text
     for (int i = 0; i < window.partitionKeys.size(); i++) {
       RexNode node = window.partitionKeys.get(i);
-      RexNodeVisitorInfo curInfo = visitRexNode(node, colNames, id, inputVar, false, ctx);
+      Expr curInfo = node.accept(translator);
       String colName = "GRPBY_COL_" + col_id_var++;
       childExprNames.add(colName);
-      childExprs.add(new RexNodeVisitorInfo(curInfo.getExprCode()));
+      childExprs.add(curInfo);
       groupbyCols.add(makeQuoted(colName));
       exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
     }
@@ -1803,19 +1491,19 @@ public class PandasCodeGenVisitor extends RelVisitor {
     for (int i = 0; i < window.orderKeys.size(); i++) {
       // The RHS of order keys is a set of SqlKind Values. I'm uncertain of what they are used for
       RexNode node = window.orderKeys.get(i).left;
-      RexNodeVisitorInfo curRexInfo = visitRexNode(node, colNames, id, inputVar, false, ctx);
+      Expr curRexInfo = node.accept(translator);
       RelFieldCollation.Direction dir = window.orderKeys.get(i).getDirection();
       RelFieldCollation.NullDirection nullDir = window.orderKeys.get(i).getNullDirection();
       if (dir == RelFieldCollation.Direction.ASCENDING) {
         String colName = "ASC_COL_" + col_id_var++;
         childExprNames.add(colName);
-        childExprs.add(new RexNodeVisitorInfo(curRexInfo.getExprCode()));
+        childExprs.add(curRexInfo);
         orderKeys.add(makeQuoted(colName));
       } else {
         assert dir == RelFieldCollation.Direction.DESCENDING;
         String colName = "DEC_COL_" + col_id_var++;
         childExprNames.add(colName);
-        childExprs.add(new RexNodeVisitorInfo(curRexInfo.getExprCode()));
+        childExprs.add(curRexInfo);
         orderKeys.add(makeQuoted(colName));
       }
       orderAscending.add(getAscendingBoolString(dir));
@@ -1853,9 +1541,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       } else {
         assert curAggOperation.getOperands().size() != 0;
         for (int i = 0; i < curAggOperation.getOperands().size(); i++) {
-          RexNodeVisitorInfo curInfo =
-              visitRexNode(
-                  curAggOperation.getOperands().get(i), colNames, id, inputVar, false, ctx);
+          Expr curInfo = curAggOperation.getOperands().get(i).accept(translator);
           if (i == 0 || WindowAggCodeGen.twoArgWindowOptimizedKernels.contains(names.get(j))) {
             // For the majority of aggregation functions, the first argument is the column on which
             // we perform the aggregation. Therefore, we add into the projection, so it will be a
@@ -1866,7 +1552,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               String curAggColName = "AGG_OP_" + cols_used;
               cols_used += 1;
               childExprNames.add(curAggColName);
-              childExprs.add(new RexNodeVisitorInfo(curInfo.getExprCode()));
+              childExprs.add(curInfo);
               BodoSQLExprType.ExprType curExprType =
                   exprTypesMap.get(
                       ExprTypeVisitor.generateRexNodeKey(curAggOperation.getOperands().get(i), id));
@@ -1874,7 +1560,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               curArgslist.add(WindowedAggregationArgument.fromColumnName(curAggColName));
             } else {
               // In the case of NTILE, it's always a scalar literal, so we just add it to argsList.
-              curArgslist.add(WindowedAggregationArgument.fromLiteralExpr(curInfo.getExprCode()));
+              curArgslist.add(WindowedAggregationArgument.fromLiteralExpr(curInfo.emit()));
             }
 
           } else {
@@ -1883,7 +1569,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             assert exprTypesMap.get(
                     ExprTypeVisitor.generateRexNodeKey(curAggOperation.getOperands().get(i), id))
                 == BodoSQLExprType.ExprType.SCALAR;
-            curArgslist.add(WindowedAggregationArgument.fromLiteralExpr(curInfo.getExprCode()));
+            curArgslist.add(WindowedAggregationArgument.fromLiteralExpr(curInfo.emit()));
           }
         }
       }
@@ -1916,7 +1602,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               colNames,
               id,
               inputVar,
-              ctx,
+              translator,
               zeroExpr);
       String upperBound =
           extractWindowBound(
@@ -1926,7 +1612,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               colNames,
               id,
               inputVar,
-              ctx,
+              translator,
               zeroExpr);
       lowerBoundedList.add(!lowerUnBound);
       upperBoundedList.add(!upperUnBound);
@@ -1939,7 +1625,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // back to the correct row
     // generateWindowedAggFn expects this column exists, and has the specified name.
     childExprNames.add(revertSortColumnName);
-    childExprs.add(new RexNodeVisitorInfo("np.arange(len(" + inputVar + "))"));
+    childExprs.add(new Expr.Raw("np.arange(len(" + inputVar + "))"));
     exprTypes.add(BodoSQLExprType.ExprType.COLUMN);
 
     // Create the projection of the input dataframe, which contains only the values which we require
@@ -2060,8 +1746,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param colNames List of colNames used in the relational expression
    * @param id The RelNode id used to uniquely identify the table.
    * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
+   * @param translator A ctx object containing the Hashset of columns used that need null handling,
+   *     the List of precomputed column variables that need to be added to the dataframe before an
    *     apply, and the list of named parameters that need to be passed to an apply function as
    *     arguments.
    * @param zeroExpr String representation of 0
@@ -2074,7 +1760,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       List<String> colNames,
       int id,
       String inputVar,
-      BodoCtx ctx,
+      RexToPandasTranslator translator,
       String zeroExpr) {
 
     if (bound.isUnbounded()) {
@@ -2087,11 +1773,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     if (bound.isPreceding()) {
       // choosing to represent preceding values as negative
       // doesn't require null checking, as value is either a literal or a column
-      result =
-          "-(" + visitRexNode(boundNode, colNames, id, inputVar, false, ctx).getExprCode() + ")";
+      result = "-(" + boundNode.accept(translator).emit() + ")";
       boundExprType = exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(boundNode, id));
     } else if (bound.isFollowing()) {
-      result = visitRexNode(boundNode, colNames, id, inputVar, false, ctx).getExprCode();
+      result = boundNode.accept(translator).emit();
       boundExprType = exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(boundNode, id));
     } else if (bound.isCurrentRow()) {
       result = zeroExpr;
@@ -2104,1125 +1789,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // We currently require scalar bounds
     assert boundExprType == BodoSQLExprType.ExprType.SCALAR;
     return result;
-  }
-
-  /**
-   * Return a pandas expression that replicates an SQL function call
-   *
-   * @param fnOperation Internal operator RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  private RexNodeVisitorInfo visitGenericFuncOp(
-      RexCall fnOperation,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-
-    String fnName = fnOperation.getOperator().toString();
-
-    List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
-    for (RexNode node : fnOperation.getOperands()) {
-      exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
-    }
-
-    // Handle IF, COALESCE, DECODE and their variants seperately
-    if (fnName == "COALESCE"
-        || fnName == "NVL"
-        || fnName == "NVL2"
-        || fnName == "BOOLAND"
-        || fnName == "BOOLOR"
-        || fnName == "BOOLXOR"
-        || fnName == "BOOLNOT"
-        || fnName == "EQUAL_NULL"
-        || fnName == "ZEROIFNULL"
-        || fnName == "IFNULL"
-        || fnName == "IF"
-        || fnName == "IFF"
-        || fnName == "DECODE") {
-      List<String> codeExprs = new ArrayList<>();
-      BodoCtx localCtx = new BodoCtx();
-      int j = 0;
-      for (RexNode operand : fnOperation.operands) {
-        RexNodeVisitorInfo operandInfo =
-            visitRexNode(operand, colNames, id, inputVar, isSingleRow, localCtx);
-        String expr = operandInfo.getExprCode();
-        // Need to unbox scalar timestamp values.
-        if (isSingleRow || (exprTypes.get(j) == BodoSQLExprType.ExprType.SCALAR)) {
-          expr = "bodo.utils.conversion.unbox_if_tz_naive_timestamp(" + expr + ")";
-        }
-        codeExprs.add(expr);
-        j++;
-      }
-
-      RexNodeVisitorInfo result;
-      switch (fnName) {
-        case "IF":
-        case "IFF":
-          result = visitIf(fnOperation, codeExprs);
-          break;
-        case "BOOLNOT":
-          result = getSingleArgCondFnInfo(fnName, codeExprs.get(0));
-          break;
-        case "BOOLAND":
-        case "BOOLOR":
-        case "BOOLXOR":
-        case "EQUAL_NULL":
-          result = getDoubleArgCondFnInfo(fnName, codeExprs.get(0), codeExprs.get(1));
-          break;
-        case "COALESCE":
-        case "ZEROIFNULL":
-        case "IFNULL":
-        case "NVL":
-        case "NVL2":
-        case "DECODE":
-          result = visitVariadic(fnOperation, codeExprs);
-          break;
-        default:
-          throw new BodoSQLCodegenException("Internal Error: reached unreachable code");
-      }
-
-      // If we're not the top level apply, we need to pass back the information so that it is
-      // properly handled by the actual top level apply
-      ctx.getColsToAddList().addAll(localCtx.getColsToAddList());
-      ctx.getNamedParams().addAll(localCtx.getNamedParams());
-      ctx.getUsedColumns().addAll(localCtx.getUsedColumns());
-
-      return result;
-    }
-
-    // These need to be final variable, to make java happy
-    final String tmp_input_val = inputVar;
-    // Extract all the inputs to the current function
-    List<RexNodeVisitorInfo> operandsInfo =
-        new ArrayList<RexNodeVisitorInfo>() {
-          {
-            for (RexNode operand : fnOperation.operands) {
-              add(visitRexNode(operand, colNames, id, tmp_input_val, isSingleRow, ctx));
-            }
-          }
-        };
-
-    String expr;
-    String strExpr;
-    DateTimeType dateTimeExprType;
-    boolean isTime;
-    String unit;
-    String tzStr;
-    switch (fnOperation.getOperator().kind) {
-      case CEIL:
-      case FLOOR:
-        return getSingleArgNumericFnInfo(
-            fnOperation.getOperator().toString(), operandsInfo.get(0).getExprCode());
-      case MOD:
-        return getDoubleArgNumericFnInfo(
-            fnOperation.getOperator().toString(),
-            operandsInfo.get(0).getExprCode(),
-            operandsInfo.get(1).getExprCode());
-      case TIMESTAMP_ADD:
-        // Uses Calcite parser, accepts both quoted and unquoted time units
-        dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(2));
-        unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), dateTimeExprType);
-        assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
-        return generateSnowflakeDateAddCode(operandsInfo, unit);
-      case TIMESTAMP_DIFF:
-        assert operandsInfo.size() == 3;
-        dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-        if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
-          throw new BodoSQLCodegenException(
-              "Invalid type of arguments to TIMESTAMPDIFF: arg1 and arg2 must be the same type."
-          );
-        unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), dateTimeExprType);
-        return generateTimestampDiffInfo(operandsInfo, unit);
-      case TRIM:
-        assert operandsInfo.size() == 3;
-        // Calcite expects: TRIM(<chars> FROM <expr>>) or TRIM(<chars>, <expr>)
-        // However, Snowflake/BodoSQL expects: TRIM(<expr>, <chars>)
-        // So we just need to swap the arguments here.
-        return generateTrimFnInfo(
-            fnOperation.getOperator().toString(), operandsInfo.get(2), operandsInfo.get(1));
-      case NULLIF:
-        assert operandsInfo.size() == 2;
-        expr =
-            "bodo.libs.bodosql_array_kernels.nullif("
-                + operandsInfo.get(0).getExprCode()
-                + ", "
-                + operandsInfo.get(1).getExprCode()
-                + ")";
-        return new RexNodeVisitorInfo(expr);
-
-      case POSITION:
-        return generatePosition(operandsInfo);
-      case OTHER:
-      case OTHER_FUNCTION:
-        /* If sqlKind = other function, the only recourse is to match on the name of the function. */
-        switch (fnName) {
-            // TODO (allai5): update this in a future PR for clean-up so it re-uses the
-            // SQLLibraryOperator definition.
-          case "LTRIM":
-          case "RTRIM":
-            if (operandsInfo.size() == 1) { // no optional characters to be trimmed
-              return generateTrimFnInfo(
-                  fnName,
-                  operandsInfo.get(0),
-                  new RexNodeVisitorInfo("' '")); // remove spaces by default
-            } else if (operandsInfo.size() == 2) {
-              return generateTrimFnInfo(fnName, operandsInfo.get(0), operandsInfo.get(1));
-            } else {
-              throw new BodoSQLCodegenException(
-                  "Invalid number of arguments to TRIM: must be either 1 or 2.");
-            }
-          case "WIDTH_BUCKET":
-            {
-              int numOps = operandsInfo.size();
-              assert numOps == 4 : "WIDTH_BUCKET takes 4 arguments, but found " + numOps;
-              StringBuilder exprCode =
-                  new StringBuilder("bodo.libs.bodosql_array_kernels.width_bucket(");
-              for (int i = 0; i < numOps; i++) {
-                exprCode.append(operandsInfo.get(i).getExprCode());
-                if (i != (numOps - 1)) {
-                  exprCode.append(", ");
-                }
-              }
-              exprCode.append(")");
-              return new RexNodeVisitorInfo(exprCode.toString());
-            }
-          case "HAVERSINE":
-            {
-              assert operandsInfo.size() == 4;
-              StringBuilder exprCode =
-                  new StringBuilder("bodo.libs.bodosql_array_kernels.haversine(");
-              int numOps = fnOperation.operands.size();
-              for (int i = 0; i < numOps; i++) {
-                exprCode.append(operandsInfo.get(i).getExprCode());
-                if (i != (numOps - 1)) {
-                  exprCode.append(", ");
-                }
-              }
-              exprCode.append(")");
-              return new RexNodeVisitorInfo(exprCode.toString());
-            }
-          case "DIV0":
-            {
-              assert operandsInfo.size() == 2 && fnOperation.operands.size() == 2;
-              StringBuilder exprCode = new StringBuilder("bodo.libs.bodosql_array_kernels.div0(");
-              exprCode.append(operandsInfo.get(0).getExprCode());
-              exprCode.append(", ");
-              exprCode.append(operandsInfo.get(1).getExprCode());
-              exprCode.append(")");
-              return new RexNodeVisitorInfo(exprCode.toString());
-            }
-          case "NULLIFZERO":
-            assert operandsInfo.size() == 1;
-            String exprCode =
-                "bodo.libs.bodosql_array_kernels.nullif("
-                    + operandsInfo.get(0).getExprCode()
-                    + ", 0)";
-            return new RexNodeVisitorInfo(exprCode);
-          case "DATEADD":
-          case "TIMEADD":
-            // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
-            // Otherwise, fall back to the normal DATEADD. TIMEADD and TIMESTAMPADD are aliases.
-            if (operandsInfo.size() == 3) {
-              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(2));
-              unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), dateTimeExprType);
-              assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
-              return generateSnowflakeDateAddCode(operandsInfo, unit);
-            }
-          case "DATE_ADD":
-          case "ADDDATE":
-          case "SUBDATE":
-          case "DATE_SUB":
-            assert operandsInfo.size() == 2;
-            // If the second argument is a timedelta, switch to manual addition
-            boolean manual_addition =
-                SqlTypeName.INTERVAL_TYPES.contains(
-                    fnOperation.getOperands().get(1).getType().getSqlTypeName());
-            // Cast arg0 to from string to timestamp, if needed
-            if (SqlTypeName.STRING_TYPES.contains(
-                fnOperation.getOperands().get(0).getType().getSqlTypeName())) {
-              RelDataType inputType = fnOperation.getOperands().get(0).getType();
-              // The output type will always be the timestamp the string is being cast to.
-              RelDataType outputType = fnOperation.getType();
-              String casted_expr =
-                  generateCastCode(
-                      operandsInfo.get(0).getExprCode(),
-                      inputType,
-                      outputType,
-                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow,
-                      useDateRuntime);
-              operandsInfo.set(0, new RexNodeVisitorInfo(casted_expr));
-            }
-
-            String arg1Expr = operandsInfo.get(1).getExprCode();
-            String addExpr =
-                generateMySQLDateAddCode(
-                    operandsInfo.get(0).getExprCode(), arg1Expr, manual_addition, fnName);
-            return new RexNodeVisitorInfo(addExpr);
-
-          case "DATEDIFF":
-            RexNodeVisitorInfo arg1;
-            RexNodeVisitorInfo arg2;
-            unit = "DAY";
-
-            if (operandsInfo.size() == 2) {
-              arg1 = operandsInfo.get(1);
-              arg2 = operandsInfo.get(0);
-              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-              if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(0)))
-                throw new BodoSQLCodegenException(
-                    "Invalid type of arguments to DATEDIFF: arg0 and arg1 must be the same type."
-                );
-            } else if (operandsInfo.size() == 3) { // this is the Snowflake option
-              unit = operandsInfo.get(0).getExprCode();
-              arg1 = operandsInfo.get(1);
-              arg2 = operandsInfo.get(2);
-              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-              if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
-                throw new BodoSQLCodegenException(
-                    "Invalid type of arguments to DATEDIFF: arg1 and arg2 must be the same type."
-                );
-            } else {
-              throw new BodoSQLCodegenException(
-                  "Invalid number of arguments to DATEDIFF: must be 2 or 3.");
-            }
-            unit = standardizeTimeUnit(fnName, unit, dateTimeExprType);
-            return generateDateDiffFnInfo(unit, arg1, arg2);
-          case "TIMEDIFF":
-            assert operandsInfo.size() == 3;
-            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-            if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
-              throw new BodoSQLCodegenException(
-                  "Invalid type of arguments to TIMEDIFF: arg1 and arg2 must be the same type."
-              );
-            unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), dateTimeExprType);
-            arg1 = operandsInfo.get(1);
-            arg2 = operandsInfo.get(2);
-            return generateDateDiffFnInfo(unit, arg1, arg2);
-          case "STR_TO_DATE":
-            assert operandsInfo.size() == 2;
-            // Format string should be a string literal.
-            // This is required by the function definition.
-            if (!(fnOperation.operands.get(1) instanceof RexLiteral)) {
-              throw new BodoSQLCodegenException(
-                  "Error STR_TO_DATE(): 'Format' must be a string literal");
-            }
-            strExpr =
-                generateStrToDateCode(
-                    operandsInfo.get(0).getExprCode(),
-                    exprTypes.get(0),
-                    operandsInfo.get(1).getExprCode());
-            return new RexNodeVisitorInfo(strExpr);
-          case "TIMESTAMP":
-            return generateTimestampFnCode(operandsInfo.get(0).getExprCode());
-          case "DATE":
-            return generateDateFnCode(operandsInfo.get(0).getExprCode());
-          case "TO_DATE":
-          case "TRY_TO_DATE":
-            return generateToDateFnCode(operandsInfo, fnName);
-          case "TO_TIMESTAMP":
-          case "TO_TIMESTAMP_NTZ":
-          case "TO_TIMESTAMP_LTZ":
-          case "TO_TIMESTAMP_TZ":
-          case "TRY_TO_TIMESTAMP":
-          case "TRY_TO_TIMESTAMP_NTZ":
-          case "TRY_TO_TIMESTAMP_LTZ":
-          case "TRY_TO_TIMESTAMP_TZ":
-            tzStr = "None";
-            if (fnOperation.getType() instanceof TZAwareSqlType) {
-              tzStr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getPyZone();
-            }
-            return generateToTimestampFnCode(
-                operandsInfo, fnOperation.getOperands(), tzStr, fnName);
-          case "TRY_TO_BOOLEAN":
-          case "TO_BOOLEAN":
-            return generateToBooleanFnCode(operandsInfo, fnName);
-          case "TRY_TO_BINARY":
-          case "TO_BINARY":
-            return generateToBinaryFnCode(operandsInfo, fnName);
-          case "TO_CHAR":
-          case "TO_VARCHAR":
-            return generateToCharFnCode(operandsInfo, fnName);
-          case "TO_DOUBLE":
-          case "TRY_TO_DOUBLE":
-            return generateToDoubleFnCode(operandsInfo, fnName);
-          case "ASINH":
-          case "ACOSH":
-          case "ATANH":
-          case "SINH":
-          case "COSH":
-          case "TANH":
-          case "COS":
-          case "SIN":
-          case "TAN":
-          case "COT":
-          case "ACOS":
-          case "ASIN":
-          case "ATAN":
-          case "DEGREES":
-          case "RADIANS":
-            return getSingleArgTrigFnInfo(fnName, operandsInfo.get(0).getExprCode());
-          case "ATAN2":
-            return getDoubleArgTrigFnInfo(
-                fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(1).getExprCode());
-          case "ABS":
-          case "CBRT":
-          case "EXP":
-          case "FACTORIAL":
-          case "LOG2":
-          case "LOG10":
-          case "LN":
-          case "SIGN":
-          case "SQUARE":
-          case "SQRT":
-          case "BITNOT":
-            return getSingleArgNumericFnInfo(fnName, operandsInfo.get(0).getExprCode());
-          case "POWER":
-          case "POW":
-          case "BITAND":
-          case "BITOR":
-          case "BITXOR":
-          case "BITSHIFTLEFT":
-          case "BITSHIFTRIGHT":
-          case "GETBIT":
-            return getDoubleArgNumericFnInfo(
-                fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(1).getExprCode());
-          case "TRUNC":
-          case "TRUNCATE":
-          case "ROUND":
-            String arg1_expr_code;
-            if (operandsInfo.size() == 1) {
-              // If no value is specified by, default to 0
-              arg1_expr_code = "0";
-            } else {
-              assert operandsInfo.size() == 2;
-              arg1_expr_code = operandsInfo.get(1).getExprCode();
-            }
-            return getDoubleArgNumericFnInfo(
-                fnName, operandsInfo.get(0).getExprCode(), arg1_expr_code);
-
-          case "LOG":
-            return generateLogFnInfo(operandsInfo, exprTypes, isSingleRow);
-          case "CONV":
-            assert operandsInfo.size() == 3;
-            strExpr =
-                generateConvCode(
-                    operandsInfo.get(0).getExprCode(),
-                    operandsInfo.get(1).getExprCode(),
-                    operandsInfo.get(2).getExprCode(),
-                    isSingleRow
-                        || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id))
-                            == BodoSQLExprType.ExprType.SCALAR));
-            return new RexNodeVisitorInfo(strExpr);
-          case "RAND":
-            return new RexNodeVisitorInfo("np.random.rand()");
-          case "PI":
-            return new RexNodeVisitorInfo("np.pi");
-          case "CONCAT":
-            return generateConcatFnInfo(operandsInfo);
-          case "CONCAT_WS":
-            assert operandsInfo.size() >= 2;
-            return generateConcatWSFnInfo(
-                operandsInfo.get(0), operandsInfo.subList(1, operandsInfo.size()));
-          case "GETDATE":
-          case "CURRENT_TIMESTAMP":
-          case "NOW":
-          case "LOCALTIMESTAMP":
-          case "SYSTIMESTAMP":
-            assert operandsInfo.size() == 0;
-            assert fnOperation.getType() instanceof TZAwareSqlType;
-            BodoTZInfo tzTimestampInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo();
-            return generateCurrTimestampCode(fnName, tzTimestampInfo);
-          case "CURRENT_TIME":
-          case "LOCALTIME":
-            assert operandsInfo.size() == 0;
-            BodoTZInfo tzTimeInfo = this.typeSystem.getDefaultTZInfo();
-            return generateCurrTimeCode(fnName, tzTimeInfo);
-          case "SYSDATE":
-          case "UTC_TIMESTAMP":
-            assert operandsInfo.size() == 0;
-            return generateUTCTimestampCode(fnName);
-          case "UTC_DATE":
-            assert operandsInfo.size() == 0;
-            return generateUTCDateCode();
-          case "MAKEDATE":
-            assert operandsInfo.size() == 2;
-            return generateMakeDateInfo(operandsInfo.get(0), operandsInfo.get(1));
-          case "DATE_FORMAT":
-            if (!(operandsInfo.size() == 2
-                && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid argument types passed to DATE_FORMAT");
-            }
-            if (!(fnOperation.operands.get(1) instanceof RexLiteral)) {
-              throw new BodoSQLCodegenException(
-                  "Error DATE_FORMAT(): 'Format' must be a string literal");
-            }
-            return generateDateFormatCode(
-                operandsInfo.get(0), exprTypes.get(0), operandsInfo.get(1), isSingleRow);
-          case "CURRENT_DATE":
-          case "CURDATE":
-            assert operandsInfo.size() == 0;
-            return generateCurdateCode(fnName);
-          case "YEARWEEK":
-            assert operandsInfo.size() == 1;
-            return getYearWeekFnInfo(operandsInfo.get(0));
-          case "MONTHNAME":
-          case "MONTH_NAME":
-          case "DAYNAME":
-          case "WEEKDAY":
-          case "LAST_DAY":
-          case "YEAROFWEEK":
-          case "YEAROFWEEKISO":
-            assert operandsInfo.size() == 1;
-            if (getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.TIME)
-              throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
-            return getSingleArgDatetimeFnInfo(fnName, operandsInfo.get(0).getExprCode());
-          case "NEXT_DAY":
-          case "PREVIOUS_DAY":
-            assert operandsInfo.size() == 2;
-            if (getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.TIME)
-              throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
-            return getDoubleArgDatetimeFnInfo(
-                fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(1).getExprCode());
-          case "DATE_PART":
-            assert operandsInfo.size() == 2;
-            assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
-            isTime =
-                fnOperation
-                    .getOperands()
-                    .get(1)
-                    .getType()
-                    .getSqlTypeName()
-                    .toString()
-                    .equals("TIME");
-            return generateDatePart(operandsInfo, isTime);
-          case "TO_DAYS":
-            return generateToDaysCode(operandsInfo.get(0));
-          case "TO_SECONDS":
-            return generateToSecondsCode(operandsInfo.get(0));
-          case "FROM_DAYS":
-            return generateFromDaysCode(operandsInfo.get(0));
-          case "TIME":
-          case "TO_TIME":
-            return generateToTimeCode(
-                fnOperation.getOperands().get(0).getType().getSqlTypeName(),
-                operandsInfo.get(0),
-                fnName);
-          case "DATE_FROM_PARTS":
-          case "DATEFROMPARTS":
-            tzStr = "None";
-            assert operandsInfo.size() == 3;
-            return generateDateTimeTypeFromPartsCode(fnName, operandsInfo, tzStr);
-          case "TIMEFROMPARTS":
-          case "TIME_FROM_PARTS":
-          case "TIMESTAMP_FROM_PARTS":
-          case "TIMESTAMPFROMPARTS":
-          case "TIMESTAMP_NTZ_FROM_PARTS":
-          case "TIMESTAMPNTZFROMPARTS":
-          case "TIMESTAMP_LTZ_FROM_PARTS":
-          case "TIMESTAMPLTZFROMPARTS":
-          case "TIMESTAMP_TZ_FROM_PARTS":
-          case "TIMESTAMPTZFROMPARTS":
-            tzStr = "None";
-            if (fnOperation.getType() instanceof TZAwareSqlType) {
-              tzStr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getPyZone();
-            }
-            return generateDateTimeTypeFromPartsCode(fnName, operandsInfo, tzStr);
-          case "TO_NUMBER":
-          case "TO_NUMERIC":
-          case "TO_DECIMAL":
-            return generateToNumberCode(operandsInfo.get(0), fnName);
-          case "TRY_TO_NUMBER":
-          case "TRY_TO_NUMERIC":
-          case "TRY_TO_DECIMAL":
-            return generateTryToNumberCode(operandsInfo.get(0), fnName);
-          case "UNIX_TIMESTAMP":
-            return generateUnixTimestamp();
-          case "FROM_UNIXTIME":
-            return generateFromUnixTimeCode(operandsInfo.get(0));
-          case "JSON_EXTRACT_PATH_TEXT":
-            return generateJsonTwoArgsInfo(fnName, operandsInfo.get(0), operandsInfo.get(1));
-          case "RLIKE":
-          case "REGEXP_LIKE":
-            if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 3)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid number of arguments passed to REGEXP_LIKE");
-            }
-            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
-                || (operandsInfo.size() == 3
-                    && exprTypes.get(2) != BodoSQLExprType.ExprType.SCALAR)) {
-              throw new BodoSQLCodegenException(
-                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
-            }
-            return generateRegexpLikeInfo(operandsInfo);
-          case "REGEXP_COUNT":
-            if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 4)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid number of arguments passed to REGEXP_COUNT");
-            }
-            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
-                || (operandsInfo.size() == 4
-                    && exprTypes.get(3) != BodoSQLExprType.ExprType.SCALAR)) {
-              throw new BodoSQLCodegenException(
-                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
-            }
-            return generateRegexpCountInfo(operandsInfo);
-          case "REGEXP_REPLACE":
-            if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 6)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid number of arguments passed to REGEXP_REPLACE");
-            }
-            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
-                || (operandsInfo.size() == 6
-                    && exprTypes.get(5) != BodoSQLExprType.ExprType.SCALAR)) {
-              throw new BodoSQLCodegenException(
-                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
-            }
-            return generateRegexpReplaceInfo(operandsInfo);
-          case "REGEXP_SUBSTR":
-            if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 6)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid number of arguments passed to REGEXP_SUBSTR");
-            }
-            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
-                || (operandsInfo.size() > 4
-                    && exprTypes.get(4) != BodoSQLExprType.ExprType.SCALAR)) {
-              throw new BodoSQLCodegenException(
-                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
-            }
-            return generateRegexpSubstrInfo(operandsInfo);
-          case "REGEXP_INSTR":
-            if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 7)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid number of arguments passed to REGEXP_INSTR");
-            }
-            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
-                || (operandsInfo.size() > 5
-                    && exprTypes.get(5) != BodoSQLExprType.ExprType.SCALAR)) {
-              throw new BodoSQLCodegenException(
-                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
-            }
-            return generateRegexpInstrInfo(operandsInfo);
-          case "ORD":
-          case "ASCII":
-          case "CHAR":
-          case "CHR":
-          case "CHAR_LENGTH":
-          case "CHARACTER_LENGTH":
-          case "LEN":
-          case "LENGTH":
-          case "REVERSE":
-          case "LCASE":
-          case "LOWER":
-          case "UCASE":
-          case "UPPER":
-          case "SPACE":
-          case "RTRIMMED_LENGTH":
-            if (operandsInfo.size() != 1) {
-              throw new BodoSQLCodegenException(fnName + " requires providing only 1 argument");
-            }
-            return getSingleArgStringFnInfo(fnName, operandsInfo.get(0).getExprCode());
-          case "FORMAT":
-          case "REPEAT":
-          case "STRCMP":
-          case "RIGHT":
-          case "LEFT":
-          case "CONTAINS":
-          case "INSTR":
-          case "STARTSWITH":
-          case "ENDSWITH":
-            if (operandsInfo.size() != 2) {
-              throw new BodoSQLCodegenException(fnName + " requires providing only 2 arguments");
-            }
-            return getTwoArgStringFnInfo(
-                fnName, inputVar, operandsInfo.get(0), operandsInfo.get(1));
-          case "RPAD":
-          case "LPAD":
-          case "SPLIT_PART":
-          case "REPLACE":
-          case "MID":
-          case "SUBSTR":
-          case "SUBSTRING_INDEX":
-          case "TRANSLATE3":
-            if (operandsInfo.size() != 3) {
-              throw new BodoSQLCodegenException(fnName + " requires providing only 3 argument");
-            }
-            return getThreeArgStringFnInfo(
-                fnName, operandsInfo.get(0), operandsInfo.get(1), operandsInfo.get(2));
-          case "INSERT":
-            return generateInsert(operandsInfo);
-          case "POSITION":
-          case "CHARINDEX":
-            return generatePosition(operandsInfo);
-          case "STRTOK":
-            return generateStrtok(operandsInfo);
-          case "EDITDISTANCE":
-            return generateEditdistance(operandsInfo);
-          case "INITCAP":
-            return generateInitcapInfo(operandsInfo);
-          case "DATE_TRUNC":
-            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-            unit = standardizeTimeUnit(fnName, operandsInfo.get(0).getExprCode(), dateTimeExprType);
-            return generateDateTruncCode(unit, operandsInfo.get(1));
-          case "MICROSECOND":
-          case "SECOND":
-          case "MINUTE":
-          case "DAY":
-          case "DAYOFYEAR":
-          case "DAYOFWEEK":
-          case "DAYOFWEEKISO":
-          case "DAYOFMONTH":
-          case "HOUR":
-          case "MONTH":
-          case "QUARTER":
-          case "YEAR":
-          case "WEEK":
-          case "WEEKOFYEAR":
-          case "WEEKISO":
-            isTime =
-                fnOperation
-                    .getOperands()
-                    .get(0)
-                    .getType()
-                    .getSqlTypeName()
-                    .toString()
-                    .equals("TIME");
-            return new RexNodeVisitorInfo(
-                generateExtractCode(fnName, operandsInfo.get(0).getExprCode(), isTime));
-          case "REGR_VALX":
-          case "REGR_VALY":
-            return getDoubleArgCondFnInfo(
-                fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(1).getExprCode());
-        }
-      default:
-        throw new BodoSQLCodegenException(
-            "Internal Error: Function: " + fnOperation.getOperator().toString() + " not supported");
-    }
-  }
-
-  /**
-   * Visitor for RexNodes which are created as internal SQL operations within calcite.
-   *
-   * <p>Return a relational expression in Pandas that implements the LIKE operator. LIKE filters its
-   * input based on a regular expression. The SQL wildcards include '%' and '_' which respectively
-   * map to '.*' and '.' in Posix.
-   *
-   * <p>Notably, this function matches case sensitively to match with pyspark.sql. This is different
-   * from other versions of SQL such as MySQL, which match case insensitively.
-   *
-   * @param node Internal operator RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  private RexNodeVisitorInfo visitLikeOp(
-      RexCall node,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-
-    // The input node has ${index} as its first operand, where
-    // ${index} is something like $3, and a SQL regular expression
-    // as its second operand. If there is an escape value it will
-    // be the third value, although it is not required and only supported
-    // for LIKE and ILIKE
-    String opName = node.getOperator().getName();
-    List<RexNode> operands = node.getOperands();
-    RexNode colIndex = operands.get(0);
-    RexNodeVisitorInfo arg = visitRexNode(colIndex, colNames, id, inputVar, isSingleRow, ctx);
-    String argCode = arg.getExprCode();
-    RexNode patternNode = operands.get(1);
-
-    // The regular expression functions only support literal patterns
-    if ((opName.equals("REGEXP") || opName.equals("RLIKE"))
-        && !(patternNode instanceof RexLiteral)) {
-      throw new BodoSQLCodegenException(
-          String.format("%s Error: Pattern must be a string literal", opName));
-    }
-    RexNodeVisitorInfo pattern =
-        visitRexNode(patternNode, colNames, id, inputVar, isSingleRow, ctx);
-    String sqlPattern = pattern.getExprCode();
-    // If escape is missing use the empty string.
-    String sqlEscape = "''";
-    if (operands.size() == 3) {
-      RexNode escapeNode = operands.get(2);
-      RexNodeVisitorInfo escape =
-          visitRexNode(escapeNode, colNames, id, inputVar, isSingleRow, ctx);
-      sqlEscape = escape.getExprCode();
-    }
-    /* Assumption: Typing in LIKE requires this to be a string type. */
-    String likeCode = generateLikeCode(opName, argCode, sqlPattern, sqlEscape);
-    return new RexNodeVisitorInfo(likeCode);
-  }
-
-  /**
-   * Visitor for RexNodes which are created as internal SQL operations within calcite
-   *
-   * <p>Use the slice command to recreate functionality of substring.
-   *
-   * @param node Internal operator RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  private RexNodeVisitorInfo visitSubstringScan(
-      RexCall node,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    // node.operands contains
-    //  * String to perform the substring operation on
-    //  * start index
-    //  * substring length
-    //  All of these values can be both scalars and columns
-    assert node.operands.size() == 3;
-    List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
-    for (RexNode operand_node : node.operands) {
-      exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operand_node, id)));
-    }
-    List<RexNodeVisitorInfo> operandsInfo = new ArrayList<>();
-    for (RexNode childNode : node.operands) {
-      operandsInfo.add(visitRexNode(childNode, colNames, id, inputVar, isSingleRow, ctx));
-    }
-    String fnName = node.getOperator().getName();
-    return getThreeArgStringFnInfo(
-        fnName, operandsInfo.get(0), operandsInfo.get(1), operandsInfo.get(2));
-  }
-
-  /**
-   * Visitor for RexNodes which are created as internal SQL operations within calcite
-   *
-   * @param node Internal operator RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  private RexNodeVisitorInfo visitInternalOp(
-      RexCall node,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    RexNodeVisitorInfo result;
-    String expr;
-    SqlKind sqlOp = node.getOperator().getKind();
-    switch (sqlOp) {
-        /* TODO(Ritwika): investigate more possible internal operations as result of optimization rules*/
-      case SEARCH:
-
-        // Determine if we can use the optimized is_in codepath. We can take this codepath if
-        // the second argument (the elements to search for) consists of exclusively discrete values,
-        // and
-        // we are not inside a case statement.
-        // We can't use the optimized implementation within a case statement due to the Sarg array
-        // being
-        // lowered as a global, and we can't lower globals within a case statement, as
-        // bodosql_case_placeholder
-        // doesn't have the doesn't have the same global state as
-        // the rest of the main generated code
-        SqlTypeName search_val_type = node.getOperands().get(1).getType().getSqlTypeName();
-        // TODO: add testing/support for sql types other than string/int:
-        // https://bodo.atlassian.net/browse/BE-4046
-        // TODO: allow lowering globals within case statements in BodoSQL:
-        //
-        boolean can_use_isin_codegen =
-            !isSingleRow
-                & (SqlTypeName.STRING_TYPES.contains(search_val_type)
-                    || SqlTypeName.INT_TYPES.contains(search_val_type));
-
-        RexLiteral sargNode = (RexLiteral) node.getOperands().get(1);
-        Sarg sargVal = (Sarg) sargNode.getValue();
-        Iterator<Range> iter = sargVal.rangeSet.asRanges().iterator();
-        // We expect the range to have at least one value,
-        // otherwise, this search should have been optimized out
-        assert iter.hasNext() : "Internal Error: search Sarg literal had no elements";
-        while (iter.hasNext() && can_use_isin_codegen) {
-          Range curRange = iter.next();
-          // Assert that each element of the range is scalar.
-          if (!(curRange.hasLowerBound()
-              && curRange.hasUpperBound()
-              && curRange.upperEndpoint() == curRange.lowerEndpoint())) {
-            can_use_isin_codegen = false;
-          }
-        }
-
-        if (can_use_isin_codegen) {
-          // use the isin array kernel in the case
-          // that the second argument does consists of
-          // exclusively discrete values
-          RexNodeVisitorInfo arg0Info =
-              visitRexNode(node.getOperands().get(0), colNames, id, inputVar, isSingleRow, ctx);
-          RexNodeVisitorInfo arg1Info =
-              visitRexNode(sargNode, colNames, id, inputVar, isSingleRow, ctx);
-
-          expr =
-              "bodo.libs.bodosql_array_kernels.is_in("
-                  + arg0Info.getExprCode()
-                  + ", "
-                  + arg1Info.getExprCode()
-                  + ")";
-          result = new RexNodeVisitorInfo(expr);
-        } else {
-          // Fallback to generating individual checks
-          // in the case that the second argument does not consist of
-          // exclusively discrete values
-
-          // Lookup the expanded nodes previously generated
-          result =
-              visitRexNode(
-                  searchMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)),
-                  colNames,
-                  id,
-                  inputVar,
-                  isSingleRow,
-                  ctx);
-        }
-
-        break;
-      default:
-        throw new BodoSQLCodegenException(
-            "Internal Error: Calcite Plan Produced an Internal Operator");
-    }
-    return result;
-  }
-
-  /**
-   * Visitor for RexCall with Binary Operator
-   *
-   * @param operation Binary operator RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  private RexNodeVisitorInfo visitBinOpScan(
-      RexCall operation,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    List<String> args = new ArrayList<>();
-    List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
-    SqlOperator binOp = operation.getOperator();
-    // Store the argument types for TZ-Aware data
-    List<RelDataType> argDataTypes = new ArrayList<>();
-    for (RexNode operand : operation.operands) {
-      RexNodeVisitorInfo info = visitRexNode(operand, colNames, id, inputVar, isSingleRow, ctx);
-      args.add(info.getExprCode());
-      exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operand, id)));
-      argDataTypes.add(operand.getType());
-    }
-    if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
-      // Support the concat operator by using the concat array kernel.
-      List<RexNodeVisitorInfo> argInfos = new ArrayList<>();
-      for (String arg : args) {
-        argInfos.add(new RexNodeVisitorInfo(arg));
-      }
-      return generateConcatFnInfo(argInfos);
-    }
-    String codeGen = generateBinOpCode(args, binOp, argDataTypes);
-    return new RexNodeVisitorInfo(codeGen);
-  }
-
-  /**
-   * Visitor for RexCall with a Postfix Operator
-   *
-   * @param operation Postfix operator RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  private RexNodeVisitorInfo visitPostfixOpScan(
-      RexCall operation,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    RexNodeVisitorInfo seriesOp =
-        visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
-    String codeExpr = generatePostfixOpCode(seriesOp.getExprCode(), operation.getOperator());
-    return new RexNodeVisitorInfo(codeExpr);
-  }
-
-  /**
-   * Visitor for RexCall with a Prefix Operator
-   *
-   * @param operation Prefix operator RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  private RexNodeVisitorInfo visitPrefixOpScan(
-      RexCall operation,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    RexNodeVisitorInfo seriesOp =
-        visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
-    String codeExpr = generatePrefixOpCode(seriesOp.getExprCode(), operation.getOperator());
-    return new RexNodeVisitorInfo(codeExpr);
-  }
-
-  /**
-   * Visitor for RexCall which needs casting to proper data type
-   *
-   * @param operation Casting RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  public RexNodeVisitorInfo visitCastScan(
-      RexCall operation,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    RelDataType inputType = operation.operands.get(0).getType();
-    RelDataType outputType = operation.getType();
-
-    boolean outputScalar =
-        isSingleRow
-            || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operation, id))
-                == BodoSQLExprType.ExprType.SCALAR);
-    RexNodeVisitorInfo child =
-        visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
-    String exprCode =
-        generateCastCode(child.getExprCode(), inputType, outputType, outputScalar, useDateRuntime);
-    return new RexNodeVisitorInfo(exprCode);
-  }
-
-  /**
-   * Visitor for RexInputRef : Input References in relational expressions.
-   *
-   * @param node RexInputRef being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  public RexNodeVisitorInfo visitInputRef(
-      RexInputRef node, List<String> colNames, String inputVar, boolean isSingleRow, BodoCtx ctx) {
-    String refValue =
-        String.format(
-            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(%s, %d)", inputVar, node.getIndex());
-    if (isSingleRow) {
-      ctx.getUsedColumns().add(node.getIndex());
-      // NOTE: Codegen for bodosql_case_placeholder() expects column value accesses
-      // (e.g. bodo.utils.indexing.scalar_optional_getitem(T1_1, i))
-      refValue =
-          "bodo.utils.indexing.scalar_optional_getitem("
-              + inputVar
-              + "_"
-              + node.getIndex()
-              + ", i)";
-    }
-    return new RexNodeVisitorInfo(refValue);
-  }
-
-  /**
-   * Visitor for RexNamedParam : Parameters to Bodo Functions for scalars.
-   *
-   * @param node RexNamedParam being visited
-   * @return RexNodeVisitorInfo containing the new RexNamedParam name and the code generated for the
-   *     RexNamedParam.
-   */
-  public RexNodeVisitorInfo visitRexNamedParam(RexNamedParam node, BodoCtx ctx) {
-    String paramName = node.getName();
-    // We just return the node name because that should match the input variable name
-    ctx.getNamedParams().add(paramName);
-    return new RexNodeVisitorInfo(paramName);
   }
 
   /**
@@ -3249,7 +1815,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public void visitTableScan(TableScan node, boolean canLoadFromCache) {
 
-    if (!(node instanceof LogicalTableScan || node instanceof LogicalTargetTableScan)) {
+    boolean supportedTableScan =
+        node instanceof LogicalTableScan || node instanceof LogicalTargetTableScan;
+    if (!supportedTableScan) {
       throw new BodoSQLCodegenException(
           "Internal error: unsupported tableScan node generated:" + node.toString());
     }
@@ -3454,5 +2022,17 @@ public class PandasCodeGenVisitor extends RelVisitor {
               .toString();
       this.generatedCode.append(msgString);
     }
+  }
+
+  private RexToPandasTranslator getRexTranslator(RelNode self, String inVar, RelNode input) {
+    return getRexTranslator(self, new Dataframe(inVar, input));
+  }
+
+  private RexToPandasTranslator getRexTranslator(RelNode self, Dataframe input) {
+    return getRexTranslator(self.getId(), input);
+  }
+
+  private RexToPandasTranslator getRexTranslator(int nodeId, Dataframe input) {
+    return new RexToPandasTranslator(this, this.generatedCode, this.typeSystem, nodeId, input);
   }
 }

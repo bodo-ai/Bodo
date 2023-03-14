@@ -1,7 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.RexNodeVisitorInfo;
+import com.bodosql.calcite.ir.Expr;
 import java.util.List;
 
 /**
@@ -17,20 +16,19 @@ public class DateAddCodeGen {
    * @param operandsInfo the list of arguments (UNIT, AMOUNT, START_DATETIME)
    * @return The code generated that matches the DATEADD expression.
    */
-  public static RexNodeVisitorInfo generateSnowflakeDateAddCode(
-      List<RexNodeVisitorInfo> operandsInfo, String unit) {
+  public static String generateSnowflakeDateAddCode(List<Expr> operandsInfo, String unit) {
     // input check for time unit is moved to standardizeTimeUnit() function,
     // which is called in PandasCodeGenVisitor.java
     StringBuilder code = new StringBuilder();
     code.append("bodo.libs.bodosql_array_kernels.add_interval_")
         .append(unit)
         .append("s(")
-        .append(operandsInfo.get(1).getExprCode())
+        .append(operandsInfo.get(1).emit())
         .append(", ")
-        .append(operandsInfo.get(2).getExprCode())
+        .append(operandsInfo.get(2).emit())
         .append(")");
 
-    return new RexNodeVisitorInfo(code.toString());
+    return code.toString();
   }
 
   /**
@@ -46,29 +44,17 @@ public class DateAddCodeGen {
    * @param fnName The name of the function
    * @return The code generated that matches the DateAdd expression.
    */
-  public static String generateMySQLDateAddCode(
-      String arg0, String arg1, boolean adding_delta, String fnName) {
+  public static Expr generateMySQLDateAddCode(
+      Expr arg0, Expr arg1, boolean adding_delta, String fnName) {
     StringBuilder addBuilder = new StringBuilder();
     if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
-      arg1 = "bodo.libs.bodosql_array_kernels.negate(" + arg1 + ")";
+      arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
     }
     if (adding_delta) {
-      addBuilder
-          .append("bodo.libs.bodosql_array_kernels.add_interval(")
-          .append(arg0)
-          .append(", ")
-          .append(arg1)
-          .append(")");
+      return new Expr.Call("bodo.libs.bodosql_array_kernels.add_interval", arg0, arg1);
     } else {
-      addBuilder
-          .append("bodo.libs.bodosql_array_kernels.add_interval_days(")
-          .append(arg1)
-          .append(", ")
-          .append(arg0)
-          .append(")");
+      return new Expr.Call("bodo.libs.bodosql_array_kernels.add_interval_days", arg1, arg0);
     }
-
-    return addBuilder.toString();
   }
 
   /**

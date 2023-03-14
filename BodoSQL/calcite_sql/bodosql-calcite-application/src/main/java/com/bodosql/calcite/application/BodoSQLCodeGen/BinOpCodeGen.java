@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.ir.Expr;
 import java.util.*;
 import org.apache.calcite.avatica.*;
 import org.apache.calcite.rel.type.*;
@@ -24,8 +25,8 @@ public class BinOpCodeGen {
    * @param argDataTypes List of SQL data types for the input to the binary operation.
    * @return The code generated for the BinOp call.
    */
-  public static String generateBinOpCode(
-      List<String> args, SqlOperator binOp, List<RelDataType> argDataTypes) {
+  public static Expr generateBinOpCode(
+      List<Expr> args, SqlOperator binOp, List<RelDataType> argDataTypes) {
     SqlKind binOpKind = binOp.getKind();
     // Handle the Datetime functions that are either tz-aware or tz-naive
     if (argDataTypes.size() == 2
@@ -75,7 +76,7 @@ public class BinOpCodeGen {
    * @param binOpKind The SqlKind of the binary operator
    * @return The code generated for the BinOp call.
    */
-  public static String generateBinOpCodeHelper(List<String> args, SqlKind binOpKind) {
+  public static Expr generateBinOpCodeHelper(List<Expr> args, SqlKind binOpKind) {
     final String fn;
     switch (binOpKind) {
       case EQUALS:
@@ -129,7 +130,7 @@ public class BinOpCodeGen {
     }
     for (int i = 0; i < args.size(); i++) {
       // Insert arguments and add , and closing )
-      codeBuilder.append(args.get(i));
+      codeBuilder.append(args.get(i).emit());
       if (i != 0) {
         codeBuilder.append(")");
       }
@@ -137,7 +138,7 @@ public class BinOpCodeGen {
         codeBuilder.append(", ");
       }
     }
-    return codeBuilder.toString();
+    return new Expr.Raw(codeBuilder.toString());
   }
 
   /**
@@ -167,18 +168,17 @@ public class BinOpCodeGen {
    * @param binOp The SQLkind for the binop. Either SqlKind.PLUS or SqlKind.MINUS.
    * @return The generated code that creates the BodoSQL array kernel call.
    */
-  public static String genIntervalAddCode(List<String> args, SqlKind binOp) {
+  public static Expr genIntervalAddCode(List<Expr> args, SqlKind binOp) {
     assert args.size() == 2;
-    final String arg0 = args.get(0);
-    String arg1 = args.get(1);
+    final Expr arg0 = args.get(0);
+    Expr arg1 = args.get(1);
     if (binOp.equals(SqlKind.MINUS)) {
       // Negate the input for Minus
-      arg1 = String.format("bodo.libs.bodosql_array_kernels.negate(%s)", arg1);
+      arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
     } else {
       assert binOp.equals(SqlKind.PLUS);
     }
-    return String.format(
-        "bodo.libs.bodosql_array_kernels.interval_add_interval(%s, %s)", arg0, arg1);
+    return new Expr.Call("bodo.libs.bodosql_array_kernels.interval_add_interval", arg0, arg1);
   }
 
   /**
@@ -189,11 +189,11 @@ public class BinOpCodeGen {
    * @param isArg0TZAware Is arg0 the tz aware argument. This is used for generating standard code.
    * @return The generated code that creates the BodoSQL array kernel call.
    */
-  public static String genTZAwareIntervalArithCode(
-      List<String> args, SqlKind binOp, boolean isArg0TZAware) {
+  public static Expr genTZAwareIntervalArithCode(
+      List<Expr> args, SqlKind binOp, boolean isArg0TZAware) {
     assert args.size() == 2;
-    final String arg0;
-    String arg1;
+    final Expr arg0;
+    Expr arg1;
     // Standardize the kernel to always put the tz aware argument
     // in the first slot to limit computation + simplify the kernels.
     // This is fine because + commutes.
@@ -207,12 +207,11 @@ public class BinOpCodeGen {
     if (binOp.equals(SqlKind.MINUS)) {
       assert isArg0TZAware;
       // Negate the input for Minus
-      arg1 = String.format("bodo.libs.bodosql_array_kernels.negate(%s)", arg1);
+      arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
     } else {
       assert binOp.equals(SqlKind.PLUS);
     }
-    return String.format(
-        "bodo.libs.bodosql_array_kernels.tz_aware_interval_add(%s, %s)", arg0, arg1);
+    return new Expr.Call("bodo.libs.bodosql_array_kernels.tz_aware_interval_add", arg0, arg1);
   }
 
   /**
@@ -221,12 +220,12 @@ public class BinOpCodeGen {
    * @param args List of length 2 with the generated code for the arguments.
    * @return The generated code that creates the BodoSQL array kernel call.
    */
-  public static String genDateSubCode(List<String> args) {
+  public static Expr genDateSubCode(List<Expr> args) {
     assert args.size() == 2;
-    final String arg0 = args.get(0);
-    final String arg1 = args.get(1);
-    return String.format(
-        "bodo.libs.bodosql_array_kernels.date_sub_date_unit('DAY', %s, %s)", arg1, arg0);
+    final Expr arg0 = args.get(0);
+    final Expr arg1 = args.get(1);
+    return new Expr.Call(
+        "bodo.libs.bodosql_array_kernels.date_sub_date_unit", new Expr.Raw("'DAY'"), arg1, arg0);
   }
 
   /**
@@ -239,11 +238,11 @@ public class BinOpCodeGen {
    *     to an interval.
    * @return The generated code that creates the BodoSQL array kernel call.
    */
-  public static String genDatetimeArithCode(
-      List<String> args, SqlKind binOp, boolean isArg0Datetime, boolean isOtherArgInterval) {
+  public static Expr genDatetimeArithCode(
+      List<Expr> args, SqlKind binOp, boolean isArg0Datetime, boolean isOtherArgInterval) {
     assert args.size() == 2;
-    final String arg0;
-    String arg1;
+    final Expr arg0;
+    final Expr arg1;
     // Standardize the kernel to always put the datetime argument
     // in the first slot to limit computation + simplify the kernels.
     // This is fine because + commutes.
@@ -270,10 +269,10 @@ public class BinOpCodeGen {
    * @param isArg0Interval Is arg0 the interval argument. This is used for generating standard code.
    * @return The generated code that creates the BodoSQL array kernel call.
    */
-  public static String genIntervalMultiplyCode(List<String> args, boolean isArg0Interval) {
+  public static Expr genIntervalMultiplyCode(List<Expr> args, boolean isArg0Interval) {
     assert args.size() == 2;
-    final String arg0;
-    String arg1;
+    final Expr arg0;
+    Expr arg1;
     // Standardize the kernel to always put the interval argument
     // in the first slot to limit computation + simplify the kernels.
     // This is fine because * commutes.
@@ -284,6 +283,6 @@ public class BinOpCodeGen {
       arg0 = args.get(1);
       arg1 = args.get(0);
     }
-    return String.format("bodo.libs.bodosql_array_kernels.interval_multiply(%s, %s)", arg0, arg1);
+    return new Expr.Call("bodo.libs.bodosql_array_kernels.interval_multiply", arg0, arg1);
   }
 }

@@ -6,6 +6,7 @@ import static com.bodosql.calcite.application.Utils.Utils.*;
 import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
+import com.bodosql.calcite.ir.Expr;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeMap;
@@ -190,16 +191,16 @@ public class ProjectCodeGen {
   public static String generateProjectedDataframe(
       String inVar,
       List<String> childExprNames,
-      List<RexNodeVisitorInfo> childExprs,
+      List<Expr> childExprs,
       List<BodoSQLExprType.ExprType> exprTypes) {
     StringBuilder projectString = new StringBuilder("pd.DataFrame({");
     boolean allScalars = true;
     for (int i = 0; i < childExprs.size(); i++) {
-      RexNodeVisitorInfo column = childExprs.get(i);
+      Expr column = childExprs.get(i);
       BodoSQLExprType.ExprType exprType = exprTypes.get(i);
       String name = escapePythonQuotes(childExprNames.get(i));
       projectString.append(makeQuoted(name)).append(": ");
-      projectString.append(column.getExprCode());
+      projectString.append(column.emit());
 
       projectString.append(", ");
       allScalars = (exprType == BodoSQLExprType.ExprType.SCALAR) && allScalars;

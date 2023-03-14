@@ -6,6 +6,7 @@ import static org.apache.calcite.sql.type.SqlTypeName.DATE;
 import static org.apache.calcite.sql.type.SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
 
 import com.bodosql.calcite.application.*;
+import com.bodosql.calcite.ir.Expr;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.type.*;
 
@@ -102,8 +103,8 @@ public class CastCodeGen {
           RexNodeVisitorInfo dayVisitor = new RexNodeVisitorInfo("day");
           codeBuilder.append(
               generateDateTruncCode(
-                      dayVisitor.getExprCode(), new RexNodeVisitorInfo(asTypeBuilder.toString()))
-                  .getExprCode());
+                      dayVisitor.getExprCode(), new Expr.Raw(asTypeBuilder.toString()))
+                  .emit());
         } else {
           codeBuilder.append(asTypeBuilder);
         }

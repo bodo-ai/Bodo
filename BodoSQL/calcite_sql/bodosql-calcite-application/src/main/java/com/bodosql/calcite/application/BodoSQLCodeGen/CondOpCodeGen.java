@@ -5,7 +5,6 @@ import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
-import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
@@ -44,7 +43,7 @@ public class CondOpCodeGen {
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  public static RexNodeVisitorInfo getSingleArgCondFnInfo(String fnName, String code1) {
+  public static Expr getSingleArgCondFnInfo(String fnName, String code1) {
 
     String kernel_str;
     if (equivalentFnMap.containsKey(fnName)) {
@@ -58,7 +57,7 @@ public class CondOpCodeGen {
     expr_code.append(code1);
     expr_code.append(")");
 
-    return new RexNodeVisitorInfo(expr_code.toString());
+    return new Expr.Raw(expr_code.toString());
   }
 
   /**
@@ -71,8 +70,7 @@ public class CondOpCodeGen {
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  public static RexNodeVisitorInfo getDoubleArgCondFnInfo(
-      String fnName, String code1, String code2) {
+  public static Expr getDoubleArgCondFnInfo(String fnName, String code1, String code2) {
 
     String kernel_str;
     if (equivalentFnMap.containsKey(fnName)) {
@@ -88,7 +86,7 @@ public class CondOpCodeGen {
     expr_code.append(code2);
     expr_code.append(")");
 
-    return new RexNodeVisitorInfo(expr_code.toString());
+    return new Expr.Raw(expr_code.toString());
   }
 
   /**
@@ -190,7 +188,7 @@ public class CondOpCodeGen {
       //   IntegerArrayType(int64),
       //   '_temp4'
       // )
-      Module.Builder initModule = new Module.Builder(outerBuilder.getSymbolTable());
+      Module.Builder initModule = new Module.Builder(outerBuilder);
 
       List<Expr.Call> inputDataArgs = new ArrayList<>();
 
@@ -274,7 +272,7 @@ public class CondOpCodeGen {
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  public static RexNodeVisitorInfo visitVariadic(RexCall fnOperation, List<String> codeExprs) {
+  public static Expr visitVariadic(RexCall fnOperation, List<String> codeExprs) {
     String func_name = fnOperation.getOperator().toString();
     int n = fnOperation.operands.size();
     StringBuilder expr_code = new StringBuilder();
@@ -297,7 +295,7 @@ public class CondOpCodeGen {
       }
     }
 
-    return new RexNodeVisitorInfo(expr_code.toString());
+    return new Expr.Raw(expr_code.toString());
   }
 
   /**
@@ -308,7 +306,7 @@ public class CondOpCodeGen {
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  public static RexNodeVisitorInfo visitIf(RexCall fnOperation, List<String> codeExprs) {
+  public static Expr visitIf(RexCall fnOperation, List<String> codeExprs) {
 
     StringBuilder expr_code = new StringBuilder("bodo.libs.bodosql_array_kernels.cond(");
     expr_code
@@ -319,6 +317,6 @@ public class CondOpCodeGen {
         .append(codeExprs.get(2))
         .append(")");
 
-    return new RexNodeVisitorInfo(expr_code.toString());
+    return new Expr.Raw(expr_code.toString());
   }
 }
