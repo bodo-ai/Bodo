@@ -7,22 +7,20 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query, bodosql_use_date_type
+from bodosql.tests.utils import bodosql_use_date_type, check_query
 
-from BodoSQL.bodosql.tests.utils import bodosql_use_date_type
 from bodo import Time
 from bodo.tests.conftest import (  # noqa
     date_df,
     day_part_strings,
-    date_df,
     time_df,
     time_part_strings,
 )
 from bodo.tests.timezone_common import (  # noqa
+    generate_date_trunc_date_func,
     generate_date_trunc_func,
     generate_date_trunc_time_func,
     representative_tz,
-    generate_date_trunc_date_func,
 )
 
 EQUIVALENT_SPARK_DT_FN_MAP = {
@@ -954,7 +952,15 @@ def test_dayname_date_cols(date_df, memory_leak_check):
 def day_name_func(date):
     if date is None:
         return None
-    dows = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    dows = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ]
     return dows[date.weekday()]
 
 
@@ -1024,9 +1030,7 @@ def test_monthname_scalars(fn_name, basic_df, spark_info, memory_leak_check):
     "fn_name", ["MONTHNAME", pytest.param("MONTH_NAME", marks=pytest.mark.slow)]
 )
 @pytest.mark.parametrize("wrap_case", [True, False])
-def test_monthname_date_cols(
-    fn_name, wrap_case, date_df, memory_leak_check
-):
+def test_monthname_date_cols(fn_name, wrap_case, date_df, memory_leak_check):
     """tests the monthname function on column inputs of date objects."""
 
     if wrap_case:
@@ -1042,17 +1046,29 @@ def test_monthname_date_cols(
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=outputs
+        expected_output=outputs,
     )
 
 
 def month_name_func(date):
     if date is None:
         return None
-    mons = ["January", "February", "March", "April",
-            "May", "June", "July", "August",
-            "September", "October", "November", "December"]
+    mons = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ]
     return mons[date.month - 1]
+
 
 @pytest.mark.parametrize("fn_name", ["MONTHNAME", "MONTH_NAME"])
 def test_monthname_date_scalars(fn_name, basic_df, memory_leak_check):
@@ -1067,7 +1083,7 @@ def test_monthname_date_scalars(fn_name, basic_df, memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=outputs
+        expected_output=outputs,
     )
 
 
@@ -1923,6 +1939,7 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
         only_jit_1DVar=True,
     )
 
+
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -1934,7 +1951,9 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
         ),
     ],
 )
-def test_timestampadd_time(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_check):
+def test_timestampadd_time(
+    timeadd_dataframe, timeadd_arguments, use_case, memory_leak_check
+):
     unit, answer = timeadd_arguments
     unit_str = {
         "hour": unit,
@@ -2413,7 +2432,7 @@ def test_date_trunc_day_part_handling(time_df, day_part_strings, memory_leak_che
     output = pd.DataFrame({"output": []})
     with pytest.raises(
         Exception,
-        match=f"Unsupported unit for DATE_TRUNC with TIME input: \"{day_part_strings}\""
+        match=f'Unsupported unit for DATE_TRUNC with TIME input: "{day_part_strings}"',
     ):
         check_query(
             query,
@@ -2457,7 +2476,6 @@ def test_date_trunc_time_part_handling(date_df, time_part_strings, memory_leak_c
             check_names=False,
             expected_output=output,
         )
-
 
 
 def test_date_trunc_timestamp(dt_fn_dataframe, date_trunc_literal, memory_leak_check):
@@ -3661,39 +3679,33 @@ def date_only_single_arg_fns(request):
 
 
 def date_only_single_arg_fns_time_input_handling(date_only_single_arg_fns, time_df):
-    query = (
-        f"SELECT {date_only_single_arg_fns}(A) as output from table1"
-    )
-    output = pd.DataFrame(
-        {"output": []}
-    )
-    with pytest.raises(Exception, match=
-    f"Time object is not supported by {date_only_single_arg_fns}"):
+    query = f"SELECT {date_only_single_arg_fns}(A) as output from table1"
+    output = pd.DataFrame({"output": []})
+    with pytest.raises(
+        Exception, match=f"Time object is not supported by {date_only_single_arg_fns}"
+    ):
         check_query(
             query,
             time_df,
             None,
             check_names=False,
             check_dtype=False,
-            expected_output=output
+            expected_output=output,
         )
 
 
 @pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
 def next_previous_day_time_input_handling(next_or_prev, time_df):
-    query = (
-        f"SELECT {next_or_prev}_DAY(A, 'mo') as output from table1"
-    )
-    output = pd.DataFrame(
-        {"output": []}
-    )
-    with pytest.raises(Exception, match=
-    f"Time object is not supported by {next_or_prev}_DAY"):
+    query = f"SELECT {next_or_prev}_DAY(A, 'mo') as output from table1"
+    output = pd.DataFrame({"output": []})
+    with pytest.raises(
+        Exception, match=f"Time object is not supported by {next_or_prev}_DAY"
+    ):
         check_query(
             query,
             time_df,
             None,
             check_names=False,
             check_dtype=False,
-            expected_output=output
+            expected_output=output,
         )
