@@ -39,175 +39,6 @@ static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
  */
 static void mean_eval(double& result, uint64_t& count) { result /= count; }
 
-/** Data structure used for the computation of groups.
-
-    @data row_to_group       : This takes the index and returns the group
-    @data group_to_first_row : This takes the group index and return the first
-   row index.
-    @data next_row_in_group  : for a row in the list returns the next row in the
-   list if existent. if non-existent value is -1.
-    @data list_missing       : list of rows which are missing and NaNs.
-
-    This is only one data structure but it has two use cases.
-    -- get_group_info computes only the entries row_to_group and
-   group_to_first_row. This is the data structure used for groupby operations
-   such as sum, mean, etc. for which the full group structure does not need to
-   be known.
-    -- get_group_info_iterate computes all the entries. This is needed for some
-   operations such as nunique, median, and cumulative operations. The entry
-   list_missing is computed only for cumulative operations and computed only if
-   needed.
- */
-struct grouping_info {
-    std::vector<int64_t> row_to_group;
-    std::vector<int64_t> group_to_first_row;
-    std::vector<int64_t> next_row_in_group;
-    std::vector<int64_t> list_missing;
-    table_info* dispatch_table = nullptr;
-    table_info* dispatch_info = nullptr;
-    size_t num_groups;
-    int mode;  // 1: for the update, 2: for the combine
-};
-
-/*
-  The construction of the array_info from standard vectors.
-  It covers array_info and multiple_array_info.
- */
-array_info* create_string_array_iter(
-    std::vector<uint8_t> const& V,
-    std::vector<std::string>::const_iterator& iter, size_t const& len,
-    size_t start_idx) {
-    size_t nb_char = 0;
-    std::vector<std::string>::const_iterator iter_b = iter;
-    for (size_t i_grp = 0; i_grp < len; i_grp++) {
-        if (GetBit(V.data(), i_grp)) {
-            nb_char += iter_b->size();
-        }
-        iter_b++;
-    }
-    size_t extra_bytes = 0;
-    array_info* out_col = alloc_string_array(len, nb_char, extra_bytes);
-    // update string array payload to reflect change
-    char* data_o = out_col->data1;
-    offset_t* offsets_o = (offset_t*)out_col->data2;
-    offset_t pos = 0;
-    iter_b = iter;
-    for (size_t i_grp = 0; i_grp < len; i_grp++) {
-        offsets_o[i_grp] = pos;
-        bool bit = GetBit(V.data(), start_idx + i_grp);
-        if (bit) {
-            size_t len_str = size_t(iter_b->size());
-            memcpy(data_o, iter_b->data(), len_str);
-            data_o += len_str;
-            pos += len_str;
-        }
-        out_col->set_null_bit(i_grp, bit);
-        iter_b++;
-    }
-    offsets_o[len] = pos;
-    return out_col;
-}
-
-array_info* create_string_array(grouping_info const& grp_info,
-                                std::vector<uint8_t> const& V,
-                                std::vector<std::string> const& ListString) {
-    std::vector<std::string>::const_iterator iter = ListString.begin();
-    size_t start_idx = 0;
-    return create_string_array_iter(V, iter, ListString.size(), start_idx);
-}
-
-array_info* create_list_string_array_iter(
-    std::vector<uint8_t> const& V,
-    std::vector<
-        std::vector<std::pair<std::string, bool>>>::const_iterator const& iter,
-    size_t len, size_t start_idx) {
-    // Determining the number of characters in output.
-    size_t nb_string = 0;
-    size_t nb_char = 0;
-    std::vector<std::vector<std::pair<std::string, bool>>>::const_iterator
-        iter_b = iter;
-    for (size_t i_grp = 0; i_grp < len; i_grp++) {
-        if (GetBit(V.data(), i_grp)) {
-            std::vector<std::pair<std::string, bool>> e_list = *iter_b;
-            nb_string += e_list.size();
-            for (auto& e_str : e_list) nb_char += e_str.first.size();
-        }
-        iter_b++;
-    }
-    // Allocation needs to be done through
-    // alloc_list_string_array, which allocates with meminfos
-    // and same data structs that Python uses. We need to
-    // re-allocate here because number of strings and chars has
-    // been determined here (previous out_col was just an empty
-    // dummy allocation).
-
-    array_info* new_out_col =
-        alloc_list_string_array(len, nb_string, nb_char, 0);
-    offset_t* index_offsets_o = (offset_t*)new_out_col->data3;
-    offset_t* data_offsets_o = (offset_t*)new_out_col->data2;
-    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask;
-    // Writing the list_strings in output
-    char* data_o = new_out_col->data1;
-    data_offsets_o[0] = 0;
-    offset_t pos_index = 0;
-    offset_t pos_data = 0;
-    iter_b = iter;
-    for (size_t i_grp = 0; i_grp < len; i_grp++) {
-        bool bit = GetBit(V.data(), i_grp);
-        new_out_col->set_null_bit(i_grp, bit);
-        index_offsets_o[i_grp] = pos_index;
-        if (bit) {
-            std::vector<std::pair<std::string, bool>> e_list = *iter_b;
-            offset_t n_string = e_list.size();
-            for (offset_t i_str = 0; i_str < n_string; i_str++) {
-                std::string& estr = e_list[i_str].first;
-                offset_t n_char = estr.size();
-                memcpy(data_o, estr.data(), n_char);
-                data_o += n_char;
-                pos_data++;
-                data_offsets_o[pos_data] =
-                    data_offsets_o[pos_data - 1] + n_char;
-                bool bit = e_list[i_str].second;
-                SetBitTo(sub_null_bitmask_o, pos_index + i_str, bit);
-            }
-            pos_index += n_string;
-        }
-        iter_b++;
-    }
-    index_offsets_o[len] = pos_index;
-    return new_out_col;
-}
-
-array_info* create_list_string_array(
-    grouping_info const& grp_info, std::vector<uint8_t> const& V,
-    std::vector<std::vector<std::pair<std::string, bool>>> const&
-        ListListPair) {
-    std::vector<std::vector<std::pair<std::string, bool>>>::const_iterator
-        iter = ListListPair.begin();
-    size_t start_idx = 0;
-    return create_list_string_array_iter(V, iter, ListListPair.size(),
-                                         start_idx);
-}
-
-/**
- * @brief Create a dict string array object from the underlying data array and
- * indices array
- *
- * @param dict_arr: the underlying data array
- * @param indices_arr: the underlying indices array
- * @param length: the number of rows of the dict-encoded array(and the indices
- * array)
- * @return array_info*
- */
-array_info* create_dict_string_array(array_info* dict_arr,
-                                     array_info* indices_arr, size_t length) {
-    array_info* out_col = new array_info(
-        bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1, -1,
-        NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
-        0, 0, false, false, false, dict_arr, indices_arr);
-    return out_col;
-}
-
 /**
  * Perform combine operation for variance, which for a set of rows belonging
  * to the same group with count (# observations), mean and m2, reduces
@@ -1090,8 +921,7 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
         SetBitTo(Vmask.data(), i, !V[i].first);
         ListListPair[i] = V[i].second;
     }
-    array_info* new_out_col =
-        create_list_string_array(grp_info, Vmask, ListListPair);
+    array_info* new_out_col = create_list_string_array(Vmask, ListListPair);
     *out_arr = std::move(*new_out_col);
     delete new_out_col;
 }
@@ -1150,7 +980,7 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
         SetBitTo(Vmask.data(), i, !V[i].first);
         ListString[i] = V[i].second;
     }
-    array_info* new_out_col = create_string_array(grp_info, Vmask, ListString);
+    array_info* new_out_col = create_string_array(Vmask, ListString);
     *out_arr = std::move(*new_out_col);
     delete new_out_col;
 }
@@ -1235,7 +1065,7 @@ void cumulative_computation_dict_encoded_string(array_info* arr,
         SetBitTo(Vmask.data(), i, !null_bit_val_vec[i].first);
         ListString[i] = null_bit_val_vec[i].second;
     }
-    array_info* new_out_col = create_string_array(grp_info, Vmask, ListString);
+    array_info* new_out_col = create_string_array(Vmask, ListString);
     *out_arr = std::move(*new_out_col);
     delete new_out_col;
 }
@@ -1901,7 +1731,7 @@ array_info* apply_to_column_list_string(array_info* in_col, array_info* out_col,
             }
         }
     }
-    return create_list_string_array(grp_info, Vmask, ListListPair);
+    return create_list_string_array(Vmask, ListListPair);
 }
 
 template <typename F, int ftype>
@@ -2054,7 +1884,7 @@ array_info* apply_to_column_string(array_info* in_col, array_info* out_col,
     // TODO: Avoid creating the output array for
     // idxmin/idxmax/idxmin_na_first/idxmax_na_first
     // Determining the number of characters in output.
-    return create_string_array(grp_info, V, ListString);
+    return create_string_array(V, ListString);
 }
 
 template <typename F, int ftype>
@@ -2369,8 +2199,7 @@ array_info* apply_to_column_dict(array_info* in_col, array_info* out_col,
         ListString[it.second - 1] = val;  // -1 to account for the 1 offset
         SetBitTo(bitmask_vec.data(), it.second - 1, true);
     }
-    array_info* dict_arr =
-        create_string_array(grp_info, bitmask_vec, ListString);
+    array_info* dict_arr = create_string_array(bitmask_vec, ListString);
     return create_dict_string_array(dict_arr, indices_arr, num_groups);
 }
 
