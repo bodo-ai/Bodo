@@ -1,9 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.BodoSQLExprType;
-import com.bodosql.calcite.application.RexNodeVisitorInfo;
-import com.bodosql.calcite.application.Utils.BodoCtx;
+import com.bodosql.calcite.ir.Expr;
 import java.util.List;
 
 public class TimestampDiffCodeGen {
@@ -15,12 +12,10 @@ public class TimestampDiffCodeGen {
    * @param unit Time unit to calculate the difference between to timestamps/bodo.Time objects
    * @return
    */
-  public static RexNodeVisitorInfo generateTimestampDiffInfo(
-      List<RexNodeVisitorInfo> operandsInfo,
-      String unit) {
+  public static String generateTimestampDiffInfo(List<Expr> operandsInfo, String unit) {
 
-    String arg0Expr = operandsInfo.get(1).getExprCode();
-    String arg1Expr = operandsInfo.get(2).getExprCode();
+    String arg0Expr = operandsInfo.get(1).emit();
+    String arg1Expr = operandsInfo.get(2).emit();
     StringBuilder output = new StringBuilder();
     // pintaoz2: TODO: merge TIMEDIFF, DATEDIFF and TIMESTAMPDIFF to use the same kernel
     output
@@ -32,6 +27,6 @@ public class TimestampDiffCodeGen {
         .append(arg1Expr)
         .append(")");
 
-    return new RexNodeVisitorInfo(output.toString());
+    return output.toString();
   }
 }

@@ -14,6 +14,8 @@ import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl;
+import java.io.FileWriter;
+import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.ArrayList;
@@ -707,8 +709,15 @@ public class RelationalAlgebraGenerator {
   }
 
   public String getPandasString(String sql, boolean debugDeltaTable) throws Exception {
-    RelNode optimizedPlan = getRelationalAlgebra(sql, true);
-    return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
+    try {
+      RelNode optimizedPlan = getRelationalAlgebra(sql, true);
+      return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
+    } catch (Exception e) {
+      PrintWriter w = new PrintWriter(new FileWriter("/tmp/exceptions.txt", true));
+      e.printStackTrace(w);
+      w.close();
+      throw e;
+    }
   }
 
   // Default debugDeltaTable to false

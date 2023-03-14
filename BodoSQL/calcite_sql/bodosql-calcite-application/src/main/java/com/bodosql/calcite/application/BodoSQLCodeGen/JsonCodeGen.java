@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.RexNodeVisitorInfo;
+import com.bodosql.calcite.ir.Expr;
 import java.util.HashMap;
 
 public class JsonCodeGen {
@@ -19,8 +19,7 @@ public class JsonCodeGen {
    * @param arg1 The second argument to the function
    * @return
    */
-  public static RexNodeVisitorInfo generateJsonTwoArgsInfo(
-      String fnName, RexNodeVisitorInfo arg0, RexNodeVisitorInfo arg1) {
+  public static Expr generateJsonTwoArgsInfo(String fnName, Expr arg0, Expr arg1) {
 
     if (!(jsonFnMap.containsKey(fnName))) {
       throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
@@ -30,11 +29,11 @@ public class JsonCodeGen {
     output
         .append(jsonFnMap.get(fnName))
         .append("(")
-        .append(arg0.getExprCode())
+        .append(arg0.emit())
         .append(", ")
-        .append(arg1.getExprCode())
+        .append(arg1.emit())
         .append(")");
 
-    return new RexNodeVisitorInfo(output.toString());
+    return new Expr.Raw(output.toString());
   }
 }

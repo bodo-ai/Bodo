@@ -4,6 +4,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.g
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 
 import com.bodosql.calcite.application.*;
+import com.bodosql.calcite.ir.Expr;
 
 public class DateDiffCodeGen {
   public static String generateDateDiffCode(String arg0, String arg1, String arg2) {
@@ -12,21 +13,16 @@ public class DateDiffCodeGen {
     String unit = standardizeTimeUnit("DATEDIFF", arg0, DatetimeFnCodeGen.DateTimeType.TIMESTAMP);
     diffExpr.append("bodo.libs.bodosql_array_kernels.date_sub_date_unit(\"");
     diffExpr.append(arg0).append("\", ");
-    diffExpr.append(
-        generateDateTruncCode(unit, new RexNodeVisitorInfo(arg1)).getExprCode());
+    diffExpr.append(generateDateTruncCode(unit, new Expr.Raw(arg1)).emit());
 
     diffExpr.append(", ");
-    diffExpr.append(
-        generateDateTruncCode(unit, new RexNodeVisitorInfo(arg2)).getExprCode());
+    diffExpr.append(generateDateTruncCode(unit, new Expr.Raw(arg2)).emit());
     diffExpr.append(")");
     return diffExpr.toString();
   }
 
-
-  public static RexNodeVisitorInfo generateDateDiffFnInfo(
-      String unit, RexNodeVisitorInfo arg1Info, RexNodeVisitorInfo arg2Info) {
-    String diffExpr =
-        generateDateDiffCode(unit, arg1Info.getExprCode(), arg2Info.getExprCode());
-    return new RexNodeVisitorInfo(diffExpr);
+  public static Expr generateDateDiffFnInfo(String unit, Expr arg1Info, Expr arg2Info) {
+    String diffExpr = generateDateDiffCode(unit, arg1Info.emit(), arg2Info.emit());
+    return new Expr.Raw(diffExpr);
   }
 }

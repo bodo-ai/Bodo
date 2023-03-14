@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import com.bodosql.calcite.application.RexNodeVisitorInfo;
+import com.bodosql.calcite.ir.Expr;
 
 public class SinceEpochFnCodeGen {
 
@@ -10,9 +10,9 @@ public class SinceEpochFnCodeGen {
    * @param arg1Info The VisitorInfo for the first argument.
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateToDaysCode(RexNodeVisitorInfo arg1Info) {
-    String outputExpr = "bodo.libs.bodosql_array_kernels.to_days(" + arg1Info.getExprCode() + ")";
-    return new RexNodeVisitorInfo(outputExpr);
+  public static Expr generateToDaysCode(Expr arg1Info) {
+    String outputExpr = "bodo.libs.bodosql_array_kernels.to_days(" + arg1Info.emit() + ")";
+    return new Expr.Raw(outputExpr);
   }
 
   /**
@@ -21,10 +21,9 @@ public class SinceEpochFnCodeGen {
    * @param arg1Info The VisitorInfo for the first argument.
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateToSecondsCode(RexNodeVisitorInfo arg1Info) {
-    String outputExpr =
-        "bodo.libs.bodosql_array_kernels.to_seconds(" + arg1Info.getExprCode() + ")";
-    return new RexNodeVisitorInfo(outputExpr);
+  public static Expr generateToSecondsCode(Expr arg1Info) {
+    String outputExpr = "bodo.libs.bodosql_array_kernels.to_seconds(" + arg1Info.emit() + ")";
+    return new Expr.Raw(outputExpr);
   }
 
   /**
@@ -33,9 +32,9 @@ public class SinceEpochFnCodeGen {
    * @param arg1Info The VisitorInfo for the first argument.
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateFromDaysCode(RexNodeVisitorInfo arg1Info) {
-    String outputExpr = "bodo.libs.bodosql_array_kernels.from_days(" + arg1Info.getExprCode() + ")";
-    return new RexNodeVisitorInfo(outputExpr);
+  public static Expr generateFromDaysCode(Expr arg1Info) {
+    String outputExpr = "bodo.libs.bodosql_array_kernels.from_days(" + arg1Info.emit() + ")";
+    return new Expr.Raw(outputExpr);
   }
 
   /**
@@ -44,11 +43,10 @@ public class SinceEpochFnCodeGen {
    * @param arg1Info The VisitorInfo for the first argument.
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateFromUnixTimeCode(RexNodeVisitorInfo arg1Info) {
+  public static Expr generateFromUnixTimeCode(Expr arg1Info) {
     String outputExpression =
-        String.format(
-            "bodo.libs.bodosql_array_kernels.second_timestamp(%s)", arg1Info.getExprCode());
-    return new RexNodeVisitorInfo(outputExpression);
+        String.format("bodo.libs.bodosql_array_kernels.second_timestamp(%s)", arg1Info.emit());
+    return new Expr.Raw(outputExpression);
   }
 
   /**
@@ -56,8 +54,8 @@ public class SinceEpochFnCodeGen {
    *
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateUnixTimestamp() {
+  public static Expr generateUnixTimestamp() {
     String output = "(pd.Timestamp.now().value // 1000000000)";
-    return new RexNodeVisitorInfo(output);
+    return new Expr.Raw(output);
   }
 }

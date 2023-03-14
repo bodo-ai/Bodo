@@ -5,9 +5,8 @@ import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLExprType;
-import com.bodosql.calcite.application.RexNodeVisitorInfo;
+import com.bodosql.calcite.ir.Expr;
 import java.util.*;
-
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.*;
 
@@ -47,13 +46,13 @@ public class DatetimeFnCodeGen {
    * @param arg1Expr The string expression of arg1
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
-  public static RexNodeVisitorInfo getSingleArgDatetimeFnInfo(String fnName, String arg1Expr) {
+  public static Expr getSingleArgDatetimeFnInfo(String fnName, String arg1Expr) {
     StringBuilder expr_code = new StringBuilder();
 
     // If the functions has a broadcasted array kernel, always use it
     if (equivalentFnMap.containsKey(fnName)) {
       expr_code.append(equivalentFnMap.get(fnName)).append("(").append(arg1Expr).append(")");
-      return new RexNodeVisitorInfo(expr_code.toString());
+      return new Expr.Raw(expr_code.toString());
     }
 
     // If we made it here, something has gone very wrong
@@ -68,8 +67,7 @@ public class DatetimeFnCodeGen {
    * @param arg2Expr The string expression of arg2
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
-  public static RexNodeVisitorInfo getDoubleArgDatetimeFnInfo(
-      String fnName, String arg1Expr, String arg2Expr) {
+  public static Expr getDoubleArgDatetimeFnInfo(String fnName, String arg1Expr, String arg2Expr) {
     StringBuilder expr_code = new StringBuilder();
 
     // If the functions has a broadcasted array kernel, always use it
@@ -81,7 +79,7 @@ public class DatetimeFnCodeGen {
           .append(",")
           .append(arg2Expr)
           .append(")");
-      return new RexNodeVisitorInfo(expr_code.toString());
+      return new Expr.Raw(expr_code.toString());
     }
 
     // If we made it here, something has gone very wrong
@@ -95,15 +93,14 @@ public class DatetimeFnCodeGen {
    * @param arg2Info The VisitorInfo for the second argument
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
-  public static RexNodeVisitorInfo generateMakeDateInfo(
-      RexNodeVisitorInfo arg1Info, RexNodeVisitorInfo arg2Info) {
+  public static Expr generateMakeDateInfo(Expr arg1Info, Expr arg2Info) {
     String outputExpr =
         "bodo.libs.bodosql_array_kernels.makedate("
-            + arg1Info.getExprCode()
+            + arg1Info.emit()
             + ", "
-            + arg2Info.getExprCode()
+            + arg2Info.emit()
             + ")";
-    return new RexNodeVisitorInfo(outputExpr);
+    return new Expr.Raw(outputExpr);
   }
 
   /**
@@ -113,9 +110,9 @@ public class DatetimeFnCodeGen {
    * @param tzInfo The Timezone information with which to create the Timestamp.
    * @return
    */
-  public static RexNodeVisitorInfo generateCurrTimestampCode(String opName, BodoTZInfo tzInfo) {
+  public static Expr generateCurrTimestampCode(String opName, BodoTZInfo tzInfo) {
     String fnExpression = String.format("pd.Timestamp.now(%s)", tzInfo.getPyZone());
-    return new RexNodeVisitorInfo(fnExpression);
+    return new Expr.Raw(fnExpression);
   }
 
   /**
@@ -125,26 +122,26 @@ public class DatetimeFnCodeGen {
    * @param tzInfo The Timezone information with which to create the Time.
    * @return
    */
-  public static RexNodeVisitorInfo generateCurrTimeCode(String opName, BodoTZInfo tzInfo) {
+  public static Expr generateCurrTimeCode(String opName, BodoTZInfo tzInfo) {
     String fnExpression =
         String.format(
             "bodo.libs.bodosql_array_kernels.to_time_util(pd.Timestamp.now(%s))",
             tzInfo == null ? "" : tzInfo.getPyZone());
-    return new RexNodeVisitorInfo(fnExpression);
+    return new Expr.Raw(fnExpression);
   }
 
-  public static RexNodeVisitorInfo generateUTCTimestampCode(String opName) {
+  public static Expr generateUTCTimestampCode(String opName) {
     // use utcnow if/when we decide to support timezones
     String fnExpression = "pd.Timestamp.now(tz='UTC')";
-    return new RexNodeVisitorInfo(fnExpression);
+    return new Expr.Raw(fnExpression);
   }
 
-  public static RexNodeVisitorInfo generateUTCDateCode() {
+  public static Expr generateUTCDateCode() {
     // use utcnow if/when we decide to support timezones
     // As dates are tz-naive, we use tz_localize to convert a UTC timestamp
     // into a tz-naive date type with the correct value.
     String fnExpression = "pd.Timestamp.now(tz='UTC').floor(freq=\"D\").tz_localize(None)";
-    return new RexNodeVisitorInfo(fnExpression);
+    return new Expr.Raw(fnExpression);
   }
 
   /**
@@ -154,11 +151,11 @@ public class DatetimeFnCodeGen {
    * @param arg2Info The VisitorInfo for the second argument. = * @return the rexNodeVisitorInfo for
    *     the result.
    */
-  public static RexNodeVisitorInfo generateDateTruncCode(String unit, RexNodeVisitorInfo arg2Info) {
+  public static Expr generateDateTruncCode(String unit, Expr arg2Info) {
     String codeGen =
         String.format(
-            "bodo.libs.bodosql_array_kernels.date_trunc(\"%s\", %s)", unit, arg2Info.getExprCode());
-    return new RexNodeVisitorInfo(codeGen);
+            "bodo.libs.bodosql_array_kernels.date_trunc(\"%s\", %s)", unit, arg2Info.emit());
+    return new Expr.Raw(codeGen);
   }
 
   /**
@@ -172,32 +169,29 @@ public class DatetimeFnCodeGen {
    *     an apply
    * @return the rexNodeVisitorInfo for the result.
    */
-  public static RexNodeVisitorInfo generateDateFormatCode(
-      RexNodeVisitorInfo arg1Info,
-      BodoSQLExprType.ExprType arg1ExprType,
-      RexNodeVisitorInfo arg2Info,
-      boolean isSingleRow) {
-    assert isStringLiteral(arg2Info.getExprCode());
-    String pythonFormatString = convertMySQLFormatStringToPython(arg2Info.getExprCode());
+  public static Expr generateDateFormatCode(
+      Expr arg1Info, BodoSQLExprType.ExprType arg1ExprType, Expr arg2Info, boolean isSingleRow) {
+    assert isStringLiteral(arg2Info.emit());
+    String pythonFormatString = convertMySQLFormatStringToPython(arg2Info.emit());
     String outputExpression;
 
     if (arg1ExprType == BodoSQLExprType.ExprType.SCALAR || isSingleRow) {
       outputExpression =
           "bodosql.libs.generated_lib.sql_null_checking_strftime("
-              + arg1Info.getExprCode()
+              + arg1Info.emit()
               + ", "
               + pythonFormatString
               + ")";
     } else {
       outputExpression =
           "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-              + arg1Info.getExprCode()
+              + arg1Info.emit()
               + ").dt.strftime("
               + pythonFormatString
               + "))";
     }
 
-    return new RexNodeVisitorInfo(outputExpression);
+    return new Expr.Raw(outputExpression);
   }
 
   /**
@@ -206,9 +200,9 @@ public class DatetimeFnCodeGen {
    * @param opName The name of the function
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
-  public static RexNodeVisitorInfo generateCurdateCode(String opName) {
+  public static Expr generateCurdateCode(String opName) {
     String fnExpression = "pd.Timestamp.now().floor(freq=\"D\")";
-    return new RexNodeVisitorInfo(fnExpression);
+    return new Expr.Raw(fnExpression);
   }
 
   /**
@@ -217,8 +211,8 @@ public class DatetimeFnCodeGen {
    * @param arg0Info The name and codegen for the argument.
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
-  public static RexNodeVisitorInfo getYearWeekFnInfo(RexNodeVisitorInfo arg0Info) {
-    String arg0Expr = arg0Info.getExprCode();
+  public static Expr getYearWeekFnInfo(Expr arg0Info) {
+    String arg0Expr = arg0Info.emit();
 
     // performs yearNum * 100 + week num
     // TODO: Add proper null checking on scalars by converting * and +
@@ -228,7 +222,7 @@ public class DatetimeFnCodeGen {
             "bodo.libs.bodosql_array_kernels.add_numeric(bodo.libs.bodosql_array_kernels.multiply_numeric(bodo.libs.bodosql_array_kernels.get_year(%s),"
                 + " 100), bodo.libs.bodosql_array_kernels.get_weekofyear(%s))",
             arg0Expr, arg0Expr);
-    return new RexNodeVisitorInfo(outputExpr);
+    return new Expr.Raw(outputExpr);
   }
 
   public static String intExprToIntervalDays(String expr) {
@@ -243,11 +237,9 @@ public class DatetimeFnCodeGen {
    * @param opName should be either "TIME" or "TO_TIME"
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateToTimeCode(
-      SqlTypeName arg1Type, RexNodeVisitorInfo arg1Info, String opName) {
-    String outputExpression =
-        "bodo.libs.bodosql_array_kernels.to_time(" + arg1Info.getExprCode() + ")";
-    return new RexNodeVisitorInfo(outputExpression);
+  public static Expr generateToTimeCode(SqlTypeName arg1Type, Expr arg1Info, String opName) {
+    String outputExpression = "bodo.libs.bodosql_array_kernels.to_time(" + arg1Info.emit() + ")";
+    return new Expr.Raw(outputExpression);
   }
 
   /**
@@ -256,8 +248,8 @@ public class DatetimeFnCodeGen {
    *
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateDateTimeTypeFromPartsCode(
-      String fnName, List<RexNodeVisitorInfo> operandsInfo, String tzStr) {
+  public static Expr generateDateTimeTypeFromPartsCode(
+      String fnName, List<Expr> operandsInfo, String tzStr) {
     StringBuilder code = new StringBuilder();
 
     boolean time_mode = false;
@@ -296,7 +288,7 @@ public class DatetimeFnCodeGen {
       if (i != 0) {
         code.append(", ");
       }
-      code.append(operandsInfo.get(i).getExprCode());
+      code.append(operandsInfo.get(i).emit());
     }
 
     // For time, add the nanosecond argument if necessary
@@ -314,9 +306,8 @@ public class DatetimeFnCodeGen {
 
     code.append(")");
 
-    return new RexNodeVisitorInfo(code.toString());
+    return new Expr.Raw(code.toString());
   }
-
 
   public enum DateTimeType {
     TIMESTAMP,
@@ -326,40 +317,32 @@ public class DatetimeFnCodeGen {
 
   /**
    * Helper function that verifies and determines the type of date or time expression
+   *
    * @param rexNode RexNode of the expression
    * @return The expression is a timestamp, time or date object
    */
   public static DateTimeType getDateTimeExprType(RexNode rexNode) {
-    if (rexNode
-        .getType()
-        .getSqlTypeName()
-        .toString()
-        .equals("TIME")) {
+    if (rexNode.getType().getSqlTypeName().toString().equals("TIME")) {
       return DateTimeType.TIME;
     }
-    if (rexNode
-        .getType()
-        .getSqlTypeName()
-        .toString()
-        .equals("DATE")) {
+    if (rexNode.getType().getSqlTypeName().toString().equals("DATE")) {
       return DateTimeType.DATE;
     }
     return DateTimeType.TIMESTAMP;
   }
-
 
   /**
    * Helper function that verifies and standardizes the time unit input
    *
    * @param fnName the function which takes this time unit as input
    * @param inputTimeStr the input time unit string
-   * @param dateTimeExprType if the time expression is Bodo.Time object,
-   *                         the time unit should be smaller or equal to hour
-   *                         if the time expression is date object,
-   *                         the time unit should be larger or equal to day
+   * @param dateTimeExprType if the time expression is Bodo.Time object, the time unit should be
+   *     smaller or equal to hour if the time expression is date object, the time unit should be
+   *     larger or equal to day
    * @return the standardized time unit string
    */
-  public static String standardizeTimeUnit(String fnName, String inputTimeStr, DateTimeType dateTimeExprType) {
+  public static String standardizeTimeUnit(
+      String fnName, String inputTimeStr, DateTimeType dateTimeExprType) {
     String unit;
     switch (inputTimeStr.toLowerCase()) {
       case "\"year\"":
