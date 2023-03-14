@@ -246,7 +246,7 @@ AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype"])
 
 
 # !!! IMPORTANT: this is supposed to match the positions in
-# Bodo_FTypes::FTypeEnum in _groupby.cpp
+# Bodo_FTypes::FTypeEnum in _groupby_ftypes.h
 supported_agg_funcs = [
     "no_op",  # needed to ensure that 0 value isn't matched with any function
     "ngroup",

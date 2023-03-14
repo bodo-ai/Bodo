@@ -8,76 +8,11 @@
 #include "_array_utils.h"
 #include "_decimal_ext.h"
 #include "_distributed.h"
+#include "_groupby_ftypes.h"
+#include "_groupby_hashing.h"
+#include "_groupby_udf.h"
 #include "_murmurhash3.h"
 #include "_shuffle.h"
-#undef DEBUG_GROUPBY
-#undef DEBUG_GROUPBY_SYMBOL
-#undef DEBUG_GROUPBY_FULL
-
-/**
- * Enum of aggregation, combine and eval functions used by groubpy.
- * Some functions like sum can be used for multiple purposes, like aggregation
- * and combine. Some operations like sum don't need eval.
- */
-struct Bodo_FTypes {
-    // !!! IMPORTANT: this is supposed to match the positions in
-    // supported_agg_funcs in aggregate.py
-    enum FTypeEnum {
-        no_op = 0,  // To make sure ftypes[0] isn't accidently matched with any
-                    // of the supported functions.
-        ngroup = 1,
-        head = 2,
-        transform = 3,
-        size = 4,
-        shift = 5,
-        sum = 6,
-        count = 7,
-        nunique = 8,
-        median = 9,
-        cumsum = 10,
-        cumprod = 11,
-        cummin = 12,
-        cummax = 13,
-        mean = 14,
-        min = 15,
-        max = 16,
-        prod = 17,
-        first = 18,
-        last = 19,
-        idxmin = 20,
-        idxmax = 21,
-        var = 22,
-        std = 23,
-        boolor_agg = 24,
-        udf = 25,
-        gen_udf = 26,
-        window = 27,
-        row_number = 28,
-        min_row_number_filter = 29,
-        num_funcs = 30,  // num_funcs is used to know how many functions up to
-                         // this point. Below this point are functions that are
-                         // defined in the C++ code but not the Python enum.
-        mean_eval = 31,
-        var_eval = 32,
-        std_eval = 33,
-        // These are internal operators used by groupby.window
-        // when the orderby clause has na values first.
-        idxmin_na_first = 34,
-        idxmax_na_first = 35
-    };
-};
-
-const char* Bodo_FTypes_names[] = {
-    "no_op",      "ngroup", "head",    "transform", "size",      "shift",
-    "sum",        "count",  "nunique", "median",    "cumsum",    "cumprod",
-    "cummin",     "cummax", "mean",    "min",       "max",       "prod",
-    "first",      "last",   "idxmin",  "idxmax",    "var",       "std",
-    "boolor_agg", "udf",    "gen_udf", "num_funcs", "mean_eval", "var_eval",
-    "std_eval"};
-
-const char* get_name_for_Bodo_FTypes(int enumVal) {
-    return Bodo_FTypes_names[enumVal];
-}
 
 // this mapping is used by BasicColSet operations to know what combine (i.e.
 // step (c)) function to use for a given aggregation function
@@ -93,74 +28,6 @@ static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
     {Bodo_FTypes::last, Bodo_FTypes::last},
     {Bodo_FTypes::nunique, Bodo_FTypes::sum},  // used in nunique_mode = 2
     {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg}};
-
-/**
- * Function pointer for groupby update and combine operations that are
- * executed in JIT-compiled code (also see udfinfo_t).
- *
- * @param input table
- * @param output table
- * @param row to group mapping (tells to which group -row in output table-
-          the row i of input table goes to)
- */
-typedef void (*udf_table_op_fn)(table_info* in_table, table_info* out_table,
-                                int64_t* row_to_group);
-/**
- * Function pointer for groupby eval operation that is executed in JIT-compiled
- * code (also see udfinfo_t).
- *
- * @param table containing the output columns and reduction variables columns
- */
-typedef void (*udf_eval_fn)(table_info*);
-
-/**
- * Function pointer for general UDFs executed in JIT-compiled code (see
- * also udfinfo_t).
- *
- * @param num_groups Number of groups in input data
- * @param in_table Input table only for columns with general UDFs. This is in
- *        *non-conventional* format. Given n groups, for each input column
- *        of groupby, this table contains n columns (containing the input
- *        data for group 0,1,...,n-1).
- * @param out_table Groupby output table. Has columns for *all* output,
- *        including for columns with no general UDFs.
- */
-typedef void (*udf_general_fn)(int64_t num_groups, table_info* in_table,
-                               table_info* out_table);
-/*
- * This struct stores info that is used when groupby.agg() has JIT-compiled
- * user-defined functions. Such JIT-compiled code will be invoked by the C++
- * library via function pointers.
- */
-struct udfinfo_t {
-    /*
-     * This empty table is used to tell the C++ library the types to use
-     * to allocate the columns (output and redvar) for udfs
-     */
-    table_info* udf_table_dummy;
-    /*
-     * Function pointer to "update" code which performs the initial
-     * local groupby and aggregation.
-     */
-    udf_table_op_fn update;
-    /*
-     * Function pointer to "combine" code which combines the results
-     * after shuffle.
-     */
-    udf_table_op_fn combine;
-    /*
-     * Function pointer to "eval" code which performs post-processing and
-     * sets the final output value for each group.
-     */
-    udf_eval_fn eval;
-
-    /*
-     * Function pointer to general UDF code (takes input data -by groups-
-     * for all input columns with general UDF and fills in the corresponding
-     * columns in the output table).
-     */
-    udf_general_fn general_udf;
-};
 
 /**
  * This template is used for functions that take two values of the same dtype.
@@ -1283,54 +1150,6 @@ static void get_group_info_loop(T& key_to_group,
 }
 #undef MAIN_LOOP_BODY
 
-namespace {
-/**
- * Look up a hash in a table.
- *
- * Don't use std::function to reduce call overhead.
- */
-struct HashLookupIn32bitTable {
-    uint32_t operator()(const int64_t iRow) const { return hashes[iRow]; }
-    uint32_t* hashes;
-};
-
-/**
- * Check if keys are equal by lookup in a table.
- *
- * Don't use std::function to reduce call overhead.
- */
-struct KeyEqualLookupIn32bitTable {
-    bool operator()(const int64_t iRowA, const int64_t iRowB) const {
-        return TestEqualJoin(table, table, iRowA, iRowB, n_keys, true);
-    }
-    int64_t n_keys;
-    table_info* table;
-};
-
-// both get_group_info and get_groupby_labes use the dealloc measurement, so
-// share that code.
-template <bool CalledFromGroupInfo, typename Map>
-void do_map_dealloc(uint32_t*& hashes, Map& key_to_group, bool is_parallel) {
-    tracing::Event ev_dealloc(CalledFromGroupInfo
-                                  ? "get_group_info_dealloc"
-                                  : "get_groupby_labels_dealloc",
-                              is_parallel);
-    delete[] hashes;
-    hashes = nullptr;  // updates hashes ptr at caller
-
-    if (ev_dealloc.is_tracing()) {
-        ev_dealloc.add_attribute("map size", key_to_group.size());
-        ev_dealloc.add_attribute("map bucket_count",
-                                 key_to_group.bucket_count());
-        ev_dealloc.add_attribute("map load_factor", key_to_group.load_factor());
-        ev_dealloc.add_attribute("map max_load_factor",
-                                 key_to_group.max_load_factor());
-    }
-    key_to_group.clear();
-    key_to_group.reserve(0);  // try to force dealloc of hash map
-    ev_dealloc.finalize();
-}
-
 template <typename Map>
 void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
                          grouping_info& grp_info, table_info* const table,
@@ -1367,7 +1186,6 @@ void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
     ev.add_attribute("num_groups", static_cast<size_t>(grp_info.num_groups));
     do_map_dealloc<true>(hashes, key_to_group, is_parallel);
 }
-}  // namespace
 
 /**
  * Given a set of tables with n key columns, this function calculates the row to
@@ -1724,8 +1542,9 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
     grouping_info& grp_info = grp_infos.back();
 
     uint64_t max_rows = 0;
-    for (table_info* table : tables)
+    for (table_info* table : tables) {
         max_rows = std::max(max_rows, table->nrows());
+    }
     grp_info.row_to_group.reserve(max_rows);
     grp_info.row_to_group.resize(table->nrows());
     grp_info.next_row_in_group.reserve(max_rows);
@@ -1942,9 +1761,6 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
                                         grouping_info const& grp_info,
                                         int32_t const& ftype,
                                         bool const& skipna) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of cumulative_computation_list_string\n";
-#endif
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "So far only cumulative sums for list-strings");
@@ -2007,10 +1823,6 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
     }
     array_info* new_out_col =
         create_list_string_array(grp_info, Vmask, ListListPair);
-#ifdef DEBUG_GROUPBY
-    std::cout << "new_out_col : ";
-    DEBUG_PrintColumn(std::cout, new_out_col);
-#endif
     *out_arr = std::move(*new_out_col);
     delete new_out_col;
 }
@@ -2018,9 +1830,6 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
 void cumulative_computation_string(array_info* arr, array_info* out_arr,
                                    grouping_info const& grp_info,
                                    int32_t const& ftype, bool const& skipna) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of cumulative_computation_string\n";
-#endif
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "So far only cumulative sums for strings");
@@ -2099,9 +1908,6 @@ void cumulative_computation_dict_encoded_string(array_info* arr,
                                                 grouping_info const& grp_info,
                                                 int32_t const& ftype,
                                                 bool const& skipna) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of cumulative_computation_dict\n";
-#endif
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(
             PyExc_RuntimeError,
@@ -8242,10 +8048,6 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
                                       bool is_parallel,
                                       bool key_dropna = true) {
     tracing::Event ev("compute_categorical_index", is_parallel);
-#ifdef DEBUG_GROUPBY
-    std::cout << "compute_categorical_index num_keys=" << num_keys
-              << " is_parallel=" << is_parallel << "\n";
-#endif
     // A rare case of incref since we are going to need the in_table after the
     // computation of red_table.
     for (int64_t i_key = 0; i_key < num_keys; i_key++) {
@@ -8263,10 +8065,6 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
                       MPI_COMM_WORLD);
     else
         n_rows_full = n_rows;
-#ifdef DEBUG_GROUPBY
-    std::cout << "compute_categorical_index n_rows=" << n_rows
-              << " n_rows_full=" << n_rows_full << "\n";
-#endif
     // Two approaches for cumulative operations : shuffle (then reshuffle) or
     // use exscan. Preferable to do shuffle when we have too many unique values.
     // This is a heuristic to decide approach.
