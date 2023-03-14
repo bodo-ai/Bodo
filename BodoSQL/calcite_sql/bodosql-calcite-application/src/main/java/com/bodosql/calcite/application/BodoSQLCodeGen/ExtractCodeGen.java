@@ -3,7 +3,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.application.Utils.Utils.escapePythonQuotes;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.RexNodeVisitorInfo;
+import com.bodosql.calcite.ir.Expr;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.calcite.sql.SqlBinaryOperator;
@@ -117,10 +117,9 @@ public class ExtractCodeGen {
    * @param isTime       Is the input TIME data?
    * @return The name generated that matches the Extract expression.
    */
-  public static RexNodeVisitorInfo generateDatePart(
-      List<RexNodeVisitorInfo> operandsInfo, boolean isTime) {
+  public static Expr generateDatePart(List<Expr> operandsInfo, boolean isTime) {
     String unit;
-    switch (operandsInfo.get(0).getExprCode()) {
+    switch (operandsInfo.get(0).emit()) {
       case "\"year\"":
       case "\"y\"":
       case "\"yy\"":
@@ -225,9 +224,9 @@ public class ExtractCodeGen {
 
       default:
         throw new BodoSQLCodegenException(
-            "Unsupported DATE_PART unit: " + operandsInfo.get(0).getExprCode());
+            "Unsupported DATE_PART unit: " + operandsInfo.get(0).emit());
     }
-    String code = generateExtractCode(unit, operandsInfo.get(1).getExprCode(), isTime);
-    return new RexNodeVisitorInfo(code);
+    String code = generateExtractCode(unit, operandsInfo.get(1).emit(), isTime);
+    return new Expr.Raw(code);
   }
 }

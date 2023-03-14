@@ -1,5 +1,7 @@
 package com.bodosql.calcite.ir
 
+import org.apache.calcite.rel.RelNode
+
 /**
  * Module is the top level compilation unit for code generation.
  * @param main The main function for this module.
@@ -21,8 +23,9 @@ class Module(private val main: List<Op>) {
     /**
      * Builder is used to construct a new module.
      */
-    class Builder(val symbolTable: SymbolTable) {
-        constructor() : this(symbolTable = SymbolTable())
+    class Builder(val symbolTable: SymbolTable, val useDateRuntime: Boolean) {
+        constructor(useDateRuntime: Boolean) : this(symbolTable = SymbolTable(), useDateRuntime = useDateRuntime)
+        constructor(builder: Builder) : this(symbolTable = builder.symbolTable, useDateRuntime = builder.useDateRuntime)
 
         private val code: MutableList<Op> = mutableListOf()
 
@@ -59,6 +62,11 @@ class Module(private val main: List<Op>) {
 
         fun append(code: StringBuilder): Builder {
             return append(code.toString())
+        }
+
+        fun genDataframe(rel: RelNode): Dataframe {
+            val v = symbolTable.genDfVar()
+            return Dataframe(v.name, rel)
         }
 
         /**

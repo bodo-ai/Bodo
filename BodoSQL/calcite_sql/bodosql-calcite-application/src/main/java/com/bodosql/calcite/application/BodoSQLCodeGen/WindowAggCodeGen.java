@@ -1190,7 +1190,6 @@ public class WindowAggCodeGen {
    * @param funcText String buffer where the output closure's codegen is being stored
    * @param argsList List of all inputs to the current window function call
    * @param fnName The name of the kernel. Must be in windowCodeExpressions.
-   * @param kernelName What is the name of the kernel function
    * @param lowerBound String representation of the lower bound of the window frame
    * @param upperBound String representation of the upper bound of the window frame
    * @param arraysToSort List that the output array name should be added to
@@ -1460,7 +1459,7 @@ public class WindowAggCodeGen {
       String inputVar,
       Variable outputVar,
       List<RexOver> aggOperations,
-      List<RexNodeVisitorInfo> childExprs,
+      List<Expr> childExprs,
       List<BodoSQLExprType.ExprType> childExprTypes,
       Module.Builder builder) {
     // usesOptimizedEngineKernel enforces that we have exactly 1 aggOperation
