@@ -5132,7 +5132,13 @@ def overload_dataframe_sort_index(
     ):  # pragma: no cover
 
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, "$_bodo_index_", ascending, inplace, na_position, None
+            df,
+            "$_bodo_index_",
+            ascending,
+            inplace,
+            na_position,
+            None,
+            False,  # _bodo_interval_sort
         )
 
     return _impl
