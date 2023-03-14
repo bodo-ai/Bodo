@@ -8,6 +8,7 @@
 #include "_array_utils.h"
 #include "_decimal_ext.h"
 #include "_distributed.h"
+#include "_groupby_agg_funcs.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_hashing.h"
 #include "_groupby_udf.h"
@@ -30,632 +31,6 @@ static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
     {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg}};
 
 /**
- * This template is used for functions that take two values of the same dtype.
- */
-template <typename T, int dtype, int ftype, typename Enable = void>
-struct aggfunc {
-    /**
-     * Apply the function.
-     * @param[in,out] first input value, and holds the result
-     * @param[in] second input value.
-     */
-    static void apply(T& v1, T& v2) {}
-};
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::sum,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            is_datetime_timedelta<dtype>::value>::type> {
-    /**
-     * Aggregation function for sum. Modifies current sum if value is not a nan
-     *
-     * @param[in,out] current sum value, and holds the result
-     * @param second input value.
-     */
-    static void apply(T& v1, T& v2) {
-        if (v2 != std::numeric_limits<T>::min()) v1 += v2;
-    }
-};
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::sum,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            !is_datetime_timedelta<dtype>::value>::type> {
-    /**
-     * Aggregation function for sum. Modifies current sum if value is not a nan
-     *
-     * @param[in,out] current sum value, and holds the result
-     * @param second input value.
-     */
-    static void apply(T& v1, T& v2) { v1 += v2; }
-};
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::sum,
-    typename std::enable_if<std::is_floating_point<T>::value>::type> {
-    static void apply(T& v1, T& v2) {
-        if (!isnan(v2)) v1 += v2;
-    }
-};
-
-template <typename T, int dtype, typename Enable = void>
-struct bool_sum {
-    /**
-     * Aggregation function for sum of booleans. Increases total by 1 if the
-     * value is not null and truthy.
-     *
-     * @param[in,out] current sum
-     * @param second input value.
-     */
-    static void apply(int64_t& v1, T& v2);
-};
-
-template <typename T, int dtype>
-struct bool_sum<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value>::type> {
-    static void apply(int64_t& v1, T& v2) {
-        if (!isnan(v2) && v2) v1 += 1;
-    }
-};
-
-// min
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::min,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            is_datetime_timedelta<dtype>::value>::type> {
-    /**
-     * Aggregation function for min. Modifies current min if value is not a nan
-     *
-     * @param[in,out] current min value (or nan for floats if no min value found
-     * yet)
-     * @param second input value.
-     */
-    static void apply(T& v1, T& v2) {
-        if (v2 != std::numeric_limits<T>::min()) v1 = std::min(v1, v2);
-    }
-};
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::min,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            !is_datetime_timedelta<dtype>::value>::type> {
-    /**
-     * Aggregation function for min. Modifies current min if value is not a nan
-     *
-     * @param[in,out] current min value (or nan for floats if no min value found
-     * yet)
-     * @param second input value.
-     */
-    static void apply(T& v1, T& v2) { v1 = std::min(v1, v2); }
-};
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::min,
-    typename std::enable_if<std::is_floating_point<T>::value>::type> {
-    static void apply(T& v1, T& v2) {
-        if (!isnan(v2))
-            v1 = std::min(v2, v1);  // std::min(x,NaN) = x
-                                    // (v1 is initialized as NaN)
-    }
-};
-
-// max
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::max,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            is_datetime_timedelta<dtype>::value>::type> {
-    /**
-     * Aggregation function for max. Modifies current max if value is not a nan
-     *
-     * @param[in,out] current max value (or nan for floats if no max value found
-     * yet)
-     * @param second input value.
-     */
-    static void apply(T& v1, T& v2) {
-        if (v2 != std::numeric_limits<T>::min()) v1 = std::max(v1, v2);
-    }
-};
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::max,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            !is_datetime_timedelta<dtype>::value>::type> {
-    /**
-     * Aggregation function for max. Modifies current max if value is not a nan
-     *
-     * @param[in,out] current max value (or nan for floats if no max value found
-     * yet)
-     * @param second input value.
-     */
-    static void apply(T& v1, T& v2) { v1 = std::max(v1, v2); }
-};
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::max,
-    typename std::enable_if<std::is_floating_point<T>::value>::type> {
-    static void apply(T& v1, T& v2) {
-        if (!isnan(v2)) {
-            v1 = std::max(v2, v1);  // std::max(x,NaN) = x
-                                    // (v1 is initialized as NaN)
-        }
-    }
-};
-
-// prod
-// product of date and timedelta is not possible so no need to support it
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::prod,
-    typename std::enable_if<!std::is_floating_point<T>::value>::type> {
-    /**
-     * Aggregation function for product. Modifies current product if value is
-     * not a nan
-     *
-     * @param[in,out] current product
-     * @param second input value.
-     */
-    static void apply(T& v1, T& v2) { v1 *= v2; }
-};
-
-template <>
-struct aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::prod> {
-    static void apply(bool& v1, bool& v2) { v1 = v1 && v2; }
-};
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::prod,
-    typename std::enable_if<std::is_floating_point<T>::value>::type> {
-    static void apply(T& v1, T& v2) {
-        if (!isnan(v2)) v1 *= v2;
-    }
-};
-
-// idxmin
-
-template <typename T, int dtype, typename Enable = void>
-struct idxmin_agg {
-    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i);
-};
-
-template <typename T, int dtype>
-struct idxmin_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            is_datetime_timedelta<dtype>::value>::type> {
-    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
-        // TODO should it be >=?
-        if ((v2 != std::numeric_limits<T>::max()) && (v1 > v2)) {
-            v1 = v2;
-            index_pos = i;
-        }
-    }
-};
-
-template <typename T, int dtype>
-struct idxmin_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            !is_datetime_timedelta<dtype>::value>::type> {
-    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
-        // TODO should it be >=?
-        if (v1 > v2) {
-            v1 = v2;
-            index_pos = i;
-        }
-    }
-};
-
-template <typename T, int dtype>
-struct idxmin_agg<
-    T, dtype, typename std::enable_if<std::is_floating_point<T>::value>::type> {
-    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
-        if (!isnan(v2)) {
-            // v1 is initialized as NaN
-            // TODO should it be >=?
-            if (isnan(v1) || (v1 > v2)) {
-                v1 = v2;
-                index_pos = i;
-            }
-        }
-    }
-};
-
-// idxmax
-
-template <typename T, int dtype, typename Enable = void>
-struct idxmax_agg {
-    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i);
-};
-
-template <typename T, int dtype>
-struct idxmax_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            is_datetime_timedelta<dtype>::value>::type> {
-    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
-        // TODO should it be <=?
-        if ((v2 != std::numeric_limits<T>::min()) && (v1 < v2)) {
-            v1 = v2;
-            index_pos = i;
-        }
-    }
-};
-
-template <typename T, int dtype>
-struct idxmax_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            !is_datetime_timedelta<dtype>::value>::type> {
-    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
-        // TODO should it be <=?
-        if (v1 < v2) {
-            v1 = v2;
-            index_pos = i;
-        }
-    }
-};
-
-template <typename T, int dtype>
-struct idxmax_agg<
-    T, dtype, typename std::enable_if<std::is_floating_point<T>::value>::type> {
-    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
-        if (!isnan(v2)) {
-            // v1 is initialized as NaN
-            // TODO should it be <=?
-            if (isnan(v1) || (v1 < v2)) {
-                v1 = v2;
-                index_pos = i;
-            }
-        }
-    }
-};
-
-/**
- * This template is used for functions that take an input value and
- * reduce its result to a boolean output.
- */
-template <typename T, int dtype, int ftype, typename Enable = void>
-struct bool_aggfunc {
-    /**
-     * Apply the function.
-     * @param[in,out] current aggregate value, holds the result
-     * @param[in] other input value.
-     */
-    static void apply(bool& v1, T& v2);
-};
-
-template <typename T, int dtype>
-struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
-                    typename std::enable_if<!is_decimal<dtype>::value>::type> {
-    /**
-     * Aggregation function for boolor_agg. Note this implementation
-     * handles both integer and floating point data.
-     *
-     * @param[in,out] current aggregate value, holds the result
-     * @param other input value.
-     */
-    static void apply(bool& v1, T& v2) { v1 = v1 || (v2 != 0); }
-};
-
-template <typename T, int dtype>
-struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
-                    typename std::enable_if<is_decimal<dtype>::value>::type> {
-    /**
-     * Aggregation function for boolor_agg. Note this implementation
-     * handles both integer and floating point data.
-     *
-     * @param[in,out] current aggregate value, holds the result
-     * @param other input value.
-     */
-    // TODO: Compare decimal directly?
-    static void apply(bool& v1, T& v2) {
-        v1 = v1 || ((decimal_to_double(v2)) != 0.0);
-    }
-};
-
-// aggstring: support for the string operations (sum, min, max)
-
-template <int ftype, typename Enable = void>
-struct aggstring {
-    /**
-     * Apply the function.
-     * @param[in,out] first input value, and holds the result
-     * @param[in] second input value.
-     */
-    static void apply(std::string& v1, std::string& v2) {}
-};
-
-template <>
-struct aggstring<Bodo_FTypes::min> {
-    static void apply(std::string& v1, std::string& v2) {
-        v1 = std::min(v1, v2);
-    }
-};
-
-template <>
-struct aggstring<Bodo_FTypes::max> {
-    static void apply(std::string& v1, std::string& v2) {
-        v1 = std::max(v1, v2);
-    }
-};
-
-static void idxmin_string(std::string& v1, std::string& v2, uint64_t& index_pos,
-                          int64_t i) {
-    if (v1.compare(v2) > 0) {
-        v1 = v2;
-        index_pos = i;
-    }
-}
-
-static void idxmax_string(std::string& v1, std::string& v2, uint64_t& index_pos,
-                          int64_t i) {
-    if (v1.compare(v2) < 0) {
-        v1 = v2;
-        index_pos = i;
-    }
-}
-
-template <>
-struct aggstring<Bodo_FTypes::last> {
-    static void apply(std::string& v1, std::string& v2) { v1 = v2; }
-};
-
-// aggdict: support for the dictionary-encoded string operations (min, max,
-// last)
-// apply is not invoked for first as only the first element is needed.
-template <int ftype, typename Enable = void>
-struct aggdict {
-    /**
-     * Apply the function.
-     * @param[in,out] first input index value to be updated.
-     * @param[in] second input index value.
-     * @param[in] first_string input string value.
-     * @param[in] second_string input string value.
-     */
-    static void apply(int32_t& v1, int32_t& v2, std::string& s1,
-                      std::string& s2) {}
-};
-
-template <>
-struct aggdict<Bodo_FTypes::min> {
-    static void apply(int32_t& v1, int32_t& v2, std::string& s1,
-                      std::string& s2) {
-        if (s1.compare(s2) > 0) {
-            v1 = v2;
-        }
-    }
-};
-
-template <>
-struct aggdict<Bodo_FTypes::max> {
-    static void apply(int32_t& v1, int32_t& v2, std::string& s1,
-                      std::string& s2) {
-        if (s1.compare(s2) < 0) {
-            v1 = v2;
-        }
-    }
-};
-
-static void idxmin_dict(int32_t& v1, int32_t& v2, std::string& s1,
-                        std::string& s2, uint64_t& index_pos, int64_t i) {
-    if (s1.compare(s2) > 0) {
-        v1 = v2;
-        index_pos = i;
-    }
-}
-
-static void idxmax_dict(int32_t& v1, int32_t& v2, std::string& s1,
-                        std::string& s2, uint64_t& index_pos, int64_t i) {
-    if (s1.compare(s2) < 0) {
-        v1 = v2;
-        index_pos = i;
-    }
-}
-
-template <>
-struct aggdict<Bodo_FTypes::last> {
-    static void apply(int32_t& v1, int32_t& v2, std::string& s1,
-                      std::string& s2) {
-        v1 = v2;
-    }
-};
-
-using pair_str_bool = std::pair<std::string, bool>;
-
-template <int ftype, typename Enable = void>
-struct aggliststring {
-    /**
-     * Apply the function.
-     * @param[in,out] first input value, and holds the result
-     * @param[in] second input value.
-     */
-    static void apply(std::vector<pair_str_bool>& v1,
-                      std::vector<pair_str_bool>& v2) {}
-};
-
-template <>
-struct aggliststring<Bodo_FTypes::sum> {
-    static void apply(std::vector<pair_str_bool>& v1,
-                      std::vector<pair_str_bool>& v2) {
-        v1.insert(v1.end(), v2.begin(), v2.end());
-    }
-};
-
-// returns -1 if v1 < v2, 0 if v1=v2 and 1 if v1 > v2
-int compare_list_string(std::vector<pair_str_bool> const& v1,
-                        std::vector<pair_str_bool> const& v2) {
-    size_t len1 = v1.size();
-    size_t len2 = v2.size();
-    size_t minlen = len1;
-    if (len2 < len1) minlen = len2;
-    for (size_t i = 0; i < minlen; i++) {
-        bool bit1 = v1[i].second;
-        bool bit2 = v2[i].second;
-        if (bit1 && !bit2) return 1;
-        if (!bit1 && bit2) return -1;
-        if (v1[i] < v2[i]) return -1;
-        if (v1[i] > v2[i]) return 1;
-    }
-    if (len1 < len2) return -1;
-    if (len1 > len2) return 1;
-    return 0;
-}
-
-template <>
-struct aggliststring<Bodo_FTypes::min> {
-    static void apply(std::vector<pair_str_bool>& v1,
-                      std::vector<pair_str_bool>& v2) {
-        if (compare_list_string(v1, v2) == 1) v1 = v2;
-    }
-};
-
-template <>
-struct aggliststring<Bodo_FTypes::max> {
-    static void apply(std::vector<pair_str_bool>& v1,
-                      std::vector<pair_str_bool>& v2) {
-        if (compare_list_string(v1, v2) == -1) v1 = v2;
-    }
-};
-
-template <>
-struct aggliststring<Bodo_FTypes::last> {
-    static void apply(std::vector<pair_str_bool>& v1,
-                      std::vector<pair_str_bool>& v2) {
-        v1 = v2;
-    }
-};
-
-// common template function
-
-template <typename T, int dtype>
-inline typename std::enable_if<!is_decimal<dtype>::value, double>::type
-to_double(T const& val) {
-    return (double)val;
-}
-
-template <typename T, int dtype>
-inline typename std::enable_if<is_decimal<dtype>::value, double>::type
-to_double(T const& val) {
-    return decimal_to_double(val);
-}
-
-// count
-
-template <typename T, int dtype, typename Enable = void>
-struct count_agg {
-    /**
-     * Aggregation function for count. Increases count if value is not a nan
-     *
-     * @param[in,out] current count
-     * @param second input value.
-     */
-    static void apply(int64_t& v1, T& v2);
-};
-
-template <typename T, int dtype>
-struct count_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            is_datetime_timedelta<dtype>::value>::type> {
-    static void apply(int64_t& v1, T& v2) {
-        if (v2 != std::numeric_limits<T>::min()) v1 += 1;
-    }
-};
-
-template <typename T, int dtype>
-struct count_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            !is_datetime_timedelta<dtype>::value>::type> {
-    static void apply(int64_t& v1, T& v2) { v1 += 1; }
-};
-
-// isnan makes sense only for floating point.
-template <typename T, int dtype>
-struct count_agg<
-    T, dtype, typename std::enable_if<std::is_floating_point<T>::value>::type> {
-    static void apply(int64_t& v1, T& v2) {
-        if (!isnan(v2)) v1 += 1;
-    }
-};
-
-template <typename T, int dtype, typename Enable = void>
-struct size_agg {
-    /**
-     * Aggregation function for size. Increases size
-     *
-     * @param[in,out] current count
-     * @param second input value.
-     */
-    static void apply(int64_t& v1, T& v2) { v1 += 1; }
-};
-
-// mean
-
-template <typename T, int dtype, typename Enable = void>
-struct mean_agg {
-    /**
-     * Aggregation function for mean. Modifies count and sum of observed input
-     * values
-     *
-     * @param[in,out] contains the current sum of observed values
-     * @param an observed input value
-     * @param[in,out] count: current number of observations
-     */
-    static void apply(double& v1, T& v2, uint64_t& count);
-};
-
-template <typename T, int dtype>
-struct mean_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            is_datetime_timedelta<dtype>::value>::type> {
-    static void apply(double& v1, T& v2, uint64_t& count) {
-        if (v2 != std::numeric_limits<T>::min()) {
-            v1 += (double)v2;
-            count += 1;
-        }
-    }
-};
-
-template <typename T, int dtype>
-struct mean_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            !is_datetime_timedelta<dtype>::value>::type> {
-    static void apply(double& v1, T& v2, uint64_t& count) {
-        v1 += to_double<T, dtype>(v2);
-        count += 1;
-    }
-};
-
-template <typename T, int dtype>
-struct mean_agg<T, dtype,
-                typename std::enable_if<std::is_floating_point<T>::value &&
-                                        !is_decimal<dtype>::value>::type> {
-    static void apply(double& v1, T& v2, uint64_t& count) {
-        if (!isnan(v2)) {
-            v1 += (double)v2;
-            count += 1;
-        }
-    }
-};
-
-/**
  * Final evaluation step for mean, which calculates the mean based on the
  * sum of observed values and the number of values.
  *
@@ -663,74 +38,6 @@ struct mean_agg<T, dtype,
  * @param count: number of observations
  */
 static void mean_eval(double& result, uint64_t& count) { result /= count; }
-
-// variance
-
-template <typename T, int dtype, typename Enable = void>
-struct var_agg {
-    /**
-     * Aggregation function for variance. Modifies count, mean and m2 (sum of
-     * squares of differences from the current mean) based on the observed input
-     * values. See
-     * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
-     * for more information.
-     *
-     * @param[in] v2: observed value
-     * @param[in,out] count: current number of observations
-     * @param[in,out] mean_x: current mean
-     * @param[in,out] m2: sum of squares of differences from the current mean
-     */
-    static void apply(T& v2, uint64_t& count, double& mean_x, double& m2);
-};
-
-template <typename T, int dtype>
-struct var_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            is_datetime_timedelta<dtype>::value>::type> {
-    inline static void apply(T& v2, uint64_t& count, double& mean_x,
-                             double& m2) {
-        if (v2 != std::numeric_limits<T>::min()) {
-            count += 1;
-            double delta = (double)v2 - mean_x;
-            mean_x += delta / count;
-            double delta2 = (double)v2 - mean_x;
-            m2 += delta * delta2;
-        }
-    }
-};
-
-template <typename T, int dtype>
-struct var_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            !is_datetime_timedelta<dtype>::value>::type> {
-    inline static void apply(T& v2, uint64_t& count, double& mean_x,
-                             double& m2) {
-        double v2_double = to_double<T, dtype>(v2);
-        count += 1;
-        double delta = v2_double - mean_x;
-        mean_x += delta / count;
-        double delta2 = v2_double - mean_x;
-        m2 += delta * delta2;
-    }
-};
-
-template <typename T, int dtype>
-struct var_agg<T, dtype,
-               typename std::enable_if<std::is_floating_point<T>::value &&
-                                       !is_decimal<dtype>::value>::type> {
-    inline static void apply(T& v2, uint64_t& count, double& mean_x,
-                             double& m2) {
-        if (!isnan(v2)) {
-            count += 1;
-            double delta = (double)v2 - mean_x;
-            mean_x += delta / count;
-            double delta2 = (double)v2 - mean_x;
-            m2 += delta * delta2;
-        }
-    }
-};
 
 /** Data structure used for the computation of groups.
 
@@ -811,15 +118,17 @@ array_info* create_string_array(grouping_info const& grp_info,
 
 array_info* create_list_string_array_iter(
     std::vector<uint8_t> const& V,
-    std::vector<std::vector<pair_str_bool>>::const_iterator const& iter,
+    std::vector<
+        std::vector<std::pair<std::string, bool>>>::const_iterator const& iter,
     size_t len, size_t start_idx) {
     // Determining the number of characters in output.
     size_t nb_string = 0;
     size_t nb_char = 0;
-    std::vector<std::vector<pair_str_bool>>::const_iterator iter_b = iter;
+    std::vector<std::vector<std::pair<std::string, bool>>>::const_iterator
+        iter_b = iter;
     for (size_t i_grp = 0; i_grp < len; i_grp++) {
         if (GetBit(V.data(), i_grp)) {
-            std::vector<pair_str_bool> e_list = *iter_b;
+            std::vector<std::pair<std::string, bool>> e_list = *iter_b;
             nb_string += e_list.size();
             for (auto& e_str : e_list) nb_char += e_str.first.size();
         }
@@ -848,7 +157,7 @@ array_info* create_list_string_array_iter(
         new_out_col->set_null_bit(i_grp, bit);
         index_offsets_o[i_grp] = pos_index;
         if (bit) {
-            std::vector<pair_str_bool> e_list = *iter_b;
+            std::vector<std::pair<std::string, bool>> e_list = *iter_b;
             offset_t n_string = e_list.size();
             for (offset_t i_str = 0; i_str < n_string; i_str++) {
                 std::string& estr = e_list[i_str].first;
@@ -871,9 +180,10 @@ array_info* create_list_string_array_iter(
 
 array_info* create_list_string_array(
     grouping_info const& grp_info, std::vector<uint8_t> const& V,
-    std::vector<std::vector<pair_str_bool>> const& ListListPair) {
-    std::vector<std::vector<pair_str_bool>>::const_iterator iter =
-        ListListPair.begin();
+    std::vector<std::vector<std::pair<std::string, bool>>> const&
+        ListListPair) {
+    std::vector<std::vector<std::pair<std::string, bool>>>::const_iterator
+        iter = ListListPair.begin();
     size_t start_idx = 0;
     return create_list_string_array_iter(V, iter, ListListPair.size(),
                                          start_idx);
@@ -1000,47 +310,6 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
         result = sqrt(m2 / (count - 1));
     }
 }
-
-// last
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::last,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            is_datetime_timedelta<dtype>::value>::type> {
-    /**
-     * Aggregation function for last. Assigns value if not a nat
-     *
-     * @param[in,out] last value, and holds the result
-     * @param second input value.
-     */
-    static void apply(T& v1, T& v2) {
-        if (v2 != std::numeric_limits<T>::min()) v1 = v2;
-    }
-};
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::last,
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                            !is_datetime_timedelta<dtype>::value>::type> {
-    /**
-     * Aggregation function for last. Just assigns value
-     *
-     * @param[in,out] last value, and holds the result
-     * @param second input value.
-     */
-    static void apply(T& v1, T& v2) { v1 = v2; }
-};
-
-template <typename T, int dtype>
-struct aggfunc<
-    T, dtype, Bodo_FTypes::last,
-    typename std::enable_if<std::is_floating_point<T>::value>::type> {
-    static void apply(T& v1, T& v2) {
-        if (!isnan(v2)) v1 = v2;
-    }
-};
 
 // TODO which load factor to use?
 #define ROBIN_MAP_MAX_LOAD_FACTOR 0.5
@@ -1766,7 +1035,7 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
                              "So far only cumulative sums for list-strings");
     }
     int64_t n = arr->length;
-    using T = std::pair<bool, std::vector<pair_str_bool>>;
+    using T = std::pair<bool, std::vector<std::pair<std::string, bool>>>;
     std::vector<T> V(n);
     uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
     uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
@@ -1777,13 +1046,13 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
         bool isna = !GetBit(null_bitmask, i);
         offset_t start_idx_offset = index_offsets[i];
         offset_t end_idx_offset = index_offsets[i + 1];
-        std::vector<pair_str_bool> LEnt;
+        std::vector<std::pair<std::string, bool>> LEnt;
         for (offset_t idx = start_idx_offset; idx < end_idx_offset; idx++) {
             offset_t str_len = data_offsets[idx + 1] - data_offsets[idx];
             offset_t start_data_offset = data_offsets[idx];
             bool bit = GetBit(sub_null_bitmask, idx);
             std::string val(&data[start_data_offset], str_len);
-            pair_str_bool eEnt = {val, bit};
+            std::pair<std::string, bool> eEnt = {val, bit};
             LEnt.push_back(eEnt);
         }
         return {isna, LEnt};
@@ -1816,7 +1085,7 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
     //
     size_t n_bytes = (n + 7) >> 3;
     std::vector<uint8_t> Vmask(n_bytes, 0);
-    std::vector<std::vector<pair_str_bool>> ListListPair(n);
+    std::vector<std::vector<std::pair<std::string, bool>>> ListListPair(n);
     for (int i = 0; i < n; i++) {
         SetBitTo(Vmask.data(), i, !V[i].first);
         ListListPair[i] = V[i].second;
@@ -2598,7 +1867,8 @@ template <typename F, int ftype>
 array_info* apply_to_column_list_string(array_info* in_col, array_info* out_col,
                                         const grouping_info& grp_info, F f) {
     size_t num_groups = grp_info.num_groups;
-    std::vector<std::vector<pair_str_bool>> ListListPair(num_groups);
+    std::vector<std::vector<std::pair<std::string, bool>>> ListListPair(
+        num_groups);
     char* data_i = in_col->data1;
     offset_t* index_offsets_i = (offset_t*)in_col->data3;
     offset_t* data_offsets_i = (offset_t*)in_col->data2;
@@ -2614,7 +1884,7 @@ array_info* apply_to_column_list_string(array_info* in_col, array_info* out_col,
             offset_t start_offset = index_offsets_i[i];
             offset_t end_offset = index_offsets_i[i + 1];
             offset_t len = end_offset - start_offset;
-            std::vector<pair_str_bool> LStrB(len);
+            std::vector<std::pair<std::string, bool>> LStrB(len);
             for (offset_t i = 0; i < len; i++) {
                 offset_t len_str = data_offsets_i[start_offset + i + 1] -
                                    data_offsets_i[start_offset + i];
@@ -3007,6 +2277,27 @@ array_info* apply_to_column_dict(array_info* in_col, array_info* out_col,
                         // to stop visiting the group. The data is still
                         // valid.
                         index_pos->set_null_bit(i_grp, false);
+                    }
+                }
+            }
+            break;
+        }
+        case Bodo_FTypes::last: {
+            // Define a specialized implementation of last
+            // so we avoid allocating for the underlying strings.
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = f(i);
+                if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
+                    bool out_bit_set = GetBit(V.data(), i_grp);
+                    int32_t& dict_ind = getv<int32_t>(in_col->info2, i);
+                    int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
+                    if (out_bit_set) {
+                        aggfunc<int32_t, Bodo_CTypes::STRING,
+                                Bodo_FTypes::last>::apply(org_ind, dict_ind);
+                    } else {
+                        org_ind = dict_ind;
+                        SetBitTo(V.data(), i_grp, true);
+                        indices_arr->set_null_bit(i_grp, true);
                     }
                 }
             }
@@ -3683,10 +2974,15 @@ void apply_to_column_F(array_info* in_col, array_info* out_col,
                         dtype == Bodo_CTypes::_BOOL) {
                         for (size_t i = 0; i < in_col->length; i++) {
                             int64_t i_grp = f(i);
-                            if ((i_grp != -1) && in_col->get_null_bit(i))
+                            if ((i_grp != -1) && in_col->get_null_bit(i)) {
                                 bool_sum<bool, dtype>::apply(
                                     getv<int64_t>(out_col, i_grp),
                                     getv<bool>(in_col, i));
+                            }
+                            // The output is never null for count_if, which is
+                            // implemented by bool_sum.
+                            // TODO: Replace with an explicit count_if function
+                            // to avoid NULL issues with SUM(BOOLEAN) column.
                             out_col->set_null_bit(i_grp, true);
                         }
                         return;
