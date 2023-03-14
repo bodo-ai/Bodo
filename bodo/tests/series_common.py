@@ -29,6 +29,9 @@ class WhereNullable:
     def __iter__(self):
         return iter([self.series, self.cond, self.other])
 
+    def __len__(self):
+        return 3
+
 
 GLOBAL_VAL = 2
 
