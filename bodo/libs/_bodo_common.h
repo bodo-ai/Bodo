@@ -446,6 +446,49 @@ array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
                                     bool has_global_dictionary,
                                     bool has_deduped_local_dictionary);
 
+/**
+ * @brief Create a string array from
+ * a null bitmap and a vector of strings.
+ *
+ * @param grp_info The group info.
+ * @param null_bitmap The null bitmap for the array.
+ * @param list_string The vector of strings.
+ * @return array_info* A string type array info constructed from the
+ * vector of strings.
+ */
+array_info* create_string_array(std::vector<uint8_t> const& null_bitmap,
+                                std::vector<std::string> const& list_string);
+
+/**
+ * @brief Create an array of list of strings,
+ * a null bitmap, and a vector of list of strings.
+ *
+ * @param grp_info The group info.
+ * @param null_bitmap The null bitmap for the array.
+ * @param list_list_pair The vector of list of strings. The list of strings
+ * is a pair of string and a boolean. The boolean is true if the list entry is
+ * null.
+ * @return array_info* A list of strings type array info constructed from the
+ * vector.
+ */
+array_info* create_list_string_array(
+    std::vector<uint8_t> const& null_bitmap,
+    std::vector<std::vector<std::pair<std::string, bool>>> const&
+        list_list_pair);
+
+/**
+ * @brief Create a dict string array object from the underlying data array and
+ * indices array
+ *
+ * @param dict_arr: the underlying data array
+ * @param indices_arr: the underlying indices array
+ * @param length: the number of rows of the dict-encoded array(and the indices
+ * array)
+ * @return array_info* The dictionary array.
+ */
+array_info* create_dict_string_array(array_info* dict_arr,
+                                     array_info* indices_arr, size_t length);
+
 /* The "get-value" functionality for array_info.
    This is the equivalent of at functionality.
    We cannot use at(idx) statements.

@@ -5,6 +5,36 @@
 
 const int max_global_number_groups_exscan = 1000;
 
+/** Data structure used for the computation of groups.
+
+    @data row_to_group       : This takes the index and returns the group
+    @data group_to_first_row : This takes the group index and return the first
+   row index.
+    @data next_row_in_group  : for a row in the list returns the next row in the
+   list if existent. if non-existent value is -1.
+    @data list_missing       : list of rows which are missing and NaNs.
+
+    This is only one data structure but it has two use cases.
+    -- get_group_info computes only the entries row_to_group and
+   group_to_first_row. This is the data structure used for groupby operations
+   such as sum, mean, etc. for which the full group structure does not need to
+   be known.
+    -- get_group_info_iterate computes all the entries. This is needed for some
+   operations such as nunique, median, and cumulative operations. The entry
+   list_missing is computed only for cumulative operations and computed only if
+   needed.
+ */
+struct grouping_info {
+    std::vector<int64_t> row_to_group;
+    std::vector<int64_t> group_to_first_row;
+    std::vector<int64_t> next_row_in_group;
+    std::vector<int64_t> list_missing;
+    table_info* dispatch_table = nullptr;
+    table_info* dispatch_info = nullptr;
+    size_t num_groups;
+    int mode;  // 1: for the update, 2: for the combine
+};
+
 /**
  * This operation groups rows in a distributed table based on keys, and applies
  * a function(s) to a set of columns in each group, producing one output column

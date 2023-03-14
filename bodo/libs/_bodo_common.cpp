@@ -261,6 +261,112 @@ array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
         false, dict_data_arr, indices_data_arr);
 }
 
+array_info* create_string_array(std::vector<uint8_t> const& null_bitmap,
+                                std::vector<std::string> const& list_string) {
+    size_t len = list_string.size();
+    // Calculate the number of characters for allocating the string.
+    size_t nb_char = 0;
+    std::vector<std::string>::const_iterator iter = list_string.begin();
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        if (GetBit(null_bitmap.data(), i_grp)) {
+            nb_char += iter->size();
+        }
+        iter++;
+    }
+    size_t extra_bytes = 0;
+    array_info* out_col = alloc_string_array(len, nb_char, extra_bytes);
+    // update string array payload to reflect change
+    char* data_o = out_col->data1;
+    offset_t* offsets_o = (offset_t*)out_col->data2;
+    offset_t pos = 0;
+    iter = list_string.begin();
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        offsets_o[i_grp] = pos;
+        bool bit = GetBit(null_bitmap.data(), i_grp);
+        if (bit) {
+            size_t len_str = size_t(iter->size());
+            memcpy(data_o, iter->data(), len_str);
+            data_o += len_str;
+            pos += len_str;
+        }
+        out_col->set_null_bit(i_grp, bit);
+        iter++;
+    }
+    offsets_o[len] = pos;
+    return out_col;
+}
+
+array_info* create_list_string_array(
+    std::vector<uint8_t> const& null_bitmap,
+    std::vector<std::vector<std::pair<std::string, bool>>> const&
+        list_list_pair) {
+    size_t len = list_list_pair.size();
+    // Determining the number of characters in output.
+    size_t nb_string = 0;
+    size_t nb_char = 0;
+    std::vector<std::vector<std::pair<std::string, bool>>>::const_iterator
+        iter = list_list_pair.begin();
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        if (GetBit(null_bitmap.data(), i_grp)) {
+            std::vector<std::pair<std::string, bool>> e_list = *iter;
+            nb_string += e_list.size();
+            for (auto& e_str : e_list) nb_char += e_str.first.size();
+        }
+        iter++;
+    }
+    // Allocation needs to be done through
+    // alloc_list_string_array, which allocates with meminfos
+    // and same data structs that Python uses. We need to
+    // re-allocate here because number of strings and chars has
+    // been determined here (previous out_col was just an empty
+    // dummy allocation).
+
+    array_info* new_out_col =
+        alloc_list_string_array(len, nb_string, nb_char, 0);
+    offset_t* index_offsets_o = (offset_t*)new_out_col->data3;
+    offset_t* data_offsets_o = (offset_t*)new_out_col->data2;
+    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask;
+    // Writing the list_strings in output
+    char* data_o = new_out_col->data1;
+    data_offsets_o[0] = 0;
+    offset_t pos_index = 0;
+    offset_t pos_data = 0;
+    iter = list_list_pair.begin();
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        bool bit = GetBit(null_bitmap.data(), i_grp);
+        new_out_col->set_null_bit(i_grp, bit);
+        index_offsets_o[i_grp] = pos_index;
+        if (bit) {
+            std::vector<std::pair<std::string, bool>> e_list = *iter;
+            offset_t n_string = e_list.size();
+            for (offset_t i_str = 0; i_str < n_string; i_str++) {
+                std::string& estr = e_list[i_str].first;
+                offset_t n_char = estr.size();
+                memcpy(data_o, estr.data(), n_char);
+                data_o += n_char;
+                pos_data++;
+                data_offsets_o[pos_data] =
+                    data_offsets_o[pos_data - 1] + n_char;
+                bool bit = e_list[i_str].second;
+                SetBitTo(sub_null_bitmask_o, pos_index + i_str, bit);
+            }
+            pos_index += n_string;
+        }
+        iter++;
+    }
+    index_offsets_o[len] = pos_index;
+    return new_out_col;
+}
+
+array_info* create_dict_string_array(array_info* dict_arr,
+                                     array_info* indices_arr, size_t length) {
+    array_info* out_col = new array_info(
+        bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1, -1,
+        NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
+        0, 0, false, false, false, dict_arr, indices_arr);
+    return out_col;
+}
+
 /**
  * Allocates memory for string allocation as a NRT_MemInfo
  */
