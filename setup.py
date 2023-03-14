@@ -352,6 +352,7 @@ ext_arr = Extension(
         "bodo/libs/_decimal_ext.h",
         "bodo/libs/_distributed.h",
         "bodo/libs/_groupby.h",
+        "bodo/libs/_groupby_agg_funcs.h",
         "bodo/libs/_groupby_ftypes.h",
         "bodo/libs/_groupby_hashing.h",
         "bodo/libs/_groupby_udf.h",
