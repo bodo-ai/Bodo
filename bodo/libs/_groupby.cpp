@@ -10,6 +10,7 @@
 #include "_distributed.h"
 #include "_groupby_agg_funcs.h"
 #include "_groupby_common.h"
+#include "_groupby_eval.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_hashing.h"
 #include "_groupby_mpi_exscan.h"
@@ -31,15 +32,6 @@ static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
     {Bodo_FTypes::last, Bodo_FTypes::last},
     {Bodo_FTypes::nunique, Bodo_FTypes::sum},  // used in nunique_mode = 2
     {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg}};
-
-/**
- * Final evaluation step for mean, which calculates the mean based on the
- * sum of observed values and the number of values.
- *
- * @param[in,out] sum of observed values, will be modified to contain the mean
- * @param count: number of observations
- */
-static void mean_eval(double& result, uint64_t& count) { result /= count; }
 
 /**
  * Perform combine operation for variance, which for a set of rows belonging
@@ -106,42 +98,6 @@ void var_combine(array_info* count_col_in, array_info* mean_col_in,
     return var_combine_F<decltype(f)>(count_col_in, mean_col_in, m2_col_in,
                                       count_col_out, mean_col_out, m2_col_out,
                                       f);
-}
-
-/**
- * Perform final evaluation step for variance, which calculates the variance
- * based on the count and m2 values. See
- * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
- * for more information.
- *
- * @param[in,out] stores the calculated variance
- * @param count: number of observations
- * @param m2: sum of squares of differences from the current mean
- */
-static void var_eval(double& result, uint64_t& count, double& m2) {
-    if (count <= 1) {
-        result = std::numeric_limits<double>::quiet_NaN();
-    } else {
-        result = m2 / (count - 1);
-    }
-}
-
-/**
- * Perform final evaluation step for std, which calculates the standard
- * deviation based on the count and m2 values. See
- * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
- * for more information.
- *
- * @param[in,out] stores the calculated std
- * @param count: number of observations
- * @param m2: sum of squares of differences from the current mean
- */
-static void std_eval(double& result, uint64_t& count, double& m2) {
-    if (count <= 1) {
-        result = std::numeric_limits<double>::quiet_NaN();
-    } else {
-        result = sqrt(m2 / (count - 1));
-    }
 }
 
 /**

@@ -357,6 +357,7 @@ ext_arr = Extension(
         "bodo/libs/_groupby.h",
         "bodo/libs/_groupby_agg_funcs.h",
         "bodo/libs/_groupby_common.h",
+        "bodo/libs/_groupby_eval.h",
         "bodo/libs/_groupby_ftypes.h",
         "bodo/libs/_groupby_hashing.h",
         "bodo/libs/_groupby_mpi_exscan.h",
