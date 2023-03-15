@@ -736,6 +736,44 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
             scalar_text += f"res[i] = bodo.hiframes.time_ext.cast_int_to_time(amt % 86400000000000, precision={precision})"
             out_dtype = types.Array(bodo.hiframes.time_ext.TimeType(precision), 1, "C")
 
+        # Code path generated for date data
+        elif is_valid_date_arg(start_dt):
+            unbox_str = (
+                "bodo.utils.conversion.unbox_if_tz_naive_timestamp" if is_vector else ""
+            )
+            if unit in ("years", "quarters", "months", "weeks", "days"):
+                # datetime.timedelta doesn't take years, quarters and months as argument,
+                # need to calculate manually
+                if unit == "years":
+                    scalar_text = "year = arg1.year + arg0\n"
+                    scalar_text += "res[i] = datetime.date(year, arg1.month, arg1.day)"
+                elif unit == "months":
+                    scalar_text = "year = arg1.year + (arg1.month + arg0 - 1) // 12\n"
+                    scalar_text += "month = (arg1.month + arg0 - 1) % 12 + 1\n"
+                    scalar_text += "res[i] = datetime.date(year, month, arg1.day)"
+                elif unit == "quarters":
+                    scalar_text = "year = arg1.year + (arg1.month + 3 * arg0 - 1) // 12\n"
+                    scalar_text += "month = (arg1.month + 3 * arg0 - 1) % 12 + 1\n"
+                    scalar_text += "res[i] = datetime.date(year, month, arg1.day)"
+                # weeks and days
+                else:
+                    scalar_text = f"td = datetime.timedelta({unit}=arg0)\n"
+                    scalar_text += "res[i] = arg1 + td"
+                # If the time unit is larger than or equal to day, returns date objects
+                out_dtype = (
+                    DatetimeDateArrayType()
+                    if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
+                    else types.Array(bodo.datetime64ns, 1, "C")
+                )
+            else:
+                if unit == "nanoseconds":
+                    scalar_text = "td = pd.Timedelta(arg0)\n"
+                else:
+                    scalar_text = f"td = pd.Timedelta({unit}=arg0)\n"
+                scalar_text += f"res[i] = {unbox_str}(pd.Timestamp(arg1) + td)"
+                # If the time unit is smaller than or equal to hour, returns timestamp objects
+                out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+
         # Code path generated for timezone-aware data
         elif time_zone is not None:
 

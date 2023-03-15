@@ -1629,6 +1629,285 @@ def test_snowflake_dateadd(dateadd_df, dateadd_queries, memory_leak_check):
     )
 
 
+@pytest.fixture
+def dateadd_date_df():
+    """Returns the context used by test_snowflake_dateadd_date"""
+    return {
+        "table1": pd.DataFrame(
+            {
+                "col_int": pd.Series([10, 1, None, -10, 100], dtype=pd.Int32Dtype()),
+                "col_dt": pd.Series(
+                    [
+                        None,
+                        datetime.date(2013, 10, 27),
+                        datetime.date(2015, 4, 1),
+                        datetime.date(2020, 2, 3),
+                        datetime.date(2021, 12, 13),
+                    ]
+                ),
+            }
+        )
+    }
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                "DATEADD({!r}, col_int, col_dt)",
+                ["year", "quarter", "month", "week", "day"],
+                pd.DataFrame(
+                    {
+                        "year": [
+                            None,
+                            datetime.date(2014, 10, 27),
+                            None,
+                            datetime.date(2010, 2, 3),
+                            datetime.date(2121, 12, 13),
+                        ],
+                        "quarter": [
+                            None,
+                            datetime.date(2014, 1, 27),
+                            None,
+                            datetime.date(2017, 8, 3),
+                            datetime.date(2046, 12, 13),
+                        ],
+                        "month": [
+                            None,
+                            datetime.date(2013, 11, 27),
+                            None,
+                            datetime.date(2019, 4, 3),
+                            datetime.date(2030, 4, 13),
+                        ],
+                        "week": [
+                            None,
+                            datetime.date(2013, 11, 3),
+                            None,
+                            datetime.date(2019, 11, 25),
+                            datetime.date(2023, 11, 13),
+                        ],
+                        "day": [
+                            None,
+                            datetime.date(2013, 10, 28),
+                            None,
+                            datetime.date(2020, 1, 24),
+                            datetime.date(2022, 3, 23),
+                        ],
+                    }
+                ),
+            ),
+            id="vector-date_units",
+        ),
+        pytest.param(
+            (
+                "TIMEADD({!r}, col_int, col_dt)",
+                ["hour", "minute", "second"],
+                pd.DataFrame(
+                    {
+                        "hour": [
+                            None,
+                            pd.Timestamp("2013-10-27 01:00:00"),
+                            None,
+                            pd.Timestamp("2020-02-02 14:00:00"),
+                            pd.Timestamp("2021-12-17 04:00:00"),
+                        ],
+                        "minute": [
+                            None,
+                            pd.Timestamp("2013-10-27 00:01:00"),
+                            None,
+                            pd.Timestamp("2020-02-02 23:50:00"),
+                            pd.Timestamp("2021-12-13 01:40:00"),
+                        ],
+                        "second": [
+                            None,
+                            pd.Timestamp("2013-10-27 00:00:01"),
+                            None,
+                            pd.Timestamp("2020-02-02 23:59:50"),
+                            pd.Timestamp("2021-12-13 00:01:40"),
+                        ],
+                    }
+                ),
+            ),
+            id="vector-time_units",
+        ),
+        pytest.param(
+            (
+                "TIMESTAMPADD({!r}, col_int, col_dt)",
+                ["millisecond", "microsecond", "nanosecond"],
+                pd.DataFrame(
+                    {
+                        "millisecond": [
+                            None,
+                            pd.Timestamp("2013-10-27 00:00:00.001"),
+                            None,
+                            pd.Timestamp("2020-02-02 23:59:59.990"),
+                            pd.Timestamp("2021-12-13 00:00:00.100"),
+                        ],
+                        "microsecond": [
+                            None,
+                            pd.Timestamp("2013-10-27 00:00:00.000001"),
+                            None,
+                            pd.Timestamp("2020-02-02 23:59:59.999990"),
+                            pd.Timestamp("2021-12-13 00:00:00.000100"),
+                        ],
+                        "nanosecond": [
+                            None,
+                            pd.Timestamp("2013-10-27 00:00:00.000000001"),
+                            None,
+                            pd.Timestamp("2020-02-02 23:59:59.999999990"),
+                            pd.Timestamp("2021-12-13 00:00:00.000000100"),
+                        ],
+                    }
+                ),
+            ),
+            id="vector-subsecond_units",
+        ),
+        pytest.param(
+            (
+                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!r}, -25, col_dt) END",
+                ["year", "quarter", "month", "week", "day"],
+                pd.DataFrame(
+                    {
+                        "year": [
+                            None,
+                            datetime.date(1988, 10, 27),
+                            datetime.date(1990, 4, 1),
+                            None,
+                            datetime.date(1996, 12, 13),
+                        ],
+                        "quarter": [
+                            None,
+                            datetime.date(2007, 7, 27),
+                            datetime.date(2009, 1, 1),
+                            None,
+                            datetime.date(2015, 9, 13),
+                        ],
+                        "month": [
+                            None,
+                            datetime.date(2011, 9, 27),
+                            datetime.date(2013, 3, 1),
+                            None,
+                            datetime.date(2019, 11, 13),
+                        ],
+                        "week": [
+                            None,
+                            datetime.date(2013, 5, 5),
+                            datetime.date(2014, 10, 8),
+                            None,
+                            datetime.date(2021, 6, 21),
+                        ],
+                        "day": [
+                            None,
+                            datetime.date(2013, 10, 2),
+                            datetime.date(2015, 3, 7),
+                            None,
+                            datetime.date(2021, 11, 18),
+                        ],
+                    }
+                ),
+            ),
+            id="case-date_units",
+            marks=pytest.mark.skip(reason="TODO: support date in CASE statements"),
+            # Calcite will set the return type to timestamp when parsing the case statement,
+            # so case statements with time units work but those with date units don't
+        ),
+        pytest.param(
+            (
+                "CASE WHEN col_int < 0 THEN NULL else TIMESTAMPADD({!r}, -25, col_dt) END",
+                ["hour", "minute", "second"],
+                pd.DataFrame(
+                    {
+                        "hour": [
+                            None,
+                            pd.Timestamp("2013-10-25 23:00:00"),
+                            pd.Timestamp("2015-03-30 23:00:00"),
+                            None,
+                            pd.Timestamp("2021-12-11 23:00:00"),
+                        ],
+                        "minute": [
+                            None,
+                            pd.Timestamp("2013-10-26 23:35:00"),
+                            pd.Timestamp("2015-03-31 23:35:00"),
+                            None,
+                            pd.Timestamp("2021-12-12 23:35:00"),
+                        ],
+                        "second": [
+                            None,
+                            pd.Timestamp("2013-10-26 23:59:35"),
+                            pd.Timestamp("2015-03-31 23:59:35"),
+                            None,
+                            pd.Timestamp("2021-12-12 23:59:35"),
+                        ],
+                    }
+                ),
+            ),
+            id="case-time_units",
+        ),
+        pytest.param(
+            (
+                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!r}, -25, col_dt) END",
+                ["millisecond", "microsecond", "nanosecond"],
+                pd.DataFrame(
+                    {
+                        "millisecond": [
+                            None,
+                            pd.Timestamp("2013-10-26 23:59:59.975"),
+                            pd.Timestamp("2015-03-31 23:59:59.975"),
+                            None,
+                            pd.Timestamp("2021-12-12 23:59:59.975"),
+                        ],
+                        "microsecond": [
+                            None,
+                            pd.Timestamp("2013-10-26 23:59:59.999975"),
+                            pd.Timestamp("2015-03-31T23:59:59.999975"),
+                            None,
+                            pd.Timestamp("2021-12-12T23:59:59.999975"),
+                        ],
+                        "nanosecond": [
+                            None,
+                            pd.Timestamp("2013-10-26 23:59:59.999999975"),
+                            pd.Timestamp("2015-03-31 23:59:59.999999975"),
+                            None,
+                            pd.Timestamp("2021-12-12T23:59:59.999999975"),
+                        ],
+                    }
+                ),
+            ),
+            id="case-subsecond_units",
+        ),
+    ]
+)
+def dateadd_date_queries(request):
+    """Returns specifications used for queries in test_snowflake_dateadd_date in
+    the following format:
+    - The query format that the units are injected into
+    - The list of units used for this test
+    - The outputs for this query when used on dateadd_df"""
+    return request.param
+
+
+def test_snowflake_dateadd_date(dateadd_date_df, dateadd_date_queries, memory_leak_check):
+    """
+    Tests the Snowflake version of DATEADD/TIMEADD/TIMESTAMPADD with date inputs for dt_val.
+    Currently takes in the unit as a scalar string instead of a DT unit literal.
+    """
+    query_fmt, units, answers = dateadd_date_queries
+    selects = []
+    for unit in units:
+        selects.append(query_fmt.format(unit))
+    query = "SELECT " + ", ".join(selects) + " FROM table1"
+
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            dateadd_date_df,
+            None,
+            check_names=False,
+            expected_output=answers,
+            only_jit_1DVar=True,
+        )
+
+
 @pytest.mark.parametrize(
     "time_zone, has_case",
     [
