@@ -573,4 +573,18 @@ struct var_agg {
     }
 };
 
+// ngroup
+
+template <typename T, int dtype>
+struct ngroup_agg {
+    /**
+     * Aggregation function for ngroup.
+     * Assign v2 (group number) to v1 (output_column[i])
+     *
+     * @param v1 [out] output value
+     * @param v2 input value.
+     */
+    static void apply(int64_t& v1, T& v2) { v1 = v2; }
+};
+
 #endif  // _GROUPBY_AGG_FUNCS_H_INCLUDED

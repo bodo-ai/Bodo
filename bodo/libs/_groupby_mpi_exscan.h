@@ -53,4 +53,15 @@ table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
                                    bool skipdropna, bool return_key,
                                    bool return_index, bool use_sql_rules);
 
+/**
+ * Create an array info that assigns an index to each unique category.
+ * @param in_table : input table
+ * @param num_keys : number of keys
+ * @param is_parallel: whether we run in parallel or not.
+ * @param key_dropna: whether we drop null keys or not.
+ * @return key categorical array_info
+ */
+array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
+                                      bool is_parallel, bool key_dropna = true);
+
 #endif  // _GROUPBY_MPI_EXSCAN_H_INCLUDED
