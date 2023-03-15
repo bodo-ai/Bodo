@@ -3,8 +3,6 @@
 #define _GROUPBY_H_INCLUDED
 #include "_bodo_common.h"
 
-const int max_global_number_groups_exscan = 1000;
-
 /** Data structure used for the computation of groups.
 
     @data row_to_group       : This takes the index and returns the group

@@ -17,6 +17,8 @@
 struct Bodo_FTypes {
     // !!! IMPORTANT: this is supposed to match the positions in
     // supported_agg_funcs in aggregate.py
+    // !!! IMPORTANT: this is supposed to match the defined
+    // names in _groupby_ftypes.cpp
     enum FTypeEnum {
         no_op = 0,  // To make sure ftypes[0] isn't accidentally matched with
                     // any of the supported functions.
@@ -62,16 +64,6 @@ struct Bodo_FTypes {
     };
 };
 
-const char* Bodo_FTypes_names[] = {
-    "no_op",      "ngroup", "head",    "transform", "size",      "shift",
-    "sum",        "count",  "nunique", "median",    "cumsum",    "cumprod",
-    "cummin",     "cummax", "mean",    "min",       "max",       "prod",
-    "first",      "last",   "idxmin",  "idxmax",    "var",       "std",
-    "boolor_agg", "udf",    "gen_udf", "num_funcs", "mean_eval", "var_eval",
-    "std_eval"};
-
-const char* get_name_for_Bodo_FTypes(int enumVal) {
-    return Bodo_FTypes_names[enumVal];
-}
+const char* get_name_for_Bodo_FTypes(int enumVal);
 
 #endif  // _GROUPBY_FTYPES_H_INCLUDED
