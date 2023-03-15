@@ -144,55 +144,6 @@ static void std_eval(double& result, uint64_t& count, double& m2) {
     }
 }
 
-// TODO which load factor to use?
-#define ROBIN_MAP_MAX_LOAD_FACTOR 0.5
-#define HOPSCOTCH_MAP_MAX_LOAD_FACTOR 0.9
-
-bool calc_use_robin_map(size_t nunique_hashes, tracing::Event* ev = nullptr) {
-    // If the number of groups is very large, we should avoid very small load
-    // factors because the map will use too much memory, and also allocation
-    // and deallocation will become very expensive
-    bool use_robin_map = true;
-    if (nunique_hashes > 1000000) {  // TODO which threshold is best?
-        double robin_map_load_factor = -1;
-        double hopscotch_map_load_factor = -1;
-        uint64_t bucket_size = 1;
-        while (true) {
-            if (bucket_size > nunique_hashes) {
-                // robin_map works best with load_factor <= 0.5, otherwise
-                // hopscotch is better:
-                // https://tessil.github.io/2016/08/29/benchmark-hopscotch-map.html
-                double load_factor = nunique_hashes / double(bucket_size);
-                if (load_factor <= ROBIN_MAP_MAX_LOAD_FACTOR &&
-                    robin_map_load_factor < 0)
-                    robin_map_load_factor = load_factor;
-                if (load_factor < HOPSCOTCH_MAP_MAX_LOAD_FACTOR &&
-                    hopscotch_map_load_factor < 0)
-                    hopscotch_map_load_factor = load_factor;
-                if (robin_map_load_factor > 0 &&
-                    hopscotch_map_load_factor > 0) {
-                    if (robin_map_load_factor >
-                        0.35)  // TODO which threshold is best?
-                        use_robin_map = true;
-                    else if (hopscotch_map_load_factor >
-                             robin_map_load_factor + 0.1)
-                        use_robin_map = false;
-                    break;
-                }
-            }
-            // tsl::robin_map and tsl::hopscotch_map uses a power of 2 growth
-            // policy by default (for faster hash to bucket calculation)
-            bucket_size = bucket_size << 1;
-        }
-        if (ev) {
-            ev->add_attribute("robin_map_load_factor", robin_map_load_factor);
-            ev->add_attribute("hopscotch_map_load_factor",
-                              hopscotch_map_load_factor);
-        }
-    }
-    return use_robin_map;
-}
-
 /**
  * The main get_group_info loop which populates a grouping_info structure
  * (map rows from input to their group number, and store the first input row
@@ -1214,17 +1165,6 @@ void head_computation(array_info* arr, array_info* out_arr,
     delete updated_col;
 }
 
-template <typename T, int dtype, typename Enable = void>
-struct ngroup_agg {
-    /**
-     * Aggregation function for ngroup.
-     * Assign v2 (group number) to v1 (output_column[i])
-     *
-     * @param v1 [out] output value
-     * @param v2 input value.
-     */
-    static void apply(int64_t& v1, T& v2) { v1 = v2; }
-};
 /**
  * @brief
  * ngroup assigns the same group number to each row in the group.
@@ -3957,24 +3897,6 @@ void get_groupby_output_dtype(int ftype,
     }
 }
 
-array_info* alloc_array_groupby(int64_t length, int64_t n_sub_elems,
-                                int64_t n_sub_sub_elems,
-                                bodo_array_type::arr_type_enum arr_type,
-                                Bodo_CTypes::CTypeEnum dtype,
-                                int64_t extra_null_bytes,
-                                int64_t num_categories) {
-    return alloc_array(length, n_sub_elems, n_sub_sub_elems, arr_type, dtype,
-                       extra_null_bytes, num_categories);
-}
-
-void free_array_groupby(array_info* arr) { delete_info_decref_array(arr); }
-
-array_info* get_array_from_iterator(std::vector<array_info*>::iterator& it) {
-    array_info* arr = *it;
-    it++;
-    return arr;
-}
-
 /*
  An instance of GroupbyPipeline class manages a groupby operation. In a
  groupby operation, an arbitrary number of functions can be applied to each
@@ -4033,8 +3955,8 @@ class BasicColSet {
         // calling this modifies arr_type and dtype
         bool is_combine = false;
         get_groupby_output_dtype(ftype, arr_type, dtype, false, is_combine);
-        out_cols.push_back(alloc_array_groupby(num_groups, 1, 1, arr_type,
-                                               dtype, 0, num_categories));
+        out_cols.push_back(
+            alloc_array(num_groups, 1, 1, arr_type, dtype, 0, num_categories));
         update_cols.push_back(out_cols.back());
     }
 
@@ -4060,8 +3982,9 @@ class BasicColSet {
      */
     virtual typename std::vector<array_info*>::iterator update_after_shuffle(
         typename std::vector<array_info*>::iterator& it) {
-        for (size_t i_col = 0; i_col < update_cols.size(); i_col++)
-            update_cols[i_col] = get_array_from_iterator(it);
+        for (size_t i_col = 0; i_col < update_cols.size(); i_col++) {
+            update_cols[i_col] = *(it++);
+        }
         return it;
     }
 
@@ -4081,8 +4004,8 @@ class BasicColSet {
             // calling this modifies arr_type and dtype
             bool is_combine = true;
             get_groupby_output_dtype(ftype, arr_type, dtype, false, is_combine);
-            out_cols.push_back(alloc_array_groupby(num_groups, 1, 1, arr_type,
-                                                   dtype, 0, num_categories));
+            out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, 0,
+                                           num_categories));
             combine_cols.push_back(out_cols.back());
         }
     }
@@ -4125,7 +4048,7 @@ class BasicColSet {
         array_info* out_col = mycols->at(0);
         for (auto it = mycols->begin() + 1; it != mycols->end(); it++) {
             array_info* a = *it;
-            free_array_groupby(a);
+            delete_info_decref_array(a);
         }
         return out_col;
     }
@@ -4149,14 +4072,14 @@ class MeanColSet : public BasicColSet {
 
     virtual void alloc_update_columns(size_t num_groups,
                                       std::vector<array_info*>& out_cols) {
-        array_info* c1 = alloc_array_groupby(num_groups, 1, 1,
-                                             bodo_array_type::NULLABLE_INT_BOOL,
-                                             Bodo_CTypes::FLOAT64, 0,
-                                             0);  // for sum and result
-        array_info* c2 = alloc_array_groupby(num_groups, 1, 1,
-                                             bodo_array_type::NULLABLE_INT_BOOL,
-                                             Bodo_CTypes::UINT64, 0,
-                                             0);  // for counts
+        array_info* c1 =
+            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                        Bodo_CTypes::FLOAT64, 0,
+                        0);  // for sum and result
+        array_info* c2 =
+            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                        Bodo_CTypes::UINT64, 0,
+                        0);  // for counts
         out_cols.push_back(c1);
         out_cols.push_back(c2);
         this->update_cols.push_back(c1);
@@ -4200,16 +4123,6 @@ class MeanColSet : public BasicColSet {
     }
 };
 
-array_info* RetrieveArray_SingleColumn_ARRAY(array_info* index_col,
-                                             array_info* index_pos) {
-    return RetrieveArray_SingleColumn_arr(index_col, index_pos);
-}
-
-array_info* RetrieveArray_SingleColumn_Multiple_ARRAY(array_info* index_col,
-                                                      array_info* index_pos) {
-    return RetrieveArray_SingleColumn_arr(index_col, index_pos);
-}
-
 class IdxMinMaxColSet : public BasicColSet {
    public:
     IdxMinMaxColSet(array_info* in_col, array_info* _index_col, int ftype,
@@ -4222,16 +4135,16 @@ class IdxMinMaxColSet : public BasicColSet {
                                       std::vector<array_info*>& out_cols) {
         // output column containing index values. dummy for now. will be
         // assigned the real data at the end of update()
-        array_info* out_col = alloc_array_groupby(
-            num_groups, 1, 1, index_col->arr_type, index_col->dtype, 0, 0);
+        array_info* out_col = alloc_array(num_groups, 1, 1, index_col->arr_type,
+                                          index_col->dtype, 0, 0);
         // create array to store min/max value
-        array_info* max_col = alloc_array_groupby(
+        array_info* max_col = alloc_array(
             num_groups, 1, 1, this->in_col->arr_type, this->in_col->dtype, 0,
             0);  // for min/max
         // create array to store index position of min/max value
         array_info* index_pos_col =
-            alloc_array_groupby(num_groups, 1, 1, bodo_array_type::NUMPY,
-                                Bodo_CTypes::UINT64, 0, 0);
+            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
+                        Bodo_CTypes::UINT64, 0, 0);
         out_cols.push_back(out_col);
         out_cols.push_back(max_col);
         this->update_cols.push_back(out_col);
@@ -4254,11 +4167,11 @@ class IdxMinMaxColSet : public BasicColSet {
                            grp_infos[0], this->ftype, use_sql_rules);
 
         array_info* real_out_col =
-            RetrieveArray_SingleColumn_ARRAY(index_col, index_pos_col);
+            RetrieveArray_SingleColumn_arr(index_col, index_pos_col);
         array_info* out_col = this->update_cols[0];
         *out_col = std::move(*real_out_col);
         delete real_out_col;
-        free_array_groupby(index_pos_col);
+        delete_info_decref_array(index_pos_col);
         this->update_cols.pop_back();
     }
 
@@ -4266,16 +4179,16 @@ class IdxMinMaxColSet : public BasicColSet {
                                        std::vector<array_info*>& out_cols) {
         // output column containing index values. dummy for now. will be
         // assigned the real data at the end of combine()
-        array_info* out_col = alloc_array_groupby(
-            num_groups, 1, 1, index_col->arr_type, index_col->dtype, 0, 0);
+        array_info* out_col = alloc_array(num_groups, 1, 1, index_col->arr_type,
+                                          index_col->dtype, 0, 0);
         // create array to store min/max value
-        array_info* max_col = alloc_array_groupby(
+        array_info* max_col = alloc_array(
             num_groups, 1, 1, this->in_col->arr_type, this->in_col->dtype, 0,
             0);  // for min/max
         // create array to store index position of min/max value
         array_info* index_pos_col =
-            alloc_array_groupby(num_groups, 1, 1, bodo_array_type::NUMPY,
-                                Bodo_CTypes::UINT64, 0, 0);
+            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
+                        Bodo_CTypes::UINT64, 0, 0);
         out_cols.push_back(out_col);
         out_cols.push_back(max_col);
         this->combine_cols.push_back(out_col);
@@ -4297,12 +4210,12 @@ class IdxMinMaxColSet : public BasicColSet {
         do_apply_to_column(this->update_cols[1], this->combine_cols[1],
                            aux_cols, grp_info, this->ftype, use_sql_rules);
 
-        array_info* real_out_col = RetrieveArray_SingleColumn_Multiple_ARRAY(
-            this->update_cols[0], index_pos_col);
+        array_info* real_out_col =
+            RetrieveArray_SingleColumn_arr(this->update_cols[0], index_pos_col);
         array_info* out_col = this->combine_cols[0];
         *out_col = std::move(*real_out_col);
         delete real_out_col;
-        free_array_groupby(index_pos_col);
+        delete_info_decref_array(index_pos_col);
         this->combine_cols.pop_back();
     }
 
@@ -4321,7 +4234,7 @@ class VarStdColSet : public BasicColSet {
                                       std::vector<array_info*>& out_cols) {
         if (!this->combine_step) {
             // need to create output column now
-            array_info* col = alloc_array_groupby(
+            array_info* col = alloc_array(
                 num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
                 Bodo_CTypes::FLOAT64, 0, 0);  // for result
             // Initialize as ftype to match nullable behavior
@@ -4330,15 +4243,15 @@ class VarStdColSet : public BasicColSet {
             out_cols.push_back(col);
             this->update_cols.push_back(col);
         }
-        array_info* count_col = alloc_array_groupby(
-            num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-            Bodo_CTypes::UINT64, 0, 0);
-        array_info* mean_col = alloc_array_groupby(
-            num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-            Bodo_CTypes::FLOAT64, 0, 0);
-        array_info* m2_col = alloc_array_groupby(
-            num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-            Bodo_CTypes::FLOAT64, 0, 0);
+        array_info* count_col =
+            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                        Bodo_CTypes::UINT64, 0, 0);
+        array_info* mean_col =
+            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                        Bodo_CTypes::FLOAT64, 0, 0);
+        array_info* m2_col =
+            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                        Bodo_CTypes::FLOAT64, 0, 0);
         aggfunc_output_initialize(count_col, Bodo_FTypes::count,
                                   use_sql_rules);  // zero initialize
         aggfunc_output_initialize(mean_col, Bodo_FTypes::count,
@@ -4371,10 +4284,10 @@ class VarStdColSet : public BasicColSet {
 
     virtual void alloc_combine_columns(size_t num_groups,
                                        std::vector<array_info*>& out_cols) {
-        array_info* col = alloc_array_groupby(
-            num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-            Bodo_CTypes::FLOAT64, 0,
-            0);  // for result
+        array_info* col =
+            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                        Bodo_CTypes::FLOAT64, 0,
+                        0);  // for result
         // Initialize as ftype to match nullable behavior
         aggfunc_output_initialize(col, this->ftype,
                                   use_sql_rules);  // zero initialize
@@ -4444,8 +4357,8 @@ class UdfColSet : public BasicColSet {
                 udf_table->columns[i]->arr_type;
             Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
             int64_t num_categories = udf_table->columns[i]->num_categories;
-            out_cols.push_back(alloc_array_groupby(num_groups, 1, 1, arr_type,
-                                                   dtype, 0, num_categories));
+            out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, 0,
+                                           num_categories));
             if (!this->combine_step)
                 this->update_cols.push_back(out_cols.back());
         }
@@ -4471,8 +4384,8 @@ class UdfColSet : public BasicColSet {
                 udf_table->columns[i]->arr_type;
             Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
             int64_t num_categories = udf_table->columns[i]->num_categories;
-            out_cols.push_back(alloc_array_groupby(num_groups, 1, 1, arr_type,
-                                                   dtype, 0, num_categories));
+            out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, 0,
+                                           num_categories));
             this->combine_cols.push_back(out_cols.back());
         }
     }
@@ -4597,9 +4510,9 @@ class CumOpColSet : public BasicColSet {
             // string
             out_type = bodo_array_type::STRING;
         }
-        out_cols.push_back(alloc_array_groupby(this->in_col->length, 1, 1,
-                                               out_type, this->in_col->dtype, 0,
-                                               this->in_col->num_categories));
+        out_cols.push_back(alloc_array(this->in_col->length, 1, 1, out_type,
+                                       this->in_col->dtype, 0,
+                                       this->in_col->num_categories));
         this->update_cols.push_back(out_cols.back());
     }
 
@@ -4623,9 +4536,9 @@ class ShiftColSet : public BasicColSet {
                                       std::vector<array_info*>& out_cols) {
         // NOTE: output size of shift is the same as input size
         //       (NOT the number of groups)
-        out_cols.push_back(alloc_array_groupby(
-            this->in_col->length, 1, 1, this->in_col->arr_type,
-            this->in_col->dtype, 0, this->in_col->num_categories));
+        out_cols.push_back(
+            alloc_array(this->in_col->length, 1, 1, this->in_col->arr_type,
+                        this->in_col->dtype, 0, this->in_col->num_categories));
         this->update_cols.push_back(out_cols.back());
     }
 
@@ -4829,8 +4742,8 @@ class TransformColSet : public BasicColSet {
                                  is_combine);
         // NOTE: output size of transform is the same as input size
         //       (NOT the number of groups)
-        out_cols.push_back(alloc_array_groupby(
-            this->in_col->length, 1, 1, arr_type, dtype, 0, num_categories));
+        out_cols.push_back(alloc_array(this->in_col->length, 1, 1, arr_type,
+                                       dtype, 0, num_categories));
         this->update_cols.push_back(out_cols.back());
     }
 
@@ -4916,7 +4829,7 @@ class TransformColSet : public BasicColSet {
                         .c_str());
                 return;
         }
-        free_array_groupby(child_out_col);
+        delete_info_decref_array(child_out_col);
     }
 
    private:
@@ -4933,9 +4846,9 @@ class HeadColSet : public BasicColSet {
                                       std::vector<array_info*>& out_cols) {
         // NOTE: output size of head is dependent on number of rows to
         // get from each group. This is computed in GroupbyPipeline::update().
-        out_cols.push_back(alloc_array_groupby(
-            update_col_len, 1, 1, this->in_col->arr_type, this->in_col->dtype,
-            0, this->in_col->num_categories));
+        out_cols.push_back(
+            alloc_array(update_col_len, 1, 1, this->in_col->arr_type,
+                        this->in_col->dtype, 0, this->in_col->num_categories));
         this->update_cols.push_back(out_cols.back());
     }
 
@@ -5070,12 +4983,12 @@ void window_computation(array_info* orderby_arr, int64_t window_func,
             // Allocate intermediate buffer to find the true element for each
             // group. Indices
             size_t num_groups = grp_info.num_groups;
-            array_info* idx_col = alloc_array_groupby(
-                num_groups, 1, 1, idx_arr_type, Bodo_CTypes::UINT64, 0, 0);
+            array_info* idx_col = alloc_array(num_groups, 1, 1, idx_arr_type,
+                                              Bodo_CTypes::UINT64, 0, 0);
             // create array to store min/max value
             array_info* data_col =
-                alloc_array_groupby(num_groups, 1, 1, orderby_arr->arr_type,
-                                    orderby_arr->dtype, 0, 0);
+                alloc_array(num_groups, 1, 1, orderby_arr->arr_type,
+                            orderby_arr->dtype, 0, 0);
             // Initialize the index column. This is 0 intialized and will
             // not initial the null values.
             aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
@@ -5157,8 +5070,8 @@ class WindowColSet : public BasicColSet {
                                  is_combine);
         // NOTE: output size of window is the same as input size
         //       (NOT the number of groups)
-        array_info* c = alloc_array_groupby(this->in_col->length, 1, 1,
-                                            arr_type, dtype, 0, num_categories);
+        array_info* c = alloc_array(this->in_col->length, 1, 1, arr_type, dtype,
+                                    0, num_categories);
         aggfunc_output_initialize(c, window_func, use_sql_rules);
         out_cols.push_back(c);
         this->update_cols.push_back(c);
@@ -5223,8 +5136,8 @@ class NgroupColSet : public BasicColSet {
                                  is_combine);
         // NOTE: output size of ngroup is the same as input size
         //       (NOT the number of groups)
-        out_cols.push_back(alloc_array_groupby(
-            this->in_col->length, 1, 1, arr_type, dtype, 0, num_categories));
+        out_cols.push_back(alloc_array(this->in_col->length, 1, 1, arr_type,
+                                       dtype, 0, num_categories));
         this->update_cols.push_back(out_cols.back());
     }
 
@@ -5242,27 +5155,6 @@ class NgroupColSet : public BasicColSet {
     bool is_parallel;  // whether input column data is distributed or
                        // replicated.
 };
-
-/* When transmitting data with shuffle, we have only functionality for
-   array_info.
-   For array_info, nothing needs to be done.
-   For multiple_array_info, we need to add the vect_access entries.
-*/
-void push_back_arrays(std::vector<array_info*>& ListArr, array_info* arr) {
-    ListArr.push_back(arr);
-}
-
-/*
-  The output_list_array takes the array (whether aray_info or
-  multiple_array_info) and write them in their final form
-  for output.
-  For array_info, nothing needs to be done.
-  For multiple_array_info, the nan bits or nan values have
-  to be set if there is actually no values to be put.
- */
-void output_list_arrays(std::vector<array_info*>& ListArr, array_info* arr) {
-    ListArr.push_back(arr);
-}
 
 BasicColSet* makeColSet(array_info* in_col, array_info* index_col, int ftype,
                         bool do_combine, bool skipna, int64_t periods,
@@ -5427,7 +5319,9 @@ class GroupbyPipeline {
         int head_i = int(head_op && is_parallel);
         // Add key-sorting-column for gb.head() to sort output at the end
         // this is relevant only if data is distributed.
-        if (head_i) add_head_key_sort_column();
+        if (head_i) {
+            add_head_key_sort_column();
+        }
         int k = 0;
         for (uint64_t icol = 0; icol < in_table->ncols() - index_i - head_i;
              icol++) {
@@ -5649,8 +5543,8 @@ class GroupbyPipeline {
      */
     void add_head_key_sort_column() {
         array_info* head_sort_col =
-            alloc_array_groupby(in_table->nrows(), 1, 1, bodo_array_type::NUMPY,
-                                Bodo_CTypes::UINT64, 0, 0);
+            alloc_array(in_table->nrows(), 1, 1, bodo_array_type::NUMPY,
+                        Bodo_CTypes::UINT64, 0, 0);
         int64_t num_ranks = dist_get_size();
         int64_t my_rank = dist_get_rank();
         // Gather the number of rows on every rank
@@ -5690,7 +5584,9 @@ class GroupbyPipeline {
         eval();
         // For gb.head() operation, if data is distributed,
         // sort table based on head_sort_col column.
-        if (head_op && is_parallel) sort_gb_head_output();
+        if (head_op && is_parallel) {
+            sort_gb_head_output();
+        }
         return getOutputTable(n_out_rows);
     }
     /**
@@ -5711,7 +5607,7 @@ class GroupbyPipeline {
         cur_table = sort_values_table(cur_table, 1, &asc_pos, &asc_pos, &zero,
                                       nullptr, nullptr, is_parallel);
         // Remove key-sort column
-        free_array_groupby(cur_table->columns[0]);
+        delete_info_decref_array(cur_table->columns[0]);
         cur_table->columns.erase(cur_table->columns.begin());
     }
 
@@ -5786,7 +5682,7 @@ class GroupbyPipeline {
             std::vector<array_info*> list_arr;
             col_set->alloc_update_columns(update_col_len, list_arr);
             for (auto& e_arr : list_arr) {
-                push_back_arrays(update_table->columns, e_arr);
+                update_table->columns.push_back(e_arr);
             }
             auto head_col = dynamic_cast<HeadColSet*>(col_set);
             if (head_col) head_col->set_head_row_list(head_row_list);
@@ -5871,13 +5767,14 @@ class GroupbyPipeline {
             std::vector<array_info*> list_arr;
             col_set->alloc_combine_columns(num_groups, list_arr);
             for (auto& e_arr : list_arr) {
-                push_back_arrays(combine_table->columns, e_arr);
+                combine_table->columns.push_back(e_arr);
             }
             col_set->combine(grp_info);
         }
-        if (n_udf > 0)
+        if (n_udf > 0) {
             udf_info.combine(update_table, combine_table,
                              grp_info.row_to_group.data());
+        }
         delete_table_decref_arrays(update_table);
     }
 
@@ -5889,7 +5786,9 @@ class GroupbyPipeline {
         tracing::Event ev("eval", is_parallel);
         for (auto col_set : col_sets) col_set->eval(grp_infos[0]);
         // only regular UDFs need eval step
-        if (n_udf - gen_udf_col_sets.size() > 0) udf_info.eval(cur_table);
+        if (n_udf - gen_udf_col_sets.size() > 0) {
+            udf_info.eval(cur_table);
+        }
     }
 
     /**
@@ -5914,12 +5813,12 @@ class GroupbyPipeline {
         // output columns.
         if (head_op && is_parallel) {
             for (uint64_t i = 0; i < cur_table->ncols(); i++) {
-                output_list_arrays(out_table->columns, cur_table->columns[i]);
+                out_table->columns.push_back(cur_table->columns[i]);
             }
         } else {
-            for (BasicColSet* col_set : col_sets)
-                output_list_arrays(out_table->columns,
-                                   col_set->getOutputColumn());
+            for (BasicColSet* col_set : col_sets) {
+                out_table->columns.push_back(col_set->getOutputColumn());
+            }
             // gb.head() already added index to out_table.
             if (!head_op && return_index) {
                 out_table->columns.push_back(cur_table->columns.back());
@@ -6019,7 +5918,7 @@ class GroupbyPipeline {
             tmp->columns.assign(in_table->columns.begin(),
                                 in_table->columns.begin() + num_keys);
             tmp->num_keys = num_keys;
-            push_back_arrays(tmp->columns, in_table->columns[col_idx]);
+            tmp->columns.push_back(in_table->columns[col_idx]);
 
             // --------- drop local duplicates ---------
             // If we know that the |set(values)| / len(values)
@@ -6357,143 +6256,6 @@ class GroupbyPipeline {
     uint32_t* hashes = nullptr;
     size_t nunique_hashes = 0;
 };
-
-namespace {
-/**
- * Compute hash for `compute_categorical_index`
- *
- * Don't use std::function to reduce call overhead.
- */
-struct HashComputeCategoricalIndex {
-    size_t operator()(size_t const iRow) const {
-        if (iRow < n_rows_full) {
-            return static_cast<size_t>(hashes_full[iRow]);
-        } else {
-            return static_cast<size_t>(hashes_in_table[iRow - n_rows_full]);
-        }
-    }
-    uint32_t* hashes_full;
-    uint32_t* hashes_in_table;
-    size_t n_rows_full;
-};
-
-/**
- * Key comparison for `compute_categorical_index`
- *
- * Don't use std::function to reduce call overhead.
- */
-struct HashEqualComputeCategoricalIndex {
-    bool operator()(size_t const iRowA, size_t const iRowB) const {
-        size_t jRowA, jRowB, shift_A, shift_B;
-        if (iRowA < n_rows_full) {
-            shift_A = 0;
-            jRowA = iRowA;
-        } else {
-            shift_A = num_keys;
-            jRowA = iRowA - n_rows_full;
-        }
-        if (iRowB < n_rows_full) {
-            shift_B = 0;
-            jRowB = iRowB;
-        } else {
-            shift_B = num_keys;
-            jRowB = iRowB - n_rows_full;
-        }
-        bool test =
-            TestEqual(*concat_column, num_keys, shift_A, jRowA, shift_B, jRowB);
-        return test;
-    }
-    int64_t num_keys;
-    size_t n_rows_full;
-    std::vector<array_info*>* concat_column;
-};
-}  // namespace
-
-/**
- * Basically assign index to each unique category
- * @param in_table : input table
- * @param num_keys : number of keys
- * @param is_parallel: whether we run in parallel or not.
- * @param key_dropna: whether we drop null keys or not.
- * @return key categorical array_info
- */
-array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
-                                      bool is_parallel,
-                                      bool key_dropna = true) {
-    tracing::Event ev("compute_categorical_index", is_parallel);
-    // A rare case of incref since we are going to need the in_table after the
-    // computation of red_table.
-    for (int64_t i_key = 0; i_key < num_keys; i_key++) {
-        array_info* a = in_table->columns[i_key];
-        if (a->arr_type == bodo_array_type::DICT) {
-            make_dictionary_global_and_unique(a, is_parallel);
-        }
-        incref_array(a);
-    }
-    table_info* red_table =
-        drop_duplicates_keys(in_table, num_keys, is_parallel, key_dropna);
-    size_t n_rows_full, n_rows = red_table->nrows();
-    if (is_parallel)
-        MPI_Allreduce(&n_rows, &n_rows_full, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                      MPI_COMM_WORLD);
-    else
-        n_rows_full = n_rows;
-    // Two approaches for cumulative operations : shuffle (then reshuffle) or
-    // use exscan. Preferable to do shuffle when we have too many unique values.
-    // This is a heuristic to decide approach.
-    if (n_rows_full > max_global_number_groups_exscan) {
-        delete_table_decref_arrays(red_table);
-        return nullptr;
-    }
-    // We are below threshold. Now doing an allgather for determining the keys.
-    bool all_gather = true;
-    table_info* full_table;
-    if (is_parallel) {
-        full_table = gather_table(red_table, num_keys, all_gather, is_parallel);
-        delete_table(red_table);
-    } else {
-        full_table = red_table;
-    }
-    // Now building the map_container.
-    uint32_t* hashes_full =
-        hash_keys_table(full_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);
-    uint32_t* hashes_in_table =
-        hash_keys_table(in_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);
-    std::vector<array_info*> concat_column(
-        full_table->columns.begin(), full_table->columns.begin() + num_keys);
-    concat_column.insert(concat_column.end(), in_table->columns.begin(),
-                         in_table->columns.begin() + num_keys);
-
-    HashComputeCategoricalIndex hash_fct{hashes_full, hashes_in_table,
-                                         n_rows_full};
-    HashEqualComputeCategoricalIndex equal_fct{num_keys, n_rows_full,
-                                               &concat_column};
-    UNORD_MAP_CONTAINER<size_t, size_t, HashComputeCategoricalIndex,
-                        HashEqualComputeCategoricalIndex>
-        entSet({}, hash_fct, equal_fct);
-    for (size_t iRow = 0; iRow < size_t(n_rows_full); iRow++)
-        entSet[iRow] = iRow;
-    size_t n_rows_in = in_table->nrows();
-    array_info* out_arr =
-        alloc_categorical(n_rows_in, Bodo_CTypes::INT32, n_rows_full);
-    std::vector<array_info*> key_cols(in_table->columns.begin(),
-                                      in_table->columns.begin() + num_keys);
-    bool has_nulls = does_keys_have_nulls(key_cols);
-    for (size_t iRow = 0; iRow < n_rows_in; iRow++) {
-        int32_t pos;
-        if (has_nulls) {
-            if (key_dropna && does_row_has_nulls(key_cols, iRow))
-                pos = -1;
-            else
-                pos = entSet[iRow + n_rows_full];
-        } else {
-            pos = entSet[iRow + n_rows_full];
-        }
-        out_arr->at<int32_t>(iRow) = pos;
-    }
-    delete_table_decref_arrays(full_table);
-    return out_arr;
-}
 
 table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,

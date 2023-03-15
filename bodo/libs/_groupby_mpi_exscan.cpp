@@ -1,10 +1,14 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 
 #include "_groupby_mpi_exscan.h"
+#include "_array_hash.h"
+#include "_array_operations.h"
 #include "_array_utils.h"
 #include "_distributed.h"
 #include "_groupby_common.h"
 #include "_groupby_ftypes.h"
+#include "_groupby_hashing.h"
+#include "_shuffle.h"
 
 // Strategy for determining exscan
 
@@ -68,6 +72,86 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
         return 0;  // For too many categories the hash partition will be better
     }
     return 1;  // all conditions satisfied. Let's go for EXSCAN code
+}
+
+// Categorical index info
+
+array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
+                                      bool is_parallel, bool key_dropna) {
+    tracing::Event ev("compute_categorical_index", is_parallel);
+    // A rare case of incref since we are going to need the in_table after the
+    // computation of red_table.
+    for (int64_t i_key = 0; i_key < num_keys; i_key++) {
+        array_info* a = in_table->columns[i_key];
+        if (a->arr_type == bodo_array_type::DICT) {
+            make_dictionary_global_and_unique(a, is_parallel);
+        }
+        incref_array(a);
+    }
+    table_info* red_table =
+        drop_duplicates_keys(in_table, num_keys, is_parallel, key_dropna);
+    size_t n_rows_full, n_rows = red_table->nrows();
+    if (is_parallel) {
+        MPI_Allreduce(&n_rows, &n_rows_full, 1, MPI_LONG_LONG_INT, MPI_SUM,
+                      MPI_COMM_WORLD);
+    } else {
+        n_rows_full = n_rows;
+    }
+    // Two approaches for cumulative operations : shuffle (then reshuffle) or
+    // use exscan. Preferable to do shuffle when we have too many unique values.
+    // This is a heuristic to decide approach.
+    if (n_rows_full > max_global_number_groups_exscan) {
+        delete_table_decref_arrays(red_table);
+        return nullptr;
+    }
+    // We are below threshold. Now doing an allgather for determining the keys.
+    bool all_gather = true;
+    table_info* full_table;
+    if (is_parallel) {
+        full_table = gather_table(red_table, num_keys, all_gather, is_parallel);
+        delete_table(red_table);
+    } else {
+        full_table = red_table;
+    }
+    // Now building the map_container.
+    uint32_t* hashes_full =
+        hash_keys_table(full_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);
+    uint32_t* hashes_in_table =
+        hash_keys_table(in_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);
+    std::vector<array_info*> concat_column(
+        full_table->columns.begin(), full_table->columns.begin() + num_keys);
+    concat_column.insert(concat_column.end(), in_table->columns.begin(),
+                         in_table->columns.begin() + num_keys);
+
+    HashComputeCategoricalIndex hash_fct{hashes_full, hashes_in_table,
+                                         n_rows_full};
+    HashEqualComputeCategoricalIndex equal_fct{num_keys, n_rows_full,
+                                               &concat_column};
+    UNORD_MAP_CONTAINER<size_t, size_t, HashComputeCategoricalIndex,
+                        HashEqualComputeCategoricalIndex>
+        entSet({}, hash_fct, equal_fct);
+    for (size_t iRow = 0; iRow < size_t(n_rows_full); iRow++)
+        entSet[iRow] = iRow;
+    size_t n_rows_in = in_table->nrows();
+    array_info* out_arr =
+        alloc_categorical(n_rows_in, Bodo_CTypes::INT32, n_rows_full);
+    std::vector<array_info*> key_cols(in_table->columns.begin(),
+                                      in_table->columns.begin() + num_keys);
+    bool has_nulls = does_keys_have_nulls(key_cols);
+    for (size_t iRow = 0; iRow < n_rows_in; iRow++) {
+        int32_t pos;
+        if (has_nulls) {
+            if (key_dropna && does_row_has_nulls(key_cols, iRow))
+                pos = -1;
+            else
+                pos = entSet[iRow + n_rows_full];
+        } else {
+            pos = entSet[iRow + n_rows_full];
+        }
+        out_arr->at<int32_t>(iRow) = pos;
+    }
+    delete_table_decref_arrays(full_table);
+    return out_arr;
 }
 
 // MPI_Exscan: https://www.mpich.org/static/docs/v3.1.x/www3/MPI_Exscan.html
