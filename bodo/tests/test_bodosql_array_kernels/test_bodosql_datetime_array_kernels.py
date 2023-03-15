@@ -486,6 +486,266 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
     )
 
 
+@pytest.mark.parametrize(
+    "args, answers",
+    [
+        pytest.param(
+            (
+                pd.Series([1, 1, 2, 2, -1, -1, 16, 16, -50, -50]),
+                pd.Series([datetime.date(2018, 1, 1), None] * 5),
+            ),
+            {
+                "years": pd.Series(
+                    [
+                        datetime.date(2019, 1, 1),
+                        None,
+                        datetime.date(2020, 1, 1),
+                        None,
+                        datetime.date(2017, 1, 1),
+                        None,
+                        datetime.date(2034, 1, 1),
+                        None,
+                        datetime.date(1968, 1, 1),
+                        None,
+                    ]
+                ),
+                "quarters": pd.Series(
+                    [
+                        datetime.date(2018, 4, 1),
+                        None,
+                        datetime.date(2018, 7, 1),
+                        None,
+                        datetime.date(2017, 10, 1),
+                        None,
+                        datetime.date(2022, 1, 1),
+                        None,
+                        datetime.date(2005, 7, 1),
+                        None,
+                    ]
+                ),
+                "months": pd.Series(
+                    [
+                        datetime.date(2018, 2, 1),
+                        None,
+                        datetime.date(2018, 3, 1),
+                        None,
+                        datetime.date(2017, 12, 1),
+                        None,
+                        datetime.date(2019, 5, 1),
+                        None,
+                        datetime.date(2013, 11, 1),
+                        None,
+                    ]
+                ),
+                "weeks": pd.Series(
+                    [
+                        datetime.date(2018, 1, 8),
+                        None,
+                        datetime.date(2018, 1, 15),
+                        None,
+                        datetime.date(2017, 12, 25),
+                        None,
+                        datetime.date(2018, 4, 23),
+                        None,
+                        datetime.date(2017, 1, 16),
+                        None,
+                    ]
+                ),
+                "days": pd.Series(
+                    [
+                        datetime.date(2018, 1, 2),
+                        None,
+                        datetime.date(2018, 1, 3),
+                        None,
+                        datetime.date(2017, 12, 31),
+                        None,
+                        datetime.date(2018, 1, 17),
+                        None,
+                        datetime.date(2017, 11, 12),
+                        None,
+                    ]
+                ),
+                "hours": pd.Series(
+                    [
+                        pd.Timestamp("2018-01-01 01:00:00"),
+                        None,
+                        pd.Timestamp("2018-01-01 02:00:00"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:00:00"),
+                        None,
+                        pd.Timestamp("2018-01-01 16:00:00"),
+                        None,
+                        pd.Timestamp("2017-12-29 22:00:00"),
+                        None,
+                    ]
+                ),
+                "minutes": pd.Series(
+                    [
+                        pd.Timestamp("2018-01-01 00:01:00"),
+                        None,
+                        pd.Timestamp("2018-01-01 00:02:00"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:59:00"),
+                        None,
+                        pd.Timestamp("2018-01-01 00:16:00"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:10:00"),
+                        None,
+                    ]
+                ),
+                "seconds": pd.Series(
+                    [
+                        pd.Timestamp("2018-01-01 00:00:01"),
+                        None,
+                        pd.Timestamp("2018-01-01 00:00:02"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:59:59"),
+                        None,
+                        pd.Timestamp("2018-01-01 00:00:16"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:59:10"),
+                        None,
+                    ]
+                ),
+                "milliseconds": pd.Series(
+                    [
+                        pd.Timestamp("2018-01-01 00:00:00.001"),
+                        None,
+                        pd.Timestamp("2018-01-01 00:00:00.002"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:59:59.999"),
+                        None,
+                        pd.Timestamp("2018-01-01 00:00:00.016"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:59:59.950"),
+                        None,
+                    ]
+                ),
+                "microseconds": pd.Series(
+                    [
+                        pd.Timestamp("2018-01-01 00:00:00.000001"),
+                        None,
+                        pd.Timestamp("2018-01-01 00:00:00.000002"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:59:59.999999"),
+                        None,
+                        pd.Timestamp("2018-01-01 00:00:00.000016"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:59:59.999950"),
+                        None,
+                    ]
+                ),
+                "nanoseconds": pd.Series(
+                    [
+                        pd.Timestamp("2018-01-01 00:00:00.000000001"),
+                        None,
+                        pd.Timestamp("2018-01-01 00:00:00.000000002"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:59:59.999999999"),
+                        None,
+                        pd.Timestamp("2018-01-01 00:00:00.000000016"),
+                        None,
+                        pd.Timestamp("2017-12-31 23:59:59.999999950"),
+                        None,
+                    ]
+                ),
+            },
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                100,
+                pd.Series(pd.date_range("1999-12-20", "1999-12-30", 11).date),
+            ),
+            {
+                "years": pd.Series(pd.date_range("2099-12-20", "2099-12-30", 11).date),
+                "quarters": pd.Series(pd.date_range("2024-12-20", "2024-12-30", 11).date),
+                "months": pd.Series(pd.date_range("2008-04-20", "2008-04-30", 11).date),
+                "weeks": pd.Series(pd.date_range("2001-11-19", "2001-11-29", 11).date),
+                "days": pd.Series(pd.date_range("2000-03-29", "2000-04-08", 11).date),
+                "hours": pd.Series(pd.date_range("1999-12-24 04:00:00", "2000-01-03 04:00:00", 11)),
+                "minutes": pd.Series(pd.date_range("1999-12-20 01:40:00", "1999-12-30 01:40:00", 11)),
+                "seconds": pd.Series(pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 11)),
+                "milliseconds": pd.Series(pd.date_range("1999-12-20 00:00:00.100", "1999-12-30 00:00:00.100", 11)),
+                "microseconds": pd.Series(pd.date_range("1999-12-20 00:00:00.000100", "1999-12-30 00:00:00.000100", 11)),
+                "nanoseconds": pd.Series(pd.date_range("1999-12-20 00:00:00.000000100", "1999-12-30 00:00:00.000000100", 11)),
+            },
+            id="scalar_vector",
+        ),
+        pytest.param(
+            (300, datetime.date(1776, 7, 4)),
+            {
+                "years": datetime.date(2076, 7, 4),
+                "quarters": datetime.date(1851, 7, 4),
+                "months": datetime.date(1801, 7, 4),
+                "weeks": datetime.date(1782, 4, 4),
+                "days": datetime.date(1777, 4, 30),
+                "hours": pd.Timestamp("1776-07-16 12:00:00"),
+                "minutes": pd.Timestamp("1776-07-04 05:00:00"),
+                "seconds": pd.Timestamp("1776-07-04 00:05:00"),
+                "milliseconds": pd.Timestamp("1776-07-04 00:00:00.300"),
+                "microseconds": pd.Timestamp("1776-07-04 00:00:00.000300"),
+                "nanoseconds": pd.Timestamp("1776-07-04 00:00:00.000000300"),
+            },
+            id="all_scalar",
+        ),
+        pytest.param(
+            (None, datetime.date(1776, 7, 4)),
+            {
+                "years": None,
+                "quarters": None,
+                "months": None,
+                "weeks": None,
+                "days": None,
+                "hours": None,
+                "minutes": None,
+                "seconds": None,
+                "milliseconds": None,
+                "microseconds": None,
+                "nanoseconds": None,
+            },
+            id="scalar_null",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "unit",
+    [
+        "years",
+        "quarters",
+        "months",
+        "weeks",
+        "days",
+        "hours",
+        "minutes",
+        "seconds",
+        "milliseconds",
+        "microseconds",
+        "nanoseconds",
+    ],
+)
+def test_add_interval_date(unit, args, answers, memory_leak_check):
+    """
+    Tests the add_interval_xxx kernels with datetime.date input.
+    If the time unit is larger than or equal to day, the function will return a
+    datetime.date object. If the time unit is smaller than or equal to hour, the
+    function will transform the date to pd.Timestamp and calculate with pd.Timedelta.
+    """
+    if any(isinstance(arg, pd.Series) for arg in args):
+        fn_str = f"lambda amount, start_dt: pd.Series(bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt))"
+    else:
+        fn_str = f"lambda amount, start_dt: bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt)"
+    impl = eval(fn_str)
+
+    with bodosql_use_date_type():
+        check_func(
+            impl,
+            args,
+            py_output=answers[unit],
+            reset_index=True,
+        )
+
+
 @pytest.fixture(
     params=[
         pytest.param(
