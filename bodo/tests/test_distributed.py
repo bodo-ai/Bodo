@@ -380,6 +380,73 @@ def test_range_index_1D_Var(memory_leak_check):
     check_func(impl, (df,), only_1DVar=True)
 
 
+def test_groupby_cumsum_dist(memory_leak_check):
+    """Make sure groupby transforms like cumsum don't cause 1D_Var output, leading to
+    errors.
+    Reproducer from BodoSQL INTERSECT ALL test: SELECT 1,2 INTERSECT ALL SELECT 1,2
+    """
+    from bodo.utils.typing import ColNamesMetaType, MetaType
+
+    global_2 = bodo.int32[::1]
+    global_3 = bodo.int32[::1]
+    global_1 = bodo.int32[::1]
+    global_6 = ColNamesMetaType(("EXPR$0", "EXPR$1", "__bodo_dummy__"))
+    global_4 = bodo.int32[::1]
+    global_5 = MetaType((0, 1, 2))
+
+    @bodo.jit
+    def impl():
+        df1 = pd.DataFrame(
+            {
+                "EXPR$0": bodo.utils.conversion.coerce_scalar_to_array(
+                    np.int32(1), 1, global_1
+                ),
+                "EXPR$1": bodo.utils.conversion.coerce_scalar_to_array(
+                    np.int32(2), 1, global_2
+                ),
+            },
+            index=bodo.hiframes.pd_index_ext.init_range_index(0, 1, 1, None),
+        )
+        df2 = pd.DataFrame(
+            {
+                "EXPR$0": bodo.utils.conversion.coerce_scalar_to_array(
+                    np.int32(1), 1, global_3
+                ),
+                "EXPR$1": bodo.utils.conversion.coerce_scalar_to_array(
+                    np.int32(2), 1, global_4
+                ),
+            },
+            index=bodo.hiframes.pd_index_ext.init_range_index(0, 1, 1, None),
+        )
+        S6 = np.ones((len(df1),), dtype=np.int64)
+        T7 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1),
+            (S6,),
+            global_5,
+            df1.shape[1],
+        )
+        df8 = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (T7,), pd.RangeIndex(0, len(df1), 1), global_6
+        )
+        S9 = df8.groupby(
+            [
+                "EXPR$0",
+                "EXPR$1",
+            ],
+            dropna=False,
+        ).cumsum()["__bodo_dummy__"]
+        T10 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1),
+            (S9,),
+            global_5,
+            df1.shape[1],
+        )
+        return T10
+
+    impl()
+    assert count_array_OneD_Vars() == 0, "invalid distributions"
+
+
 def test_bodo_func_dist_call1(memory_leak_check):
     """make sure calling other bodo functions with their distributed flags set works as
     expected (dist info is propagated across functions).
