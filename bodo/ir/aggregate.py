@@ -1079,6 +1079,12 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
 
     # output is 1D_Var due to groupby/shuffle, has to meet input dist
     out_dist = Distribution(min(in_dist.value, Distribution.OneD_Var.value))
+
+    # cumulative/transform/window functions don't aggregate values and have a reverse
+    # shuffle, so output chunk size is the same as input size (can stay 1D)
+    if aggregate_node.maintain_input_size:
+        out_dist = in_dist
+
     for col_var in out_arrs:
         if col_var.name in array_dists:
             out_dist = Distribution(
@@ -1086,7 +1092,7 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
             )
 
     # output can cause input REP
-    if out_dist != Distribution.OneD_Var:
+    if out_dist == Distribution.REP:
         in_dist = out_dist
 
     # set dists
