@@ -351,6 +351,7 @@ ext_arr = Extension(
         "bodo/libs/_array_hash.h",
         "bodo/libs/_array_utils.h",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_bodo_to_arrow.h",
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_datetime_utils.h",
         "bodo/libs/_decimal_ext.cpp",

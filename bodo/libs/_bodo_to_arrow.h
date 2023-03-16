@@ -49,3 +49,13 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
  * @return std::shared_ptr<arrow::Table> Arrow table
  */
 std::shared_ptr<arrow::Table> bodo_table_to_arrow(table_info *table);
+
+/**
+ * @brief convert Arrow array to Bodo array_info with zero-copy.
+ * The output Bodo array holds references to the Arrow array's buffers and
+ * releases them when deleted. Currently, only string arrays are supported.
+ *
+ * @param arrow_arr input Arrow array (string array currently)
+ * @return array_info* output Bodo array
+ */
+array_info *arrow_array_to_bodo(std::shared_ptr<arrow::Array> arrow_arr);
