@@ -338,6 +338,7 @@ ext_arr = Extension(
         "bodo/libs/_decimal_ext.cpp",
         "bodo/libs/_groupby.cpp",
         "bodo/libs/_groupby_common.cpp",
+        "bodo/libs/_groupby_eval.cpp",
         "bodo/libs/_groupby_ftypes.cpp",
         "bodo/libs/_groupby_mpi_exscan.cpp",
         "bodo/libs/_groupby_update.cpp",

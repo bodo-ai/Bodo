@@ -9,6 +9,25 @@
  * be inlined.
  */
 
+// Remapping Update -> Combine for when a local update has occurred
+
+// this mapping is used by BasicColSet operations to know what combine (i.e.
+// step (c)) function to use for a given aggregation function
+static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
+    {Bodo_FTypes::size, Bodo_FTypes::sum},
+    {Bodo_FTypes::sum, Bodo_FTypes::sum},
+    {Bodo_FTypes::count, Bodo_FTypes::sum},
+    {Bodo_FTypes::mean, Bodo_FTypes::sum},  // sum totals and counts
+    {Bodo_FTypes::min, Bodo_FTypes::min},
+    {Bodo_FTypes::max, Bodo_FTypes::max},
+    {Bodo_FTypes::prod, Bodo_FTypes::prod},
+    {Bodo_FTypes::first, Bodo_FTypes::first},
+    {Bodo_FTypes::last, Bodo_FTypes::last},
+    {Bodo_FTypes::nunique, Bodo_FTypes::sum},  // used in nunique_mode = 2
+    {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg}};
+
+int get_combine_func(int update_ftype) { return combine_funcs[update_ftype]; }
+
 // Cumulative OPs
 
 /**
@@ -591,4 +610,44 @@ void shift_computation(array_info* arr, array_info* out_arr,
     array_info* updated_col = RetrieveArray_SingleColumn(arr, row_list);
     *out_arr = std::move(*updated_col);
     delete updated_col;
+}
+
+// Variance
+void var_combine(array_info* count_col_in, array_info* mean_col_in,
+                 array_info* m2_col_in, array_info* count_col_out,
+                 array_info* mean_col_out, array_info* m2_col_out,
+                 grouping_info const& grp_info) {
+    for (size_t i = 0; i < count_col_in->length; i++) {
+        // Var always has null compute columns even
+        // if there is an original numpy input. All arrays
+        // will have the same null bit value so just check 1.
+        if (count_col_in->get_null_bit(i)) {
+            int64_t group_num = grp_info.row_to_group[i];
+            uint64_t& count_a = getv<uint64_t>(count_col_out, group_num);
+            uint64_t& count_b = getv<uint64_t>(count_col_in, i);
+            // TODO: Can I delete this comment + condition
+            // in the pivot case we can receive dummy values from other ranks
+            // when combining the results (in this case with count == 0). This
+            // is because the pivot case groups on index and creates n_pivot
+            // columns, and so for each of its index values a rank will have
+            // n_pivot fields, even if a rank does not have a particular (index,
+            // pivot_value) pair
+            if (count_b == 0) {
+                continue;
+            }
+            double& mean_a = getv<double>(mean_col_out, group_num);
+            double& mean_b = getv<double>(mean_col_in, i);
+            double& m2_a = getv<double>(m2_col_out, group_num);
+            double& m2_b = getv<double>(m2_col_in, i);
+            uint64_t count = count_a + count_b;
+            double delta = mean_b - mean_a;
+            mean_a = (count_a * mean_a + count_b * mean_b) / count;
+            m2_a = m2_a + m2_b + delta * delta * count_a * count_b / count;
+            count_a = count;
+            // Set all the null bits to true.
+            count_col_out->set_null_bit(i, true);
+            mean_col_out->set_null_bit(i, true);
+            m2_col_out->set_null_bit(i, true);
+        }
+    }
 }
