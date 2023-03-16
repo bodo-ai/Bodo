@@ -394,31 +394,26 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
 
         ret_type = arrow_type;
 
-        // We use the same input Bodo buffers (no need to copy to new buffers)
+        // We use the same input Bodo buffers wrapped in BodoBuffers, which
+        // track refcounts and deallocate if necessary.
         const int64_t n_strings = array->length;
         const int64_t n_chars = ((offset_t *)array->data2)[n_strings];
 
-        std::shared_ptr<arrow::Buffer> chars_buffer =
-            std::make_shared<arrow::Buffer>((uint8_t *)array->data1, n_chars);
+        // get meminfos of characters and offsets arrays to wrap in BodoBuffers.
+        array_item_arr_numpy_payload *payload =
+            (array_item_arr_numpy_payload *)(array->meminfo->data);
 
-        std::shared_ptr<arrow::Buffer> offsets_buffer =
-            std::make_shared<arrow::Buffer>((uint8_t *)array->data2,
-                                            sizeof(offset_t) * (n_strings + 1));
+        MemInfo *chars_meminfo = payload->data.meminfo;
+        MemInfo *offsets_meminfo = payload->offsets.meminfo;
 
-        // copy buffers if necessary (resulting buffers will be
-        // managed/de-allocated by Arrow)
-        // TODO: eliminate the need to copy in callers as much as possible
-        if (copy) {
-            auto chars_buff_copy_res = arrow::Buffer::Copy(
-                chars_buffer, arrow::default_cpu_memory_manager());
-            CHECK_ARROW_AND_ASSIGN(chars_buff_copy_res, "Buffer::Copy",
-                                   chars_buffer);
+        // NOTE: BodoBuffers hold a reference
+        std::shared_ptr<BodoBuffer> chars_buffer = std::make_shared<BodoBuffer>(
+            (uint8_t *)array->data1, n_chars, chars_meminfo);
 
-            auto offsets_buff_copy_res = arrow::Buffer::Copy(
-                offsets_buffer, arrow::default_cpu_memory_manager());
-            CHECK_ARROW_AND_ASSIGN(offsets_buff_copy_res, "Buffer::Copy",
-                                   offsets_buffer);
-        }
+        std::shared_ptr<BodoBuffer> offsets_buffer =
+            std::make_shared<BodoBuffer>((uint8_t *)array->data2,
+                                         sizeof(offset_t) * (n_strings + 1),
+                                         offsets_meminfo);
 
         auto arr_data = arrow::ArrayData::Make(
             arrow_type, n_strings, {null_bitmap, offsets_buffer, chars_buffer},

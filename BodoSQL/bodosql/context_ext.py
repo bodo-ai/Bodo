@@ -123,9 +123,8 @@ def box_bodosql_context(typ, val, c):
         df = c.builder.extract_value(dataframes, i)
         c.context.nrt.incref(c.builder, typ.dataframes[i], df)
         df_obj = c.pyapi.from_native_value(typ.dataframes[i], df, c.env_manager)
-        c.context.nrt.decref(c.builder, typ.dataframes[i], df)
-        # dict_setitem_string borrows a reference, so avoid decrefing.
         c.pyapi.dict_setitem_string(py_dict_obj, name, df_obj)
+        c.pyapi.decref(df_obj)
 
     # Box the catalog if it exists
     if is_overload_none(typ.catalog_type):
@@ -146,6 +145,7 @@ def box_bodosql_context(typ, val, c):
     c.pyapi.decref(bodosql_class_obj)
     c.pyapi.decref(py_dict_obj)
     c.pyapi.decref(catalog_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return res
 
 
