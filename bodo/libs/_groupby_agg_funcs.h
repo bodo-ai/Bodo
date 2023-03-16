@@ -4,10 +4,9 @@
 #define _GROUPBY_AGG_FUNCS_H_INCLUDED
 
 #include "_groupby_ftypes.h"
-
 /**
  * The file contains the templated aggregate functions that are used
- * for the update step of groupby.
+ * for the update step of groupby and will be inlined.
  *
  */
 
