@@ -11,6 +11,18 @@
  * be inlined.
  */
 
+// Combine mapping
+
+/**
+ * @brief Get the combine function for a given update
+ * function. Combine is used after we have already done
+ * a local reduction.
+ *
+ * @param update_ftype The update function type.
+ * @return The combine function type.
+ */
+int get_combine_func(int update_ftype);
+
 // Cumulative OPs
 
 /**
@@ -65,5 +77,24 @@ void median_computation(array_info* arr, array_info* out_arr,
  */
 void shift_computation(array_info* arr, array_info* out_arr,
                        grouping_info const& grp_info, int64_t const& periods);
+
+// Variance
+
+/**
+ * @brief Compute the variance update function for combining the result
+ * of local reductions on each rank.
+ *
+ * @param[in] count_col_in The count input column.
+ * @param[in] mean_col_in The mean input column.
+ * @param[in] m2_col_in The mean^2 input column.
+ * @param[out] count_col_out The count output column.
+ * @param[out] mean_col_out The mean output column.
+ * @param[out] m2_col_out The mean^2 output column.
+ * @param[in] grp_info The grouping information.
+ */
+void var_combine(array_info* count_col_in, array_info* mean_col_in,
+                 array_info* m2_col_in, array_info* count_col_out,
+                 array_info* mean_col_out, array_info* m2_col_out,
+                 grouping_info const& grp_info);
 
 #endif  // _GROUPBY_UPDATE_H_INCLUDED
