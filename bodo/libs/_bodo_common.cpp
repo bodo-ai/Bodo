@@ -3,6 +3,10 @@
 
 std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
 
+// Global memory allocation tracker to allow finding memory leaks in unit tests.
+// Each extension module is a separate shared library and has a copy.
+NRT_MemSys TheMSys(malloc, realloc, free);
+
 void bodo_common_init() {
     static bool initialized = false;
     if (initialized) {
@@ -54,8 +58,6 @@ void bodo_common_init() {
                              "float64 size mismatch between C++ and NumPy!");
         return;
     }
-    // initalize memory alloc/tracking system in _meminfo.h
-    NRT_MemSys_init();
 }
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(
@@ -853,7 +855,6 @@ void decref_array(array_info* arr) {
         if (arr->info2 != nullptr) decref_array(arr->info2);
         return;
     }
-
     if (arr->meminfo != NULL && arr->meminfo->refct != -1) {
         arr->meminfo->refct--;
         if (arr->meminfo->refct == 0) NRT_MemInfo_call_dtor(arr->meminfo);
@@ -865,7 +866,20 @@ void decref_array(array_info* arr) {
     }
 }
 
-void incref_array(array_info* arr) {
+void decref_meminfo(MemInfo* meminfo) {
+    if (meminfo != NULL && meminfo->refct != -1) {
+        meminfo->refct--;
+        if (meminfo->refct == 0) NRT_MemInfo_call_dtor(meminfo);
+    }
+}
+
+void incref_meminfo(MemInfo* meminfo) {
+    if (meminfo != NULL && meminfo->refct != -1) {
+        meminfo->refct++;
+    }
+}
+
+void incref_array(const array_info* arr) {
     // dictionary-encoded string array uses nested infos
     if (arr->arr_type == bodo_array_type::DICT) {
         if (arr->info1 != nullptr) incref_array(arr->info1);
@@ -875,6 +889,7 @@ void incref_array(array_info* arr) {
 
     if (arr->meminfo != NULL && arr->meminfo->refct != -1)
         arr->meminfo->refct++;
+
     if (arr->meminfo_bitmask != NULL && arr->meminfo_bitmask->refct != -1)
         arr->meminfo_bitmask->refct++;
 }

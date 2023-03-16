@@ -11,6 +11,32 @@
 #undef timezone
 #endif
 
+/**
+ * @brief Arrow buffer that holds a reference to a Bodo meminfo and
+ * decrefs/deallocates if necessary. Alternative to Arrow's PoolBuffer:
+ * https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/memory_pool.cc#L838
+ */
+class BodoBuffer : public arrow::MutableBuffer {
+   public:
+    BodoBuffer(uint8_t *data, const int64_t size, NRT_MemInfo *meminfo_)
+        : MutableBuffer(data, size), meminfo(meminfo_) {
+        incref_meminfo(meminfo);
+    }
+
+    ~BodoBuffer() override {
+        // Adapted from:
+        // https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/memory_pool.cc#L844
+        uint8_t *ptr = mutable_data();
+        // TODO(ehsan): add global_state.is_finalizing() check to match Arrow
+        if (ptr) {
+            decref_meminfo(meminfo);
+        }
+    }
+
+   private:
+    NRT_MemInfo *meminfo;
+};
+
 std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const array_info *array,
     std::shared_ptr<arrow::Array> *out, bool convert_timedelta_to_int64,

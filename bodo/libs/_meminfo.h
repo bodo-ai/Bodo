@@ -36,6 +36,8 @@
 #include <cstring>
 #include <iostream>
 
+extern "C" {
+
 // ******** copied from Numba
 // NRT = NumbaRunTime
 // Related to managing memory between Numba and C++.
@@ -52,7 +54,20 @@ typedef void (*NRT_free_func)(void *ptr);
 typedef int (*atomic_meminfo_cas_func)(void **ptr, void *cmp, void *repl,
                                        void **oldptr);
 
+struct Allocator {
+    Allocator(NRT_malloc_func malloc_, NRT_realloc_func realloc_,
+              NRT_free_func free_)
+        : malloc(malloc_), realloc(realloc_), free(free_) {}
+    NRT_malloc_func malloc;
+    NRT_realloc_func realloc;
+    NRT_free_func free;
+};
+
 struct MemSys {
+    MemSys(NRT_malloc_func malloc_, NRT_realloc_func realloc_,
+           NRT_free_func free_)
+        : allocator(malloc_, realloc_, free_) {}
+
     /* Atomic increment and decrement function */
     NRT_atomic_inc_dec_func atomic_inc, atomic_dec;
     /* Atomic CAS */
@@ -62,17 +77,13 @@ struct MemSys {
     /* Stats */
     size_t stats_alloc, stats_free, stats_mi_alloc, stats_mi_free;
     /* System allocation functions */
-    struct {
-        NRT_malloc_func malloc;
-        NRT_realloc_func realloc;
-        NRT_free_func free;
-    } allocator;
+    Allocator allocator;
 };
 
 typedef struct MemSys NRT_MemSys;
 
 /* The Memory System object */
-static NRT_MemSys TheMSys;
+extern NRT_MemSys TheMSys;
 
 inline static size_t nrt_testing_atomic_inc(size_t *ptr) {
     /* non atomic */
@@ -121,18 +132,6 @@ inline void NRT_MemSys_set_atomic_cas_stub(void) {
     NRT_MemSys_set_atomic_cas(nrt_testing_atomic_cas);
 }
 
-inline void NRT_MemSys_init(void) {
-    memset(&TheMSys, 0, sizeof(NRT_MemSys));
-    /* Bind to libc allocator */
-    TheMSys.allocator.malloc = malloc;
-    TheMSys.allocator.realloc = realloc;
-    TheMSys.allocator.free = free;
-    // Bodo change: initialize to non-atomic functions since we don't use
-    // multithreading
-    NRT_MemSys_set_atomic_inc_dec_stub();
-    NRT_MemSys_set_atomic_cas_stub();
-}
-
 inline size_t NRT_MemSys_get_stats_alloc() { return TheMSys.stats_alloc; }
 
 inline size_t NRT_MemSys_get_stats_free() { return TheMSys.stats_free; }
@@ -160,27 +159,18 @@ inline void nrt_debug_print(char *fmt, ...) {
     va_end(args);
 }
 
-#if 0
-#define BODO_DEBUG
-#else
-#undef BODO_DEBUG
-#endif
-
 #if !defined MIN
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
 #endif
 
 inline void NRT_Free(void *ptr) {
-#ifdef BODO_DEBUG
-    std::cerr << "NRT_Free " << ptr << "\n";
-#endif
     TheMSys.allocator.free(ptr);
-    TheMSys.atomic_inc(&TheMSys.stats_free);
+    TheMSys.stats_free++;
 }
 
 inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
     NRT_Free(mi);
-    TheMSys.atomic_inc(&TheMSys.stats_mi_free);
+    TheMSys.stats_mi_free++;
 }
 
 /* This function is to be called only from C++.
@@ -188,9 +178,6 @@ inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
    Assert statements are made for controlling that the reference count is 0.
  */
 inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
-#ifdef BODO_DEBUG
-    std::cerr << "NRT_MemInfo_call_dtor " << mi << "\n";
-#endif
     assert(mi->refct == 0);  // The reference count should be exactly 0
     if (mi->dtor && !TheMSys.shutting)
         /* We have a destructor and the system is not shutting down */
@@ -205,10 +192,8 @@ inline void *NRT_Allocate(size_t size) {
         std::cerr << "bad alloc: possible Out of Memory error\n";
         exit(9);
     }
-#ifdef BODO_DEBUG
-    std::cerr << "NRT_Allocate bytes=" << size << " ptr=" << ptr << "\n";
-#endif
-    TheMSys.atomic_inc(&TheMSys.stats_alloc);
+
+    TheMSys.stats_alloc++;
     return ptr;
 }
 
@@ -230,23 +215,17 @@ inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
     mi->size = size;
     mi->external_allocator = external_allocator;
     /* Update stats */
-    TheMSys.atomic_inc(&TheMSys.stats_mi_alloc);
+    TheMSys.stats_mi_alloc++;
 }
 
 inline void nrt_internal_dtor_safe(void *ptr, size_t size, void *info) {
-#ifdef BODO_DEBUG
-    std::cerr << "nrt_internal_dtor_safe " << ptr << ", " << info << "\n";
-#endif
     /* See NRT_MemInfo_alloc_safe() */
     memset(ptr, 0xDE, MIN(size, 256));
 }
 
 inline void nrt_internal_custom_dtor_safe(void *ptr, size_t size, void *info) {
     NRT_dtor_function dtor = (NRT_dtor_function)info;
-#ifdef BODO_DEBUG
-    std::cerr << "nrt_internal_custom_dtor_safe " << ptr << ", " << info
-              << "\n";
-#endif
+
     if (dtor) {
         dtor(ptr, size, NULL);
     }
@@ -261,9 +240,6 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_dtor_safe(size_t size,
     /* Only fill up a couple cachelines with debug markers, to minimize
        overhead. */
     memset(data, 0xCB, MIN(size, 256));
-#ifdef BODO_DEBUG
-    std::cerr << "NRT_MemInfo_alloc_dtor_safe " << data << " " << size << "\n";
-#endif
     NRT_MemInfo_init(mi, data, size, nrt_internal_custom_dtor_safe,
                      (void *)dtor, NULL);
     return mi;
@@ -291,9 +267,6 @@ inline void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
 inline NRT_MemInfo *NRT_MemInfo_alloc_aligned(size_t size, unsigned align) {
     NRT_MemInfo *mi;
     void *data = nrt_allocate_meminfo_and_data_align(size, align, &mi);
-#ifdef BODO_DEBUG
-    std::cerr << "NRT_MemInfo_alloc_aligned " << data << "\n";
-#endif
     NRT_MemInfo_init(mi, data, size, NULL, NULL, NULL);
     return mi;
 }
@@ -305,13 +278,11 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size,
     /* Only fill up a couple cachelines with debug markers, to minimize
        overhead. */
     memset(data, 0xCB, MIN(size, 256));
-#ifdef BODO_DEBUG
-    std::cerr << "NRT_MemInfo_alloc_safe_aligned " << data << " " << size
-              << "\n";
-#endif
     NRT_MemInfo_init(mi, data, size, nrt_internal_dtor_safe, (void *)size,
                      NULL);
     return mi;
 }
+
+}  // extern "C"
 
 #endif  // #ifndef BODO_MEMINFO_INCLUDED
