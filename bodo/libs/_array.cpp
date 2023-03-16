@@ -16,6 +16,7 @@
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_bodo_to_arrow.h"
 #include "_distributed.h"
 #include "_groupby.h"
 #include "_join.h"
@@ -514,50 +515,9 @@ NRT_MemInfo* string_array_from_pyarrow(PyObject* pyarrow_arr) {
     std::shared_ptr<arrow::LargeStringArray> arrow_str_arr =
         std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr);
 
-    int64_t n = arrow_str_arr->length();
+    array_info* arr = arrow_array_to_bodo(arrow_str_arr);
+    return arr->meminfo;
 
-    // allocate null bitmap and copy data
-    int64_t n_bytes = arrow::bit_util::BytesForBits(n);
-    numpy_arr_payload null_bitmap_payload =
-        allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8);
-    uint8_t* null_bitmap = (uint8_t*)null_bitmap_payload.data;
-
-    // Arrow doesn't allocate null bitmap if there are no nulls in the array
-    if (arrow_str_arr->null_bitmap_data() != NULLPTR) {
-        memcpy(null_bitmap, arrow_str_arr->null_bitmap_data(), n_bytes);
-    } else {
-        CHECK(arrow_str_arr->null_count() == 0,
-              "expected no nulls in Arrow array");
-        // set all elements to non-null
-        memset(null_bitmap, 0xff, n_bytes);
-    }
-
-    // allocate characters array and copy data
-    // TODO[BE-3591]: support zero-copy Arrow array unboxing
-    int64_t n_chars = arrow_str_arr->total_values_length();
-    numpy_arr_payload char_buf_payload =
-        allocate_numpy_payload(n_chars, Bodo_CTypes::UINT8);
-    char* char_buff = char_buf_payload.data;
-    memcpy(char_buff, arrow_str_arr->raw_data(), n_chars);
-
-    // allocate offsets and copy data
-    numpy_arr_payload offsets_payload =
-        allocate_numpy_payload(n + 1, Bodo_CType_offset);
-    offset_t* offsets = (offset_t*)offsets_payload.data;
-    memcpy(offsets, arrow_str_arr->raw_value_offsets(),
-           sizeof(offset_t) * (n + 1));
-
-    // create array(item) meminfo and set data members
-    NRT_MemInfo* meminfo_array_item = alloc_array_item_arr_meminfo();
-    array_item_arr_numpy_payload* payload =
-        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
-
-    payload->n_arrays = n;
-    payload->data = char_buf_payload;
-    payload->offsets = offsets_payload;
-    payload->null_bitmap = null_bitmap_payload;
-
-    return meminfo_array_item;
 #undef CHECK
 }
 
