@@ -655,7 +655,17 @@ void decref_array(array_info* arr);
 /**
  * incref Bodo array
  */
-void incref_array(array_info* arr);
+void incref_array(const array_info* arr);
+
+/**
+ * decref meminfo refcount
+ */
+void decref_meminfo(MemInfo* meminfo);
+
+/**
+ * incref meminfo refcount
+ */
+void incref_meminfo(MemInfo* meminfo);
 
 extern "C" {
 

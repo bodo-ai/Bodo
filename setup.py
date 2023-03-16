@@ -296,6 +296,7 @@ ext_str = Extension(
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_bodo_to_arrow.h",
+        "bodo/libs/_meminfo.h",
         "bodo/libs/_datetime_utils.h",
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow", "arrow_python"],
