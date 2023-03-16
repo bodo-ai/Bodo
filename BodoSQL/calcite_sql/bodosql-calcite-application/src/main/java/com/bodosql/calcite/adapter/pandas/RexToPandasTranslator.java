@@ -353,7 +353,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       // and change the variables to reference the new dataframe
       List<String> colNames = input.getRel().getRowType().getFieldNames();
       final String indent = getBodoIndent();
-      String tmp_case_name = "tmp_case_" + builder.getSymbolTable().genDfVar();
+      String tmp_case_name = "tmp_case_" + builder.getSymbolTable().genDfVar().emit();
       this.builder.append(
           indent
               + tmp_case_name

@@ -1564,7 +1564,7 @@ class SeriesPass:
             return self._handle_ufuncs_bool_arr(func_name, rhs.args)
 
         # support matplot lib calls
-        if "matplotlib" in sys.modules:
+        if "bodo.libs.matplotlib_ext" in sys.modules:
             # matplotlib.pyplot functions
             if (
                 func_mod == "matplotlib.pyplot"

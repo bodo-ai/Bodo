@@ -1364,7 +1364,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
         // accesses
         // (e.g. bodo.utils.indexing.scalar_optional_getitem(T1_1, i))
         String returnExpr =
-            "bodo.utils.indexing.scalar_optional_getitem(" + inputVar + "_" + colInd + ", i)";
+            "bodo.utils.indexing.scalar_optional_getitem("
+                + inputVar.emit()
+                + "_"
+                + colInd
+                + ", i)";
         outputRexInfoList.add(new Expr.Raw(returnExpr));
       } else {
         outputRexInfoList.add(new Expr.Raw(outputColExprs.get(i)));

@@ -62,6 +62,8 @@ def memory_leak_check():
     Equivalent to Numba's MemoryLeakMixin:
     https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/tests/support.py#L688
     """
+    import bodo.tests.utils
+
     gc.collect()
     old = rtsys.get_allocation_stats()
     old_bodo = bodo.utils.allocation_tracking.get_allocation_stats()
@@ -75,7 +77,7 @@ def memory_leak_check():
     total_free = sum([m[1] for m in new_stats]) - sum([m[1] for m in old_stats])
     total_mi_alloc = sum([m[2] for m in new_stats]) - sum([m[2] for m in old_stats])
     total_mi_free = sum([m[3] for m in new_stats]) - sum([m[3] for m in old_stats])
-    
+
     # Don't check for memory leaks if the test is being re-run by flaky
     if bodo.tests.utils.pytest_snowflake_is_rerunning:
         bodo.tests.utils.pytest_snowflake_is_rerunning = False
@@ -556,30 +558,34 @@ def time_df():
     return {
         "table1": pd.DataFrame(
             {
-                "A": pd.Series([
-                    bodo.Time(17, 33, 26, 91, 8, 79),
-                    bodo.Time(0, 24, 43, 365, 18, 74),
-                    bodo.Time(3, 59, 6, 25, 757, 3),
-                    bodo.Time(),
-                    bodo.Time(4),
-                    bodo.Time(6, 41),
-                    bodo.Time(22, 13, 57),
-                    bodo.Time(17, 34, 29, 90),
-                    bodo.Time(7, 3, 45, 876, 234),
-                    None,
-                ]),
-                "B": pd.Series([
-                    bodo.Time(20, 6, 26, 324, 4, 79),
-                    bodo.Time(3, 59, 6, 25, 57, 3),
-                    bodo.Time(7, 3, 45, 876, 234),
-                    bodo.Time(17, 34, 29, 90),
-                    bodo.Time(22, 13, 57),
-                    bodo.Time(6, 41),
-                    bodo.Time(4),
-                    bodo.Time(),
-                    None,
-                    bodo.Time(0, 24, 4, 512, 18, 74),
-                ])
+                "A": pd.Series(
+                    [
+                        bodo.Time(17, 33, 26, 91, 8, 79),
+                        bodo.Time(0, 24, 43, 365, 18, 74),
+                        bodo.Time(3, 59, 6, 25, 757, 3),
+                        bodo.Time(),
+                        bodo.Time(4),
+                        bodo.Time(6, 41),
+                        bodo.Time(22, 13, 57),
+                        bodo.Time(17, 34, 29, 90),
+                        bodo.Time(7, 3, 45, 876, 234),
+                        None,
+                    ]
+                ),
+                "B": pd.Series(
+                    [
+                        bodo.Time(20, 6, 26, 324, 4, 79),
+                        bodo.Time(3, 59, 6, 25, 57, 3),
+                        bodo.Time(7, 3, 45, 876, 234),
+                        bodo.Time(17, 34, 29, 90),
+                        bodo.Time(22, 13, 57),
+                        bodo.Time(6, 41),
+                        bodo.Time(4),
+                        bodo.Time(),
+                        None,
+                        bodo.Time(0, 24, 4, 512, 18, 74),
+                    ]
+                ),
             }
         )
     }
@@ -635,30 +641,34 @@ def date_df():
     return {
         "table1": pd.DataFrame(
             {
-                "A": pd.Series([
-                    datetime.date(2017, 3, 26),
-                    datetime.date(2000, 12, 31),
-                    datetime.date(2003, 9, 6),
-                    datetime.date(2023, 3, 6),
-                    datetime.date(2024, 1, 1),
-                    datetime.date(1996, 4, 25),
-                    datetime.date(2022, 11, 17),
-                    datetime.date(1917, 7, 29),
-                    datetime.date(2007, 10, 14),
-                    None,
-                ]),
-                "B": pd.Series([
-                    datetime.date(2020, 6, 26),
-                    datetime.date(2025, 5, 3),
-                    datetime.date(1987, 3, 15),
-                    datetime.date(2117, 8, 29),
-                    datetime.date(1822, 12, 7),
-                    datetime.date(1906, 4, 14),
-                    datetime.date(2004, 9, 13),
-                    datetime.date(1917, 7, 29),
-                    None,
-                    datetime.date(1700, 2, 4),
-                ])
+                "A": pd.Series(
+                    [
+                        datetime.date(2017, 3, 26),
+                        datetime.date(2000, 12, 31),
+                        datetime.date(2003, 9, 6),
+                        datetime.date(2023, 3, 6),
+                        datetime.date(2024, 1, 1),
+                        datetime.date(1996, 4, 25),
+                        datetime.date(2022, 11, 17),
+                        datetime.date(1917, 7, 29),
+                        datetime.date(2007, 10, 14),
+                        None,
+                    ]
+                ),
+                "B": pd.Series(
+                    [
+                        datetime.date(2020, 6, 26),
+                        datetime.date(2025, 5, 3),
+                        datetime.date(1987, 3, 15),
+                        datetime.date(2117, 8, 29),
+                        datetime.date(1822, 12, 7),
+                        datetime.date(1906, 4, 14),
+                        datetime.date(2004, 9, 13),
+                        datetime.date(1917, 7, 29),
+                        None,
+                        datetime.date(1700, 2, 4),
+                    ]
+                ),
             }
         )
     }
