@@ -19,88 +19,6 @@
 #include "_murmurhash3.h"
 #include "_shuffle.h"
 
-// this mapping is used by BasicColSet operations to know what combine (i.e.
-// step (c)) function to use for a given aggregation function
-static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
-    {Bodo_FTypes::size, Bodo_FTypes::sum},
-    {Bodo_FTypes::sum, Bodo_FTypes::sum},
-    {Bodo_FTypes::count, Bodo_FTypes::sum},
-    {Bodo_FTypes::mean, Bodo_FTypes::sum},  // sum totals and counts
-    {Bodo_FTypes::min, Bodo_FTypes::min},
-    {Bodo_FTypes::max, Bodo_FTypes::max},
-    {Bodo_FTypes::prod, Bodo_FTypes::prod},
-    {Bodo_FTypes::first, Bodo_FTypes::first},
-    {Bodo_FTypes::last, Bodo_FTypes::last},
-    {Bodo_FTypes::nunique, Bodo_FTypes::sum},  // used in nunique_mode = 2
-    {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg}};
-
-/**
- * Perform combine operation for variance, which for a set of rows belonging
- * to the same group with count (# observations), mean and m2, reduces
- * the values to one row. See
- * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
- * for more information.
- *
- * @param input array of counts (can include multiple values per group and
- * multiple groups)
- * @param input array of means (can include multiple values per group and
- * multiple groups)
- * @param input array of m2 (can include multiple values per group and multiple
- * groups)
- * @param output array of counts (one row per group)
- * @param output array of means (one row per group)
- * @param output array of m2 (one row per group)
- * @param maps row numbers in input arrays to row number in output array
- */
-template <typename F>
-void var_combine_F(array_info* count_col_in, array_info* mean_col_in,
-                   array_info* m2_col_in, array_info* count_col_out,
-                   array_info* mean_col_out, array_info* m2_col_out, F f) {
-    for (size_t i = 0; i < count_col_in->length; i++) {
-        // Var always has null compute columns even
-        // if there is an original numpy input. All arrays
-        // will have the same null bit value so just check 1.
-        if (count_col_in->get_null_bit(i)) {
-            int64_t j = f(i);
-            uint64_t& count_a = getv<uint64_t>(count_col_out, j);
-            uint64_t& count_b = getv<uint64_t>(count_col_in, i);
-            // TODO: Can I delete this comment + condition
-            // in the pivot case we can receive dummy values from other ranks
-            // when combining the results (in this case with count == 0). This
-            // is because the pivot case groups on index and creates n_pivot
-            // columns, and so for each of its index values a rank will have
-            // n_pivot fields, even if a rank does not have a particular (index,
-            // pivot_value) pair
-            if (count_b == 0) continue;
-            double& mean_a = getv<double>(mean_col_out, j);
-            double& mean_b = getv<double>(mean_col_in, i);
-            double& m2_a = getv<double>(m2_col_out, j);
-            double& m2_b = getv<double>(m2_col_in, i);
-            uint64_t count = count_a + count_b;
-            double delta = mean_b - mean_a;
-            mean_a = (count_a * mean_a + count_b * mean_b) / count;
-            m2_a = m2_a + m2_b + delta * delta * count_a * count_b / count;
-            count_a = count;
-            // Set all the null bits to true.
-            count_col_out->set_null_bit(i, true);
-            mean_col_out->set_null_bit(i, true);
-            m2_col_out->set_null_bit(i, true);
-        }
-    }
-}
-
-void var_combine(array_info* count_col_in, array_info* mean_col_in,
-                 array_info* m2_col_in, array_info* count_col_out,
-                 array_info* mean_col_out, array_info* m2_col_out,
-                 grouping_info const& grp_info) {
-    auto f = [&](int64_t const& i_row) -> int64_t {
-        return grp_info.row_to_group[i_row];
-    };
-    return var_combine_F<decltype(f)>(count_col_in, mean_col_in, m2_col_in,
-                                      count_col_out, mean_col_out, m2_col_out,
-                                      f);
-}
-
 /**
  * The main get_group_info loop which populates a grouping_info structure
  * (map rows from input to their group number, and store the first input row
@@ -3235,68 +3153,6 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
     }
 }
 
-/**
- * Returns the array type and dtype required for output columns based on the
- * aggregation function and input dtype.
- *
- * @param function identifier
- * @param[in,out] array type (caller sets a default, this function only changes
- * in certain cases)
- * @param[in,out] output dtype (caller sets a default, this function only
- * changes in certain cases)
- * @param true if column is key column (in this case ignore because output type
- * will be the same)
- */
-void get_groupby_output_dtype(int ftype,
-                              bodo_array_type::arr_type_enum& array_type,
-                              Bodo_CTypes::CTypeEnum& dtype, bool is_key,
-                              bool is_combine) {
-    if (is_combine) ftype = combine_funcs[ftype];
-    if (is_key) return;
-    switch (ftype) {
-        case Bodo_FTypes::nunique:
-        case Bodo_FTypes::count:
-        case Bodo_FTypes::size:
-        case Bodo_FTypes::ngroup:
-            array_type = bodo_array_type::NUMPY;
-            dtype = Bodo_CTypes::INT64;
-            return;
-        case Bodo_FTypes::median:
-        case Bodo_FTypes::mean:
-        case Bodo_FTypes::var:
-        case Bodo_FTypes::std:
-            array_type = bodo_array_type::NULLABLE_INT_BOOL;
-            dtype = Bodo_CTypes::FLOAT64;
-            return;
-        case Bodo_FTypes::cumsum:
-        case Bodo_FTypes::sum:
-            // This is safe even for cumsum because a boolean cumsum is not yet
-            // supported on the Python side, so an error will be raised there
-            if (dtype == Bodo_CTypes::_BOOL) {
-                array_type = bodo_array_type::NULLABLE_INT_BOOL;
-                dtype = Bodo_CTypes::INT64;
-            }
-            if (dtype == Bodo_CTypes::STRING) {
-                array_type = bodo_array_type::STRING;
-            }
-            return;
-        case Bodo_FTypes::boolor_agg:
-            array_type = bodo_array_type::NULLABLE_INT_BOOL;
-            dtype = Bodo_CTypes::_BOOL;
-            return;
-        case Bodo_FTypes::row_number:
-            array_type = bodo_array_type::NUMPY;
-            dtype = Bodo_CTypes::UINT64;
-            return;
-        case Bodo_FTypes::min_row_number_filter:
-            array_type = bodo_array_type::NUMPY;
-            dtype = Bodo_CTypes::_BOOL;
-            return;
-        default:
-            return;
-    }
-}
-
 /*
  An instance of GroupbyPipeline class manages a groupby operation. In a
  groupby operation, an arbitrary number of functions can be applied to each
@@ -3416,12 +3272,12 @@ class BasicColSet {
      * @param grouping info calculated by GroupbyPipeline
      */
     virtual void combine(const grouping_info& grp_info) {
-        Bodo_FTypes::FTypeEnum combine_ftype =
-            static_cast<Bodo_FTypes::FTypeEnum>(combine_funcs[ftype]);
+        int combine_ftype = get_combine_func(ftype);
         std::vector<array_info*> aux_cols(combine_cols.begin() + 1,
                                           combine_cols.end());
-        for (auto col : combine_cols)
+        for (auto col : combine_cols) {
             aggfunc_output_initialize(col, combine_ftype, use_sql_rules);
+        }
         do_apply_to_column(update_cols[0], combine_cols[0], aux_cols, grp_info,
                            combine_ftype, use_sql_rules);
     }
@@ -3951,145 +3807,6 @@ class ShiftColSet : public BasicColSet {
     int64_t periods;
 };
 
-/**
- * Copy nullable value from tmp_col to all the rows in the
- * corresponding group update_col.
- * @param update_col[out] output column
- * @param tmp_col[in] input column (one value per group)
- * @param grouping_info[in] structures used to get rows for each group
- *
- */
-template <typename T>
-void copy_nullable_values_transform(array_info* update_col, array_info* tmp_col,
-                                    const grouping_info& grp_info) {
-    int64_t nrows = update_col->length;
-    bool bit = false;
-    for (int64_t iRow = 0; iRow < nrows; iRow++) {
-        int64_t igrp = grp_info.row_to_group[iRow];
-        bit = tmp_col->get_null_bit(igrp);
-        T val = tmp_col->template at<T>(igrp);
-        update_col->set_null_bit(iRow, bit);
-        update_col->template at<T>(iRow) = val;
-    }
-}
-/**
- * Propagate value from the row in the tmp_col to all the rows in the
- * group update_col.
- * @param update_col[out]: column that has the final result for all rows
- * @param tmp_col[in]: column that has the result per group
- * @param grouping_info[in]: structures used to get rows for each group
- *
- * */
-void copy_string_values_transform(array_info* update_col, array_info* tmp_col,
-                                  const grouping_info& grp_info) {
-    int64_t num_groups = grp_info.num_groups;
-    array_info* out_arr = NULL;
-    // first we have to deal with offsets first so we
-    // need one first loop to determine the needed length. In the second
-    // loop, the assignation is made. If the entries are missing then the
-    // bitmask is set to false.
-    bodo_array_type::arr_type_enum arr_type = tmp_col->arr_type;
-    Bodo_CTypes::CTypeEnum dtype = tmp_col->dtype;
-    int64_t n_chars = 0;
-    int64_t nRowOut = update_col->length;
-    // Store size of data per row
-    std::vector<offset_t> ListSizes(nRowOut);
-    offset_t* in_offsets = (offset_t*)tmp_col->data2;
-    char* in_data1 = tmp_col->data1;
-    // 1. Determine needed length (total number of characters)
-    // and number of characters per element/row
-    // All rows in same group gets same data
-    for (int64_t igrp = 0; igrp < num_groups; igrp++) {
-        offset_t size = 0;
-        offset_t start_offset = in_offsets[igrp];
-        offset_t end_offset = in_offsets[igrp + 1];
-        size = end_offset - start_offset;
-        int64_t idx = grp_info.group_to_first_row[igrp];
-        while (true) {
-            if (idx == -1) break;
-            ListSizes[idx] = size;
-            n_chars += size;
-            idx = grp_info.next_row_in_group[idx];
-        }
-    }
-    out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
-    offset_t* out_offsets = (offset_t*)out_arr->data2;
-    char* out_data1 = out_arr->data1;
-    // keep track of output array position
-    offset_t pos = 0;
-    // 2. Copy data from tmp_col to corresponding rows in out_arr
-    bool bit = false;
-    for (int64_t iRow = 0; iRow < nRowOut; iRow++) {
-        offset_t size = ListSizes[iRow];
-        int64_t igrp = grp_info.row_to_group[iRow];
-        offset_t start_offset = in_offsets[igrp];
-        char* in_ptr = in_data1 + start_offset;
-        char* out_ptr = out_data1 + pos;
-        out_offsets[iRow] = pos;
-        memcpy(out_ptr, in_ptr, size);
-        pos += size;
-        bit = tmp_col->get_null_bit(igrp);
-        out_arr->set_null_bit(iRow, bit);
-    }
-    out_offsets[nRowOut] = pos;
-    *update_col = std::move(*out_arr);
-    delete out_arr;
-}
-
-/**
- * @param update_col[out]: column that has the final result for all rows
- * @param tmp_col[in]: column that has the result per group
- * @param grouping_info[in]: structures used to get rows for each group
- * Propagate value from the row in the tmp_col to all the rows in the
- * group update_col.
- *
- * */
-template <typename T>
-void copy_values(array_info* update_col, array_info* tmp_col,
-                 const grouping_info& grp_info) {
-    if (tmp_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        copy_nullable_values_transform<T>(update_col, tmp_col, grp_info);
-        return;
-    }
-    // Copy result from tmp_col to corressponding group rows in
-    // update_col.
-    int64_t nrows = update_col->length;
-    for (int64_t iRow = 0; iRow < nrows; iRow++) {
-        int64_t igrp = grp_info.row_to_group[iRow];
-        T& val = getv<T>(tmp_col, igrp);
-        T& val2 = getv<T>(update_col, iRow);
-        val2 = val;
-    }
-}
-
-/**
- * Propagate value from the row in the tmp_col to all the rows in the
- * group update_col. Both tmp_col and update_col are dictionary encoded
- * @param update_col[out]: column that has the final result for all rows
- * @param tmp_col[in]: column that has the result per group
- * @param grouping_info[in]: structures used to get rows for each group
- *
- * */
-void copy_dict_string_values_transform(array_info* update_col,
-                                       array_info* tmp_col,
-                                       const grouping_info& grp_info) {
-    int64_t length = update_col->length;
-    array_info* indices_arr =
-        alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
-    copy_values<int32_t>(indices_arr, tmp_col->info2, grp_info);
-    incref_array(tmp_col->info1);  // increase reference because we reuse the
-                                   // underlying data array.
-    array_info* out_col =
-        create_dict_string_array(tmp_col->info1, indices_arr, length);
-    *update_col = std::move(*out_col);
-    // reverse_shuffle_table needs the dictionary to be global
-    // copy_dict_string_values_transform is only called on distributed data
-    // Does this implementation require the dictionary is sorted.
-    // Similarly does it require that there are no duplicates.
-    make_dictionary_global_and_unique(update_col, true);
-    delete out_col;
-}
-
 // Add function declaration before usage in TransformColSet
 /**
  * Construct and return a column set based on the ftype.
@@ -4162,73 +3879,7 @@ class TransformColSet : public BasicColSet {
         // copy_values need to know type of the data it'll copy.
         // Hence we use switch case on the column dtype
         array_info* child_out_col = this->transform_op_col->getOutputColumn();
-        switch (child_out_col->dtype) {
-            case Bodo_CTypes::_BOOL:
-                copy_values<bool>(this->update_cols[0], child_out_col,
-                                  grp_info);
-                break;
-            case Bodo_CTypes::INT8:
-                copy_values<int8_t>(this->update_cols[0], child_out_col,
-                                    grp_info);
-                break;
-            case Bodo_CTypes::UINT8:
-                copy_values<uint8_t>(this->update_cols[0], child_out_col,
-                                     grp_info);
-                break;
-            case Bodo_CTypes::INT16:
-                copy_values<int16_t>(this->update_cols[0], child_out_col,
-                                     grp_info);
-                break;
-            case Bodo_CTypes::UINT16:
-                copy_values<uint16_t>(this->update_cols[0], child_out_col,
-                                      grp_info);
-                break;
-            case Bodo_CTypes::INT32:
-                copy_values<int32_t>(this->update_cols[0], child_out_col,
-                                     grp_info);
-                break;
-            case Bodo_CTypes::UINT32:
-                copy_values<uint32_t>(this->update_cols[0], child_out_col,
-                                      grp_info);
-                break;
-            case Bodo_CTypes::DATE:
-            case Bodo_CTypes::DATETIME:
-            case Bodo_CTypes::TIMEDELTA:
-            case Bodo_CTypes::INT64:
-            // TODO: [BE-4106] Split Time into Time32 and Time64
-            case Bodo_CTypes::TIME:
-                copy_values<int64_t>(this->update_cols[0], child_out_col,
-                                     grp_info);
-                break;
-            case Bodo_CTypes::UINT64:
-                copy_values<uint64_t>(this->update_cols[0], child_out_col,
-                                      grp_info);
-                break;
-            case Bodo_CTypes::FLOAT32:
-                copy_values<float>(this->update_cols[0], child_out_col,
-                                   grp_info);
-                break;
-            case Bodo_CTypes::FLOAT64:
-                copy_values<double>(this->update_cols[0], child_out_col,
-                                    grp_info);
-                break;
-            case Bodo_CTypes::STRING:
-                if (child_out_col->arr_type == bodo_array_type::DICT) {
-                    copy_dict_string_values_transform(this->update_cols[0],
-                                                      child_out_col, grp_info);
-                } else {
-                    copy_string_values_transform(this->update_cols[0],
-                                                 child_out_col, grp_info);
-                }
-                break;
-            default:
-                Bodo_PyErr_SetString(
-                    PyExc_RuntimeError,
-                    (std::string("unsuported data type for eval: ") +
-                     std::string(GetDtype_as_string(child_out_col->dtype)))
-                        .c_str());
-                return;
-        }
+        copy_values_transform(this->update_cols[0], child_out_col, grp_info);
         delete_info_decref_array(child_out_col);
     }
 
