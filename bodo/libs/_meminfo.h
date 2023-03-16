@@ -85,53 +85,6 @@ typedef struct MemSys NRT_MemSys;
 /* The Memory System object */
 extern NRT_MemSys TheMSys;
 
-inline static size_t nrt_testing_atomic_inc(size_t *ptr) {
-    /* non atomic */
-    size_t out = *ptr;
-    out += 1;
-    *ptr = out;
-    return out;
-}
-
-inline static size_t nrt_testing_atomic_dec(size_t *ptr) {
-    /* non atomic */
-    size_t out = *ptr;
-    out -= 1;
-    *ptr = out;
-    return out;
-}
-
-inline static int nrt_testing_atomic_cas(void *volatile *ptr, void *cmp,
-                                         void *val, void **oldptr) {
-    /* non atomic */
-    void *old = *ptr;
-    *oldptr = old;
-    if (old == cmp) {
-        *ptr = val;
-        return 1;
-    }
-    return 0;
-}
-
-inline void NRT_MemSys_set_atomic_inc_dec(NRT_atomic_inc_dec_func inc,
-                                          NRT_atomic_inc_dec_func dec) {
-    TheMSys.atomic_inc = inc;
-    TheMSys.atomic_dec = dec;
-}
-
-inline void NRT_MemSys_set_atomic_inc_dec_stub(void) {
-    NRT_MemSys_set_atomic_inc_dec(nrt_testing_atomic_inc,
-                                  nrt_testing_atomic_dec);
-}
-
-inline void NRT_MemSys_set_atomic_cas(NRT_atomic_cas_func cas) {
-    TheMSys.atomic_cas = (atomic_meminfo_cas_func)cas;
-}
-
-inline void NRT_MemSys_set_atomic_cas_stub(void) {
-    NRT_MemSys_set_atomic_cas(nrt_testing_atomic_cas);
-}
-
 inline size_t NRT_MemSys_get_stats_alloc() { return TheMSys.stats_alloc; }
 
 inline size_t NRT_MemSys_get_stats_free() { return TheMSys.stats_free; }
@@ -150,14 +103,6 @@ struct MemInfo {
 };
 
 typedef struct MemInfo NRT_MemInfo;
-
-inline void nrt_debug_print(char *fmt, ...) {
-    va_list args;
-
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
-}
 
 #if !defined MIN
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
