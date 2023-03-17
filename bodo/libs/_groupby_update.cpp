@@ -2,6 +2,7 @@
 #include "_groupby_update.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_distributed.h"
 
 /**
  * The file contains the aggregate functions that are used
@@ -459,6 +460,27 @@ void head_computation(array_info* arr, array_info* out_arr,
     array_info* updated_col = RetrieveArray_SingleColumn(arr, row_list);
     *out_arr = std::move(*updated_col);
     delete updated_col;
+}
+
+// NGROUP
+
+void ngroup_computation(array_info* arr, array_info* out_arr,
+                        grouping_info const& grp_info, bool is_parallel) {
+    //
+    size_t num_group = grp_info.group_to_first_row.size();
+    int64_t start_ngroup = 0;
+    if (is_parallel) {
+        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::INT64);
+        MPI_Exscan(&num_group, &start_ngroup, 1, mpi_typ, MPI_SUM,
+                   MPI_COMM_WORLD);
+    }
+    for (size_t i = 0; i < arr->length; i++) {
+        int64_t i_grp = grp_info.row_to_group[i];
+        if (i_grp != -1) {
+            int64_t val = i_grp + start_ngroup;
+            getv<int64_t>(out_arr, i) = val;
+        }
+    }
 }
 
 // MEDIAN

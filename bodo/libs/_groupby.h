@@ -133,4 +133,16 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
                            int64_t* sort_idx, bool key_dropna,
                            bool is_parallel);
 
+/**
+ * @brief Copy values from the tmp_col into the update_col. This is used
+ * for the eval step of transform.
+ *
+ * @param update_col[out]: column that has the final result for all rows
+ * @param tmp_col[in]: column that has the result per group
+ * @param grouping_info[in]: structures used to get rows for each group
+ *
+ */
+void copy_values_transform(array_info* update_col, array_info* tmp_col,
+                           const grouping_info& grp_info);
+
 #endif  // _GROUPBY_H_INCLUDED

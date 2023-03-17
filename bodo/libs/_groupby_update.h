@@ -39,6 +39,8 @@ void cumulative_computation(array_info* arr, array_info* out_arr,
                             grouping_info const& grp_info, int32_t const& ftype,
                             bool const& skipna);
 
+// HEAD
+
 /**
  * @brief The head_computation function.
  * Copy rows identified by row_list from input to output column
@@ -48,6 +50,25 @@ void cumulative_computation(array_info* arr, array_info* out_arr,
  */
 void head_computation(array_info* arr, array_info* out_arr,
                       const std::vector<int64_t>& row_list);
+
+// NGROUP
+
+/**
+ * @brief ngroup assigns the same group number to each row in the group.
+ * If data is replicated, start from 0 and the group number will be the output
+ * value for all rows in that group. If data is distributed, we need to identify
+ * starting group number on each rank. Then, row's output is: start group number
+ * + row's local group number (igrp in current rank) This is done by summing
+ * number of groups of ranks before current rank. This is achieved with
+ * MPI_Exscan: partial reduction excluding current rank value.
+ * @param[in] arr The input column on which we do the computation
+ * @param[out] out_arr The output column which contains ngroup results
+ * @param[in] grp_info grouping_info about groups and rows organization per rank
+ * @param[in] is_parallel: true if data is distributed (used to indicate whether
+ * we need to do cumsum on group numbers or not)
+ */
+void ngroup_computation(array_info* arr, array_info* out_arr,
+                        grouping_info const& grp_info, bool is_parallel);
 
 // MEDIAN
 
