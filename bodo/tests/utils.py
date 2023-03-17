@@ -706,7 +706,7 @@ def check_func_1D_var(
         kwargs.update(additional_compiler_arguments)
 
     dist_args = tuple(
-        _get_dist_arg(a, copy_input, False, check_typing_issues) if to_dist else a
+        _get_dist_arg(a, copy_input, True, check_typing_issues) if to_dist else a
         for a, to_dist in zip(args, dist_map)
     )
 
