@@ -3,6 +3,7 @@
 #ifndef _GROUPBY_AGG_FUNCS_H_INCLUDED
 #define _GROUPBY_AGG_FUNCS_H_INCLUDED
 
+#include "_array_utils.h"
 #include "_groupby_ftypes.h"
 /**
  * The file contains the templated aggregate functions that are used
