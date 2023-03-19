@@ -157,7 +157,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @return variable name
    */
-  private String genDfVar() {
+  public String genDfVar() {
     return generatedCode.getSymbolTable().genDfVar().getName();
   }
 
@@ -404,7 +404,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   private void visitLogicalIntersect(LogicalIntersect node) {
     // We always assume intersect is between exactly two inputs
-    assert node.getInputs().size() == 2;
+    if (node.getInputs().size() != 2) {
+      throw new BodoSQLCodegenException(
+          "Internal Error: Intersect should be between exactly two inputs");
+    }
 
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
@@ -423,7 +426,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     this.generatedCode.append(
         generateIntersectCode(
-            outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames, node.all));
+            outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames, node.all, this));
 
     varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
