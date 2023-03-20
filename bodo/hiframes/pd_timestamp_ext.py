@@ -43,6 +43,7 @@ from bodo.hiframes.datetime_date_ext import (
     _ord2ymd,
     _ymd2ord,
     get_isocalendar,
+    str_2d,
 )
 from bodo.hiframes.datetime_timedelta_ext import (
     PDTimeDeltaType,
@@ -1123,15 +1124,6 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
     )
     impl = loc_vars["impl"]
     return impl
-
-
-# TODO: support general string formatting
-@numba.njit
-def str_2d(a):  # pragma: no cover
-    res = str(a)
-    if len(res) == 1:
-        return "0" + res
-    return res
 
 
 @overload(str, no_unliteral=True)

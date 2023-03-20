@@ -409,6 +409,27 @@ def fromordinal_impl(n):  # pragma: no cover
     return datetime.date(y, m, d)
 
 
+# TODO: support general string formatting
+@numba.njit
+def str_2d(a):  # pragma: no cover
+    """Takes in a number representing an date/time unit and formats it as a
+    2 character string, adding a leading zero if necessary."""
+    res = str(a)
+    if len(res) == 1:
+        return "0" + res
+    return res
+
+
+@overload(str)
+def overload_date_str(val):
+    if val == datetime_date_type:
+
+        def impl(val):  # pragma: no cover
+            return str(val.year) + "-" + str_2d(val.month) + "-" + str_2d(val.day)
+
+        return impl
+
+
 @overload_method(DatetimeDateType, "replace")
 def replace_overload(date, year=None, month=None, day=None):
     if not is_overload_none(year) and not is_overload_int(year):
