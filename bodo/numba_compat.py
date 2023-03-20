@@ -4359,6 +4359,79 @@ if _check_numba_change:  # pragma: no cover
 numba.core.base.BaseContext.make_constant_array = make_constant_array
 
 
+def get_preferred_array_alignment(context, ty):
+    """
+    Get preferred array alignment for Numba type *ty*.
+    """
+    # Bodo change: use 64-byte alignment as recommended/required by Arrow:
+    # https://arrow.apache.org/docs/format/Columnar.html#buffer-alignment-and-padding
+    # https://arrow.apache.org/docs/cpp/api/memory.html#_CPPv4N5arrow10MemoryPoolE
+    return 64
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.base.BaseContext.get_preferred_array_alignment)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "e99d180ef8a17e9f57ef1ec503d9485712be5f66c854751de34e0042a80f25c4"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.base.BaseContext.get_preferred_array_alignment has changed"
+        )
+
+
+numba.core.base.BaseContext.get_preferred_array_alignment = (
+    get_preferred_array_alignment
+)
+
+
+def meminfo_alloc_aligned_unchecked(self, builder, size, align):
+    """
+    Allocate a new MemInfo with an aligned data payload of `size` bytes.
+    The data pointer is aligned to `align` bytes.  `align` can be either
+    a Python int or a LLVM uint32 value.
+
+    A pointer to the MemInfo is returned.
+
+    Returns NULL to indicate error/failure to allocate.
+    """
+    from llvmlite import ir as lir
+
+    self._require_nrt()
+
+    mod = builder.module
+    u32 = lir.IntType(32)
+    fnty = lir.FunctionType(cgutils.voidptr_t, [cgutils.intp_t, u32])
+    # Bodo change: use Bodo's allocator which has zero-padding (for Arrow compatibility)
+    fn = cgutils.get_or_insert_function(
+        mod, fnty, "BODO_NRT_MemInfo_alloc_safe_aligned"
+    )
+    fn.return_value.add_attribute("noalias")
+    if isinstance(align, int):
+        align = self._context.get_constant(types.uint32, align)
+    else:
+        assert align.type == u32, "align must be a uint32"
+    return builder.call(fn, [size, align])
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(
+        numba.core.runtime.context.NRTContext.meminfo_alloc_aligned_unchecked
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "a8dd2cf74a589f3073175fc9058dafbdec4cfc3ec4c498258ff3e3bc7df0eea3"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.runtime.context.NRTContext.meminfo_alloc_aligned_unchecked has changed"
+        )
+
+
+numba.core.runtime.context.NRTContext.meminfo_alloc_aligned_unchecked = (
+    meminfo_alloc_aligned_unchecked
+)
+
+
 # Bodo change: avoid incref/decref if the meminfo is a constant global (writing to
 # constant globals can lead to segfault)
 def _define_atomic_inc_dec(module, op, ordering):

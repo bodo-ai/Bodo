@@ -197,7 +197,8 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_safe(size_t size) {
 inline void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
                                                  NRT_MemInfo **mi) {
     size_t offset, intptr, remainder;
-    char *base = (char *)nrt_allocate_meminfo_and_data(size + 2 * align, mi);
+    size_t capacity = size + 2 * align;
+    char *base = (char *)nrt_allocate_meminfo_and_data(capacity, mi);
     intptr = (size_t)base;
     /* See if we are aligned */
     remainder = intptr % align;
@@ -206,14 +207,13 @@ inline void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
     } else { /* No, move forward `offset` bytes */
         offset = align - remainder;
     }
-    return base + offset;
-}
 
-inline NRT_MemInfo *NRT_MemInfo_alloc_aligned(size_t size, unsigned align) {
-    NRT_MemInfo *mi;
-    void *data = nrt_allocate_meminfo_and_data_align(size, align, &mi);
-    NRT_MemInfo_init(mi, data, size, NULL, NULL, NULL);
-    return mi;
+    // Zero-pad to match Arrow
+    // https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/memory_pool.cc#L932
+    // https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/buffer.h#L125
+    memset(base + offset + size, 0, capacity - size - offset);
+
+    return base + offset;
 }
 
 inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size,
