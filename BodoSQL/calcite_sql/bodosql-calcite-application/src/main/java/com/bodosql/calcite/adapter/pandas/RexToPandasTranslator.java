@@ -409,9 +409,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   private Expr visitExtractScan(RexCall node) {
     List<Expr> args = visitList(node.operands);
     boolean isTime = node.operands.get(1).getType().getSqlTypeName().toString().equals("TIME");
+    boolean isDate = node.operands.get(1).getType().getSqlTypeName().toString().equals("DATE");
     Expr dateVal = args.get(0);
     Expr column = args.get(1);
-    String codeExpr = generateExtractCode(dateVal.emit(), column.emit(), isTime);
+    String codeExpr = generateExtractCode(dateVal.emit(), column.emit(), isTime, isDate);
     return new Expr.Raw(codeExpr);
   }
 
@@ -518,6 +519,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     String strExpr;
     DatetimeFnCodeGen.DateTimeType dateTimeExprType;
     boolean isTime;
+    boolean isDate;
     String unit;
     String tzStr;
     switch (fnOperation.getOperator().kind) {
@@ -895,7 +897,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                     .getSqlTypeName()
                     .toString()
                     .equals("TIME");
-            return generateDatePart(operands, isTime);
+            isDate =
+                fnOperation
+                    .getOperands()
+                    .get(1)
+                    .getType()
+                    .getSqlTypeName()
+                    .toString()
+                    .equals("DATE");
+            return generateDatePart(operands, isTime, isDate);
           case "TO_DAYS":
             return generateToDaysCode(operands.get(0));
           case "TO_SECONDS":
@@ -1085,7 +1095,16 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                     .getSqlTypeName()
                     .toString()
                     .equals("TIME");
-            return new Expr.Raw(generateExtractCode(fnName, operands.get(0).emit(), isTime));
+            isDate =
+                fnOperation
+                    .getOperands()
+                    .get(0)
+                    .getType()
+                    .getSqlTypeName()
+                    .toString()
+                    .equals("DATE");
+            return new Expr.Raw(
+                generateExtractCode(fnName, operands.get(0).emit(), isTime, isDate));
           case "REGR_VALX":
           case "REGR_VALY":
             return getDoubleArgCondFnInfo(fnName, operands.get(0).emit(), operands.get(1).emit());

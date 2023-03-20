@@ -1886,7 +1886,9 @@ def dateadd_date_queries(request):
     return request.param
 
 
-def test_snowflake_dateadd_date(dateadd_date_df, dateadd_date_queries, memory_leak_check):
+def test_snowflake_dateadd_date(
+    dateadd_date_df, dateadd_date_queries, memory_leak_check
+):
     """
     Tests the Snowflake version of DATEADD/TIMEADD/TIMESTAMPADD with date inputs for dt_val.
     Currently takes in the unit as a scalar string instead of a DT unit literal.

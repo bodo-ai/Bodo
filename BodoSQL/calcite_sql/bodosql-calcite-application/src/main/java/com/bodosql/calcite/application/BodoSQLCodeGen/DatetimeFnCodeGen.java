@@ -277,8 +277,7 @@ public class DatetimeFnCodeGen {
       code.append("time_from_parts");
     } else if (date_mode) {
       code.append("date_from_parts");
-    }
-    else { // timestamp_mode
+    } else { // timestamp_mode
       code.append("construct_timestamp");
     }
 

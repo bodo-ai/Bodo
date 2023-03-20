@@ -250,7 +250,7 @@ def date_from_parts(year, month, day):  # pragma: no cover
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.date_from_parts",
-                ["year", "month","day"],
+                ["year", "month", "day"],
                 i,
             )
 
@@ -1015,11 +1015,28 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
         else:
             verify_datetime_arg_allow_tz(arr, fn_name, "arr")
         tz = get_tz_if_exists(arr)
+        is_date = is_valid_date_arg(arr)
         box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
         # For Timestamp, ms and us are stored in the same value.
         # For Time, they are stored separately.
         ms_str = "microsecond // 1000" if not is_valid_time_arg(arr) else "millisecond"
-        format_strings = {
+
+        # The specifications of how kernel should extract the relevent value
+        # if the input is a date type
+        date_format_strings = {
+            "get_year": "arg0.year",
+            "get_quarter": "(arg0.month + 2) // 3 ",
+            "get_month": "arg0.month",
+            "get_week": "arg0.isocalendar()[1]",
+            "get_weekofyear": "arg0.isocalendar()[1]",
+            "dayofmonth": "arg0.day",
+            "dayofweek": "(arg0.weekday() + 1) % 7",
+            "dayofweekiso": "arg0.weekday() + 1",
+            "dayofyear": "bodo.hiframes.datetime_date_ext._day_of_year(arg0.year, arg0.month, arg0.day)",
+        }
+        # The specifications of how kernel should extract the relevent value
+        # if the input is a time or timestamp type
+        other_format_strings = {
             "get_year": f"{box_str}(arg0).year",
             "get_quarter": f"{box_str}(arg0).quarter",
             "get_month": f"{box_str}(arg0).month",
@@ -1040,7 +1057,10 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
         arg_names = ["arr"]
         arg_types = [arr]
         propagate_null = [True]
-        scalar_text = f"res[i] = {format_strings[fn_name]}"
+        if is_date:
+            scalar_text = f"res[i] = {date_format_strings[fn_name]}"
+        else:
+            scalar_text = f"res[i] = {other_format_strings[fn_name]}"
 
         out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
 
@@ -1204,7 +1224,9 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
             if get_tz_if_exists(arr1) != tz and not (
                 is_overload_none(arr0) or is_overload_none(arr1)
             ):
-                raise_bodo_error(f"diff_{unit}: both arguments must have the same timezone")
+                raise_bodo_error(
+                    f"diff_{unit}: both arguments must have the same timezone"
+                )
             scalar_text = ""
             if tz == None:
                 scalar_text += "arg0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
@@ -1236,7 +1258,6 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
             "day": ["da_diff"],
             "nanosecond": ["ns_diff"],
         }
-
 
         # Load in all of the required definitions
         for req_defn in req_defns.get(unit, []):
@@ -1379,16 +1400,24 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
         scalar_text += "    elif part_str == 'minute':\n"
         scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute)\n"
         scalar_text += "    elif part_str == 'second':\n"
-        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second)\n"
+        scalar_text += (
+            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second)\n"
+        )
         scalar_text += "    elif part_str == 'millisecond':\n"
-        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, " \
-                       "arg1.millisecond)\n"
+        scalar_text += (
+            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, "
+            "arg1.millisecond)\n"
+        )
         scalar_text += "    elif part_str == 'microsecond':\n"
-        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, " \
-                       "arg1.millisecond, arg1.microsecond)\n"
+        scalar_text += (
+            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, "
+            "arg1.millisecond, arg1.microsecond)\n"
+        )
         scalar_text += "    elif part_str == 'nanosecond':\n"
-        scalar_text += "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, " \
-                       "arg1.millisecond, arg1.microsecond, arg1.nanosecond)\n"
+        scalar_text += (
+            "        res[i] = bodo.Time(arg1.hour, arg1.minute, arg1.second, "
+            "arg1.millisecond, arg1.microsecond, arg1.nanosecond)\n"
+        )
         scalar_text += "    else:\n"
         scalar_text += "        raise ValueError('Invalid time part for DATE_TRUNC')\n"
         out_dtype = bodo.TimeArrayType(9)
@@ -1424,7 +1453,9 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
             out_dtype,
         )
     else:  # Truncate a timestamp object/array
-        verify_datetime_arg_allow_tz(date_or_time_expr, "DATE_TRUNC", "date_or_time_expr")
+        verify_datetime_arg_allow_tz(
+            date_or_time_expr, "DATE_TRUNC", "date_or_time_expr"
+        )
         tz_literal = get_tz_if_exists(date_or_time_expr)
         # We perform computation on Timestamp types.
         box_str = (
@@ -1443,9 +1474,7 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
         scalar_text += "if part_str == 'quarter':\n"
         scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month= (3*(arg1.quarter - 1)) + 1, day=1, tz=tz_literal)\n"
         scalar_text += "elif part_str == 'year':\n"
-        scalar_text += (
-            "    out_val = pd.Timestamp(year=arg1.year, month=1, day=1, tz=tz_literal)\n"
-        )
+        scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month=1, day=1, tz=tz_literal)\n"
         scalar_text += "elif part_str == 'month':\n"
         scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month=arg1.month, day=1, tz=tz_literal)\n"
         scalar_text += "elif part_str == 'day':\n"
@@ -1455,9 +1484,7 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
         scalar_text += "    if arg1.dayofweek == 0:\n"
         scalar_text += "        out_val = arg1.normalize()\n"
         scalar_text += "    else:\n"
-        scalar_text += (
-            "        out_val = arg1.normalize() - pd.tseries.offsets.Week(n=1, weekday=0)\n"
-        )
+        scalar_text += "        out_val = arg1.normalize() - pd.tseries.offsets.Week(n=1, weekday=0)\n"
         scalar_text += "elif part_str == 'hour':\n"
         scalar_text += "    out_val = arg1.floor('H')\n"
         scalar_text += "elif part_str == 'minute':\n"
@@ -1472,7 +1499,9 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
         scalar_text += "    out_val = arg1\n"
         scalar_text += "else:\n"
         # TODO: Include part_str when non-constant exception strings are supported.
-        scalar_text += "    raise ValueError('Invalid date or time part for DATE_TRUNC')\n"
+        scalar_text += (
+            "    raise ValueError('Invalid date or time part for DATE_TRUNC')\n"
+        )
         if tz_literal is None:
             # In the tz-naive array case we have to convert the Timestamp to dt64
             scalar_text += f"res[i] = {unbox_str}(out_val)\n"
@@ -1834,8 +1863,10 @@ def monthname_util(arr):
     arg_types = [arr]
     propagate_null = [True]
     if is_valid_date_arg(arr):
-        scalar_text = "mons = ('January', 'February', 'March', 'April', 'May', 'June', " \
-                      "'July', 'August', 'September', 'October', 'November', 'December')\n"
+        scalar_text = (
+            "mons = ('January', 'February', 'March', 'April', 'May', 'June', "
+            "'July', 'August', 'September', 'October', 'November', 'December')\n"
+        )
         scalar_text += f"res[i] = mons[arg0.month - 1]"
     else:
         scalar_text = f"res[i] = {box_str}(arg0).month_name()"
