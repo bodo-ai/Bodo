@@ -612,7 +612,9 @@ def to_char_util(arr):
         scalar_text += "    r = str(v)\n"
         scalar_text += "res[i] = r"
     elif is_valid_datetime_or_date_arg(arr):
-        if is_valid_tz_aware_datetime_arg(arr):
+        if is_valid_date_arg(arr):
+            scalar_text = "res[i] = str(arg0)\n"
+        elif is_valid_tz_aware_datetime_arg(arr):
             # strftime returns (-/+) HHMM for UTC offset, when the default Bodo
             # timezone format is (-/+) HH:MM. So we must manually insert a ":" character
             scalar_text = "tz_raw = arg0.strftime('%z')\n"

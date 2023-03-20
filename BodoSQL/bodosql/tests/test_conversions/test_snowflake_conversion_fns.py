@@ -2,11 +2,13 @@
 """Test Bodo's array kernel utilities for BodoSQL Snowflake date-related conversion functions"""
 
 
+import datetime
+
 import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import bodosql_use_date_type, check_query
 from pandas.api.types import is_bool_dtype, is_float_dtype
 
 from bodo import Time
@@ -319,14 +321,15 @@ def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
     else:
         py_output = arr.apply(lambda x: np.nan if pd.isna(x) else str(x))
     py_output = pd.DataFrame({"a": py_output})
-    check_query(
-        query,
-        ctx,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        expected_output=py_output,
-    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
+            spark_info,
+            check_dtype=False,
+            check_names=False,
+            expected_output=py_output,
+        )
 
 
 @pytest.mark.parametrize(
@@ -396,11 +399,11 @@ def test_tz_aware_datetime_to_char(tz_aware_df, memory_leak_check):
     )
 
 
-def test_datetime_to_char(memory_leak_check):
-    """simplest test for TO_CHAR on datetimes"""
+def test_timestamp_to_char(memory_leak_check):
+    """simplest test for TO_CHAR on timezone-naive timestamps"""
     query = "SELECT TO_CHAR(A) as A from table1"
 
-    dt_series = pd.date_range("2022/1/1", periods=30, freq="6D5H").to_series()
+    dt_series = pd.date_range("2022/1/1", periods=30, freq="6D5H15T45S").to_series()
     df = pd.DataFrame({"A": dt_series})
     expected_output = pd.DataFrame({"A": dt_series.dt.strftime("%Y-%m-%d %X%z")})
 
@@ -413,6 +416,41 @@ def test_datetime_to_char(memory_leak_check):
         check_names=False,
         expected_output=expected_output,
     )
+
+
+def test_date_to_char(memory_leak_check):
+    """simplest test for TO_CHAR on date inputs"""
+    query = "SELECT TO_CHAR(A) as A from table1"
+
+    dt_series = pd.Series(
+        [
+            None
+            if i % 7 == 2
+            else datetime.date(
+                2023 - (i**2) % 25, 1 + ((i**2) % 48) // 4, 1 + (i**5) % 28
+            )
+            for i in range(30)
+        ]
+    )
+    df = pd.DataFrame({"A": dt_series})
+    expected_output = pd.DataFrame(
+        {
+            "A": pd.DatetimeIndex(dt_series)
+            .to_series(index=pd.RangeIndex(30))
+            .dt.strftime("%Y-%m-%d")
+        }
+    )
+
+    ctx = {"table1": df}
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
+            None,
+            check_dtype=False,
+            check_names=False,
+            expected_output=expected_output,
+        )
 
 
 @pytest.mark.parametrize(
