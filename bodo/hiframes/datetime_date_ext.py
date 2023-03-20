@@ -271,6 +271,15 @@ def _days_before_month(year, month):  # pragma: no cover
     return _DAYS_BEFORE_MONTH[month] + (month > 2 and _is_leap(year))
 
 
+@register_jitable
+def _day_of_year(year, month, day):  # pragma: no cover
+    "year, month, day -> how many days into the year is it"
+    days = day
+    for m in range(1, month):
+        days += _days_in_month(year, m)
+    return days
+
+
 _DI400Y = _days_before_year(401)  # number of days in 400 years
 _DI100Y = _days_before_year(101)  #    "    "   "   " 100   "
 _DI4Y = _days_before_year(5)  #    "    "   "   "   4   "
