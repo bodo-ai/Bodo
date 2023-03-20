@@ -3,11 +3,17 @@
 Test correctness of Snowflake TO_X functions for date-related casting in BodoSQL
 """
 
+import datetime
+
 import bodosql
 import pandas as pd
 import pytest
 from bodosql.tests.test_datetime_fns import dt_fn_dataframe  # noqa
-from bodosql.tests.utils import check_query, make_tables_nullable
+from bodosql.tests.utils import (
+    bodosql_use_date_type,
+    check_query,
+    make_tables_nullable,
+)
 
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_date_conversion_array_kernels import (  # pragma: no cover
     scalar_to_date_equiv_fn,
@@ -441,6 +447,30 @@ _to_timestamp_timestamp_data = [
         ),
         id="tz_timestamp",
     ),
+    pytest.param(
+        (
+            pd.Series(
+                [
+                    datetime.date(2020, 7, 4),
+                    None,
+                    datetime.date(2023, 2, 28),
+                    None,
+                    datetime.date(2021, 12, 31),
+                ]
+            ),
+            pd.Series(
+                [
+                    "2020-7-4 00:00:00",
+                    None,
+                    "2023-2-28 00:00:00",
+                    None,
+                    "2021-12-31 00:00:00",
+                ]
+            ),
+            None,
+        ),
+        id="date",
+    ),
 ]
 
 
@@ -503,14 +533,15 @@ def test_to_timestamp_non_numeric(
     )
     if use_case:
         expected_output[0][ctx["table1"]["b"]] = None
-    check_query(
-        query,
-        ctx,
-        None,
-        expected_output=expected_output,
-        check_names=False,
-        only_jit_1DVar=True,
-    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=expected_output,
+            check_names=False,
+            only_jit_1DVar=True,
+        )
 
 
 @pytest.fixture(

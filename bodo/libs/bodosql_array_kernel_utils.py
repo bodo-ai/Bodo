@@ -17,10 +17,8 @@ from numba.extending import overload
 import bodo
 from bodo.hiframes.datetime_timedelta_ext import PDTimeDeltaType
 from bodo.hiframes.pd_series_ext import (
-    is_datetime_date_series_typ,
     is_timedelta64_series_typ,
     pd_timedelta_type,
-    pd_timestamp_tz_naive_type,
 )
 from bodo.utils.typing import (
     is_overload_bool,
@@ -738,19 +736,17 @@ def is_valid_datetime_or_date_arg(arg):
     """
     Args:
         arg (dtype): the dtype of the argument being checked
-    returns: False if the argument is not datetime or date data
+    returns: True if the input argument is a scalar or vector date, datetime64,
+    or timestamp type (with or without a timezone).
 
-    Note: In BodoSQL, scalar date/datetime types are both timestamp,
-    and the columnar date/datetime types are both .
+    Note; If the presence or absence of a timezone is important, specifically use
+    is_valid_tz_aware_datetime_arg to check if the dtype has a timezone.
     """
 
-    return arg == pd_timestamp_tz_naive_type or (
-        bodo.utils.utils.is_array_typ(arg, True)
-        and (
-            is_datetime_date_series_typ(arg)
-            or isinstance(arg, bodo.DatetimeArrayType)
-            or arg.dtype == bodo.datetime64ns
-        )
+    return (
+        is_valid_date_arg(arg)
+        or is_valid_tz_naive_datetime_arg(arg)
+        or is_valid_tz_aware_datetime_arg(arg)
     )
 
 
@@ -1534,12 +1530,14 @@ def gen_windowed(
 
     return impl
 
-def check_insert_args(pos, len): # pragma: no cover
+
+def check_insert_args(pos, len):  # pragma: no cover
     pass
+
 
 @overload(check_insert_args)
 def overload_check_insert_args(pos, len):
-    def impl(pos, len): # pragma: no cover
+    def impl(pos, len):  # pragma: no cover
         assert pos >= 1, "<pos> argument must be at least 1!"
         assert len >= 0, "<len> argument must be at least 0!"
 
