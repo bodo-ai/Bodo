@@ -215,9 +215,7 @@ def create_date_cast_util(func, error_on_fail):
             scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day).{extraction_fn}())\n"
 
         # If a non-tz timestamp/datetime, round it down to the nearest day
-        elif is_valid_datetime_or_date_arg(
-            conversionVal
-        ) or is_valid_tz_naive_datetime_arg(conversionVal):
+        elif is_valid_datetime_or_date_arg(conversionVal):
             scalar_text = (
                 f"res[i] = {unbox_str}(pd.Timestamp(arg0).{extraction_fn}())\n"
             )
@@ -432,11 +430,11 @@ def create_timestamp_cast_util(func, error_on_fail):
         elif is_valid_float_arg(conversionVal):
             scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0 * (10 ** (9 - arg3))){localize_str})\n"
 
-        elif is_valid_datetime_or_date_arg(conversionVal):
-            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0){localize_str})\n"
-
         elif is_valid_tz_aware_datetime_arg(conversionVal):
             scalar_text = f"res[i] = {unbox_str}(arg0{localize_str})\n"
+
+        elif is_valid_datetime_or_date_arg(conversionVal):
+            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0){localize_str})\n"
 
         else:  # pragma: no cover
             raise raise_bodo_error(
