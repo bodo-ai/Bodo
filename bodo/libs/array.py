@@ -133,6 +133,9 @@ ll.add_symbol("alloc_like_kernel_cache", array_ext.alloc_like_kernel_cache)
 ll.add_symbol("add_to_like_kernel_cache", array_ext.add_to_like_kernel_cache)
 ll.add_symbol("check_like_kernel_cache", array_ext.check_like_kernel_cache)
 ll.add_symbol("dealloc_like_kernel_cache", array_ext.dealloc_like_kernel_cache)
+ll.add_symbol(
+    "BODO_NRT_MemInfo_alloc_safe_aligned", array_ext.NRT_MemInfo_alloc_safe_aligned
+)
 
 
 class LikeKernelCache(types.Opaque):

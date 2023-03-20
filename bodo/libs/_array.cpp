@@ -1769,5 +1769,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "dealloc_like_kernel_cache",
         PyLong_FromVoidPtr((void*)(&dealloc_like_kernel_cache)));
+    PyObject_SetAttrString(
+        m, "NRT_MemInfo_alloc_safe_aligned",
+        PyLong_FromVoidPtr((void*)(&NRT_MemInfo_alloc_safe_aligned)));
     return m;
 }
