@@ -28,7 +28,6 @@ from numba.core.ir_utils import (
 )
 from numba.parfors.parfor import (
     Parfor,
-    get_parfor_reductions,
     unwrap_parfor_blocks,
     wrap_parfor_blocks,
 )
@@ -689,12 +688,6 @@ class DistributedAnalysis:
         """analyze Parfor nodes for distribution. Parfor and its accessed arrays should
         have the same distribution.
         """
-        # get reduction info for parfor if not already available.
-        # can compute & save it since parfor doesn't change at this compiler stage
-        if "redvars" not in parfor._kws:
-            parfor.redvars, parfor.reddict = get_parfor_reductions(
-                self.func_ir, parfor, parfor.params, self.calltypes
-            )
         if parfor.id not in parfor_dists:
             parfor_dists[parfor.id] = Distribution.OneD
             # save parfor loc for diagnostics
