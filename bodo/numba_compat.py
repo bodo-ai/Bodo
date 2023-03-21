@@ -2260,6 +2260,115 @@ if _check_numba_change:  # pragma: no cover
 numba.parfors.parfor.get_reduce_nodes = get_reduce_nodes
 
 
+# Fix Numba bug: return nested parfors so that Numba sets reduction info for them. See:
+# https://github.com/numba/numba/blob/288a38bbd5a15418a211bf067878dfdf3c139509/numba/parfors/parfor.py#L2979
+# https://bodo.atlassian.net/browse/BE-4523?focusedCommentId=21264
+def get_parfor_params(blocks, options_fusion, fusion_info):
+    """find variables used in body of parfors from outside and save them.
+    computed as live variables at entry of first block.
+    """
+    from numba.core.analysis import compute_use_defs
+    from numba.core.ir_utils import find_topo_order
+    from numba.parfors.parfor import (
+        _combine_params_races_for_ssa_names,
+        _find_parfors,
+    )
+
+    # since parfor wrap creates a back-edge to first non-init basic block,
+    # live_map[first_non_init_block] contains variables defined in parfor body
+    # that could be undefined before. So we only consider variables that are
+    # actually defined before the parfor body in the program.
+    parfor_ids = set()
+    parfors = []
+    pre_defs = set()
+    _, all_defs = compute_use_defs(blocks)
+    topo_order = find_topo_order(blocks)
+    for label in topo_order:
+        block = blocks[label]
+        for i, parfor in _find_parfors(block.body):
+            # find variable defs before the parfor in the same block
+            dummy_block = ir.Block(block.scope, block.loc)
+            dummy_block.body = block.body[:i]
+            before_defs = compute_use_defs({0: dummy_block}).defmap[0]
+            pre_defs |= before_defs
+            # Bodo change: get nested parfors
+            params, inner_parfors = get_parfor_params_inner(
+                parfor,
+                pre_defs,
+                options_fusion,
+                fusion_info,
+            )
+            parfor.params, parfor.races = _combine_params_races_for_ssa_names(
+                block.scope,
+                params,
+                parfor.races,
+            )
+            parfor_ids.add(parfor.id)
+            parfors.append(parfor)
+            # Bodo change: add nested parfor info
+            parfors.extend(inner_parfors)
+            parfor_ids.update({p.id for p in inner_parfors})
+
+        pre_defs |= all_defs[label]
+    return parfor_ids, parfors
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.parfors.parfor.get_parfor_params)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "2225ad2a053c610af1e07c1dcf9661b318371389d4869a2fd571babe434286bd"
+    ):  # pragma: no cover
+        warnings.warn("numba.parfors.parfor.get_parfor_params has changed")
+
+numba.parfors.parfor.get_parfor_params = get_parfor_params
+
+
+def get_parfor_params_inner(parfor, pre_defs, options_fusion, fusion_info):
+    from numba.core.analysis import compute_live_map, compute_use_defs
+    from numba.core.ir_utils import compute_cfg_from_blocks
+    from numba.parfors.parfor import unwrap_parfor_blocks, wrap_parfor_blocks
+
+    blocks = wrap_parfor_blocks(parfor)
+    cfg = compute_cfg_from_blocks(blocks)
+    usedefs = compute_use_defs(blocks)
+    live_map = compute_live_map(cfg, blocks, usedefs.usemap, usedefs.defmap)
+    # Bodo change: get nested parfors
+    parfor_ids, inner_parfors = get_parfor_params(blocks, options_fusion, fusion_info)
+    n_parfors = len(parfor_ids)
+    if n_parfors > 0:
+        if numba.core.config.DEBUG_ARRAY_OPT_STATS:
+            after_fusion = "After fusion" if options_fusion else "With fusion disabled"
+            print(
+                ("{}, parallel for-loop {} has " "nested Parfor(s) #{}.").format(
+                    after_fusion, parfor.id, n_parfors, parfor_ids
+                )
+            )
+        fusion_info[parfor.id] = list(parfor_ids)
+
+    unwrap_parfor_blocks(parfor)
+    keylist = sorted(live_map.keys())
+    init_block = keylist[0]
+    first_non_init_block = keylist[1]
+
+    before_defs = usedefs.defmap[init_block] | pre_defs
+    params = live_map[first_non_init_block] & before_defs
+    # Bodo change: return nested parfors
+    return params, inner_parfors
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.parfors.parfor.get_parfor_params_inner)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "c595b7196f2eb6f86ebd957f8ef3b88065fe4a01dc9e0377a2802dd9790de52e"
+    ):  # pragma: no cover
+        warnings.warn("numba.parfors.parfor.get_parfor_params_inner has changed")
+
+
+numba.parfors.parfor.get_parfor_params_inner = get_parfor_params_inner
+
+
 # declare array writes in Bodo IR nodes and builtins to avoid invalid statement
 # reordering in parfor fusion
 def _can_reorder_stmts(stmt, next_stmt, func_ir, call_table, alias_map, arg_aliases):
