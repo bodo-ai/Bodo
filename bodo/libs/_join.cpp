@@ -2786,6 +2786,22 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
     bool is_strict_contained, bool is_strict_start_cond, bool point_left) {
     tracing::Event ev("interval_merge", interval_parallel || point_parallel);
 
+    // When the point side is empty, the output will be empty regardless of
+    // whether it's an inner join or a point-outer join.
+    // Note that in the case that the interval side is empty, but the point
+    // side is not, the output won't be empty in case of a point-outer join
+    // (it'll be the point table plus nulls for all the columns from the
+    // interval side).
+    // This was added to avoid problems with batch_n_rows computation
+    // (undefined behavior)
+    if (point_table->nrows() == 0) {
+        ev.add_attribute("out_num_rows", 0);
+        ev.add_attribute("out_num_inner_rows", 0);
+        ev.add_attribute("out_num_outer_rows", 0);
+        ev.finalize();
+        return std::pair(std::vector<int64_t>(), std::vector<int64_t>());
+    }
+
     auto [interval_arr_infos, interval_col_data, interval_col_null] =
         get_gen_cond_data_ptrs(interval_table);
     auto [point_arr_infos, point_col_data, point_col_null] =
@@ -2851,8 +2867,8 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
     if (batch_size) {
         batch_size_bytes = std::stoi(batch_size);
     }
-    if (batch_size_bytes < 0) {
-        throw std::runtime_error("interval_join_table: batch_size_bytes < 0");
+    if (batch_size_bytes <= 0) {
+        throw std::runtime_error("interval_join_table: batch_size_bytes <= 0");
     }
 
     // Since we iterate on the point side (with the interval side constant),
