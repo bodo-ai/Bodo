@@ -1304,6 +1304,73 @@ def test_point_in_interval_join(
 
 
 @pytest.mark.parametrize(
+    "point_df",
+    [
+        pd.DataFrame({"P": pd.Series([], dtype="int64")}),
+        pd.DataFrame({"P": pd.Series([1, 2, 3, 4, 5], dtype="int64")}),
+    ],
+)
+@pytest.mark.parametrize(
+    "range_df",
+    [
+        pd.DataFrame(
+            {"A": pd.Series([], dtype="int64"), "B": pd.Series([], dtype="int64")}
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series([1, 2], dtype="int64"),
+                "B": pd.Series([1, 2], dtype="int64"),
+            }
+        ),
+    ],
+)
+@pytest.mark.parametrize("how", ["inner", "left"])
+def test_point_in_interval_join_empty(point_df, range_df, how, memory_leak_check):
+    """
+    Test if Point-in-Interval Join works with empty tables.
+    We especially want to test when
+    - Point Table is Empty
+    - Point Table is Not Empty and Left Join
+    """
+    if len(point_df) != 0 and len(range_df) != 0:
+        pytest.skip("Already testing this case")
+
+    points = point_df["P"] if how == "left" else pd.Series([], dtype="int64")
+    out_df = pd.DataFrame(
+        {
+            "P": points,
+            "A": pd.Series([pd.NA] * len(points), dtype="Int64"),
+            "B": pd.Series([pd.NA] * len(points), dtype="Int64"),
+        }
+    )
+
+    def impl(point_df, range_df, on_str, how):
+        df3 = point_df.merge(range_df, on=on_str, how=how)
+        return df3
+
+    on_str = "((left.`P` > right.`A`) & (left.`P` < right.`B`))"
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    point_df_type = bodo.typeof(point_df)
+    range_df_type = bodo.typeof(range_df)
+    on_str_type = numba.types.literal(on_str)
+    how_str_type = numba.types.literal(how)
+    with set_logging_stream(logger, 2):
+        bodo.jit((point_df_type, range_df_type, on_str_type, how_str_type))(impl)
+        check_logger_msg(stream, "Using optimized interval range join")
+
+    check_func(
+        impl,
+        (point_df, range_df, on_str, how),
+        py_output=out_df,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
     "lcond,rcond",
     [
         (">=", "<"),
