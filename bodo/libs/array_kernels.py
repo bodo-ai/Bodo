@@ -1267,15 +1267,16 @@ def overload_sample_table_operation(data, ind_arr, n, frac, replace, parallel=Fa
     return impl
 
 
-def drop_duplicates(data, ind_arr, ncols, parallel=False):  # pragma: no cover
+def drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):  # pragma: no cover
     pass
 
 
 @overload(drop_duplicates, no_unliteral=True)
-def overload_drop_duplicates(data, ind_arr, ncols, parallel=False):
+def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
     """
     Kernel implementation for drop_duplicates. ncols is the number of
     columns to check for possible duplicates, which are always at the front.
+    keep_i is either 0, 1, or 2 corresponding to keep="first", "last", or False
     """
 
     # TODO: inline for optimization?
@@ -1285,13 +1286,11 @@ def overload_drop_duplicates(data, ind_arr, ncols, parallel=False):
     # ncols <= count. The duplicate checked columns are always at the front.
     count = len(data)
 
-    func_text = "def impl(data, ind_arr, ncols, parallel=False):\n"
+    func_text = "def impl(data, ind_arr, ncols, keep_i, parallel=False):\n"
     func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
         ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-    # We keep the first entry in the drop_duplicates
-    func_text += "  keep_i = 0\n"
     func_text += "  out_table = drop_duplicates_table(table_total, parallel, ncols, keep_i, False, True)\n"
     for i_col in range(count):
         func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(

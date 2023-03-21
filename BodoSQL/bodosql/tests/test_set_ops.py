@@ -33,8 +33,10 @@ def intersect_cmds(request):
 
 @pytest.fixture(
     params=[
-        pytest.param("EXCEPT", marks=pytest.mark.skip("[BS-379] Except not supported")),
-        pytest.param("MINUS", marks=pytest.mark.skip("[BS-379] Except not supported")),
+        "EXCEPT",
+        pytest.param("MINUS", marks=pytest.mark.slow),
+        "EXCEPT ALL",
+        pytest.param("MINUS ALL", marks=pytest.mark.slow),
     ]
 )
 def except_cmds(request):
@@ -297,61 +299,91 @@ def test_intersect_scalars(query, col1, col2, memory_leak_check):
     )
 
 
-def test_except_cols(set_ops_dfs, except_cmds, spark_info, memory_leak_check):
+def test_except_numeric_cols(set_ops_dfs, except_cmds, spark_info, memory_leak_check):
     """
-    Test that EXCEPT/MINUS works for columns
+    Test that EXCEPT/MINUS [ALL] works for a single numeric column
     """
     query = f"SELECT A FROM table1 {except_cmds} SELECT B FROM table2"
-    check_query(query, set_ops_dfs, spark_info, only_python=True)
+    check_query(query, set_ops_dfs, spark_info, check_dtype=False)
+
+
+def test_except_nullable_numeric_many_cols(
+    null_set_df, except_cmds, spark_info, memory_leak_check
+):
+    """
+    Test that EXCEPT/MINUS [ALL] works for many nullable numeric columns
+    """
+    query = f"SELECT A, B, C FROM table1 {except_cmds} SELECT C, C, B FROM table1"
+    check_query(query, null_set_df, spark_info, check_dtype=False)
 
 
 def test_except_string_cols(
     bodosql_string_types, except_cmds, spark_info, memory_leak_check
 ):
     """
-    Test that EXCEPT/MINUS works for string columns
+    Test that EXCEPT/MINUS [ALL] works for string columns
     """
-    query = f"SELECT A, B FROM table1 {except_cmds} SELECT A, C FROM table1"
-    check_query(query, bodosql_string_types, spark_info, only_python=True)
+    query = f"SELECT A FROM table1 {except_cmds} SELECT B FROM table1"
+    check_query(query, bodosql_string_types, spark_info, check_dtype=False)
 
 
 def test_except_string_restrictions(
     bodosql_string_types, except_cmds, spark_info, memory_leak_check
 ):
     """
-    Test that EXCEPT/MINUS works for string columns when used with restrictions
+    Test that EXCEPT/MINUS [ALL] works for string columns when used with restrictions
     """
     query = (
         f"(SELECT CASE WHEN LENGTH(B) > 4 THEN B END, C, A FROM table1 ORDER BY C) {except_cmds} "
         f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B LIMIT 2) "
     )
-    check_query(query, bodosql_string_types, spark_info, check_dtype=False)
+    check_query(
+        query, bodosql_string_types, spark_info, check_names=False, check_dtype=False
+    )
 
 
 def test_except_tz_aware_cols(except_cmds, representative_tz, memory_leak_check):
     """
-    Tests that EXCEPT/MINUS works for tz_aware columns
+    Tests that EXCEPT/MINUS [ALL] works for tz_aware columns
     """
     df = make_tz_aware_df(representative_tz)
     py_output = pd.DataFrame({"A": list(set(df["A"]).difference(set(df["B"])))})
+    if "ALL" in except_cmds:
+        # For EXCEPT/MINUS ALL, number of NA's should be max(A_na - B_na, 0)
+        num_na = max(df["A"].isna().sum() - df["B"].isna().sum(), 0)
+        py_output = py_output.dropna()
+        py_output = pd.DataFrame({"A": list(py_output["A"]) + [None] * num_na})
+    else:
+        # Drop duplicates for EXCEPT/MINUS
+        py_output = py_output.drop_duplicates()
+
     ctx = {"table1": df}
     query = f"SELECT A FROM table1 {except_cmds} SELECT B FROM table1"
     check_query(query, ctx, None, expected_output=py_output)
 
 
 @pytest.mark.slow
-@pytest.mark.skip("[BS-379] Except not supported")
 @pytest.mark.parametrize(
     "query,col1,col2",
     [
         # [BS-381] These queries are not valid for spark
-        ("SELECT 1,2 EXCEPT SELECT 2,3", [1], [2]),
         ("SELECT 1,2 EXCEPT SELECT 1,2", [], []),
+        ("SELECT 1,2 MINUS SELECT 2,3", [1], [2]),
+        pytest.param(
+            "SELECT 1,2 EXCEPT ALL SELECT 1,2",
+            [],
+            [],
+        ),
+        pytest.param(
+            "(SELECT 1,2 UNION ALL SELECT 1,2) MINUS ALL SELECT 1,2",
+            [1],
+            [2],
+        ),
     ],
 )
 def test_except_scalars(query, col1, col2, memory_leak_check):
     """
-    Tests that EXCEPT works for scalars
+    Tests that EXCEPT/MINUS [ALL] works for scalars
     """
     py_output = pd.DataFrame({"col1": col1, "col2": col2})
     check_query(
@@ -362,18 +394,3 @@ def test_except_scalars(query, col1, col2, memory_leak_check):
         expected_output=py_output,
         check_dtype=False,
     )
-
-
-@pytest.mark.skip("[BS-379] Except not supported")
-def test_set_ops_join(join_dataframes, spark_info, memory_leak_check):
-    """
-    Integration test for UNION, INTERSECT, and EXCEPT on joined tables.
-    The column order should be the same across join types.
-    """
-    query = (
-        f"SELECT * FROM table1.A OUTER JOIN table2.A ON table1.A = table2.A EXCEPT "
-        f"SELECT * FROM table1.A LEFT JOIN table2.A ON table1.A = table2.A UNION "
-        f"SELECT * FROM table1.A RIGHT JOIN table2.A ON table1.A = table2.A INTERSECT "
-        f"SELECT * FROM table1.A OUTER JOIN table2.A ON table1.A = table2.A"
-    )
-    check_query(query, join_dataframes, spark_info, check_dtype=False)

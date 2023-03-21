@@ -961,15 +961,16 @@ def test_series_astype_bool_arr(S, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "S",
+    "S, keep",
     [
-        pd.Series(["a", "b", "aa", "bb", "A", "a", "BB"]),
-        pd.Series([1, 2, 41, 2, 1, 4, 2, 1, 1, 25, 5, 3]),
+        (pd.Series(["a", "b", "aa", "bb", "A", "a", "BB"]), "first"),
+        (pd.Series([1, 2, 41, 2, 1, 4, 2, 1, 1, 25, 5, 3]), "last"),
+        (pd.Series(["BB", "C", "A", None, "A", "BBB", None, "C", "BB", "A"]), False),
     ],
 )
-def test_series_drop_duplicates(S, memory_leak_check):
+def test_series_drop_duplicates(S, keep, memory_leak_check):
     def test_impl(S):
-        return S.drop_duplicates()
+        return S.drop_duplicates(keep=keep)
 
     check_func(test_impl, (S,), sort_output=True)
 

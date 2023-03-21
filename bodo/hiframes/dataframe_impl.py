@@ -2329,15 +2329,14 @@ def overload_dataframe_drop_duplicates(
     check_runtime_cols_unsupported(df, "DataFrame.drop_duplicates()")
     # TODO: support inplace
     args_dict = {
-        "keep": keep,
         "inplace": inplace,
         "ignore_index": ignore_index,
     }
     args_default_dict = {
-        "keep": "first",
         "inplace": False,
         "ignore_index": False,
     }
+
     subset_columns = []
     if is_overload_constant_list(subset):
         # List is a single of column names
@@ -2361,6 +2360,24 @@ def overload_dataframe_drop_duplicates(
                 + f"Column {col_name} not found in DataFrame columns {df.columns}"
             )
         subset_idx.append(df.column_index[col_name])
+
+    # keep: "first" => 0, "last" => 1, False => 2
+    if is_overload_constant_str(keep):
+        keep_str = get_overload_const_str(keep)
+        if keep_str == "first":
+            keep_i = 0
+        elif keep_str == "last":
+            keep_i = 1
+        else:  # pragma: no cover
+            raise_bodo_error(
+                "DataFrame.drop_duplicates(): keep must be 'first', 'last', or False"
+            )
+    elif is_overload_constant_bool(keep) and get_overload_const_bool(keep) == False:
+        keep_i = 2
+    else:  # pragma: no cover
+        raise_bodo_error(
+            "DataFrame.drop_duplicates(): keep must be 'first', 'last', or False"
+        )
 
     check_unsupported_args(
         "DataFrame.drop_duplicates",
@@ -2417,8 +2434,8 @@ def overload_dataframe_drop_duplicates(
             i
         )
     index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
-    func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1}, {2})\n".format(
-        drop_duplicates_args, index, num_drop_cols
+    func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1}, {2}, {3})\n".format(
+        drop_duplicates_args, index, num_drop_cols, keep_i
     )
     func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
     return _gen_init_df(func_text, df.columns, data_args, "index")
