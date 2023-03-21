@@ -438,8 +438,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node LogicalMinus node to be visited
    */
   private void visitLogicalMinus(LogicalMinus node) {
-    // I'm making the assumption that the minus node always has exactly two inputs
-    assert node.getInputs().size() == 2;
+    // We always assume minus is between exactly two inputs
+    if (node.getInputs().size() != 2) {
+      throw new BodoSQLCodegenException(
+          "Internal Error: Except should be between exactly two inputs");
+    }
 
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
@@ -457,12 +460,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     String outVar = this.genDfVar();
     String throwAwayVar = this.genDfVar();
-    List<String> colNames = new ArrayList<>();
+    List<String> colNames = node.getRowType().getFieldNames();
     this.genRelnodeTimerStart(node);
 
     this.generatedCode.append(
         generateExceptCode(
-            outVar, throwAwayVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames));
+            outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames, node.all, this));
 
     varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
