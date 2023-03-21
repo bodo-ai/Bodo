@@ -64,6 +64,7 @@ from bodo.utils.typing import (
     get_common_scalar_dtype,
     get_index_names,
     get_literal_value,
+    get_overload_const_bool,
     get_overload_const_bytes,
     get_overload_const_int,
     get_overload_const_str,
@@ -5426,8 +5427,27 @@ def overload_series_duplicated(S, keep="first"):
 @overload_method(SeriesType, "drop_duplicates", inline="always", no_unliteral=True)
 def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False):
     # TODO: support inplace
-    unsupported_args = dict(subset=subset, keep=keep, inplace=inplace)
-    arg_defaults = dict(subset=None, keep="first", inplace=False)
+    unsupported_args = dict(subset=subset, inplace=inplace)
+    arg_defaults = dict(subset=None, inplace=False)
+
+    # keep: "first" => 0, "last" => 1, False => 2
+    if is_overload_constant_str(keep):
+        keep_str = get_overload_const_str(keep)
+        if keep_str == "first":
+            keep_i = 0
+        elif keep_str == "last":
+            keep_i = 1
+        else:  # pragma: no cover
+            raise_bodo_error(
+                "Series.drop_duplicates(): keep must be 'first', 'last', or False"
+            )
+    elif is_overload_constant_bool(keep) and get_overload_const_bool(keep) == False:
+        keep_i = 2
+    else:  # pragma: no cover
+        raise_bodo_error(
+            "Series.drop_duplicates(): keep must be 'first', 'last', or False"
+        )
+
     check_unsupported_args(
         "Series.drop_duplicates",
         unsupported_args,
@@ -5446,7 +5466,7 @@ def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False)
         )
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         (data_0,), index_arr = bodo.libs.array_kernels.drop_duplicates(
-            (data_0,), index, 1
+            (data_0,), index, 1, keep_i
         )
         index = bodo.utils.conversion.index_from_array(index_arr)
         return bodo.hiframes.pd_series_ext.init_series(data_0, index, name)

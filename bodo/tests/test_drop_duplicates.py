@@ -577,7 +577,6 @@ def test_dd_struct_array_non_drop():
     check_func(test_impl, (df1,), reset_index=True, dist_test=False)
 
 
-@pytest.mark.skip("keep argument not supported")
 def test_dd_subset_last(memory_leak_check):
     """
     Test drop_duplicates subset with keep='last'
@@ -591,7 +590,6 @@ def test_dd_subset_last(memory_leak_check):
     check_func(test_impl, (df1,), reset_index=True, sort_output=True)
 
 
-@pytest.mark.skip("keep argument not supported")
 def test_dd_subset_false(memory_leak_check):
     """
     Test drop_duplicates subset with keep=False
