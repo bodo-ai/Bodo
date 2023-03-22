@@ -89,17 +89,51 @@ class PlannerImpl(config: Config) : Planner by Frameworks.getPlanner(frameworkCo
      * This program removes subqueries from the query and then
      * removes the correlation nodes that it produces.
      */
-    private class SubQueryRemoveProgram : Program by Programs.sequence(
-        Programs.hep(
-            listOf(
-                SubQueryRemoveRule.Config.FILTER.toRule(),
-                SubQueryRemoveRule.Config.PROJECT.toRule(),
-                SubQueryRemoveRule.Config.JOIN.toRule(),
-                JoinExtractOverRule.Config.DEFAULT.toRule(),
+    private class SubQueryRemoveProgram : Program {
+        private val program = Programs.sequence(
+            Programs.hep(
+                listOf(
+                    SubQueryRemoveRule.Config.FILTER.toRule(),
+                    SubQueryRemoveRule.Config.PROJECT.toRule(),
+                    SubQueryRemoveRule.Config.JOIN.toRule(),
+                    JoinExtractOverRule.Config.DEFAULT.toRule(),
+                ),
+                false, DefaultRelMetadataProvider.INSTANCE
             ),
-            false, DefaultRelMetadataProvider.INSTANCE),
-        DecorrelateProgram(),
-    )
+            DecorrelateProgram(),
+        )
+
+        override fun run(
+            planner: RelOptPlanner?,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet?,
+            materializations: List<RelOptMaterialization>?,
+            lattices: List<RelOptLattice>?
+        ): RelNode {
+            // This is needed because the hep planner will only run rules
+            // repeatedly until they don't modify the node anymore, but it
+            // will only do this per node rather than as a group.
+            //
+            // Calcite has functionality through a subprogram to do this
+            // repeatedly on a group of rules, but that functionality is broken
+            // and a fix is not present at the current moment.
+            // See https://issues.apache.org/jira/browse/CALCITE-5561 for details.
+            //
+            // Another option is to switch to using the VolcanoPlanner which
+            // does this automatically. That's probably a better idea than
+            // fixing the HepPlanner, but just leaving this as-is until we're
+            // able to test the VolcanoPlanner.
+            var lastOptimizedPlan = rel
+            for (i in 1..25) {
+                val curOptimizedPlan = program.run(planner, lastOptimizedPlan, requiredOutputTraits, materializations, lattices)
+                if (curOptimizedPlan.deepEquals(lastOptimizedPlan)) {
+                    return lastOptimizedPlan
+                }
+                lastOptimizedPlan = curOptimizedPlan
+            }
+            return lastOptimizedPlan
+        }
+    }
 
     /**
      * The decorrelate program will convert Correlate nodes to
