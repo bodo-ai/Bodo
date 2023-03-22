@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application
 
+import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregateRule
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*
 import com.bodosql.calcite.application.bodo_sql_rules.*
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
@@ -333,6 +334,9 @@ class PlannerImpl(config: Config) : Planner by Frameworks.getPlanner(frameworkCo
             // projection. See the rule docstring for more detail.
             .addRuleInstance(ProjectFilterProjectColumnEliminationRule.Config.DEFAULT.toRule())
             .addRuleInstance(MinRowNumberFilterRule.Config.DEFAULT.toRule())
+            // Push down aggregates on snowflake tables directly to snowflake.
+            .addRuleInstance(SnowflakeAggregateRule.Config.DEFAULT.toRule())
+            .addRuleInstance(SnowflakeAggregateRule.Config.WITH_FILTER.toRule())
             .build()
 
         override fun run(

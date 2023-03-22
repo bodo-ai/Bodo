@@ -448,10 +448,14 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * Generate a Python connection string used to read from or write to Snowflake in Bodo's SQL
    * Python code.
    *
+   * <p>TODO(jsternberg): This method is needed for the SnowflakeAggregateTableScan, but exposing
+   * this is a bad idea and this class likely needs to be refactored in a way that the connection
+   * information can be passed around more easily.
+   *
    * @param schemaName The of the schema which must be inserted into the connection string.
    * @return The connection string
    */
-  private String generatePythonConnStr(String schemaName) {
+  public String generatePythonConnStr(String schemaName) {
     // First create the basic connection string that must
     // always be included.
     StringBuilder connString = new StringBuilder();
@@ -465,7 +469,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
               URLEncoder.encode(this.password, "UTF-8"),
               URLEncoder.encode(this.accountName, "UTF-8"),
               URLEncoder.encode(this.catalogName, "UTF-8")));
-      if (schemaName != "") {
+      if (!schemaName.isEmpty()) {
         // Append a schema if it exists
         connString.append(String.format("/%s", URLEncoder.encode(schemaName, "UTF-8")));
       }

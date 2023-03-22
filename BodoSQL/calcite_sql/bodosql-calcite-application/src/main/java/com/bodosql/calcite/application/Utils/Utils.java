@@ -10,7 +10,6 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.calcite.rel.core.AggregateCall;
-import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexOver;

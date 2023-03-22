@@ -190,6 +190,52 @@ def test_snowflake_catalog_read(
     check_func(impl, (bc,), py_output=py_output)
 
 
+def test_snowflake_catalog_aggregate_pushdown_sum(
+    snowflake_sample_data_snowflake_catalog, memory_leak_check
+):
+    def impl(bc, query):
+        return bc.sql("SELECT SUM(l_quantity) as total FROM TPCH_SF1.LINEITEM")
+
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+    py_output = pd.read_sql(
+        "SELECT SUM(l_quantity) as total FROM LINEITEM",
+        get_snowflake_connection_string(
+            snowflake_sample_data_snowflake_catalog.database, "TPCH_SF1"
+        ),
+    )
+
+    # Case insensitive.
+    query1 = "SELECT SUM(l_quantity) as total FROM TPCH_SF1.LINEITEM"
+    check_func(impl, (bc, query1), py_output=py_output)
+    # Case sensitive.
+    query2 = 'SELECT SUM("L_QUANTITY") as total FROM TPCH_SF1.LINEITEM'
+    check_func(impl, (bc, query2), py_output=py_output)
+
+
+def test_snowflake_catalog_aggregate_pushdown_count(
+    snowflake_sample_data_snowflake_catalog, memory_leak_check
+):
+    def impl(bc):
+        return bc.sql("SELECT COUNT(*) as cnt FROM TPCH_SF1.LINEITEM")
+
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+    py_output = pd.read_sql(
+        "SELECT COUNT(*) as cnt FROM LINEITEM",
+        get_snowflake_connection_string(
+            snowflake_sample_data_snowflake_catalog.database, "TPCH_SF1"
+        ),
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit()(impl)(bc)
+        check_logger_msg(stream, "Columns loaded ['cnt']")
+
+    # Count produces an int64 type from pandas and an int32 from calcite.
+    check_func(impl, (bc,), py_output=py_output, check_dtype=False)
+
+
 def test_snowflake_catalog_insert_into(
     test_db_snowflake_catalog, use_default_schema, memory_leak_check
 ):

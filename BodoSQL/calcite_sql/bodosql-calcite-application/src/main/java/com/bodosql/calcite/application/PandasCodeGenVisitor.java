@@ -15,6 +15,7 @@ import static com.bodosql.calcite.application.Utils.Utils.*;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 
 import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
+import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
@@ -25,7 +26,9 @@ import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
+import com.google.common.collect.ImmutableList;
 import java.util.*;
+import kotlin.jvm.functions.Function0;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -37,7 +40,6 @@ import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.sql.*;
-import org.apache.calcite.sql.fun.*;
 import org.apache.calcite.sql.type.*;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
@@ -281,7 +283,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   @Override
   public void visit(RelNode node, int ordinal, RelNode parent) {
-    if (node instanceof TableScan) {
+    if (node instanceof PandasRel) {
+      this.visitPandasRel((PandasRel) node);
+    } else if (node instanceof TableScan) {
       this.visitTableScan((TableScan) node, !(parent instanceof LogicalFilter));
     } else if (node instanceof Join) {
       this.visitJoin((Join) node);
@@ -312,6 +316,62 @@ public class PandasCodeGenVisitor extends RelVisitor {
       throw new BodoSQLCodegenException(
           "Internal Error: Encountered Unsupported Calcite Node " + node.getClass().toString());
     }
+  }
+
+  /**
+   * Generic visitor method for any RelNode that implements PandasRel.
+   *
+   * <p>This method handles node caching, visiting inputs, passing those inputs to the node itself
+   * to emit code into the Module.Builder, and generating timers when requested.
+   *
+   * <p>The resulting variable that is generated for this RelNode is placed on the varGenStack.
+   *
+   * @param node the node to emit code for.
+   */
+  private void visitPandasRel(PandasRel node) {
+    // Determine if this node has already been cached.
+    // If it has, just return that immediately.
+    if (isNodeCached(node)) {
+      varGenStack.push(varCache.get(node.getId()));
+      return;
+    }
+
+    // Currently wrapping this functionality in a closure.
+    // We pass this to the emit function so it can decide whether
+    // to run this code.
+    //
+    // The reason for this is because we haven't correctly set a convention
+    // and implemented a convention converter. In the calcite code, see the cassandra
+    // module, CassandraRel, and CassandraToEnumerableConverter. The last one
+    // implements EnumerableRel which allows the enumerable engine built into calcite
+    // to invoke the Cassandra relation. The converter then constructs the underlying
+    // Cassandra query and executes it. We need a common top-level converter that implements
+    // PandaRel. Once that's properly in place, this could be converted to just emitting
+    // the inputs eagerly.
+    Function0<? extends List<Dataframe>> getInputs =
+        () -> {
+          // Visit the inputs for this node.
+          node.childrenAccept(this);
+
+          // Construct the input variables by popping off the stack.
+          // We use reverse on this afterwards since building the list is in reverse order.
+          int capacity = node.getInputs().size();
+          ImmutableList.Builder<Dataframe> inputs = ImmutableList.builder();
+          for (int i = capacity - 1; i >= 0; i--) {
+            // TODO(jsternberg): When varGenStack is refactored to natively hold dataframes,
+            // the creation of a dataframe here should be removed.
+            Dataframe df = new Dataframe(varGenStack.pop(), node.getInput(i));
+            inputs.add(df);
+          }
+          return inputs.build().reverse();
+        };
+
+    // Construct the inputs and then invoke the emit function.
+    this.genRelnodeTimerStart(node);
+    Dataframe out = node.emit(generatedCode, getInputs);
+    this.genRelnodeTimerStop(node);
+    varCache.put(node.getId(), out.getVariable().getName());
+    varGenStack.push(out.getVariable().getName());
   }
 
   /**
@@ -1826,7 +1886,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitTableScan(TableScan node, boolean canLoadFromCache) {
 
     boolean supportedTableScan =
-        node instanceof LogicalTableScan || node instanceof LogicalTargetTableScan;
+        node instanceof LogicalTableScan
+            || node instanceof LogicalTargetTableScan
+            || node instanceof SnowflakeTableScan;
     if (!supportedTableScan) {
       throw new BodoSQLCodegenException(
           "Internal error: unsupported tableScan node generated:" + node.toString());
@@ -1841,8 +1903,17 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String cacheKey = this.varCache.get(nodeId);
       this.generatedCode.append(String.format("  %s = %s\n", outVar, cacheKey));
     } else {
-      RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
-      BodoSqlTable table = (BodoSqlTable) relTable.table();
+      BodoSqlTable table;
+      // TODO(jsternberg): The proper way to do this is to have the individual nodes
+      // handle the code generation. Due to the way the code generation is constructed,
+      // we can't really do that so we're just going to hack around it for now to avoid
+      // a large refactor.
+      if (node instanceof SnowflakeTableScan) {
+        table = ((SnowflakeTableScan) node).getCatalogTable();
+      } else {
+        RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
+        table = (BodoSqlTable) relTable.table();
+      }
       String readCode;
       String readAssign;
       // Add the table to cached values
