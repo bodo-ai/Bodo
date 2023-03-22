@@ -1232,6 +1232,20 @@ std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
                 exp_type->id() == Type::DOUBLE ||
                 exp_type->id() == Type::TIMESTAMP) {
                 nullable_eq = true;
+            } else if (exp_type->id() == Type::INT8 ||
+                       exp_type->id() == Type::INT16 ||
+                       exp_type->id() == Type::INT32 ||
+                       exp_type->id() == Type::INT64) {
+                // Integer types are sometimes misreported as being
+                // nullable when they are not. In particular, COUNT(*)
+                // is not nullable but the snowflake connector says it is.
+                // If we've been told that the expected is not nullable
+                // and the actual is nullable, confirm whether the actual
+                // is compatible.
+                if (!exp_nullable && act_nullable && col->null_count() == 0) {
+                    // There are no nulls so just mark this conversion as ok.
+                    nullable_eq = true;
+                }
             }
 
             if (act_type->Equals(exp_type) && nullable_eq) {

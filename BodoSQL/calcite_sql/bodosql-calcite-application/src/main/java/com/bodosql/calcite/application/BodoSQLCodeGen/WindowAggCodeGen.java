@@ -1472,21 +1472,21 @@ public class WindowAggCodeGen {
     // Generate intermediate names for each partition keys
     int col_id_var = 0;
     for (int i = 0; i < window.partitionKeys.size(); i++) {
-      Expr.Raw colName = new Expr.Raw("GRPBY_COL_" + col_id_var++);
+      String colName = "GRPBY_COL_" + col_id_var++;
       groupByColNames.add(new Expr.StringLiteral(colName));
-      childColNames.add(colName.emit());
+      childColNames.add(colName);
     }
 
-    final Expr orderByColName;
+    final String orderByColName;
     RelFieldCollation.Direction dir = window.orderKeys.get(0).getDirection();
     RelFieldCollation.NullDirection nullDir = window.orderKeys.get(0).getNullDirection();
     if (dir == RelFieldCollation.Direction.ASCENDING) {
-      orderByColName = new Expr.Raw("ASC_COL_" + col_id_var);
+      orderByColName = "ASC_COL_" + col_id_var;
     } else {
       assert dir == RelFieldCollation.Direction.DESCENDING;
-      orderByColName = new Expr.Raw("DEC_COL_" + col_id_var);
+      orderByColName = "DEC_COL_" + col_id_var;
     }
-    childColNames.add(orderByColName.emit());
+    childColNames.add(orderByColName);
     final Expr.StringLiteral orderByKey = new Expr.StringLiteral(orderByColName);
     final String orderAscending = getAscendingBoolString(dir);
     final String orderNAPosition = getNAPositionString(nullDir);
@@ -1508,7 +1508,7 @@ public class WindowAggCodeGen {
             // The two supported window functions share the same name with the Python function.
             List.of(
                 new Expr.StringLiteral(
-                    new Expr.Raw(windowFunc.getAggOperator().getName().toLowerCase(Locale.ROOT))),
+                    windowFunc.getAggOperator().getName().toLowerCase(Locale.ROOT)),
                 orderByKey,
                 new Expr.Raw(orderAscending),
                 new Expr.Raw(orderNAPosition)),
