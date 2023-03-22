@@ -594,6 +594,19 @@ class BodoSQLContext:
         if failed:
             raise BodoError(msg)
 
+    def validate_query(self, sql):
+        """
+        Verifies BodoSQL can compute query,
+        but does not actually compile the query in Bodo.
+        """
+        try:
+            code = self.convert_to_pandas(sql)
+            executable_flag = True
+        except:
+            executable_flag = False
+
+        return executable_flag
+
     def convert_to_pandas(self, sql, params_dict=None):
         """converts SQL code to Pandas"""
         pd_code, lowered_globals = self._convert_to_pandas(sql, True, params_dict)
