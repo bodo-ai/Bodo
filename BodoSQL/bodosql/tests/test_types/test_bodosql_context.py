@@ -567,3 +567,28 @@ def test_bodosql_context_loop_unrolling(memory_leak_check):
         }
     )
     check_func(impl, (bc, query), py_output=py_output)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param("select * from t1", id="valid-query"),
+        pytest.param("select * from table1", id="invalid-query"),
+    ],
+)
+def test_validate_query(query, request, memory_leak_check):
+    """
+    Make sure validate query fails on a bad query.
+    """
+    df = pd.DataFrame({"a": np.arange(100), "b": ["r32r", "R32", "Rew", "r32r"] * 25})
+    bc = BodoSQLContext(
+        {
+            "t1": df,
+            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+        }
+    )
+
+    if not "invalid" in request.node.name:
+        assert bc.validate_query(query)
+    else:
+        assert not bc.validate_query(query)
