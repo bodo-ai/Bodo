@@ -645,6 +645,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "DATE_SUB":
             {
               assert operands.size() == 2;
+              if (getDateTimeExprType(fnOperation.getOperands().get(0)).equals(DateTimeType.TIME)) {
+                throw new BodoSQLCodegenException("Cannot add/subtract days from TIME");
+              }
               // If the second argument is a timedelta, switch to manual addition
               boolean manual_addition =
                   SqlTypeName.INTERVAL_TYPES.contains(
