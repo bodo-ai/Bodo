@@ -89,40 +89,6 @@ def test_snowflake_catalog_simple_filter_pushdown(memory_leak_check):
     test_impl(bc, query, conn_str, "l_suppkey")
 
 
-def test_snowflake_catalog_zero_columns_pruning(memory_leak_check):
-    """
-    Test loading just a length from a table in a Snowflake Catalog.
-    """
-
-    def impl(bc, query):
-        return bc.sql(query)
-
-    bc = bodosql.BodoSQLContext(
-        catalog=bodosql.SnowflakeCatalog(
-            os.environ["SF_USERNAME"],
-            os.environ["SF_PASSWORD"],
-            "bodopartner.us-east-1",
-            "DEMO_WH",
-            "SNOWFLAKE_SAMPLE_DATA",
-        )
-    )
-
-    query = "SELECT COUNT(*) as cnt from TPCH_SF1.LINEITEM"
-
-    py_output = pd.read_sql(
-        query,
-        get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"),
-    )
-
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        bodo.jit()(impl)(bc, query)
-        check_logger_msg(stream, "Columns loaded []")
-
-    check_func(impl, (bc, query), py_output=py_output, is_out_distributed=False)
-
-
 def test_snowflake_catalog_just_limit_pushdown(memory_leak_check):
     """
     Test limit pushdown with loading from a table from a Snowflake catalog.

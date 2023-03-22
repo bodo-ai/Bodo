@@ -1,5 +1,7 @@
 package com.bodosql.calcite.ir
 
+import com.bodosql.calcite.application.Utils.Utils
+
 abstract class Expr {
     /**
      * Emits code for this expression.
@@ -29,11 +31,14 @@ abstract class Expr {
      * @param callee the function this expression will invoke.
      * @param args a list of expressions to be used as arguments.
      */
-    data class Call(val callee: String, val args: kotlin.collections.List<Expr> = listOf()) : Expr() {
-        constructor(callee: String, vararg args: Expr) : this(callee, args.toList())
+    data class Call(val callee: String, val args: kotlin.collections.List<Expr> = listOf(), val namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf()) : Expr() {
+        constructor(callee: String, args: kotlin.collections.List<Expr>) : this(callee, args, listOf())
+        constructor(callee: String, vararg args: Expr) : this(callee, args.toList(), listOf())
 
         override fun emit(): String {
-            val args = this.args.joinToString(separator = ", ") { it.emit() }
+            val posArgs = args.asSequence().map { it.emit() }
+            val namedArgs = namedArgs.asSequence().map { (name, value) -> "${name}=${value.emit()}" }
+            val args = (posArgs + namedArgs).joinToString(separator = ", ")
             return "${callee}(${args})"
         }
     }
@@ -122,8 +127,8 @@ abstract class Expr {
      * double quotes.
      * @param arg The body of the string.
      */
-    data class StringLiteral(val arg: Expr) : Expr() {
-        override fun emit(): String = "\"${arg.emit()}\""
+    data class StringLiteral(val arg: String) : Expr() {
+        override fun emit(): String = "\"${Utils.escapePythonQuotes(arg)}\""
     }
 
     /**

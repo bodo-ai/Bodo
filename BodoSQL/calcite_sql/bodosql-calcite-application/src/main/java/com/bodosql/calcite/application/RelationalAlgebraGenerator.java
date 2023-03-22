@@ -4,10 +4,7 @@ import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSyst
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
-import com.bodosql.calcite.sql.parser.SqlBodoParserImpl;
 import com.google.common.collect.ImmutableList;
-import java.io.FileWriter;
-import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.HashMap;
@@ -17,7 +14,6 @@ import java.util.function.BiConsumer;
 import javax.annotation.Nullable;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.plan.RelOptUtil;
-import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexNode;
@@ -48,8 +44,6 @@ public class RelationalAlgebraGenerator {
 
   /** Planner that converts sql to relational algebra. */
   private Planner planner;
-  /** Program which takes relational algebra and optimizes it */
-  private HepProgram program;
   /**
    * Stores the output of parsing the given SQL query. This is done to allow separating parsing from
    * other steps.
@@ -132,8 +126,7 @@ public class RelationalAlgebraGenerator {
 
   /**
    * Constructor for the relational algebra generator class. It will take the schema store it in the
-   * config and then set up the {@link #program} for optimizing and the {@link #planner} for
-   * parsing.
+   * config and then set up the program for optimizing and the {@link #planner} for parsing.
    *
    * @param newSchema This is the schema which we will be using to validate our query against. This
    *     gets stored in the {@link #planner}
@@ -162,8 +155,7 @@ public class RelationalAlgebraGenerator {
   /**
    * Constructor for the relational algebra generator class that accepts a Catalog and Schema
    * objects. It will take the schema objects in the Catalog as well as the Schema object store it
-   * in the schemas and then set up the {@link #program} for optimizing and the {@link #planner} for
-   * parsing.
+   * in the schemas and then set up the program for optimizing and the {@link #planner} for parsing.
    */
   public RelationalAlgebraGenerator(
       BodoSQLCatalog catalog,
@@ -329,15 +321,8 @@ public class RelationalAlgebraGenerator {
   }
 
   public String getPandasString(String sql, boolean debugDeltaTable) throws Exception {
-    try {
-      RelNode optimizedPlan = getRelationalAlgebra(sql, true);
-      return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
-    } catch (Exception e) {
-      PrintWriter w = new PrintWriter(new FileWriter("/tmp/exceptions.txt", true));
-      e.printStackTrace(w);
-      w.close();
-      throw e;
-    }
+    RelNode optimizedPlan = getRelationalAlgebra(sql, true);
+    return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
   }
 
   // Default debugDeltaTable to false
