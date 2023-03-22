@@ -1745,3 +1745,115 @@ def group_from_hash(testname, num_groups):
     # Hash val is a hex-string
     int_hash = int(hash_val, base=16) % num_groups
     return str(int_hash)
+
+
+@pytest.fixture
+def timeadd_dataframe():
+    """Returns a table wkth two columns: one of various time values,
+    and the other is various amounts of each unit that can be added
+    by a query."""
+    time_args_list = [
+        (0, 0, 0, 0),
+        (1, 1, 1, 1),
+        (2, 4, 8, 16),
+        None,
+        (14, 52, 48, 20736),
+        (16, 25, 37, 28561),
+        (18, 1, 44, 38416),
+    ]
+    return {
+        "table1": pd.DataFrame(
+            {
+                "T": [
+                    None
+                    if t is None
+                    else bodo.Time(hour=t[0], minute=t[1], second=t[2], nanosecond=t[3])
+                    for t in time_args_list
+                ],
+                "N": [-50, 7, -22, 13, -42, -17, 122],
+            }
+        )
+    }
+
+
+@pytest.fixture(
+    params=[
+        "hour",
+        "minute",
+        "second",
+        "millisecond",
+        "microsecond",
+        "nanosecond",
+    ]
+)
+def timeadd_arguments(request, timeadd_dataframe):
+    """For each time unit, returns the answer column created by using timeadd
+    on the columns created in timeadd_dataframe with the specified unit"""
+    time_args_lists = {
+        "hour": [
+            (22, 0, 0, 0),
+            (8, 1, 1, 1),
+            (4, 4, 8, 16),
+            None,
+            (20, 52, 48, 20736),
+            (23, 25, 37, 28561),
+            (20, 1, 44, 38416),
+        ],
+        "minute": [
+            (23, 10, 0, 0),
+            (1, 8, 1, 1),
+            (1, 42, 8, 16),
+            None,
+            (14, 10, 48, 20736),
+            (16, 8, 37, 28561),
+            (20, 3, 44, 38416),
+        ],
+        "second": [
+            (23, 59, 10, 0),
+            (1, 1, 8, 1),
+            (2, 3, 46, 16),
+            None,
+            (14, 52, 6, 20736),
+            (16, 25, 20, 28561),
+            (18, 3, 46, 38416),
+        ],
+        "millisecond": [
+            (23, 59, 59, 950000000),
+            (1, 1, 1, 7000001),
+            (2, 4, 7, 978000016),
+            None,
+            (14, 52, 47, 958020736),
+            (16, 25, 36, 983028561),
+            (18, 1, 44, 122038416),
+        ],
+        "microsecond": [
+            (23, 59, 59, 999950000),
+            (1, 1, 1, 7001),
+            (2, 4, 7, 999978016),
+            None,
+            (14, 52, 47, 999978736),
+            (16, 25, 37, 11561),
+            (18, 1, 44, 160416),
+        ],
+        "nanosecond": [
+            (23, 59, 59, 999999950),
+            (1, 1, 1, 8),
+            (2, 4, 7, 999999994),
+            None,
+            (14, 52, 48, 20694),
+            (16, 25, 37, 28544),
+            (18, 1, 44, 38538),
+        ],
+    }
+    answer = pd.DataFrame(
+        {
+            0: timeadd_dataframe["table1"]["T"],
+            1: [
+                None
+                if t is None
+                else bodo.Time(hour=t[0], minute=t[1], second=t[2], nanosecond=t[3])
+                for t in time_args_lists[request.param]
+            ],
+        }
+    )
+    return request.param, answer

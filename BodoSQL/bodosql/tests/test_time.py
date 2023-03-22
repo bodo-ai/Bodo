@@ -5,12 +5,17 @@ Test SQL `time` support
 import numpy as np
 import pandas as pd
 import pytest
-from bodo.tests.conftest import time_df, time_part_strings, day_part_strings
-from bodo.tests.timezone_common import date_sub_unit_time_fn
 from bodosql.context import BodoSQLContext
+from bodosql.tests.conftest import timeadd_arguments, timeadd_dataframe  # noqa
 from bodosql.tests.utils import check_query
 
 import bodo
+from bodo.tests.conftest import (  # noqa
+    day_part_strings,
+    time_df,
+    time_part_strings,
+)
+from bodo.tests.timezone_common import date_sub_unit_time_fn
 
 
 @pytest.mark.parametrize(
@@ -417,44 +422,138 @@ def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
         )
 
 
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(
+            True,
+            id="with_case",
+            marks=pytest.mark.skip(reason="TODO: support time in CASE statements"),
+        ),
+    ],
+)
+def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_check):
+    unit, answer = timeadd_arguments
+    # Decide which function to use based on the unit
+    func = {
+        "hour": "DATEADD",
+        "minute": "TIMEADD",
+        "second": "DATEADD",
+        "millisecond": "TIMEADD",
+        "microsecond": "DATEADD",
+        "nanosecond": "TIMEADD",
+    }[unit]
+    if use_case:
+        query = f"SELECT T, CASE WHEN N < -100 THEN NULL ELSE {func}('{unit}', N, T) END FROM TABLE1"
+    else:
+        query = f"SELECT T, {func}('{unit}', N, T) FROM TABLE1"
+    check_query(
+        query,
+        timeadd_dataframe,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "calculation, error_msg",
+    [
+        pytest.param(
+            "DATEADD('yrs', 1, T)",
+            'Unsupported unit for DATEADD with TIME input: "yrs"',
+            id="dateadd-year",
+        ),
+        pytest.param(
+            "TIMEADD('mon', 6, T)",
+            'Unsupported unit for TIMEADD with TIME input: "mon"',
+            id="timeadd-month",
+        ),
+        # TIMESTAMPADD / DATE_ADD / ADDATE will cause an error at the calcite level
+        # due to a type mismatch so BodoSQL will not control the error message created
+        pytest.param("TIMESTAMPADD(WEEK, -1, T)", "", id="timestampadd-week"),
+        pytest.param("DATE_ADD(10, T)", "", id="date_add-day"),
+        pytest.param("ADDATE(13, T)", "", id="addate-day"),
+        pytest.param(
+            "DATE_SUB(T, 1)", "Cannot add/subtract days from TIME", id="date_sub-day"
+        ),
+        pytest.param(
+            "SUBDATE(T, 2)", "Cannot add/subtract days from TIME", id="subdate-day"
+        ),
+        pytest.param(
+            "DATEDIFF('QUARTER', T, T)",
+            'Unsupported unit for DATEDIFF with TIME input: "QUARTER"',
+            id="datediff-quarter",
+        ),
+        pytest.param(
+            "TIMEDIFF('wy', T, T)",
+            'Unsupported unit for TIMEDIFF with TIME input: "wy"',
+            id="timediff-week",
+        ),
+        pytest.param(
+            "TIMESTAMPDIFF(DAY, T, T)",
+            "Unsupported unit for TIMESTAMPDIFF with TIME input: DAY",
+            id="timestampdiff-day",
+        ),
+    ],
+)
+def test_timeadd_timediff_invalid_units(timeadd_dataframe, calculation, error_msg):
+    """Tests various date/time addition/subtraction functions on TIME data with
+    invalid units to ensure that they raise an error"""
+    query = f"SELECT {calculation} FROM table1"
+    bc = BodoSQLContext(timeadd_dataframe)
+    with pytest.raises(Exception, match=error_msg):
+        bc.sql(query)
+
+
 def test_timestampdiff_time_columns(time_df, time_part_strings, memory_leak_check):
     """
     Checks that calling TIMESTAMPDIFF on columns behaves as expected
     """
-    query = (
-        f"SELECT TIMESTAMPDIFF('{time_part_strings}', A, B) as output from table1"
-    )
+    query = f"SELECT TIMESTAMPDIFF('{time_part_strings}', A, B) as output from table1"
     output = pd.DataFrame(
-        {"output": [
-            date_sub_unit_time_fn(time_part_strings,
-                                  time_df["table1"]["A"][i],
-                                  time_df["table1"]["B"][i]
-                                  ) for i in range(len(time_df["table1"]["A"]))]}
+        {
+            "output": [
+                date_sub_unit_time_fn(
+                    time_part_strings,
+                    time_df["table1"]["A"][i],
+                    time_df["table1"]["B"][i],
+                )
+                for i in range(len(time_df["table1"]["A"]))
+            ]
+        }
     )
     check_query(
-        query, time_df, None, check_names=False, check_dtype=False, expected_output=output
+        query,
+        time_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=output,
     )
 
 
-def test_timestampdiff_time_day_part_handling(time_df, day_part_strings, memory_leak_check):
+def test_timestampdiff_time_day_part_handling(
+    time_df, day_part_strings, memory_leak_check
+):
     """
     Checks that TIMESTAMPDIFF throws an error when a date part is passed in as the unit
     """
-    query = (
-        f"SELECT TIMESTAMPDIFF('{day_part_strings}', A, B) as output from table1"
-    )
-    output = pd.DataFrame(
-        {"output": []}
-    )
-    with pytest.raises(Exception, match=
-        f"Unsupported unit for TIMESTAMPDIFF with TIME input: \"{day_part_strings}\""):
+    query = f"SELECT TIMESTAMPDIFF('{day_part_strings}', A, B) as output from table1"
+    output = pd.DataFrame({"output": []})
+    with pytest.raises(
+        Exception,
+        match=f'Unsupported unit for TIMESTAMPDIFF with TIME input: "{day_part_strings}"',
+    ):
         check_query(
             query,
             time_df,
             None,
             check_names=False,
             check_dtype=False,
-            expected_output=output
+            expected_output=output,
         )
 
 
@@ -469,7 +568,7 @@ def test_max_time_types(time_df, memory_leak_check):
         None,
         check_names=False,
         expected_output=pd.DataFrame({"A": [bodo.Time(22, 13, 57)]}),
-        is_out_distributed=False
+        is_out_distributed=False,
     )
 
 
@@ -484,5 +583,5 @@ def test_min_time_types(time_df, memory_leak_check):
         None,
         check_names=False,
         expected_output=pd.DataFrame({"A": [bodo.Time()]}),
-        is_out_distributed=False
+        is_out_distributed=False,
     )

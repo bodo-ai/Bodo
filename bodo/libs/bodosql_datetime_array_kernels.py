@@ -1438,7 +1438,7 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
         scalar_text += "    res[i] = datetime.date(arg1.year, arg1.month, 1)\n"
         scalar_text += "elif part_str == 'week':\n"
         scalar_text += "    res[i] = arg1 - datetime.timedelta(days=arg1.weekday())\n"
-        scalar_text += "else:\n" # when time unit is smaller than or equal to day, return the same date
+        scalar_text += "else:\n"  # when time unit is smaller than or equal to day, return the same date
         scalar_text += "    res[i] = arg1\n"
         out_dtype = (
             DatetimeDateArrayType()
@@ -2908,7 +2908,6 @@ def overload_date_sub_date_unit_util(date_or_time_part, arr0, arr1):  # pragma: 
         scalar_text = f"res[i] = ({arg2} - {arg1}).days\n"
     else:
         timedelta_str = f"({arg2}.value - {arg1}.value)"
-
         if datetime_part == "hour":
             scalar_text = (
                 f"res[i] = {timedelta_str} // {((1000 * 1000 * 1000) * 3600)}\n"
