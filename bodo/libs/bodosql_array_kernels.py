@@ -79,7 +79,6 @@ broadcasted_fixed_arg_functions = {
     "cot",
     "create_date",
     "create_timestamp",
-    "date_sub_date_unit",
     "date_trunc",
     "dayname",
     "dayofmonth",

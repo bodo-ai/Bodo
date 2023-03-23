@@ -661,16 +661,38 @@ def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_che
             ),
             {
                 "years": pd.Series(pd.date_range("2099-12-20", "2099-12-30", 11).date),
-                "quarters": pd.Series(pd.date_range("2024-12-20", "2024-12-30", 11).date),
+                "quarters": pd.Series(
+                    pd.date_range("2024-12-20", "2024-12-30", 11).date
+                ),
                 "months": pd.Series(pd.date_range("2008-04-20", "2008-04-30", 11).date),
                 "weeks": pd.Series(pd.date_range("2001-11-19", "2001-11-29", 11).date),
                 "days": pd.Series(pd.date_range("2000-03-29", "2000-04-08", 11).date),
-                "hours": pd.Series(pd.date_range("1999-12-24 04:00:00", "2000-01-03 04:00:00", 11)),
-                "minutes": pd.Series(pd.date_range("1999-12-20 01:40:00", "1999-12-30 01:40:00", 11)),
-                "seconds": pd.Series(pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 11)),
-                "milliseconds": pd.Series(pd.date_range("1999-12-20 00:00:00.100", "1999-12-30 00:00:00.100", 11)),
-                "microseconds": pd.Series(pd.date_range("1999-12-20 00:00:00.000100", "1999-12-30 00:00:00.000100", 11)),
-                "nanoseconds": pd.Series(pd.date_range("1999-12-20 00:00:00.000000100", "1999-12-30 00:00:00.000000100", 11)),
+                "hours": pd.Series(
+                    pd.date_range("1999-12-24 04:00:00", "2000-01-03 04:00:00", 11)
+                ),
+                "minutes": pd.Series(
+                    pd.date_range("1999-12-20 01:40:00", "1999-12-30 01:40:00", 11)
+                ),
+                "seconds": pd.Series(
+                    pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 11)
+                ),
+                "milliseconds": pd.Series(
+                    pd.date_range(
+                        "1999-12-20 00:00:00.100", "1999-12-30 00:00:00.100", 11
+                    )
+                ),
+                "microseconds": pd.Series(
+                    pd.date_range(
+                        "1999-12-20 00:00:00.000100", "1999-12-30 00:00:00.000100", 11
+                    )
+                ),
+                "nanoseconds": pd.Series(
+                    pd.date_range(
+                        "1999-12-20 00:00:00.000000100",
+                        "1999-12-30 00:00:00.000000100",
+                        11,
+                    )
+                ),
             },
             id="scalar_vector",
         ),
@@ -2095,14 +2117,18 @@ def test_create_timestamp(arg, memory_leak_check):
     )
 
 
-def date_sub_unit_fn(unit, arg0, arg1):
+def diff_fn(unit, arg0, arg1):
     if pd.isna(arg0) or pd.isna(arg1):
         return None
     else:
+        datetime_part = standardize_snowflake_date_time_part_compile_time(unit)(unit)
+        if isinstance(arg0, bodo.Time):
+            return nanoseconds_to_other_time_units(
+                arg1.value, datetime_part
+            ) - nanoseconds_to_other_time_units(arg0.value, datetime_part)
         A = pd.Timestamp(arg0)
         B = pd.Timestamp(arg1)
 
-        datetime_part = standardize_snowflake_date_time_part_compile_time(unit)(unit)
         if datetime_part == "year":
             return B.year - A.year
         elif datetime_part == "quarter":
@@ -2122,119 +2148,9 @@ def date_sub_unit_fn(unit, arg0, arg1):
         elif datetime_part == "day":
             return (B - A).days
         else:
-            return nanoseconds_to_other_time_units((B - A).value, datetime_part)
-
-
-def date_sub_unit_time_fn(unit, arg0, arg1):
-    if pd.isna(arg0) or pd.isna(arg1):
-        return None
-    else:
-        time_part = standardize_snowflake_date_time_part_compile_time(unit)(unit)
-        return nanoseconds_to_other_time_units(arg1.value - arg0.value, time_part)
-
-
-def test_date_sub_date_unit(datetime_part_strings, memory_leak_check):
-    """
-    Tests date_sub_date_unit with array and scalar data.
-    """
-
-    def impl(unit, arg0, arg1):
-        return pd.Series(
-            bodo.libs.bodosql_array_kernels.date_sub_date_unit(
-                numba.literally(unit), arg0, arg1
-            )
-        )
-
-    scalar_impl = (
-        lambda unit, arg0, arg1: bodo.libs.bodosql_array_kernels.date_sub_date_unit(
-            numba.literally(unit), arg0, arg1
-        )
-    )
-
-    S0 = pd.Series(list(pd.date_range("2022-1-1", freq="29D", periods=30)) + [None] * 4)
-    S1 = pd.Series(
-        [None] * 4 + list(pd.date_range("2023-11-1", freq="-50D", periods=30))
-    )
-    arr0 = S0.values
-    arr1 = S1.values
-    scalar0 = S0[0]
-    scalar1 = S1[15]
-
-    args = (datetime_part_strings, arr0, arr1)
-    check_func(
-        impl,
-        args,
-        py_output=vectorized_sol(args, date_sub_unit_fn, None),
-        check_dtype=False,
-        reset_index=True,
-    )
-    args = (datetime_part_strings, scalar0, scalar1)
-    check_func(
-        scalar_impl,
-        args,
-        py_output=vectorized_sol(args, date_sub_unit_fn, None),
-        check_dtype=False,
-        reset_index=True,
-    )
-
-
-def test_date_sub_date_time_unit(time_part_strings, memory_leak_check):
-    """
-    Tests date_sub_date_unit with array and scalar data.
-    """
-
-    def impl(unit, arg0, arg1):
-        return pd.Series(
-            bodo.libs.bodosql_array_kernels.date_sub_date_unit(
-                numba.literally(unit), arg0, arg1
-            )
-        )
-
-    scalar_impl = (
-        lambda unit, arg0, arg1: bodo.libs.bodosql_array_kernels.date_sub_date_unit(
-            numba.literally(unit), arg0, arg1
-        )
-    )
-
-    S0 = pd.Series(
-        [
-            bodo.Time(17, 33, 26, 91, 8, 79),
-            None,
-            bodo.Time(0, 24, 43, 365, 18, 74),
-            bodo.Time(22, 13, 57),
-        ]
-        * 4
-    )
-    S1 = pd.Series(
-        [
-            bodo.Time(3, 59, 6, 25, 757, 3),
-            bodo.Time(17, 34, 29, 90),
-            None,
-            bodo.Time(7, 3, 45, 876, 234),
-        ]
-        * 4
-    )
-    arr0 = S0.values
-    arr1 = S1.values
-    scalar0 = S0[0]
-    scalar1 = S1[15]
-
-    args = (time_part_strings, arr0, arr1)
-    check_func(
-        impl,
-        args,
-        py_output=vectorized_sol(args, date_sub_unit_time_fn, None),
-        check_dtype=False,
-        reset_index=True,
-    )
-    args = (time_part_strings, scalar0, scalar1)
-    check_func(
-        scalar_impl,
-        args,
-        py_output=vectorized_sol(args, date_sub_unit_time_fn, None),
-        check_dtype=False,
-        reset_index=True,
-    )
+            return nanoseconds_to_other_time_units(
+                B.value, datetime_part
+            ) - nanoseconds_to_other_time_units(A.value, datetime_part)
 
 
 @pytest.fixture(params=["scalar", "vector", "null"])
@@ -2736,34 +2652,3 @@ def test_create_timestamp_optional(memory_leak_check):
             (arg, flag),
             py_output=answer,
         )
-
-
-@pytest.mark.slow
-def test_date_sub_date_unit_optional(datetime_part_strings, memory_leak_check):
-    """
-    Tests date_sub_date_unit with optional data.
-    """
-
-    def impl(date_or_time_part, A, B, flag0, flag1):
-        arg0 = A if flag0 else None
-        arg1 = B if flag1 else None
-
-        return bodo.libs.bodosql_array_kernels.date_sub_date_unit(
-            numba.literally(date_or_time_part), arg0, arg1
-        )
-
-    # Note that pd.Timestamp constructor does not accept a millisecond argument
-    # Year, month, day, hour, minute, second, microsecond, nanosecond
-    A = pd.Timestamp(2022, 11, 14, 1, 12, 10, 10, 10)
-    B = pd.Timestamp(2021, 12, 2, 10, 2, 50, 1, 999)
-
-    answer = date_sub_unit_fn(datetime_part_strings, A, B)
-
-    for flag0 in [True, False]:
-        for flag1 in [True, False]:
-            answer = answer if flag0 and flag1 else None
-            check_func(
-                impl,
-                (datetime_part_strings, A, B, flag0, flag1),
-                py_output=answer,
-            )

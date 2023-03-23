@@ -7,8 +7,13 @@ import datetime
 import bodosql
 import pandas as pd
 import pytest
+from bodo.tests.conftest import date_df, time_part_strings, day_part_strings
 from bodosql.context import BodoSQLContext
 from bodosql.tests.utils import bodosql_use_date_type, check_query
+
+from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels import (
+    diff_fn,
+)
 
 
 @pytest.mark.parametrize(
@@ -231,3 +236,159 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
                 check_dtype=False,
                 sort_output=False,
             )
+
+
+@pytest.mark.parametrize(
+    "query, expected_output",
+    [
+        pytest.param(
+            "SELECT DATEDIFF('YEAR', TO_DATE('2000-01-01'), TO_DATE('2022-12-31'))",
+            pd.DataFrame({"A": pd.Series([22])}),
+            id="year",
+        ),
+        pytest.param(
+            "SELECT TIMEDIFF('QUARTER', TO_DATE('2022-06-30'), TO_DATE('2000-01-01'))",
+            pd.DataFrame({"A": pd.Series([-89])}),
+            id="quarter",
+        ),
+        pytest.param(
+            "SELECT TIMESTAMPDIFF('MONTH', TO_DATE('2022-06-30'), TO_DATE('2020-01-01'))",
+            pd.DataFrame({"A": pd.Series([-29])}),
+            id="month",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('WEEK', TO_DATE('2010-01-01'), TO_DATE('2022-12-31'))",
+            pd.DataFrame({"A": pd.Series([678])}),
+            id="week",
+        ),
+        pytest.param(
+            "SELECT TIMEDIFF('DAY', TO_DATE('2022-06-30'), TO_DATE('2000-01-01'))",
+            pd.DataFrame({"A": pd.Series([-8216])}),
+            id="day",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('HOUR', TO_DATE('2020-01-01'), TO_DATE('2022-06-30'))",
+            pd.DataFrame({"A": pd.Series([21864])}),
+            id="hour",
+        ),
+        pytest.param(
+            "SELECT TIMEDIFF('MINUTE', TO_DATE('2010-01-01'), TO_DATE('2022-12-31'))",
+            pd.DataFrame({"A": pd.Series([6835680])}),
+            id="minute",
+        ),
+        pytest.param(
+            "SELECT TIMESTAMPDIFF('SECOND', TO_DATE('2022-06-30'), TO_DATE('2020-01-01'))",
+            pd.DataFrame({"A": pd.Series([-78710400])}),
+            id="second",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('MILLISECOND', TO_DATE('2000-01-01'), TO_DATE('2022-12-31'))",
+            pd.DataFrame({"A": pd.Series([725760000000])}),
+            id="millisecond",
+        ),
+        pytest.param(
+            "SELECT TIMEDIFF('MICROSECOND', TO_DATE('2022-12-31'), TO_DATE('2010-01-01'))",
+            pd.DataFrame({"A": pd.Series([-410140800000000])}),
+            id="microsecond",
+        ),
+        pytest.param(
+            "SELECT TIMESTAMPDIFF('NANOSECOND', TO_DATE('2020-01-01'), TO_DATE('2022-06-30'))",
+            pd.DataFrame({"A": pd.Series([78710400000000000])}),
+            id="nanosecond",
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_datediff_date_literals(query, expected_output, basic_df, memory_leak_check):
+    """
+    Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF on datetime.date literals behaves as expected.
+    Tests all possible datetime parts except for time units.
+    """
+
+    check_query(
+        query,
+        basic_df,
+        spark=None,
+        expected_output=expected_output,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
+def test_datediff_date_columns_time_units(
+    date_df, time_part_strings, memory_leak_check
+):
+    """
+    Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF with date columns and time units behaves as expected
+    """
+    fn_name = {
+        "HOUR": "DATEDIFF",
+        "hr": "TIMEDIFF",
+        "MINUTE": "TIMESTAMPDIFF",
+        "min": "DATEDIFF",
+        "SECOND": "TIMEDIFF",
+        "ms": "TIMESTAMPDIFF",
+        "microsecond": "DATEDIFF",
+        "usec": "TIMEDIFF",
+        "nanosecs": "TIMESTAMPDIFF",
+    }[time_part_strings]
+    query = f"SELECT {fn_name}('{time_part_strings}', A, B) as output from table1"
+    output = pd.DataFrame(
+        {
+            "output": [
+                diff_fn(
+                    time_part_strings,
+                    date_df["table1"]["A"][i],
+                    date_df["table1"]["B"][i],
+                )
+                for i in range(len(date_df["table1"]["A"]))
+            ]
+        }
+    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            date_df,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=output,
+        )
+
+
+def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_check):
+    """
+    Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF with date columns and date units behaves as expected
+    """
+    fn_name = {
+        "quarter": "DATEDIFF",
+        "yyy": "TIMEDIFF",
+        "MONTH": "TIMESTAMPDIFF",
+        "mon": "DATEDIFF",
+        "WEEK": "TIMEDIFF",
+        "wk": "TIMESTAMPDIFF",
+        "DAY": "DATEDIFF",
+        "dd": "TIMEDIFF",
+    }[day_part_strings]
+    query = f"SELECT {fn_name}('{day_part_strings}', A, B) as output from table1"
+    output = pd.DataFrame(
+        {
+            "output": [
+                diff_fn(
+                    day_part_strings,
+                    date_df["table1"]["A"][i],
+                    date_df["table1"]["B"][i],
+                )
+                for i in range(len(date_df["table1"]["A"]))
+            ]
+        }
+    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            date_df,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=output,
+        )
