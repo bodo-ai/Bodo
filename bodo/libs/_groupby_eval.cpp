@@ -22,13 +22,15 @@ template <typename T>
 void copy_nullable_values_transform(array_info* update_col, array_info* tmp_col,
                                     const grouping_info& grp_info) {
     int64_t nrows = update_col->length;
-    bool bit = false;
     for (int64_t iRow = 0; iRow < nrows; iRow++) {
         int64_t igrp = grp_info.row_to_group[iRow];
-        bit = tmp_col->get_null_bit(igrp);
-        T val = tmp_col->template at<T>(igrp);
+        // Update the bitmap
+        bool bit = tmp_col->get_null_bit(igrp);
         update_col->set_null_bit(iRow, bit);
-        update_col->template at<T>(iRow) = val;
+        // Update the value
+        T& val = getv<T>(tmp_col, igrp);
+        T& val2 = getv<T>(update_col, iRow);
+        val2 = val;
     }
 }
 /**
@@ -109,16 +111,17 @@ void copy_values(array_info* update_col, array_info* tmp_col,
                  const grouping_info& grp_info) {
     if (tmp_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         copy_nullable_values_transform<T>(update_col, tmp_col, grp_info);
-        return;
-    }
-    // Copy result from tmp_col to corresponding group rows in
-    // update_col.
-    int64_t nrows = update_col->length;
-    for (int64_t iRow = 0; iRow < nrows; iRow++) {
-        int64_t igrp = grp_info.row_to_group[iRow];
-        T& val = getv<T>(tmp_col, igrp);
-        T& val2 = getv<T>(update_col, iRow);
-        val2 = val;
+    } else {
+        // Numpy array. No bitmap
+        // Copy result from tmp_col to corresponding group rows in
+        // update_col.
+        int64_t nrows = update_col->length;
+        for (int64_t iRow = 0; iRow < nrows; iRow++) {
+            int64_t igrp = grp_info.row_to_group[iRow];
+            T& val = getv<T>(tmp_col, igrp);
+            T& val2 = getv<T>(update_col, iRow);
+            val2 = val;
+        }
     }
 }
 
@@ -140,8 +143,7 @@ void copy_dict_string_values_transform(array_info* update_col,
     copy_values<int32_t>(indices_arr, tmp_col->info2, grp_info);
     incref_array(tmp_col->info1);  // increase reference because we reuse the
                                    // underlying data array.
-    array_info* out_col =
-        create_dict_string_array(tmp_col->info1, indices_arr, length);
+    array_info* out_col = create_dict_string_array(tmp_col->info1, indices_arr);
     *update_col = std::move(*out_col);
     // reverse_shuffle_table needs the dictionary to be global
     // copy_dict_string_values_transform is only called on distributed data
@@ -153,55 +155,38 @@ void copy_dict_string_values_transform(array_info* update_col,
 
 void copy_values_transform(array_info* update_col, array_info* tmp_col,
                            const grouping_info& grp_info) {
-    switch (tmp_col->dtype) {
-        case Bodo_CTypes::_BOOL:
-            copy_values<bool>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::INT8:
-            copy_values<int8_t>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::UINT8:
-            copy_values<uint8_t>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::INT16:
-            copy_values<int16_t>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::UINT16:
-            copy_values<uint16_t>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::INT32:
-            copy_values<int32_t>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::UINT32:
-            copy_values<uint32_t>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::DATE:
-        case Bodo_CTypes::DATETIME:
-        case Bodo_CTypes::TIMEDELTA:
-        case Bodo_CTypes::INT64:
-        // TODO: [BE-4106] Split Time into Time32 and Time64
-        case Bodo_CTypes::TIME:
-            copy_values<int64_t>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::UINT64:
-            copy_values<uint64_t>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::FLOAT32:
-            copy_values<float>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::FLOAT64:
-            copy_values<double>(update_col, tmp_col, grp_info);
-            break;
-        case Bodo_CTypes::STRING:
-            if (tmp_col->arr_type == bodo_array_type::DICT) {
-                copy_dict_string_values_transform(update_col, tmp_col,
-                                                  grp_info);
-            } else {
-                copy_string_values_transform(update_col, tmp_col, grp_info);
-            }
-            break;
-        default:
-            throw new std::runtime_error("unsupported data type for eval: " +
-                                         GetDtype_as_string(tmp_col->dtype));
+    if (tmp_col->arr_type == bodo_array_type::DICT) {
+        copy_dict_string_values_transform(update_col, tmp_col, grp_info);
+    } else if (tmp_col->arr_type == bodo_array_type::STRING) {
+        copy_string_values_transform(update_col, tmp_col, grp_info);
+    } else {
+        // macro to reduce code duplication
+#ifndef COPY_VALUES_CALL
+#define COPY_VALUES_CALL(CTYPE)                                               \
+    if (tmp_col->dtype == CTYPE) {                                            \
+        copy_values<typename dtype_to_type<CTYPE>::type>(update_col, tmp_col, \
+                                                         grp_info);           \
+        return;                                                               \
     }
+#endif
+        COPY_VALUES_CALL(Bodo_CTypes::_BOOL)
+        COPY_VALUES_CALL(Bodo_CTypes::INT8)
+        COPY_VALUES_CALL(Bodo_CTypes::UINT8)
+        COPY_VALUES_CALL(Bodo_CTypes::INT16)
+        COPY_VALUES_CALL(Bodo_CTypes::UINT16)
+        COPY_VALUES_CALL(Bodo_CTypes::INT32)
+        COPY_VALUES_CALL(Bodo_CTypes::UINT32)
+        COPY_VALUES_CALL(Bodo_CTypes::INT64)
+        COPY_VALUES_CALL(Bodo_CTypes::UINT64)
+        COPY_VALUES_CALL(Bodo_CTypes::DATE)
+        COPY_VALUES_CALL(Bodo_CTypes::DATETIME)
+        COPY_VALUES_CALL(Bodo_CTypes::TIMEDELTA)
+        COPY_VALUES_CALL(Bodo_CTypes::TIME)
+        COPY_VALUES_CALL(Bodo_CTypes::FLOAT32)
+        COPY_VALUES_CALL(Bodo_CTypes::FLOAT64)
+        // None of the calls match. If any matched we return from the macro.
+        throw new std::runtime_error("unsupported data type for eval: " +
+                                     GetDtype_as_string(tmp_col->dtype));
+    }
+#undef COPY_VALUES_CALL
 }

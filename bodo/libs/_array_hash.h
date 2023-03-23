@@ -14,9 +14,9 @@
 #define SEED_HASH_PIVOT_SHUFFLE 0xb0d01285
 #define SEED_HASH_CONTAINER 0xb0d01284
 
-void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                        const uint32_t seed, bool global_dict_needed,
-                        bool is_parallel);
+void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
+                        array_info* array, size_t n_rows, const uint32_t seed,
+                        bool global_dict_needed, bool is_parallel);
 
 /**
  * Function for the computation of hashes for keys
@@ -27,17 +27,18 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
  * @return hash keys
  *
  */
-uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
-                    const uint32_t seed, bool is_parallel,
-                    bool global_dict_needed = true);
+std::unique_ptr<uint32_t[]> hash_keys(std::vector<array_info*> const& key_arrs,
+                                      const uint32_t seed, bool is_parallel,
+                                      bool global_dict_needed = true);
 
-uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
-                             std::vector<array_info*> const& ref_key_arrs,
-                             const uint32_t seed, bool is_parallel);
+std::unique_ptr<uint32_t[]> coherent_hash_keys(
+    std::vector<array_info*> const& key_arrs,
+    std::vector<array_info*> const& ref_key_arrs, const uint32_t seed,
+    bool is_parallel);
 
-void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                const uint32_t seed, bool is_parallel, bool global_dict_needed,
-                bool use_murmurhash = false);
+void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
+                size_t n_rows, const uint32_t seed, bool is_parallel,
+                bool global_dict_needed, bool use_murmurhash = false);
 
 /**
  * Function for the getting table keys and returning its hashes
@@ -49,18 +50,19 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
  * @return hash keys
  *
  */
-inline uint32_t* hash_keys_table(table_info* in_table, size_t num_keys,
-                                 uint32_t seed, bool is_parallel) {
+inline std::unique_ptr<uint32_t[]> hash_keys_table(table_info* in_table,
+                                                   size_t num_keys,
+                                                   uint32_t seed,
+                                                   bool is_parallel) {
     tracing::Event ev("hash_keys_table", is_parallel);
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
     return hash_keys(key_arrs, seed, is_parallel);
 }
 
-inline uint32_t* coherent_hash_keys_table(table_info* in_table,
-                                          table_info* ref_table,
-                                          size_t num_keys, uint32_t seed,
-                                          bool is_parallel) {
+inline std::unique_ptr<uint32_t[]> coherent_hash_keys_table(
+    table_info* in_table, table_info* ref_table, size_t num_keys, uint32_t seed,
+    bool is_parallel) {
     tracing::Event ev("coherent_hash_keys_table", is_parallel);
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
@@ -250,8 +252,8 @@ struct HashDict {
         }
     }
     const size_t global_array_rows;
-    const uint32_t* global_array_hashes;
-    const uint32_t* local_array_hashes;
+    const std::unique_ptr<uint32_t[]>& global_array_hashes;
+    const std::unique_ptr<uint32_t[]>& local_array_hashes;
 };
 
 // For key comparison involving dictionaries of dictionary-encoded arrays
@@ -305,7 +307,7 @@ struct HashMultiArray {
         const size_t iTable = hash_info.second;
         return hashes[iTable][iRow];
     }
-    std::vector<uint32_t*>& hashes;
+    std::vector<std::shared_ptr<uint32_t[]>>& hashes;
 };
 
 // Equality comparison for comparing multiple arrays where each array is

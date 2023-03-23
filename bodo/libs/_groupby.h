@@ -122,9 +122,9 @@ table_info* groupby_and_aggregate(
 /**
  * @brief Get total number of groups for input key arrays
  *
- * @param table a table of all key arrays
- * @param out_labels output array to fill
- * @param sort_idx output array to fill
+ * @param[in] table a table of all key arrays
+ * @param[out] out_labels output array to fill
+ * @param[out] sort_idx output array to fill
  * @param key_dropna: whether to include NA in key groups or not.
  * @param is_parallel: true if data is distributed
  * @return int64_t total number of groups

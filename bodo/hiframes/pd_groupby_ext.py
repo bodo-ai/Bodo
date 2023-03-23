@@ -377,6 +377,13 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             None,
             f"For boolor_agg, only columns of type integer, float, Decimal, or boolean type are allowed",
         )
+    elif func_name == "count_if":
+        if in_dtype == types.boolean:
+            return types.Array(types.int64, 1, "C"), "ok"
+        return (
+            None,
+            f"For count_if, only boolean columns are allowed",
+        )
 
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if is_list_string or in_dtype == types.unicode_type:

@@ -155,11 +155,10 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   bool dropna = false,
                                   bool drop_local_first = true);
 
-table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
-                                        int64_t keep, int step,
-                                        bool is_parallel, bool dropna,
-                                        bool drop_duplicates_dict,
-                                        uint32_t* hashes = nullptr);
+table_info* drop_duplicates_table_inner(
+    table_info* in_table, int64_t num_keys, int64_t keep, int step,
+    bool is_parallel, bool dropna, bool drop_duplicates_dict,
+    std::shared_ptr<uint32_t[]> hashes = std::shared_ptr<uint32_t[]>(nullptr));
 
 /**
  * @brief Performs a SQL UNION operation on the input tables.

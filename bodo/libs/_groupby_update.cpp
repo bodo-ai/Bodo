@@ -1,8 +1,12 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_update.h"
+#include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
+#include "_groupby_common.h"
+#include "_groupby_do_apply_to_column.h"
+#include "_groupby_hashing.h"
 
 /**
  * The file contains the aggregate functions that are used
@@ -25,7 +29,8 @@ static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
     {Bodo_FTypes::first, Bodo_FTypes::first},
     {Bodo_FTypes::last, Bodo_FTypes::last},
     {Bodo_FTypes::nunique, Bodo_FTypes::sum},  // used in nunique_mode = 2
-    {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg}};
+    {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg},
+    {Bodo_FTypes::count_if, Bodo_FTypes::sum}};
 
 int get_combine_func(int update_ftype) { return combine_funcs[update_ftype]; }
 
@@ -671,5 +676,337 @@ void var_combine(array_info* count_col_in, array_info* mean_col_in,
             mean_col_out->set_null_bit(i, true);
             m2_col_out->set_null_bit(i, true);
         }
+    }
+}
+
+// NUNIQUE
+void nunique_computation(array_info* arr, array_info* out_arr,
+                         grouping_info const& grp_info, bool const& dropna,
+                         bool const& is_parallel) {
+    tracing::Event ev("nunique_computation", is_parallel);
+    size_t num_group = grp_info.group_to_first_row.size();
+    if (num_group == 0) {
+        return;
+    }
+    // Note: Dictionary encoded is supported because we just
+    // call nunique on the indices. See update that converts
+    // the dict array to its indices. This is tested with
+    // test_nunique_dict.
+    if (arr->arr_type == bodo_array_type::NUMPY ||
+        arr->arr_type == bodo_array_type::CATEGORICAL) {
+        /**
+         * Check if a pointer points to a NaN or not
+         *
+         * @param the char* pointer
+         * @param the type of the data in input
+         */
+        auto isnan_entry = [&](char* ptr) -> bool {
+            if (arr->dtype == Bodo_CTypes::FLOAT32) {
+                float* ptr_f = (float*)ptr;
+                return isnan(*ptr_f);
+            }
+            if (arr->dtype == Bodo_CTypes::FLOAT64) {
+                double* ptr_d = (double*)ptr;
+                return isnan(*ptr_d);
+            }
+            if (arr->dtype == Bodo_CTypes::DATETIME ||
+                arr->dtype == Bodo_CTypes::TIMEDELTA) {
+                int64_t* ptr_i = (int64_t*)ptr;
+                return *ptr_i == std::numeric_limits<int64_t>::min();
+            }
+            if (arr->arr_type == bodo_array_type::CATEGORICAL) {
+                return isnan_categorical_ptr(arr->dtype, ptr);
+            }
+            return false;
+        };
+        const size_t siztype = numpy_item_size[arr->dtype];
+        const uint32_t seed = SEED_HASH_CONTAINER;
+
+        HashNuniqueComputationNumpyOrNullableIntBool hash_fct{arr, siztype,
+                                                              seed};
+        KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{arr,
+                                                                   siztype};
+        UNORD_SET_CONTAINER<int64_t,
+                            HashNuniqueComputationNumpyOrNullableIntBool,
+                            KeyEqualNuniqueComputationNumpyOrNullableIntBool>
+            eset({}, hash_fct, equal_fct);
+        eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
+        eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
+
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            int64_t i = grp_info.group_to_first_row[igrp];
+            // with nunique mode=2 some groups might not be present in the
+            // nunique table
+            if (i < 0) {
+                continue;
+            }
+            eset.clear();
+            bool HasNullRow = false;
+            while (true) {
+                char* ptr = arr->data1 + (i * siztype);
+                if (!isnan_entry(ptr)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_info.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
+        offset_t* in_index_offsets = (offset_t*)arr->data3;
+        offset_t* in_data_offsets = (offset_t*)arr->data2;
+        uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
+        const uint32_t seed = SEED_HASH_CONTAINER;
+
+        HashNuniqueComputationListString hash_fct{arr, in_index_offsets,
+                                                  in_data_offsets, seed};
+        KeyEqualNuniqueComputationListString equal_fct{
+            arr, in_index_offsets, in_data_offsets, sub_null_bitmask, seed};
+        UNORD_SET_CONTAINER<int64_t, HashNuniqueComputationListString,
+                            KeyEqualNuniqueComputationListString>
+            eset({}, hash_fct, equal_fct);
+        eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
+        eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
+
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            int64_t i = grp_info.group_to_first_row[igrp];
+            // with nunique mode=2 some groups might not be present in the
+            // nunique table
+            if (i < 0) {
+                continue;
+            }
+            eset.clear();
+            bool HasNullRow = false;
+            while (true) {
+                if (arr->get_null_bit(i)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_info.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    } else if (arr->arr_type == bodo_array_type::STRING) {
+        offset_t* in_offsets = (offset_t*)arr->data2;
+        const uint32_t seed = SEED_HASH_CONTAINER;
+
+        HashNuniqueComputationString hash_fct{arr, in_offsets, seed};
+        KeyEqualNuniqueComputationString equal_fct{arr, in_offsets};
+        UNORD_SET_CONTAINER<int64_t, HashNuniqueComputationString,
+                            KeyEqualNuniqueComputationString>
+            eset({}, hash_fct, equal_fct);
+        eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
+        eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
+
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            int64_t i = grp_info.group_to_first_row[igrp];
+            // with nunique mode=2 some groups might not be present in the
+            // nunique table
+            if (i < 0) {
+                continue;
+            }
+            eset.clear();
+            bool HasNullRow = false;
+            while (true) {
+                if (arr->get_null_bit(i)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_info.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    } else if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        const size_t siztype = numpy_item_size[arr->dtype];
+        HashNuniqueComputationNumpyOrNullableIntBool hash_fct{arr, siztype};
+        KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{arr,
+                                                                   siztype};
+        UNORD_SET_CONTAINER<int64_t,
+                            HashNuniqueComputationNumpyOrNullableIntBool,
+                            KeyEqualNuniqueComputationNumpyOrNullableIntBool>
+            eset({}, hash_fct, equal_fct);
+        eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
+        eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
+
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            int64_t i = grp_info.group_to_first_row[igrp];
+            // with nunique mode=2 some groups might not be present in the
+            // nunique table
+            if (i < 0) {
+                continue;
+            }
+            eset.clear();
+            bool HasNullRow = false;
+            while (true) {
+                if (arr->get_null_bit(i)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_info.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    } else {
+        throw std::runtime_error(
+            "Unsupported array type encountered with nunique. Found type: " +
+            GetArrType_as_string(arr->arr_type));
+    }
+}
+
+// WINDOW
+
+void window_computation(array_info* orderby_arr, int64_t window_func,
+                        array_info* out_arr, grouping_info const& grp_info,
+                        bool asc, bool na_pos, bool is_parallel,
+                        bool use_sql_rules) {
+    switch (window_func) {
+        case Bodo_FTypes::row_number: {
+            const std::vector<int64_t>& row_to_group = grp_info.row_to_group;
+            int64_t num_rows = row_to_group.size();
+            // Wrap the row_to_group in an array info so we can use it to sort.
+            array_info* group_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
+            // TODO: Reuse the row_to_group buffer
+            for (int64_t i = 0; i < num_rows; i++) {
+                getv<int64_t>(group_arr, i) = row_to_group[i];
+            }
+            // Create a new table. We want to sort the table first by
+            // the groups and second by the orderby_arr.
+            table_info* sort_table = new table_info();
+            // sort_values_table_local steals a reference
+            incref_array(orderby_arr);
+            sort_table->columns.push_back(group_arr);
+            sort_table->columns.push_back(orderby_arr);
+            // Append an index column so we can find the original
+            // index in the out array.
+            array_info* idx_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
+            for (int64_t i = 0; i < num_rows; i++) {
+                getv<int64_t>(idx_arr, i) = i;
+            }
+            sort_table->columns.push_back(idx_arr);
+            int64_t vect_ascending[2] = {asc, asc};
+            int64_t na_position[2] = {na_pos, na_pos};
+
+            // Sort the table
+            // XXX: We don't need the entire chunk of data sorted,
+            // just the groups. We could do a partial sort to avoid
+            // the overhead of sorting the data and in the future
+            // we may be want to explore if we can use hashing
+            // instead to avoid sort overhead.
+            table_info* iter_table = sort_values_table_local(
+                sort_table, 2, vect_ascending, na_position, nullptr,
+                is_parallel /* This is just used for tracing */);
+            array_info* sorted_groups = iter_table->columns[0];
+            array_info* sorted_idx = iter_table->columns[2];
+            // sort_values_table_local steals a reference so
+            // we don't need to decref
+            delete sort_table;
+
+            int64_t prev_group = -1;
+            int64_t row_num = 1;
+            for (int64_t i = 0; i < num_rows; i++) {
+                int64_t curr_group = getv<int64_t>(sorted_groups, i);
+                if (curr_group != prev_group) {
+                    row_num = 1;
+                } else {
+                    row_num++;
+                }
+                // Get the index in the output array.
+                int64_t idx = getv<int64_t>(sorted_idx, i);
+                getv<int64_t>(out_arr, idx) = row_num;
+                // Set the prev group
+                prev_group = curr_group;
+            }
+            // Delete the sorted table.
+            delete_table_decref_arrays(iter_table);
+            break;
+        }
+        case Bodo_FTypes::min_row_number_filter: {
+            // To compute min_row_number_filter we want to find the
+            // idxmin/idxmax based on the orderby column. Then in the output
+            // array those locations will have the value true. We have already
+            // initialized all other locations to false.
+            int64_t ftype;
+            bodo_array_type::arr_type_enum idx_arr_type;
+            if (asc) {
+                // The first value of an array in ascending order is the min.
+                if (na_pos) {
+                    ftype = Bodo_FTypes::idxmin;
+                    // We don't need null values for indices
+                    idx_arr_type = bodo_array_type::NUMPY;
+                } else {
+                    ftype = Bodo_FTypes::idxmin_na_first;
+                    // We need null values to signal we found an NA
+                    // value.
+                    idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+                }
+            } else {
+                // The first value of an array in descending order is the max.
+                if (na_pos) {
+                    ftype = Bodo_FTypes::idxmax;
+                    // We don't need null values for indices
+                    idx_arr_type = bodo_array_type::NUMPY;
+                } else {
+                    ftype = Bodo_FTypes::idxmax_na_first;
+                    // We need null values to signal we found an NA
+                    // value.
+                    idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+                }
+            }
+            // Allocate intermediate buffer to find the true element for each
+            // group. Indices
+            size_t num_groups = grp_info.num_groups;
+            array_info* idx_col = alloc_array(num_groups, 1, 1, idx_arr_type,
+                                              Bodo_CTypes::UINT64, 0, 0);
+            // create array to store min/max value
+            array_info* data_col =
+                alloc_array(num_groups, 1, 1, orderby_arr->arr_type,
+                            orderby_arr->dtype, 0, 0);
+            // Initialize the index column. This is 0 intialized and will
+            // not initial the null values.
+            aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
+                                      use_sql_rules);
+            std::vector<array_info*> aux_cols = {idx_col};
+            // Initialize the max column
+            if (ftype == Bodo_FTypes::idxmax ||
+                ftype == Bodo_FTypes::idxmax_na_first) {
+                aggfunc_output_initialize(data_col, Bodo_FTypes::max,
+                                          use_sql_rules);
+            } else {
+                aggfunc_output_initialize(data_col, Bodo_FTypes::min,
+                                          use_sql_rules);
+            }
+            // Compute the idxmin/idxmax
+            do_apply_to_column(orderby_arr, data_col, aux_cols, grp_info,
+                               ftype);
+            // Delete the max/min result
+            delete_info_decref_array(data_col);
+            // Now we have the idxmin/idxmax in the idx_col. We need to set the
+            // indices to true.
+            for (size_t i = 0; i < idx_col->length; i++) {
+                int64_t idx = getv<int64_t>(idx_col, i);
+                getv<bool>(out_arr, idx) = true;
+            }
+            // Delete the idx_col
+            delete_info_decref_array(idx_col);
+            break;
+        }
+        default:
+            throw new std::runtime_error("Invalid window function");
     }
 }

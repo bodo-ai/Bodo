@@ -35,8 +35,8 @@ static void hash_na_val(const uint32_t seed, uint32_t* hash_value,
  */
 template <typename T>
 static typename std::enable_if<!std::is_floating_point<T>::value, void>::type
-hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
-                 const uint32_t seed, uint8_t* null_bitmask,
+hash_array_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
+                 size_t n_rows, const uint32_t seed, uint8_t* null_bitmask,
                  bool use_murmurhash = false) {
     if (null_bitmask) {
         uint32_t na_hash;
@@ -80,8 +80,9 @@ static inline Py_hash_t Npy_HashDouble(PyObject* __UNUSED__(identity),
 
 template <typename T>
 static typename std::enable_if<std::is_floating_point<T>::value, void>::type
-hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
-                 const uint32_t seed, bool use_murmurhash = false) {
+hash_array_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
+                 size_t n_rows, const uint32_t seed,
+                 bool use_murmurhash = false) {
     for (size_t i = 0; i < n_rows; i++) {
         Py_hash_t py_hash = Npy_HashDouble(nullptr, data[i]);
         if (use_murmurhash)
@@ -109,12 +110,10 @@ hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
  * 2) The hash of the string length
  * 3) The hash of the bitmask
  */
-static void combine_hash_array_list_string(uint32_t* out_hashes, char* data,
-                                           offset_t* data_offsets,
-                                           offset_t* index_offsets,
-                                           uint8_t* null_bitmask,
-                                           uint8_t* sub_null_bitmask,
-                                           size_t n_rows) {
+static void combine_hash_array_list_string(
+    std::unique_ptr<uint32_t[]>& out_hashes, char* data, offset_t* data_offsets,
+    offset_t* index_offsets, uint8_t* null_bitmask, uint8_t* sub_null_bitmask,
+    size_t n_rows) {
     offset_t start_index_offset = 0;
     for (size_t i = 0; i < n_rows; i++) {
         uint32_t hash1, hash2, hash3;
@@ -170,7 +169,7 @@ static void combine_hash_array_list_string(uint32_t* out_hashes, char* data,
  * 3) The hash of the bitmask
  */
 static void hash_array_list_string(
-    uint32_t* out_hashes, char* data, offset_t* data_offsets,
+    std::unique_ptr<uint32_t[]>& out_hashes, char* data, offset_t* data_offsets,
     offset_t* index_offsets, uint8_t* null_bitmask, uint8_t* sub_null_bitmask,
     size_t n_rows, const uint32_t seed, bool use_murmurhash = false) {
     offset_t start_index_offset = 0;
@@ -247,10 +246,11 @@ static void hash_na_string(const uint32_t seed, uint32_t* hash_value,
  * Right now, the bitmask is not used in the computation, which
  * may be a problem to consider later on.
  */
-static void hash_array_string(uint32_t* out_hashes, char* data,
-                              offset_t* offsets, uint8_t* null_bitmask,
-                              size_t n_rows, const uint32_t seed,
-                              bool is_parallel, bool use_murmurhash = false) {
+static void hash_array_string(std::unique_ptr<uint32_t[]>& out_hashes,
+                              char* data, offset_t* offsets,
+                              uint8_t* null_bitmask, size_t n_rows,
+                              const uint32_t seed, bool is_parallel,
+                              bool use_murmurhash = false) {
     tracing::Event ev("hash_array_string", is_parallel);
     offset_t start_offset = 0;
     uint32_t na_hash;
@@ -286,7 +286,7 @@ static void hash_array_string(uint32_t* out_hashes, char* data,
  * One approximation is the casting to char of the algorithm.
  */
 template <typename T>
-void apply_arrow_offset_hash(uint32_t* out_hashes,
+void apply_arrow_offset_hash(std::unique_ptr<uint32_t[]>& out_hashes,
                              std::vector<offset_t> const& list_offsets,
                              size_t n_rows, T const& input_array,
                              bool use_murmurhash = false) {
@@ -314,7 +314,7 @@ void apply_arrow_offset_hash(uint32_t* out_hashes,
  * an approximation if the size is greater than 8 but ok for hashes.
  */
 template <typename T>
-void apply_arrow_bitmask_hash(uint32_t* out_hashes,
+void apply_arrow_bitmask_hash(std::unique_ptr<uint32_t[]>& out_hashes,
                               std::vector<offset_t> const& list_offsets,
                               size_t n_rows, T const& input_array) {
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
@@ -341,8 +341,8 @@ void apply_arrow_bitmask_hash(uint32_t* out_hashes,
  *
  */
 void apply_arrow_string_hashes(
-    uint32_t* out_hashes, std::vector<offset_t> const& list_offsets,
-    size_t const& n_rows,
+    std::unique_ptr<uint32_t[]>& out_hashes,
+    std::vector<offset_t> const& list_offsets, size_t const& n_rows,
 #if OFFSET_BITWIDTH == 32
     std::shared_ptr<arrow::StringArray> const& input_array) {
 #else
@@ -374,8 +374,8 @@ void apply_arrow_string_hashes(
  * @param input_array: the array in input.
  */
 void apply_arrow_numeric_hash(
-    uint32_t* out_hashes, std::vector<offset_t> const& list_offsets,
-    size_t const& n_rows,
+    std::unique_ptr<uint32_t[]>& out_hashes,
+    std::vector<offset_t> const& list_offsets, size_t const& n_rows,
     std::shared_ptr<arrow::PrimitiveArray> const& primitive_array) {
     Bodo_CTypes::CTypeEnum bodo_typ =
         arrow_to_bodo_type(primitive_array->type());
@@ -401,7 +401,7 @@ void apply_arrow_numeric_hash(
  * @param n_rows: the number of rows in input
  * @param input_array: the input array put in argument.
  */
-void hash_arrow_array(uint32_t* out_hashes,
+void hash_arrow_array(std::unique_ptr<uint32_t[]>& out_hashes,
                       std::vector<offset_t> const& list_offsets,
                       size_t const& n_rows,
                       std::shared_ptr<arrow::Array> const& input_array) {
@@ -469,9 +469,9 @@ void hash_arrow_array(uint32_t* out_hashes,
  * @param use_murmurhash: use murmurhash3_x86_32 hashes (used by Iceberg).
  * Default: false
  */
-void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                const uint32_t seed, bool is_parallel, bool global_dict_needed,
-                bool use_murmurhash) {
+void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
+                size_t n_rows, const uint32_t seed, bool is_parallel,
+                bool global_dict_needed, bool use_murmurhash) {
     // dispatch to proper function
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
@@ -563,8 +563,8 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
             (uint8_t*)array->null_bitmask, use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::DECIMAL) {
-        return hash_array_inner<decimal_value_cpp>(
-            out_hashes, (decimal_value_cpp*)array->data1, n_rows, seed,
+        return hash_array_inner<__int128>(
+            out_hashes, (__int128*)array->data1, n_rows, seed,
             (uint8_t*)array->null_bitmask, use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::UINT64) {
@@ -623,8 +623,9 @@ static inline void hash_combine_boost(uint32_t& h1, uint32_t k1) {
 
 template <class T>
 static typename std::enable_if<!std::is_floating_point<T>::value, void>::type
-hash_array_combine_inner(uint32_t* out_hashes, T* data, size_t n_rows,
-                         const uint32_t seed, uint8_t* null_bitmask) {
+hash_array_combine_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
+                         size_t n_rows, const uint32_t seed,
+                         uint8_t* null_bitmask) {
     if (null_bitmask) {
         uint32_t na_hash;
         hash_na_val(seed, &na_hash);
@@ -650,8 +651,8 @@ hash_array_combine_inner(uint32_t* out_hashes, T* data, size_t n_rows,
 
 template <class T>
 static typename std::enable_if<std::is_floating_point<T>::value, void>::type
-hash_array_combine_inner(uint32_t* out_hashes, T* data, size_t n_rows,
-                         const uint32_t seed) {
+hash_array_combine_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
+                         size_t n_rows, const uint32_t seed) {
     uint32_t out_hash = 0;
     for (size_t i = 0; i < n_rows; i++) {
         Py_hash_t py_hash = Npy_HashDouble(nullptr, data[i]);
@@ -660,9 +661,10 @@ hash_array_combine_inner(uint32_t* out_hashes, T* data, size_t n_rows,
     }
 }
 
-static void hash_array_combine_string(uint32_t* out_hashes, char* data,
-                                      offset_t* offsets, uint8_t* null_bitmask,
-                                      size_t n_rows, const uint32_t seed) {
+static void hash_array_combine_string(std::unique_ptr<uint32_t[]>& out_hashes,
+                                      char* data, offset_t* offsets,
+                                      uint8_t* null_bitmask, size_t n_rows,
+                                      const uint32_t seed) {
     offset_t start_offset = 0;
     uint32_t na_hash;
     hash_na_string(seed, &na_hash);
@@ -683,9 +685,9 @@ static void hash_array_combine_string(uint32_t* out_hashes, char* data,
 }
 
 // See hash_array for documentation of parameters
-void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                        const uint32_t seed, bool global_dict_needed,
-                        bool is_parallel) {
+void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
+                        array_info* array, size_t n_rows, const uint32_t seed,
+                        bool global_dict_needed, bool is_parallel) {
     // dispatch to proper function
     // TODO: general dispatcher
     if (array->arr_type == bodo_array_type::ARROW) {
@@ -793,8 +795,8 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
     }
     if (array->dtype == Bodo_CTypes::DECIMAL ||
         array->dtype == Bodo_CTypes::INT128) {
-        return hash_array_combine_inner<decimal_value_cpp>(
-            out_hashes, (decimal_value_cpp*)array->data1, n_rows, seed,
+        return hash_array_combine_inner<__int128>(
+            out_hashes, (__int128*)array->data1, n_rows, seed,
             (uint8_t*)array->null_bitmask);
     }
     Bodo_PyErr_SetString(PyExc_RuntimeError,
@@ -817,8 +819,9 @@ get_value(T val) {
 }
 
 template <typename T>
-void coherent_hash_array_inner_uint64(uint32_t* out_hashes, array_info* array,
-                                      size_t n_rows, const uint32_t seed) {
+void coherent_hash_array_inner_uint64(std::unique_ptr<uint32_t[]>& out_hashes,
+                                      array_info* array, size_t n_rows,
+                                      const uint32_t seed) {
     T* data = (T*)array->data1;
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
@@ -838,8 +841,9 @@ void coherent_hash_array_inner_uint64(uint32_t* out_hashes, array_info* array,
 }
 
 template <typename T>
-void coherent_hash_array_inner_int64(uint32_t* out_hashes, array_info* array,
-                                     size_t n_rows, const uint32_t seed) {
+void coherent_hash_array_inner_int64(std::unique_ptr<uint32_t[]>& out_hashes,
+                                     array_info* array, size_t n_rows,
+                                     const uint32_t seed) {
     T* data = (T*)array->data1;
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
@@ -860,8 +864,9 @@ void coherent_hash_array_inner_int64(uint32_t* out_hashes, array_info* array,
 }
 
 template <typename T>
-void coherent_hash_array_inner_double(uint32_t* out_hashes, array_info* array,
-                                      size_t n_rows, const uint32_t seed) {
+void coherent_hash_array_inner_double(std::unique_ptr<uint32_t[]>& out_hashes,
+                                      array_info* array, size_t n_rows,
+                                      const uint32_t seed) {
     T* data = (T*)array->data1;
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
@@ -882,9 +887,10 @@ void coherent_hash_array_inner_double(uint32_t* out_hashes, array_info* array,
     }
 }
 
-void coherent_hash_array(uint32_t* out_hashes, array_info* array,
-                         array_info* ref_array, size_t n_rows,
-                         const uint32_t seed, bool is_parallel = true) {
+void coherent_hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
+                         array_info* array, array_info* ref_array,
+                         size_t n_rows, const uint32_t seed,
+                         bool is_parallel = true) {
     if ((array->arr_type == bodo_array_type::DICT) &&
         (array->info1 != ref_array->info1)) {
         // This implementation of coherent_hash_array hashes data based on
@@ -1010,9 +1016,9 @@ void coherent_hash_array(uint32_t* out_hashes, array_info* array,
 }
 
 template <typename T>
-void coherent_hash_array_combine_inner_uint64(uint32_t* out_hashes,
-                                              array_info* array, size_t n_rows,
-                                              const uint32_t seed) {
+void coherent_hash_array_combine_inner_uint64(
+    std::unique_ptr<uint32_t[]>& out_hashes, array_info* array, size_t n_rows,
+    const uint32_t seed) {
     T* data = (T*)array->data1;
     uint32_t out_hash;
     if (array->arr_type == bodo_array_type::NUMPY) {
@@ -1033,9 +1039,9 @@ void coherent_hash_array_combine_inner_uint64(uint32_t* out_hashes,
 }
 
 template <typename T>
-void coherent_hash_array_combine_inner_int64(uint32_t* out_hashes,
-                                             array_info* array, size_t n_rows,
-                                             const uint32_t seed) {
+void coherent_hash_array_combine_inner_int64(
+    std::unique_ptr<uint32_t[]>& out_hashes, array_info* array, size_t n_rows,
+    const uint32_t seed) {
     T* data = (T*)array->data1;
     uint32_t out_hash;
     if (array->arr_type == bodo_array_type::NUMPY) {
@@ -1057,9 +1063,9 @@ void coherent_hash_array_combine_inner_int64(uint32_t* out_hashes,
 }
 
 template <typename T>
-void coherent_hash_array_combine_inner_double(uint32_t* out_hashes,
-                                              array_info* array, size_t n_rows,
-                                              const uint32_t seed) {
+void coherent_hash_array_combine_inner_double(
+    std::unique_ptr<uint32_t[]>& out_hashes, array_info* array, size_t n_rows,
+    const uint32_t seed) {
     T* data = (T*)array->data1;
     uint32_t out_hash;
     if (array->arr_type == bodo_array_type::NUMPY) {
@@ -1084,9 +1090,10 @@ void coherent_hash_array_combine_inner_double(uint32_t* out_hashes,
     }
 }
 
-void coherent_hash_array_combine(uint32_t* out_hashes, array_info* array,
-                                 array_info* ref_array, size_t n_rows,
-                                 const uint32_t seed, bool is_parallel) {
+void coherent_hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
+                                 array_info* array, array_info* ref_array,
+                                 size_t n_rows, const uint32_t seed,
+                                 bool is_parallel) {
     // For those types, no type conversion is ever needed.
     if (array->arr_type == bodo_array_type::ARROW ||
         array->arr_type == bodo_array_type::STRING ||
@@ -1204,12 +1211,13 @@ void coherent_hash_array_combine(uint32_t* out_hashes, array_info* array,
    @param is_parallel: Is the input data distributed
    @return returning the list of hashes.
  */
-uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
-                             std::vector<array_info*> const& ref_key_arrs,
-                             const uint32_t seed, bool is_parallel) {
+std::unique_ptr<uint32_t[]> coherent_hash_keys(
+    std::vector<array_info*> const& key_arrs,
+    std::vector<array_info*> const& ref_key_arrs, const uint32_t seed,
+    bool is_parallel) {
     tracing::Event ev("coherent_hash_keys", is_parallel);
     size_t n_rows = (size_t)key_arrs[0]->length;
-    uint32_t* hashes = new uint32_t[n_rows];
+    std::unique_ptr<uint32_t[]> hashes = std::make_unique<uint32_t[]>(n_rows);
     coherent_hash_array(hashes, key_arrs[0], ref_key_arrs[0], n_rows, seed,
                         is_parallel);
     for (size_t i = 1; i < key_arrs.size(); i++) {
@@ -1219,12 +1227,12 @@ uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
     return hashes;
 }
 
-uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
-                    const uint32_t seed, bool is_parallel,
-                    bool global_dict_needed) {
+std::unique_ptr<uint32_t[]> hash_keys(std::vector<array_info*> const& key_arrs,
+                                      const uint32_t seed, bool is_parallel,
+                                      bool global_dict_needed) {
     tracing::Event ev("hash_keys", is_parallel);
     size_t n_rows = (size_t)key_arrs[0]->length;
-    uint32_t* hashes = new uint32_t[n_rows];
+    std::unique_ptr<uint32_t[]> hashes = std::make_unique<uint32_t[]>(n_rows);
     // hash first array
     hash_array(hashes, key_arrs[0], n_rows, seed, is_parallel,
                global_dict_needed);
@@ -1271,7 +1279,7 @@ void ensure_dicts_can_unify(std::vector<array_info*>& arrs,
 UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t, HashMultiArray,
                     MultiArrayInfoEqual>*
 create_several_array_hashmap(std::vector<array_info*>& arrs,
-                             std::vector<uint32_t*>& hashes,
+                             std::vector<std::shared_ptr<uint32_t[]>>& hashes,
                              std::vector<array_info*>& stored_arrs) {
     // hash map mapping dictionary values of arr1 and arr2 to index in unified
     // dictionary
@@ -1317,14 +1325,15 @@ void insert_initial_dict_to_multiarray_hashmap(
     UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
                         HashMultiArray, MultiArrayInfoEqual>*
         dict_value_to_unified_index,
-    std::vector<uint32_t*>& hashes, std::vector<array_info*>& stored_arrs,
-    array_info* dict, offset_t const* const offsets, const size_t len,
-    dict_indices_t& next_index, size_t& n_chars, const uint32_t hash_seed) {
-    uint32_t* arr_hashes = new uint32_t[len];
+    std::vector<std::shared_ptr<uint32_t[]>>& hashes,
+    std::vector<array_info*>& stored_arrs, array_info* dict,
+    offset_t const* const offsets, const size_t len, dict_indices_t& next_index,
+    size_t& n_chars, const uint32_t hash_seed) {
+    std::unique_ptr<uint32_t[]> arr_hashes = std::make_unique<uint32_t[]>(len);
     hash_array(arr_hashes, dict, len, hash_seed, false,
                /*global_dict_needed=*/false);
     // Insert the hashes and the array
-    hashes.push_back(arr_hashes);
+    hashes.push_back(std::move(arr_hashes));
     stored_arrs.push_back(dict);
     // Update the number of chars
     n_chars += offsets[len];
@@ -1362,17 +1371,18 @@ void insert_new_dict_to_multiarray_hashmap(
     UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
                         HashMultiArray, MultiArrayInfoEqual>*
         dict_value_to_unified_index,
-    std::vector<uint32_t*>& hashes, std::vector<array_info*>& stored_arrs,
+    std::vector<std::shared_ptr<uint32_t[]>>& hashes,
+    std::vector<array_info*>& stored_arrs,
     std::vector<dict_indices_t>& arr_index_map,
     std::vector<std::vector<dict_indices_t>*>& unique_indices_all_arrs,
     array_info* dict, offset_t const* const offsets, const size_t len,
     dict_indices_t& next_index, size_t& n_chars, size_t arr_num,
     const uint32_t hash_seed) {
-    uint32_t* arr_hashes = new uint32_t[len];
+    std::unique_ptr<uint32_t[]> arr_hashes = std::make_unique<uint32_t[]>(len);
     hash_array(arr_hashes, dict, len, hash_seed, false,
                /*global_dict_needed=*/false);
     // Insert the hashes and the array
-    hashes.push_back(arr_hashes);
+    hashes.push_back(std::move(arr_hashes));
     stored_arrs.push_back(dict);
     // Create a vector to store the indices of the unique strings in the
     // current arr.
@@ -1438,7 +1448,7 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
     // Keep a vector of hashes for each array. That will be checked. We will
     // update this dynamically to avoid need to constantly rehash/update the
     // array.
-    std::vector<uint32_t*> hashes;
+    std::vector<std::shared_ptr<uint32_t[]>> hashes;
     // Keep a vector of array infos
     std::vector<array_info*> stored_arrs;
     // Create the hash table. We will dynamically fill the vector of
@@ -1511,7 +1521,7 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
     delete dict_value_to_unified_index;
     // Free all of the hashes
     for (size_t i = 0; i < hashes.size(); i++) {
-        delete[] hashes[i];
+        hashes[i].reset();
     }
 
     // Now that we have all of the dictionary elements we can create the
@@ -1578,8 +1588,10 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     std::vector<dict_indices_t> arr2_index_map(arr2_dictionary_len);
 
     const uint32_t hash_seed = SEED_HASH_JOIN;
-    uint32_t* arr1_hashes = new uint32_t[arr1_dictionary_len];
-    uint32_t* arr2_hashes = new uint32_t[arr2_dictionary_len];
+    std::unique_ptr<uint32_t[]> arr1_hashes =
+        std::make_unique<uint32_t[]>(arr1_dictionary_len);
+    std::unique_ptr<uint32_t[]> arr2_hashes =
+        std::make_unique<uint32_t[]>(arr2_dictionary_len);
     hash_array(arr1_hashes, arr1->info1, arr1_dictionary_len, hash_seed, false,
                /*global_dict_needed=*/false);
     hash_array(arr2_hashes, arr2->info1, arr2_dictionary_len, hash_seed, false,
@@ -1633,8 +1645,8 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     }
     int64_t n_strings = arr1_dictionary_len + arr2_unique_strs.size();
     delete dict_value_to_unified_index;
-    delete[] arr1_hashes;
-    delete[] arr2_hashes;
+    arr1_hashes.reset();
+    arr2_hashes.reset();
 
     array_info* new_dict = alloc_string_array(n_strings, n_chars, 0);
     offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2;

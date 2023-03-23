@@ -117,11 +117,6 @@ inline std::vector<char> GetCharVector(T const& val) {
 
 #define BYTES_PER_DECIMAL 16
 
-struct decimal_value_cpp {
-    int64_t low;
-    int64_t high;
-};
-
 /* The NaN entry used in the case a normal value is not available.
  *
  * The choice are done in following way:
@@ -157,8 +152,8 @@ inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::DECIMAL) {
         // Normally the null value of decimal_value should never show up
         // anywhere. A value is assigned for simplicity of the code
-        decimal_value_cpp e_val{0, 0};
-        return GetCharVector<decimal_value_cpp>(e_val);
+        __int128 e_val = 0;
+        return GetCharVector<__int128>(e_val);
     }
     return {};
 }
@@ -482,12 +477,17 @@ array_info* create_list_string_array(
  *
  * @param dict_arr: the underlying data array
  * @param indices_arr: the underlying indices array
- * @param length: the number of rows of the dict-encoded array(and the indices
- * array)
+ * @param has_global_dictionary: Is the dict_arr global?
+ * @param has_deduped_local_dictionary Can dict_arr contain
+ * duplicates on this rank?
+ * @param has_sorted_dictionary Is dict_arr sorted on this rank?
  * @return array_info* The dictionary array.
  */
 array_info* create_dict_string_array(array_info* dict_arr,
-                                     array_info* indices_arr, size_t length);
+                                     array_info* indices_arr,
+                                     bool has_global_dictionary = false,
+                                     bool has_deduped_local_dictionary = false,
+                                     bool has_sorted_dictionary = false);
 
 /* The "get-value" functionality for array_info.
    This is the equivalent of at functionality.
@@ -565,7 +565,7 @@ struct mpi_comm_info {
      */
     template <bool keep_nulls_and_filter_misses = false>
     void set_counts(
-        uint32_t const* const hashes, bool is_parallel,
+        const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
         SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
         const uint8_t* null_bitmask = nullptr);
 };
@@ -581,7 +581,7 @@ struct table_info {
     // currently used in groupby apply
     // TODO: refactor out?
     mpi_comm_info* comm_info;
-    uint32_t* hashes;
+    std::shared_ptr<uint32_t[]> hashes;
     int id;
     table_info() {}
     explicit table_info(std::vector<array_info*>& _columns)

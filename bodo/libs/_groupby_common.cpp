@@ -37,8 +37,9 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
         // TODO: Template on use_sql_rules
         if (use_sql_rules) {
             // All nullable outputs in SQL output null for empty groups
-            // except for count.
-            init_val = ftype == Bodo_FTypes::count;
+            // except for count and count_if.
+            init_val = (ftype == Bodo_FTypes::count) ||
+                       (ftype == Bodo_FTypes::count_if);
         } else {
             if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
                 ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last ||
@@ -374,31 +375,13 @@ void aggfunc_output_initialize(array_info* out_col, int ftype,
     aggfunc_output_initialize_kernel(out_col, ftype, use_sql_rules);
 }
 
-/**
- * Returns the array type and dtype required for output columns based on the
- * aggregation function and input dtype.
- *
- * @param[in] ftype Function type
- * @param[in,out] array type (caller sets a default, this function only changes
- * in certain cases)
- * @param[in,out] output dtype (caller sets a default, this function only
- * changes in certain cases)
- * @param[in] is_key true if column is key column (in this case ignore because
- * output type will be the same)
- * @param[in] is_combine true if we are initializing the output for a combine
- * operation, which may remap certain functions.
- */
 void get_groupby_output_dtype(int ftype,
                               bodo_array_type::arr_type_enum& array_type,
-                              Bodo_CTypes::CTypeEnum& dtype, bool is_key,
-                              bool is_combine) {
-    if (is_combine) {
-        ftype = get_combine_func(ftype);
-    }
-    if (is_key) return;
+                              Bodo_CTypes::CTypeEnum& dtype) {
     switch (ftype) {
         case Bodo_FTypes::nunique:
         case Bodo_FTypes::count:
+        case Bodo_FTypes::count_if:
         case Bodo_FTypes::size:
         case Bodo_FTypes::ngroup:
             array_type = bodo_array_type::NUMPY;
@@ -418,8 +401,7 @@ void get_groupby_output_dtype(int ftype,
             if (dtype == Bodo_CTypes::_BOOL) {
                 array_type = bodo_array_type::NULLABLE_INT_BOOL;
                 dtype = Bodo_CTypes::INT64;
-            }
-            if (dtype == Bodo_CTypes::STRING) {
+            } else if (dtype == Bodo_CTypes::STRING) {
                 array_type = bodo_array_type::STRING;
             }
             return;
@@ -434,8 +416,6 @@ void get_groupby_output_dtype(int ftype,
         case Bodo_FTypes::min_row_number_filter:
             array_type = bodo_array_type::NUMPY;
             dtype = Bodo_CTypes::_BOOL;
-            return;
-        default:
             return;
     }
 }
