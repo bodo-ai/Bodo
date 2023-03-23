@@ -6,7 +6,6 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import nanoseconds_to_other_time_units
 
 
 @pytest.fixture(params=["Poland", None])
@@ -130,7 +129,7 @@ def generate_date_trunc_time_func(part_str: str):
         if pd.isna(part_str) or pd.isna(time_input):
             return None
         else:
-            if standardized_part in ('quarter', 'year', 'month', 'week', 'day'):
+            if standardized_part in ("quarter", "year", "month", "week", "day"):
                 # date_or_time_part is too large, set everything to 0
                 return bodo.Time()
             else:
@@ -175,7 +174,14 @@ def generate_date_trunc_date_func(part_str: str):
 
 def trunc_time(time, time_part):
     time_args = []
-    time_units = ('hour', 'minute', 'second', 'millisecond', 'microsecond', 'nanosecond')
+    time_units = (
+        "hour",
+        "minute",
+        "second",
+        "millisecond",
+        "microsecond",
+        "nanosecond",
+    )
     for unit in time_units:
         time_args.append(getattr(time, unit))
         if time_part == unit:
@@ -184,36 +190,14 @@ def trunc_time(time, time_part):
 
 
 def trunc_date(date, date_part):
-    if date_part == 'year':
+    if date_part == "year":
         return datetime.date(date.year, 1, 1)
-    elif date_part == 'quarter':
+    elif date_part == "quarter":
         month = date.month - (date.month - 1) % 3
         return datetime.date(date.year, month, 1)
-    elif date_part == 'month':
+    elif date_part == "month":
         return datetime.date(date.year, date.month, 1)
-    elif date_part == 'week':
+    elif date_part == "week":
         return date - datetime.timedelta(date.weekday())
-    elif date_part == 'day':
-        return datetime.date(date.year, date.month, date.day)
-
-def date_sub_unit_time_fn(part_str, time1, time2):
-    if pd.isna(part_str) or pd.isna(time1) or pd.isna(time2):
-        return None
-    @bodo.jit
-    def standardize_part(part_str):
-        return bodo.libs.bodosql_array_kernels.standardize_snowflake_date_time_part(
-            part_str
-        )
-
-    # Standardize the part using our snowflake mapping kernel.
-    if part_str is not None:
-        standardized_part = standardize_part(part_str)
     else:
-        standardized_part = part_str
-
-    trunced_time1 = trunc_time(time1, standardized_part)
-    trunced_time2 = trunc_time(time2, standardized_part)
-    return nanoseconds_to_other_time_units(
-        trunced_time2.value - trunced_time1.value,
-        standardized_part
-    )
+        return datetime.date(date.year, date.month, date.day)
