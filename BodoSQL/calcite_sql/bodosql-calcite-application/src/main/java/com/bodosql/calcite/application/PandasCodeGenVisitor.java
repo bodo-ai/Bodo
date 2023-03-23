@@ -1297,8 +1297,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
       return Collections.singletonList(outputCode);
     }
 
-    // Used to store each distinct window and the list of corresponding
-    // window function calls
+    // The overall goal of this section of code is to separate the input list
+    // of agg operations into groups that can be done in the same group-by
+    // function.
+    // These are the variables used to store each distinct window and the
+    // list of corresponding window function calls for each group.
     List<List<RexWindow>> windows = new ArrayList<>();
     List<List<SqlKind>> fnKinds = new ArrayList<>();
     List<List<String>> fnNames = new ArrayList<>();
@@ -1307,6 +1310,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Used to store how each output within each groupby-apply corresponds
     // to one of the original column outputs in the SELECT statement
+    // indices.get(x).get(y) = z means that "group by apply function" number x's
+    // y'th output is the equivalent expression for aggOperations.get(z)
     List<List<Integer>> indices = new ArrayList<>();
 
     // Eventually used to store the names of each output
@@ -1314,29 +1319,31 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Loop over each aggregation and identify if it can be fused with one
     // of the aggregations already added to the aggSets list
-    for (Integer j = 0; j < aggOperations.size(); j++) {
+    for (Integer aggOperationIndex = 0;
+        aggOperationIndex < aggOperations.size();
+        aggOperationIndex++) {
       outputColExprs.add(null);
 
-      RexOver agg = aggOperations.get(j);
+      RexOver agg = aggOperations.get(aggOperationIndex);
       Boolean canFuse = false;
       RexWindow window = agg.getWindow();
       SqlKind fnKind = agg.getAggOperator().getKind();
       String fnName = agg.getAggOperator().getName();
       Boolean respectNulls = !agg.ignoreNulls();
-      for (Integer i = 0; i < windows.size(); i++) {
+      for (Integer groupbyApplyIdx = 0; groupbyApplyIdx < windows.size(); groupbyApplyIdx++) {
 
         // Check if the window function can be fused with one of the earlier
         // closures. This is true if it has the same partition & order as the
         // first window in that closure.
-        if (windows.get(i).get(0).partitionKeys.equals(window.partitionKeys)
-            && windows.get(i).get(0).orderKeys.equals(window.orderKeys)) {
+        if (windows.get(groupbyApplyIdx).get(0).partitionKeys.equals(window.partitionKeys)
+            && windows.get(groupbyApplyIdx).get(0).orderKeys.equals(window.orderKeys)) {
           canFuse = true;
-          windows.get(i).add(window);
-          fnKinds.get(i).add(fnKind);
-          fnNames.get(i).add(fnName);
-          aggSets.get(i).add(agg);
-          respectNullsLists.get(i).add(respectNulls);
-          indices.get(i).add(j);
+          windows.get(groupbyApplyIdx).add(window);
+          fnKinds.get(groupbyApplyIdx).add(fnKind);
+          fnNames.get(groupbyApplyIdx).add(fnName);
+          aggSets.get(groupbyApplyIdx).add(agg);
+          respectNullsLists.get(groupbyApplyIdx).add(respectNulls);
+          indices.get(groupbyApplyIdx).add(aggOperationIndex);
           break;
         }
       }
@@ -1349,18 +1356,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
         fnNames.add(new ArrayList<>(Arrays.asList(fnName)));
         respectNullsLists.add(new ArrayList<>(Arrays.asList(respectNulls)));
         aggSets.add(new ArrayList<>(Arrays.asList(agg)));
-        indices.add(new ArrayList<>(Arrays.asList(j)));
+        indices.add(new ArrayList<>(Arrays.asList(aggOperationIndex)));
       }
     }
 
     // For each distinct window/function combination, create a new
     // closure and groupby-apply call
-    for (int i = 0; i < windows.size(); i++) {
-      List<RexWindow> windowList = windows.get(i);
-      List<SqlKind> fnKindList = fnKinds.get(i);
-      List<String> fnNameList = fnNames.get(i);
-      List<Boolean> respectNullsList = respectNullsLists.get(i);
-      List<RexOver> aggSet = aggSets.get(i);
+    for (int groupbyApplyIdx = 0; groupbyApplyIdx < windows.size(); groupbyApplyIdx++) {
+      List<RexWindow> windowList = windows.get(groupbyApplyIdx);
+      List<SqlKind> fnKindList = fnKinds.get(groupbyApplyIdx);
+      List<String> fnNameList = fnNames.get(groupbyApplyIdx);
+      List<Boolean> respectNullsList = respectNullsLists.get(groupbyApplyIdx);
+      List<RexOver> aggSet = aggSets.get(groupbyApplyIdx);
       Pair<String, List<String>> out =
           visitAggOverHelper(
               aggSet,
@@ -1387,7 +1394,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       // For each aggregation that was fused into this window, extract the
       // corresponding column
-      List<Integer> innerIndices = indices.get(i);
+      // Reminder that "indices.get(x).get(y) = z" Means, from the dataframe
+      // returned by group-by apply function number x, the y'th column
+      // is the equivalent expression for aggOperations.get(z)
+      List<Integer> innerIndices = indices.get(groupbyApplyIdx);
       for (int j = 0; j < aggSet.size(); j++) {
         String outputDfColName = outputDfColnameList.get(j);
         String outputCode =
@@ -1407,7 +1417,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     List<Expr> outputRexInfoList = new ArrayList<>();
 
-    for (int i = 0; i < outputColExprs.size(); i++) {
+    for (int outputColExprsIdx = 0;
+        outputColExprsIdx < outputColExprs.size();
+        outputColExprsIdx++) {
       if (isSingleRow) {
         // In the case that we're inside an apply, we precalculate the column
         // and add the column to colsToAddList. This will result in
@@ -1420,7 +1432,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             .append(indent)
             .append(colName)
             .append(" = ")
-            .append(outputColExprs.get(i))
+            .append(outputColExprs.get(outputColExprsIdx))
             .append("\n");
 
         // Since we're adding the column to the dataframe before the apply, we return
@@ -1437,7 +1449,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 + ", i)";
         outputRexInfoList.add(new Expr.Raw(returnExpr));
       } else {
-        outputRexInfoList.add(new Expr.Raw(outputColExprs.get(i)));
+        outputRexInfoList.add(new Expr.Raw(outputColExprs.get(outputColExprsIdx)));
       }
     }
 
@@ -1709,7 +1721,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Sort the dataframe by the ORDER BY columns of the window
 
-    // Ascending/Decending/NAPosition have an effect on the output)?
+    // Ascending/Descending/NAPosition have an effect on the output)?
 
     StringBuilder ascendingString = new StringBuilder();
     StringBuilder NAPositionString = new StringBuilder();
