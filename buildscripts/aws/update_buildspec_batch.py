@@ -74,6 +74,8 @@ def construct_batch_field(env_vars, images):
     # IF NP=1 is in the env vars add SonarQube as a last step
     if "NP" in env_vars and 1 in env_vars["NP"]:
         add_sonar(build_graph)
+    # Also add maven unit tests
+    add_maven_unit_tests(build_graph, images)
     return {"build-graph": build_graph}
 
 
@@ -95,6 +97,21 @@ def add_sonar(build_graph):
             "depend-on": dependencies,
         }
     )
+
+
+def add_maven_unit_tests(build_graph, images):
+    for image_name, image_path in images.items():
+        buildspec = "buildscripts/aws/buildspecs/maven_unittest_buildspec.yml"
+        compute_type = "BUILD_GENERAL1_SMALL"
+        identifier = image_name.replace(" ", "_") + "_" + "_MAVEN_UNIT_TESTS"
+        # Now create the env dict portion
+        env_dict = dict()
+        env_dict["compute-type"] = compute_type
+        env_dict["image"] = image_path
+        env_dict["variables"] = dict()
+        build_graph.append(
+            {"identifier": identifier, "env": env_dict, "buildspec": buildspec}
+        )
 
 
 # TODO(Nick): Update this function when multiple buildspecs are included with
