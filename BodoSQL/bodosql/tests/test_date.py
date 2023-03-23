@@ -392,3 +392,18 @@ def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_
             check_dtype=False,
             expected_output=output,
         )
+
+
+@pytest.mark.parametrize(
+    "func_name,expected",
+    [
+        pytest.param("NEXT_DAY", datetime.date(1999, 1, 3), id="next_day"),
+        pytest.param("PREVIOUS_DAY", datetime.date(1998, 12, 27), id="prev_day"),
+    ],
+)
+def test_date_next_day(func_name, expected, memory_leak_check):
+    query = f"select {func_name}(TO_DATE('1999-01-01'), 'Sunday') as A"
+    ctx = {}
+    expected_output = pd.DataFrame({"A": [expected]})
+    with bodosql_use_date_type():
+        check_query(query, ctx, None, expected_output=expected_output)

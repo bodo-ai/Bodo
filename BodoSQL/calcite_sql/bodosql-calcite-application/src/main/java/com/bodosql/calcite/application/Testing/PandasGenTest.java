@@ -13,7 +13,7 @@ public class PandasGenTest {
 
   public static void main(String[] args) throws Exception {
 
-    String sql = "select a from __bodolocal__.table1 limit @cwsfe_21";
+    String sql = "select last_day(TO_DATE('2000-02-01'))";
 
     LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
