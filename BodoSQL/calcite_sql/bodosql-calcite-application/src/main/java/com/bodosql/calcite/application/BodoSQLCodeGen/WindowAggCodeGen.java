@@ -433,7 +433,7 @@ public class WindowAggCodeGen {
           break;
 
           // These functions are handled via a slice and a Pandas method. Add
-          // them to the relevent lists so that they can be dealt with en-masse
+          // them to the relevant lists so that they can be dealt with en-masse
           // at the end.
         case "MIN":
         case "MAX":

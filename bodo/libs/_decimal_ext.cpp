@@ -28,27 +28,15 @@ std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
     return str;
 }
 
-std::string decimal_value_cpp_to_std_string(decimal_value_cpp const& val,
-                                            int const& scale) {
-    arrow::Decimal128 arrow_decimal(val.high, val.low);
+std::string int128_decimal_to_std_string(__int128 const& val,
+                                         int const& scale) {
+    arrow::Decimal128 arrow_decimal((int64_t)(val >> 64), (int64_t)(val));
     return decimal_to_std_string(arrow_decimal, scale);
 }
 
-bool operator<(decimal_value_cpp const& left, decimal_value_cpp const& right) {
-    arrow::Decimal128 arrow_decimal_left(left.high, left.low);
-    arrow::Decimal128 arrow_decimal_right(right.high, right.low);
-    return arrow_decimal_left < arrow_decimal_right;
-}
-
-bool operator>(decimal_value_cpp const& left, decimal_value_cpp const& right) {
-    arrow::Decimal128 arrow_decimal_left(left.high, left.low);
-    arrow::Decimal128 arrow_decimal_right(right.high, right.low);
-    return arrow_decimal_left > arrow_decimal_right;
-}
-
-double decimal_to_double(decimal_value_cpp const& val) {
+double decimal_to_double(__int128 const& val) {
     int scale = 18;
-    std::string str = decimal_value_cpp_to_std_string(val, scale);
+    std::string str = int128_decimal_to_std_string(val, scale);
     return std::stod(str);
 }
 

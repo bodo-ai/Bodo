@@ -524,7 +524,8 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
         }
 
         const uint32_t seed = SEED_HASH_PARTITION;
-        uint32_t *hashes = hash_keys(partition_cols, seed, is_parallel);
+        std::shared_ptr<uint32_t[]> hashes =
+            hash_keys(partition_cols, seed, is_parallel);
         UNORD_MAP_CONTAINER<multi_col_key, partition_write_info,
                             multi_col_key_hash>
             key_to_partition;
@@ -591,7 +592,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             }
             p.rows.push_back(i);
         }
-        delete[] hashes;
+        hashes.reset();
 
         // drop partition columns from new_table (they are not written to
         // parquet)

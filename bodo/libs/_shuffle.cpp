@@ -129,7 +129,7 @@ void handle_unmatchable_rows<false>(std::vector<int>& row_dest,
 
 template <bool keep_nulls_and_filter_misses>
 void mpi_comm_info::set_counts(
-    uint32_t const* const hashes, bool is_parallel,
+    const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
     SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
     const uint8_t* null_bitmask) {
     tracing::Event ev("set_counts", is_parallel);
@@ -683,8 +683,10 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     const size_t local_dict_len = static_cast<size_t>(local_dictionary->length);
     const size_t global_dict_len =
         static_cast<size_t>(global_dictionary->length);
-    uint32_t* hashes_local_dict = new uint32_t[local_dict_len];
-    uint32_t* hashes_global_dict = new uint32_t[global_dict_len];
+    std::unique_ptr<uint32_t[]> hashes_local_dict =
+        std::make_unique<uint32_t[]>(local_dict_len);
+    std::unique_ptr<uint32_t[]> hashes_global_dict =
+        std::make_unique<uint32_t[]>(global_dict_len);
     hash_array(hashes_local_dict, local_dictionary, local_dict_len, hash_seed,
                false, /*global_dict_needed=*/false);
     hash_array(hashes_global_dict, global_dictionary, global_dict_len,
@@ -727,8 +729,8 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     }
     dict_value_to_global_index.clear();
     dict_value_to_global_index.reserve(0);  // try to force dealloc of hashmap
-    delete[] hashes_local_dict;
-    delete[] hashes_global_dict;
+    hashes_local_dict.reset();
+    hashes_global_dict.reset();
     delete_info_decref_array(local_dictionary);
 
     // --------------
@@ -1324,7 +1326,8 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
   2a) First set up the send_arr by aligning the data from the input columns
   accordingly. 2b) Second do the shuffling of data between all processors.
  */
-table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
+table_info* shuffle_table_kernel(table_info* in_table,
+                                 std::shared_ptr<uint32_t[]>& hashes,
                                  mpi_comm_info const& comm_info,
                                  bool is_parallel) {
     tracing::Event ev("shuffle_table_kernel", is_parallel);
@@ -1477,7 +1480,8 @@ array_info* reverse_shuffle_numpy_array(array_info* in_arr,
     return out_arr;
 }
 
-array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
+array_info* reverse_shuffle_string_array(array_info* in_arr,
+                                         std::shared_ptr<uint32_t[]>& hashes,
                                          mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_string_array");
     // 1: computing the recv_count_sub and related
@@ -1548,7 +1552,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
 }
 
 void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
-                                       uint32_t* hashes,
+                                       std::shared_ptr<uint32_t[]>& hashes,
                                        mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_null_bitmap_array");
     int n_pes = comm_info.n_pes;
@@ -1590,9 +1594,9 @@ void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
     }
 }
 
-array_info* reverse_shuffle_list_string_array(array_info* in_arr,
-                                              uint32_t* hashes,
-                                              mpi_comm_info const& comm_info) {
+array_info* reverse_shuffle_list_string_array(
+    array_info* in_arr, std::shared_ptr<uint32_t[]>& hashes,
+    mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_list_string_array");
     // 1: computing the recv_count_sub and related
     int n_pes = comm_info.n_pes;
@@ -1758,21 +1762,17 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
     As a consequence of that, we cannot use the existing infrastructure
     for making the reverse shuffle.
     There is no way we can build a uint32_t*
-   compute_reverse_shuffle(uint32_t* hashes)
+   compute_reverse_shuffle(std::shared_ptr<uint32_t[]>& hashes)
     ---
     @param in_table  : The shuffled input table
     @param hashes    : the hashes (of the original table)
     @param comm_info : The comm_info (computed from the original table)
     @return the reshuffled table
  */
-table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
+table_info* reverse_shuffle_table_kernel(table_info* in_table,
+                                         std::shared_ptr<uint32_t[]>& hashes,
                                          mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_table_kernel");
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "Beginning of reverse_shuffle_table_kernel. in_table:\n";
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-    DEBUG_PrintRefct(std::cout, in_table->columns);
-#endif
     uint64_t n_cols = in_table->ncols();
     std::vector<array_info*> out_arrs;
     for (uint64_t i = 0; i < n_cols; i++) {
@@ -1833,18 +1833,13 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
         decref_array(in_arr);
         out_arrs.push_back(out_arr);
     }
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "Ending of reverse_shuffle_table_kernel. out_arrs:\n";
-    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
-    DEBUG_PrintRefct(std::cout, out_arrs);
-#endif
     return new table_info(out_arrs);
 }
 
 // NOTE: Steals a reference from the input table.
 table_info* shuffle_table(table_info* in_table, int64_t n_keys,
                           bool is_parallel, int32_t keep_comm_info,
-                          uint32_t* hashes) {
+                          std::shared_ptr<uint32_t[]> hashes) {
     tracing::Event ev("shuffle_table", is_parallel);
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
@@ -1852,7 +1847,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
         return NULL;
     }
 
-    const bool delete_hashes = (hashes == nullptr);
+    const bool delete_hashes = bool(hashes);
     mpi_comm_info* comm_info = new mpi_comm_info(in_table->columns);
 
     // For any dictionary arrays that have local dictionaries, convert their
@@ -1872,7 +1867,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
     }
 
     // computing the hash data structure
-    if (hashes == nullptr) {
+    if (!hashes) {
         hashes =
             hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION, is_parallel);
     }
@@ -1884,7 +1879,9 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
         table->comm_info = comm_info;
         table->hashes = hashes;
     } else {
-        if (delete_hashes) delete[] hashes;
+        if (delete_hashes) {
+            hashes.reset();
+        }
         delete comm_info;
     }
 
@@ -1918,7 +1915,6 @@ shuffle_info* get_shuffle_info(table_info* table) {
  */
 void delete_shuffle_info(shuffle_info* sh_info) {
     delete sh_info->comm_info;
-    delete[] sh_info->hashes;
     delete sh_info;
 }
 
@@ -1949,7 +1945,8 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info) {
 
 table_info* coherent_shuffle_table(
     table_info* in_table, table_info* ref_table, int64_t n_keys,
-    uint32_t* hashes, SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
+    std::shared_ptr<uint32_t[]> hashes,
+    SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
     const uint8_t* null_bitmask, const bool keep_nulls_and_filter_misses) {
     tracing::Event ev("coherent_shuffle_table", true);
     // error checking
@@ -1957,7 +1954,7 @@ table_info* coherent_shuffle_table(
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
         return NULL;
     }
-    const bool delete_hashes = (hashes == nullptr);
+    const bool delete_hashes = bool(hashes);
     mpi_comm_info comm_info(in_table->columns);
 
     // For any dictionary arrays that have local dictionaries, convert their
@@ -1974,9 +1971,10 @@ table_info* coherent_shuffle_table(
     }
 
     // computing the hash data structure
-    if (hashes == nullptr)
+    if (!hashes) {
         hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
                                           SEED_HASH_PARTITION, true);
+    }
     // coherent_shuffle_table only called in join with parallel options.
     // is_parallel = true
     // Prereq to calling shuffle_table_kernel
@@ -1986,7 +1984,9 @@ table_info* coherent_shuffle_table(
         comm_info.set_counts<false>(hashes, true, filter, null_bitmask);
     }
     table_info* table = shuffle_table_kernel(in_table, hashes, comm_info, true);
-    if (delete_hashes) delete[] hashes;
+    if (delete_hashes) {
+        hashes.reset();
+    }
     return table;
 }
 
@@ -3054,13 +3054,6 @@ bool need_reshuffling(table_info* in_table, double crit_fraction) {
     double avg_n_rows = ceil(double(sum_n_rows) / double(n_pes));
     double objective_measure = double(max_n_rows) / avg_n_rows;
     bool result = objective_measure > crit_fraction;
-#ifdef DEBUG_BOUND_INFO
-    std::cout << "n_rows=" << n_rows << "\n";
-    std::cout << "avg_n_rows=" << avg_n_rows << " max_n_rows=" << max_n_rows
-              << "\n";
-    std::cout << "objective_measure=" << objective_measure
-              << " result=" << result << "\n";
-#endif
     return result;
 }
 
@@ -3106,7 +3099,7 @@ table_info* shuffle_renormalization_group(table_info* in_table,
     // We use the word "hashes" as they are used all over the shuffle code.
     // However, in that case, it does not mean literally "hash". What it
     // means is the global rank to which the row is going to be sent.
-    std::vector<uint32_t> hashes(n_rows);
+    std::shared_ptr<uint32_t[]> hashes = std::make_unique<uint32_t[]>(n_rows);
     if (n_dest_ranks > 0) {
         // take data from all ranks and distribute to a subset of ranks
         for (int64_t i_row = 0; i_row < n_rows; i_row++) {
@@ -3128,9 +3121,9 @@ table_info* shuffle_renormalization_group(table_info* in_table,
     }
     //
     mpi_comm_info comm_info(in_table->columns);
-    comm_info.set_counts(hashes.data(), parallel);
+    comm_info.set_counts(hashes, parallel);
     table_info* ret_table =
-        shuffle_table_kernel(in_table, hashes.data(), comm_info, parallel);
+        shuffle_table_kernel(in_table, hashes, comm_info, parallel);
     if (random) {
         // data arrives ordered by source and for each source in its
         // original (not random) order, so we need to do a local random

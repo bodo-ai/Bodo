@@ -50,8 +50,9 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
     for (uint64_t i = num_keys; i < in_table->ncols() - index_i; i++) {
         array_info* oper_col = in_table->columns[i];
         if (oper_col->arr_type != bodo_array_type::NUMPY &&
-            oper_col->arr_type != bodo_array_type::NULLABLE_INT_BOOL)
+            oper_col->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
             has_non_arithmetic_type = true;
+        }
     }
     if (has_non_arithmetic_type) {
         return 0;  // No choice, we have to use the classic hash scheme
@@ -114,9 +115,9 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
         full_table = red_table;
     }
     // Now building the map_container.
-    uint32_t* hashes_full =
+    std::shared_ptr<uint32_t[]> hashes_full =
         hash_keys_table(full_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);
-    uint32_t* hashes_in_table =
+    std::shared_ptr<uint32_t[]> hashes_in_table =
         hash_keys_table(in_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);
     std::vector<array_info*> concat_column(
         full_table->columns.begin(), full_table->columns.begin() + num_keys);
@@ -130,8 +131,9 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     UNORD_MAP_CONTAINER<size_t, size_t, HashComputeCategoricalIndex,
                         HashEqualComputeCategoricalIndex>
         entSet({}, hash_fct, equal_fct);
-    for (size_t iRow = 0; iRow < size_t(n_rows_full); iRow++)
+    for (size_t iRow = 0; iRow < size_t(n_rows_full); iRow++) {
         entSet[iRow] = iRow;
+    }
     size_t n_rows_in = in_table->nrows();
     array_info* out_arr =
         alloc_categorical(n_rows_in, Bodo_CTypes::INT32, n_rows_full);
@@ -141,10 +143,11 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     for (size_t iRow = 0; iRow < n_rows_in; iRow++) {
         int32_t pos;
         if (has_nulls) {
-            if (key_dropna && does_row_has_nulls(key_cols, iRow))
+            if (key_dropna && does_row_has_nulls(key_cols, iRow)) {
                 pos = -1;
-            else
+            } else {
                 pos = entSet[iRow + n_rows_full];
+            }
         } else {
             pos = entSet[iRow + n_rows_full];
         }
@@ -328,7 +331,7 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
     std::vector<T> cumulative(max_row_idx * n_oper);
     for (int j = start; j != end; j++) {
         int ftype = ftypes[j];
-        T value_init = -1;  // Not correct value
+        T value_init = -1;  // Dummy value set to avoid a compiler warning
         if (ftype == Bodo_FTypes::cumsum) {
             value_init = 0;
         } else if (ftype == Bodo_FTypes::cumprod) {
@@ -371,12 +374,14 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
                         if (bit_i) cumulative[pos] = new_val;
                     } else {
                         if (bit_i) {
-                            if (cumulative_mask[pos] == 1)
+                            if (cumulative_mask[pos] == 1) {
                                 bit_o = false;
-                            else
+                            } else {
                                 cumulative[pos] = new_val;
-                        } else
+                            }
+                        } else {
                             cumulative_mask[pos] = 1;
+                        }
                     }
                     work_col->set_null_bit(i_row, bit_o);
                 }
@@ -528,55 +533,35 @@ table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
     // input table. But we can consider the various cumsum / cumprod / cummax /
     // cummin in turn.
     k = 0;
+    // macro to reduce code duplication
+#ifndef MPI_EXSCAN_COMPUTATION_T_CALL
+#define MPI_EXSCAN_COMPUTATION_T_CALL(CTYPE)                                \
+    if (dtype == CTYPE) {                                                   \
+        mpi_exscan_computation_T<Tkey, typename dtype_to_type<CTYPE>::type, \
+                                 CTYPE>(out_arrs, cat_column, in_table,     \
+                                        num_keys, k, ftypes, func_offsets,  \
+                                        is_parallel, skipdropna);           \
+    }
+#endif
     for (uint64_t i = num_keys; i < in_table->ncols() - return_index_i;
          i++, k++) {
         array_info* col = in_table->columns[i];
         const Bodo_CTypes::CTypeEnum dtype = col->dtype;
-        if (dtype == Bodo_CTypes::INT8) {
-            mpi_exscan_computation_T<Tkey, int8_t, Bodo_CTypes::INT8>(
-                out_arrs, cat_column, in_table, num_keys, k, ftypes,
-                func_offsets, is_parallel, skipdropna);
-        } else if (dtype == Bodo_CTypes::UINT8) {
-            mpi_exscan_computation_T<Tkey, uint8_t, Bodo_CTypes::UINT8>(
-                out_arrs, cat_column, in_table, num_keys, k, ftypes,
-                func_offsets, is_parallel, skipdropna);
-        } else if (dtype == Bodo_CTypes::INT16) {
-            mpi_exscan_computation_T<Tkey, int16_t, Bodo_CTypes::INT16>(
-                out_arrs, cat_column, in_table, num_keys, k, ftypes,
-                func_offsets, is_parallel, skipdropna);
-        } else if (dtype == Bodo_CTypes::UINT16) {
-            mpi_exscan_computation_T<Tkey, uint16_t, Bodo_CTypes::UINT16>(
-                out_arrs, cat_column, in_table, num_keys, k, ftypes,
-                func_offsets, is_parallel, skipdropna);
-        } else if (dtype == Bodo_CTypes::INT32) {
-            mpi_exscan_computation_T<Tkey, int32_t, Bodo_CTypes::INT32>(
-                out_arrs, cat_column, in_table, num_keys, k, ftypes,
-                func_offsets, is_parallel, skipdropna);
-        } else if (dtype == Bodo_CTypes::UINT32) {
-            mpi_exscan_computation_T<Tkey, uint32_t, Bodo_CTypes::UINT32>(
-                out_arrs, cat_column, in_table, num_keys, k, ftypes,
-                func_offsets, is_parallel, skipdropna);
-        } else if (dtype == Bodo_CTypes::INT64) {
-            mpi_exscan_computation_T<Tkey, int64_t, Bodo_CTypes::INT64>(
-                out_arrs, cat_column, in_table, num_keys, k, ftypes,
-                func_offsets, is_parallel, skipdropna);
-        } else if (dtype == Bodo_CTypes::UINT64) {
-            mpi_exscan_computation_T<Tkey, uint64_t, Bodo_CTypes::UINT64>(
-                out_arrs, cat_column, in_table, num_keys, k, ftypes,
-                func_offsets, is_parallel, skipdropna);
-        } else if (dtype == Bodo_CTypes::FLOAT32) {
-            mpi_exscan_computation_T<Tkey, float, Bodo_CTypes::FLOAT32>(
-                out_arrs, cat_column, in_table, num_keys, k, ftypes,
-                func_offsets, is_parallel, skipdropna);
-        } else if (dtype == Bodo_CTypes::FLOAT64) {
-            mpi_exscan_computation_T<Tkey, double, Bodo_CTypes::FLOAT64>(
-                out_arrs, cat_column, in_table, num_keys, k, ftypes,
-                func_offsets, is_parallel, skipdropna);
-        }
+        MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::INT8)
+        MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::UINT8)
+        MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::INT16)
+        MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::UINT16)
+        MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::INT32)
+        MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::UINT32)
+        MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::INT64)
+        MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::UINT64)
+        MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::FLOAT32)
+        MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::FLOAT64)
     }
     if (return_index) {
         out_arrs.push_back(copy_array(in_table->columns.back()));
     }
+#undef MPI_EXSCAN_COMPUTATION_T_CALL
 
     return new table_info(out_arrs);
 }
@@ -588,41 +573,27 @@ table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
                                    bool return_index, bool use_sql_rules) {
     tracing::Event ev("mpi_exscan_computation", is_parallel);
     const Bodo_CTypes::CTypeEnum dtype = cat_column->dtype;
-    if (dtype == Bodo_CTypes::INT8) {
-        return mpi_exscan_computation_Tkey<int8_t>(
-            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
-            skipdropna, return_key, return_index, use_sql_rules);
-    } else if (dtype == Bodo_CTypes::UINT8) {
-        return mpi_exscan_computation_Tkey<uint8_t>(
-            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
-            skipdropna, return_key, return_index, use_sql_rules);
-    } else if (dtype == Bodo_CTypes::INT16) {
-        return mpi_exscan_computation_Tkey<int16_t>(
-            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
-            skipdropna, return_key, return_index, use_sql_rules);
-    } else if (dtype == Bodo_CTypes::UINT16) {
-        return mpi_exscan_computation_Tkey<uint16_t>(
-            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
-            skipdropna, return_key, return_index, use_sql_rules);
-    } else if (dtype == Bodo_CTypes::INT32) {
-        return mpi_exscan_computation_Tkey<int32_t>(
-            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
-            skipdropna, return_key, return_index, use_sql_rules);
-    } else if (dtype == Bodo_CTypes::UINT32) {
-        return mpi_exscan_computation_Tkey<uint32_t>(
-            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
-            skipdropna, return_key, return_index, use_sql_rules);
-    } else if (dtype == Bodo_CTypes::INT64) {
-        return mpi_exscan_computation_Tkey<int64_t>(
-            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
-            skipdropna, return_key, return_index, use_sql_rules);
-    } else if (dtype == Bodo_CTypes::UINT64) {
-        return mpi_exscan_computation_Tkey<uint64_t>(
-            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
-            skipdropna, return_key, return_index, use_sql_rules);
-    } else {
-        throw std::runtime_error(
-            "MPI EXSCAN groupby implementation failed to find a matching "
-            "dtype");
+    // macro to reduce code duplication
+#ifndef MPI_EXSCAN_COMPUTATION_CALL
+#define MPI_EXSCAN_COMPUTATION_CALL(CTYPE)                                     \
+    if (dtype == CTYPE) {                                                      \
+        return mpi_exscan_computation_Tkey<                                    \
+            typename dtype_to_type<CTYPE>::type>(                              \
+            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel, \
+            skipdropna, return_key, return_index, use_sql_rules);              \
     }
+#endif
+    MPI_EXSCAN_COMPUTATION_CALL(Bodo_CTypes::INT8)
+    MPI_EXSCAN_COMPUTATION_CALL(Bodo_CTypes::UINT8)
+    MPI_EXSCAN_COMPUTATION_CALL(Bodo_CTypes::INT16)
+    MPI_EXSCAN_COMPUTATION_CALL(Bodo_CTypes::UINT16)
+    MPI_EXSCAN_COMPUTATION_CALL(Bodo_CTypes::INT32)
+    MPI_EXSCAN_COMPUTATION_CALL(Bodo_CTypes::UINT32)
+    MPI_EXSCAN_COMPUTATION_CALL(Bodo_CTypes::INT64)
+    MPI_EXSCAN_COMPUTATION_CALL(Bodo_CTypes::UINT64)
+    // If we haven't returned in the macro we didn't find a match.
+    throw std::runtime_error(
+        "MPI EXSCAN groupby implementation failed to find a matching "
+        "dtype");
+#undef MPI_EXSCAN_COMPUTATION_CALL
 }

@@ -48,7 +48,7 @@ public class AggCodeGen {
     equivalentNumpyFuncMap.put(SqlKind.VAR_POP, "np.var");
     equivalentNumpyFuncMap.put(SqlKind.STDDEV_POP, "np.std");
 
-    equivalentPandasNameMethodMap.put("COUNT_IF", "sum");
+    equivalentPandasNameMethodMap.put("COUNT_IF", "count_if");
     equivalentPandasNameMethodMap.put("VARIANCE_POP", "var_pop");
     equivalentPandasNameMethodMap.put("VARIANCE_SAMP", "var");
     equivalentHelperFnMap.put("BOOLOR_AGG", "boolor_agg");
@@ -130,18 +130,22 @@ public class AggCodeGen {
       // We need an optional type in case the series is empty.
       if (a.getAggregation().getKind() != SqlKind.COUNT
           && a.getAggregation().getKind() != SqlKind.SUM0
-          && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE) {
+          && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE
+          && !aggFunc.equals("count_if")) {
         aggString.append("bodosql.libs.null_handling.null_if_not_flag(");
       }
 
       // If the aggregation function is ANY_VALUE, manually alter syntax
       // to use brackets
-      if (aggFunc == "iloc") {
+      if (aggFunc.equals("iloc")) {
         aggString.append(seriesBuilder);
         aggString.append(".iloc[0]");
-      } else if (aggFunc == "var_pop") {
+      } else if (aggFunc.equals("var_pop")) {
         aggString.append(seriesBuilder);
         aggString.append(".var(ddof=0)");
+      } else if (aggFunc.equals("count_if")) {
+        aggString.append(seriesBuilder);
+        aggString.append(".sum()");
       } else {
         if (!isMethod) {
           // If we have a function surround the column
@@ -160,7 +164,8 @@ public class AggCodeGen {
 
       if (a.getAggregation().getKind() != SqlKind.COUNT
           && a.getAggregation().getKind() != SqlKind.SUM0
-          && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE) {
+          && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE
+          && !aggFunc.equals("count_if")) {
         // We need an optional type in case the series is empty
         aggString.append(", len(").append(seriesBuilder).append(") > 0)");
       }
@@ -369,25 +374,46 @@ public class AggCodeGen {
       fnString.append("\n");
       // Generate the call
       fnString.append(funcIndent).append(newVar).append(" = ");
-      if (filterCol.length() > 0 && a.getAggregation().getKind() != SqlKind.COUNT) {
+      if (filterCol.length() > 0
+          && a.getAggregation().getKind() != SqlKind.COUNT
+          && a.getAggregation().getKind() != SqlKind.SUM0
+          && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE
+          && !aggFunc.equals("count_if")) {
         // We need an optional type in case the series is empty. Since this is
         // groupby we must have a filter for this to occur.
         fnString.append("bodosql.libs.null_handling.null_if_not_flag(");
       }
-      if (!isMethod) {
-        // If we have a function surround the column
-        fnString.append(aggFunc).append("(");
+      // If the aggregation function is ANY_VALUE, manually alter syntax
+      // to use brackets
+      if (aggFunc.equals("iloc")) {
+        fnString.append(seriesVar);
+        fnString.append(".iloc[0]");
+      } else if (aggFunc.equals("var_pop")) {
+        fnString.append(seriesVar);
+        fnString.append(".var(ddof=0)");
+      } else if (aggFunc.equals("count_if")) {
+        fnString.append(seriesVar);
+        fnString.append(".sum()");
+      } else {
+        if (!isMethod) {
+          // If we have a function surround the column
+          fnString.append(aggFunc).append("(");
+        }
+        // append the column var and if necessary filter
+        fnString.append(seriesVar);
+        if (isMethod) {
+          // If we have a method do the method call instead.
+          // We currently don't support any extra arguments
+          fnString.append(".").append(aggFunc).append("(");
+        }
+        // Both func and method need a closing )
+        fnString.append(")");
       }
-      // append the column var and if necessary filter
-      fnString.append(seriesVar);
-      if (isMethod) {
-        // If we have a method do the method call instead.
-        // We currently don't support any extra arguments
-        fnString.append(".").append(aggFunc).append("(");
-      }
-      // Both func and method need a closing )
-      fnString.append(")");
-      if (filterCol.length() > 0 && a.getAggregation().getKind() != SqlKind.COUNT) {
+      if (filterCol.length() > 0
+          && a.getAggregation().getKind() != SqlKind.COUNT
+          && a.getAggregation().getKind() != SqlKind.SUM0
+          && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE
+          && !aggFunc.equals("count_if")) {
         // We need an optional type in case the series is empty. Since this is
         // groupby we must have a filter for this to occur.
         fnString.append(", len(").append(seriesVar).append(") > 0)");

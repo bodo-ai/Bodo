@@ -426,7 +426,8 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         tracing::Event ev_part_gen("iceberg_pq_write_partition_spec_gen_parts",
                                    is_parallel);
         const uint32_t seed = SEED_HASH_PARTITION;
-        uint32_t *hashes = hash_keys(transform_cols, seed, is_parallel);
+        std::shared_ptr<uint32_t[]> hashes =
+            hash_keys(transform_cols, seed, is_parallel);
         UNORD_MAP_CONTAINER<multi_col_key, partition_write_info,
                             multi_col_key_hash>
             key_to_partition;
@@ -478,7 +479,7 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
             }
             p.rows.push_back(i);
         }
-        delete[] hashes;
+        hashes.reset();
         ev_part_gen.finalize();
 
         // Remove the unused transform columns

@@ -377,8 +377,10 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
             // (which is the inner join).
             BloomFilter* bloom_left = nullptr;
             BloomFilter* bloom_right = nullptr;
-            uint32_t* hashes_left = nullptr;
-            uint32_t* hashes_right = nullptr;
+            std::shared_ptr<uint32_t[]> hashes_left =
+                std::shared_ptr<uint32_t[]>(nullptr);
+            std::shared_ptr<uint32_t[]> hashes_right =
+                std::shared_ptr<uint32_t[]>(nullptr);
             uint8_t* null_bitmask_keys_left = nullptr;
             uint8_t* null_bitmask_keys_right = nullptr;
 
@@ -542,12 +544,6 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
             // Delete left_table and right_table as they are no longer used.
             delete_table(left_table);
             delete_table(right_table);
-            if (hashes_left != nullptr) {
-                delete[] hashes_left;
-            }
-            if (hashes_right != nullptr) {
-                delete[] hashes_right;
-            }
             if (bloom_left != nullptr) {
                 delete bloom_left;
             }
@@ -1233,9 +1229,9 @@ void hash_join_compute_tuples_helper(
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
         joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
         second_level_hash_maps,
-    uint32_t*& build_nonequal_key_hashes, std::vector<uint8_t>& V_build_map,
-    std::vector<int64_t>& build_write_idxs, std::vector<uint8_t>& V_probe_map,
-    std::vector<int64_t>& probe_write_idxs) {
+    std::shared_ptr<uint32_t[]>& build_nonequal_key_hashes,
+    std::vector<uint8_t>& V_build_map, std::vector<int64_t>& build_write_idxs,
+    std::vector<uint8_t>& V_probe_map, std::vector<int64_t>& probe_write_idxs) {
     // Create a data structure containing the columns to match the format
     // expected by cond_func. We create two pairs of vectors, one with
     // the array_infos, which handle general types, and one with just data1
@@ -1540,10 +1536,10 @@ table_info* hash_join_table_inner(
     // Now computing the hashes that will be used in the hash map
     // or compared to the hash map.
     //
-    uint32_t* hashes_left =
+    std::shared_ptr<uint32_t[]> hashes_left =
         hash_keys_table(work_left_table, n_key, SEED_HASH_JOIN, parallel_trace);
-    uint32_t* hashes_right = hash_keys_table(work_right_table, n_key,
-                                             SEED_HASH_JOIN, parallel_trace);
+    std::shared_ptr<uint32_t[]> hashes_right = hash_keys_table(
+        work_right_table, n_key, SEED_HASH_JOIN, parallel_trace);
 
     bool build_is_left = select_build_table(n_rows_left, n_rows_right,
                                             is_left_outer, is_right_outer, ev);
@@ -1553,7 +1549,8 @@ table_info* hash_join_table_inner(
     // the probe table, we simply iterate over the rows and see if the keys
     // are in the hash map.
     size_t build_table_rows, probe_table_rows;  // the number of rows
-    uint32_t *build_table_hashes, *probe_table_hashes;
+    std::shared_ptr<uint32_t[]> build_table_hashes;
+    std::shared_ptr<uint32_t[]> probe_table_hashes;
     // This corresponds to is_left_outer/is_right_outer and determines
     // if the build/probe tables are outer joins.
     bool build_table_outer, probe_table_outer;
@@ -1609,7 +1606,8 @@ table_info* hash_join_table_inner(
         build_table_rows, build_table_hashes, probe_table_hashes};
 
     std::vector<std::vector<size_t>*>* groups = nullptr;
-    uint32_t* build_nonequal_key_hashes = nullptr;
+    std::shared_ptr<uint32_t[]> build_nonequal_key_hashes =
+        std::shared_ptr<uint32_t[]>(nullptr);
     std::vector<UNORD_MAP_CONTAINER<
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
         joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
@@ -1907,10 +1905,10 @@ table_info* hash_join_table_inner(
     delete second_level_hash_maps;
 
     // Delete the hashes
-    delete[] hashes_left;
-    delete[] hashes_right;
-    if (build_nonequal_key_hashes != nullptr) {
-        delete[] build_nonequal_key_hashes;
+    hashes_left.reset();
+    hashes_right.reset();
+    if (build_nonequal_key_hashes) {
+        build_nonequal_key_hashes.reset();
     }
     ev_clear_map.finalize();
 

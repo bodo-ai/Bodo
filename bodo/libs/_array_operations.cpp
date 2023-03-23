@@ -43,14 +43,16 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
     uint32_t seed = SEED_HASH_CONTAINER;
 
     int64_t len_values = in_values->length;
-    std::vector<uint32_t> hashes_values(len_values);
-    hash_array(hashes_values.data(), in_values, (size_t)len_values, seed,
-               is_parallel, /*global_dict_needed=*/false);
+    std::unique_ptr<uint32_t[]> hashes_values =
+        std::make_unique<uint32_t[]>(len_values);
+    hash_array(hashes_values, in_values, (size_t)len_values, seed, is_parallel,
+               /*global_dict_needed=*/false);
 
     int64_t len_in_arr = in_arr->length;
-    std::vector<uint32_t> hashes_in_arr(len_in_arr);
-    hash_array(hashes_in_arr.data(), in_arr, (size_t)len_in_arr, seed,
-               is_parallel, /*global_dict_needed=*/false);
+    std::unique_ptr<uint32_t[]> hashes_in_arr =
+        std::make_unique<uint32_t[]>(len_in_arr);
+    hash_array(hashes_in_arr, in_arr, (size_t)len_in_arr, seed, is_parallel,
+               /*global_dict_needed=*/false);
 
     std::function<bool(int64_t, int64_t)> equal_fct =
         [&](int64_t const& pos1, int64_t const& pos2) -> bool {
@@ -75,10 +77,11 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
     std::function<size_t(int64_t)> hash_fct =
         [&](int64_t const& pos) -> size_t {
         int64_t value;
-        if (pos < len_values)
+        if (pos < len_values) {
             value = hashes_values[pos];
-        else
+        } else {
             value = hashes_in_arr[pos - len_values];
+        }
         return (size_t)value;
     };
     UNORD_SET_CONTAINER<size_t, std::function<size_t(int64_t)>,
@@ -113,7 +116,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
             shuffle_table(&table_in_values, num_keys, is_parallel);
         // we need the comm_info and hashes for the reverse shuffling
         mpi_comm_info comm_info(table_in_arr->columns);
-        uint32_t* hashes =
+        std::shared_ptr<uint32_t[]> hashes =
             hash_keys_table(table_in_arr, 1, SEED_HASH_PARTITION, is_parallel);
         comm_info.set_counts(hashes, is_parallel);
         table_info* shuf_table_in_arr =
@@ -148,7 +151,6 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
         // reference)
         decref_array(out_arr);
         delete table_in_arr;
-        delete[] hashes;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;
@@ -515,7 +517,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 
         // Now computing to which process it all goes.
         tracing::Event ev_hashes("compute_destinations", parallel);
-        std::vector<uint32_t> hashes_v(n_local);
+        std::shared_ptr<uint32_t[]> hashes =
+            std::make_unique<uint32_t[]>(n_local);
         uint32_t rank_id = 0;
         for (int64_t i = 0; i < n_local; i++) {
             size_t shift_key1 = 0, shift_key2 = 0;
@@ -531,17 +534,17 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                                          na_position)) {
                 rank_id++;
             }
-            hashes_v[i] = rank_id;
+            hashes[i] = rank_id;
         }
         delete_table_decref_arrays(bounds);
 
         // Now shuffle all the data
         mpi_comm_info comm_info(local_sort->columns);
-        comm_info.set_counts(hashes_v.data(), parallel);
+        comm_info.set_counts(hashes, parallel);
         ev_hashes.finalize();
         ev_sample.finalize();
-        table_info* collected_table = shuffle_table_kernel(
-            local_sort, hashes_v.data(), comm_info, parallel);
+        table_info* collected_table =
+            shuffle_table_kernel(local_sort, hashes, comm_info, parallel);
         // NOTE: shuffle_table_kernel decrefs input arrays
         delete_table(local_sort);
 
@@ -721,7 +724,7 @@ void validate_inputs_for_get_parallel_sort_bounds_for_domain(
  * get decref-ed)
  * @param rank_to_row_ids Vector of length `n_pes`. Each element is a vector
  * containing the rows that must go to that rank.
- * @param[out] hashes_v Reference to a vector to fill the hashes in. In this
+ * @param[out] hashes Reference to am array to fill the hashes in. In this
  * case, we directly fill the ranks (and can treat them as hashes).
  * @param parallel Only for tracing purposes
  * @return table_info* The new table and the
@@ -729,7 +732,7 @@ void validate_inputs_for_get_parallel_sort_bounds_for_domain(
  */
 table_info* create_send_table_and_hashes_from_rank_to_row_ids(
     table_info* table, const std::vector<std::vector<int64_t>> rank_to_row_ids,
-    std::vector<uint32_t>& hashes_v, bool parallel) {
+    std::shared_ptr<uint32_t[]>& hashes, bool parallel) {
     tracing::Event ev("create_send_table_and_hashes_from_rank_to_row_ids",
                       parallel);
     std::vector<uint64_t> rank_to_num_rows(rank_to_row_ids.size());
@@ -753,11 +756,13 @@ table_info* create_send_table_and_hashes_from_rank_to_row_ids(
     table_info* new_table = RetrieveTable(table, indices, -1);
 
     // Fill hashes array (i.e. the rank that rows in the new_table should go to)
-    hashes_v.resize(total_rows);
+    hashes.reset(new uint32_t[total_rows]);
     uint64_t idx = 0;
     for (size_t i = 0; i < rank_to_row_ids.size(); i++) {
-        std::fill(hashes_v.begin() + idx,
-                  hashes_v.begin() + idx + rank_to_num_rows[i], i);
+        // TODO: replace with std::fill
+        for (size_t j = idx; j < idx + rank_to_num_rows[i]; j++) {
+            hashes[j] = i;
+        }
         idx += rank_to_num_rows[i];
     }
 
@@ -846,16 +851,16 @@ const std::vector<std::vector<int64_t>> compute_destinations_for_interval(
  * @param bounds_arr Boundaries for the ranks. Should be n_pes - 1 long.
  * @param n_pes Total number of MPI ranks.
  * @param parallel Only for tracing purposes
- * @return std::vector<uint32_t> Vector with destination ranks for each of the
- * rows in the input table.
+ * @return std::shared_ptr<uint32_t []> PTR with destination ranks for each of
+ * the rows in the input table.
  */
-std::vector<uint32_t> compute_destinations_for_point_table(
+std::shared_ptr<uint32_t[]> compute_destinations_for_point_table(
     table_info* table, array_info* bounds_arr, int n_pes, bool parallel) {
     tracing::Event ev("compute_destinations_for_point_table", parallel);
     uint64_t n_local = table->nrows();
     // We call them hashes for consistency, but in this case, they're actually
     // the ranks themselves.
-    std::vector<uint32_t> hashes_v(n_local);
+    std::shared_ptr<uint32_t[]> hashes = std::make_unique<uint32_t[]>(n_local);
     uint32_t rank_id = 0;
     for (uint64_t i = 0; i < n_local; i++) {
         // Keep incrementing rank_id while the bound for rank_id
@@ -869,11 +874,11 @@ std::vector<uint32_t> compute_destinations_for_point_table(
         }
 
         // At this point, (point <= bounds[rank_id])
-        hashes_v[i] = rank_id;
+        hashes[i] = rank_id;
     }
     // C++ onwards vectors get returned without copying the buffers. Verified
     // manually by checking the memory addresses.
-    return hashes_v;
+    return hashes;
 }
 
 /**
@@ -1065,7 +1070,8 @@ table_info* sort_table_for_interval_join(table_info* table,
     // In this case, we compute the ranks directly, and treat them as the hashes
     // (the modulo step later doesn't end up changing these values since they're
     // all already between 0 and n_pes-1).
-    std::vector<uint32_t> table_to_send_hashes;
+    std::shared_ptr<uint32_t[]> table_to_send_hashes =
+        std::shared_ptr<uint32_t[]>(nullptr);
 
     if (is_table_point_side) {
         table_to_send = local_sort_table;
@@ -1089,10 +1095,10 @@ table_info* sort_table_for_interval_join(table_info* table,
     //
 
     mpi_comm_info comm_info_table(table_to_send->columns);
-    comm_info_table.set_counts(table_to_send_hashes.data(), parallel);
+    comm_info_table.set_counts(table_to_send_hashes, parallel);
     // NOTE: shuffle_table_kernel decrefs input arrays
     table_info* collected_table = shuffle_table_kernel(
-        table_to_send, table_to_send_hashes.data(), comm_info_table, parallel);
+        table_to_send, table_to_send_hashes, comm_info_table, parallel);
 
     // There are a few cases for cleanup:
     // 1. Table was already sorted: In this case, local_sort_table = table, so
@@ -1302,7 +1308,7 @@ struct HashDropDuplicates {
     size_t operator()(size_t const iRow) const {
         return static_cast<size_t>(hashes[iRow]);
     }
-    const uint32_t* hashes;
+    const std::shared_ptr<uint32_t[]>& hashes;
 };
 
 /**
@@ -1349,7 +1355,7 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
     uint32_t seed = SEED_HASH_CONTAINER;
-    uint32_t* hashes = hash_keys(key_arrs, seed, is_parallel);
+    std::shared_ptr<uint32_t[]> hashes = hash_keys(key_arrs, seed, is_parallel);
     HashDropDuplicates hash_fct{hashes};
     KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
     UNORD_MAP_CONTAINER<size_t, size_t, HashDropDuplicates,
@@ -1379,12 +1385,7 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
     // Now building the out_arrs array. We select only the first num_keys.
     table_info* ret_table = RetrieveTable(in_table, ListIdx, num_keys);
     //
-    delete[] hashes;
-#ifdef DEBUG_DD_SYMBOL
-    std::cout << "drop_duplicates_keys_inner : OUTPUT:\n";
-    DEBUG_PrintRefct(std::cout, ret_table->columns);
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-#endif
+    hashes.reset();
     return ret_table;
 }
 
@@ -1424,7 +1425,7 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
                                         int64_t keep, int step,
                                         bool is_parallel, bool dropna,
                                         bool drop_duplicates_dict,
-                                        uint32_t* hashes) {
+                                        std::shared_ptr<uint32_t[]> hashes) {
     tracing::Event ev("drop_duplicates_table_inner", is_parallel);
     ev.add_attribute("table_nrows_before",
                      static_cast<size_t>(in_table->nrows()));
@@ -1432,7 +1433,7 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
         size_t global_table_nbytes = table_global_memory_size(in_table);
         ev.add_attribute("g_table_nbytes", global_table_nbytes);
     }
-    const bool delete_hashes = hashes == nullptr;
+    const bool delete_hashes = bool(hashes);
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(num_keys);
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++) {
@@ -1451,7 +1452,7 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
         key_arrs[iKey] = key;
     }
     uint32_t seed = SEED_HASH_CONTAINER;
-    if (hashes == nullptr) {
+    if (!hashes) {
         hashes = hash_keys(key_arrs, seed, is_parallel,
                            /*global_dict_needed=*/false);
     }
@@ -1534,7 +1535,7 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
     table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
     //
     if (delete_hashes) {
-        delete[] hashes;
+        hashes.reset();
     }
     ev.add_attribute("table_nrows_after",
                      static_cast<size_t>(ret_table->nrows()));
@@ -1776,13 +1777,6 @@ table_info* union_tables(table_info** in_table, int64_t num_tables,
 table_info* sample_table(table_info* in_table, int64_t n, double frac,
                          bool replace, bool parallel) {
     try {
-#ifdef DEBUG_SAMPLE
-        std::cout << "sample_table : in_table\n";
-        DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-        DEBUG_PrintRefct(std::cout, in_table->columns);
-        std::cout << "sample_table : n=" << n << " frac=" << frac << "\n";
-        std::cout << "sample_table : parallel=" << parallel << "\n";
-#endif
         int n_local = in_table->nrows();
         std::vector<int> ListSizes;
         int n_pes = 0, myrank = 0, mpi_root = 0;
@@ -1944,22 +1938,12 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
             ListIdx.push_back(idx_export);
         }
         table_info* tab_out = RetrieveTable(in_table, ListIdx, -1);
-#ifdef DEBUG_SAMPLE
-        std::cout << "sample_table : tab_out\n";
-        DEBUG_PrintRefct(std::cout, tab_out->columns);
-        DEBUG_PrintSetOfColumn(std::cout, tab_out->columns);
-#endif
         if (parallel) {
             bool all_gather = true;
             size_t n_cols = tab_out->ncols();
             table_info* tab_ret =
                 gather_table(tab_out, n_cols, all_gather, parallel);
             delete_table(tab_out);
-#ifdef DEBUG_SAMPLE
-            std::cout << "sample_table : tab_ret\n";
-            DEBUG_PrintRefct(std::cout, tab_ret->columns);
-            DEBUG_PrintSetOfColumn(std::cout, tab_ret->columns);
-#endif
             return tab_ret;
         }
         return tab_out;
