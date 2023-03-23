@@ -1,15 +1,40 @@
-package com.bodosql.calcite.application
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to you under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * This file is a derivative work of the PlannerImpl in the core calcite
+ * project located here: https://github.com/apache/calcite/blob/main/core/src/main/java/org/apache/calcite/prepare/PlannerImpl.java.
+ *
+ * It has been modified for Bodo purposes. As this is a derivative work,
+ * the license has been retained above.
+ */
+package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregateRule
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*
 import com.bodosql.calcite.application.bodo_sql_rules.*
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
+import com.google.common.collect.ImmutableList
 import org.apache.calcite.avatica.util.Casing
 import org.apache.calcite.avatica.util.Quoting
 import org.apache.calcite.config.NullCollation
+import org.apache.calcite.jdbc.CalciteSchema
 import org.apache.calcite.plan.*
 import org.apache.calcite.plan.hep.HepPlanner
 import org.apache.calcite.plan.hep.HepProgramBuilder
+import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.RelFactories
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
@@ -28,11 +53,13 @@ import org.apache.calcite.sql2rel.StandardConvertletTable
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 import org.apache.calcite.tools.*
 
-class PlannerImpl(config: Config) : Planner by Frameworks.getPlanner(frameworkConfig(config)) {
+class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config)) {
+    private val defaultSchemas = config.defaultSchemas
+    private val namedParamTableName = config.namedParamTableName
+
     companion object {
         private fun frameworkConfig(config: Config): FrameworkConfig {
             return Frameworks.newConfigBuilder()
-                .defaultSchemas(config.defaultSchemas)
                 .operatorTable(
                     SqlOperatorTables.chain(
                         SqlStdOperatorTable.instance(),
@@ -78,6 +105,28 @@ class PlannerImpl(config: Config) : Planner by Frameworks.getPlanner(frameworkCo
                 )
                 .build()
         }
+
+        private fun rootSchema(schema: SchemaPlus): SchemaPlus {
+            var currSchema = schema
+            while (true) {
+                val parentSchema = currSchema.parentSchema ?: return currSchema
+                currSchema = parentSchema
+            }
+        }
+    }
+
+    override fun createCatalogReader(): CalciteCatalogReader {
+        val rootSchema = rootSchema(defaultSchemas[0])
+        val defaultSchemaPaths: ImmutableList.Builder<List<String>> = ImmutableList.builder()
+        for (schema in defaultSchemas) {
+            defaultSchemaPaths.add(CalciteSchema.from(schema).path(null))
+        }
+        defaultSchemaPaths.add(listOf())
+        return BodoCatalogReader(
+            CalciteSchema.from(rootSchema),
+            defaultSchemaPaths.build(),
+            typeFactory, connectionConfig,
+        )
     }
 
     class Config(

@@ -2,6 +2,7 @@ package com.bodosql.calcite.application;
 
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.google.common.collect.ImmutableList;
