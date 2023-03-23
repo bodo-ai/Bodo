@@ -1439,23 +1439,21 @@ def test_from_days(arg, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "dt, dow_str",
     [
         pytest.param(
-            (
-                pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20)),
-                pd.Series(["su"] * 20),
-            )
+            pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20)),
+            pd.Series(["su"] * 20),
+            id="timestamp-vector",
         ),
         pytest.param(
-            (
-                pd.Series(pd.date_range("2019-01-01", "2020-01-01", periods=21)),
-                pd.Series(["mo", "tu", "we", "th", "fr", "sa", "su"] * 3),
-            )
+            pd.Series(pd.date_range("2019-01-01", "2020-01-01", periods=21).date),
+            pd.Series(["mo", "tu", "we", "th", "fr", "sa", "su"] * 3),
+            id="date-vector",
         ),
     ],
 )
-def test_next_previous_day(args, memory_leak_check):
+def test_next_previous_day(dt, dow_str, memory_leak_check):
     def next_impl(arr0, arr1):
         return pd.Series(bodo.libs.bodosql_array_kernels.next_day(arr0, arr1))
 
@@ -1467,42 +1465,47 @@ def test_next_previous_day(args, memory_leak_check):
     def next_prev_day_scalar_fn(is_prev=False):
         mlt = -1 if is_prev else 1
 
-        def impl(ts, day):
-            if pd.isna(ts) or pd.isna(day):
+        def impl(dt, day):
+            if pd.isna(dt) or pd.isna(day):
                 return None
+            if isinstance(dt, pd.Timestamp):
+                return dt.date() + mlt * pd.Timedelta(
+                    days=7 - ((mlt * (dt.dayofweek - dow_map[day])) % 7)
+                )
             else:
-                return pd.Timestamp(
-                    (
-                        ts
-                        + mlt
-                        * pd.Timedelta(
-                            days=7 - ((mlt * (ts.dayofweek - dow_map[day])) % 7)
-                        )
-                    ).date()
+                return dt + mlt * pd.Timedelta(
+                    days=7 - ((mlt * (dt.weekday() - dow_map[day])) % 7)
                 )
 
         return impl
 
-    next_day_answer = vectorized_sol(
-        args, next_prev_day_scalar_fn(), np.datetime64, manual_coercion=True
+    next_day_answer = pd.Series(
+        [next_prev_day_scalar_fn()(dt[i], dow_str[i]) for i in range(len(dt))]
     )
-    check_func(
-        next_impl,
-        args,
-        py_output=next_day_answer,
-        check_dtype=False,
-        reset_index=True,
+    print(next_day_answer)
+    with bodosql_use_date_type():
+        check_func(
+            next_impl,
+            (
+                dt,
+                dow_str,
+            ),
+            py_output=next_day_answer,
+            reset_index=True,
+        )
+    previous_day_answer = pd.Series(
+        [next_prev_day_scalar_fn(True)(dt[i], dow_str[i]) for i in range(len(dt))]
     )
-    previous_day_answer = vectorized_sol(
-        args, next_prev_day_scalar_fn(True), np.datetime64, manual_coercion=True
-    )
-    check_func(
-        prev_impl,
-        args,
-        py_output=previous_day_answer,
-        check_dtype=False,
-        reset_index=True,
-    )
+    with bodosql_use_date_type():
+        check_func(
+            prev_impl,
+            (
+                dt,
+                dow_str,
+            ),
+            py_output=previous_day_answer,
+            reset_index=True,
+        )
 
 
 def test_weekday(dates_scalar_vector, memory_leak_check):
