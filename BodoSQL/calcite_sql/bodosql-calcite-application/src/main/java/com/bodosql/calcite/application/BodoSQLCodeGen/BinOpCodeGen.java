@@ -224,8 +224,7 @@ public class BinOpCodeGen {
     assert args.size() == 2;
     final Expr arg0 = args.get(0);
     final Expr arg1 = args.get(1);
-    return new Expr.Call(
-        "bodo.libs.bodosql_array_kernels.date_sub_date_unit", new Expr.Raw("'DAY'"), arg1, arg0);
+    return new Expr.Call("bodo.libs.bodosql_array_kernels.diff_day", arg1, arg0);
   }
 
   /**

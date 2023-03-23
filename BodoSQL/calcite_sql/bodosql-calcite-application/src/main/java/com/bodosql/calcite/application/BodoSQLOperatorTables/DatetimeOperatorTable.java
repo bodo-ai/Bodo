@@ -95,7 +95,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               OperandTypes.DATETIME),
           SqlFunctionCategory.TIMEDATE);
 
-
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction DATE_ADD =
       new SqlFunction(
@@ -521,16 +520,11 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
           OperandTypes.or(
               OperandTypes.sequence(
-                  "DATEDIFF(CHARACTER, TIMESTAMP, TIMESTAMP)",
-                  OperandTypes.CHARACTER,
-                  OperandTypes.TIMESTAMP,
-                  OperandTypes.TIMESTAMP),
+                  "DATEDIFF(TIMESTAMP/DATE, TIMESTAMP/DATE)",
+                  OperandTypes.DATETIME,
+                  OperandTypes.DATETIME),
               OperandTypes.sequence(
-                  "DATEDIFF(TIMESTAMP, TIMESTAMP)",
-                  OperandTypes.TIMESTAMP,
-                  OperandTypes.TIMESTAMP),
-              OperandTypes.sequence(
-                  "DATEDIFF(CHARACTER, TIME, TIME)",
+                  "DATEDIFF(CHARACTER, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
                   OperandTypes.CHARACTER,
                   OperandTypes.DATETIME,
                   OperandTypes.DATETIME)),
@@ -548,17 +542,11 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(
-              OperandTypes.sequence(
-                  "TIMEDIFF(CHARACTER, TIMESTAMP, TIMESTAMP)",
-                  OperandTypes.CHARACTER,
-                  OperandTypes.TIMESTAMP,
-                  OperandTypes.TIMESTAMP),
-              OperandTypes.sequence(
-                  "TIMEDIFF(CHARACTER, TIME, TIME)",
-                  OperandTypes.CHARACTER,
-                  OperandTypes.DATETIME,
-                  OperandTypes.DATETIME)),
+          OperandTypes.sequence(
+              "DATEDIFF(CHARACTER, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
+              OperandTypes.CHARACTER,
+              OperandTypes.DATETIME,
+              OperandTypes.DATETIME),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 

@@ -752,7 +752,9 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                     scalar_text += "month = (arg1.month + arg0 - 1) % 12 + 1\n"
                     scalar_text += "res[i] = datetime.date(year, month, arg1.day)"
                 elif unit == "quarters":
-                    scalar_text = "year = arg1.year + (arg1.month + 3 * arg0 - 1) // 12\n"
+                    scalar_text = (
+                        "year = arg1.year + (arg1.month + 3 * arg0 - 1) // 12\n"
+                    )
                     scalar_text += "month = (arg1.month + 3 * arg0 - 1) % 12 + 1\n"
                     scalar_text += "res[i] = datetime.date(year, month, arg1.day)"
                 # weeks and days
@@ -1217,6 +1219,10 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
         scalar_text = ""
         if is_valid_time_arg(arr0):
             assert is_valid_time_arg(arr1)
+        elif is_valid_date_arg(arr0):
+            assert is_valid_date_arg(arr1)
+            scalar_text += "arg0 = pd.Timestamp(arg0)\n"
+            scalar_text += "arg1 = pd.Timestamp(arg1)\n"
         else:
             verify_datetime_arg_allow_tz(arr0, "diff_" + unit, "arr0")
             verify_datetime_arg_allow_tz(arr1, "diff_" + unit, "arr1")
@@ -2788,143 +2794,6 @@ def overload_create_timestamp_util(arr):  # pragma: no cover
     )
 
     scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0))\n"
-    return gen_vectorized(
-        arg_names,
-        arg_types,
-        propagate_null,
-        scalar_text,
-        out_dtype,
-    )
-
-
-def date_sub_date_unit(unit, arr0, arr1):  # pragma: no cover
-    pass
-
-
-@overload(date_sub_date_unit)
-def overload_date_sub_date_unit(date_or_time_part, arr0, arr1):
-    """Array kernel that supports subtracting two dates
-    with SQL semantics. The result is in the number of {unit}
-    between the two dates as an integer.
-
-    Args:
-        date_or_time_part (types.Type): A string scalar denoting the unit of time for the result
-        arr0 (types.Type): Date column or scalar
-        arr1 (types.Type): Date column or scalar
-
-    Returns:
-        types.Type: Integer number of {units} between the dates (arr1 - arr0)
-    """
-    args = (date_or_time_part, arr0, arr1)
-    for i in range(len(args)):
-        if isinstance(args[i], types.optional):  # pragma: no cover
-            return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.date_sub_date_unit",
-                ["date_or_time_part", "arr0", "arr1"],
-                i,
-            )
-
-    def impl(date_or_time_part, arr0, arr1):  # pragma: no cover
-        return date_sub_date_unit_util(date_or_time_part, arr0, arr1)
-
-    return impl
-
-
-def date_sub_date_unit_util(date_or_time_part, arr0, arr1):  # pragma: no cover
-    pass
-
-
-@overload(date_sub_date_unit_util)
-def overload_date_sub_date_unit_util(date_or_time_part, arr0, arr1):  # pragma: no cover
-    """Array kernel that supports subtracting two dates
-     with SQL semantics. The result is in the number of {units}
-     between the two dates as an integer.
-
-     Args:
-         date_or_time_part (types.Type): A string scalar denoting the unit of time for the result
-         arr0 (types.Type): Date column or scalar
-         arr1 (types.Type): Date column or scalar
-
-    Returns:
-        types.Type: Integer number of {units} between the dates (arr1 - arr0)
-    """
-    # TODO: When we have a formal date type in SQL this should only
-    # accept dates.
-    verify_string_arg(date_or_time_part, "DATE_SUB_DATE_UNIT", "date_or_time_part")
-    if is_valid_time_arg(arr0):
-        assert is_valid_time_arg(arr1)
-    else:
-        verify_datetime_arg(arr0, "DATE_SUB_DATE_UNIT", "arr0")
-        verify_datetime_arg(arr1, "DATE_SUB_DATE_UNIT", "arr1")
-
-    unit = ""
-    if is_overload_constant_str(date_or_time_part):
-        unit = get_overload_const_str(date_or_time_part)
-    else:
-        raise_bodo_error("Date or time part provided is not a string literal!")
-
-    datetime_part = standardize_snowflake_date_time_part_compile_time(unit)(unit)
-
-    arg_names = ["date_or_time_part", "arr0", "arr1"]
-    arg_types = [date_or_time_part, arr0, arr1]
-    propagate_null = [True, True, True]
-    out_dtype = bodo.IntegerArrayType(bodo.int64)
-    box_str0 = (
-        "bodo.utils.conversion.box_if_dt64"
-        if bodo.utils.utils.is_array_typ(arr0, True)
-        else ""
-    )
-    box_str1 = (
-        "bodo.utils.conversion.box_if_dt64"
-        if bodo.utils.utils.is_array_typ(arr1, True)
-        else ""
-    )
-
-    arg1 = f"{box_str0}(arg1)"
-    arg2 = f"{box_str1}(arg2)"
-
-    # We use PandasTimestampType's API for extracting date parts
-    # PDTimeDeltaType's API for extracting time parts.
-
-    # Snowflake disregards datetime parts that occur after the one specified
-    # when performing the DATEDIFF. E.g. DATEDIFF(YEAR, '2020-12-31', '2021-01-01')
-    # is functionally equivalent to DATEDIFF(YEAR, '2020-01-01', '2021-01-01')
-    if datetime_part == "year":
-        scalar_text = f"res[i] = ({arg2}.year - {arg1}.year)\n"
-    elif datetime_part == "quarter":
-        scalar_text = f"yr_diff = ({arg2}.year - {arg1}.year) * 4\n"
-        scalar_text += f"res[i] = yr_diff + ({arg2}.quarter - {arg1}.quarter)"
-    elif datetime_part == "month":
-        # Calculate the difference in months derived from difference in years
-        scalar_text = f"yr_diff = ({arg2}.year - {arg1}.year) * 12\n"
-
-        # then add the difference in months derived from difference in the months
-        scalar_text += f"res[i] = yr_diff + ({arg2}.month - {arg1}.month)\n"
-    elif datetime_part == "week":
-        scalar_text = f"iso_yr_diff = bodo.libs.bodosql_array_kernels.get_iso_weeks_between_years({arg1}.year, {arg2}.year)\n"
-        scalar_text += f"wk_diff = {arg2}.week - {arg1}.week\n"
-        scalar_text += f"res[i] = iso_yr_diff + wk_diff\n"
-    elif datetime_part == "day":
-        scalar_text = f"res[i] = ({arg2} - {arg1}).days\n"
-    else:
-        timedelta_str = f"({arg2}.value - {arg1}.value)"
-        if datetime_part == "hour":
-            scalar_text = (
-                f"res[i] = {timedelta_str} // {((1000 * 1000 * 1000) * 3600)}\n"
-            )
-        elif datetime_part == "minute":
-            scalar_text = f"res[i] = {timedelta_str} // {((1000 * 1000 * 1000) * 60)}\n"
-        elif datetime_part == "second":
-            scalar_text = f"res[i] = {timedelta_str} // {(1000 * 1000 * 1000)}\n"
-        elif datetime_part == "millisecond":
-            scalar_text = f"res[i] = {timedelta_str} // {(1000 * 1000)}\n"
-        elif datetime_part == "microsecond":
-            scalar_text = f"res[i] = {timedelta_str} // 1000\n"
-        elif datetime_part == "nanosecond":
-            scalar_text = f"res[i] = {timedelta_str}\n"
-        else:
-            raise ValueError("Invalid datetime part for DATEDIFF!")
-
     return gen_vectorized(
         arg_names,
         arg_types,

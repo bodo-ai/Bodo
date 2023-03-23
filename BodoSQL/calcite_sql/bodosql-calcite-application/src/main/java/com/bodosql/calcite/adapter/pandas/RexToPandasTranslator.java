@@ -20,7 +20,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInitcapInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.TimestampDiffCodeGen.generateTimestampDiffInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getDoubleArgTrigFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getSingleArgTrigFnInfo;
 import static com.bodosql.calcite.application.Utils.Utils.*;
@@ -547,7 +546,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           throw new BodoSQLCodegenException(
               "Invalid type of arguments to TIMESTAMPDIFF: arg1 and arg2 must be the same type.");
         unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
-        return new Expr.Raw(generateTimestampDiffInfo(operands, unit));
+        return generateDateDiffFnInfo(unit, operands.get(1), operands.get(2));
       case TRIM:
         assert operands.size() == 3;
         // Calcite expects: TRIM(<chars> FROM <expr>>) or TRIM(<chars>, <expr>)
