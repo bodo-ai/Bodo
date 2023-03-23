@@ -46,21 +46,22 @@ struct Bodo_FTypes {
         var = 22,
         std = 23,
         boolor_agg = 24,
-        udf = 25,
-        gen_udf = 26,
-        window = 27,
-        row_number = 28,
-        min_row_number_filter = 29,
-        num_funcs = 30,  // num_funcs is used to know how many functions up to
+        count_if = 25,
+        udf = 26,
+        gen_udf = 27,
+        window = 28,
+        row_number = 29,
+        min_row_number_filter = 30,
+        num_funcs = 31,  // num_funcs is used to know how many functions up to
                          // this point. Below this point are functions that are
                          // defined in the C++ code but not the Python enum.
-        mean_eval = 31,
-        var_eval = 32,
-        std_eval = 33,
+        mean_eval = 32,
+        var_eval = 33,
+        std_eval = 34,
         // These are internal operators used by groupby.window
         // when the orderby clause has na values first.
-        idxmin_na_first = 34,
-        idxmax_na_first = 35
+        idxmin_na_first = 35,
+        idxmax_na_first = 36
     };
 };
 

@@ -58,8 +58,8 @@ struct HashHashJoinTable {
         }
     }
     size_t short_table_rows;
-    uint32_t* short_table_hashes;
-    uint32_t* long_table_hashes;
+    std::shared_ptr<uint32_t[]>& short_table_hashes;
+    std::shared_ptr<uint32_t[]>& long_table_hashes;
 };
 
 /**
@@ -142,7 +142,7 @@ struct SecondLevelHashHashJoinTable {
     uint32_t operator()(const size_t iRow) const {
         return short_nonequal_key_hashes[iRow];
     }
-    uint32_t* short_nonequal_key_hashes;
+    std::shared_ptr<uint32_t[]> short_nonequal_key_hashes;
 };
 
 /**
@@ -177,8 +177,8 @@ struct SecondLevelKeyEqualHashJoinTable {
  * @return hash keys
  *
  */
-uint32_t* hash_data_cols_table(const std::vector<array_info*>& in_table,
-                               uint64_t* col_nums, size_t n_cols, uint32_t seed,
-                               bool is_parallel);
+std::unique_ptr<uint32_t[]> hash_data_cols_table(
+    const std::vector<array_info*>& in_table, uint64_t* col_nums, size_t n_cols,
+    uint32_t seed, bool is_parallel);
 
 #endif  // _JOIN_HASHING_H_INCLUDED

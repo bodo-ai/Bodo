@@ -361,11 +361,16 @@ array_info* create_list_string_array(
 }
 
 array_info* create_dict_string_array(array_info* dict_arr,
-                                     array_info* indices_arr, size_t length) {
-    array_info* out_col = new array_info(
-        bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1, -1,
-        NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
-        0, 0, false, false, false, dict_arr, indices_arr);
+                                     array_info* indices_arr,
+                                     bool has_global_dictionary,
+                                     bool has_deduped_local_dictionary,
+                                     bool has_sorted_dictionary) {
+    array_info* out_col =
+        new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
+                       indices_arr->length, -1, -1, NULL, NULL, NULL,
+                       indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0, 0,
+                       0, has_global_dictionary, has_deduped_local_dictionary,
+                       has_sorted_dictionary, dict_arr, indices_arr);
     return out_col;
 }
 

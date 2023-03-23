@@ -229,7 +229,8 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
     ev.add_attribute("nRows", nRow);
 
     array_info* out_arr = alloc_nullable_array(nRow, Bodo_CTypes::UINT32, 0);
-    uint32_t* hashes = (uint32_t*)out_arr->data1;
+    std::unique_ptr<uint32_t[]> hashes =
+        std::unique_ptr<uint32_t[]>((uint32_t*)out_arr->data1);
 
     int64_t n_bytes = ((nRow + 7) >> 3);
 
@@ -238,7 +239,8 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
     // strings, which doesn't work for Iceberg.
     if (in_arr->arr_type == bodo_array_type::DICT) {
         // Calculate hashes on the dict
-        uint32_t* dict_hashes = new uint32_t[in_arr->info1->length];
+        std::unique_ptr<uint32_t[]> dict_hashes =
+            std::make_unique<uint32_t[]>(in_arr->info1->length);
         hash_array(dict_hashes, in_arr->info1, in_arr->info1->length, 0,
                    is_parallel, false, /*use_murmurhash=*/true);
         // Iterate over the elements and assign hash from the dict
@@ -334,6 +336,8 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
     for (uint64_t i = 0; i < nRow; i++) {
         hashes[i] = (hashes[i] & INT_MAX) % N;
     }
+    // Release the ptr to hashes because we don't have ownership
+    hashes.release();
 
     return out_arr;
 }

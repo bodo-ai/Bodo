@@ -172,7 +172,7 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
     if (dtype == Bodo_CTypes::DATETIME) return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::TIMEDELTA) return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::DECIMAL)
-        return decimal_to_double(GetTentry<decimal_value_cpp>(ptr));
+        return decimal_to_double(GetTentry<__int128>(ptr));
     throw std::runtime_error(
         "_array_utils.h::GetDoubleEntry: Unsupported case in GetDoubleEntry");
 }
@@ -479,8 +479,8 @@ int NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
  */
 inline int NumericComparison_decimal(char* ptr1, char* ptr2,
                                      bool const& na_position) {
-    decimal_value_cpp* ptr1_dec = (decimal_value_cpp*)ptr1;
-    decimal_value_cpp* ptr2_dec = (decimal_value_cpp*)ptr2;
+    __int128* ptr1_dec = (__int128*)ptr1;
+    __int128* ptr2_dec = (__int128*)ptr2;
     double value1 = decimal_to_double(*ptr1_dec);
     double value2 = decimal_to_double(*ptr2_dec);
     if (value1 > value2) return -1;
@@ -753,8 +753,8 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
  * @param is_parallel: true if data is distributed (used to indicate whether
  * tracing should be parallel or not)
  */
-size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len,
-                          bool is_parallel);
+size_t get_nunique_hashes(const std::shared_ptr<uint32_t[]> hashes,
+                          const size_t len, bool is_parallel);
 
 /**
  * Given an array of hashes, returns estimate of number of unique hashes
@@ -765,7 +765,8 @@ size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len,
  * tracing should be parallel or not)
  */
 std::pair<size_t, size_t> get_nunique_hashes_global(
-    uint32_t const* const hashes, const size_t len, bool is_parallel);
+    const std::shared_ptr<uint32_t[]> hashes, const size_t len,
+    bool is_parallel);
 
 std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype);
 

@@ -101,12 +101,10 @@ class SimdBlockFilterFixed {
     void Add(const uint64_t key) noexcept;
 
     // Add multiple items to the filter.
-    void AddAll(const std::vector<uint64_t>& data, const size_t start,
-                const size_t end) {
-        return AddAll(data.data(), start, end);
-    }
-    void AddAll(const uint64_t* data, const size_t start, const size_t end);
-    void AddAll(const uint32_t* data, const size_t start, const size_t end);
+    void AddAll(const std::shared_ptr<uint64_t[]>& data, const size_t start,
+                const size_t end);
+    void AddAll(const std::shared_ptr<uint32_t[]>& data, const size_t start,
+                const size_t end);
 
     bool Find(const uint64_t key) const noexcept;
     uint64_t SizeInBytes() const { return sizeof(Bucket) * bucketCount; }
@@ -212,9 +210,9 @@ void SimdBlockFilterFixed<HashFamily>::ApplyBlock(uint64_t* tmp, int block,
 }
 
 template <typename HashFamily>
-void SimdBlockFilterFixed<HashFamily>::AddAll(const uint64_t* keys,
-                                              const size_t start,
-                                              const size_t end) {
+void SimdBlockFilterFixed<HashFamily>::AddAll(
+    const std::shared_ptr<uint64_t[]>& keys, const size_t start,
+    const size_t end) {
     int blocks = 1 + bucketCount / blockLen;
     uint64_t* tmp = new uint64_t[blocks * blockLen];
     int* tmpLen = new int[blocks]();
@@ -240,9 +238,9 @@ void SimdBlockFilterFixed<HashFamily>::AddAll(const uint64_t* keys,
 }
 
 template <typename HashFamily>
-void SimdBlockFilterFixed<HashFamily>::AddAll(const uint32_t* keys,
-                                              const size_t start,
-                                              const size_t end) {
+void SimdBlockFilterFixed<HashFamily>::AddAll(
+    const std::shared_ptr<uint32_t[]>& keys, const size_t start,
+    const size_t end) {
     int blocks = 1 + bucketCount / blockLen;
     uint64_t* tmp = new uint64_t[blocks * blockLen];
     int* tmpLen = new int[blocks]();
@@ -415,13 +413,8 @@ class SimdBlockFilterFixed {
     ~SimdBlockFilterFixed() noexcept;
     void Add(const uint64_t key) noexcept;
 
-    // Add multiple items to the filter.
-    // void AddAll(const std::vector<uint64_t>& data, const size_t start, const
-    // size_t end) {
-    //    return AddAll(data.data(),start,end);
-    //}
-
-    void AddAll(const uint32_t* data, const size_t start, const size_t end);
+    void AddAll(const std::shared_ptr<uint32_t[]>& data, const size_t start,
+                const size_t end);
 
     bool Find(const uint64_t key) const noexcept;
     uint64_t SizeInBytes() const { return sizeof(Bucket) * bucketCount; }
@@ -493,9 +486,9 @@ template <typename HashFamily>
 }
 
 template <typename HashFamily>
-void SimdBlockFilterFixed<HashFamily>::AddAll(const uint32_t* keys,
-                                              const size_t start,
-                                              const size_t end) {
+void SimdBlockFilterFixed<HashFamily>::AddAll(
+    const std::shared_ptr<uint32_t[]>& keys, const size_t start,
+    const size_t end) {
     for (size_t i = start; i < end; i++) {
         // TODO: more efficient implementation like the AVX version does?
         Add(static_cast<uint64_t>(keys[i]));
@@ -618,10 +611,10 @@ class SimdBlockFilterFixed {
     void Add(const uint64_t key) noexcept {};
 
     // Add multiple items to the filter.
-    void AddAll(const std::vector<uint64_t>& data, const size_t start,
+    void AddAll(const std::shared_ptr<uint64_t[]>&& data, const size_t start,
                 const size_t end) {}
-    void AddAll(const uint64_t* data, const size_t start, const size_t end) {}
-    void AddAll(const uint32_t* data, const size_t start, const size_t end) {}
+    void AddAll(const std::shared_ptr<uint32_t[]>& data, const size_t start,
+                const size_t end) {}
     bool Find(const uint64_t key) const noexcept { return false; }
     uint64_t SizeInBytes() const { return 0; }
     void union_reduction() {}

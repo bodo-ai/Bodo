@@ -165,6 +165,7 @@ struct aggfunc<T, dtype, Bodo_FTypes::sum> {
     }
 };
 
+// This is also used by count_if.
 template <typename T, int dtype, typename Enable = void>
 struct bool_sum {
     /**

@@ -34,8 +34,9 @@ static inline int hash_to_rank(uint32_t hash, int n_pes) {
  */
 struct shuffle_info {
     mpi_comm_info* comm_info;
-    uint32_t* hashes;
-    explicit shuffle_info(mpi_comm_info* _comm_info, uint32_t* _hashes)
+    std::shared_ptr<uint32_t[]> hashes;
+    explicit shuffle_info(mpi_comm_info* _comm_info,
+                          std::shared_ptr<uint32_t[]> _hashes)
         : comm_info(_comm_info), hashes(_hashes) {}
 };
 
@@ -51,9 +52,10 @@ struct shuffle_info {
  * @param hashes : provide precalculated hashes
  * @return the new table after shuffling
  */
-table_info* shuffle_table(table_info* in_table, int64_t n_keys,
-                          bool is_parallel = true, int32_t keep_comm_info = 0,
-                          uint32_t* hashes = nullptr);
+table_info* shuffle_table(
+    table_info* in_table, int64_t n_keys, bool is_parallel = true,
+    int32_t keep_comm_info = 0,
+    std::shared_ptr<uint32_t[]> hashes = std::shared_ptr<uint32_t[]>(nullptr));
 
 table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
                                      bool is_parallel = true,
@@ -109,7 +111,7 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info);
  */
 table_info* coherent_shuffle_table(
     table_info* in_table, table_info* ref_table, int64_t n_keys,
-    uint32_t* hashes = nullptr,
+    std::shared_ptr<uint32_t[]> hashes = std::shared_ptr<uint32_t[]>(nullptr),
     SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
     const uint8_t* null_bitmask = nullptr,
     const bool keep_nulls_and_filter_misses = true);
@@ -125,7 +127,8 @@ table_info* coherent_shuffle_table(
  * not
  * @return the new table after the shuffling.
  */
-table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
+table_info* shuffle_table_kernel(table_info* in_table,
+                                 std::shared_ptr<uint32_t[]>& hashes,
                                  mpi_comm_info const& comm_info,
                                  bool is_parallel = true);
 
@@ -136,7 +139,8 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
  * @param comm_info : the array for the communication.
  * @return the new table after the shuffling-
  */
-table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
+table_info* reverse_shuffle_table_kernel(table_info* in_table,
+                                         std::shared_ptr<uint32_t[]>& hashes,
                                          mpi_comm_info const& comm_info);
 
 /** Broadcasting a table.
@@ -236,7 +240,8 @@ table_info* shuffle_renormalization_group_py_entrypt(
  * It takes the rows after the MPI_alltoall and put them at their right position
  */
 template <class T>
-inline void fill_recv_data_inner(T* recv_buff, T* data, uint32_t* hashes,
+inline void fill_recv_data_inner(T* recv_buff, T* data,
+                                 std::shared_ptr<uint32_t[]>& hashes,
                                  std::vector<int64_t> const& send_disp,
                                  int n_pes, size_t n_rows) {
     std::vector<int64_t> tmp_offset(send_disp);

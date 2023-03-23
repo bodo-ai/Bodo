@@ -1639,8 +1639,8 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         return std::to_string(*ptr);
     }
     if (dtype == Bodo_CTypes::DECIMAL) {
-        decimal_value_cpp* val = (decimal_value_cpp*)ptrdata;
-        return decimal_value_cpp_to_std_string(*val, scale);
+        __int128* val = (__int128*)ptrdata;
+        return int128_decimal_to_std_string(*val, scale);
     }
     if (dtype == Bodo_CTypes::FLOAT64) {
         double* ptr = (double*)ptrdata;
@@ -1667,15 +1667,15 @@ void DEBUG_append_to_primitive_T(const T* values, int64_t offset,
 }
 
 void DEBUG_append_to_primitive_decimal(
-    const decimal_value_cpp* values, int64_t offset, int64_t length,
+    const __int128* values, int64_t offset, int64_t length,
     std::string& string_builder, const std::vector<uint8_t>& valid_elems) {
     string_builder += "[";
     for (int64_t i = 0; i < length; i++) {
         if (i > 0) string_builder += ",";
         if (valid_elems[i]) {
-            decimal_value_cpp val = values[offset + i];
+            __int128 val = values[offset + i];
             int scale = 18;
-            string_builder += decimal_value_cpp_to_std_string(val, scale);
+            string_builder += int128_decimal_to_std_string(val, scale);
         } else {
             string_builder += "None";
         }
@@ -1718,8 +1718,8 @@ void DEBUG_append_to_primitive(arrow::Type::type const& type,
         DEBUG_append_to_primitive_T((double*)values, offset, length,
                                     string_builder, valid_elems);
     } else if (type == arrow::Type::DECIMAL) {
-        DEBUG_append_to_primitive_decimal((decimal_value_cpp*)values, offset,
-                                          length, string_builder, valid_elems);
+        DEBUG_append_to_primitive_decimal((__int128*)values, offset, length,
+                                          string_builder, valid_elems);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "Unsupported primitive type building arrow array");
@@ -2134,8 +2134,8 @@ void MPI_hyper_log_log_merge(void* in, void* inout, int* len,
 // the hashes with our MurmurHash3_x64_32, and uses 1 MB of memory
 #define HLL_SIZE 20
 
-size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len,
-                          bool is_parallel) {
+size_t get_nunique_hashes(const std::shared_ptr<uint32_t[]> hashes,
+                          const size_t len, bool is_parallel) {
     tracing::Event ev("get_nunique_hashes", is_parallel);
     hll::HyperLogLog hll(HLL_SIZE);
     hll.addAll(hashes, len);
@@ -2145,7 +2145,8 @@ size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len,
 }
 
 std::pair<size_t, size_t> get_nunique_hashes_global(
-    uint32_t const* const hashes, const size_t len, bool is_parallel) {
+    const std::shared_ptr<uint32_t[]> hashes, const size_t len,
+    bool is_parallel) {
     tracing::Event ev("get_nunique_hashes_global", is_parallel);
     tracing::Event ev_local("get_nunique_hashes_local", is_parallel);
     hll::HyperLogLog hll(HLL_SIZE);
