@@ -1933,16 +1933,7 @@ def next_day_util(arr0, arr1):
     verify_datetime_arg_allow_tz(arr0, "NEXT_DAY", "arr0")
     verify_string_arg(arr1, "NEXT_DAY", "arr1")
     is_input_tz_aware = is_valid_tz_aware_datetime_arg(arr0)
-
-    # When returning a scalar we always return a pd.Timestamp type.
-    unbox_str = (
-        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-        if (
-            bodo.utils.utils.is_array_typ(arr0, True)
-            or bodo.utils.utils.is_array_typ(arr1, True)
-        )
-        else ""
-    )
+    is_date = is_valid_date_arg(arr0)
 
     arg_names = ["arr0", "arr1"]
     arg_types = [arr0, arr1]
@@ -1956,13 +1947,18 @@ def next_day_util(arr0, arr1):
     scalar_text = f"arg1_trimmed = arg1.lstrip()[:2].lower()\n"
     if is_input_tz_aware:
         arg0_timestamp = "arg0"
+    elif is_date:
+        arg0_timestamp = "pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day)"
     else:
         arg0_timestamp = "bodo.utils.conversion.box_if_dt64(arg0)"
     scalar_text += f"new_timestamp = {arg0_timestamp}.normalize() + pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed])\n"
-    # The output is suppose to be a date. Since we output a Timestamp still we need to make it naive.
-    scalar_text += f"res[i] = {unbox_str}(new_timestamp.tz_localize(None))\n"
+    scalar_text += f"res[i] = new_timestamp.date()\n"
 
-    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    out_dtype = (
+        DatetimeDateArrayType()
+        if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
+        else types.Array(bodo.datetime64ns, 1, "C")
+    )
 
     return gen_vectorized(
         arg_names,
@@ -1992,16 +1988,7 @@ def previous_day_util(arr0, arr1):
     verify_datetime_arg_allow_tz(arr0, "PREVIOUS_DAY", "arr0")
     verify_string_arg(arr1, "PREVIOUS_DAY", "arr1")
     is_input_tz_aware = is_valid_tz_aware_datetime_arg(arr0)
-
-    # When returning a scalar we always return a pd.Timestamp type.
-    unbox_str = (
-        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-        if (
-            bodo.utils.utils.is_array_typ(arr0, True)
-            or bodo.utils.utils.is_array_typ(arr1, True)
-        )
-        else ""
-    )
+    is_date = is_valid_date_arg(arr0)
 
     arg_names = ["arr0", "arr1"]
     arg_types = [arr0, arr1]
@@ -2015,13 +2002,18 @@ def previous_day_util(arr0, arr1):
     scalar_text = f"arg1_trimmed = arg1.lstrip()[:2].lower()\n"
     if is_input_tz_aware:
         arg0_timestamp = "arg0"
+    elif is_date:
+        arg0_timestamp = "pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day)"
     else:
         arg0_timestamp = "bodo.utils.conversion.box_if_dt64(arg0)"
     scalar_text += f"new_timestamp = {arg0_timestamp}.normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed])\n"
-    # The output is suppose to be a date. Since we output a Timestamp still we need to make it naive.
-    scalar_text += f"res[i] = {unbox_str}(new_timestamp.tz_localize(None))\n"
+    scalar_text += f"res[i] = new_timestamp.date()\n"
 
-    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    out_dtype = (
+        DatetimeDateArrayType()
+        if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
+        else types.Array(bodo.datetime64ns, 1, "C")
+    )
 
     return gen_vectorized(
         arg_names,
