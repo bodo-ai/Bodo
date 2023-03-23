@@ -374,3 +374,21 @@ stages:
       matrix:
         TEST_2P:
           NP: 2
+
+# Maven unit tests
+- stage: Test_BodoSQL_Maven
+  displayName: 'Test BodoSQL Maven unit tests'
+  dependsOn: []
+  jobs:
+
+  - template: buildscripts/bodosql/azure/azure-test-mvn-linux.yml
+    parameters:
+      # NOTE: a few of these parameters may not actually be used.
+      # I'm uncertain which are/aren't used by the helper bash
+      # scripts, so I've decided to just leave them in for now for
+      # saftey.
+      name: BODOSQL_maven_unit_tests
+      vmImage: ubuntu-latest
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: build_bodo_sql
+      PYTHON_VERSION: 3.10

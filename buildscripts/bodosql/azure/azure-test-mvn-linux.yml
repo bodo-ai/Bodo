@@ -1,0 +1,41 @@
+parameters:
+  name: ''
+  vmImage: ''
+  CONDA_ENV: ''
+  BODO_CHANNEL_NAME: ''
+  PYTHON_VERSION: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  variables:
+    - group: SnowflakeCredentials
+  timeoutInMinutes: 360
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+
+  steps:
+
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.9'
+    displayName: 'Use Python $(python.version)'
+
+
+  - script: |
+      set -eo pipefail
+      # NOTE: this installs mvn in the env, which is all that is needed.
+      # In the future, we could make a custom script that would omit
+      # the uneeded installs, but this is likely a very minor speedup
+      # relative to the amount of time it would take to write/debug.
+      ./buildscripts/bodosql/install.sh
+    env:
+      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
+      PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
+    displayName: 'Download miniconda and create conda env'
+
+  - script: |
+      set -eo pipefail
+      cd $(System.DefaultWorkingDirectory)/BodoSQL/calcite_sql/
+      mvn '-Dtest=com.bodosql.calcite.application.*Test' test
+    displayName: 'Run maven tests for BodoSQL'
+
