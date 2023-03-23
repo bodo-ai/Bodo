@@ -463,6 +463,9 @@ def test_nbytes(memory_leak_check):
     check_func(
         impl,
         (A,),
+        # Number of may vary depdending on distribution,
+        # so we elect to only test with 1DVar
+        only_1DVar=True,
         py_output=py_output,
         use_dict_encoded_strings=bodo.hiframes.boxing._use_dict_str_type,
     )
