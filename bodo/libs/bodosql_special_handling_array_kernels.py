@@ -3,7 +3,6 @@
 Implements array kernels that are specific to BodoSQL. These kernels require special codegen
 that cannot be done through the the normal gen_vectorized path
 """
-import numpy as np
 from numba.core import types
 from numba.extending import overload
 
@@ -89,7 +88,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
         def impl(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
             # code modified from overload_series_isin
             n = len(arr_to_check)
-            out_arr = np.empty(n, np.bool_)
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
 
             bodo.libs.array.array_isin(
                 out_arr, arr_to_check, arr_search_vals, is_parallel
@@ -97,15 +96,12 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
 
             # apply the null mask from arr_to_check to out_arr to match SQL behavior
             # TODO: only do this null setting in the case that arr_to_check is nullable
-            # TODO: directly copy/clone the whole bit mask from arr_to_check to out_arr using init_bool_array
-            out_arr_nullable = bodo.libs.bool_arr_ext.alloc_bool_array(n)
-            for i in range(len(arr_to_check)):
+            # TODO: directly copy/clone the whole bit mask
+            for i in range(n):
                 if bodo.libs.array_kernels.isna(arr_to_check, i):
-                    bodo.libs.array_kernels.setna(out_arr_nullable, i)
-                else:
-                    out_arr_nullable[i] = out_arr[i]
+                    bodo.libs.array_kernels.setna(out_arr, i)
 
-            return out_arr_nullable
+            return out_arr
 
         return impl
     elif arr_to_check == bodo.dict_str_arr_type:
@@ -128,7 +124,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
         def impl(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
             # code modified from overload_series_isin
             n = len(arr_to_check)
-            out_arr = np.empty(n, np.bool_)
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
 
             arr_search_vals = bodo.libs.str_arr_ext.str_arr_to_dict_str_arr(
                 arr_search_vals
@@ -140,15 +136,12 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
 
             # apply the null mask from arr_to_check to out_arr to match SQL behavior
             # TODO: only do this null setting in the case that arr_to_check is nullable
-            # TODO: directly copy/clone the whole bit mask from arr_to_check to out_arr using init_bool_array
-            out_arr_nullable = bodo.libs.bool_arr_ext.alloc_bool_array(n)
-            for i in range(len(arr_to_check)):
+            # TODO: directly copy/clone the whole bit mask from arr_to_check
+            for i in range(n):
                 if bodo.libs.array_kernels.isna(arr_to_check, i):
-                    bodo.libs.array_kernels.setna(out_arr_nullable, i)
-                else:
-                    out_arr_nullable[i] = out_arr[i]
+                    bodo.libs.array_kernels.setna(out_arr, i)
 
-            return out_arr_nullable
+            return out_arr
 
         return impl
 
@@ -186,7 +179,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
         def impl(arr_to_check, arr_search_vals, is_parallel=False):  # pragma: no cover
             # code modified from overload_series_isin
             n = len(arr_to_check)
-            out_arr = np.empty(n, np.bool_)
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
 
             # NOTE: array_isin requires that the array_infos are equal, which means that we have to
             # convert both arrays to the same type if one is not nullable, or we need to do up casting
@@ -203,15 +196,12 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
 
             # apply the null mask from arr_to_check to out_arr to match SQL behavior
             # TODO: only do this null setting in the case that arr_to_check is nullable
-            # TODO: directly copy/clone the whole bit mask from arr_to_check to out_arr using init_bool_array
-            out_arr_nullable = bodo.libs.bool_arr_ext.alloc_bool_array(n)
-            for i in range(len(arr_to_check)):
+            # TODO: directly copy/clone the whole bit mask from arr_to_check
+            for i in range(n):
                 if bodo.libs.array_kernels.isna(arr_to_check, i):
-                    bodo.libs.array_kernels.setna(out_arr_nullable, i)
-                else:
-                    out_arr_nullable[i] = out_arr[i]
+                    bodo.libs.array_kernels.setna(out_arr, i)
 
-            return out_arr_nullable
+            return out_arr
 
         return impl
     elif is_scalar_type(arr_to_check):
@@ -227,7 +217,7 @@ def is_in_util_overload(arr_to_check, arr_search_vals, is_parallel=False):
                 common_scalar_typ,
             )
 
-            out_arr = np.empty(1, np.bool_)
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(1)
             bodo.libs.array.array_isin(
                 out_arr, arr_to_check, arr_search_vals, is_parallel
             )

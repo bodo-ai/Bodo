@@ -3394,7 +3394,7 @@ def overload_index_difference(I, other, sort=None):
         # than just calling array_isin with A2.
         unique_A1 = bodo.libs.array_kernels.unique(A1)
         unique_A2 = bodo.libs.array_kernels.unique(A2)
-        mask = np.empty(len(unique_A1), np.bool_)
+        mask = bodo.libs.bool_arr_ext.alloc_false_bool_array(len(unique_A1))
         bodo.libs.array.array_isin(mask, unique_A1, unique_A2, False)
         return constructor(unique_A1[~mask], None)
 
@@ -3451,8 +3451,8 @@ def overload_index_symmetric_difference(I, other, result_name=None, sort=None):
         A2 = bodo.utils.conversion.coerce_to_array(other)
         unique_A1 = bodo.libs.array_kernels.unique(A1)
         unique_A2 = bodo.libs.array_kernels.unique(A2)
-        mask1 = np.empty(len(unique_A1), np.bool_)
-        mask2 = np.empty(len(unique_A2), np.bool_)
+        mask1 = bodo.libs.bool_arr_ext.alloc_false_bool_array(len(unique_A1))
+        mask2 = bodo.libs.bool_arr_ext.alloc_false_bool_array(len(unique_A2))
         bodo.libs.array.array_isin(mask1, unique_A1, unique_A2, False)
         bodo.libs.array.array_isin(mask2, unique_A2, unique_A1, False)
         combined_arr = bodo.libs.array_kernels.concat(
@@ -5526,15 +5526,15 @@ def overload_index_isin(I, values):
             values_arr = bodo.utils.conversion.coerce_to_array(values)
             A = bodo.hiframes.pd_index_ext.get_index_data(I)
             n = len(A)
-            out_arr = np.empty(n, np.bool_)
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
             bodo.libs.array.array_isin(out_arr, A, values_arr, False)
             return out_arr
 
         return impl_arr
 
     # 'values' should be a set or list, TODO: support other list-likes such as Array
-    if not isinstance(values, (types.Set, types.List)):
-        raise BodoError("Series.isin(): 'values' parameter should be a set or a list")
+    if not isinstance(values, (types.Set, types.List)):  # pragma: no cover
+        raise BodoError("Index.isin(): 'values' parameter should be a set or a list")
 
     def impl(I, values):  # pragma: no cover
         A = bodo.hiframes.pd_index_ext.get_index_data(I)
@@ -5554,7 +5554,7 @@ def overload_range_index_isin(I, values):
             values_arr = bodo.utils.conversion.coerce_to_array(values)
             A = np.arange(I.start, I.stop, I.step)
             n = len(A)
-            out_arr = np.empty(n, np.bool_)
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
             # TODO: design special kernel operator at C++ level to optimize
             # this operation just for ranges [BE-2836]
             bodo.libs.array.array_isin(out_arr, A, values_arr, False)
