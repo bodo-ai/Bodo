@@ -624,8 +624,8 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
 
         out_array = new array_info(
             bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1,
-            -1, NULL, NULL, NULL, bodo_indices->null_bitmask, NULL, NULL, NULL,
-            NULL, 0, 0, 0, false, false, false, bodo_dictionary, bodo_indices);
+            -1, NULL, NULL, NULL, bodo_indices->null_bitmask, NULL, {}, NULL, 0,
+            0, 0, false, false, false, bodo_dictionary, bodo_indices);
 
         all_chunks.clear();
         return out_array;
@@ -713,8 +713,8 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         // dictionary.
         out_array = new array_info(
             bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1,
-            -1, NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL,
-            NULL, 0, 0, 0, false, /*_has_deduped_local_dictionary=*/true, false,
+            -1, NULL, NULL, NULL, indices_arr->null_bitmask, NULL, {}, NULL, 0,
+            0, 0, false, /*_has_deduped_local_dictionary=*/true, false,
             dict_arr, indices_arr);
         return out_array;
     }
@@ -885,7 +885,7 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
         out_array = new array_info(
             bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
             out_arrow_array->length(), -1, -1, NULL, NULL, NULL, NULL, NULL,
-            /*meminfo TODO*/ NULL, NULL, out_arrow_array);
+            /*meminfo TODO*/ {}, out_arrow_array);
         return out_array;
     }
 

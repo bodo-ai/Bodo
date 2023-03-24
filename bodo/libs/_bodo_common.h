@@ -249,8 +249,11 @@ struct array_info {
     char* data3;
     char* null_bitmask;      // for nullable arrays like strings
     char* sub_null_bitmask;  // for second level nullable like list-string
-    NRT_MemInfo* meminfo;
-    NRT_MemInfo* meminfo_bitmask;
+
+    // Data buffer meminfos for this array, e.g. data/offsets/null_bitmap for
+    // string array. Last element is always the null bitmap buffer.
+    std::vector<NRT_MemInfo*> meminfos;
+
     std::shared_ptr<arrow::Array> array;
     int32_t precision;                  // for array of decimals and times
     int32_t scale;                      // for array of decimals
@@ -260,21 +263,18 @@ struct array_info {
     bool has_sorted_dictionary;         // for dict-encoded arrays
     array_info* info1;                  // for dict-encoded arrays
     array_info* info2;                  // for dict-encoded arrays
-    // TODO: shape/stride for multi-dim arrays
-    explicit array_info(bodo_array_type::arr_type_enum _arr_type,
-                        Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
-                        int64_t _n_sub_elems, int64_t _n_sub_sub_elems,
-                        char* _data1, char* _data2, char* _data3,
-                        char* _null_bitmask, char* _sub_null_bitmask,
-                        NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask,
-                        std::shared_ptr<arrow::Array> _array = nullptr,
-                        int32_t _precision = 0, int32_t _scale = 0,
-                        int64_t _num_categories = 0,
-                        bool _has_global_dictionary = false,
-                        bool _has_deduped_local_dictionary = false,
-                        bool _has_sorted_dictionary = false,
-                        array_info* _info1 = nullptr,
-                        array_info* _info2 = nullptr)
+
+    explicit array_info(
+        bodo_array_type::arr_type_enum _arr_type, Bodo_CTypes::CTypeEnum _dtype,
+        int64_t _length, int64_t _n_sub_elems, int64_t _n_sub_sub_elems,
+        char* _data1, char* _data2, char* _data3, char* _null_bitmask,
+        char* _sub_null_bitmask, std::vector<NRT_MemInfo*> _meminfos,
+        std::shared_ptr<arrow::Array> _array = nullptr, int32_t _precision = 0,
+        int32_t _scale = 0, int64_t _num_categories = 0,
+        bool _has_global_dictionary = false,
+        bool _has_deduped_local_dictionary = false,
+        bool _has_sorted_dictionary = false, array_info* _info1 = nullptr,
+        array_info* _info2 = nullptr)
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -285,8 +285,6 @@ struct array_info {
           data3(_data3),
           null_bitmask(_null_bitmask),
           sub_null_bitmask(_sub_null_bitmask),
-          meminfo(_meminfo),
-          meminfo_bitmask(_meminfo_bitmask),
           array(_array),
           precision(_precision),
           scale(_scale),
@@ -295,7 +293,9 @@ struct array_info {
           has_deduped_local_dictionary(_has_deduped_local_dictionary),
           has_sorted_dictionary(_has_sorted_dictionary),
           info1(_info1),
-          info2(_info2) {}
+          info2(_info2) {
+        this->meminfos = std::move(_meminfos);
+    }
 
     template <typename T>
     T& at(size_t idx) {

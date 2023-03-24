@@ -493,8 +493,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
 
         out_arr = new array_info(
             bodo_array_type::DICT, in_arr->dtype, out_indices->length, -1, -1,
-            NULL, NULL, NULL, out_indices->null_bitmask, NULL, NULL, NULL, NULL,
-            0, 0, 0, in_arr->has_global_dictionary,
+            NULL, NULL, NULL, out_indices->null_bitmask, NULL, {}, NULL, 0, 0,
+            0, in_arr->has_global_dictionary,
             in_arr->has_deduped_local_dictionary, in_arr->has_sorted_dictionary,
             in_arr->info1, out_indices);
         // input and output share the same dictionary array
@@ -584,7 +584,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
         out_arr =
             new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
                            nRowOut, -1, -1, NULL, NULL, NULL, NULL, NULL,
-                           /*meminfo TODO*/ NULL, NULL, out_arrow_array);
+                           /*meminfo TODO*/ {}, out_arrow_array);
     }
     out_arr->precision = in_arr->precision;
     return out_arr;
@@ -779,10 +779,9 @@ array_info* RetrieveArray_TwoColumns(
         }
         out_arr = new array_info(
             bodo_array_type::DICT, arr1->dtype, out_indices->length, -1, -1,
-            NULL, NULL, NULL, out_indices->null_bitmask, NULL, NULL, NULL, NULL,
-            0, 0, 0, arr1->has_global_dictionary,
-            arr1->has_deduped_local_dictionary, arr1->has_sorted_dictionary,
-            arr1->info1, out_indices);
+            NULL, NULL, NULL, out_indices->null_bitmask, NULL, {}, NULL, 0, 0,
+            0, arr1->has_global_dictionary, arr1->has_deduped_local_dictionary,
+            arr1->has_sorted_dictionary, arr1->info1, out_indices);
         incref_array(arr1->info1);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -881,7 +880,7 @@ array_info* RetrieveArray_TwoColumns(
         out_arr =
             new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
                            nRowOut, -1, -1, NULL, NULL, NULL, NULL, NULL,
-                           /*meminfo TODO*/ NULL, NULL, out_arrow_array);
+                           /*meminfo TODO*/ {}, out_arrow_array);
     }
     return out_arr;
 };
@@ -2081,18 +2080,16 @@ void DEBUG_PrintRefct(std::ostream& os,
            << " dtype=" << GetDtype_as_string(ListArr[iCol]->dtype);
         if (ListArr[iCol]->arr_type == bodo_array_type::DICT) {
             // Print details from info1 and info2 in the dict case.
-            os << " : info1 meminfo="
-               << GetNRTinfo(ListArr[iCol]->info1->meminfo)
-               << " info1 meminfo_bitmask="
-               << GetNRTinfo(ListArr[iCol]->info1->meminfo_bitmask)
-               << " : info2 meminfo="
-               << GetNRTinfo(ListArr[iCol]->info2->meminfo)
-               << " info2 meminfo_bitmask="
-               << GetNRTinfo(ListArr[iCol]->info2->meminfo_bitmask) << "\n";
+            for (MemInfo* meminfo : ListArr[iCol]->info1->meminfos) {
+                os << " : info1 meminfo=" << GetNRTinfo(meminfo) << "\n";
+            }
+            for (MemInfo* meminfo : ListArr[iCol]->info2->meminfos) {
+                os << " : info2 meminfo=" << GetNRTinfo(meminfo) << "\n";
+            }
         } else {
-            os << " : meminfo=" << GetNRTinfo(ListArr[iCol]->meminfo)
-               << " meminfo_bitmask="
-               << GetNRTinfo(ListArr[iCol]->meminfo_bitmask) << "\n";
+            for (MemInfo* meminfo : ListArr[iCol]->meminfos) {
+                os << " : meminfo=" << GetNRTinfo(meminfo) << "\n";
+            }
         }
     }
 }

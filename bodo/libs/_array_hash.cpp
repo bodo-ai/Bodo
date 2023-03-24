@@ -1423,7 +1423,7 @@ void replace_dict_arr_indices(array_info* arr,
     // Update the indices for this array. If there is only one reference to
     // the dict_array remaining we can update the array inplace without
     // allocating a new array.
-    bool inplace = (arr->info2->meminfo->refct == 1);
+    bool inplace = (arr->info2->meminfos[0]->refct == 1);
     if (!inplace) {
         array_info* indices = copy_array(arr->info2);
         delete_info_decref_array(arr->info2);
