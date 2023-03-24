@@ -897,7 +897,7 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
                        MPI_COMM_WORLD);
         convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data3,
                                   (size_t)out_arr->length);
-        lens.resize(out_arr->n_sub_elems);
+        lens.resize(out_arr->n_sub_elems());
         // data_offsets
         bodo_alltoallv(send_arr->data2, send_count_sub, send_disp_sub, mpi_typ,
                        lens.data(), recv_count_sub, recv_disp_sub, mpi_typ,
@@ -1419,7 +1419,7 @@ table_info* shuffle_table_kernel(table_info* in_table,
             NRT_MemInfo* meminfo = NULL;
             out_arr = new array_info(
                 bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_items,
-                -1, -1, NULL, NULL, NULL, NULL, NULL, {meminfo}, out_array);
+                NULL, NULL, NULL, NULL, NULL, {meminfo}, out_array);
         }
         // release reference of input array
         // This is a steal reference case. The idea is to release memory as
@@ -1431,9 +1431,9 @@ table_info* shuffle_table_kernel(table_info* in_table,
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
             array_info* out_dict_arr = new array_info(
-                bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1, -1,
-                NULL, NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0,
-                0, true, true, in_arr->has_sorted_dictionary, in_arr->info1,
+                bodo_array_type::DICT, in_arr->dtype, out_arr->length, NULL,
+                NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+                true, true, in_arr->has_sorted_dictionary, in_arr->info1,
                 out_arr);
             // info1 is dictionary. incref so it doesn't get deleted since
             // it is given to the output array
@@ -1820,9 +1820,9 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table,
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
             array_info* out_dict_arr = new array_info(
-                bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1, -1,
-                NULL, NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0,
-                0, true, true, in_arr->has_sorted_dictionary, in_arr->info1,
+                bodo_array_type::DICT, in_arr->dtype, out_arr->length, NULL,
+                NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+                true, true, in_arr->has_sorted_dictionary, in_arr->info1,
                 out_arr);
             // info1 is dictionary. incref so it doesn't get deleted since
             // it is given to the output array
@@ -2272,8 +2272,8 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             arr_bcast[0] = in_arr->length;
             arr_bcast[1] = in_arr->dtype;
             arr_bcast[2] = in_arr->arr_type;
-            arr_bcast[3] = in_arr->n_sub_elems;
-            arr_bcast[4] = in_arr->n_sub_sub_elems;
+            arr_bcast[3] = in_arr->n_sub_elems();
+            arr_bcast[4] = in_arr->n_sub_sub_elems();
             arr_bcast[5] = in_arr->num_categories;
             arr_bcast[6] = (int64_t)in_arr->precision;
         }
@@ -2298,9 +2298,9 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             uint64_t n_rows = array->length();
             NRT_MemInfo* meminfo = NULL;
             out_arr = new array_info(bodo_array_type::ARROW,
-                                     Bodo_CTypes::INT8 /*dummy*/, n_rows, -1,
-                                     -1, NULL, NULL, NULL, NULL, NULL,
-                                     {meminfo}, array, /*precision=*/precision);
+                                     Bodo_CTypes::INT8 /*dummy*/, n_rows, NULL,
+                                     NULL, NULL, NULL, NULL, {meminfo}, array,
+                                     /*precision=*/precision);
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||
@@ -2383,9 +2383,9 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             array_info* dict_arr = ref_table->columns[i_col]->info1;
             // Create a DICT out_arr
             out_arr = new array_info(
-                bodo_array_type::DICT, dict_arr->dtype, out_arr->length, -1, -1,
-                NULL, NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0,
-                0, /*has_global_dictionary=*/true,
+                bodo_array_type::DICT, dict_arr->dtype, out_arr->length, NULL,
+                NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+                /*has_global_dictionary=*/true,
                 /*has_deduped_local_dictionary=*/true,
                 ref_table->columns[i_col]->has_sorted_dictionary, dict_arr,
                 out_arr);
@@ -2742,8 +2742,8 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             in_arr = in_arr->info2;
         }
         int64_t n_rows = in_arr->length;
-        int64_t n_sub_elems = in_arr->n_sub_elems;
-        int64_t n_sub_sub_elems = in_arr->n_sub_sub_elems;
+        int64_t n_sub_elems = in_arr->n_sub_elems();
+        int64_t n_sub_sub_elems = in_arr->n_sub_sub_elems();
         arr_gath_s[0] = n_rows;
         arr_gath_s[1] = n_sub_elems;
         arr_gath_s[2] = n_sub_sub_elems;
@@ -2774,7 +2774,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 n_rows_tot = out_array->length();
             out_arr = new array_info(
                 bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows_tot,
-                -1, -1, NULL, NULL, NULL, NULL, NULL, {meminfo}, out_array);
+                NULL, NULL, NULL, NULL, NULL, {meminfo}, out_array);
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||
@@ -3010,9 +3010,8 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             in_arr = in_table->columns[i_col];
             if (all_gather || myrank == mpi_root) {
                 out_arr = new array_info(
-                    bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1,
-                    -1, NULL, NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL,
-                    0, 0, 0,
+                    bodo_array_type::DICT, in_arr->dtype, out_arr->length, NULL,
+                    NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
                     /*has_global_dictionary=*/true,
                     /*has_deduped_local_dictionary=*/true,
                     in_arr->has_sorted_dictionary, in_arr->info1, out_arr);

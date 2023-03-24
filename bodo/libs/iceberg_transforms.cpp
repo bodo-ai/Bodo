@@ -295,9 +295,10 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
         } else if (in_arr->dtype == Bodo_CTypes::INT32) {
             // in case of int32, we need to cast to int64 before hashing
             // (https://iceberg.apache.org/spec/#appendix-b-32-bit-hash-requirements)
-            array_info* int64_arr = alloc_array(
-                in_arr->length, in_arr->n_sub_elems, in_arr->n_sub_sub_elems,
-                in_arr->arr_type, Bodo_CTypes::INT64, 0, 0);
+            array_info* int64_arr =
+                alloc_array(in_arr->length, in_arr->n_sub_elems(),
+                            in_arr->n_sub_sub_elems(), in_arr->arr_type,
+                            Bodo_CTypes::INT64, 0, 0);
             if (in_arr->null_bitmask) {
                 // Copy the null bitmask if it exists for the arr type
                 memcpy(int64_arr->null_bitmask, in_arr->null_bitmask, n_bytes);
@@ -450,8 +451,8 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
         // it's just a truncation. It might not have all
         // unique elements though.
         out_arr = new array_info(
-            bodo_array_type::DICT, in_arr->dtype, in_arr->length, -1, -1, NULL,
-            NULL, NULL, indices_copy->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+            bodo_array_type::DICT, in_arr->dtype, in_arr->length, NULL, NULL,
+            NULL, indices_copy->null_bitmask, NULL, {}, NULL, 0, 0, 0,
             in_arr->has_global_dictionary, in_arr->has_deduped_local_dictionary,
             in_arr->has_sorted_dictionary, trunc_dict_data_arr, indices_copy);
         return out_arr;

@@ -216,7 +216,7 @@ void apply_sum_to_column_string(array_info* in_col, array_info* out_col,
     // allocate output array (length is number of groups, number of chars same
     // as input)
     size_t num_groups = grp_info.num_groups;
-    int64_t n_chars = in_col->n_sub_elems;
+    int64_t n_chars = in_col->n_sub_elems();
     array_info* out_arr = alloc_string_array(num_groups, n_chars, 0);
     size_t n_bytes = (num_groups + 7) >> 3;
     memset(out_arr->null_bitmask, 0xff, n_bytes);  // null not possible

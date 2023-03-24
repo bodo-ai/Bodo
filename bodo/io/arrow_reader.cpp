@@ -623,9 +623,9 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         array_info* bodo_indices = indices_builder.get_output();
 
         out_array = new array_info(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1,
-            -1, NULL, NULL, NULL, bodo_indices->null_bitmask, NULL, {}, NULL, 0,
-            0, 0, false, false, false, bodo_dictionary, bodo_indices);
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, NULL,
+            NULL, NULL, bodo_indices->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+            false, false, false, bodo_dictionary, bodo_indices);
 
         all_chunks.clear();
         return out_array;
@@ -712,10 +712,10 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         // dictionary ourselves and made sure not to put nulls in the
         // dictionary.
         out_array = new array_info(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1,
-            -1, NULL, NULL, NULL, indices_arr->null_bitmask, NULL, {}, NULL, 0,
-            0, 0, false, /*_has_deduped_local_dictionary=*/true, false,
-            dict_arr, indices_arr);
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, NULL,
+            NULL, NULL, indices_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+            false, /*_has_deduped_local_dictionary=*/true, false, dict_arr,
+            indices_arr);
         return out_array;
     }
 
@@ -884,7 +884,7 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
         arrays.clear();  // memory of each array will be freed now
         out_array = new array_info(
             bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-            out_arrow_array->length(), -1, -1, NULL, NULL, NULL, NULL, NULL,
+            out_arrow_array->length(), NULL, NULL, NULL, NULL, NULL,
             /*meminfo TODO*/ {}, out_arrow_array);
         return out_array;
     }

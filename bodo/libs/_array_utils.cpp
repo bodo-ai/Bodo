@@ -492,11 +492,10 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
             in_indices, in_arr_idxs, nRowOut);
 
         out_arr = new array_info(
-            bodo_array_type::DICT, in_arr->dtype, out_indices->length, -1, -1,
-            NULL, NULL, NULL, out_indices->null_bitmask, NULL, {}, NULL, 0, 0,
-            0, in_arr->has_global_dictionary,
-            in_arr->has_deduped_local_dictionary, in_arr->has_sorted_dictionary,
-            in_arr->info1, out_indices);
+            bodo_array_type::DICT, in_arr->dtype, out_indices->length, NULL,
+            NULL, NULL, out_indices->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+            in_arr->has_global_dictionary, in_arr->has_deduped_local_dictionary,
+            in_arr->has_sorted_dictionary, in_arr->info1, out_indices);
         // input and output share the same dictionary array
         incref_array(in_arr->info1);
     }
@@ -583,7 +582,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
         (void)builder->Finish(&out_arrow_array);
         out_arr =
             new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                           nRowOut, -1, -1, NULL, NULL, NULL, NULL, NULL,
+                           nRowOut, NULL, NULL, NULL, NULL, NULL,
                            /*meminfo TODO*/ {}, out_arrow_array);
     }
     out_arr->precision = in_arr->precision;
@@ -778,9 +777,9 @@ array_info* RetrieveArray_TwoColumns(
             out_indices->set_null_bit(iRow, bit);
         }
         out_arr = new array_info(
-            bodo_array_type::DICT, arr1->dtype, out_indices->length, -1, -1,
-            NULL, NULL, NULL, out_indices->null_bitmask, NULL, {}, NULL, 0, 0,
-            0, arr1->has_global_dictionary, arr1->has_deduped_local_dictionary,
+            bodo_array_type::DICT, arr1->dtype, out_indices->length, NULL, NULL,
+            NULL, out_indices->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+            arr1->has_global_dictionary, arr1->has_deduped_local_dictionary,
             arr1->has_sorted_dictionary, arr1->info1, out_indices);
         incref_array(arr1->info1);
     }
@@ -879,7 +878,7 @@ array_info* RetrieveArray_TwoColumns(
         (void)builder->Finish(&out_arrow_array);
         out_arr =
             new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                           nRowOut, -1, -1, NULL, NULL, NULL, NULL, NULL,
+                           nRowOut, NULL, NULL, NULL, NULL, NULL,
                            /*meminfo TODO*/ {}, out_arrow_array);
     }
     return out_arr;

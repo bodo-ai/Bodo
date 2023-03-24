@@ -1083,9 +1083,9 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
     out_offsets[num_dict_strs] = static_cast<offset_t>(total_dict_chars);
 
     return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-                          arr_len, -1, -1, NULL, NULL, NULL,
-                          indices_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
-                          false, false, false, values_arr, indices_arr);
+                          arr_len, NULL, NULL, NULL, indices_arr->null_bitmask,
+                          NULL, {}, NULL, 0, 0, 0, false, false, false,
+                          values_arr, indices_arr);
 }
 
 // Inspired by the Cpython implementation
