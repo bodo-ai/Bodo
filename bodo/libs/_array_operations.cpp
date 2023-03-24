@@ -2157,9 +2157,6 @@ array_info* get_replace_regex_slice(array_info* in_arr, char const* const pat,
         out_arr->set_null_bit(outRow, bit);
         out_data2[outRow + 1] = out_offset + num_chars;
     }
-    // Update the actual number of characters since there may be fewer than we
-    // allocated. This is necessary if we shuffle data.
-    out_arr->n_sub_elems = out_data2[out_arr_len] - out_data2[0];
     return out_arr;
 }
 
@@ -2215,7 +2212,7 @@ array_info* get_replace_regex(array_info* in_arr, char const* const pat,
         }
         array_info* new_indices = copy_array(indices_arr);
         out_arr = new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
-                                 in_arr->length, -1, -1, NULL, NULL, NULL,
+                                 in_arr->length, NULL, NULL, NULL,
                                  new_indices->null_bitmask, NULL, {}, NULL, 0,
                                  0, 0, in_arr->has_global_dictionary,
                                  false,  // Note replace can create collisions.

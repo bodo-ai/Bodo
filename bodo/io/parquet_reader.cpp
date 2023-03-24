@@ -293,7 +293,7 @@ void ParquetReader::read_all(TableBuilder& builder) {
         // column from the indices array and dictionary
         this->input_file_name_col_arr = new array_info(
             bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, this->count,
-            -1, -1, NULL, NULL, NULL,
+            NULL, NULL, NULL,
             this->input_file_name_col_indices_arr->null_bitmask, NULL, {}, NULL,
             0, 0, 0, false, false, false, this->input_file_name_col_dict_arr,
             this->input_file_name_col_indices_arr);
