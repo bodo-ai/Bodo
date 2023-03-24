@@ -687,8 +687,8 @@ array_info *arrow_array_to_bodo(std::shared_ptr<arrow::Array> arrow_arr) {
     payload->offsets = offsets_payload;
     payload->null_bitmap = null_bitmap_payload;
 
-    return new array_info(
-        bodo_array_type::STRING, Bodo_CTypes::STRING, n, n_chars, -1,
-        payload->data.data, (char *)payload->offsets.data, NULL,
-        (char *)payload->null_bitmap.data, NULL, {meminfo_array_item});
+    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, n,
+                          payload->data.data, (char *)payload->offsets.data,
+                          NULL, (char *)payload->null_bitmap.data, NULL,
+                          {meminfo_array_item});
 }

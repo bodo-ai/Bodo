@@ -252,9 +252,9 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
             nested_array_from_c(types, buffers, lengths, field_names, type_pos,
                                 buf_pos, length_pos, name_pos);
         // TODO: better memory management of struct, meminfo refcount?
-        return new array_info(
-            bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, lengths[0], -1,
-            -1, NULL, NULL, NULL, NULL, NULL, {meminfo}, ai.array);
+        return new array_info(bodo_array_type::ARROW,
+                              Bodo_CTypes::INT8 /*dummy*/, lengths[0], NULL,
+                              NULL, NULL, NULL, NULL, {meminfo}, ai.array);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -267,25 +267,22 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
 
     array_item_arr_numpy_payload* sub_payload =
         (array_item_arr_numpy_payload*)payload->data->data;
-    int64_t n_strings = sub_payload->n_arrays;
-    int64_t n_chars = ((offset_t*)sub_payload->offsets.data)[n_strings];
 
     return new array_info(
         bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_items,
-        n_strings, n_chars, (char*)sub_payload->data.data,
-        (char*)sub_payload->offsets.data, (char*)payload->offsets.data,
-        (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap.data,
-        {meminfo});
+        (char*)sub_payload->data.data, (char*)sub_payload->offsets.data,
+        (char*)payload->offsets.data, (char*)payload->null_bitmap.data,
+        (char*)sub_payload->null_bitmap.data, {meminfo});
 }
 
-array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
-                                 char* offsets, char* null_bitmap,
-                                 NRT_MemInfo* meminfo, int is_bytes) {
+array_info* string_array_to_info(uint64_t n_items, char* data, char* offsets,
+                                 char* null_bitmap, NRT_MemInfo* meminfo,
+                                 int is_bytes) {
     // TODO: better memory management of struct, meminfo refcount?
     auto dtype = Bodo_CTypes::STRING;
     if (is_bytes) dtype = Bodo_CTypes::BINARY;
-    return new array_info(bodo_array_type::STRING, dtype, n_items, n_chars, -1,
-                          data, offsets, NULL, null_bitmap, NULL, {meminfo});
+    return new array_info(bodo_array_type::STRING, dtype, n_items, data,
+                          offsets, NULL, null_bitmap, NULL, {meminfo});
 }
 
 array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
@@ -294,8 +291,8 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
     // For now has_sorted_dictionary is only available and exposed in the C++
     // struct, so we set it to false
     return new array_info(
-        bodo_array_type::DICT, Bodo_CTypes::STRING, indices_arr->length, -1, -1,
-        NULL, NULL, NULL, indices_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+        bodo_array_type::DICT, Bodo_CTypes::STRING, indices_arr->length, NULL,
+        NULL, NULL, indices_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
         bool(has_global_dictionary), bool(has_deduped_local_dictionary), false,
         str_arr, indices_arr);
 }
@@ -324,8 +321,8 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                 NRT_MemInfo* meminfo) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NUMPY,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, NULL, NULL, {meminfo});
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
+                          NULL, NULL, NULL, {meminfo});
 }
 
 #undef DEBUG_CATEGORICAL
@@ -339,10 +336,9 @@ array_info* categorical_array_to_info(uint64_t n_items, char* data,
               << "\n";
     std::cout << "typ_enum=" << typ_enum << "\n";
 #endif
-    return new array_info(bodo_array_type::CATEGORICAL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, NULL, NULL, {meminfo}, nullptr, 0,
-                          0, num_categories);
+    return new array_info(
+        bodo_array_type::CATEGORICAL, (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
+        data, NULL, NULL, NULL, NULL, {meminfo}, nullptr, 0, 0, num_categories);
 }
 
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -350,19 +346,17 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                    NRT_MemInfo* meminfo_bitmask) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, NULL,
-                          {meminfo, meminfo_bitmask});
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
+                          NULL, null_bitmap, NULL, {meminfo, meminfo_bitmask});
 }
 
 array_info* interval_array_to_info(uint64_t n_items, char* left_data,
                                    char* right_data, int typ_enum,
                                    NRT_MemInfo* left_meminfo,
                                    NRT_MemInfo* right_meminfo) {
-    return new array_info(bodo_array_type::INTERVAL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          left_data, right_data, NULL, NULL, NULL,
-                          {left_meminfo, right_meminfo});
+    return new array_info(
+        bodo_array_type::INTERVAL, (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
+        left_data, right_data, NULL, NULL, NULL, {left_meminfo, right_meminfo});
 }
 
 array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -371,9 +365,9 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   int32_t precision, int32_t scale) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, NULL,
-                          {meminfo, meminfo_bitmask}, NULL, precision, scale);
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
+                          NULL, null_bitmap, NULL, {meminfo, meminfo_bitmask},
+                          NULL, precision, scale);
 }
 
 array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -381,9 +375,9 @@ array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                NRT_MemInfo* meminfo_bitmask,
                                int32_t precision) {
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, NULL,
-                          {meminfo, meminfo_bitmask}, NULL, precision);
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
+                          NULL, null_bitmap, NULL, {meminfo, meminfo_bitmask},
+                          NULL, precision);
 }
 
 void info_to_list_string_array(array_info* info,

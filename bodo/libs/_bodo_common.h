@@ -208,14 +208,11 @@ inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
  * --- length is the number of rows.
  * Case of STRING:
  * --- The length is the number of rows.
- * --- The n_sub_elems is the total number of characters
  * --- data1 is for the characters
  * --- data2 is for the index offsets
  * --- null_bitmask is for the missing entries
  * Case of LIST_STRING:
  * --- The length is the number of rows.
- * --- The n_sub_elems is the total number of strings.
- * --- The n_sub_sub_elems is the total number of characters
  * --- data1 is the characters
  * --- data2 is for the data_offsets
  * --- data3 is for the index_offsets
@@ -238,10 +235,7 @@ struct array_info {
     Bodo_CTypes::CTypeEnum dtype;
     uint64_t length;  // number of elements in the array (not bytes) For DICT
                       // arrays this is the length of indices array
-    uint64_t n_sub_elems;  // number of sub-elements for variable length arrays,
-                           // e.g. characters in string array
-    uint64_t n_sub_sub_elems;  // second level of subelements (e.g. for the
-                               // list_string_array_type)
+
     // data1 is the main data pointer. some arrays have multiple data pointers
     // e.g. string offsets
     char* data1;
@@ -264,22 +258,22 @@ struct array_info {
     array_info* info1;                  // for dict-encoded arrays
     array_info* info2;                  // for dict-encoded arrays
 
-    explicit array_info(
-        bodo_array_type::arr_type_enum _arr_type, Bodo_CTypes::CTypeEnum _dtype,
-        int64_t _length, int64_t _n_sub_elems, int64_t _n_sub_sub_elems,
-        char* _data1, char* _data2, char* _data3, char* _null_bitmask,
-        char* _sub_null_bitmask, std::vector<NRT_MemInfo*> _meminfos,
-        std::shared_ptr<arrow::Array> _array = nullptr, int32_t _precision = 0,
-        int32_t _scale = 0, int64_t _num_categories = 0,
-        bool _has_global_dictionary = false,
-        bool _has_deduped_local_dictionary = false,
-        bool _has_sorted_dictionary = false, array_info* _info1 = nullptr,
-        array_info* _info2 = nullptr)
+    explicit array_info(bodo_array_type::arr_type_enum _arr_type,
+                        Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
+                        char* _data1, char* _data2, char* _data3,
+                        char* _null_bitmask, char* _sub_null_bitmask,
+                        std::vector<NRT_MemInfo*> _meminfos,
+                        std::shared_ptr<arrow::Array> _array = nullptr,
+                        int32_t _precision = 0, int32_t _scale = 0,
+                        int64_t _num_categories = 0,
+                        bool _has_global_dictionary = false,
+                        bool _has_deduped_local_dictionary = false,
+                        bool _has_sorted_dictionary = false,
+                        array_info* _info1 = nullptr,
+                        array_info* _info2 = nullptr)
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
-          n_sub_elems(_n_sub_elems),
-          n_sub_sub_elems(_n_sub_sub_elems),
           data1(_data1),
           data2(_data2),
           data3(_data3),
@@ -295,6 +289,44 @@ struct array_info {
           info1(_info1),
           info2(_info2) {
         this->meminfos = std::move(_meminfos);
+    }
+
+    /**
+     * @brief return number of sub-elements for nested arrays:
+     * number of characters for strings arrays,
+     * number of strings for list of string arrays,
+     * number of sub-elements for array(item) arrays,
+     * -1 for other arrays which are non-nested.
+     *
+     * @return int64_t number of sub-elements
+     */
+    int64_t n_sub_elems() {
+        if (arr_type == bodo_array_type::STRING ||
+            arr_type == bodo_array_type::ARRAY_ITEM) {
+            offset_t* offsets = (offset_t*)data2;
+            return offsets[length];
+        }
+        if (arr_type == bodo_array_type::LIST_STRING) {
+            offset_t* offsets = (offset_t*)data3;
+            return offsets[length];
+        }
+        return -1;
+    }
+
+    /**
+     * @brief return number of sub-sub-elements for two-level nested arrays
+     * (only list of strings supported now): number of characters for list of
+     * strings arrays, -1 for other arrays.
+     *
+     * @return int64_t number of sub-elements
+     */
+    int64_t n_sub_sub_elems() {
+        if (arr_type == bodo_array_type::LIST_STRING) {
+            int64_t n_strings = n_sub_elems();
+            offset_t* offsets = (offset_t*)data2;
+            return offsets[n_strings];
+        }
+        return -1;
     }
 
     template <typename T>

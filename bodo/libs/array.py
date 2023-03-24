@@ -526,15 +526,10 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         null_bitmap = context.make_helper(
             builder, null_bitmap_arr_type, payload.null_bitmap
         ).data
-        num_total_chars = builder.zext(
-            builder.load(builder.gep(offsets, [payload.n_arrays])),
-            lir.IntType(64),
-        )
         is_bytes = context.get_constant(types.int32, int(arr_type == binary_array_type))
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
-                lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(offset_type.bitwidth).as_pointer(),
@@ -550,7 +545,6 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
             fn_tp,
             [
                 payload.n_arrays,
-                num_total_chars,
                 data,
                 offsets,
                 null_bitmap,
