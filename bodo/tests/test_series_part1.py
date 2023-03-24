@@ -1943,7 +1943,7 @@ def test_series_getitem_array_bool(series_val, memory_leak_check):
         return S[[True, True, False, True, False]]
 
     def test_impl2(S, cond):
-        # using .values to test boolean_array
+        # using .values to test boolean_array_type
         return S[cond.values]
 
     # Make sure cond always matches length

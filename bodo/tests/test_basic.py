@@ -1315,7 +1315,7 @@ def test_parfor_empty_entry_block(memory_leak_check):
     """make sure CFG simplification can handle empty entry block corner case properly.
     See BodoSQL/bodosql/tests/test_named_param_df_apply.py::test_case
     """
-    out_arr_type = bodo.boolean_array
+    out_arr_type = bodo.boolean_array_type
 
     @bodo.jit
     def impl(arrs, n, b, c, d, e, f, g):

@@ -62,7 +62,7 @@ def contains_util(arr, pattern):
     verify_string_binary_arg(arr, "CONTAINS", "arr")
     verify_string_binary_arg(pattern, "CONTAINS", "pattern")
 
-    out_dtype = bodo.boolean_array
+    out_dtype = bodo.boolean_array_type
     arg_names = ["arr", "pattern"]
     arg_types = [arr, pattern]
     propagate_null = [True] * 2
@@ -833,7 +833,7 @@ def endswith_util(source, suffix):
     propagate_null = [True] * 2
     scalar_text = "res[i] = arg0.endswith(arg1)"
 
-    out_dtype = bodo.boolean_array
+    out_dtype = bodo.boolean_array_type
 
     return gen_vectorized(
         arg_names,
@@ -1376,7 +1376,7 @@ def startswith_util(source, prefix):
     propagate_null = [True] * 2
     scalar_text = "res[i] = arg0.startswith(arg1)"
 
-    out_dtype = bodo.boolean_array
+    out_dtype = bodo.boolean_array_type
 
     return gen_vectorized(
         arg_names,
@@ -1654,11 +1654,14 @@ def lower_util(arr):  # pragma: no cover
 def upper_util(arr):  # pragma: no cover
     pass
 
+
 def trim_util(source, chars):  # pragma: no cover
     pass
 
+
 def ltrim_util(source, chars):  # pragma: no cover
     pass
+
 
 def rtrim_util(source, chars):  # pragma: no cover
     pass
@@ -1678,7 +1681,9 @@ def create_trim_fn_overload(fn_name):
                 )
 
         func_text = "def impl(source, chars):\n"
-        func_text += f"  return bodo.libs.bodosql_array_kernels.{fn_name}_util(source, chars)"
+        func_text += (
+            f"  return bodo.libs.bodosql_array_kernels.{fn_name}_util(source, chars)"
+        )
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
 

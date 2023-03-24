@@ -1299,7 +1299,7 @@ def struct_arr_getitem(arr, ind):
 
     # Note nullable boolean arrays are handled in
     # bool_arr_ind_getitem to ensure NAs are converted to False.
-    if ind != bodo.boolean_array:
+    if ind != bodo.boolean_array_type:
         # other getitem cases return an array, so just call getitem on underlying arrays
         n_fields = len(arr.data)
         func_text = "def impl(arr, ind):\n"

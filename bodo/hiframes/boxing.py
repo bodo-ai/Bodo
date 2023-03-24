@@ -904,7 +904,7 @@ def _infer_series_arr_type(S, array_metadata=None):
         # always unbox boolean Series using nullable boolean array instead of Numpy
         # because some processes may have nulls, leading to inconsistent data types
         if arr_type == types.Array(types.bool_, 1, "C"):
-            arr_type = bodo.boolean_array
+            arr_type = bodo.boolean_array_type
 
         # We make all Series data arrays contiguous during unboxing to avoid type errors
         # see test_df_query_stringliteral_expr
@@ -1621,7 +1621,7 @@ def _infer_ndarray_obj_dtype(val):
     elif isinstance(first_val, (bytes, bytearray)):
         return binary_array_type
     elif isinstance(first_val, (bool, np.bool_)):
-        return bodo.libs.bool_arr_ext.boolean_array
+        return bodo.libs.bool_arr_ext.boolean_array_type
     elif isinstance(
         first_val,
         (

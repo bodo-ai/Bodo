@@ -87,7 +87,7 @@ def overload_coerce_to_ndarray(
         )  # pragma: no cover
 
     # nullable boolean array
-    if data == bodo.libs.bool_arr_ext.boolean_array and not is_overload_none(
+    if data == bodo.libs.bool_arr_ext.boolean_array_type and not is_overload_none(
         use_nullable_array
     ):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.get_bool_arr_data(
@@ -104,15 +104,20 @@ def overload_coerce_to_ndarray(
             )
         ):
             if data.dtype == types.bool_:
-                if data.layout != "C":
-                    return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
-                        np.ascontiguousarray(data),
-                        np.full((len(data) + 7) >> 3, 255, np.uint8),
-                    )  # pragma: no cover
-                else:
-                    return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
-                        data, np.full((len(data) + 7) >> 3, 255, np.uint8)
-                    )  # pragma: no cover
+
+                def impl(
+                    data,
+                    error_on_nonarray=True,
+                    use_nullable_array=None,
+                    scalar_to_arr_len=None,
+                ):  # pragma: no cover
+                    n = len(data)
+                    out_array = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                    for i in range(n):
+                        out_array[i] = data[i]
+                    return out_array
+
+                return impl
             elif (
                 isinstance(data.dtype, types.Float)
                 and bodo.libs.float_arr_ext._use_nullable_float
@@ -467,7 +472,7 @@ def overload_ndarray_if_nullable_arr(data):
                 bodo.libs.float_arr_ext.FloatingArrayType,
             ),
         )
-        or data == bodo.libs.bool_arr_ext.boolean_array
+        or data == bodo.libs.bool_arr_ext.boolean_array_type
     ):
         return lambda data: bodo.utils.conversion.coerce_to_ndarray(
             data
@@ -551,7 +556,7 @@ def overload_coerce_to_array(
         bodo.string_array_type,
         bodo.dict_str_arr_type,
         bodo.binary_array_type,
-        bodo.libs.bool_arr_ext.boolean_array,
+        bodo.libs.bool_arr_ext.boolean_array_type,
         bodo.hiframes.datetime_date_ext.datetime_date_array_type,
         bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
         bodo.hiframes.split_impl.string_array_split_view_type,
@@ -1941,7 +1946,7 @@ def nullable_bool_to_bool_na_false(arr):
 
 @overload(nullable_bool_to_bool_na_false)
 def overload_nullable_bool_to_bool_na_false(arr):
-    if arr == bodo.boolean_array:
+    if arr == bodo.boolean_array_type:
 
         def impl(arr):  # pragma: no cover
             output_arr = bodo.libs.bool_arr_ext.get_bool_arr_data(arr)

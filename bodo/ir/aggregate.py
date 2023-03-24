@@ -1339,7 +1339,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         float_typ_name = str(t.dtype).capitalize()
         return f"bodo.hiframes.pd_series_ext.get_series_data(pd.Series([1.0], dtype='{float_typ_name}'))"
     elif isinstance(t, BooleanArrayType):
-        return "bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))"
+        return "bodo.libs.bool_arr_ext.alloc_bool_array(0)"
     elif isinstance(t, StringArrayType):
         return "pre_alloc_string_array(1, 1)"
     elif t == bodo.dict_str_arr_type:
@@ -2013,7 +2013,7 @@ def gen_top_level_agg_func(
     else:
         # if there are no udfs we don't need udf table, so just create
         # an empty one-column table
-        func_text += "    udf_table_dummy = arr_info_list_to_table([array_to_info(np.empty(1))])\n"
+        func_text += "    udf_table_dummy = arr_info_list_to_table([array_to_info(np.empty(1, dtype=np.int64))])\n"
         func_text += "    cpp_cb_update_addr = 0\n"
         func_text += "    cpp_cb_combine_addr = 0\n"
         func_text += "    cpp_cb_eval_addr = 0\n"

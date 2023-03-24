@@ -34,7 +34,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.time_ext import TimeArrayType, TimeType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.float_arr_ext import FloatingArrayType
@@ -260,7 +260,7 @@ def _get_numba_typ_from_pa_typ(
     arr_typ = string_array_type if dtype == string_type else types.Array(dtype, 1, "C")
 
     if dtype == types.bool_:
-        arr_typ = boolean_array
+        arr_typ = boolean_array_type
 
     # Do what metadata says or use global defualt
     _use_nullable_pd_arr = (
@@ -366,7 +366,7 @@ def _numba_to_pyarrow_type(numba_type: types.ArrayCompatible, is_iceberg: bool =
             ordered=False if cat_dtype.ordered is None else cat_dtype.ordered,
         )
 
-    elif numba_type == boolean_array:
+    elif numba_type == boolean_array_type:
         dtype = pa.bool_()
     elif numba_type in (string_array_type, bodo.dict_str_arr_type):
         dtype = pa.string()

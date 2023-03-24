@@ -31,7 +31,7 @@ from bodo.libs.array_item_arr_ext import (
     offset_type,
 )
 from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -264,7 +264,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                 return types_list
             elif (
                 isinstance(arr_typ, (types.Array, IntegerArrayType, FloatingArrayType))
-                or arr_typ == boolean_array
+                or arr_typ == boolean_array_type
             ):
                 return get_types(arr_typ.dtype)
             elif arr_typ == string_array_type:
@@ -317,7 +317,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                 arr_typ,
                 (IntegerArrayType, FloatingArrayType, DecimalArrayType, types.Array),
             ) or arr_typ in (
-                boolean_array,
+                boolean_array_type,
                 datetime_date_array_type,
                 string_array_type,
                 binary_array_type,
@@ -381,7 +381,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
             elif isinstance(
                 arr_typ, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
             ) or arr_typ in (
-                boolean_array,
+                boolean_array_type,
                 datetime_date_array_type,
             ):
                 np_dtype = arr_typ.dtype
@@ -693,7 +693,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
     if isinstance(
         arr_type, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
     ) or arr_type in (
-        boolean_array,
+        boolean_array_type,
         datetime_date_array_type,
     ):
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
@@ -1114,7 +1114,7 @@ def nested_to_array(
     elif isinstance(
         arr_typ, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
     ) or arr_typ in (
-        boolean_array,
+        boolean_array_type,
         datetime_date_array_type,
     ):
         # construct "primitive" array given the array_infos received from C++
@@ -1453,7 +1453,7 @@ def info_to_array_codegen(context, builder, sig, args):
     if isinstance(
         arr_type, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
     ) or arr_type in (
-        boolean_array,
+        boolean_array_type,
         datetime_date_array_type,
     ):
         arr = cgutils.create_struct_proxy(arr_type)(context, builder)
@@ -3389,7 +3389,7 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
         )
         or col_array_dtype
         in (
-            bodo.libs.bool_arr_ext.boolean_array,
+            bodo.libs.bool_arr_ext.boolean_array_type,
             bodo.binary_array_type,
             bodo.datetime_date_array_type,
         )

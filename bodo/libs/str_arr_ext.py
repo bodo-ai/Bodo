@@ -889,7 +889,7 @@ def get_str_arr_item_copy(B, j, A, i):  # pragma: no cover
 @numba.njit(no_cpython_wrapper=True)
 def get_str_null_bools(str_arr):  # pragma: no cover
     n = len(str_arr)
-    null_bools = np.empty(n, np.bool_)
+    null_bools = bodo.libs.bool_arr_ext.alloc_bool_array(n)
     for i in range(n):
         null_bools[i] = bodo.libs.array_kernels.isna(str_arr, i)
     return null_bools
@@ -1954,7 +1954,7 @@ def str_arr_getitem_int(A, ind):
     # bool arr indexing. Note nullable boolean arrays are handled in
     # bool_arr_ind_getitem to ensure NAs are converted to False.
     if (
-        ind != bodo.boolean_array
+        ind != bodo.boolean_array_type
         and is_list_like_index_type(ind)
         and ind.dtype == types.bool_
     ):
@@ -2113,7 +2113,7 @@ def str_arr_getitem_int(A, ind):
     # This should be the only StringArray implementation
     # except for converting a Nullable boolean index to non-nullable.
     # We only expect to reach this case if more ind options are added.
-    if ind != bodo.boolean_array:  # pragma: no cover
+    if ind != bodo.boolean_array_type:  # pragma: no cover
         raise BodoError(
             f"getitem for StringArray with indexing type {ind} not supported."
         )

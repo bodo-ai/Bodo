@@ -183,7 +183,7 @@ def booland_util(A, B):
     else:
         scalar_text = "res[i] = (arg0 != 0) and (arg1 != 0)"
 
-    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -267,7 +267,7 @@ def boolor_util(A, B):
     else:
         scalar_text = "res[i] = (arg0 != 0) or (arg1 != 0)"
 
-    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -297,7 +297,7 @@ def boolxor_util(A, B):
 
     scalar_text = "res[i] = (arg0 == 0) != (arg1 == 0)"
 
-    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -325,7 +325,7 @@ def boolnot_util(A):
 
     scalar_text = "res[i] = arg0 == 0"
 
-    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -536,7 +536,7 @@ def equal_null_util(A, B):
     else:
         scalar_text = "res[i] = arg0 == arg1"
 
-    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -715,8 +715,7 @@ def create_is_func_util_overload(fn_name):  # pragma: no cover
 
         # These functions can't output null so we switch to a non-nullable
         # array.
-        out_dtype = types.Array(types.bool_, 1, "C")
-
+        out_dtype = bodo.boolean_array_type
         return gen_vectorized(
             arg_names, arg_types, propagate_null, scalar_text, out_dtype
         )

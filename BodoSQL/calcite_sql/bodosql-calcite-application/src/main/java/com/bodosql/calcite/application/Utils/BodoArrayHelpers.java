@@ -83,11 +83,8 @@ public class BodoArrayHelpers {
       case NULL:
         return "bodo.null_array_type";
       case BOOLEAN:
-        if (nullable) {
-          return "bodo.boolean_array";
-        } else {
-          return "numba.core.types.Array(bodo.bool_, 1, 'C')";
-        }
+        // TODO: Add nullable support in the type
+        return "bodo.boolean_array_type";
       case TINYINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {

@@ -2236,7 +2236,7 @@ def test_series_np_where_num(memory_leak_check):
         return np.where((S == 2.0), S, 11.0)
 
     def test_impl2(S, a, cond):
-        # cond.values to test boolean_array
+        # cond.values to test boolean_array_type
         return np.where(cond.values, a, S.values)
 
     S = pd.Series(

@@ -361,3 +361,29 @@ def test_and_null_scalar(memory_leak_check):
     check_func(test_impl, (arr, False))
     check_func(test_impl, (True, arr))
     check_func(test_impl, (False, arr))
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        pytest.param(pd.array([True] * 10, dtype="boolean"), id="true"),
+        pytest.param(
+            pd.array([True, False] + [True] * 10, dtype="boolean"), id="false"
+        ),
+        pytest.param(pd.array([True] * 10 + [None], dtype="boolean"), id="true-na"),
+        pytest.param(
+            pd.array([True, False] + [True] * 10 + [None], dtype="boolean"),
+            id="false-na",
+        ),
+        pytest.param(pd.array([None] * 10, dtype="boolean"), id="all-na"),
+        pytest.param(pd.array([], dtype="boolean"), id="empty"),
+    ],
+)
+@pytest.mark.slow
+def test_all(arr, memory_leak_check):
+    """Test BooleanArray.all()"""
+
+    def impl(A):
+        return A.all()
+
+    check_func(impl, (arr,))

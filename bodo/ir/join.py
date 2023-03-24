@@ -731,7 +731,7 @@ ir_utils.visit_vars_extensions[Join] = visit_vars_join
 
 
 def check_cross_join_coltypes(
-    left_col_types: List[types.Array], right_col_types: List[types.Array]
+    left_col_types: List[types.Type], right_col_types: List[types.Type]
 ):
     """
     Check the Columns of Cross Join or Interval Join tables to
@@ -2200,7 +2200,7 @@ def _replace_column_accesses(
                 )
                 or array_typ
                 in (
-                    bodo.libs.bool_arr_ext.boolean_array,
+                    bodo.libs.bool_arr_ext.boolean_array_type,
                     bodo.binary_array_type,
                     bodo.datetime_date_array_type,
                 )

@@ -197,7 +197,7 @@ def gen_snowflake_schema(column_names, column_datatypes):  # pragma: no cover
             sf_schema[col_name] = "TEXT"
         elif col_type == bodo.binary_array_type:
             sf_schema[col_name] = "BINARY"
-        elif col_type == bodo.boolean_array:
+        elif col_type == bodo.boolean_array_type:
             sf_schema[col_name] = "BOOLEAN"
         # TODO: differentiate between unsigned vs. signed, 8, 16, 32, 64
         elif isinstance(col_type, bodo.IntegerArrayType):

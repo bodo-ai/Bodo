@@ -18,7 +18,7 @@
 #define ROOT_PE 0
 
 // XXX same as distributed_api.py:Reduce_Type
-struct HPAT_ReduceOps {
+struct BODO_ReduceOps {
     enum ReduceOpsEnum {
         SUM = 0,
         PROD = 1,
@@ -26,7 +26,12 @@ struct HPAT_ReduceOps {
         MAX = 3,
         ARGMIN = 4,
         ARGMAX = 5,
-        OR = 6
+        BIT_OR = 6,
+        BIT_AND = 7,
+        BIT_XOR = 8,
+        LOGICAL_OR = 9,
+        LOGICAL_AND = 10,
+        LOGICAL_XOR = 11
     };
 };
 
@@ -475,14 +480,14 @@ static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) {
 
 // from distributed_api Reduce_Type
 static MPI_Op get_MPI_op(int op_enum) {
-    // printf("op type enum:%d\n", op_enum);
-    if (op_enum < 0 || op_enum > 6) {
+    if (op_enum < 0 || op_enum > 11) {
         std::cerr << "Invalid MPI_Op"
                   << "\n";
         return MPI_SUM;
     }
-    MPI_Op ops_list[] = {MPI_SUM,    MPI_PROD,   MPI_MIN, MPI_MAX,
-                         MPI_MINLOC, MPI_MAXLOC, MPI_BOR};
+    MPI_Op ops_list[] = {MPI_SUM,    MPI_PROD,   MPI_MIN,  MPI_MAX,
+                         MPI_MINLOC, MPI_MAXLOC, MPI_BOR,  MPI_BAND,
+                         MPI_BXOR,   MPI_LOR,    MPI_LAND, MPI_LXOR};
 
     return ops_list[op_enum];
 }

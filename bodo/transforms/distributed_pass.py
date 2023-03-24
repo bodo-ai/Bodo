@@ -1499,6 +1499,13 @@ class DistributedPass:
                 lhs, func_mod, func_name, assign, rhs.args, equiv_set, avail_vars
             )
 
+        # BooleanArray.func calls
+        if (
+            isinstance(func_mod, ir.Var)
+            and self.typemap[func_mod.name] == bodo.boolean_array_type
+        ):
+            return self._run_call_boolean_array(func_mod, func_name, assign)
+
         # df.func calls
         if isinstance(func_mod, ir.Var) and isinstance(
             self.typemap[func_mod.name], DataFrameType
@@ -2431,6 +2438,19 @@ class DistributedPass:
                     self,
                     extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
                 )
+
+        return out
+
+    def _run_call_boolean_array(self, arr, func_name, assign):
+        """transform distributed BooleanArray.func calls"""
+        out = [assign]
+        if func_name == "all":
+            if self._is_1D_or_1D_Var_arr(arr.name):
+                reduce_op = Reduce_Type.Logical_And
+                reduce_var = assign.target
+                scope = assign.target.scope
+                loc = assign.loc
+                return out + self._gen_reduce(reduce_var, reduce_op, scope, loc)
 
         return out
 
@@ -4347,7 +4367,7 @@ class DistributedPass:
         user_init_val = self._get_reduce_user_init(reduce_var)
         pre_init_val = ""
 
-        if reduce_op in [Reduce_Type.Sum, Reduce_Type.Or]:
+        if reduce_op in [Reduce_Type.Sum, Reduce_Type.Bit_Or]:
             init_val = str(el_typ(0))
             if user_init_val == el_typ(0):
                 return []

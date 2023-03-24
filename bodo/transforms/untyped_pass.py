@@ -36,7 +36,7 @@ from bodo.utils.utils import is_assign, is_call, is_expr
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType
 import bodo.hiframes.pd_dataframe_ext
@@ -2843,7 +2843,7 @@ def _dtype_val_to_arr_type(t, func_name, loc):
         t = "bool_" if t == "O" else t
 
         if t == "bool_":
-            return boolean_array
+            return boolean_array_type
 
         typ = getattr(types, t)
         typ = types.Array(typ, 1, "C")

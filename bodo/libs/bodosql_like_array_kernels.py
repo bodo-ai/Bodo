@@ -430,7 +430,7 @@ def overload_like_kernel_const_pattern_util(arr, pattern, escape, case_insensiti
     arg_types = [arr, pattern, escape, case_insensitive]
     # By definition only the array can contain nulls.
     propagate_null = [True, False, False, False]
-    out_dtype = bodo.boolean_array
+    out_dtype = bodo.boolean_array_type
     # Some paths have prefix and/or need extra globals
     prefix_code = None
     extra_globals = {}
@@ -511,7 +511,7 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
     arg_types = [arr, pattern, escape, case_insensitive]
     # By definition case_insensitive cannot be null.
     propagate_null = [True, True, True, False]
-    out_dtype = bodo.boolean_array
+    out_dtype = bodo.boolean_array_type
     extra_globals = {
         "convert_sql_pattern": convert_sql_pattern_to_python_runtime,
         # Dictionary encoding optimized function.
@@ -666,7 +666,7 @@ def overload_like_kernel_scalar_pattern_util(arr, pattern, escape, case_insensit
     arg_types = [arr, pattern, escape, case_insensitive]
     # By definition case_insensitive cannot be null.
     propagate_null = [True, True, True, False]
-    out_dtype = bodo.boolean_array
+    out_dtype = bodo.boolean_array_type
     extra_globals = {
         "convert_sql_pattern": convert_sql_pattern_to_python_runtime,
         # A dummy matcher used to ensure type stability if we don't
@@ -740,7 +740,7 @@ def overload_convert_sql_pattern_to_python_runtime_dict_encoding(
             a scalar or a dictionary encoded array. If this is an array pattern must be a scalar.
         case_insensitive (types.boolean): Is the conversion case insensitive.
 
-    Returns: Tuple[bodo.string_array, types.Array(types.boolean, 1, "C"), types.Array(types.boolean, 1, "C"), types.Array(types.boolean, 1, "C"), types.Array(types.boolean, 1, "C")]
+    Returns: Tuple[bodo.string_array, bodo.boolean_array_type, bodo.boolean_array_type, bodo.boolean_array_type, bodo.boolean_array_type]
     """
     if pattern == bodo.dict_str_arr_type:
         assert (
@@ -763,11 +763,10 @@ def overload_convert_sql_pattern_to_python_runtime_dict_encoding(
         n = len(dict_arr)
         # Allocate the output arrays.
         python_pattern_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
-        # Note we don't care about NA values here since we won't fetch these elements.
-        requires_regex = np.empty(n, np.bool_)
-        must_match_start = np.empty(n, np.bool_)
-        must_match_end = np.empty(n, np.bool_)
-        match_anything = np.empty(n, np.bool_)
+        requires_regex = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+        must_match_start = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+        must_match_end = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+        match_anything = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in range(n):
             if not bodo.libs.array_kernels.isna(dict_arr, i):
                 # Convert the pattern.
