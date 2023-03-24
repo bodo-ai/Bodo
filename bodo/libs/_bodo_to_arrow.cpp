@@ -401,7 +401,7 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
 
         // get meminfos of characters and offsets arrays to wrap in BodoBuffers.
         array_item_arr_numpy_payload *payload =
-            (array_item_arr_numpy_payload *)(array->meminfo->data);
+            (array_item_arr_numpy_payload *)(array->meminfos[0]->data);
 
         MemInfo *chars_meminfo = payload->data.meminfo;
         MemInfo *offsets_meminfo = payload->offsets.meminfo;
@@ -690,5 +690,5 @@ array_info *arrow_array_to_bodo(std::shared_ptr<arrow::Array> arrow_arr) {
     return new array_info(
         bodo_array_type::STRING, Bodo_CTypes::STRING, n, n_chars, -1,
         payload->data.data, (char *)payload->offsets.data, NULL,
-        (char *)payload->null_bitmap.data, NULL, meminfo_array_item, NULL);
+        (char *)payload->null_bitmap.data, NULL, {meminfo_array_item});
 }

@@ -254,7 +254,7 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
         // TODO: better memory management of struct, meminfo refcount?
         return new array_info(
             bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, lengths[0], -1,
-            -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, ai.array);
+            -1, NULL, NULL, NULL, NULL, NULL, {meminfo}, ai.array);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -275,7 +275,7 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
         n_strings, n_chars, (char*)sub_payload->data.data,
         (char*)sub_payload->offsets.data, (char*)payload->offsets.data,
         (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap.data,
-        meminfo, nullptr);
+        {meminfo});
 }
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
@@ -285,8 +285,7 @@ array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
     auto dtype = Bodo_CTypes::STRING;
     if (is_bytes) dtype = Bodo_CTypes::BINARY;
     return new array_info(bodo_array_type::STRING, dtype, n_items, n_chars, -1,
-                          data, offsets, NULL, null_bitmap, NULL, meminfo,
-                          NULL);
+                          data, offsets, NULL, null_bitmap, NULL, {meminfo});
 }
 
 array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
@@ -296,9 +295,9 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
     // struct, so we set it to false
     return new array_info(
         bodo_array_type::DICT, Bodo_CTypes::STRING, indices_arr->length, -1, -1,
-        NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
-        0, 0, bool(has_global_dictionary), bool(has_deduped_local_dictionary),
-        false, str_arr, indices_arr);
+        NULL, NULL, NULL, indices_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+        bool(has_global_dictionary), bool(has_deduped_local_dictionary), false,
+        str_arr, indices_arr);
 }
 
 array_info* get_nested_info(array_info* dict_arr, int32_t info_no) {
@@ -326,7 +325,7 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NUMPY,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, NULL, NULL, meminfo, NULL);
+                          data, NULL, NULL, NULL, NULL, {meminfo});
 }
 
 #undef DEBUG_CATEGORICAL
@@ -342,8 +341,8 @@ array_info* categorical_array_to_info(uint64_t n_items, char* data,
 #endif
     return new array_info(bodo_array_type::CATEGORICAL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, NULL, NULL, meminfo, NULL, nullptr,
-                          0, 0, num_categories);
+                          data, NULL, NULL, NULL, NULL, {meminfo}, nullptr, 0,
+                          0, num_categories);
 }
 
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -352,8 +351,8 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, NULL, meminfo,
-                          meminfo_bitmask);
+                          data, NULL, NULL, null_bitmap, NULL,
+                          {meminfo, meminfo_bitmask});
 }
 
 array_info* interval_array_to_info(uint64_t n_items, char* left_data,
@@ -362,8 +361,8 @@ array_info* interval_array_to_info(uint64_t n_items, char* left_data,
                                    NRT_MemInfo* right_meminfo) {
     return new array_info(bodo_array_type::INTERVAL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          left_data, right_data, NULL, NULL, NULL, left_meminfo,
-                          right_meminfo);
+                          left_data, right_data, NULL, NULL, NULL,
+                          {left_meminfo, right_meminfo});
 }
 
 array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -373,8 +372,8 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, NULL, meminfo,
-                          meminfo_bitmask, NULL, precision, scale);
+                          data, NULL, NULL, null_bitmap, NULL,
+                          {meminfo, meminfo_bitmask}, NULL, precision, scale);
 }
 
 array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -383,8 +382,8 @@ array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                int32_t precision) {
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, NULL, meminfo,
-                          meminfo_bitmask, NULL, precision);
+                          data, NULL, NULL, null_bitmap, NULL,
+                          {meminfo, meminfo_bitmask}, NULL, precision);
 }
 
 void info_to_list_string_array(array_info* info,
@@ -397,7 +396,7 @@ void info_to_list_string_array(array_info* info,
         return;
     }
 
-    *array_item_meminfo = info->meminfo;
+    *array_item_meminfo = info->meminfos[0];
 }
 
 void info_to_nested_array(array_info* info, int64_t* lengths,
@@ -420,7 +419,7 @@ void info_to_string_array(array_info* info, NRT_MemInfo** meminfo) {
                         "info_to_string_array requires string input.");
         return;
     }
-    *meminfo = info->meminfo;
+    *meminfo = info->meminfos[0];
 }
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
@@ -435,7 +434,7 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
     }
     *n_items = info->length;
     *data = info->data1;
-    *meminfo = info->meminfo;
+    *meminfo = info->meminfos[0];
 }
 
 void info_to_nullable_array(array_info* info, uint64_t* n_items,
@@ -452,8 +451,8 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
     *n_bytes = (info->length + 7) >> 3;
     *data = info->data1;
     *null_bitmap = info->null_bitmask;
-    *meminfo = info->meminfo;
-    *meminfo_bitmask = info->meminfo_bitmask;
+    *meminfo = info->meminfos[0];
+    *meminfo_bitmask = info->meminfos[1];
 }
 
 void info_to_interval_array(array_info* info, uint64_t* n_items,
@@ -469,8 +468,8 @@ void info_to_interval_array(array_info* info, uint64_t* n_items,
     *n_items = info->length;
     *left_data = info->data1;
     *right_data = info->data2;
-    *left_meminfo = info->meminfo;
-    *right_meminfo = info->meminfo_bitmask;
+    *left_meminfo = info->meminfos[0];
+    *right_meminfo = info->meminfos[1];
 }
 
 table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs) {
@@ -516,7 +515,7 @@ NRT_MemInfo* string_array_from_pyarrow(PyObject* pyarrow_arr) {
         std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr);
 
     array_info* arr = arrow_array_to_bodo(arrow_str_arr);
-    return arr->meminfo;
+    return arr->meminfos[0];
 
 #undef CHECK
 }
@@ -545,7 +544,7 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
         array_info* out_arr =
             alloc_array(0, 0, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
                         Bodo_CTypes::UINT8, 0, 0);
-        NRT_MemInfo* out_meminfo = out_arr->meminfo;
+        NRT_MemInfo* out_meminfo = out_arr->meminfos[0];
         delete out_arr;
         return out_meminfo;
     }
