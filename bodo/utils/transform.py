@@ -162,6 +162,8 @@ no_side_effect_call_tuples = {
     ("get_bool_arr_bitmap", "bool_arr_ext", "libs", bodo),
     ("init_bool_array", "bool_arr_ext", "libs", bodo),
     ("alloc_bool_array", "bool_arr_ext", "libs", bodo),
+    ("alloc_false_bool_array", "bool_arr_ext", "libs", bodo),
+    ("alloc_true_bool_array", "bool_arr_ext", "libs", bodo),
     # Datetime array
     ("datetime_date_arr_to_dt64_arr", "pd_timestamp_ext", "hiframes", bodo),
     # tz-aware array

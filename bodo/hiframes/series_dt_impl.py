@@ -134,7 +134,7 @@ def create_date_field_overload(field):
             "is_year_start",
             "is_year_end",
         ):
-            func_text += "    out_arr = np.empty(n, np.bool_)\n"
+            func_text += "    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
         else:
             func_text += (
                 "    out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"

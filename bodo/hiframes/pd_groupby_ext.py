@@ -372,7 +372,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
         if isinstance(
             in_dtype, (Decimal128Type, types.Integer, types.Float, types.Boolean)
         ):
-            return bodo.boolean_array, "ok"
+            return bodo.boolean_array_type, "ok"
         return (
             None,
             f"For boolor_agg, only columns of type integer, float, Decimal, or boolean type are allowed",
@@ -1286,9 +1286,8 @@ def resolve_window_funcs(
         # as a uint64.
         out_data = [dtype_to_array_type(types.uint64)]
     else:
-        # min_row_number_filter outputs non-nullable a boolean
-        # array.
-        out_data = [types.Array(types.boolean, 1, "C")]
+        # TODO: min_row_number_filter never outputs null
+        out_data = [bodo.boolean_array_type]
     # Generate the gb_info
     gb_info = {(order_by, "window"): out_columns[0]}
 

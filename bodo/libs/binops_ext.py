@@ -41,7 +41,7 @@ from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.hiframes.series_impl import SeriesType
 from bodo.hiframes.time_ext import TimeType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -49,9 +49,9 @@ from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
     BodoError,
     is_overload_bool,
+    is_overload_none,
     is_str_arr_type,
     is_timedelta_type,
-    is_overload_none,
 )
 
 
@@ -371,7 +371,7 @@ def create_overload_arith_op(op):
             return bodo.libs.float_arr_ext.create_op_overload(op, 2)(lhs, rhs)
 
         # boolean array
-        if lhs == boolean_array or rhs == boolean_array:
+        if lhs == boolean_array_type or rhs == boolean_array_type:
             return bodo.libs.bool_arr_ext.create_op_overload(op, 2)(lhs, rhs)
 
         # String arrays
@@ -540,7 +540,7 @@ def create_overload_cmp_operator(op):
             )
 
         # boolean array
-        if lhs == boolean_array or rhs == boolean_array:
+        if lhs == boolean_array_type or rhs == boolean_array_type:
             return bodo.libs.bool_arr_ext.create_op_overload(op, 2)(lhs, rhs)
 
         # int array

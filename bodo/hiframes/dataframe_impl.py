@@ -63,7 +63,7 @@ from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.float_arr_ext import FloatingArrayType
@@ -816,15 +816,8 @@ def overload_dataframe_isna(df):
     extra_globals = None
     out_df_type = None
     if df.is_table_format:
-        # isna generates a numpy boolean array for every column
-        output_arr_typ = types.Array(types.bool_, 1, "C")
-        out_df_type = DataFrameType(
-            tuple([output_arr_typ] * len(df.data)),
-            df.index,
-            df.columns,
-            df.dist,
-            is_table_format=True,
-        )
+        # isna generates a boolean array for every column
+        output_arr_typ = bodo.boolean_array_type
         extra_globals = {"output_arr_typ": output_arr_typ}
         data_args = (
             "bodo.utils.table_utils.generate_mappable_table_func("
@@ -941,15 +934,8 @@ def overload_dataframe_notna(df):
     extra_globals = None
     out_df_type = None
     if df.is_table_format:
-        # notna generates a numpy boolean array for every column
-        output_arr_typ = types.Array(types.bool_, 1, "C")
-        out_df_type = DataFrameType(
-            tuple([output_arr_typ] * len(df.data)),
-            df.index,
-            df.columns,
-            df.dist,
-            is_table_format=True,
-        )
+        # notna generates a boolean array for every column
+        output_arr_typ = bodo.boolean_array_type
         extra_globals = {"output_arr_typ": output_arr_typ}
         data_args = (
             "bodo.utils.table_utils.generate_mappable_table_func("
@@ -1203,7 +1189,7 @@ def overload_dataframe_isin(df, values):
   numba.parfors.parfor.init_prange()
   n = len({0})
   m = len({1})
-  {2} = np.empty(n, np.bool_)
+  {2} = bodo.libs.bool_arr_ext.alloc_bool_array(n)
   for i in numba.parfors.parfor.internal_prange(n):
     {2}[i] = {0}[i] == {1}[i] if i < m else False
 """
@@ -1211,11 +1197,11 @@ def overload_dataframe_isin(df, values):
     isin_vals_func = """
   numba.parfors.parfor.init_prange()
   n = len({0})
-  {2} = np.empty(n, np.bool_)
+  {2} = bodo.libs.bool_arr_ext.alloc_bool_array(n)
   for i in numba.parfors.parfor.internal_prange(n):
     {2}[i] = {0}[i] in {1}
 """
-    bool_arr_func = "  {} = np.zeros(len(df), np.bool_)\n"
+    bool_arr_func = "  {} = bodo.libs.bool_arr_ext.alloc_false_bool_array(len(df))\n"
     for i, (cname, in_var) in enumerate(zip(df.columns, data)):
         if cname in other_colmap:
             other_col_var = other_colmap[cname]
@@ -1271,7 +1257,7 @@ def overload_dataframe_corr(df, method="pearson", min_periods=1):
                 isinstance(
                     df.data[df.column_index[c]], (IntegerArrayType, FloatingArrayType)
                 )
-                or df.data[df.column_index[c]] == boolean_array
+                or df.data[df.column_index[c]] == boolean_array_type
             )
             else "",
         )
@@ -1333,7 +1319,7 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
                 isinstance(
                     df.data[df.column_index[c]], (IntegerArrayType, FloatingArrayType)
                 )
-                or df.data[df.column_index[c]] == boolean_array
+                or df.data[df.column_index[c]] == boolean_array_type
             )
             else "",
         )
@@ -1620,7 +1606,7 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
                     bodo.CategoricalArrayType,
                 ),
             )
-            or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
+            or coltype in [bodo.boolean_array_type, bodo.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmax() only supported for numeric column types. Column type: {coltype} not supported."
@@ -1665,7 +1651,7 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
                     bodo.CategoricalArrayType,
                 ),
             )
-            or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
+            or coltype in [bodo.boolean_array_type, bodo.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmin() only supported for numeric column types. Column type: {coltype} not supported."
@@ -2510,7 +2496,9 @@ def create_dataframe_mask_where_overload(func_name):
         )
 
         if gen_all_false[0]:
-            header += "  all_false = np.zeros(len(df), dtype=bool)\n"
+            header += (
+                "  all_false = bodo.libs.bool_arr_ext.alloc_false_bool_array(len(df))\n"
+            )
 
         return _gen_init_df(header, df.columns, data_args)
 
@@ -2742,7 +2730,7 @@ def create_binary_op_overload(op):
                 header += "  numba.parfors.parfor.init_prange()\n"
                 header += "  n = len(lhs)\n"
                 header += "".join(
-                    f"  {arr_name} = np.empty(n, dtype=np.bool_)\n"
+                    f"  {arr_name} = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
                     for arr_name in diff_types
                 )
                 header += "  for i in numba.parfors.parfor.internal_prange(n):\n"
@@ -2790,7 +2778,9 @@ def create_binary_op_overload(op):
                 header += "  numba.parfors.parfor.init_prange()\n"
                 header += "  n = len(rhs)\n"
                 header += "".join(
-                    "  {0} = np.empty(n, dtype=np.bool_)\n".format(arr_name)
+                    "  {0} = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n".format(
+                        arr_name
+                    )
                     for arr_name in diff_types
                 )
                 header += "  for i in numba.parfors.parfor.internal_prange(n):\n"
@@ -2942,7 +2932,7 @@ def overload_isna(obj):
         def impl(obj):  # pragma: no cover
             numba.parfors.parfor.init_prange()
             n = len(obj)
-            out_arr = np.empty(n, np.bool_)
+            out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
             for i in numba.parfors.parfor.internal_prange(n):
                 out_arr[i] = bodo.libs.array_kernels.isna(obj, i)
             return out_arr
@@ -2971,7 +2961,7 @@ def overload_isna_scalar(obj):
         # no reuse of array implementation to avoid prange (unexpected threading etc.)
         def impl(obj):  # pragma: no cover
             n = len(obj)
-            out_arr = np.empty(n, np.bool_)
+            out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
             for i in range(n):
                 out_arr[i] = pd.isna(obj[i])
             return out_arr
@@ -3513,7 +3503,7 @@ def common_validate_merge_merge_asof_spec(
         binary_array_type,
         datetime_date_array_type,
         datetime_timedelta_array_type,
-        boolean_array,
+        boolean_array_type,
     }
     merge_on_names = {
         get_overload_const_str(on_const)

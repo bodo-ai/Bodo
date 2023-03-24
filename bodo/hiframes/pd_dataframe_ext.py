@@ -71,7 +71,7 @@ from bodo.libs.array import (
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -3656,7 +3656,7 @@ def gen_pandas_parquet_metadata(
             else:
                 tz = pd.DatetimeTZDtype(tz=col_type.tz).tz
             metadata = {"timezone": pa.lib.tzinfo_to_string(tz)}
-        elif isinstance(col_type, types.Array) or col_type == boolean_array:
+        elif isinstance(col_type, types.Array) or col_type == boolean_array_type:
             pandas_type = numpy_type = col_type.dtype.name
             if numpy_type.startswith("datetime"):
                 pandas_type = "datetime"
@@ -3975,7 +3975,7 @@ def to_parquet_overload(
         func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
         write_index = True
     else:
-        func_text += "    index_col = array_to_info(np.empty(0))\n"
+        func_text += "    index_col = array_to_info(np.empty(0, dtype=np.int64))\n"
         write_index = False
     if df.has_runtime_cols:
         # Compute the metadata string at runtime.
@@ -4532,7 +4532,7 @@ def to_sql_overload(
         func_text += "        col_names = array_to_info(names_arr)\n"
     else:
         func_text += "        col_names = array_to_info(col_names_arr)\n"
-    func_text += "        index_col = array_to_info(np.empty(0))\n"
+    func_text += "        index_col = array_to_info(np.empty(0, dtype=np.int64))\n"
 
     func_text += "        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(parquet_path, parallel=_is_parallel)\n"
 

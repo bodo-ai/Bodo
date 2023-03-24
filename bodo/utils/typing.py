@@ -996,7 +996,7 @@ def is_list_like_index_type(
     """
     from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
-    from bodo.libs.bool_arr_ext import boolean_array
+    from bodo.libs.bool_arr_ext import boolean_array_type
 
     # TODO: include datetimeindex/timedeltaindex?
 
@@ -1006,7 +1006,7 @@ def is_list_like_index_type(
         or isinstance(t, (NumericIndexType, RangeIndexType))
         or isinstance(t, SeriesType)
         or isinstance(t, bodo.IntegerArrayType)
-        or t == boolean_array
+        or t == boolean_array_type
     )
 
 
@@ -1473,8 +1473,8 @@ def dtype_to_array_type(dtype, convert_nullable=False):
     if isinstance(dtype, bodo.libs.float_arr_ext.FloatDtype):  # pragma: no cover
         return bodo.FloatingArrayType(dtype.dtype)
 
-    if dtype == types.bool_:
-        return bodo.boolean_array
+    if dtype == types.boolean:
+        return bodo.boolean_array_type
 
     if dtype == bodo.datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
@@ -1521,9 +1521,7 @@ def dtype_to_array_type(dtype, convert_nullable=False):
         return types.Array(bodo.timedelta64ns, 1, "C")
 
     # regular numpy array
-    if isinstance(
-        dtype, (types.Number, types.Boolean, types.NPDatetime, types.NPTimedelta)
-    ):
+    if isinstance(dtype, (types.Number, types.NPDatetime, types.NPTimedelta)):
         arr = types.Array(dtype, 1, "C")
         # If this comes from an optional type try converting to
         # nullable.
@@ -1626,7 +1624,7 @@ def is_hashable_type(t):
 
 def to_nullable_type(t):
     """Converts types that cannot hold NAs to corresponding nullable types.
-    For example, boolean_array is returned for Numpy array(bool_) and IntegerArray is
+    For example, boolean_array_type is returned for Numpy array(bool_) and IntegerArray is
     returned for Numpy array(int).
     Converts data in DataFrame and Series types as well.
     """
@@ -1648,7 +1646,7 @@ def to_nullable_type(t):
 
     if isinstance(t, types.Array):
         if t.dtype == types.bool_:
-            return bodo.libs.bool_arr_ext.boolean_array
+            return bodo.libs.bool_arr_ext.boolean_array_type
 
         if isinstance(t.dtype, types.Integer):
             return bodo.libs.int_arr_ext.IntegerArrayType(t.dtype)
@@ -1830,7 +1828,7 @@ def get_nullable_and_non_nullable_types(array_of_types):
 
     all_types = []
     for typ in array_of_types:
-        if typ == bodo.libs.bool_arr_ext.boolean_array:
+        if typ == bodo.libs.bool_arr_ext.boolean_array_type:
             all_types.append(types.Array(types.bool_, 1, "C"))
 
         elif isinstance(
@@ -1844,7 +1842,7 @@ def get_nullable_and_non_nullable_types(array_of_types):
 
         elif isinstance(typ, types.Array):
             if typ.dtype == types.bool_:
-                all_types.append(bodo.libs.bool_arr_ext.boolean_array)
+                all_types.append(bodo.libs.bool_arr_ext.boolean_array_type)
 
             if isinstance(typ.dtype, types.Integer):
                 all_types.append(bodo.libs.int_arr_ext.IntegerArrayType(typ.dtype))
@@ -2475,7 +2473,7 @@ def get_castable_arr_dtype(arr_type: types.Type):
     """
     if isinstance(arr_type, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
         cast_typ = arr_type.get_pandas_scalar_type_instance.name
-    elif arr_type in (bodo.boolean_array, bodo.dict_str_arr_type) or isinstance(
+    elif arr_type in (bodo.boolean_array_type, bodo.dict_str_arr_type) or isinstance(
         arr_type, bodo.DatetimeArrayType
     ):
         cast_typ = arr_type

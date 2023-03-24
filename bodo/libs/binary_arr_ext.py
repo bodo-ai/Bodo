@@ -318,7 +318,7 @@ def binary_arr_getitem(arr, ind):
     # bool arr, int arr, and slice. Note nullable boolean arrays are handled in
     # bool_arr_ind_getitem to ensure NAs are converted to False.
     if (
-        ind != bodo.boolean_array
+        ind != bodo.boolean_array_type
         and is_list_like_index_type(ind)
         and (ind.dtype == types.bool_ or isinstance(ind.dtype, types.Integer))
     ) or isinstance(ind, types.SliceType):
@@ -326,7 +326,7 @@ def binary_arr_getitem(arr, ind):
 
     # This should be the only Binary array implementation
     # except for converting a Nullable boolean index to non-nullable.
-    if ind != bodo.boolean_array:  # pragma: no cover
+    if ind != bodo.boolean_array_type:  # pragma: no cover
         raise BodoError(
             f"getitem for Binary Array with indexing type {ind} not supported."
         )

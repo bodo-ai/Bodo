@@ -49,6 +49,7 @@ from bodo.utils.indexing import (
 )
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     is_iterable_type,
     is_overload_false,
     is_overload_true,
@@ -74,12 +75,12 @@ class BooleanArrayType(types.ArrayCompatible):
         return BooleanArrayType()
 
 
-boolean_array = BooleanArrayType()
+boolean_array_type = BooleanArrayType()
 
 
 @typeof_impl.register(pd.arrays.BooleanArray)
 def typeof_boolean_array(val, c):
-    return boolean_array
+    return boolean_array_type
 
 
 data_type = types.Array(types.bool_, 1, "C")
@@ -392,7 +393,7 @@ def init_bool_array(typingctx, data, null_bitmap=None):
     """Create a BooleanArray with provided data and null bitmap values."""
     assert data == types.Array(types.bool_, 1, "C")
     assert null_bitmap == types.Array(types.uint8, 1, "C")
-    sig = boolean_array(data, null_bitmap)
+    sig = boolean_array_type(data, null_bitmap)
     return sig, lower_init_bool_array
 
 
@@ -464,9 +465,28 @@ def alloc_bool_array(n):  # pragma: no cover
     return init_bool_array(data_arr, nulls)
 
 
+# allocate a boolean array of all false values
+@numba.njit(no_cpython_wrapper=True)
+def alloc_false_bool_array(n):  # pragma: no cover
+    data_arr = np.zeros(n, dtype=np.bool_)
+    # Initialize null bitmap to all 1s
+    nulls = np.full((n + 7) >> 3, 255, dtype=np.uint8)
+    return init_bool_array(data_arr, nulls)
+
+
+# allocate a boolean array of all true values
+@numba.njit(no_cpython_wrapper=True)
+def alloc_true_bool_array(n):  # pragma: no cover
+    data_arr = np.full(n, 1, dtype=np.bool_)
+    # Initialize null bitmap to all 1s
+    nulls = np.full((n + 7) >> 3, 255, dtype=np.uint8)
+    return init_bool_array(data_arr, nulls)
+
+
 def alloc_bool_array_equiv(self, scope, equiv_set, loc, args, kws):
-    """Array analysis function for alloc_bool_array() passed to Numba's array analysis
-    extension. Assigns output array's size as equivalent to the input size variable.
+    """Array analysis function for alloc_bool_array(), alloc_false_bool_array(),
+    and alloc_true_bool_array() passed to Numba's array analysis extension.
+    Assigns output array's size as equivalent to the input size variable.
     """
     assert len(args) == 1 and not kws
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
@@ -476,10 +496,18 @@ ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_alloc_bool_array = (
     alloc_bool_array_equiv
 )
 
+ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_alloc_false_bool_array = (
+    alloc_bool_array_equiv
+)
+
+ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_alloc_true_bool_array = (
+    alloc_bool_array_equiv
+)
+
 
 @overload(operator.getitem, no_unliteral=True)
 def bool_arr_getitem(A, ind):
-    if A != boolean_array:
+    if A != boolean_array_type:
         return
 
     # TODO: refactor with int arr since almost same code
@@ -491,7 +519,7 @@ def bool_arr_getitem(A, ind):
     # bool arr indexing. Note nullable boolean arrays are handled in
     # bool_arr_ind_getitem to ensure NAs are converted to False.
     if (
-        ind != boolean_array
+        ind != boolean_array_type
         and is_list_like_index_type(ind)
         and ind.dtype == types.bool_
     ):
@@ -523,7 +551,7 @@ def bool_arr_getitem(A, ind):
     # This should be the only BooleanArray implementation
     # except for converting a Nullable boolean index to non-nullable.
     # We only expect to reach this case if more idx options are added.
-    if ind != boolean_array:  # pragma: no cover
+    if ind != boolean_array_type:  # pragma: no cover
         raise BodoError(
             f"getitem for BooleanArray with indexing type {ind} not supported."
         )
@@ -531,7 +559,7 @@ def bool_arr_getitem(A, ind):
 
 @overload(operator.setitem, no_unliteral=True)
 def bool_arr_setitem(A, idx, val):
-    if A != boolean_array:
+    if A != boolean_array_type:
         return
 
     # TODO: refactor with int arr since almost same code
@@ -594,7 +622,7 @@ def bool_arr_setitem(A, idx, val):
 
 @overload(len, no_unliteral=True)
 def overload_bool_arr_len(A):
-    if A == boolean_array:
+    if A == boolean_array_type:
         return lambda A: len(A._data)  # pragma: no cover
 
 
@@ -710,12 +738,42 @@ def overload_bool_fillna(A, value=None, method=None, limit=None):
     def impl(A, value=None, method=None, limit=None):  # pragma: no cover
         data = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
         n = len(data)
-        B = np.empty(n, dtype=np.bool_)
+        B = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
-            B[i] = data[i]
             if bodo.libs.array_kernels.isna(A, i):
                 B[i] = value
+            else:
+                B[i] = data[i]
         return B
+
+    return impl
+
+
+@overload_method(BooleanArrayType, "all")
+def overload_bool_arr_all(A, skipna=True):
+    unsupported_args = dict(skipna=skipna)
+    default_args = dict(skipna=True)
+    check_unsupported_args(
+        "BooleanArray.to_numpy",
+        unsupported_args,
+        default_args,
+        package_name="pandas",
+        # Note: We don't have docs from array yet.
+        module_name="Array",
+    )
+
+    def impl(A, skipna=True):  # pragma: no cover
+        result = True
+        n = len(A)
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(A, i):
+                continue
+            elif not A[i]:
+                result = False
+                break
+        # This returns the output for a single rank. Distributed
+        # pass handles the reduction.
+        return result
 
     return impl
 
@@ -762,7 +820,7 @@ def create_op_overload(op, n_inputs):
 
         def overload_bool_arr_op_nin_2(lhs, rhs):
             # if any input is BooleanArray
-            if lhs == boolean_array or rhs == boolean_array:
+            if lhs == boolean_array_type or rhs == boolean_array_type:
                 return bodo.libs.int_arr_ext.get_nullable_array_binary_impl(
                     op, lhs, rhs
                 )
@@ -875,13 +933,14 @@ def overload_unique(A):
             if na_found and true_found and false_found:
                 break
 
-        new_data = np.array(data)
-        n = len(new_data)
-        n_bytes = 1
-        new_mask = np.empty(n_bytes, np.uint8)
+        n = len(data)
+        output_array = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for j in range(n):
-            bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, j, mask[j])
-        return init_bool_array(new_data, new_mask)
+            if mask[j]:
+                output_array[j] = data[j]
+            else:
+                bodo.libs.array_kernels.setna(output_array, j)
+        return output_array
 
     return impl_bool_arr
 
@@ -889,7 +948,7 @@ def overload_unique(A):
 @overload(operator.getitem, no_unliteral=True)
 def bool_arr_ind_getitem(A, ind):
     # getitem for array indexed by BooleanArray
-    if ind == boolean_array and (
+    if ind == boolean_array_type and (
         isinstance(
             A,
             (
@@ -910,7 +969,7 @@ def bool_arr_ind_getitem(A, ind):
         in (
             string_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type,
-            boolean_array,
+            boolean_array_type,
             bodo.datetime_date_array_type,
             bodo.datetime_timedelta_array_type,
             bodo.binary_array_type,
@@ -924,19 +983,23 @@ def bool_arr_ind_getitem(A, ind):
         return impl
 
 
-@lower_cast(types.Array(types.bool_, 1, "C"), boolean_array)
+@lower_cast(types.Array(types.bool_, 1, "C"), boolean_array_type)
 def cast_np_bool_arr_to_bool_arr(context, builder, fromty, toty, val):
-    func = lambda A: bodo.libs.bool_arr_ext.init_bool_array(
-        A, np.full((len(A) + 7) >> 3, 255, np.uint8)
-    )
+    def func(A):  # pragma: no cover
+        n = len(A)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+        for i in range(n):
+            out_arr[i] = A[i]
+        return out_arr
+
     res = context.compile_internal(builder, func, toty(fromty), [val])
     return impl_ret_borrowed(context, builder, toty, res)
 
 
 @overload(operator.setitem, no_unliteral=True)
 def overload_np_array_setitem_bool_arr(A, idx, val):
-    """Support setitem of Arrays with boolean_array"""
-    if isinstance(A, types.Array) and idx == boolean_array:
+    """Support setitem of Arrays with boolean_array_type"""
+    if isinstance(A, types.Array) and idx == boolean_array_type:
 
         def impl(A, idx, val):  # pragma: no cover
             # TODO(ehsan): consider NAs in idx?
@@ -968,9 +1031,7 @@ def create_nullable_logical_op_overload(op):
 
         func_text = "def impl(val1, val2):\n"
         func_text += f"  n = len({len_arr})\n"
-        func_text += (
-            "  out_arr = bodo.utils.utils.alloc_type(n, bodo.boolean_array, (-1,))\n"
-        )
+        func_text += "  out_arr = bodo.utils.utils.alloc_type(n, bodo.boolean_array_type, (-1,))\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         if is_val1_arr:
             null1 = "bodo.libs.array_kernels.isna(val1, i)\n"
@@ -1103,7 +1164,7 @@ class BooleanArrayLogicalOperatorTemplate(AbstractTemplate):
             return
 
         # Return type is always boolean array
-        ret = boolean_array
+        ret = boolean_array_type
         # Return the signature
         return ret(*args)
 
@@ -1113,7 +1174,7 @@ def is_valid_boolean_array_logical_op(typ1, typ2):
     on a boolean array type"""
 
     is_valid = (
-        (typ1 == bodo.boolean_array or typ2 == bodo.boolean_array)
+        (typ1 == bodo.boolean_array_type or typ2 == bodo.boolean_array_type)
         and (
             (bodo.utils.utils.is_array_typ(typ1, False) and typ1.dtype == types.bool_)
             or typ1 == types.bool_
@@ -1132,9 +1193,9 @@ def _install_nullable_logical_lowering():
         lower_impl = create_boolean_array_logical_lower_impl(op)
         infer_global(op)(BooleanArrayLogicalOperatorTemplate)
         for typ1, typ2 in [
-            (boolean_array, boolean_array),
-            (boolean_array, types.bool_),
-            (boolean_array, types.Array(types.bool_, 1, "C")),
+            (boolean_array_type, boolean_array_type),
+            (boolean_array_type, types.bool_),
+            (boolean_array_type, types.Array(types.bool_, 1, "C")),
         ]:
             lower_builtin(op, typ1, typ2)(lower_impl)
 

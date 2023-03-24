@@ -37,9 +37,10 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
         // TODO: Template on use_sql_rules
         if (use_sql_rules) {
             // All nullable outputs in SQL output null for empty groups
-            // except for count and count_if.
+            // except for count, count_if and min_row_number_filter.
             init_val = (ftype == Bodo_FTypes::count) ||
-                       (ftype == Bodo_FTypes::count_if);
+                       (ftype == Bodo_FTypes::count_if) ||
+                       (ftype == Bodo_FTypes::min_row_number_filter);
         } else {
             if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
                 ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last ||
@@ -414,7 +415,7 @@ void get_groupby_output_dtype(int ftype,
             dtype = Bodo_CTypes::UINT64;
             return;
         case Bodo_FTypes::min_row_number_filter:
-            array_type = bodo_array_type::NUMPY;
+            array_type = bodo_array_type::NULLABLE_INT_BOOL;
             dtype = Bodo_CTypes::_BOOL;
             return;
     }

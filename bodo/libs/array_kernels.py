@@ -48,7 +48,7 @@ from bodo.libs.array import (
     sample_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType, offset_type
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import DictionaryArrayType, init_dict_arr
 from bodo.libs.distributed_api import Reduce_Type
@@ -114,7 +114,7 @@ def overload_isna(arr, i):
     if isinstance(
         arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
     ) or arr in (
-        boolean_array,
+        boolean_array_type,
         datetime_date_array_type,
         datetime_timedelta_array_type,
         string_array_split_view_type,
@@ -245,7 +245,7 @@ def setna_overload(arr, ind, int_nan_const=0):
     # to a numpy array. For indexing purposes, we need to try NA as False, so
     # we set the data here.
     # TODO: Update coerce_to_ndarray or indexing to handle NA properly.
-    if arr == boolean_array:
+    if arr == boolean_array_type:
 
         def impl(arr, ind, int_nan_const=0):
             arr[ind] = False
@@ -1141,8 +1141,8 @@ def duplicated(data, parallel=False):
     n = len(data)
     # empty input tuple corner case
     if n == 0:
-        return lambda data, parallel=False: np.empty(
-            0, dtype=np.bool_
+        return lambda data, parallel=False: bodo.libs.bool_arr_ext.alloc_bool_array(
+            0
         )  # pragma: no cover
 
     # if is_tuple, we are processing a dataframe and will form nullable tuples from the rows
@@ -1162,7 +1162,7 @@ def duplicated(data, parallel=False):
     func_text += "    bodo.libs.array.delete_table(out_cpp_table)\n"
     func_text += "    bodo.libs.array.delete_table(cpp_table)\n"
     func_text += "  n = len(data[0])\n"
-    func_text += "  out = np.empty(n, np.bool_)\n"
+    func_text += "  out = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
     func_text += "  uniqs = dict()\n"
     if is_tuple:
         func_text += "  for i in range(n):\n"
@@ -1840,11 +1840,11 @@ def concat_overload(arr_list):
     # Boolean array input, or mix of Numpy and nullable boolean
     if (
         isinstance(arr_list, (types.UniTuple, types.List))
-        and arr_list.dtype == boolean_array
+        and arr_list.dtype == boolean_array_type
         or (
             isinstance(arr_list, types.BaseTuple)
             and all(t.dtype == types.bool_ for t in arr_list.types)
-            and any(t == boolean_array for t in arr_list.types)
+            and any(t == boolean_array_type for t in arr_list.types)
         )
     ):
         # TODO: refactor to avoid duplication with integer array
@@ -1855,17 +1855,16 @@ def concat_overload(arr_list):
             for A in arr_list_converted:
                 all_data.append(A._data)
                 n_all += len(A)
-            out_data = bodo.libs.array_kernels.concat(all_data)
-            n_bytes = (n_all + 7) >> 3
-            new_mask = np.empty(n_bytes, np.uint8)
-            curr_bit = 0
+            out_array = bodo.libs.bool_arr_ext.alloc_bool_array(n_all)
+            offset = 0
             for A in arr_list_converted:
-                old_mask = A._null_bitmap
                 for j in range(len(A)):
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, j)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
-                    curr_bit += 1
-            return bodo.libs.bool_arr_ext.init_bool_array(out_data, new_mask)
+                    if bodo.libs.array_kernels.isna(A, j):
+                        bodo.libs.array_kernels.setna(out_array, offset + j)
+                    else:
+                        out_array[offset + j] = A[j]
+                offset += len(A)
+            return out_array
 
         return impl_bool_arr_list
 
@@ -2665,7 +2664,7 @@ def overload_sort(arr, ascending, inplace):
 
 
 def overload_array_max(A):
-    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array:
+    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array_type:
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).max()
@@ -2679,7 +2678,7 @@ overload(max, inline="always", no_unliteral=True)(overload_array_max)
 
 
 def overload_array_min(A):
-    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array:
+    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array_type:
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).min()
@@ -2693,7 +2692,7 @@ overload(min, inline="always", no_unliteral=True)(overload_array_min)
 
 
 def overload_array_sum(A):
-    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array:
+    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array_type:
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).sum()
@@ -2708,7 +2707,7 @@ overload(sum, inline="always", no_unliteral=True)(overload_array_sum)
 
 @overload(np.prod, inline="always", no_unliteral=True)
 def overload_array_prod(A):
-    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array:
+    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array_type:
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).prod()
@@ -3644,7 +3643,7 @@ def _overload_nan_argmin(arr):
     # we are operating on 1D arrays
     if (
         isinstance(arr, (IntegerArrayType, FloatingArrayType))
-        or arr in [boolean_array, datetime_date_array_type]
+        or arr in [boolean_array_type, datetime_date_array_type]
         or arr.dtype == bodo.timedelta64ns
         # Recent Numpy versions treat NA as min while pandas
         # skips NA values
@@ -3705,7 +3704,7 @@ def _overload_nan_argmax(arr):
 
     if (
         isinstance(arr, (IntegerArrayType, FloatingArrayType))
-        or arr in [boolean_array, datetime_date_array_type]
+        or arr in [boolean_array_type, datetime_date_array_type]
         or arr.dtype == bodo.timedelta64ns
         # Recent Numpy versions treat NA as max while pandas
         # skips NA values

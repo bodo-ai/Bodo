@@ -96,7 +96,6 @@ def launch_jvm() -> JavaGateway:
             ),
         )
 
-        print("Current Rank: ", MPI.COMM_WORLD.Get_rank())
         # TODO: Test out auto_convert=True for converting collections (esp lists)
         # https://www.py4j.org/advanced_topics.html#collections-conversion
         gateway = JavaGateway(gateway_parameters=GatewayParameters(port=gateway_port))
@@ -104,9 +103,9 @@ def launch_jvm() -> JavaGateway:
 
     # NOTE: currently, gateway.entry_point returns a non existent java object. Additionally, the
     # "main" function of the IcebergReadEntryPoint never seems to run. This is very strange.
-    # I suspect it may have somthing to do with the fact that we don't store any state in the
+    # I suspect it may have something to do with the fact that we don't store any state in the
     # gateway object class, and/or the fact that I'm generating a classpath aware executable JAR, as
-    # opposed to BodoSQl where I'm packaging it as a sigular executable JAR with all dependencies
+    # opposed to BodoSQl where I'm packaging it as a singular executable JAR with all dependencies
     # included. In any case, it doesn't actually impact us, so we can safely ignore it.
     return gateway
 

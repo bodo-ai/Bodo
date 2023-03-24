@@ -25,7 +25,7 @@ from bodo.io.fs_io import (
     storage_options_dict_type,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
@@ -607,9 +607,9 @@ def _get_dtype_str(t):
         setattr(types, t_name, t)
         return t_name
 
-    if t == boolean_array:
-        types.boolean_array = boolean_array
-        return "boolean_array"
+    if t == boolean_array_type:
+        types.boolean_array_type = boolean_array_type
+        return "boolean_array_type"
 
     if dtype == types.bool_:
         dtype = "bool_"
@@ -658,7 +658,7 @@ def _get_pd_dtype_str(t):
         # Float32 or Float64
         return f'"{t.get_pandas_scalar_type_instance.name}"'
 
-    if t == boolean_array:
+    if t == boolean_array_type:
         return "np.bool_"
 
     if isinstance(t, ArrayItemArrayType) and isinstance(

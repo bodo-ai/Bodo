@@ -35,7 +35,7 @@ import bodo
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.ir.filter import supported_compute_funcs
 from bodo.libs.binary_arr_ext import bytes_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -195,6 +195,14 @@ def is_alloc_callname(func_name, mod_name):
             and mod_name == "bodo.libs.tuple_arr_ext"
         )
         or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
+        or (
+            func_name == "alloc_false_bool_array"
+            and mod_name == "bodo.libs.bool_arr_ext"
+        )
+        or (
+            func_name == "alloc_true_bool_array"
+            and mod_name == "bodo.libs.bool_arr_ext"
+        )
         or (func_name == "alloc_int_array" and mod_name == "bodo.libs.int_arr_ext")
         or (func_name == "alloc_float_array" and mod_name == "bodo.libs.float_arr_ext")
         or (
@@ -355,7 +363,7 @@ def is_array_typ(var_typ, include_index_series=True):
             bodo.hiframes.split_impl.string_array_split_view_type,
             bodo.hiframes.datetime_date_ext.datetime_date_array_type,
             bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
-            boolean_array,
+            boolean_array_type,
             bodo.libs.str_ext.random_access_string_array,
             bodo.libs.interval_arr_ext.IntervalArrayType,
             bodo.null_array_type,
@@ -526,7 +534,7 @@ def empty_like_type_overload(n, arr):
 
         return empty_like_type_float_arr
 
-    if arr == boolean_array:
+    if arr == boolean_array_type:
 
         def empty_like_type_bool_arr(n, arr):  # pragma: no cover
             return bodo.libs.bool_arr_ext.alloc_bool_array(n)
@@ -874,7 +882,7 @@ def overload_alloc_type(n, t, s=None):
         )  # pragma: no cover
 
     # nullable bool array
-    if typ == boolean_array:
+    if typ == boolean_array_type:
         return lambda n, t, s=None: bodo.libs.bool_arr_ext.alloc_bool_array(
             n
         )  # pragma: no cover
@@ -956,11 +964,16 @@ def overload_full_type(n, val, t):
         )  # pragma: no cover
 
     # nullable bool array
-    if typ == boolean_array:
-        return lambda n, val, t: bodo.libs.bool_arr_ext.init_bool_array(
-            np.full(n, val, np.bool_),
-            np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
-        )  # pragma: no cover
+    if typ == boolean_array_type:
+
+        def impl(n, val, t):  # pragma: no cover
+            length = tuple_to_scalar(n)
+            if val:
+                return bodo.libs.bool_arr_ext.alloc_true_bool_array(length)
+            else:
+                return bodo.libs.bool_arr_ext.alloc_false_bool_array(length)
+
+        return impl
 
     # string array
     if typ == string_array_type:

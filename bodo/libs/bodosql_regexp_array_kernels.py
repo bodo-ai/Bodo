@@ -438,7 +438,7 @@ def regexp_like_util(arr, pattern, flags):
         scalar_text += "else:\n"
         scalar_text += "   res[i] = True\n"
 
-    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
 
     return gen_vectorized(
         arg_names,

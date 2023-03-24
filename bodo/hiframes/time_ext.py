@@ -20,7 +20,6 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
-    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -40,7 +39,8 @@ from bodo.utils.indexing import (
 from bodo.utils.typing import (
     BodoError,
     is_iterable_type,
-    is_list_like_index_type, is_overload_none,
+    is_list_like_index_type,
+    is_overload_none,
 )
 
 _nanos_per_micro = 1000
@@ -108,7 +108,7 @@ class Time:
             raise TypeError("Cannot compare Time with non-Time type")
 
     def __lt__(self, other):  # pragma: no cover
-        if other is None or other == float('inf'):  # pragma: no cover
+        if other is None or other == float("inf"):  # pragma: no cover
             # None will be transformed to float('inf') during < comparison
             # with other Time objects in pandas.Series
             return True
@@ -116,7 +116,7 @@ class Time:
         return self.value < other.value
 
     def __le__(self, other):  # pragma: no cover
-        if other is None or other == float('inf'):  # pragma: no cover
+        if other is None or other == float("inf"):  # pragma: no cover
             # None will be transformed to float('inf') during <= comparison
             # with other Time objects in pandas.Series
             return True
@@ -124,7 +124,7 @@ class Time:
         return self.value <= other.value
 
     def __gt__(self, other):
-        if other is None or other == float('-inf'):  # pragma: no cover
+        if other is None or other == float("-inf"):  # pragma: no cover
             # None will be transformed to float('inf') during > comparison
             # with other Time objects in pandas.Series
             return True
@@ -132,7 +132,7 @@ class Time:
         return self.value > other.value
 
     def __ge__(self, other):
-        if other is None or other == float('-inf'):  # pragma: no cover
+        if other is None or other == float("-inf"):  # pragma: no cover
             # None will be transformed to float('-inf') during >= comparison
             # with other Time objects in pandas.Series
             return True
@@ -764,7 +764,7 @@ def time_arr_getitem(A, ind):  # pragma: no cover
     # bool arr indexing. Note nullable boolean arrays are handled in
     # bool_arr_ind_getitem to ensure NAs are converted to False.
     if (
-        ind != bodo.boolean_array
+        ind != bodo.boolean_array_type
         and is_list_like_index_type(ind)
         and ind.dtype == types.bool_
     ):
@@ -796,7 +796,7 @@ def time_arr_getitem(A, ind):  # pragma: no cover
     # This should be the only TimeArray implementation
     # except for converting a Nullable boolean index to non-nullable.
     # We only expect to reach this case if more idx options are added.
-    if ind != bodo.boolean_array:  # pragma: no cover
+    if ind != bodo.boolean_array_type:  # pragma: no cover
         raise BodoError(
             f"getitem for TimeArray with indexing type {ind} not supported."
         )
@@ -908,6 +908,7 @@ def time_arr_nbytes_overload(A):
 
 def create_cmp_op_overload(op):
     """create overload function for comparison operators with Time type."""
+
     def overload_time_cmp(lhs, rhs):
         if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
 
@@ -921,7 +922,9 @@ def create_cmp_op_overload(op):
         if isinstance(lhs, TimeType) and is_overload_none(rhs):
             # When we compare Time and None in order to sort or take extreme values
             # in a series/array of Time, Time() > None, Time() < None should all return True
-            return lambda lhs, rhs: False if op is operator.eq else True  # pragma: no cover
+            return (
+                lambda lhs, rhs: False if op is operator.eq else True
+            )  # pragma: no cover
 
         if is_overload_none(lhs) and isinstance(rhs, TimeType):
             # When we compare None and Time in order to sort or take extreme values

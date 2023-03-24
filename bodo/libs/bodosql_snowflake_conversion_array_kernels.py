@@ -103,7 +103,7 @@ def to_boolean_util(arr, _try=False):
     else:
         scalar_text = f"res[i] = bool(arg0)"
 
-    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
 
     return gen_vectorized(
         arg_names,

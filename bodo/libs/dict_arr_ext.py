@@ -38,7 +38,6 @@ from numba.extending import (
 
 import bodo
 from bodo.libs import hstr_ext
-from bodo.libs.bool_arr_ext import init_bool_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     StringArrayType,
@@ -539,25 +538,33 @@ def dict_arr_eq(arr, val):  # pragma: no cover
     if arr._has_deduped_local_dictionary:
         dict_ind = find_dict_ind_unique(arr, val)
         if dict_ind == -1:
-            return init_bool_array(
-                np.full(n, False, np.bool_), arr._indices._null_bitmap.copy()
-            )
+            # TODO: Add an API for just copying the null bitmap?
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
+            for i in range(n):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+            return out_arr
         return arr._indices == dict_ind
     else:
         # In this case, we may have multiple indices with a value
         dict_ind_set = find_dict_ind_non_unique(arr, val)
 
         if len(dict_ind_set) == 0:
-            return init_bool_array(
-                np.full(n, False, np.bool_), arr._indices._null_bitmap.copy()
-            )
+            # TODO: Add an API for just copying the null bitmap?
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
+            for i in range(n):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+            return out_arr
 
-        values_arr = np.empty(n, dtype=np.bool_)
-
-        for i in range(len(arr._indices)):
-            values_arr[i] = arr._indices[i] in dict_ind_set
-
-        return init_bool_array(values_arr, arr._indices._null_bitmap.copy())
+        # TODO: Add an API for just copying the null bitmap?
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+        for i in range(n):
+            if bodo.libs.array_kernels.isna(arr, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            out_arr[i] = arr._indices[i] in dict_ind_set
+        return out_arr
 
 
 @numba.njit(no_cpython_wrapper=True)
@@ -569,25 +576,33 @@ def dict_arr_ne(arr, val):  # pragma: no cover
         # the values in the dictionary are unique.
         dict_ind = find_dict_ind_unique(arr, val)
         if dict_ind == -1:
-            return init_bool_array(
-                np.full(n, True, np.bool_), arr._indices._null_bitmap.copy()
-            )
+            # TODO: Add an API for just copying the null bitmap?
+            out_arr = bodo.libs.bool_arr_ext.alloc_true_bool_array(n)
+            for i in range(n):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+            return out_arr
         return arr._indices != dict_ind
     else:
         # In this case, we may have multiple indicies with a value
         dict_ind_set = find_dict_ind_non_unique(arr, val)
 
         if len(dict_ind_set) == 0:
-            return init_bool_array(
-                np.full(n, True, np.bool_), arr._indices._null_bitmap.copy()
-            )
+            # TODO: Add an API for just copying the null bitmap?
+            out_arr = bodo.libs.bool_arr_ext.alloc_true_bool_array(n)
+            for i in range(n):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+            return out_arr
 
-        values_arr = np.empty(n, dtype=np.bool_)
-
-        for i in range(len(arr._indices)):
-            values_arr[i] = arr._indices[i] not in dict_ind_set
-
-        return init_bool_array(values_arr, arr._indices._null_bitmap.copy())
+        # TODO: Add an API for just copying the null bitmap?
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+        for i in range(n):
+            if bodo.libs.array_kernels.isna(arr, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            out_arr[i] = arr._indices[i] not in dict_ind_set
+        return out_arr
 
 
 def get_binary_op_overload(op, lhs, rhs):
@@ -865,7 +880,7 @@ def str_series_contains_regex(arr, pat, case, flags, na, regex):  # pragma: no c
     # numpy object array.
     dict_arr_S = pd.Series(dict_arr)
     # Compute the operation on the dictionary and save the output
-    with numba.objmode(dict_arr_out=bodo.boolean_array):
+    with numba.objmode(dict_arr_out=bodo.boolean_array_type):
         dict_arr_out = pd.array(dict_arr_S.array, "string")._str_contains(
             pat, case, flags, na, regex
         )
@@ -943,7 +958,7 @@ def str_match(arr, pat, case, flags, na):  # pragma: no cover
     out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_indices)
     dict_arr_S = pd.Series(dict_arr)
     # Compute the operation on the dictionary and save the output
-    with numba.objmode(dict_arr_out=bodo.boolean_array):
+    with numba.objmode(dict_arr_out=bodo.boolean_array_type):
         dict_arr_out = dict_arr_S.array._str_match(pat, case, flags, na)
 
     for i in range(n_indices):

@@ -78,7 +78,7 @@ from bodo.hiframes.split_impl import StringArraySplitViewType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import (
     BooleanArrayType,
-    boolean_array,
+    boolean_array_type,
     is_valid_boolean_array_logical_op,
 )
 from bodo.libs.decimal_arr_ext import DecimalArrayType
@@ -1325,7 +1325,7 @@ class SeriesPass:
 
         # inline operator.or_ and operator.and_ for boolean arrays
         if (rhs.fn in [operator.or_, operator.and_]) and any(
-            t == boolean_array for t in (typ1, typ2)
+            t == boolean_array_type for t in (typ1, typ2)
         ):
             if is_valid_boolean_array_logical_op(typ1, typ2):
                 impl = bodo.libs.bool_arr_ext.create_nullable_logical_op_overload(
@@ -1337,7 +1337,7 @@ class SeriesPass:
         # inline Boolean array ops
         if (
             rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
-            and any(t == boolean_array for t in (typ1, typ2))
+            and any(t == boolean_array_type for t in (typ1, typ2))
             # Don't inline operators between array + Series. These should be handled
             # by Series
             and not any(isinstance(t, SeriesType) for t in (typ1, typ2))
@@ -1349,7 +1349,7 @@ class SeriesPass:
         if (
             rhs.fn
             in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
-            and any(t == boolean_array for t in (typ1, typ2))
+            and any(t == boolean_array_type for t in (typ1, typ2))
         ):
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
@@ -1408,7 +1408,7 @@ class SeriesPass:
             impl = overload_func(typ)
             return replace_func(self, impl, [arg])
 
-        if typ == boolean_array:
+        if typ == boolean_array_type:
             assert rhs.fn in (operator.neg, operator.invert, operator.pos)
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 1)
             impl = overload_func(typ)
@@ -1559,7 +1559,7 @@ class SeriesPass:
         if (
             func_mod in ("numpy", "ufunc")
             and func_name in ufunc_names
-            and any(self.typemap[a.name] == boolean_array for a in rhs.args)
+            and any(self.typemap[a.name] == boolean_array_type for a in rhs.args)
         ):
             return self._handle_ufuncs_bool_arr(func_name, rhs.args)
 
@@ -1723,7 +1723,7 @@ class SeriesPass:
         # inline BooleanArray.copy()
         if (
             isinstance(func_mod, ir.Var)
-            and self.typemap[func_mod.name] == boolean_array
+            and self.typemap[func_mod.name] == boolean_array_type
             and func_name in ("copy", "astype")
         ):
             rhs.args.insert(0, func_mod)
@@ -2606,7 +2606,7 @@ class SeriesPass:
                 "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
                 "    numba.parfors.parfor.init_prange()\n"
                 "    n = len(arr)\n"
-                "    out = np.empty(n, np.bool_)\n"
+                "    out = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
                 "    for i in numba.parfors.parfor.internal_prange(n):\n"
                 "        out[i] = arr[i] in vals\n"
                 "    return bodo.hiframes.pd_series_ext.init_series(out, index)\n"
@@ -2625,7 +2625,7 @@ class SeriesPass:
                 "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
                 "    numba.parfors.parfor.init_prange()\n"
                 "    n = len(arr)\n"
-                "    out = np.empty(n, np.bool_)\n"
+                "    out = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
                 "    for i in numba.parfors.parfor.internal_prange(n):\n"
                 "        # TODO: why don't these work?\n"
                 "        # out[i] = (arr[i] not in vals)\n"
@@ -2970,7 +2970,7 @@ class SeriesPass:
             return [ir.Assign(expr, assign.target, rhs.loc)]
 
         # inline bool arr operators
-        if any(self.typemap[a.name] == boolean_array for a in rhs.args):
+        if any(self.typemap[a.name] == boolean_array_type for a in rhs.args):
             n_args = len(rhs.args)
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(func, n_args)
             impl = overload_func(*tuple(self.typemap[a.name] for a in rhs.args))
