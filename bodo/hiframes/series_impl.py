@@ -2803,7 +2803,7 @@ def overload_series_isin(S, values):
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             n = len(A)
-            out_arr = np.empty(n, np.bool_)
+            out_arr = bodo.libs.bool_arr_ext.alloc_false_bool_array(n)
             bodo.libs.array.array_isin(out_arr, A, values_arr, False)
             return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
