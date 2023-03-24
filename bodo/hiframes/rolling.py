@@ -1518,7 +1518,7 @@ def is_supported_shift_array_type(arr_type):
         )
         or arr_type
         in (
-            bodo.boolean_array,
+            bodo.boolean_array_type,
             bodo.datetime_date_array_type,
             bodo.string_array_type,
             bodo.binary_array_type,

@@ -107,7 +107,7 @@ def create_comparison_operators_util_func_overload(func_name):  # pragma: no cov
         arg_names = ["arr0", "arr1"]
         arg_types = [arr0, arr1]
         propagate_null = [True] * 2
-        out_dtype = bodo.boolean_array
+        out_dtype = bodo.boolean_array_type
         if func_name == "equal":
             operator_str = "=="
         elif func_name == "not_equal":

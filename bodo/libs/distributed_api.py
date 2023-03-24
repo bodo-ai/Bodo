@@ -35,7 +35,7 @@ from bodo.libs.array_item_arr_ext import (
     offset_type,
 )
 from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
@@ -105,6 +105,7 @@ MPI_ROOT = 0
 ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
 
 
+# XXX same as _distributed.h::BODO_ReduceOps::ReduceOpsEnum
 class Reduce_Type(Enum):
     Sum = 0
     Prod = 1
@@ -112,9 +113,14 @@ class Reduce_Type(Enum):
     Max = 3
     Argmin = 4
     Argmax = 5
-    Or = 6
-    Concat = 7
-    No_Op = 8
+    Bit_Or = 6
+    Bit_And = 7
+    Bit_Xor = 8
+    Logical_Or = 9
+    Logical_And = 10
+    Logical_Xor = 11
+    Concat = 12
+    No_Op = 13
 
 
 _get_rank = types.ExternalFunction("c_get_rank", types.int32())
@@ -215,7 +221,7 @@ def isend(arr, size, pe, tag, cond=True):
     if isinstance(
         arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
     ) or arr in (
-        boolean_array,
+        boolean_array_type,
         datetime_date_array_type,
     ):
         # return a tuple of requests for data and null arrays
@@ -312,7 +318,7 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
     if isinstance(
         arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
     ) or arr in (
-        boolean_array,
+        boolean_array_type,
         datetime_date_array_type,
     ):
         # return a tuple of requests for data and null arrays
@@ -748,7 +754,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         data,
         (IntegerArrayType, FloatingArrayType, DecimalArrayType, bodo.TimeArrayType),
     ) or data in (
-        boolean_array,
+        boolean_array_type,
         datetime_date_array_type,
     ):
         typ_val = numba_to_c_type(data.dtype)
@@ -1699,7 +1705,7 @@ def get_value_for_type(dtype):  # pragma: no cover
         return pd.array([3.0], pd_dtype)
 
     # bool array
-    if dtype == boolean_array:
+    if dtype == boolean_array_type:
         return pd.array([True], "boolean")
 
     # Decimal array
@@ -2035,7 +2041,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
     if isinstance(
         data, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
     ) or data in (
-        boolean_array,
+        boolean_array_type,
         datetime_date_array_type,
     ):
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
@@ -2054,7 +2060,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
                     d, b, precision, scale
                 )  # pragma: no cover
             )
-        if data == boolean_array:
+        if data == boolean_array_type:
             init_func = bodo.libs.bool_arr_ext.init_bool_array
         if data == datetime_date_array_type:
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
@@ -2408,7 +2414,7 @@ def bcast_overload(data, root=MPI_ROOT):
 
     # nullable int/float/bool/date arrays
     if isinstance(data, (IntegerArrayType, FloatingArrayType)) or data in (
-        boolean_array,
+        boolean_array_type,
         datetime_date_array_type,
     ):
 
@@ -3020,7 +3026,7 @@ def alltoallv(
     if isinstance(
         send_data, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
     ) or send_data in (
-        boolean_array,
+        boolean_array_type,
         datetime_date_array_type,
     ):
         return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(

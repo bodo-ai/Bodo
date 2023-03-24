@@ -1647,7 +1647,7 @@ def test_pq_non_constant_filepath_error(datapath):
             "df": {
                 "one": bodo.float64[:],
                 "two": bodo.string_array_type,
-                "three": bodo.boolean_array,
+                "three": bodo.boolean_array_type,
                 "four": bodo.float64[:],
                 "five": bodo.string_array_type,
                 "__index_level_0__": bodo.int64[:],

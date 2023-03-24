@@ -1117,7 +1117,7 @@ def test_df_dtypes(df_value):
     df_type = bodo.typeof(df_value)
     for i in range(len(df_value.columns)):
         if py_output.iloc[i] == object:
-            if df_type.data[i] == bodo.boolean_array:
+            if df_type.data[i] == bodo.boolean_array_type:
                 py_output.iloc[i] = pd.BooleanDtype()
             if df_type.data[i] in (bodo.string_array_type, bodo.dict_str_arr_type):
                 py_output.iloc[i] = pd.StringDtype()

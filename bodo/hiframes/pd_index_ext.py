@@ -37,7 +37,7 @@ from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
@@ -160,7 +160,7 @@ def typeof_pd_index(val, c):
         return NumericIndexType(
             types.bool_,
             get_val_type_maybe_str_literal(val.name),
-            boolean_array,
+            boolean_array_type,
         )
     # catch-all for non-supported Index types
     # RangeIndex is directly supported (TODO: make sure this is not called)
@@ -431,13 +431,15 @@ def overload_datetime_index_is_leap_year(dti):
         numba.parfors.parfor.init_prange()
         A = bodo.hiframes.pd_index_ext.get_index_data(dti)
         n = len(A)
-        # TODO (ritwika): use nullable bool array.
-        S = np.empty(n, np.bool_)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(A, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
             val = A[i]
             ts = bodo.utils.conversion.box_if_dt64(val)
-            S[i] = bodo.hiframes.pd_timestamp_ext.is_leap_year(ts.year)
-        return S
+            out_arr[i] = bodo.hiframes.pd_timestamp_ext.is_leap_year(ts.year)
+        return out_arr
 
     return impl
 
@@ -3160,7 +3162,7 @@ def array_type_to_index(arr_typ, name_typ=None):
         (types.Array, IntegerArrayType, FloatingArrayType, bodo.CategoricalArrayType),
     ) or arr_typ in (
         bodo.datetime_date_array_type,
-        bodo.boolean_array,
+        bodo.boolean_array_type,
     ), f"Converting array type {arr_typ} to index not supported"
 
     # TODO: Pandas keeps datetime_date Index as a generic Index(, dtype=object)
@@ -3681,7 +3683,7 @@ def create_isna_specific_method(overload_name):
             def impl(I):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
                 n = len(I)
-                out_arr = np.empty(n, np.bool_)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
                     out_arr[i] = not cond_when_isna
                 return out_arr
@@ -3693,7 +3695,7 @@ def create_isna_specific_method(overload_name):
             "    numba.parfors.parfor.init_prange()\n"
             "    arr = bodo.hiframes.pd_index_ext.get_index_data(I)\n"
             "    n = len(arr)\n"
-            "    out_arr = np.empty(n, np.bool_)\n"
+            "    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
             "    for i in numba.parfors.parfor.internal_prange(n):\n"
             f"       out_arr[i] = {'' if cond_when_isna else 'not '}"
             "bodo.libs.array_kernels.isna(arr, i)\n"
@@ -3890,7 +3892,7 @@ def overload_index_duplicated(I, keep="first"):
     if isinstance(I, RangeIndexType):
 
         def impl(I, keep="first"):  # pragma: no cover
-            return np.zeros(len(I), np.bool_)
+            return bodo.libs.bool_arr_ext.alloc_false_bool_array(len(I))
 
         return impl
 

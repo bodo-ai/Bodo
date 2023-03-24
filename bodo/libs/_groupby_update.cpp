@@ -977,7 +977,7 @@ void window_computation(array_info* orderby_arr, int64_t window_func,
             array_info* data_col =
                 alloc_array(num_groups, 1, 1, orderby_arr->arr_type,
                             orderby_arr->dtype, 0, 0);
-            // Initialize the index column. This is 0 intialized and will
+            // Initialize the index column. This is 0 initialized and will
             // not initial the null values.
             aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
                                       use_sql_rules);

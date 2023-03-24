@@ -1057,7 +1057,7 @@ def pd_series_overload(
             elif isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype):
                 _arr_dtype = bodo.FloatingArrayType(nb_dtype.dtype)
             elif nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
-                _arr_dtype = bodo.boolean_array
+                _arr_dtype = bodo.boolean_array_type
             elif isinstance(nb_dtype, types.Number) or nb_dtype in [
                 bodo.datetime64ns,
                 bodo.timedelta64ns,

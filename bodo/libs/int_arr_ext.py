@@ -507,7 +507,7 @@ def int_arr_getitem(A, ind):
     # bool arr indexing. Note nullable boolean arrays are handled in
     # bool_arr_ind_getitem to ensure NAs are converted to False.
     if (
-        ind != bodo.boolean_array
+        ind != bodo.boolean_array_type
         and is_list_like_index_type(ind)
         and ind.dtype == types.bool_
     ):
@@ -539,7 +539,7 @@ def int_arr_getitem(A, ind):
     # This should be the only IntegerArray implementation
     # except for converting a Nullable boolean index to non-nullable.
     # We only expect to reach this case if more idx options are added.
-    if ind != bodo.boolean_array:  # pragma: no cover
+    if ind != bodo.boolean_array_type:  # pragma: no cover
         raise BodoError(
             f"getitem for IntegerArray with indexing type {ind} not supported."
         )

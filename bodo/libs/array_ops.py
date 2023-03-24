@@ -145,7 +145,7 @@ def overload_array_op_isna(arr):
     def impl(arr):  # pragma: no cover
         numba.parfors.parfor.init_prange()
         n = len(arr)
-        out_arr = np.empty(n, np.bool_)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
             out_arr[i] = bodo.libs.array_kernels.isna(arr, i)
         return out_arr
@@ -795,7 +795,7 @@ def overload_array_op_isin(arr, values):
         values = bodo.libs.array_ops._convert_isin_values(values, use_hash_impl)
         numba.parfors.parfor.init_prange()
         n = len(arr)
-        out_arr = np.empty(n, np.bool_)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
             # TODO: avoid Timestamp conversion for date comparisons if possible
             # TODO: handle None/nan/NA values properly

@@ -213,7 +213,7 @@ from bodo.hiframes.pd_timestamp_ext import (
     pd_timestamp_tz_naive_type,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.interval_arr_ext import IntervalArrayType

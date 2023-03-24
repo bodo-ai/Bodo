@@ -46,7 +46,7 @@ from bodo.libs.binary_arr_ext import (
     binary_array_type,
     bytes_type,
 )
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -1409,7 +1409,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
             S.data,
             (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.CategoricalArrayType),
         )
-        or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
+        or S.data in [bodo.boolean_array_type, bodo.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmin() only supported for numeric array types. Array type: {S.data} not supported."
@@ -1462,7 +1462,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
             S.data,
             (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.CategoricalArrayType),
         )
-        or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
+        or S.data in [bodo.boolean_array_type, bodo.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmax() only supported for numeric array types. Array type: {S.data} not supported."
@@ -4346,7 +4346,7 @@ def create_explicit_binary_op_overload(op):
             if isinstance(
                 S.data, (IntegerArrayType, FloatingArrayType)
             ) and ret_dtype == types.Array(types.bool_, 1, "C"):
-                ret_dtype = boolean_array
+                ret_dtype = boolean_array_type
 
             def impl_scalar(
                 S, other, level=None, fill_value=None, axis=0
@@ -4379,7 +4379,7 @@ def create_explicit_binary_op_overload(op):
         if isinstance(
             S.data, (IntegerArrayType, FloatingArrayType)
         ) and ret_dtype == types.Array(types.bool_, 1, "C"):
-            ret_dtype = boolean_array
+            ret_dtype = boolean_array_type
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -4441,7 +4441,7 @@ def create_explicit_binary_reverse_op_overload(op):
             if isinstance(
                 S.data, (IntegerArrayType, FloatingArrayType)
             ) and ret_dtype == types.Array(types.bool_, 1, "C"):
-                ret_dtype = boolean_array
+                ret_dtype = boolean_array_type
 
             def impl_scalar(
                 S, other, level=None, fill_value=None, axis=0
@@ -4473,7 +4473,7 @@ def create_explicit_binary_reverse_op_overload(op):
         if isinstance(
             S.data, (IntegerArrayType, FloatingArrayType)
         ) and ret_dtype == types.Array(types.bool_, 1, "C"):
-            ret_dtype = boolean_array
+            ret_dtype = boolean_array_type
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
