@@ -699,7 +699,6 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                     recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
                 displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
                 tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-            #  print(rank, n_loc, n_total, recv_counts, displs)
             c_gatherv(
                 data._days_data.ctypes,
                 np.int32(n_loc),

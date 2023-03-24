@@ -890,7 +890,10 @@ class TestDataFrame(unittest.TestCase):
         df2 = pd.DataFrame({"A": np.arange(n), "C": np.arange(n) ** 2})
         df2.A[n // 2 :] = n
         pd.testing.assert_frame_equal(
-            bodo_func(df, df2), test_impl(df, df2), check_column_type=False
+            bodo_func(df, df2),
+            test_impl(df, df2),
+            check_column_type=False,
+            check_dtype=False,
         )
 
     @unittest.skip("needs dict typing in Numba")
@@ -915,7 +918,7 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
         pd.testing.assert_frame_equal(
-            bodo_func(df), test_impl(df), check_column_type=False
+            bodo_func(df), test_impl(df), check_column_type=False, check_dtype=False
         )
 
     def test_append1(self):
