@@ -22,6 +22,7 @@ from bodo.tests.utils import (
     check_func,
     nanoseconds_to_other_time_units,
 )
+from BodoSQL.bodosql.tests.utils import bodosql_use_date_type
 
 
 @pytest.mark.parametrize(
@@ -342,6 +343,72 @@ def test_add_interval_time_units(unit, args, answers, memory_leak_check):
         impl,
         args,
         py_output=answers[unit],
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "interval_input",
+    [
+        pytest.param(pd.Timedelta(seconds=90), id="timedelta-scalar"),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timedelta(days=1),
+                    None,
+                    pd.Timedelta(seconds=-42),
+                    pd.Timedelta(microseconds=15),
+                    pd.Timedelta(days=-1, minutes=15),
+                ]
+            ).values,
+            id="timedelta-vector",
+        ),
+    ],
+)
+def test_interval_add_interval_to_time(interval_input, memory_leak_check):
+    """
+    Tests support for interval_add_interval on various Interval types.
+    """
+
+    def impl(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.add_interval(arr0, arr1))
+
+    time_input = pd.Series(
+        [
+            bodo.Time(12, 30, 0, nanosecond=1),
+            bodo.Time(0, 0, 1),
+            bodo.Time(0, 0, 0),
+            bodo.Time(12, 0, 0),
+            bodo.Time(10, 50, 45, microsecond=500),
+        ]
+    )
+
+    if isinstance(interval_input, (pd.Timedelta)):
+        answer = pd.Series(
+            [
+                bodo.Time(12, 31, 30, nanosecond=1),
+                bodo.Time(0, 1, 31),
+                bodo.Time(0, 1, 30),
+                bodo.Time(12, 1, 30),
+                bodo.Time(10, 52, 15, microsecond=500),
+            ]
+        )
+    else:
+        answer = pd.Series(
+            [
+                bodo.Time(12, 30, 0, nanosecond=1),
+                None,
+                bodo.Time(23, 59, 18),
+                bodo.Time(12, 0, 0, microsecond=15),
+                bodo.Time(11, 5, 45, microsecond=500),
+            ]
+        )
+
+    check_func(
+        impl,
+        (time_input, interval_input),
+        py_output=answer,
         check_dtype=False,
         reset_index=True,
     )

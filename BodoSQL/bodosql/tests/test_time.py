@@ -425,6 +425,105 @@ def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "query, answer",
+    [
+        pytest.param(
+            "SELECT DATE_ADD(TI, TD) FROM table1",
+            pd.Series(
+                [
+                    bodo.Time(13, 30, 0),
+                    None,
+                    bodo.Time(21, 40, 13),
+                    bodo.Time(2, 3, 2, microsecond=1),
+                    bodo.Time(5, 45, 3, nanosecond=625999250),
+                ]
+            ),
+            id="date_add-timedelta_array",
+        ),
+        pytest.param(
+            "SELECT DATE_SUB(TI, Interval '30' minutes) FROM table1",
+            pd.Series(
+                [
+                    bodo.Time(12, 0, 0),
+                    None,
+                    bodo.Time(0, 30, 13),
+                    bodo.Time(21, 30, 0),
+                    bodo.Time(5, 15, 0, nanosecond=125999250),
+                ]
+            ),
+            id="date_sub-interval_scalar",
+        ),
+        pytest.param(
+            "SELECT TI + Interval '3' hours FROM table1",
+            pd.Series(
+                [
+                    bodo.Time(15, 30, 0),
+                    None,
+                    bodo.Time(4, 0, 13),
+                    bodo.Time(1, 0, 0),
+                    bodo.Time(8, 45, 0, nanosecond=125999250),
+                ]
+            ),
+            id="addition-interval_scalar",
+        ),
+        pytest.param(
+            "SELECT TI - TD FROM table1",
+            pd.Series(
+                [
+                    bodo.Time(11, 30, 0),
+                    None,
+                    bodo.Time(4, 20, 13),
+                    bodo.Time(17, 56, 57, microsecond=999999),
+                    bodo.Time(5, 44, 56, nanosecond=625999250),
+                ]
+            ),
+            id="subtraction-timedelta_array",
+        ),
+    ],
+)
+def test_time_plus_minus_intervals(query, answer, memory_leak_check):
+    """Tests adding/subtracting intervals to/from TIME values.
+
+    NOTE: intervals with units larger than hour __should__ cause
+    an error at compile time, but currently BodoSQL is not able to
+    know if this is the case since intervals are converted into
+    timedeltas before the binop is computed, which means it is impossible
+    to tell if the timedelta is from a unit that is too large or just
+    a value from the legal units that has overflowed.
+
+    Example: TIME + (1 day + 1 hour) should not be allowed (but currently is)
+    Example: TIME + (25 hours) is allowed"""
+    TI = pd.Series(
+        [
+            bodo.Time(12, 30, 0),
+            None,
+            bodo.Time(1, 0, 13),
+            bodo.Time(22, 0, 0),
+            bodo.Time(5, 45, 0, nanosecond=125999250),
+        ]
+    )
+    TD = pd.Series(
+        [
+            pd.Timedelta(hours=1),
+            pd.Timedelta(hours=2),
+            pd.Timedelta(minutes=-200),
+            pd.Timedelta(hours=4, minutes=3, seconds=2, microseconds=1),
+            pd.Timedelta(seconds=3, milliseconds=500),
+        ]
+    )
+    ctx = {"table1": pd.DataFrame({"TI": TI, "TD": TD})}
+    expected_output = pd.DataFrame({0: answer})
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+        check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
     "use_case",
     [
         pytest.param(False, id="no_case"),

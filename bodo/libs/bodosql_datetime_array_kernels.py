@@ -536,7 +536,7 @@ def add_interval_util(start_dt, interval):
     Returns:
         datetime series/scalar: start_dt + interval
     """
-    verify_datetime_arg_allow_tz(start_dt, "add_interval", "start_dt")
+    verify_time_or_datetime_arg_allow_tz(start_dt, "add_interval", "start_dt")
     verify_sql_interval(interval, "add_interval", "interval")
     time_zone = get_tz_if_exists(start_dt)
 
@@ -545,8 +545,15 @@ def add_interval_util(start_dt, interval):
     propagate_null = [True] * 2
     scalar_text = ""
     extra_globals = None
+
+    if is_valid_time_arg(start_dt):
+        scalar_text += "td_val = bodo.utils.conversion.box_if_dt64(arg1).value\n"
+        scalar_text += "value = (arg0.value + td_val) % 86400000000000\n"
+        scalar_text += "res[i] = bodo.Time(nanosecond=value)"
+        out_dtype = bodo.TimeArrayType(9)
+
     # Modified logic from add_interval_xxx functions
-    if time_zone is not None:
+    elif time_zone is not None:
         if (
             bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone)
             and interval != bodo.date_offset_type
