@@ -974,7 +974,7 @@ class GroupbyPipeline {
                 }
             }
             if (key_col->arr_type == bodo_array_type::DICT) {
-                array_info* key_indices = key_col->info2;
+                array_info* key_indices = key_col->child_arrays[1];
                 array_info* new_key_indices =
                     alloc_array(num_groups, -1, -1, key_indices->arr_type,
                                 key_indices->dtype, 0, 0);
@@ -982,19 +982,19 @@ class GroupbyPipeline {
                     std::tie(key_col, key_row) =
                         find_key_for_group(j, from_tables, i);
                     // Update key_indices with the new key col
-                    key_indices = key_col->info2;
+                    key_indices = key_col->child_arrays[1];
                     new_key_indices->at<dict_indices_t>(j) =
                         key_indices->at<dict_indices_t>(key_row);
                     bool bit = key_indices->get_null_bit(key_row);
                     new_key_indices->set_null_bit(j, bit);
                 }
                 new_key_col = create_dict_string_array(
-                    key_col->info1, new_key_indices,
+                    key_col->child_arrays[0], new_key_indices,
                     key_col->has_global_dictionary,
                     key_col->has_deduped_local_dictionary,
                     key_col->has_sorted_dictionary);
                 // incref because they share the same dictionary array
-                incref_array(key_col->info1);
+                incref_array(key_col->child_arrays[0]);
             }
             if (key_col->arr_type == bodo_array_type::STRING) {
                 // new key col will have num_groups rows containing the

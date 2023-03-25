@@ -615,7 +615,7 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
 void update_local_dictionary_remove_duplicates(array_info* dict_array,
                                                bool gather_global_dict,
                                                bool sort_dictionary) {
-    array_info* local_dictionary = dict_array->info1;
+    array_info* local_dictionary = dict_array->child_arrays[0];
     array_info* global_dictionary;
     // If we don't have the global dictionary with unique values
     // then we need to drop duplicates on the local data and then
@@ -669,7 +669,7 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     }
 
     // XXX this doesn't propagate to Python
-    dict_array->info1 = global_dictionary;
+    dict_array->child_arrays[0] = global_dictionary;
     if (gather_global_dict) {
         // If we didn't gather data, then the dictionary can remain
         // global if it was already global.
@@ -739,18 +739,19 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     // TODO? if there is only one reference to dict_array remaining, I can
     // modify indices in place, otherwise I have to allocate a new array if
     // I am not changing the dictionary of the input array in Python side
-    bool inplace = (dict_array->info2->meminfos[0]->refct == 1);
+    bool inplace = (dict_array->child_arrays[1]->meminfos[0]->refct == 1);
     if (!inplace) {
-        array_info* dict_indices = copy_array(dict_array->info2);
-        delete_info_decref_array(dict_array->info2);
-        dict_array->info2 = dict_indices;
+        array_info* dict_indices = copy_array(dict_array->child_arrays[1]);
+        delete_info_decref_array(dict_array->child_arrays[1]);
+        dict_array->child_arrays[1] = dict_indices;
         dict_array->null_bitmask = dict_indices->null_bitmask;
     }
 
     uint8_t* null_bitmask = (uint8_t*)dict_array->null_bitmask;
-    for (size_t i = 0; i < dict_array->info2->length; i++) {
+    for (size_t i = 0; i < dict_array->child_arrays[1]->length; i++) {
         if (GetBit(null_bitmask, i)) {
-            dict_indices_t& index = dict_array->info2->at<dict_indices_t>(i);
+            dict_indices_t& index =
+                dict_array->child_arrays[1]->at<dict_indices_t>(i);
             if (local_to_global_index[index] < 0) {
                 // This has to be an NA since all values in local dictionary
                 // (except NA) _must_ be in the global/deduplicated
@@ -1368,7 +1369,7 @@ table_info* shuffle_table_kernel(table_info* in_table,
                     "shuffle_array: input dictionary array doesn't have a "
                     "global dictionary");
             // in_arr <- indices array, to simplify code below
-            in_arr = in_arr->info2;
+            in_arr = in_arr->child_arrays[1];
         }
         array_info* out_arr;
         if (in_arr->arr_type != bodo_array_type::ARROW) {
@@ -1419,7 +1420,7 @@ table_info* shuffle_table_kernel(table_info* in_table,
             NRT_MemInfo* meminfo = NULL;
             out_arr = new array_info(
                 bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_items,
-                NULL, NULL, NULL, NULL, NULL, {meminfo}, out_array);
+                NULL, NULL, NULL, NULL, NULL, {meminfo}, {}, out_array);
         }
         // release reference of input array
         // This is a steal reference case. The idea is to release memory as
@@ -1432,12 +1433,12 @@ table_info* shuffle_table_kernel(table_info* in_table,
             in_arr = in_table->columns[i];
             array_info* out_dict_arr = new array_info(
                 bodo_array_type::DICT, in_arr->dtype, out_arr->length, NULL,
-                NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
-                true, true, in_arr->has_sorted_dictionary, in_arr->info1,
-                out_arr);
+                NULL, NULL, out_arr->null_bitmask, NULL, {},
+                {in_arr->child_arrays[0], out_arr}, NULL, 0, 0, 0, true, true,
+                in_arr->has_sorted_dictionary);
             // info1 is dictionary. incref so it doesn't get deleted since
             // it is given to the output array
-            incref_array(in_arr->info1);
+            incref_array(in_arr->child_arrays[0]);
             out_arr = out_dict_arr;
         }
         decref_array(in_arr);
@@ -1793,7 +1794,7 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table,
                     "global dictionary");
             }
             // in_arr <- indices array, to simplify code below
-            in_arr = in_arr->info2;
+            in_arr = in_arr->child_arrays[1];
             arr_type = in_arr->arr_type;
         }
         {
@@ -1821,12 +1822,12 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table,
             in_arr = in_table->columns[i];
             array_info* out_dict_arr = new array_info(
                 bodo_array_type::DICT, in_arr->dtype, out_arr->length, NULL,
-                NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
-                true, true, in_arr->has_sorted_dictionary, in_arr->info1,
-                out_arr);
+                NULL, NULL, out_arr->null_bitmask, NULL, {},
+                {in_arr->child_arrays[0], out_arr}, NULL, 0, 0, 0, true, true,
+                in_arr->has_sorted_dictionary);
             // info1 is dictionary. incref so it doesn't get deleted since
             // it is given to the output array
-            incref_array(in_arr->info1);
+            incref_array(in_arr->child_arrays[0]);
             out_arr = out_dict_arr;
         }
         // Reference stealing see shuffle_table_kernel for discussion
@@ -2267,7 +2268,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 // we assume that the dictionary is global.
                 // Which means we just need to broadcast the indices
                 // array, which is the same logic as NULLABLE_INT_BOOL.
-                in_arr = in_arr->info2;
+                in_arr = in_arr->child_arrays[1];
             }
             arr_bcast[0] = in_arr->length;
             arr_bcast[1] = in_arr->dtype;
@@ -2297,10 +2298,10 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 broadcast_arrow_array(ref_array, in_array);
             uint64_t n_rows = array->length();
             NRT_MemInfo* meminfo = NULL;
-            out_arr = new array_info(bodo_array_type::ARROW,
-                                     Bodo_CTypes::INT8 /*dummy*/, n_rows, NULL,
-                                     NULL, NULL, NULL, NULL, {meminfo}, array,
-                                     /*precision=*/precision);
+            out_arr = new array_info(
+                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows,
+                NULL, NULL, NULL, NULL, NULL, {meminfo}, {}, array,
+                /*precision=*/precision);
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||
@@ -2380,15 +2381,15 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 // at the end.
                 in_arr = in_table->columns[i_col];
             }
-            array_info* dict_arr = ref_table->columns[i_col]->info1;
+            array_info* dict_arr = ref_table->columns[i_col]->child_arrays[0];
             // Create a DICT out_arr
             out_arr = new array_info(
                 bodo_array_type::DICT, dict_arr->dtype, out_arr->length, NULL,
-                NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+                NULL, NULL, out_arr->null_bitmask, NULL, {},
+                {dict_arr, out_arr}, NULL, 0, 0, 0,
                 /*has_global_dictionary=*/true,
                 /*has_deduped_local_dictionary=*/true,
-                ref_table->columns[i_col]->has_sorted_dictionary, dict_arr,
-                out_arr);
+                ref_table->columns[i_col]->has_sorted_dictionary);
             // incref the dictionary so it doesn't get deleted since
             // it is given to the output array
             incref_array(dict_arr);
@@ -2739,7 +2740,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             // Note: We need to revisit if gather_table should be
             // a no-op if is_parallel=False
             make_dictionary_global_and_unique(in_arr, true);
-            in_arr = in_arr->info2;
+            in_arr = in_arr->child_arrays[1];
         }
         int64_t n_rows = in_arr->length;
         int64_t n_sub_elems = in_arr->n_sub_elems();
@@ -2774,7 +2775,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 n_rows_tot = out_array->length();
             out_arr = new array_info(
                 bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows_tot,
-                NULL, NULL, NULL, NULL, NULL, {meminfo}, out_array);
+                NULL, NULL, NULL, NULL, NULL, {meminfo}, {}, out_array);
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||
@@ -3011,11 +3012,12 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             if (all_gather || myrank == mpi_root) {
                 out_arr = new array_info(
                     bodo_array_type::DICT, in_arr->dtype, out_arr->length, NULL,
-                    NULL, NULL, out_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+                    NULL, NULL, out_arr->null_bitmask, NULL, {},
+                    {in_arr->child_arrays[0], out_arr}, NULL, 0, 0, 0,
                     /*has_global_dictionary=*/true,
                     /*has_deduped_local_dictionary=*/true,
-                    in_arr->has_sorted_dictionary, in_arr->info1, out_arr);
-                incref_array(in_arr->info1);
+                    in_arr->has_sorted_dictionary);
+                incref_array(in_arr->child_arrays[0]);
             }  // else out_arr is already NULL, so doesn't need to be
                // handled
         }

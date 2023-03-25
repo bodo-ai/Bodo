@@ -562,25 +562,28 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                         // `has_deduped_local_dictionary` means no nulls in the
                         // dict)
                         bool isna = !GetBit(
-                            (uint8_t *)part_col->info2->null_bitmask, i);
+                            (uint8_t *)part_col->child_arrays[1]->null_bitmask,
+                            i);
                         if (isna) {
                             value_str = "null";
                         } else {
                             int32_t dict_ind =
-                                ((int32_t *)part_col->info2->data1)[i];
+                                ((int32_t *)part_col->child_arrays[1]
+                                     ->data1)[i];
                             // get start_offset and end_offset of the string
                             // value referred to by dict_index i
                             offset_t start_offset =
-                                ((offset_t *)part_col->info1->data2)[dict_ind];
+                                ((offset_t *)part_col->child_arrays[0]
+                                     ->data2)[dict_ind];
                             offset_t end_offset =
-                                ((offset_t *)
-                                     part_col->info1->data2)[dict_ind + 1];
+                                ((offset_t *)part_col->child_arrays[0]
+                                     ->data2)[dict_ind + 1];
                             // get length of the string value
                             offset_t len = end_offset - start_offset;
                             // extract string value from string buffer
-                            std::string val(
-                                &((char *)part_col->info1->data1)[start_offset],
-                                len);
+                            std::string val(&((char *)part_col->child_arrays[0]
+                                                  ->data1)[start_offset],
+                                            len);
                             value_str = val;
                         }
                     } else {

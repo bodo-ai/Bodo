@@ -135,8 +135,7 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         this->has_global_dictionary = other.has_global_dictionary;
         this->has_deduped_local_dictionary = other.has_deduped_local_dictionary;
         this->has_sorted_dictionary = other.has_sorted_dictionary;
-        this->info1 = other.info1;
-        this->info2 = other.info2;
+        this->child_arrays = std::move(other.child_arrays);
 
         // reset the other array_info's pointers
         other.data1 = nullptr;
@@ -145,8 +144,6 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         other.null_bitmask = nullptr;
         other.sub_null_bitmask = nullptr;
         other.array = nullptr;
-        other.info1 = nullptr;
-        other.info2 = nullptr;
     }
     return *this;
 }
@@ -178,7 +175,7 @@ array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
     return new array_info(bodo_array_type::CATEGORICAL, typ_enum, length, data,
-                          NULL, NULL, NULL, NULL, {meminfo}, NULL, 0, 0,
+                          NULL, NULL, NULL, NULL, {meminfo}, {}, NULL, 0, 0,
                           num_categories);
 }
 
@@ -253,9 +250,9 @@ array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
 
     return new array_info(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, NULL,
-        NULL, NULL, indices_data_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
-        has_global_dictionary, has_deduped_local_dictionary, false,
-        dict_data_arr, indices_data_arr);
+        NULL, NULL, indices_data_arr->null_bitmask, NULL, {},
+        {dict_data_arr, indices_data_arr}, NULL, 0, 0, 0, has_global_dictionary,
+        has_deduped_local_dictionary, false);
 }
 
 array_info* create_string_array(std::vector<uint8_t> const& null_bitmap,
@@ -363,8 +360,8 @@ array_info* create_dict_string_array(array_info* dict_arr,
     array_info* out_col = new array_info(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
         indices_arr->length, NULL, NULL, NULL, indices_arr->null_bitmask, NULL,
-        {}, NULL, 0, 0, 0, has_global_dictionary, has_deduped_local_dictionary,
-        has_sorted_dictionary, dict_arr, indices_arr);
+        {}, {dict_arr, indices_arr}, NULL, 0, 0, 0, has_global_dictionary,
+        has_deduped_local_dictionary, has_sorted_dictionary);
     return out_col;
 }
 
@@ -665,7 +662,7 @@ int64_t array_memory_size(array_info* earr) {
             // TODO also contribute dictionary size, but note that when
             // table_global_memory_size() calls this function, it's not supposed
             // to add the size of dictionaries of all ranks
-            earr = earr->info2;
+            earr = earr->child_arrays[1];
         uint64_t siztype = numpy_item_size[earr->dtype];
         int64_t n_bytes = ((earr->length + 7) >> 3);
         return n_bytes + siztype * earr->length;
@@ -710,13 +707,13 @@ array_info* copy_array(array_info* earr) {
     int64_t extra_null_bytes = 0;
     array_info* farr;
     if (earr->arr_type == bodo_array_type::DICT) {
-        array_info* dictionary = copy_array(earr->info1);
-        array_info* indices = copy_array(earr->info2);
+        array_info* dictionary = copy_array(earr->child_arrays[0]);
+        array_info* indices = copy_array(earr->child_arrays[1]);
         farr = new array_info(
             bodo_array_type::DICT, earr->dtype, indices->length, NULL, NULL,
-            NULL, indices->null_bitmask, NULL, {}, NULL, 0, 0, 0,
-            earr->has_global_dictionary, earr->has_deduped_local_dictionary,
-            earr->has_sorted_dictionary, dictionary, indices);
+            NULL, indices->null_bitmask, NULL, {}, {dictionary, indices}, NULL,
+            0, 0, 0, earr->has_global_dictionary,
+            earr->has_deduped_local_dictionary, earr->has_sorted_dictionary);
     } else {
         farr = alloc_array(earr->length, earr->n_sub_elems(),
                            earr->n_sub_sub_elems(), earr->arr_type, earr->dtype,
@@ -847,8 +844,8 @@ void decref_table_arrays(table_info* table) {
 void decref_array(array_info* arr) {
     // dictionary-encoded string array uses nested infos
     if (arr->arr_type == bodo_array_type::DICT) {
-        if (arr->info1 != nullptr) decref_array(arr->info1);
-        if (arr->info2 != nullptr) decref_array(arr->info2);
+        if (arr->child_arrays[0] != nullptr) decref_array(arr->child_arrays[0]);
+        if (arr->child_arrays[1] != nullptr) decref_array(arr->child_arrays[1]);
         return;
     }
     for (MemInfo* meminfo : arr->meminfos) {
@@ -872,8 +869,8 @@ void incref_meminfo(MemInfo* meminfo) {
 void incref_array(const array_info* arr) {
     // dictionary-encoded string array uses nested infos
     if (arr->arr_type == bodo_array_type::DICT) {
-        if (arr->info1 != nullptr) incref_array(arr->info1);
-        if (arr->info2 != nullptr) incref_array(arr->info2);
+        if (arr->child_arrays[0] != nullptr) incref_array(arr->child_arrays[0]);
+        if (arr->child_arrays[1] != nullptr) incref_array(arr->child_arrays[1]);
         return;
     }
 

@@ -500,8 +500,9 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
             // operation where hashing based on local dictionary won't affect
             // correctness or performance
             return hash_array_inner<dict_indices_t>(
-                out_hashes, (dict_indices_t*)array->info2->data1, n_rows, seed,
-                (uint8_t*)array->info2->null_bitmask, use_murmurhash);
+                out_hashes, (dict_indices_t*)array->child_arrays[1]->data1,
+                n_rows, seed, (uint8_t*)array->child_arrays[1]->null_bitmask,
+                use_murmurhash);
         } else {
             // 3 options:
             // - Convert to global dictionary now
@@ -709,8 +710,8 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             // operation where hashing based on local dictionary won't affect
             // correctness or performance
             return hash_array_combine_inner<dict_indices_t>(
-                out_hashes, (dict_indices_t*)array->info2->data1, n_rows, seed,
-                (uint8_t*)array->null_bitmask);
+                out_hashes, (dict_indices_t*)array->child_arrays[1]->data1,
+                n_rows, seed, (uint8_t*)array->null_bitmask);
         } else {
             // 3 options:
             // - Convert to global dictionary now
@@ -892,7 +893,7 @@ void coherent_hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
                          size_t n_rows, const uint32_t seed,
                          bool is_parallel = true) {
     if ((array->arr_type == bodo_array_type::DICT) &&
-        (array->info1 != ref_array->info1)) {
+        (array->child_arrays[0] != ref_array->child_arrays[0])) {
         // This implementation of coherent_hash_array hashes data based on
         // the values in the indices array. To do this, we make and enforce
         // a few assumptions
@@ -1297,7 +1298,7 @@ create_several_array_hashmap(std::vector<array_info*>& arrs,
     // dictionaries.
     std::vector<size_t> lengths(arrs.size());
     for (size_t i = 0; i < arrs.size(); i++) {
-        lengths[i] = arrs[i]->info1->length;
+        lengths[i] = arrs[i]->child_arrays[0]->length;
     }
     size_t max_length = *std::max_element(lengths.begin(), lengths.end());
     dict_value_to_unified_index->reserve(max_length);
@@ -1423,19 +1424,19 @@ void replace_dict_arr_indices(array_info* arr,
     // Update the indices for this array. If there is only one reference to
     // the dict_array remaining we can update the array inplace without
     // allocating a new array.
-    bool inplace = (arr->info2->meminfos[0]->refct == 1);
+    bool inplace = (arr->child_arrays[1]->meminfos[0]->refct == 1);
     if (!inplace) {
-        array_info* indices = copy_array(arr->info2);
-        delete_info_decref_array(arr->info2);
-        arr->info2 = indices;
+        array_info* indices = copy_array(arr->child_arrays[1]);
+        delete_info_decref_array(arr->child_arrays[1]);
+        arr->child_arrays[1] = indices;
         arr->null_bitmask = indices->null_bitmask;
     }
 
     uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
 
-    for (size_t j = 0; j < arr->info2->length; j++) {
+    for (size_t j = 0; j < arr->child_arrays[1]->length; j++) {
         if (GetBit(null_bitmask, j)) {
-            dict_indices_t& index = arr->info2->at<dict_indices_t>(j);
+            dict_indices_t& index = arr->child_arrays[1]->at<dict_indices_t>(j);
             index = arr_index_map[index];
         }
     }
@@ -1461,7 +1462,7 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
 
     // The first dictionary will always be entirely included in the output
     // unified dictionary.
-    array_info* base_dict = arrs[0]->info1;
+    array_info* base_dict = arrs[0]->child_arrays[0];
     const size_t base_len = static_cast<size_t>(base_dict->length);
     offset_t const* const base_offsets = (offset_t*)base_dict->data2;
     bool added_first = false;
@@ -1479,7 +1480,7 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
         // then anything new from arr2, etc). As a result, this means that the
         // entries in arr{i} can never modify the indices of arr{i-1}.
         array_info* curr_arr = arrs[i];
-        array_info* curr_dict = curr_arr->info1;
+        array_info* curr_dict = curr_arr->child_arrays[0];
         offset_t const* const curr_dict_offsets = (offset_t*)curr_dict->data2;
 
         // Using this realization, we can then conclude that we can simply
@@ -1560,8 +1561,8 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
 
     // replace old dictionaries with a new one
     for (size_t i = 0; i < arrs.size(); i++) {
-        delete_info_decref_array(arrs[i]->info1);
-        arrs[i]->info1 = new_dict;
+        delete_info_decref_array(arrs[i]->child_arrays[0]);
+        arrs[i]->child_arrays[0] = new_dict;
         if (i != 0) {
             // This same array is now in N places so we need to incref it.
             incref_array(new_dict);
@@ -1576,14 +1577,17 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     std::vector<bool> is_parallel = {arr1_is_parallel, arr2_is_parallel};
     ensure_dicts_can_unify(arrs, is_parallel);
 
-    if (arr1->info1 == arr2->info1) return;  // dictionaries are the same
+    if (arr1->child_arrays[0] == arr2->child_arrays[0])
+        return;  // dictionaries are the same
 
     // Note we insert the dictionaries in order (arr1 then arr2). Since we have
     // ensured there are no duplicates this means that only the indices in arr2
     // can change and the entire dictionary in arr1 will be in the unified dict.
 
-    const size_t arr1_dictionary_len = static_cast<size_t>(arr1->info1->length);
-    const size_t arr2_dictionary_len = static_cast<size_t>(arr2->info1->length);
+    const size_t arr1_dictionary_len =
+        static_cast<size_t>(arr1->child_arrays[0]->length);
+    const size_t arr2_dictionary_len =
+        static_cast<size_t>(arr2->child_arrays[0]->length);
     // this vector will be used to map old indices to new ones
     std::vector<dict_indices_t> arr2_index_map(arr2_dictionary_len);
 
@@ -1592,16 +1596,18 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
         std::make_unique<uint32_t[]>(arr1_dictionary_len);
     std::unique_ptr<uint32_t[]> arr2_hashes =
         std::make_unique<uint32_t[]>(arr2_dictionary_len);
-    hash_array(arr1_hashes, arr1->info1, arr1_dictionary_len, hash_seed, false,
+    hash_array(arr1_hashes, arr1->child_arrays[0], arr1_dictionary_len,
+               hash_seed, false,
                /*global_dict_needed=*/false);
-    hash_array(arr2_hashes, arr2->info1, arr2_dictionary_len, hash_seed, false,
+    hash_array(arr2_hashes, arr2->child_arrays[0], arr2_dictionary_len,
+               hash_seed, false,
                /*global_dict_needed=*/false);
 
     // hash map mapping dictionary values of arr1 and arr2 to index in unified
     // dictionary
     HashDict hash_fct{arr1_dictionary_len, arr1_hashes, arr2_hashes};
-    KeyEqualDict equal_fct{arr1_dictionary_len, arr1->info1,
-                           arr2->info1 /*, is_na_equal*/};
+    KeyEqualDict equal_fct{arr1_dictionary_len, arr1->child_arrays[0],
+                           arr2->child_arrays[0] /*, is_na_equal*/};
     UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict,
                         KeyEqualDict>* dict_value_to_unified_index =
         new UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict, KeyEqualDict>(
@@ -1619,7 +1625,8 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     std::vector<size_t> arr2_unique_strs;
     arr2_unique_strs.reserve(arr2_dictionary_len);
 
-    offset_t const* const arr1_str_offsets = (offset_t*)arr1->info1->data2;
+    offset_t const* const arr1_str_offsets =
+        (offset_t*)arr1->child_arrays[0]->data2;
     int64_t n_chars = arr1_str_offsets[arr1_dictionary_len];
 
     dict_indices_t next_index = 1;
@@ -1631,7 +1638,8 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
         index = next_index++;
     }
 
-    offset_t const* const arr2_str_offsets = (offset_t*)arr2->info1->data2;
+    offset_t const* const arr2_str_offsets =
+        (offset_t*)arr2->child_arrays[0]->data2;
     for (size_t i = 0; i < arr2_dictionary_len; i++) {
         dict_indices_t& index =
             (*dict_value_to_unified_index)[i + arr1_dictionary_len];
@@ -1659,20 +1667,20 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     memcpy(new_dict_str_offsets, arr1_str_offsets,
            cur_offset_idx * sizeof(offset_t));
     // copy strings from arr1 into new_dict
-    memcpy(new_dict->data1, arr1->info1->data1, cur_offset);
+    memcpy(new_dict->data1, arr1->child_arrays[0]->data1, cur_offset);
     for (auto i : arr2_unique_strs) {
         offset_t str_len = arr2_str_offsets[i + 1] - arr2_str_offsets[i];
         memcpy(new_dict->data1 + cur_offset,
-               arr2->info1->data1 + arr2_str_offsets[i], str_len);
+               arr2->child_arrays[0]->data1 + arr2_str_offsets[i], str_len);
         cur_offset += str_len;
         new_dict_str_offsets[cur_offset_idx++] = cur_offset;
     }
 
     // replace old dictionaries with new one
-    delete_info_decref_array(arr1->info1);
-    delete_info_decref_array(arr2->info1);
-    arr1->info1 = new_dict;
-    arr2->info1 = new_dict;
+    delete_info_decref_array(arr1->child_arrays[0]);
+    delete_info_decref_array(arr2->child_arrays[0]);
+    arr1->child_arrays[0] = new_dict;
+    arr2->child_arrays[0] = new_dict;
     incref_array(new_dict);
 
     // convert old indices to new ones for arr2

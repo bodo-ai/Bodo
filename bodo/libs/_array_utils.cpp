@@ -486,18 +486,19 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
         out_offsets[nRowOut] = pos;
     }
     if (arr_type == bodo_array_type::DICT) {
-        array_info* in_indices = in_arr->info2;
+        array_info* in_indices = in_arr->child_arrays[1];
 
         array_info* out_indices = RetrieveArray_SingleColumn_F_nullable(
             in_indices, in_arr_idxs, nRowOut);
 
         out_arr = new array_info(
             bodo_array_type::DICT, in_arr->dtype, out_indices->length, NULL,
-            NULL, NULL, out_indices->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+            NULL, NULL, out_indices->null_bitmask, NULL, {},
+            {in_arr->child_arrays[0], out_indices}, NULL, 0, 0, 0,
             in_arr->has_global_dictionary, in_arr->has_deduped_local_dictionary,
-            in_arr->has_sorted_dictionary, in_arr->info1, out_indices);
+            in_arr->has_sorted_dictionary);
         // input and output share the same dictionary array
-        incref_array(in_arr->info1);
+        incref_array(in_arr->child_arrays[0]);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         out_arr =
@@ -583,7 +584,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
         out_arr =
             new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
                            nRowOut, NULL, NULL, NULL, NULL, NULL,
-                           /*meminfo TODO*/ {}, out_arrow_array);
+                           /*meminfo TODO*/ {}, {}, out_arrow_array);
     }
     out_arr->precision = in_arr->precision;
     return out_arr;
@@ -614,7 +615,7 @@ array_info* RetrieveArray_TwoColumns(
     if ((arr1 != nullptr) && (arr2 != nullptr) &&
         (arr1->arr_type == bodo_array_type::DICT) &&
         (arr2->arr_type == bodo_array_type::DICT) &&
-        (arr1->info1 != arr2->info1)) {
+        (arr1->child_arrays[0] != arr2->child_arrays[0])) {
         throw std::runtime_error(
             "RetrieveArray_TwoColumns: don't know if arrays have unified "
             "dictionary");
@@ -757,18 +758,20 @@ array_info* RetrieveArray_TwoColumns(
         // if (is_parallel && !arr1->has_global_dictionary)
         //    throw std::runtime_error("RetrieveArray_TwoColumns: reference
         //    column doesn't have a global dictionary");
-        array_info* out_indices = alloc_array(
-            nRowOut, -1, -1, arr1->info2->arr_type, arr1->info2->dtype, 0, 0);
-        uint64_t siztype = numpy_item_size[arr1->info2->dtype];
+        array_info* out_indices =
+            alloc_array(nRowOut, -1, -1, arr1->child_arrays[1]->arr_type,
+                        arr1->child_arrays[1]->dtype, 0, 0);
+        uint64_t siztype = numpy_item_size[arr1->child_arrays[1]->dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             bool bit = false;
             char* out_ptr = out_indices->data1 + siztype * iRow;
             if (ArrRow.second >= 0) {
                 array_info* e_col = ArrRow.first;
-                char* in_ptr = e_col->info2->data1 + siztype * ArrRow.second;
+                char* in_ptr =
+                    e_col->child_arrays[1]->data1 + siztype * ArrRow.second;
                 memcpy(out_ptr, in_ptr, siztype);
-                bit = e_col->info2->get_null_bit(ArrRow.second);
+                bit = e_col->child_arrays[1]->get_null_bit(ArrRow.second);
             } else {
                 // set index value to zero in case some other code accesses it
                 // by mistake. see https://bodo.atlassian.net/browse/BE-4146
@@ -778,10 +781,11 @@ array_info* RetrieveArray_TwoColumns(
         }
         out_arr = new array_info(
             bodo_array_type::DICT, arr1->dtype, out_indices->length, NULL, NULL,
-            NULL, out_indices->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+            NULL, out_indices->null_bitmask, NULL, {},
+            {arr1->child_arrays[0], out_indices}, NULL, 0, 0, 0,
             arr1->has_global_dictionary, arr1->has_deduped_local_dictionary,
-            arr1->has_sorted_dictionary, arr1->info1, out_indices);
-        incref_array(arr1->info1);
+            arr1->has_sorted_dictionary);
+        incref_array(arr1->child_arrays[0]);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // In the case of NULLABLE array, we do a single loop for
@@ -879,7 +883,7 @@ array_info* RetrieveArray_TwoColumns(
         out_arr =
             new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
                            nRowOut, NULL, NULL, NULL, NULL, NULL,
-                           /*meminfo TODO*/ {}, out_arrow_array);
+                           /*meminfo TODO*/ {}, {}, out_arrow_array);
     }
     return out_arr;
 };
@@ -1121,13 +1125,13 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
     if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         arr1->arr_type == bodo_array_type::DICT) {
         if (arr1->arr_type == bodo_array_type::DICT) {
-            if (arr1->info1 != arr2->info1) {
+            if (arr1->child_arrays[0] != arr2->child_arrays[0]) {
                 throw std::runtime_error(
                     "TestEqualColumn: don't know if arrays have unified "
                     "dictionary");
             }
-            arr1 = arr1->info2;
-            arr2 = arr2->info2;
+            arr1 = arr1->child_arrays[1];
+            arr2 = arr2->child_arrays[1];
         }
         // NULLABLE case. We need to consider the bitmask and the values.
         bool bit1 = arr1->get_null_bit(pos1);
@@ -1368,16 +1372,17 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
     }
     if (arr1->arr_type == bodo_array_type::DICT) {
         if (arr2->arr_type == bodo_array_type::DICT) {
-            if (arr1->info1 != arr2->info1) {
+            if (arr1->child_arrays[0] != arr2->child_arrays[0]) {
                 throw std::runtime_error(
                     "KeyComparisonAsPython_Column: don't know if arrays "
                     "have unified dictionary");
             }
         }
-        // Since arr1->info1 == arr2->info1 (if arr2 is DICT)
-        array_info* arr_dict = arr1->info1;
-        array_info* arr1_indices = arr1->info2;
-        array_info* arr2_indices = arr2->info2;
+        // Since arr1->child_arrays[0] == arr2->child_arrays[0] (if arr2 is
+        // DICT)
+        array_info* arr_dict = arr1->child_arrays[0];
+        array_info* arr1_indices = arr1->child_arrays[1];
+        array_info* arr2_indices = arr2->child_arrays[1];
 
         if (arr1->has_sorted_dictionary) {
             // In case of sorted dictionaries, we can simply compare the
@@ -1843,11 +1848,11 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::DICT) {
-        nRow = arr->info2->length;
+        nRow = arr->child_arrays[1]->length;
         std::vector<std::string> dataStr(nRow);
-        dataStr = GetColumn_as_ListString(arr->info1);
+        dataStr = GetColumn_as_ListString(arr->child_arrays[0]);
         std::vector<std::string> indexStr(nRow);
-        indexStr = GetColumn_as_ListString(arr->info2);
+        indexStr = GetColumn_as_ListString(arr->child_arrays[1]);
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             bool bit = arr->get_null_bit(iRow);
             if (!bit) {
@@ -2078,12 +2083,14 @@ void DEBUG_PrintRefct(std::ostream& os,
            << GetArrType_as_string(ListArr[iCol]->arr_type)
            << " dtype=" << GetDtype_as_string(ListArr[iCol]->dtype);
         if (ListArr[iCol]->arr_type == bodo_array_type::DICT) {
-            // Print details from info1 and info2 in the dict case.
-            for (MemInfo* meminfo : ListArr[iCol]->info1->meminfos) {
-                os << " : info1 meminfo=" << GetNRTinfo(meminfo) << "\n";
+            // Print details from child arrays in the dict case.
+            for (MemInfo* meminfo : ListArr[iCol]->child_arrays[0]->meminfos) {
+                os << " : child_arrays[0] meminfo=" << GetNRTinfo(meminfo)
+                   << "\n";
             }
-            for (MemInfo* meminfo : ListArr[iCol]->info2->meminfos) {
-                os << " : info2 meminfo=" << GetNRTinfo(meminfo) << "\n";
+            for (MemInfo* meminfo : ListArr[iCol]->child_arrays[1]->meminfos) {
+                os << " : child_arrays[1] meminfo=" << GetNRTinfo(meminfo)
+                   << "\n";
             }
         } else {
             for (MemInfo* meminfo : ListArr[iCol]->meminfos) {
