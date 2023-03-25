@@ -1447,7 +1447,7 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
                 // need to do this and can just do a best effort approach.
                 drop_duplicates_local_dictionary(key);
             }
-            key = key->info2;
+            key = key->child_arrays[1];
         }
         key_arrs[iKey] = key;
     }
@@ -2015,7 +2015,7 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
         // building the output boolean array by indexing into this
         // result.
 
-        array_info* dict_arr = in_arr->info1;
+        array_info* dict_arr = in_arr->child_arrays[0];
 
         // Allocate boolean array to store output of get_search_regex
         // on the dictionary (dict_arr)
@@ -2031,7 +2031,7 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
         get_search_regex(dict_arr, case_sensitive, match_beginning, pat,
                          dict_arr_out);
 
-        array_info* indices_arr = in_arr->info2;
+        array_info* indices_arr = in_arr->child_arrays[1];
 
         // Iterate over the indices, and assign values to the output
         // boolean array from dict_arr_out.
@@ -2179,8 +2179,8 @@ array_info* get_replace_regex(array_info* in_arr, char const* const pat,
         // by recursing on the dictionary (info1)
         // (which is presumably much smaller), and then
         // copying the null bitmap and indices.
-        array_info* dict_arr = in_arr->info1;
-        array_info* indices_arr = in_arr->info2;
+        array_info* dict_arr = in_arr->child_arrays[0];
+        array_info* indices_arr = in_arr->child_arrays[1];
 
         // We use a special path for large dictionaries that are global and
         // called in parallel.
@@ -2213,10 +2213,11 @@ array_info* get_replace_regex(array_info* in_arr, char const* const pat,
         array_info* new_indices = copy_array(indices_arr);
         out_arr = new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
                                  in_arr->length, NULL, NULL, NULL,
-                                 new_indices->null_bitmask, NULL, {}, NULL, 0,
-                                 0, 0, in_arr->has_global_dictionary,
+                                 new_indices->null_bitmask, NULL, {},
+                                 {new_dict, new_indices}, NULL, 0, 0, 0,
+                                 in_arr->has_global_dictionary,
                                  false,  // Note replace can create collisions.
-                                 false, new_dict, new_indices);
+                                 false);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "array in_arr type should be string");

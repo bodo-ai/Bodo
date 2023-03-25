@@ -240,22 +240,26 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
     if (in_arr->arr_type == bodo_array_type::DICT) {
         // Calculate hashes on the dict
         std::unique_ptr<uint32_t[]> dict_hashes =
-            std::make_unique<uint32_t[]>(in_arr->info1->length);
-        hash_array(dict_hashes, in_arr->info1, in_arr->info1->length, 0,
-                   is_parallel, false, /*use_murmurhash=*/true);
+            std::make_unique<uint32_t[]>(in_arr->child_arrays[0]->length);
+        hash_array(dict_hashes, in_arr->child_arrays[0],
+                   in_arr->child_arrays[0]->length, 0, is_parallel, false,
+                   /*use_murmurhash=*/true);
         // Iterate over the elements and assign hash from the dict
         for (uint64_t i = 0; i < nRow; i++) {
-            if (!in_arr->info2->get_null_bit(i)) {
-                // in case index i is null, in_arr->info2->at<uint32_t>(i)
-                // is a garbage value and might be out of bounds for
-                // dict_hashes, so we set the hash to -1 to avoid access errors.
+            if (!in_arr->child_arrays[1]->get_null_bit(i)) {
+                // in case index i is null,
+                // in_arr->child_arrays[1]->at<uint32_t>(i) is a garbage value
+                // and might be out of bounds for dict_hashes, so we set the
+                // hash to -1 to avoid access errors.
                 hashes[i] = -1;
             } else {
-                hashes[i] = dict_hashes[in_arr->info2->at<uint32_t>(i)];
+                hashes[i] =
+                    dict_hashes[in_arr->child_arrays[1]->at<uint32_t>(i)];
             }
         }
         // Copy the null bitmask from the indices array
-        memcpy(out_arr->null_bitmask, in_arr->info2->null_bitmask, n_bytes);
+        memcpy(out_arr->null_bitmask, in_arr->child_arrays[1]->null_bitmask,
+               n_bytes);
     } else {
         // hash_array doesn't hash nulls
         // as we need. In particular, we need null
@@ -440,21 +444,22 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
         }
     }
     if (in_arr->arr_type == bodo_array_type::DICT) {
-        array_info* dict_data_arr = in_arr->info1;
+        array_info* dict_data_arr = in_arr->child_arrays[0];
         // Call recursively on the dictionary
         array_info* trunc_dict_data_arr =
             array_transform_truncate_W(dict_data_arr, width, is_parallel);
         // Make a copy of the indices
-        array_info* indices_copy = copy_array(in_arr->info2);
+        array_info* indices_copy = copy_array(in_arr->child_arrays[1]);
         // Note that if the input dictionary was sorted, the
         // transformed dictionary would be sorted too since
         // it's just a truncation. It might not have all
         // unique elements though.
         out_arr = new array_info(
             bodo_array_type::DICT, in_arr->dtype, in_arr->length, NULL, NULL,
-            NULL, indices_copy->null_bitmask, NULL, {}, NULL, 0, 0, 0,
+            NULL, indices_copy->null_bitmask, NULL, {},
+            {trunc_dict_data_arr, indices_copy}, NULL, 0, 0, 0,
             in_arr->has_global_dictionary, in_arr->has_deduped_local_dictionary,
-            in_arr->has_sorted_dictionary, trunc_dict_data_arr, indices_copy);
+            in_arr->has_sorted_dictionary);
         return out_arr;
     }
     // Throw an error if type is not supported (e.g. CATEGORICAL)
@@ -760,11 +765,12 @@ PyObject* iceberg_transformed_val_to_py(array_info* arr, size_t idx) {
         case Bodo_CTypes::STRING: {
             switch (arr->arr_type) {
                 case bodo_array_type::DICT: {
-                    int32_t dict_idx = arr->info2->at<int32_t>(idx);
-                    offset_t* offsets = (offset_t*)arr->info1->data2;
+                    int32_t dict_idx = arr->child_arrays[1]->at<int32_t>(idx);
+                    offset_t* offsets = (offset_t*)arr->child_arrays[0]->data2;
                     return PyUnicode_FromString(
-                        std::string(arr->info1->data1 + offsets[dict_idx],
-                                    offsets[dict_idx + 1] - offsets[dict_idx])
+                        std::string(
+                            arr->child_arrays[0]->data1 + offsets[dict_idx],
+                            offsets[dict_idx + 1] - offsets[dict_idx])
                             .c_str());
                 }
                 default: {

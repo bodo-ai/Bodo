@@ -111,7 +111,7 @@ struct multi_col_key {
                         c2->has_deduped_local_dictionary &&
                         (!is_parallel || c1->has_global_dictionary) &&
                         (!other.is_parallel || c2->has_global_dictionary)) {
-                        if (c1->info1 != c2->info1) {
+                        if (c1->child_arrays[0] != c2->child_arrays[0]) {
                             throw std::runtime_error(
                                 "multi-key-hashing dictionary the columns are "
                                 "not unified.");
@@ -125,8 +125,9 @@ struct multi_col_key {
                             // the dictionary contains garbage
                             continue;
                         }
-                        bool match = c1->info2->at<dict_indices_t>(row) ==
-                                     c2->info2->at<dict_indices_t>(other.row);
+                        bool match =
+                            c1->child_arrays[1]->at<dict_indices_t>(row) ==
+                            c2->child_arrays[1]->at<dict_indices_t>(other.row);
                         if (!match) {
                             return false;
                         }
@@ -341,7 +342,7 @@ class ElementComparator {
         // comparisons are not accurate).
         if (arr1_->arr_type == bodo_array_type::DICT &&
             arr2_->arr_type == bodo_array_type::DICT) {
-            if (arr1_->info1 != arr2_->info1) {
+            if (arr1_->child_arrays[0] != arr2_->child_arrays[0]) {
                 throw std::runtime_error(
                     "ElementComparator: don't know if arrays have "
                     "unified dictionary.");
@@ -350,8 +351,8 @@ class ElementComparator {
                 throw std::runtime_error(
                     "ElementComparator: Dictionary is not deduplicated.");
             }
-            arr1_ = arr1_->info2;
-            arr2_ = arr2_->info2;
+            arr1_ = arr1_->child_arrays[1];
+            arr2_ = arr2_->child_arrays[1];
         }
         this->arr1 = arr1_;
         this->arr2 = arr2_;

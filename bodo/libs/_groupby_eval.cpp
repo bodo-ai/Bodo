@@ -140,10 +140,11 @@ void copy_dict_string_values_transform(array_info* update_col,
     int64_t length = update_col->length;
     array_info* indices_arr =
         alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
-    copy_values<int32_t>(indices_arr, tmp_col->info2, grp_info);
-    incref_array(tmp_col->info1);  // increase reference because we reuse the
-                                   // underlying data array.
-    array_info* out_col = create_dict_string_array(tmp_col->info1, indices_arr);
+    copy_values<int32_t>(indices_arr, tmp_col->child_arrays[1], grp_info);
+    incref_array(tmp_col->child_arrays[0]);  // increase reference because we
+                                             // reuse the underlying data array.
+    array_info* out_col =
+        create_dict_string_array(tmp_col->child_arrays[0], indices_arr);
     *update_col = std::move(*out_col);
     // reverse_shuffle_table needs the dictionary to be global
     // copy_dict_string_values_transform is only called on distributed data
