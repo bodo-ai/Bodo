@@ -392,12 +392,12 @@ void apply_sum_to_column_dict(array_info* in_col, array_info* out_col,
     // every string has a start and end offset so len(offsets) == (len(data) +
     // 1)
     std::vector<offset_t> str_offsets(num_groups + 1, 0);
-    char* data_i = in_col->info1->data1;
-    offset_t* offsets_i = (offset_t*)in_col->info1->data2;
+    char* data_i = in_col->child_arrays[0]->data1;
+    offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2;
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
-        if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
-            int32_t dict_ind = getv<int32_t>(in_col->info2, i);
+        if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
+            int32_t dict_ind = getv<int32_t>(in_col->child_arrays[1], i);
             offset_t len = offsets_i[dict_ind + 1] - offsets_i[dict_ind];
             str_offsets[i_grp + 1] += len;
             n_chars += len;
@@ -416,8 +416,8 @@ void apply_sum_to_column_dict(array_info* in_col, array_info* out_col,
     // copy characters to output
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
-        if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
-            int32_t dict_ind = getv<int32_t>(in_col->info2, i);
+        if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
+            int32_t dict_ind = getv<int32_t>(in_col->child_arrays[1], i);
             offset_t len = offsets_i[dict_ind + 1] - offsets_i[dict_ind];
             memcpy(&data_o[str_offsets[i_grp]], data_i + offsets_i[dict_ind],
                    len);
@@ -453,13 +453,13 @@ void apply_to_column_dict(array_info* in_col, array_info* out_col,
     }
     std::vector<uint8_t> V(n_bytes,
                            0);  // bitmask to mark if group's been updated
-    char* data_i = in_col->info1->data1;
-    offset_t* offsets_i = (offset_t*)in_col->info1->data2;
+    char* data_i = in_col->child_arrays[0]->data1;
+    offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2;
     switch (ftype) {
         case Bodo_FTypes::count: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                if (i_grp != -1 && in_col->info2->get_null_bit(i)) {
+                if (i_grp != -1 && in_col->child_arrays[1]->get_null_bit(i)) {
                     // Note: int is unused since we would only use an NA check.
                     count_agg<int, Bodo_CTypes::STRING>::apply(
                         getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
@@ -484,7 +484,8 @@ void apply_to_column_dict(array_info* in_col, array_info* out_col,
                     if (idx_func_take_non_na_path<ftype>(i, in_col)) {
                         // This assumes the input row is not NA.
                         bool out_bit_set = GetBit(V.data(), i_grp);
-                        int32_t& dict_ind = getv<int32_t>(in_col->info2, i);
+                        int32_t& dict_ind =
+                            getv<int32_t>(in_col->child_arrays[1], i);
                         int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
                         if (out_bit_set) {
                             // Get the address and length of the new value to be
@@ -529,9 +530,10 @@ void apply_to_column_dict(array_info* in_col, array_info* out_col,
             // so we avoid allocating for the underlying strings.
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
+                if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
                     bool out_bit_set = GetBit(V.data(), i_grp);
-                    int32_t& dict_ind = getv<int32_t>(in_col->info2, i);
+                    int32_t& dict_ind =
+                        getv<int32_t>(in_col->child_arrays[1], i);
                     int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
                     if (out_bit_set) {
                         aggfunc<int32_t, Bodo_CTypes::STRING,
@@ -549,12 +551,13 @@ void apply_to_column_dict(array_info* in_col, array_info* out_col,
             // Populate the new indices array.
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
-                if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
+                if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
                     bool out_bit_set = GetBit(V.data(), i_grp);
                     if (ftype == Bodo_FTypes::first && out_bit_set) {
                         continue;
                     }
-                    int32_t& dict_ind = getv<int32_t>(in_col->info2, i);
+                    int32_t& dict_ind =
+                        getv<int32_t>(in_col->child_arrays[1], i);
                     int32_t& org_ind = getv<int32_t>(indices_arr, i_grp);
                     if (out_bit_set) {
                         // Get the address and length of the new value to be

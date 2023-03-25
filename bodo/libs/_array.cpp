@@ -254,7 +254,7 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
         // TODO: better memory management of struct, meminfo refcount?
         return new array_info(bodo_array_type::ARROW,
                               Bodo_CTypes::INT8 /*dummy*/, lengths[0], NULL,
-                              NULL, NULL, NULL, NULL, {meminfo}, ai.array);
+                              NULL, NULL, NULL, NULL, {meminfo}, {}, ai.array);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -292,16 +292,16 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
     // struct, so we set it to false
     return new array_info(
         bodo_array_type::DICT, Bodo_CTypes::STRING, indices_arr->length, NULL,
-        NULL, NULL, indices_arr->null_bitmask, NULL, {}, NULL, 0, 0, 0,
-        bool(has_global_dictionary), bool(has_deduped_local_dictionary), false,
-        str_arr, indices_arr);
+        NULL, NULL, indices_arr->null_bitmask, NULL, {}, {str_arr, indices_arr},
+        NULL, 0, 0, 0, bool(has_global_dictionary),
+        bool(has_deduped_local_dictionary), false);
 }
 
 array_info* get_nested_info(array_info* dict_arr, int32_t info_no) {
     if (info_no == 1) {
-        return dict_arr->info1;
+        return dict_arr->child_arrays[0];
     } else if (info_no == 2) {
-        return dict_arr->info2;
+        return dict_arr->child_arrays[1];
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "get_nested_info: invalid info_no");
@@ -336,9 +336,10 @@ array_info* categorical_array_to_info(uint64_t n_items, char* data,
               << "\n";
     std::cout << "typ_enum=" << typ_enum << "\n";
 #endif
-    return new array_info(
-        bodo_array_type::CATEGORICAL, (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
-        data, NULL, NULL, NULL, NULL, {meminfo}, nullptr, 0, 0, num_categories);
+    return new array_info(bodo_array_type::CATEGORICAL,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
+                          NULL, NULL, NULL, {meminfo}, {}, nullptr, 0, 0,
+                          num_categories);
 }
 
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -367,7 +368,7 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
                           NULL, null_bitmap, NULL, {meminfo, meminfo_bitmask},
-                          NULL, precision, scale);
+                          {}, NULL, precision, scale);
 }
 
 array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -377,7 +378,7 @@ array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
                           NULL, null_bitmap, NULL, {meminfo, meminfo_bitmask},
-                          NULL, precision);
+                          {}, NULL, precision);
 }
 
 void info_to_list_string_array(array_info* info,

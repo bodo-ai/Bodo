@@ -132,13 +132,15 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         std::shared_ptr<arrow::Array> index_array;
 
         // Recurse on the dictionary
-        auto dict_type = bodo_array_to_arrow(
-            pool, array->info1, &dictionary, convert_timedelta_to_int64, tz,
-            time_unit, copy, downcast_time_ns_to_us);
+        auto dict_type =
+            bodo_array_to_arrow(pool, array->child_arrays[0], &dictionary,
+                                convert_timedelta_to_int64, tz, time_unit, copy,
+                                downcast_time_ns_to_us);
         // Recurse on the index array
-        auto index_type = bodo_array_to_arrow(
-            pool, array->info2, &index_array, convert_timedelta_to_int64, tz,
-            time_unit, copy, downcast_time_ns_to_us);
+        auto index_type =
+            bodo_array_to_arrow(pool, array->child_arrays[1], &index_array,
+                                convert_timedelta_to_int64, tz, time_unit, copy,
+                                downcast_time_ns_to_us);
 
         // Extract the types from the dictionary call.
         // TODO: Can we provide ordered?

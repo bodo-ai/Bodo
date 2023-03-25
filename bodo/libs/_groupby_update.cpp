@@ -337,15 +337,15 @@ void cumulative_computation_dict_encoded_string(array_info* arr,
     using T = std::pair<bool, std::string>;
     std::vector<T> null_bit_val_vec(n);  // a temporary vector that stores the
                                          // null bit and value for each row
-    uint8_t* null_bitmask = (uint8_t*)arr->info2->null_bitmask;
-    char* data = arr->info1->data1;
-    offset_t* offsets = (offset_t*)arr->info1->data2;
+    uint8_t* null_bitmask = (uint8_t*)arr->child_arrays[1]->null_bitmask;
+    char* data = arr->child_arrays[0]->data1;
+    offset_t* offsets = (offset_t*)arr->child_arrays[0]->data2;
     auto get_entry = [&](int64_t i) -> T {
         bool isna = !GetBit(null_bitmask, i);
         if (isna) {
             return {isna, ""};
         }
-        int32_t dict_ind = ((int32_t*)arr->info2->data1)[i];
+        int32_t dict_ind = ((int32_t*)arr->child_arrays[1]->data1)[i];
         offset_t start_offset = offsets[dict_ind];
         offset_t end_offset = offsets[dict_ind + 1];
         offset_t len = end_offset - start_offset;

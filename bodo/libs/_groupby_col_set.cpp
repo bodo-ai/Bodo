@@ -468,10 +468,10 @@ NUniqueColSet::~NUniqueColSet() {
 
 void NUniqueColSet::update(const std::vector<grouping_info>& grp_infos) {
     // to support nunique for dictionary-encoded arrays we only need to
-    // perform the nunqiue operation on the indices array(info2), which is a
-    // int32_t numpy array.
+    // perform the nunqiue operation on the indices array(child_arrays[1]),
+    // which is a int32_t numpy array.
     array_info* input_col = this->in_col->arr_type == bodo_array_type::DICT
-                                ? this->in_col->info2
+                                ? this->in_col->child_arrays[1]
                                 : this->in_col;
     // TODO: check nunique with pivot_table operation
     if (my_nunique_table != nullptr) {
