@@ -32,8 +32,7 @@ conda activate Bodo
 mamba install bodo -c bodo.ai -c conda-forge
 ```
 
-These commands install the [Bodo Community Edition](https://www.bodo.ai/community-edition){target="blank"}
-by default, which is free on up to 8 cores.
+This command installs Bodo Community Edition by default, which is free and works on up to 8 cores.
 You can also subscribe to
 [Bodo Platform on AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-zg6n2qyj5h74o){target="blank"}
 or [contact us](https://bodo.ai/contact/){target="blank"} for trial licenses.
