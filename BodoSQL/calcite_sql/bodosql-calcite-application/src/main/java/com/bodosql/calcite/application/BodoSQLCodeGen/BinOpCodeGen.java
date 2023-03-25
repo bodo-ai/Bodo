@@ -42,9 +42,13 @@ public class BinOpCodeGen {
       SqlTypeName arg1TypeName = argDataTypes.get(1).getSqlTypeName();
 
       boolean isArg0Datetime =
-          arg0TypeName.equals(SqlTypeName.TIMESTAMP) || arg0TypeName.equals(SqlTypeName.DATE);
+          arg0TypeName.equals(SqlTypeName.TIMESTAMP)
+              || arg0TypeName.equals(SqlTypeName.DATE)
+              || arg0TypeName.equals(SqlTypeName.TIME);
       boolean isArg1Datetime =
-          arg1TypeName.equals(SqlTypeName.TIMESTAMP) || arg1TypeName.equals(SqlTypeName.DATE);
+          arg1TypeName.equals(SqlTypeName.TIMESTAMP)
+              || arg1TypeName.equals(SqlTypeName.DATE)
+              || arg1TypeName.equals(SqlTypeName.TIME);
 
       boolean isArg0Interval = argDataTypes.get(0) instanceof IntervalSqlType;
       boolean isArg1Interval = argDataTypes.get(1) instanceof IntervalSqlType;
