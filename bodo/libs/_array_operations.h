@@ -190,17 +190,20 @@ table_info* union_tables(table_info** in_table, int64_t num_tables,
 table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
                                  bool is_parallel, bool dropna = true);
 
-/** This function is the function for the sampling of rows in the dataframe
- *  This code uses
+/**
+ * @brief C++ implementation of df.sample. This is implemented using rejection
+ * sampling for small sample sizes, and whole-array permutation for large
+ * sample sizes. In the parallel case, each rank samples from local data only.
  * @param table_info: the input table
  * @param n_samp: the number of rows in output
  * @param frac: the fraction of rows selected
  * @param replace: whether we allow replaced entries or not
+ * @param random_state: seed for random number generator
  * @param parallel: if true the array is distributed, if false it is replicated
- * @return the sampled entries in the table (in a replicated state).
+ * @return the sampled entries in the table (same distribution as input table)
  */
 table_info* sample_table(table_info* in_table, int64_t n, double frac,
-                         bool replace, bool parallel);
+                         bool replace, int64_t random_state, bool parallel);
 
 void get_search_regex(array_info* in_arr, const bool case_sensitive,
                       const bool match_beginning, char const* const pat,
