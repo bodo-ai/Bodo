@@ -11,14 +11,6 @@
 #include "_shuffle.h"
 #include "gfx/timsort.hpp"
 
-#undef DEBUG_DD_SYMBOL
-#undef DEBUG_DD_FULL
-#undef DEBUG_SORT_LOCAL_SYMBOL
-#undef DEBUG_SORT_LOCAL_FULL
-#undef DEBUG_SORT_SYMBOL
-#undef DEBUG_SORT_FULL
-#undef DEBUG_SAMPLE
-
 //
 //   ARRAY ISIN
 //
@@ -1774,184 +1766,313 @@ table_info* union_tables(table_info** in_table, int64_t num_tables,
 //   SAMPLE
 //
 
-table_info* sample_table(table_info* in_table, int64_t n, double frac,
-                         bool replace, bool parallel) {
-    try {
-        int n_local = in_table->nrows();
-        std::vector<int> ListSizes;
-        int n_pes = 0, myrank = 0, mpi_root = 0;
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        if (parallel) {
-            // Number of rows to collect
-            if (myrank == mpi_root) ListSizes.resize(n_pes);
-            MPI_Gather(&n_local, 1, MPI_INT, ListSizes.data(), 1, MPI_INT,
-                       mpi_root, MPI_COMM_WORLD);
+/**
+ * Helper function that samples integers without replacement, using an unordered
+ * set to track previous samples. Best suited for small `n_samp`
+ * @param n_samp Number of random samples
+ * @param n_total Sample integers from range [0, n_total)
+ * @param gen std::mt19937 generator to sample from
+ * @param out Output vector that samples are written to
+ */
+void sample_ints_unordset(int64_t n_samp, int64_t n_total, std::mt19937& gen,
+                          std::vector<int64_t>& out) {
+    UNORD_SET_CONTAINER<int64_t> UnordsetIdxChosen;
+
+    int64_t i_samp = 0;
+    std::uniform_int_distribution<int64_t> rng(0, n_total - 1);
+    while (i_samp < n_samp) {
+        int64_t idx_rand = rng(gen);
+        if (UnordsetIdxChosen.count(idx_rand) == 0) {
+            UnordsetIdxChosen.insert(idx_rand);
+            out[i_samp] = idx_rand;
+            i_samp++;
         }
-        // n_total is used only on node 0. If parallel then its value is correct
-        // only on node 0
-        int n_total;
-        if (parallel)
-            n_total = std::accumulate(ListSizes.begin(), ListSizes.end(), 0);
-        else
-            n_total = n_local;
-        // The total number of sampled node. Its value is used only on node 0.
-        int n_samp;
-        if (frac < 0)
-            n_samp = n;
-        else
-            n_samp = round(n_total * frac);
-        std::vector<int> ListIdxChosen;
-        std::vector<int> ListByProcessor;
+    }
+}
+
+/**
+ * Helper function that samples integers without replacement, using a bitmask
+ * to track previous samples. Best suited for medium-small `n_samp`
+ * @param n_samp Number of random samples
+ * @param n_total Sample integers from range [0, n_total)
+ * @param gen std::mt19937 generator to sample from
+ * @param out Output vector that samples are written to
+ */
+void sample_ints_bitmask(int64_t n_samp, int64_t n_total, std::mt19937& gen,
+                         std::vector<int64_t>& out) {
+    std::vector<bool> BitmaskIdxChosen(n_total);
+
+    int64_t i_samp = 0;
+    std::uniform_int_distribution<int64_t> rng(0, n_total - 1);
+    while (i_samp < n_samp) {
+        int64_t idx_rand = rng(gen);
+        if (!BitmaskIdxChosen[idx_rand]) {
+            BitmaskIdxChosen[idx_rand] = true;
+            out[i_samp] = idx_rand;
+            i_samp++;
+        }
+    }
+}
+
+/**
+ * Helper function that samples integers without replacement, by permuting the
+ * array of all integers. Best suited for large `n_samp`
+ * @param n_samp Number of random samples
+ * @param n_total Sample integers from range [0, n_total)
+ * @param gen std::mt19937 generator to sample from
+ * @param out Output vector that samples are written to
+ */
+void sample_ints_permute(int64_t n_samp, int64_t n_total, std::mt19937& gen,
+                         std::vector<int64_t>& out) {
+    std::vector<int64_t> AllIndices(n_total);
+    for (int64_t i_total = 0; i_total < n_total; i_total++) {
+        AllIndices[i_total] = i_total;
+    }
+
+    for (int64_t i_samp = 0; i_samp < n_samp; i_samp++) {
+        std::uniform_int_distribution<int64_t> rng(i_samp, n_total - 1);
+        int64_t idx_swap = rng(gen);
+        int64_t idx_rand = AllIndices[idx_swap];
+        AllIndices[idx_swap] = AllIndices[i_samp];
+        out[i_samp] = idx_rand;
+    }
+}
+
+/**
+ * Inner implementation of parallel sample_table
+ */
+table_info* sample_table_inner_parallel(table_info* in_table, int64_t n,
+                                        double frac, bool replace,
+                                        int64_t random_state) {
+    int64_t n_local = in_table->nrows();
+    int n_pes = 0;
+    int myrank = 0;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    // Gather how many rows are on each rank
+    std::vector<int64_t> ListSizes(n_pes);
+    MPI_Allgather(&n_local, 1, MPI_LONG, ListSizes.data(), 1, MPI_LONG,
+                  MPI_COMM_WORLD);
+
+    // Total number of rows across all ranks
+    int64_t n_total = std::accumulate(ListSizes.begin(), ListSizes.end(), 0);
+
+    // Total number of samples across all ranks
+    int64_t n_samp;
+    if (frac < 0) {
+        n_samp = std::max(static_cast<int64_t>(0), std::min(n_total, n));
+    } else {
+        n_samp = round(n_total * std::max(0., std::min(1., frac)));
+    }
+
+    // Compute start and end of each rank's input portion (inclusive)
+    std::vector<int64_t> ListStarts(n_pes);
+    std::vector<int64_t> ListEnds(n_pes);
+
+    int64_t sum_siz = 0;
+    for (int iProc = 0; iProc < n_pes; iProc++) {
+        ListStarts[iProc] = sum_siz;
+        sum_siz += ListSizes[iProc];
+        ListEnds[iProc] = sum_siz - 1;
+    }
+
+    // Compute which rank a random sample belongs to
+    // Sample random points deterministically across the whole array.
+    // Each RNG has the same seed on all ranks, so this is safe and requires
+    // no synchronization across ranks.
+    std::vector<int64_t> ListIdxChosen;
+    std::mt19937 gen(random_state);
+
+    if (replace) {
+        // Sampling with replacement: Simply output random points. Each rank
+        // runs this code separately, selecting the samples that belong to it.
+
+        int64_t mystart = ListStarts[myrank];
+        int64_t myend = ListEnds[myrank];
+
+        std::uniform_int_distribution<int64_t> rng(0, n_total = 1);
+        for (int64_t i_samp = 0; i_samp < n_samp; i_samp++) {
+            int64_t idx_rand = rng(gen);
+            if (mystart <= idx_rand && idx_rand <= myend) {
+                ListIdxChosen.emplace_back(idx_rand - mystart);
+            }
+        }
+    } else {
+        // Sampling without replacement: Sample random points using the best
+        // method for the current sample size. This code runs on rank 0 only
+        // to reduce peak memory usage. Afterwards, we shuffle each sample to
+        // its destination rank.
+        //
+        // For small n_samp, rejection sample with a bitmask/unordered set to
+        // track already-selected indices. For large n_samp, permute the array
+        // of all indices.
+        //
+        // Threshold 1 (unordered set vs. bitmask): Bitmasks require
+        // `n_total / 8` bytes, and unordered sets of integers require
+        // `n_samp * 8 / load_factor` bytes, where absl::flat_hash_set
+        // has load factor between 7/8 and 7/16 (average 21/32)
+        // (Source: https://abseil.io/docs/cpp/guides/container).
+        // So on average, unordered sets are less memory than bitmasks
+        // when n_samp < 21/2048 * n_total, approximately n_total / 96
+        //
+        // Threshold 2 (rejection sampling vs. permutation): Rejection
+        // sampling becomes catastrophically slow at large n_samp: for
+        // the last sample on average `n_total / (n_total - n_samp)`
+        // attempts are needed. However, an array of all indices costs
+        // more memory than a bitmask. Setting this threshold to the
+        // halfway point gives similar performance on large arrays.
+
+        std::vector<int64_t> ListIdxSampled;
+        std::vector<int64_t> ListIdxSampledExport;
+
+        // NOTE: MPI requires sendcounts and displs to be passed as ints, so
+        // these could overflow
         std::vector<int> ListCounts;
-        // We compute random points. In the case of parallel=T we consider it
-        // with respect to the whole array while in the case of parallel=F we
-        // need to select the same rows on all nodes.
+        std::vector<int> ListDisps;
+
         if (myrank == 0) {
-            ListIdxChosen.resize(n_samp);
-            if (parallel) {
-                ListByProcessor.resize(n_samp);
-                ListCounts.resize(n_pes);
-                for (int i_p = 0; i_p < n_pes; i_p++) ListCounts[i_p] = 0;
+            ListIdxSampled.resize(n_samp);
+            ListIdxSampledExport.resize(n_samp);
+            ListCounts.resize(n_pes);
+            ListDisps.resize(n_pes);
+
+            if (n_samp * 96L <= n_total) {
+                // If n_samp is very small, keep an unordered set of which
+                // indices to include.
+                sample_ints_unordset(n_samp, n_total, gen, ListIdxSampled);
+            } else if (n_samp * 2L <= n_total) {
+                // If n_samp is medium-small, keep a bitmask of which
+                // indices to include
+                sample_ints_bitmask(n_samp, n_total, gen, ListIdxSampled);
+            } else {
+                // If n_samp is large, generate a random permutation of the
+                // array of all indices by swapping with subsequent values
+                sample_ints_permute(n_samp, n_total, gen, ListIdxSampled);
             }
-            auto GetIProc_IPos =
-                [&](int const& idx_rand) -> std::pair<int, int> {
-                int new_siz, sum_siz = 0;
-                int iProc = 0;
-                while (true) {
-                    new_siz = sum_siz + ListSizes[iProc];
-                    if (idx_rand < new_siz) {
-                        int pos = idx_rand - sum_siz;
-                        return {iProc, pos};
-                    }
-                    sum_siz = new_siz;
-                    iProc++;
-                }
-                return {-1, -1};  // This code path should not happen. Put here
-                                  // to avoid warnings.
-            };
-            // In the case of replace, we simply have to take points at random.
-            //
-            // In the case of not replacing operation, this is more complicated.
-            // The issue is considered in
-            // ---Bentley J., Programming Pearls, 2nd, Column 12
-            // ---Knuth D., TAOCP, Seminumerical algorithms, Section 3.4.2
-            // The algorithms implemented here are based on the approximation of
-            // m small.
-            std::set<int> SetIdxChosen;
-            UNORD_SET_CONTAINER<int> UnordsetIdxChosen;
-            // Deterministic random number generation. See sort_values_table for
-            // rationale.
-            std::mt19937 gen(1234567890);
-            auto get_rand = [&](int const& len) -> int {
-                return std::uniform_int_distribution<>(0, len - 1)(gen);
-            };
-            auto GetIdx_Rand = [&]() -> int64_t {
-                if (replace) return get_rand(n_total);
-                // Two different algorithms according to the size
-                // Complexity will be of about O(m log m)
-                if (n_samp * 2 < n_total) {
-                    // In the case of small sampling state we can iterate in
-                    // order to conclude.
-                    while (true) {
-                        int idx_rand = get_rand(n_total);
-                        if (UnordsetIdxChosen.count(idx_rand) == 0) {
-                            UnordsetIdxChosen.insert(idx_rand);
-                            return idx_rand;
-                        }
-                    }
-                } else {
-                    // If the number of sampling points is near to the size of
-                    // the object then the random will be too slow. So,
-                    // something more complicated is needed.
-                    int64_t siz = SetIdxChosen.size();
-                    int64_t idx_rand = get_rand(n_total - siz);
-                    auto iter = SetIdxChosen.begin();
-                    while (iter != SetIdxChosen.end()) {
-                        if (idx_rand < *iter) break;
-                        iter++;
-                        idx_rand++;
-                    }
-                    SetIdxChosen.insert(idx_rand);
-                    return idx_rand;
-                }
-            };
-            for (int i_samp = 0; i_samp < n_samp; i_samp++) {
-                int64_t idx_rand = GetIdx_Rand();
-                if (parallel) {
-                    std::pair<int, int> ePair = GetIProc_IPos(idx_rand);
-                    int iProc = ePair.first;
-                    int pos = ePair.second;
-                    ListByProcessor[i_samp] = iProc;
-                    ListIdxChosen[i_samp] = pos;
-                    ListCounts[iProc]++;
-                } else {
-                    ListIdxChosen[i_samp] = idx_rand;
-                }
+
+            // Compute destination rank of each sample
+            std::vector<int> ListByProcessor(n_samp);
+            for (int64_t i_samp = 0; i_samp < n_samp; i_samp++) {
+                int64_t idx_rand = ListIdxSampled[i_samp];
+                int i_proc =
+                    std::distance(ListEnds.begin(),
+                                  std::lower_bound(ListEnds.begin(),
+                                                   ListEnds.end(), idx_rand));
+                ListIdxSampled[i_samp] -= ListStarts[i_proc];
+                ListByProcessor[i_samp] = i_proc;
+                ListCounts[i_proc]++;
             }
-        }
-        if (!parallel && myrank != 0) {
-            ListIdxChosen.resize(n_samp);
-        }
-        int n_samp_out;
-        if (parallel) {
-            MPI_Scatter(ListCounts.data(), 1, MPI_INT, &n_samp_out, 1, MPI_INT,
-                        mpi_root, MPI_COMM_WORLD);
-        } else {
-            n_samp_out = n_samp;
+
+            // Compute sendbufs and displacements for MPI_Scatterv
+            ListDisps[0] = 0;
+            for (int i_pes = 0; i_pes < n_pes - 1; i_pes++) {
+                ListDisps[i_pes + 1] = ListDisps[i_pes] + ListCounts[i_pes];
+            }
+
+            std::vector<int> ListShifts(n_pes);
+            for (int64_t i_samp = 0; i_samp < n_samp; i_samp++) {
+                int i_proc = ListByProcessor[i_samp];
+                int i_dest = ListDisps[i_proc] + ListShifts[i_proc];
+                ListIdxSampledExport[i_dest] = ListIdxSampled[i_samp];
+                ListShifts[i_proc]++;
+            }
         }
 
-        std::vector<int> ListIdxExport(n_samp_out), ListDisps,
-            ListIdxChosenExport;
-        if (myrank == 0 && parallel) {
-            ListDisps.resize(n_pes);
-            ListIdxChosenExport.resize(n_samp);
-            ListDisps[0] = 0;
-            for (int i_pes = 1; i_pes < n_pes; i_pes++)
-                ListDisps[i_pes] = ListDisps[i_pes - 1] + ListCounts[i_pes - 1];
-            std::vector<int> ListShift(n_pes, 0);
-            for (int i_samp = 0; i_samp < n_samp; i_samp++) {
-                int iProc = ListByProcessor[i_samp];
-                ListIdxChosenExport[ListDisps[iProc] + ListShift[iProc]] =
-                    ListIdxChosen[i_samp];
-                ListShift[iProc]++;
-            }
+        ListIdxSampled.clear();
+
+        // Scatter sampled indices to each node
+        int n_samp_out;
+        MPI_Scatter(ListCounts.data(), 1, MPI_INT, &n_samp_out, 1, MPI_INT, 0,
+                    MPI_COMM_WORLD);
+
+        ListIdxChosen.resize(n_samp_out);
+        MPI_Scatterv(ListIdxSampledExport.data(), ListCounts.data(),
+                     ListDisps.data(), MPI_LONG, ListIdxChosen.data(),
+                     n_samp_out, MPI_LONG, 0, MPI_COMM_WORLD);
+
+        ListIdxSampledExport.clear();
+        ListCounts.clear();
+        ListDisps.clear();
+    }
+
+    // Retrieve the output table from sampled indices
+    table_info* tab_out = RetrieveTable(in_table, ListIdxChosen, -1);
+    return tab_out;
+}
+
+/**
+ * Inner implementation of sequential sample_table
+ */
+table_info* sample_table_inner_sequential(table_info* in_table, int64_t n,
+                                          double frac, bool replace,
+                                          int64_t random_state) {
+    // Total number of rows
+    int64_t n_total = in_table->nrows();
+
+    // Total number of samples
+    int64_t n_samp;
+    if (frac < 0) {
+        n_samp = std::max(static_cast<int64_t>(0), std::min(n_total, n));
+    } else {
+        n_samp = round(n_total * std::max(0., std::min(1., frac)));
+    }
+
+    // Sample random points deterministically across the whole array.
+    // Each RNG has the same seed on all ranks, so this is safe and requires
+    // no synchronization across ranks.
+    std::vector<int64_t> ListIdxChosen(n_samp);
+    std::mt19937 gen(random_state);
+
+    if (replace) {
+        // Sampling with replacement: Simply output random points.
+        std::uniform_int_distribution<int64_t> rng(0, n_total - 1);
+        for (int64_t i_samp = 0; i_samp < n_samp; i_samp++) {
+            int64_t idx_rand = rng(gen);
+            ListIdxChosen[i_samp] = idx_rand;
+        }
+    } else {
+        // Sampling without replacement: For small n_samp, rejection sample
+        // with a bitmask/unordered set to track included idxs. For large
+        // n_samp, permute the array of all indices. For justification of
+        // thresholds, see comments in sample_table_inner_parallel
+
+        if (n_samp * 96L <= n_total) {
+            // If n_samp is very small, keep an unordered set of which
+            // indices to include.
+            sample_ints_unordset(n_samp, n_total, gen, ListIdxChosen);
+        } else if (n_samp * 2L <= n_total) {
+            // If n_samp is medium-small, keep a bitmask of which
+            // indices to include
+            sample_ints_bitmask(n_samp, n_total, gen, ListIdxChosen);
         } else {
-            if (myrank == 0) {
-                for (int i_samp = 0; i_samp < n_samp; i_samp++)
-                    ListIdxExport[i_samp] = ListIdxChosen[i_samp];
-            }
+            // If n_samp is large, generate a random permutation of the
+            // array of all indices by swapping with subsequent values
+            sample_ints_permute(n_samp, n_total, gen, ListIdxChosen);
         }
+    }
+
+    // Retrieve the output table from sampled indices
+    table_info* tab_out = RetrieveTable(in_table, ListIdxChosen, -1);
+    return tab_out;
+}
+
+table_info* sample_table(table_info* in_table, int64_t n, double frac,
+                         bool replace, int64_t random_state, bool parallel) {
+    try {
         if (parallel) {
-            // Exporting to all nodes, the data that they must extract
-            MPI_Scatterv(ListIdxChosenExport.data(), ListCounts.data(),
-                         ListDisps.data(), MPI_INT, ListIdxExport.data(),
-                         n_samp_out, MPI_INT, mpi_root, MPI_COMM_WORLD);
+            return sample_table_inner_parallel(in_table, n, frac, replace,
+                                               random_state);
         } else {
-            MPI_Bcast(ListIdxExport.data(), n_samp_out, MPI_INT, mpi_root,
-                      MPI_COMM_WORLD);
+            return sample_table_inner_sequential(in_table, n, frac, replace,
+                                                 random_state);
         }
-        //
-        std::vector<int64_t> ListIdx;
-        for (int i_samp_out = 0; i_samp_out < n_samp_out; i_samp_out++) {
-            size_t idx_export = ListIdxExport[i_samp_out];
-            ListIdx.push_back(idx_export);
-        }
-        table_info* tab_out = RetrieveTable(in_table, ListIdx, -1);
-        if (parallel) {
-            bool all_gather = true;
-            size_t n_cols = tab_out->ncols();
-            table_info* tab_ret =
-                gather_table(tab_out, n_cols, all_gather, parallel);
-            delete_table(tab_out);
-            return tab_ret;
-        }
-        return tab_out;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
     }
 }
+
 /**
  * Search for pattern in each input element using
  * boost::xpressive::regex_search(in, pattern)

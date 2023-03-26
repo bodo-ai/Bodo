@@ -1794,7 +1794,7 @@ class DistributedAnalysis:
             )
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
             self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
-            self._set_REP(lhs, array_dists, "output of sample is REP", rhs.loc)
+            self._set_var_dist(lhs, array_dists, in_dist)
             return
 
         if fdef == (

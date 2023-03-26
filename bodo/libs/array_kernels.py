@@ -1212,28 +1212,33 @@ def duplicated(data, parallel=False):
     return impl
 
 
-def sample_table_operation(data, ind_arr, n, frac, replace, parallel=False):
+def sample_table_operation(
+    data, ind_arr, n, frac, replace, random_state, parallel=False
+):
     pass
 
 
 @overload(sample_table_operation, no_unliteral=True)
-def overload_sample_table_operation(data, ind_arr, n, frac, replace, parallel=False):
+def overload_sample_table_operation(
+    data, ind_arr, n, frac, replace, random_state, parallel=False
+):
     """This is the code calling the C++ function for the sampling procedure.
     Parameters passed in argument are:
     ---the number of rows.
     ---The fraction used (-1 if the number of rows is used.
-    ---Whether to allow collision of values."""
+    ---Whether to allow collision of values.
+    ---Random number generator seed"""
     count = len(data)
 
-    func_text = "def impl(data, ind_arr, n, frac, replace, parallel=False):\n"
+    func_text = (
+        "def impl(data, ind_arr, n, frac, replace, random_state, parallel=False):\n"
+    )
     func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
         ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += (
-        "  out_table = sample_table(table_total, n, frac, replace, parallel)\n".format(
-            count
-        )
+    func_text += "  out_table = sample_table(table_total, n, frac, replace, random_state, parallel)\n".format(
+        count
     )
     for i_col in range(count):
         func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(

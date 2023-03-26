@@ -5521,12 +5521,19 @@ def overload_dataframe_sample(
     """
     check_runtime_cols_unsupported(df, "DataFrame.sample()")
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(df, "DataFrame.sample()")
-    unsupported_args = dict(
-        random_state=random_state, weights=weights, axis=axis, ignore_index=ignore_index
-    )
-    sample_defaults = dict(
-        random_state=None, weights=None, axis=None, ignore_index=False
-    )
+    unsupported_args = dict(weights=weights, axis=axis, ignore_index=ignore_index)
+    sample_defaults = dict(weights=None, axis=None, ignore_index=False)
+
+    if not is_overload_none(n) and not is_overload_none(frac):
+        raise BodoError(
+            "DataFrame.sample(): only one of n and frac option can be selected"
+        )
+
+    if not is_overload_none(random_state) and not is_overload_int(random_state):
+        raise BodoError(
+            "DataFrame.sample(): random_state must be None or an int argument"
+        )
+
     check_unsupported_args(
         "DataFrame.sample",
         unsupported_args,
@@ -5534,35 +5541,31 @@ def overload_dataframe_sample(
         package_name="pandas",
         module_name="DataFrame",
     )
-    if not is_overload_none(n) and not is_overload_none(frac):
-        raise BodoError(
-            "DataFrame.sample(): only one of n and frac option can be selected"
-        )
 
     n_cols = len(df.columns)
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
     rhs_data_args = ", ".join("rhs_data_{}".format(i) for i in range(n_cols))
 
     func_text = "def impl(df, n=None, frac=None, replace=False, weights=None, random_state=None, axis=None, ignore_index=False):\n"
-    func_text += "  if (frac == 1 or n == len(df)) and not replace:\n"
-    func_text += "    return bodo.allgatherv(bodo.random_shuffle(df), False)\n"
     for i in range(n_cols):
         func_text += "  rhs_data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
             i
         )
-    func_text += "  if frac is None:\n"
-    func_text += "    frac_d = -1.0\n"
+    func_text += "  frac_d = -1.0 if frac is None else frac\n"
+    func_text += "  n_i = 0 if n is None else n\n"
+    func_text += "  if random_state is None:\n"
+    func_text += "    random_state_i = bodo.libs.distributed_api.bcast_scalar(np.random.randint(0, 2**31))\n"
     func_text += "  else:\n"
-    func_text += "    frac_d = frac\n"
-    func_text += "  if n is None:\n"
-    func_text += "    n_i = 0\n"
-    func_text += "  else:\n"
-    func_text += "    n_i = n\n"
+    func_text += "    random_state_i = random_state\n"
+
     index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
-    func_text += f"  ({data_args},), index_arr = bodo.libs.array_kernels.sample_table_operation(({rhs_data_args},), {index}, n_i, frac_d, replace)\n"
+    func_text += f"  ({data_args},), index_arr = bodo.libs.array_kernels.sample_table_operation(({rhs_data_args},), {index}, n_i, frac_d, replace, random_state_i)\n"
     func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
     return bodo.hiframes.dataframe_impl._gen_init_df(
-        func_text, df.columns, data_args, "index"
+        func_text,
+        df.columns,
+        data_args,
+        "index",
     )
 
 
