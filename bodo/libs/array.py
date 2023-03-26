@@ -2801,9 +2801,11 @@ def sort_table_for_interval_join(
 
 
 @intrinsic
-def sample_table(typingctx, table_t, n_keys_t, frac_t, replace_t, parallel_t):
+def sample_table(
+    typingctx, table_t, n_keys_t, frac_t, replace_t, random_state_t, parallel_t
+):
     """
-    Interface to the sorting of tables.
+    Interface to the sampling of tables.
     """
     assert table_t == table_type
 
@@ -2815,6 +2817,7 @@ def sample_table(typingctx, table_t, n_keys_t, frac_t, replace_t, parallel_t):
                 lir.IntType(64),
                 lir.DoubleType(),
                 lir.IntType(1),
+                lir.IntType(64),
                 lir.IntType(1),
             ],
         )
@@ -2828,7 +2831,14 @@ def sample_table(typingctx, table_t, n_keys_t, frac_t, replace_t, parallel_t):
         return ret
 
     return (
-        table_type(table_t, types.int64, types.float64, types.boolean, types.boolean),
+        table_type(
+            table_t,
+            types.int64,
+            types.float64,
+            types.boolean,
+            types.int64,
+            types.boolean,
+        ),
         codegen,
     )
 
