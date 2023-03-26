@@ -11,9 +11,9 @@ from bodo.tests.timezone_common import representative_tz  # noqa
 
 @pytest.fixture(
     params=[
-        "UNION",
-        pytest.param("UNION DISTINCT", marks=pytest.mark.slow),
-        "UNION ALL",
+        pytest.param("UNION", id="union_op"),
+        pytest.param("UNION DISTINCT", id="union_distinct", marks=pytest.mark.slow),
+        pytest.param("UNION ALL", id="union_all"),
     ]
 )
 def union_cmds(request):
@@ -22,9 +22,11 @@ def union_cmds(request):
 
 @pytest.fixture(
     params=[
-        "INTERSECT",
-        pytest.param("INTERSECT DISTINCT", marks=pytest.mark.slow),
-        "INTERSECT ALL",
+        pytest.param("INTERSECT", id="intersect_op"),
+        pytest.param(
+            "INTERSECT DISTINCT", id="intersect_distinct", marks=pytest.mark.slow
+        ),
+        pytest.param("INTERSECT ALL", id="intersect_all"),
     ]
 )
 def intersect_cmds(request):
@@ -33,24 +35,68 @@ def intersect_cmds(request):
 
 @pytest.fixture(
     params=[
-        "EXCEPT",
-        pytest.param("MINUS", marks=pytest.mark.slow),
-        "EXCEPT ALL",
-        pytest.param("MINUS ALL", marks=pytest.mark.slow),
+        pytest.param("EXCEPT", id="except_op"),
+        pytest.param("MINUS", id="minus_op", marks=pytest.mark.slow),
+        pytest.param("EXCEPT ALL", id="except_all"),
+        pytest.param("MINUS ALL", id="minus_all", marks=pytest.mark.slow),
     ]
 )
 def except_cmds(request):
     return request.param
 
 
-@pytest.fixture
-def null_set_df():
-    int_data = {
-        "A": [1, 2, 3, None] * 3,
-        "B": [4, None, 2, 3] * 3,
-        "C": [None, 1, 2, 3] * 3,
-    }
-    return {"table1": pd.DataFrame(data=int_data, dtype="Int64")}
+@pytest.fixture(
+    params=[
+        pytest.param("UNION", id="union_op"),
+        pytest.param("UNION DISTINCT", id="union_distinct", marks=pytest.mark.slow),
+        pytest.param("UNION ALL", id="union_all"),
+        pytest.param("INTERSECT", id="intersect_op"),
+        pytest.param(
+            "INTERSECT DISTINCT", id="intersect_distinct", marks=pytest.mark.slow
+        ),
+        pytest.param("INTERSECT ALL", id="intersect_all"),
+        pytest.param("EXCEPT", id="except_op"),
+        pytest.param("MINUS", id="minus_op", marks=pytest.mark.slow),
+        pytest.param("EXCEPT ALL", id="except_all"),
+        pytest.param("MINUS ALL", id="minus_all", marks=pytest.mark.slow),
+    ]
+)
+def set_ops_cmds(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            {
+                "table1": pd.DataFrame(
+                    {
+                        "A": pd.Series([1, 2, 3, None] * 3),
+                        "B": pd.Series([4, None, 2, 3] * 3),
+                        "C": pd.Series([None, 1, 2, 3] * 3),
+                    },
+                    dtype="Int64",
+                )
+            },
+            id="int",
+        ),
+        pytest.param(
+            {
+                "table1": pd.DataFrame(
+                    {
+                        "A": pd.Series(["a", "b", "cc", None] * 3),
+                        "B": pd.Series(["d", None, "bb", "c"] * 3),
+                        "C": pd.Series([None, "aa", "b", "c"] * 3),
+                    },
+                    dtype="string",
+                )
+            },
+            id="string",
+        ),
+    ]
+)
+def null_set_dfs(request):
+    return request.param
 
 
 @pytest.fixture(
@@ -86,57 +132,114 @@ def make_tz_aware_df(tz):
     return pd.DataFrame(data=tz_aware_data)
 
 
-def test_union_numeric_cols(set_ops_dfs, union_cmds, spark_info, memory_leak_check):
+# ===== Set Ops Tests
+
+
+def test_set_ops_numeric_cols(set_ops_dfs, set_ops_cmds, spark_info, memory_leak_check):
     """
-    Test that UNION [ALL/DISTINCT] works for a single numeric column
+    Test that set ops work for a single numeric column
     """
-    query = f"SELECT A FROM table1 {union_cmds} SELECT B FROM table2"
+    query = f"SELECT A FROM table1 {set_ops_cmds} SELECT B FROM table2"
     check_query(query, set_ops_dfs, spark_info, check_dtype=False)
 
 
-def test_union_nullable_numeric_many_cols(
-    null_set_df, union_cmds, spark_info, memory_leak_check
+def test_set_ops_nullable_many_cols(
+    null_set_dfs, set_ops_cmds, spark_info, memory_leak_check
 ):
     """
-    Test that UNION [ALL/DISTINCT] works for many nullable numeric columns
+    Test that set ops work for many nullable columns
     """
-    query = f"SELECT A, B, C FROM table1 {union_cmds} SELECT C, C, B FROM table1"
-    check_query(query, null_set_df, spark_info, check_dtype=False)
+    query = f"SELECT A, B, C FROM table1 {set_ops_cmds} SELECT C, C, B FROM table1"
+    check_query(query, null_set_dfs, spark_info, check_dtype=False)
 
 
-def test_union_null_literals(memory_leak_check):
+@pytest.mark.parametrize(
+    "query_cmd, py_output",
+    [
+        pytest.param(
+            "UNION",
+            pd.DataFrame(
+                {
+                    "A": pd.Series([1, 2, 3, 4, None], dtype="Int64"),
+                    "B": pd.Series([1.1, 2.7, 3.4, 110.3, None], dtype="Float64"),
+                    "C": ["A", None, "c", "recall", None],
+                }
+            ),
+            id="union",
+        ),
+        pytest.param(
+            "INTERSECT",
+            pd.DataFrame(
+                {
+                    "A": pd.Series([None], dtype="Int64"),
+                    "B": pd.Series([None], dtype="Float64"),
+                    "C": [None],
+                }
+            ),
+            id="intersect",
+            marks=pytest.mark.skip("[BE-4320] Support null literals in intersect"),
+        ),
+        pytest.param(
+            "EXCEPT",
+            pd.DataFrame(
+                {
+                    "A": pd.Series([1, 2, 3, 4], dtype="Int64"),
+                    "B": pd.Series([1.1, 2.7, 3.4, 110.3], dtype="Float64"),
+                    "C": ["A", None, "c", "recall"],
+                }
+            ),
+            id="except",
+            marks=pytest.mark.skip("[BE-4320] Support null literals in except"),
+        ),
+    ],
+)
+def test_set_ops_null_literals(query_cmd, py_output, memory_leak_check):
     """
-    Test for [BE-4320], checks that union works for various null literals
+    Test for [BE-4320], checks that set ops works for various null literals
     """
     df = pd.DataFrame(
         {
-            "A": [1, 2, 3, 4] * 3,
-            "B": [1.1, 2.7, 3.4, 110.3] * 3,
-            "C": ["A", None, "c", "recall"] * 3,
+            "A": [1, 2, 3, 4, None] * 3,
+            "B": [1.1, 2.7, 3.4, 110.3, None] * 3,
+            "C": ["A", None, "c", "recall", None] * 3,
         }
     )
     ctx = {"table1": df}
-    expected_output = pd.DataFrame(
-        {
-            "A": pd.Series([1, 2, 3, 4, None], dtype="Int64"),
-            "B": pd.Series([1.1, 2.7, 3.4, 110.3, None], dtype="Float64"),
-            "C": ["A", None, "c", "recall", None],
-        }
-    )
-    query = (
-        "(SELECT A, B, C from table1) UNION (select null as A, null as B, null as C)"
-    )
-    check_query(query, ctx, None, expected_output=expected_output, check_dtype=False)
+    query = f"(SELECT A, B, C from table1) {query_cmd} (SELECT null as A, null as B, null as C)"
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
-def test_union_string_cols(
-    bodosql_string_types, union_cmds, spark_info, memory_leak_check
+def test_set_ops_string_cols(
+    bodosql_string_types, set_ops_cmds, spark_info, memory_leak_check
 ):
     """
-    Test that UNION [ALL/DISTINCT] works for string columns
+    Test that set ops work for string columns
     """
-    query = f"SELECT A FROM table1 {union_cmds} SELECT B FROM table1"
+    query = f"SELECT A FROM table1 {set_ops_cmds} SELECT B FROM table1"
     check_query(query, bodosql_string_types, spark_info, check_dtype=False)
+
+
+def test_set_ops_datetime_cols(
+    bodosql_datetime_types, set_ops_cmds, spark_info, memory_leak_check
+):
+    """
+    Test that set ops work for datetime columns
+    """
+    query = f"SELECT A FROM table1 {set_ops_cmds} SELECT B FROM table1"
+    check_query(query, bodosql_datetime_types, spark_info, check_dtype=False)
+
+
+def test_set_ops_binary_cols(
+    bodosql_binary_types, set_ops_cmds, spark_info, memory_leak_check
+):
+    """
+    Test that set ops work for binary columns
+    """
+    query = f"SELECT A FROM table1 {set_ops_cmds} SELECT B FROM table1"
+    check_query(query, bodosql_binary_types, spark_info, check_dtype=False)
+
+
+# ===== String Restrictions
 
 
 def test_union_string_restrictions(
@@ -151,7 +254,43 @@ def test_union_string_restrictions(
         f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B LIMIT 2) {union_cmds} "
         f"(SELECT C, B, A FROM table1)"
     )
-    check_query(query, bodosql_string_types, spark_info, check_dtype=False)
+    check_query(
+        query, bodosql_string_types, spark_info, check_names=False, check_dtype=False
+    )
+
+
+def test_intersect_string_restrictions(
+    bodosql_string_types, intersect_cmds, spark_info, memory_leak_check
+):
+    """
+    Test that INTERSECT [ALL/DISTINCT] works for string columns when used with restrictions
+    """
+    query = (
+        f"(SELECT CASE WHEN LENGTH(B) > 4 THEN B END, C, A FROM table1 ORDER BY C) {intersect_cmds} "
+        f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B LIMIT 2) {intersect_cmds} "
+        f"(SELECT B, C, A FROM table1)"
+    )
+    check_query(
+        query, bodosql_string_types, spark_info, check_names=False, check_dtype=False
+    )
+
+
+def test_except_string_restrictions(
+    bodosql_string_types, except_cmds, spark_info, memory_leak_check
+):
+    """
+    Test that EXCEPT/MINUS [ALL] works for string columns when used with restrictions
+    """
+    query = (
+        f"(SELECT CASE WHEN LENGTH(B) > 4 THEN B END, C, A FROM table1 ORDER BY C) {except_cmds} "
+        f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B LIMIT 2) "
+    )
+    check_query(
+        query, bodosql_string_types, spark_info, check_names=False, check_dtype=False
+    )
+
+
+# ===== Timezone-Aware Cols
 
 
 def test_union_tz_aware_cols(union_cmds, representative_tz, memory_leak_check):
@@ -174,77 +313,6 @@ def test_union_tz_aware_cols(union_cmds, representative_tz, memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output)
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "query,col1,col2",
-    [
-        # [BS-381] These queries are not valid for spark
-        ("SELECT 1,2 UNION SELECT 1,2", [1], [2]),
-        ("SELECT 1,2 UNION DISTINCT SELECT 1,3", [1, 1], [2, 3]),
-        ("SELECT 1,2 UNION ALL SELECT 1,2", [1, 1], [2, 2]),
-    ],
-)
-def test_union_scalars(query, col1, col2, memory_leak_check):
-    """
-    Tests that UNION [ALL/DISTINCT] works for scalars
-    """
-    py_output = pd.DataFrame({"col1": col1, "col2": col2})
-    check_query(
-        query,
-        dict(),
-        None,
-        check_names=False,
-        expected_output=py_output,
-        check_dtype=False,
-    )
-
-
-def test_intersect_numeric_cols(
-    set_ops_dfs, intersect_cmds, spark_info, memory_leak_check
-):
-    """
-    Test that INTERSECT [ALL/DISTINCT] works for a single numeric column
-    """
-    query = f"SELECT A FROM table1 {intersect_cmds} SELECT B FROM table2"
-    check_query(query, set_ops_dfs, spark_info, check_dtype=False)
-
-
-def test_intersect_nullable_numeric_many_cols(
-    null_set_df, intersect_cmds, spark_info, memory_leak_check
-):
-    """
-    Test that INTERSECT [ALL/DISTINCT] works for many nullable numeric columns
-    """
-    query = f"SELECT A, B, C FROM table1 {intersect_cmds} SELECT C, C, B FROM table1"
-    check_query(query, null_set_df, spark_info, check_dtype=False)
-
-
-def test_intersect_string_cols(
-    bodosql_string_types, intersect_cmds, spark_info, memory_leak_check
-):
-    """
-    Test that INTERSECT [ALL/DISTINCT] works for string columns
-    """
-    query = f"SELECT A FROM table1 {intersect_cmds} SELECT B FROM table1"
-    check_query(query, bodosql_string_types, spark_info, check_dtype=False)
-
-
-def test_intersect_string_restrictions(
-    bodosql_string_types, intersect_cmds, spark_info, memory_leak_check
-):
-    """
-    Test that INTERSECT [ALL/DISTINCT] works for string columns when used with restrictions
-    """
-    query = (
-        f"(SELECT CASE WHEN LENGTH(B) > 4 THEN B END, C, A FROM table1 ORDER BY C) {intersect_cmds} "
-        f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B LIMIT 2) {intersect_cmds} "
-        f"(SELECT B, C, A FROM table1)"
-    )
-    check_query(
-        query, bodosql_string_types, spark_info, check_names=False, check_dtype=False
-    )
-
-
 def test_intersect_tz_aware_cols(intersect_cmds, representative_tz, memory_leak_check):
     """
     Test that INTERSECT [ALL/DISTINCT] works for tz_aware columns
@@ -263,83 +331,6 @@ def test_intersect_tz_aware_cols(intersect_cmds, representative_tz, memory_leak_
     ctx = {"table1": df}
     query = f"SELECT A FROM table1 {intersect_cmds} SELECT B FROM table1"
     check_query(query, ctx, None, expected_output=py_output)
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "query,col1,col2",
-    [
-        # [BS-381] These queries are not valid for spark
-        ("SELECT 1,2 INTERSECT SELECT 1,2", [1], [2]),
-        ("SELECT 1,2 INTERSECT DISTINCT SELECT 2,3", [], []),
-        pytest.param(
-            "SELECT 1,2 INTERSECT ALL SELECT 1,2",
-            [1],
-            [2],
-        ),
-        (
-            "(SELECT 1,2 UNION ALL SELECT 1,2) INTERSECT ALL (SELECT 1,2 UNION ALL SELECT 1,2)",
-            [1, 1],
-            [2, 2],
-        ),
-    ],
-)
-def test_intersect_scalars(query, col1, col2, memory_leak_check):
-    """
-    Test that INTERSECT [ALL/DISTINCT] works for scalars
-    """
-    py_output = pd.DataFrame({"col1": col1, "col2": col2})
-    check_query(
-        query,
-        dict(),
-        None,
-        check_names=False,
-        expected_output=py_output,
-        check_dtype=False,
-    )
-
-
-def test_except_numeric_cols(set_ops_dfs, except_cmds, spark_info, memory_leak_check):
-    """
-    Test that EXCEPT/MINUS [ALL] works for a single numeric column
-    """
-    query = f"SELECT A FROM table1 {except_cmds} SELECT B FROM table2"
-    check_query(query, set_ops_dfs, spark_info, check_dtype=False)
-
-
-def test_except_nullable_numeric_many_cols(
-    null_set_df, except_cmds, spark_info, memory_leak_check
-):
-    """
-    Test that EXCEPT/MINUS [ALL] works for many nullable numeric columns
-    """
-    query = f"SELECT A, B, C FROM table1 {except_cmds} SELECT C, C, B FROM table1"
-    check_query(query, null_set_df, spark_info, check_dtype=False)
-
-
-def test_except_string_cols(
-    bodosql_string_types, except_cmds, spark_info, memory_leak_check
-):
-    """
-    Test that EXCEPT/MINUS [ALL] works for string columns
-    """
-    query = f"SELECT A FROM table1 {except_cmds} SELECT B FROM table1"
-    check_query(query, bodosql_string_types, spark_info, check_dtype=False)
-
-
-def test_except_string_restrictions(
-    bodosql_string_types, except_cmds, spark_info, memory_leak_check
-):
-    """
-    Test that EXCEPT/MINUS [ALL] works for string columns when used with restrictions
-    """
-    query = (
-        f"(SELECT CASE WHEN LENGTH(B) > 4 THEN B END, C, A FROM table1 ORDER BY C) {except_cmds} "
-        f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B LIMIT 2) "
-    )
-    check_query(
-        query, bodosql_string_types, spark_info, check_names=False, check_dtype=False
-    )
 
 
 def test_except_tz_aware_cols(except_cmds, representative_tz, memory_leak_check):
@@ -364,28 +355,75 @@ def test_except_tz_aware_cols(except_cmds, representative_tz, memory_leak_check)
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "query,col1,col2",
+    "query, py_output",
     [
         # [BS-381] These queries are not valid for spark
-        ("SELECT 1,2 EXCEPT SELECT 1,2", [], []),
-        ("SELECT 1,2 MINUS SELECT 2,3", [1], [2]),
+        pytest.param(
+            "SELECT 1,2 UNION SELECT 1,2",
+            pd.DataFrame({"A": [1], "B": [2]}),
+            id="union_op_same",
+        ),
+        pytest.param(
+            "SELECT 1,2 UNION DISTINCT SELECT 1,3",
+            pd.DataFrame({"A": [1, 1], "B": [2, 3]}),
+            id="union_distinct_diff",
+        ),
+        pytest.param(
+            "SELECT 1,2 UNION ALL SELECT 1,2",
+            pd.DataFrame({"A": [1, 1], "B": [2, 2]}),
+            id="union_all_same",
+        ),
+        pytest.param(
+            "(SELECT 1,2 UNION ALL SELECT 1,2) UNION ALL SELECT 1,2",
+            pd.DataFrame({"A": [1, 1, 1], "B": [2, 2, 2]}),
+            id="union_all_dup",
+        ),
+        pytest.param(
+            "SELECT 1,2 INTERSECT SELECT 1,2",
+            pd.DataFrame({"A": [1], "B": [2]}),
+            id="intersect_op_same",
+        ),
+        pytest.param(
+            "SELECT 1,2 INTERSECT DISTINCT SELECT 2,3",
+            pd.DataFrame({"A": [], "B": []}),
+            id="intersect_distinct_diff",
+        ),
+        pytest.param(
+            "SELECT 1,2 INTERSECT ALL SELECT 1,2",
+            pd.DataFrame({"A": [1], "B": [2]}),
+            id="intersect_all_same",
+        ),
+        pytest.param(
+            "(SELECT 1,2 UNION ALL SELECT 1,2) INTERSECT ALL (SELECT 1,2 UNION ALL SELECT 1,2)",
+            pd.DataFrame({"A": [1, 1], "B": [2, 2]}),
+            id="intersect_all_dup",
+        ),
+        pytest.param(
+            "SELECT 1,2 EXCEPT SELECT 1,2",
+            pd.DataFrame({"A": [], "B": []}),
+            id="except_op_same",
+        ),
+        pytest.param(
+            "SELECT 1,2 MINUS SELECT 2,3",
+            pd.DataFrame({"A": [1], "B": [2]}),
+            id="minus_op_diff",
+        ),
         pytest.param(
             "SELECT 1,2 EXCEPT ALL SELECT 1,2",
-            [],
-            [],
+            pd.DataFrame({"A": [], "B": []}),
+            id="except_all_same",
         ),
         pytest.param(
             "(SELECT 1,2 UNION ALL SELECT 1,2) MINUS ALL SELECT 1,2",
-            [1],
-            [2],
+            pd.DataFrame({"A": [1], "B": [2]}),
+            id="minus_all_dup",
         ),
     ],
 )
-def test_except_scalars(query, col1, col2, memory_leak_check):
+def test_set_ops_scalars(query, py_output, memory_leak_check):
     """
-    Tests that EXCEPT/MINUS [ALL] works for scalars
+    Tests that set ops work for scalars
     """
-    py_output = pd.DataFrame({"col1": col1, "col2": col2})
     check_query(
         query,
         dict(),
