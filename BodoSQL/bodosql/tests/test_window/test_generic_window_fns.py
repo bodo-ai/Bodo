@@ -11,7 +11,6 @@ from bodosql.tests.test_window.window_common import (  # noqa
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 
-
 @pytest.mark.parametrize(
     "funcs",
     [

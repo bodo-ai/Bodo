@@ -2,10 +2,14 @@
 """
 Test correctness of SQL comparison operations on BodoSQL
 """
+import datetime
+
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import bodosql_use_date_type, check_query
+
+from bodo import Time
 
 
 @pytest.fixture(
@@ -18,83 +22,276 @@ def between_clause(request):
     return request.param
 
 
-def test_comparison_operators_numeric_within_table(
-    bodosql_numeric_types,
-    comparison_ops,
+@pytest.fixture(
+    params=[
+        pytest.param(
+            ([None, 1, 2, 4, 8, 127, 128, 255, 0], pd.UInt8Dtype()), id="uint8"
+        ),
+        pytest.param(([None, 1, 2, 4, 8, 127, -128, -1, 0], pd.Int8Dtype()), id="int8"),
+        pytest.param(
+            ([None, 1, 2, 65535, 32767, 127, 128, 255, 0], pd.UInt16Dtype()),
+            id="uint16",
+        ),
+        pytest.param(
+            ([None, 1, 2, -32768, 32767, 127, -128, -1, 0], pd.Int16Dtype()), id="int16"
+        ),
+        pytest.param(
+            ([None, 1, 7, 4, 8, 4294967295, 1234567890, 255, 0], pd.UInt32Dtype()),
+            id="uint32",
+        ),
+        pytest.param(
+            ([None, 1, 2, 13, 8, 2147483647, -2147483647, -1, 0], pd.Int32Dtype()),
+            id="int32",
+        ),
+        pytest.param(
+            (
+                [
+                    None,
+                    9,
+                    256,
+                    65535,
+                    32767,
+                    184467440551615,
+                    922337203684775807,
+                    255,
+                    3,
+                ],
+                pd.UInt64Dtype(),
+            ),
+            id="uint64",
+        ),
+        pytest.param(
+            (
+                [
+                    None,
+                    1,
+                    4,
+                    -32768,
+                    32767,
+                    9223372036854775807,
+                    -9223372036854775808,
+                    -1,
+                    -100,
+                ],
+                pd.Int64Dtype(),
+            ),
+            id="int64",
+        ),
+        pytest.param(
+            (
+                [
+                    None,
+                    "",
+                    "alpha",
+                    "alphabet",
+                    "beta",
+                    "ZEBRA",
+                    "40",
+                    "123",
+                    "ÁÖ¬⅐♫",
+                    " ",
+                    "\t",
+                ],
+                None,
+            ),
+            id="strings",
+        ),
+        pytest.param(
+            (
+                [
+                    None,
+                    b"",
+                    b"alpha",
+                    b"alphabet",
+                    b"beta",
+                    b"ZEBRA",
+                    b"40",
+                    b"123",
+                    b"zebra" b" ",
+                    b"\t",
+                ],
+                None,
+            ),
+            id="binary",
+        ),
+        pytest.param(
+            (
+                [
+                    None,
+                    datetime.date(1999, 12, 31),
+                    datetime.date(2019, 7, 4),
+                    datetime.date(2022, 2, 6),
+                    datetime.date(2022, 3, 4),
+                    datetime.date(2022, 3, 14),
+                ],
+                None,
+            ),
+            id="date",
+        ),
+        pytest.param(
+            (
+                [
+                    None,
+                    pd.Timestamp("2000-1-1"),
+                    pd.Timestamp("2010-8-3"),
+                    pd.Timestamp("2023-1-1"),
+                    pd.Timestamp("2023-4-1"),
+                    pd.Timestamp("2000-1-2"),
+                ],
+                None,
+            ),
+            id="timestamp",
+        ),
+    ]
+)
+def comparison_df(request):
+    """Creates a DataFrame from a list of distinct values of a certain type with
+    two columns ensuring that the span of the rows is equivalent to a
+    cartesian product of the original list with itself. I.e.:
+    [42, 16, -1] would produce the following DataFrame:
+
+         A   B
+     0  42  42
+     1  16  42
+     2  -1  42
+     3  42  16
+     4  16  16
+     5  -1  16
+     6  42  -1
+     7  16  -1
+     8  -1  -1
+
+     This creats an ideal table for testing comparison operators.
+    """
+    data, dtype = request.param
+    A = pd.Series(data * len(data), dtype=dtype)
+    b = []
+    for elem in data:
+        b += [elem] * len(data)
+    B = pd.Series(b, dtype=dtype)
+    return {"table1": pd.DataFrame({"A": A, "B": B})}
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(("=", False), id="=-no_case"),
+        pytest.param(("<>", False), id="<>-no_case"),
+        pytest.param(("!=", False), id="!=-no_case", marks=pytest.mark.slow),
+        pytest.param(("<=", False), id="<=-no_case"),
+        pytest.param((">=", False), id=">=-no_case", marks=pytest.mark.slow),
+        pytest.param(("<", False), id="<-no_case", marks=pytest.mark.slow),
+        pytest.param((">", False), id=">-no_case"),
+        pytest.param(("<=>", False), id="<=>-no_case"),
+        pytest.param(("=", True), id="=-with_case"),
+        pytest.param(("<>", True), id="<>-with_case", marks=pytest.mark.slow),
+        pytest.param(("!=", True), id="!=-with_case"),
+        pytest.param(("<=", True), id="<=-with_case", marks=pytest.mark.slow),
+        pytest.param((">=", True), id=">=-with_case", marks=pytest.mark.slow),
+        pytest.param(("<", True), id="<-with_case", marks=pytest.mark.slow),
+        pytest.param((">", True), id=">-with_case", marks=pytest.mark.slow),
+        pytest.param(("<=>", True), id="<=>-with_case"),
+    ],
+)
+def comparison_query_args(request):
+    return request.param
+
+
+def test_comparison_operators_within_table(
+    comparison_df,
+    comparison_query_args,
     spark_info,
     # seems to be leaking memory sporadically
     # memory_leak_check
 ):
-    """
-    Tests that the basic comparison operators work with numeric data within the same table
-    """
-    query = f"""
-        SELECT
-            A, C
-        FROM
-            table1
-        WHERE
-            A {comparison_ops} C
-        """
-    check_query(query, bodosql_numeric_types, spark_info, check_dtype=False)
+    cmp_op, use_case = comparison_query_args
+    if use_case:
+        query = f"SELECT A, B, \
+                        CASE WHEN (A {cmp_op} B) IS NULL THEN 'N' \
+                            WHEN (A {cmp_op} B) then 'T' \
+                                ELSE 'F' END FROM table1"
+    else:
+        query = f"SELECT A, B, A {cmp_op} B FROM table1"
+    is_binary = type(comparison_df["table1"]["A"].iloc[-1]) == bytes
+    convert_columns_bytearray = ["A", "B"] if is_binary else []
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            comparison_df,
+            spark_info,
+            check_dtype=False,
+            check_names=False,
+            convert_columns_bytearray=convert_columns_bytearray,
+        )
 
 
-def test_comparison_operators_binary_within_table(
-    bodosql_binary_types, comparison_ops, spark_info, memory_leak_check
+@pytest.fixture
+def time_comparison_args(comparison_query_args):
+    cmp_op, use_case = comparison_query_args
+    data = [
+        None,
+        Time(0, 0, 0, precision=9),
+        Time(12, 30, 15, nanosecond=13, precision=9),
+        Time(12, 45, 0, precision=9),
+        Time(5, 58, 1, microsecond=999, precision=9),
+        Time(5, 58, 30, precision=9),
+        Time(5, 58, 1, millisecond=1, precision=9),
+        Time(22, 14, 20, nanosecond=67, precision=9),
+        Time(22, 14, 20, precision=9),
+    ]
+    A = pd.Series(data * 9)
+    b = []
+    for elem in data:
+        b += [elem] * 9
+    B = pd.Series(b)
+    ctx = {"table1": pd.DataFrame({"A": A, "B": B})}
+    row_funcs = {
+        "=": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] == x[1],
+        "<>": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] != x[1],
+        "!=": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] != x[1],
+        "<": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] < x[1],
+        "<=": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] <= x[1],
+        ">": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] > x[1],
+        ">=": lambda x: None if pd.isna(x[0]) or pd.isna(x[1]) else x[0] >= x[1],
+        "<=>": lambda x: True
+        if pd.isna(x[0]) and pd.isna(x[1])
+        else (False if pd.isna(x[1]) or pd.isna(x[1]) else x[0] == x[1]),
+    }
+    answer = ctx["table1"].apply(row_funcs[cmp_op], axis=1)
+    return cmp_op, use_case, ctx, answer
+
+
+def test_time_comparison_operators_within_table(
+    time_comparison_args, memory_leak_check
 ):
-    """
-    Tests that the basic comparison operators work with Binary data within the same table
-    """
-    query = f"""
-        SELECT
-            A, C
-        FROM
-            table1
-        WHERE
-            A {comparison_ops} C
-        """
-    check_query(
-        query,
-        bodosql_binary_types,
-        spark_info,
-        check_dtype=False,
-        convert_columns_bytearray=["A", "C"],
-    )
-
-
-def test_comparison_operators_string_within_table(
-    bodosql_string_types, comparison_ops, spark_info
-):
-    # TODO: Enable memory leak check
-    """
-    Tests that the basic comparison operators work with String data within the same table
-    """
-    query = f"""
-        SELECT
-            A, C
-        FROM
-            table1
-        WHERE
-            A {comparison_ops} C
-        """
-    check_query(query, bodosql_string_types, spark_info, check_dtype=False)
-
-
-def test_comparison_operators_datetime_within_table(
-    bodosql_datetime_types, comparison_ops, spark_info, memory_leak_check
-):
-    """
-    Tests that the basic comparison operators work with Timestamp data within the same table
-    """
-    query = f"""
-        SELECT
-            A, C
-        FROM
-            table1
-        WHERE
-            A {comparison_ops} C
-        """
-    check_query(query, bodosql_datetime_types, spark_info, check_dtype=False)
+    cmp_op, use_case, ctx, answer = time_comparison_args
+    if use_case:
+        if cmp_op == "<=>":
+            query = f"SELECT A, B, \
+                        CASE WHEN (A {cmp_op} B) then 'T' \
+                                ELSE 'F' END FROM table1"
+        else:
+            query = f"SELECT A, B, \
+                        CASE WHEN (A {cmp_op} B) IS NULL THEN 'N' \
+                            WHEN (A {cmp_op} B) then 'T' \
+                                ELSE 'F' END FROM table1"
+        answer = answer.apply(lambda x: "N" if pd.isna(x) else ("T" if x else "F"))
+        expected_output = pd.DataFrame(
+            {"A": ctx["table1"].A, "B": ctx["table1"].B, "C": answer}
+        )
+    else:
+        query = f"SELECT A, B, A {cmp_op} B FROM table1"
+        expected_output = pd.DataFrame(
+            {"A": ctx["table1"].A, "B": ctx["table1"].B, "C": answer}
+        )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=expected_output,
+            check_dtype=False,
+            check_names=False,
+        )
 
 
 def test_comparison_operators_interval_within_table(
