@@ -8,9 +8,7 @@ import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.google.common.collect.ImmutableList;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 import java.util.function.BiConsumer;
 import javax.annotation.Nullable;
 import org.apache.calcite.jdbc.CalciteConnection;
@@ -173,13 +171,27 @@ public class RelationalAlgebraGenerator {
         setupSchema(
             calciteConnection,
             (root, defaults) -> {
-              List<String> catalogDefaultSchemas = catalog.getDefaultSchema();
-              for (String schemaName : catalog.getSchemaNames()) {
+              String catalogName = catalog.getCatalogName();
+              // Create a schema object with the name of the catalog,
+              // and register all the schemas with this catalog as sub-schemas
+              defaults.add(root.add(catalogName, new CatalogSchemaImpl(catalogName, catalog)));
+              Set<String> remainingSchemaNamesToAdd = catalog.getSchemaNames();
+
+              for (String schemaName : catalog.getDefaultSchema()) {
                 SchemaPlus schema =
-                    root.add(schemaName, new CatalogSchemaImpl(schemaName, catalog));
-                if (catalogDefaultSchemas.contains(schemaName)) {
-                  defaults.add(schema);
-                }
+                    root.getSubSchema(catalogName)
+                        .add(schemaName, new CatalogSchemaImpl(schemaName, catalog));
+                defaults.add(schema);
+                assert schemaName.contains(schemaName)
+                    : "Error in RelationalAlgebraGenerator: catalog.getDefaultSchema() returned"
+                        + " schema "
+                        + schemaName
+                        + ", which is not present in catalog.getDefaultSchemaNames()";
+                remainingSchemaNamesToAdd.remove(schemaName);
+              }
+              for (String schemaName : remainingSchemaNamesToAdd) {
+                root.getSubSchema(catalogName)
+                    .add(schemaName, new CatalogSchemaImpl(schemaName, catalog));
               }
               defaults.add(root.add(newSchema.getName(), newSchema));
             });
