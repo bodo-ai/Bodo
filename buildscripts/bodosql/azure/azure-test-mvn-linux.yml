@@ -36,6 +36,6 @@ jobs:
   - script: |
       set -eo pipefail
       cd $(System.DefaultWorkingDirectory)/BodoSQL/calcite_sql/
-      mvn '-Dtest=com.bodosql.calcite.application.*Test' test
+      mvn -B -U test
     displayName: 'Run maven tests for BodoSQL'
 
