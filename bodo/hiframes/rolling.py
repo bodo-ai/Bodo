@@ -1514,6 +1514,7 @@ def is_supported_shift_array_type(arr_type):
                 bodo.FloatingArrayType,
                 bodo.DecimalArrayType,
                 bodo.DatetimeArrayType,
+                bodo.TimeArrayType,
             ),
         )
         or arr_type

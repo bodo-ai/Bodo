@@ -60,6 +60,9 @@ public class BodoArrayHelpers {
       case BINARY:
       case VARBINARY:
         return String.format("bodo.libs.str_arr_ext.pre_alloc_binary_array(%s, -1)", len);
+      case TIME:
+        int precision = typ.getPrecision();
+        return String.format("bodo.hiframes.time_ext.alloc_time_array(%s, %d)", len, precision);
       default:
         throw new BodoSQLCodegenException(
             "Error, type: " + typ.toString() + " not supported for Window Aggregation functions");
