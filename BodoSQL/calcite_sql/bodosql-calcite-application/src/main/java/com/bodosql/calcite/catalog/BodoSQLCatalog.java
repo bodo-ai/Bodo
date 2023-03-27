@@ -67,10 +67,12 @@ public interface BodoSQLCatalog {
   Schema getSchema(String schemaName);
 
   /**
-   * Return the list of default schema for a user. In the future we may opt to include a default
-   * schema at each level, so we return a list of schema.
+   * Return the list of implicit/default schemas for the given catalog, in the order that they
+   * should be prioritized during table resolution. We choose to implement this behavior at the
+   * catalog level, as different catalogs may have different rules for how ambiguous table
+   * identifiers are resolved.
    *
-   * @return List of any default Schema that exist.
+   * @return List of default Schema for this catalog.
    */
   List<String> getDefaultSchema();
 
@@ -125,4 +127,11 @@ public interface BodoSQLCatalog {
    * @return BodoTZInfo for the default timezone.
    */
   BodoTZInfo getDefaultTimezone();
+
+  /**
+   * Return the top level name of the Catalog.
+   *
+   * @return The top level name of the Catalog.
+   */
+  public String getCatalogName();
 }

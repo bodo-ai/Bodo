@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
@@ -399,10 +401,21 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   }
 
   /**
-   * Return the list of default schema for a user. In the future we may opt to include a default
-   * schema at each level, so we return a list of schema.
+   * Return the list of implicit/default schemas for the given catalog, in the order that they
+   * should be prioritized during table resolution.
    *
-   * @return List of default Schema if they exist.
+   * <p>For a snowflake catalog, the order should be based on the list of schemas returned by
+   * CURRENT_SCHEMAS(). IE, if CURRENT_SCHEMAS() = ["MYTESTDB.schema1", "MYTESTDB.schema2"...
+   * "MYTESTDB.schemaN"]
+   *
+   * <p>We would attempt to resolve any non-qualified tables as:
+   *
+   * <p>MYTESTDB.schema1.(table_identifier) MYTESTDB.schema2.(table_identifier) ...
+   * MYTESTDB.non_default_schema_n.(table_identifier)
+   *
+   * <p>(see https://docs.snowflake.com/en/sql-reference/name-resolution)
+   *
+   * @return List of default Schema to check when attempting to resolve a table in this catalog.
    */
   public List<String> getDefaultSchema() {
     return getDefaultSchemaImpl(isConnectionCached());
@@ -419,12 +432,21 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     try {
       Connection conn = getConnection();
       Statement stmt = conn.createStatement();
-      ResultSet schemaInfo = stmt.executeQuery("select current_schema()");
+      // For Snowflake, the attempted order of resolution should be the list of schemas provided by
+      // CURRENT_SCHEMAS()
+      ResultSet schemaInfo = stmt.executeQuery("select current_schemas()");
       while (schemaInfo.next()) {
         // Output in column 1
-        String schemaName = schemaInfo.getString(1);
-        if (schemaName != null) {
-          defaultSchema.add(schemaName);
+        String schemaNames = schemaInfo.getString(1);
+        if (schemaNames != null) {
+          // schemaNames() returns a string in the form of '["BD.Scheam1", "DB.Schema2"...]'
+          // Do some simple regex to extract the schema names.
+          Pattern pattern = Pattern.compile("\"" + catalogName + ".([^\"]*)\"");
+          Matcher matcher = pattern.matcher(schemaNames);
+
+          while (matcher.find()) {
+            defaultSchema.add(matcher.group(1));
+          }
         }
       }
       // TODO: Cache the same connection if possible
@@ -646,5 +668,10 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         throw new RuntimeException(errorMsg);
       }
     }
+  }
+
+  @Override
+  public String getCatalogName() {
+    return catalogName;
   }
 }
