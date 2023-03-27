@@ -28,6 +28,7 @@ import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs import hdist
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
@@ -219,7 +220,7 @@ def isend(arr, size, pe, tag, cond=True):
 
     # nullable arrays
     if isinstance(
-        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
     ) or arr in (
         boolean_array_type,
         datetime_date_array_type,
@@ -316,7 +317,7 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
 
     # nullable arrays
     if isinstance(
-        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
     ) or arr in (
         boolean_array_type,
         datetime_date_array_type,
@@ -2411,8 +2412,10 @@ def bcast_overload(data, root=MPI_ROOT):
 
         return bcast_decimal_arr
 
-    # nullable int/float/bool/date arrays
-    if isinstance(data, (IntegerArrayType, FloatingArrayType)) or data in (
+    # nullable int/float/bool/date/time arrays
+    if isinstance(
+        data, (IntegerArrayType, FloatingArrayType, TimeArrayType)
+    ) or data in (
         boolean_array_type,
         datetime_date_array_type,
     ):

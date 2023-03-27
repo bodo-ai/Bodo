@@ -111,8 +111,7 @@ def test_conditional_change_event(partition_col, answer, memory_leak_check):
         return_codegen=True,
     )["pandas_code"]
 
-    # Verify that fusion is working correctly. The term window_frames[1] refers
-    # to how many distinct groupby-apply calls are expected after fusion.
+    # Verify that fusion is working correctly.
     count_window_applies(pandas_code, 1, ["CONDITIONAL_CHANGE_EVENT"])
 
 
@@ -522,9 +521,6 @@ def test_mode(data_col, bounds, answer, memory_leak_check):
     )
 
 
-
-
-
 def test_variance_stddev_nan(memory_leak_check):
     """Tests the 4 major var/std functions on data with both NULL and NaN"""
     params = [
@@ -548,30 +544,30 @@ def test_variance_stddev_nan(memory_leak_check):
             }
         )
     }
-    expected_output = pd.DataFrame({
-        0: range(10),
-        1: nullable_float_arr_maker(
-            [0.0, 0.0, 1.0, 14/9, 35/16] + [0.0] * 5, 
-            [-1], 
-            [5, 6, 7, 8, 9]),
-        2: nullable_float_arr_maker(
-            [0.0] * 3 + [2.0, 0.5, 1.0] + [0.0] * 4, 
-            [0, 1, 2], 
-            [6, 7, 8, 9]),
-        3: nullable_float_arr_maker(
-            [0.0] * 7 + [0.5, 0.0, 0.0], 
-            [9], 
-            [0, 1, 2, 3, 4, 5, 6]),
-        4: nullable_float_arr_maker(
-            [0.0, 2**0.5, 0.5**0.5, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5**0.5, 0.0], 
-            [0, 9], 
-            [4, 5, 6, 7]),
-    })
+    expected_output = pd.DataFrame(
+        {
+            0: range(10),
+            1: nullable_float_arr_maker(
+                [0.0, 0.0, 1.0, 14 / 9, 35 / 16] + [0.0] * 5, [-1], [5, 6, 7, 8, 9]
+            ),
+            2: nullable_float_arr_maker(
+                [0.0] * 3 + [2.0, 0.5, 1.0] + [0.0] * 4, [0, 1, 2], [6, 7, 8, 9]
+            ),
+            3: nullable_float_arr_maker(
+                [0.0] * 7 + [0.5, 0.0, 0.0], [9], [0, 1, 2, 3, 4, 5, 6]
+            ),
+            4: nullable_float_arr_maker(
+                [0.0, 2**0.5, 0.5**0.5, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5**0.5, 0.0],
+                [0, 9],
+                [4, 5, 6, 7],
+            ),
+        }
+    )
     check_query(
         query,
         ctx,
         None,
-        expected_output=expected_output, 
+        expected_output=expected_output,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
