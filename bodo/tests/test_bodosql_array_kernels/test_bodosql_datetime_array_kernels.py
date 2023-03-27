@@ -6,6 +6,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
+from bodosql.tests.utils import bodosql_use_date_type
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
@@ -22,7 +23,6 @@ from bodo.tests.utils import (
     check_func,
     nanoseconds_to_other_time_units,
 )
-from BodoSQL.bodosql.tests.utils import bodosql_use_date_type
 
 
 @pytest.mark.parametrize(
