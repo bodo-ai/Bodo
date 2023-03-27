@@ -1635,6 +1635,30 @@ def concat_overload(arr_list):
 
         return datetime_date_array_concat_impl
 
+    # Time array
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+        arr_list.dtype, TimeArrayType
+    ):
+        prec = arr_list.dtype.precision
+
+        def time_array_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            Aret = bodo.hiframes.time_ext.alloc_time_array(tot_len, prec)
+            curr_pos = 0
+            for A in arr_list:
+                for i in range(len(A)):
+                    Aret._data[i + curr_pos] = A._data[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        Aret._null_bitmap, i + curr_pos, bit
+                    )
+                curr_pos += len(A)
+            return Aret
+
+        return time_array_concat_impl
+
     # datetime.timedelta array
     if (
         isinstance(arr_list, (types.UniTuple, types.List))
