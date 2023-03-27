@@ -1208,3 +1208,328 @@ def test_snowflake_catalog_create_table_orderby_with():
         match=".*CREATE TABLE is only supported for Snowflake Catalog Schemas.*",
     ):
         bodo_impl(bc, ctas_query)
+
+
+@pytest.mark.parametrize(
+    "table_name_qualifer",
+    [
+        f"SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER",
+        f"TPCH_SF1.CUSTOMER",
+        f"CUSTOMER",
+    ],
+)
+def test_snowflake_catalog_fully_qualified(
+    snowflake_sample_data_snowflake_catalog, table_name_qualifer, memory_leak_check
+):
+    """Tests that the snowflake catalog correctly handles table names with varying levels of qualification"""
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = f"SELECT C_ADDRESS from {table_name_qualifer} where C_CUSTKEY = 60000"
+    py_output = pd.DataFrame({"C_ADDRESS": ["gUTQNtV,KAQve"]})
+
+    # Only testing Seq, since output is tiny and we're only really testing
+    # name resolution is successful
+    check_func(
+        impl,
+        (bc, query),
+        None,
+        py_output=py_output,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+        only_seq=True,
+    )
+
+
+# Table Names present in each location
+
+# The specified Snowflake catalog is TEST_DB.TEST_SCHEMA
+# The non-default Snowflake catalog is TEST_DB.PUBLIC
+# the local schema is __bodolocal__
+# These schemas/tables have been manually added to the bnsare snowflake account,
+# and should not be modified.
+#
+# For all tables present in public, the tables are created as follows:
+# Create TABLE *NAME* as SELECT 'TEST_DB.PUBLIC' as A from VALUES (1,2,3)
+#
+# For all tables present in the TEST_SCHEMA, the tables are created as follows:
+# Create TABLE *NAME* as SELECT 'TEST_DB.TEST_SCHEMA' as A from VALUES (1,2,3)
+#
+# For the local table, it's defined as:
+# pd.DataFrame({"a": ["local"]})
+# The locations in which each table can be found are as follows:
+# tableScopingTest: TEST_DB.PUBLIC, TEST_DB.TEST_SCHEMA, __bodolocal__
+# tableScopingTest2: TEST_DB.TEST_SCHEMA, __bodolocal__
+# tableScopingTest3: TEST_DB.PUBLIC, TEST_DB.TEST_SCHEMA
+# tableScopingTest4: TEST_DB.PUBLIC, __bodolocal__
+
+tableScopingTest1TableName = "tableScopingTest"
+tableScopingTest2TableName = "tableScopingTest2"
+tableScopingTest3TableName = "tableScopingTest3"
+tableScopingTest4TableName = "tableScopingTest4"
+
+# Expected outputs, assuming we select the local/non-default catalog/default catalog schemas
+expected_out_local = pd.DataFrame({"a": ["local"]})
+expected_out_TEST_SCHEMA_catalog_schema = pd.DataFrame({"a": ["TEST_DB.TEST_SCHEMA"]})
+expected_out_PUBLIC_catalog_schema = pd.DataFrame({"a": ["TEST_DB.PUBLIC"]})
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (tableScopingTest1TableName, expected_out_TEST_SCHEMA_catalog_schema),
+            id="present_in_all_locations_table_name. Should resolve to default catalog schema",
+        ),
+        pytest.param(
+            (tableScopingTest2TableName, expected_out_TEST_SCHEMA_catalog_schema),
+            id="present_in_local_and_default_catalog_schema. Should resolve to default catalog schema",
+        ),
+        pytest.param(
+            (tableScopingTest3TableName, expected_out_TEST_SCHEMA_catalog_schema),
+            id="present_in_default_and_PUBLIC_catalog_schema. Should resolve to default catalog schema",
+        ),
+        pytest.param(
+            (tableScopingTest4TableName, expected_out_PUBLIC_catalog_schema),
+            id="present_in_local_and_PUBLIC_catalog_schema.  Should resolve to PUBLIC catalog schema",
+        ),
+    ],
+)
+def test_snowflake_catalog_table_priority(args, memory_leak_check):
+    """
+    Tests that BodoSQL selects the correct table in the case that the tablename is
+    present in multiple locations in the catalog/database.
+
+    In Snowflake, the default schema is PUBLIC.
+    In the case that a schema is specified, the default schema is the specified schema,
+    but the PUBLIC schema is still implicitly available.
+    (
+        by default, this can change base on connection parameters, see
+        https://docs.snowflake.com/en/sql-reference/name-resolution
+    )
+    For example, in Snowflake, if the specified schema is TEST_DB, when attempting to resolve
+    an unqualified table name,
+    Snowflake will attempt to resolve it as TEST_DB.TABLE_NAME, and then PUBLIC.TABLE_NAME.
+
+    In BodoSQL, we prioritize snowflake tables over locally defined tables. Therefore,
+    The correct attempted order of resolution for an unqualified table name in BodoSQL should be
+        default_database.specified_schema.(table_identifier)
+        default_database.PUBLIC.(table_identifier)
+        __bodo_local__.(table_identifier)
+
+    To test this, we have several tablenames that are present across the different
+    locations (PUBLIC, TEST_DB, and __bodo_local__),
+    and we test that the correct table is selected in each case.
+    """
+    default_db_name = "TEST_DB"
+    default_schema_name = "TEST_SCHEMA"
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        default_db_name,
+        connection_params={
+            "schema": default_schema_name,
+        },
+    )
+
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    for table_name in [
+        tableScopingTest1TableName,
+        tableScopingTest2TableName,
+        tableScopingTest4TableName,
+    ]:
+
+        bc = bc.add_or_replace_view(table_name, expected_out_local)
+
+    current_table_name, expected_output = args
+    query = f"SELECT * FROM {current_table_name}"
+
+    def impl(bc, q):
+        return bc.sql(q)
+
+    # Only testing Seq, since output is tiny and we're only really testing
+    # that name resolution is successful
+    check_func(
+        impl,
+        (bc, query),
+        None,
+        py_output=expected_output,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+        only_seq=True,
+        check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(("__bodolocal__", expected_out_local), id="__bodolocal__"),
+        pytest.param(("PUBLIC", expected_out_PUBLIC_catalog_schema), id="PUBLIC"),
+    ],
+)
+def test_snowflake_catalog_table_priority_override(args, memory_leak_check):
+    """Tests that BodoSQL properly selects the correct table in the case that the tablename is
+    not ambiguous. IE, if we explicitly specify the catalog/schema,
+    we should select the table present in the specified catalog/schema, instead of a different
+    table with the same name in a different catalog/schema.
+    IE If the user specifies "__bodolocal__.tablename", it should not resolve to the table
+    found at "TEST_DB.PUBLIC.tablename", and visa versa.
+    """
+    default_db_name = "TEST_DB"
+    default_schema_name = "TEST_SCHEMA"
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        default_db_name,
+        connection_params={
+            "schema": default_schema_name,
+        },
+    )
+
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    for table_name in [
+        tableScopingTest1TableName,
+        tableScopingTest2TableName,
+        tableScopingTest4TableName,
+    ]:
+
+        bc = bc.add_or_replace_view(table_name, expected_out_local)
+
+    prefix, expected_output = args
+    query = f"SELECT * FROM {prefix}.{tableScopingTest1TableName}"
+
+    def impl(bc, q):
+        return bc.sql(q)
+
+    # Only testing Seq, since output is tiny and we're only really testing
+    # name resolution is successful
+    check_func(
+        impl,
+        (bc, query),
+        None,
+        py_output=expected_output,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+        only_seq=True,
+    )
+
+
+def test_snowflake_catalog_defaults_to_public(memory_leak_check):
+    """Tests that BodoSQL defaults to the public schema if none are specified."""
+    default_db_name = "TEST_DB"
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        default_db_name,
+    )
+
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    # Table is present in TEST_DB.TEST_SCHEMA, __bodolocal__, but not PUBLIC.
+    # We should be able to find the table if the schema is specified,
+    # even if it's not in the default search path
+    succsess_query = f"SELECT * FROM {tableScopingTest1TableName}"
+
+    def impl(bc, q):
+        return bc.sql(q)
+
+    # Only testing Seq, since output is tiny and we're only really testing
+    # name resolution is successful
+    check_func(
+        impl,
+        (bc, succsess_query),
+        None,
+        py_output=expected_out_PUBLIC_catalog_schema,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+        only_seq=True,
+    )
+
+
+def test_snowflake_catalog_table_not_found(memory_leak_check):
+    """Tests that BodoSQL does NOT find a tablename that is present in the catalog/database,
+    but not present in any of the implicit schemas.
+    """
+    default_db_name = "TEST_DB"
+    default_schema_name = "PUBLIC"
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        default_db_name,
+        connection_params={
+            "schema": default_schema_name,
+        },
+    )
+
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    # Table is present in TEST_DB.TEST_SCHEMA, __bodolocal__, but not PUBLIC.
+    # Therefore, we shouldn't be able to find it
+    fail_query = f"SELECT * FROM {tableScopingTest2TableName}"
+
+    @bodo.jit()
+    def impl(bc, q):
+        return bc.sql(q)
+
+    with pytest.raises(BodoError, match=".*Object 'tableScopingTest2' not found.*"):
+        impl(bc, fail_query)
+
+
+def test_snowflake_catalog_table_find_able_if_not_default(memory_leak_check):
+    """Tests that BodoSQL does can find all tables in the catalog/database,
+    provided that they are appropriately qualified.
+    """
+    default_db_name = "TEST_DB"
+    default_schema_name = "PUBLIC"
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        default_db_name,
+        connection_params={
+            "schema": default_schema_name,
+        },
+    )
+
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    # Table is present in TEST_DB.TEST_SCHEMA, __bodolocal__, but not PUBLIC.
+    # Therefore, we should be able to find it IF we qualify it
+    succsess_query = f"SELECT * FROM TEST_SCHEMA.{tableScopingTest2TableName}"
+
+    def impl(bc, q):
+        return bc.sql(q)
+
+    # Only testing Seq, since output is tiny and we're only really testing
+    # name resolution is successful
+    check_func(
+        impl,
+        (bc, succsess_query),
+        None,
+        py_output=expected_out_TEST_SCHEMA_catalog_schema,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+        only_seq=True,
+    )
