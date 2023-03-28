@@ -8,7 +8,7 @@ from bodosql.tests.test_window.window_common import (  # noqa
     testing_locally,
     uint8_window_df,
 )
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import bodosql_use_date_type, check_query
 
 
 @pytest.fixture(params=["LEAD", "LAG"])
@@ -45,7 +45,7 @@ def gen_lead_lag_queries(
     return lead_lag_queries, lead_lag_names
 
 
-@pytest.mark.timeout(600)
+@pytest.mark.timeout(750)
 @pytest.mark.parametrize(
     "cols_to_use, window_frame",
     [
@@ -53,7 +53,7 @@ def gen_lead_lag_queries(
             ["U8", "I64", "F64", "BO"], "PARTITION BY W1 ORDER BY W4", id="numerics"
         ),
         pytest.param(
-            ["ST", "BI", "DT", "TZ"],
+            ["ST", "BI", "DT", "TZ", "DA"],
             "PARTITION BY W2 ORDER BY W3, W4",
             id="non_numerics",
         ),
@@ -93,18 +93,19 @@ def test_lead_lag_respect_nulls(
         selects.append(lead_lag_queries)
         include_two_arg_test = not include_two_arg_test
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
-    pandas_code = check_query(
-        query,
-        all_window_df,
-        spark_info,
-        sort_output=True,
-        check_dtype=False,
-        check_names=False,
-        return_codegen=True,
-        convert_columns_bytearray=cols_that_need_bytearray_conv,
-        convert_columns_tz_naive=cols_to_remove_tz,
-        only_jit_1DVar=True,
-    )["pandas_code"]
+    with bodosql_use_date_type():
+        pandas_code = check_query(
+            query,
+            all_window_df,
+            spark_info,
+            sort_output=True,
+            check_dtype=False,
+            check_names=False,
+            return_codegen=True,
+            convert_columns_bytearray=cols_that_need_bytearray_conv,
+            convert_columns_tz_naive=cols_to_remove_tz,
+            only_jit_1DVar=True,
+        )["pandas_code"]
 
     # Verify that fusion is working correctly. The term window_frames[1] refers
     # to how many distinct groupby-apply calls are expected after fusion.

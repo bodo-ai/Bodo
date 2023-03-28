@@ -8,8 +8,11 @@ from bodosql.tests.test_window.window_common import (  # noqa
     count_window_applies,
     window_frames,
 )
-from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
-
+from bodosql.tests.utils import (
+    bodosql_use_date_type,
+    check_query,
+    get_equivalent_spark_agg_query,
+)
 
 @pytest.mark.parametrize(
     "funcs",
@@ -140,18 +143,19 @@ def test_non_numeric_window_functions(
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
     spark_query = get_equivalent_spark_agg_query(query)
     # TODO: Generate an expected output instead so we properly support TZ-Aware
-    pandas_code = check_query(
-        query,
-        all_window_df,
-        spark_info,
-        equivalent_spark_query=spark_query,
-        sort_output=True,
-        check_dtype=False,
-        check_names=False,
-        return_codegen=True,
-        only_jit_1DVar=True,
-        convert_columns_tz_naive=convert_columns_tz_naive,
-    )["pandas_code"]
+    with bodosql_use_date_type():
+        pandas_code = check_query(
+            query,
+            all_window_df,
+            spark_info,
+            equivalent_spark_query=spark_query,
+            sort_output=True,
+            check_dtype=False,
+            check_names=False,
+            return_codegen=True,
+            only_jit_1DVar=True,
+            convert_columns_tz_naive=convert_columns_tz_naive,
+        )["pandas_code"]
 
     # Verify that fusion is working correctly. The term window_frames[1] refers
     # to how many distinct groupby-apply calls are expected after fusion.
@@ -163,25 +167,30 @@ def test_first_last_any_nth(
 ):
     """Tests first_value, last_value, any_value and nth_value with various
     combinations of window frames to test correctness, fusion and optimization"""
-    batches = [
-        ["FIRST_VALUE({:s})", "ANY_VALUE({:s})"],
-        ["LAST_VALUE({:s})"],
-        ["NTH_VALUE({:s}, 2)", "NTH_VALUE({:s}, 7)", "NTH_VALUE({:s}, 25)"],
+    window_calls = [
+        "FIRST_VALUE(I64)",
+        "FIRST_VALUE(ST)",
+        "LAST_VALUE(DA)",
+        "LAST_VALUE(ST)",
+        "LAST_VALUE(BI)",
+        "ANY_VALUE(TZ)",
+        "NTH_VALUE(DT, 2)",
+        "NTH_VALUE(BI, 7)",
+        "NTH_VALUE(I64, 25)",
     ]
     selects = []
     convert_columns_bytearray = []
-    for i in range(len(batches)):
-        funcs = batches[i]
-        for j, col in enumerate(["I64", "DT", "ST", "BI", "TZ"]):
-            if type(all_window_df["table1"][col].iloc[0]) == bytes:
-                convert_columns_bytearray.append(f"C_{i}_{j}")
-            selects.append(
-                f"{funcs[j % len(funcs)].format(col)} OVER ({window_frames[0][(i+j)%len(window_frames[0])]}) AS C_{i}_{j}"
-            )
+    convert_columns_tz_naive = []
+    for i in range(len(window_calls)):
+        if "BI" in window_calls[i]:
+            convert_columns_bytearray.append(f"C_{i}")
+        if "TZ" in window_calls[i]:
+            convert_columns_tz_naive.append(f"C_{i}")
+        selects.append(
+            f"{window_calls[i]} OVER ({window_frames[0][i%len(window_frames[0])]}) AS C_{i}"
+        )
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
     spark_query = get_equivalent_spark_agg_query(query)
-    # Convert the spark input to tz-naive bc it can't handle timezones
-    convert_columns_tz_naive = ["TZ"]
     pandas_code = check_query(
         query,
         all_window_df,
@@ -212,7 +221,7 @@ def test_first_value_last_value_optimized(
     combinations of window frames to test correctness, fusion and optimization"""
     selects = []
     window = "PARTITION BY U8 ORDER BY DT ASC NULLS FIRST"
-    for col in ["I64", "ST", "BI"]:
+    for col in ["I64", "ST", "BI", "DA"]:
         selects.append(
             f"FIRST_VALUE({col}) OVER ({window} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS {col}_FV"
         )
@@ -221,17 +230,18 @@ def test_first_value_last_value_optimized(
         )
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
     convert_columns_bytearray = ["BI_FV", "BI_LV"]
-    pandas_code = check_query(
-        query,
-        all_window_df,
-        spark_info,
-        sort_output=True,
-        check_dtype=False,
-        check_names=False,
-        return_codegen=True,
-        only_jit_1DVar=True,
-        convert_columns_bytearray=convert_columns_bytearray,
-    )["pandas_code"]
+    with bodosql_use_date_type():
+        pandas_code = check_query(
+            query,
+            all_window_df,
+            spark_info,
+            sort_output=True,
+            check_dtype=False,
+            check_names=False,
+            return_codegen=True,
+            only_jit_1DVar=True,
+            convert_columns_bytearray=convert_columns_bytearray,
+        )["pandas_code"]
 
     # Verify that fusion is working correctly. The term window_frames[1] refers
     # to how many distinct groupby-apply calls are expected after fusion.
