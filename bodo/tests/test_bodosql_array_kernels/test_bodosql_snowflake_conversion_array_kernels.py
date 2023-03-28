@@ -301,6 +301,28 @@ def test_to_char(args):
         )
 
 
+def test_to_char_timestamp():
+    """specific test for timestamp to char conversion with the treat_timestamp_as_date
+    flag set to True"""
+
+    input = pd.Series(pd.date_range("2010-1-1", periods=10, freq="841D")).apply(
+        lambda x: x.date()
+    )
+    py_output = input.apply(lambda x: str(x))
+
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.to_char(arr, True))
+
+    check_func(
+        impl,
+        (input,),
+        py_output=py_output,
+        check_dtype=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
 @pytest.mark.parametrize(
     "args",
     [
