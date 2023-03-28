@@ -790,6 +790,35 @@ def overload_str_bool(val):
         return impl
 
 
+@overload_method(BooleanArrayType, "to_numpy", no_unliteral=True)
+def overload_bool_arr_to_numpy(A, dtype=None, copy=False, na_value=None):
+    # TODO: support the proper default value for dtype and na_value
+    unsupported_args = dict(dtype=dtype, copy=copy, na_value=na_value)
+    default_args = dict(dtype=None, copy=False, na_value=None)
+    check_unsupported_args(
+        "BooleanArray.to_numpy",
+        unsupported_args,
+        default_args,
+        package_name="pandas",
+        # Note: We don't have docs from array yet.
+        module_name="Array",
+    )
+
+    def impl(A, dtype=None, copy=False, na_value=None):  # pragma: no cover
+        data = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
+        n = len(data)
+        out_array = np.empty(n, np.bool_)
+        for i in numba.parfors.parfor.internal_prange(n):
+            # TODO: handle NA values via na_value
+            # For now we default to False because the common use case
+            # is to use a boolean array as a filter (where NA is falsy), and we want to match
+            # those semantics.
+            out_array[i] = not bodo.libs.array_kernels.isna(data, i) and data[i]
+        return out_array
+
+    return impl
+
+
 # XXX: register all operators just in case they are supported on bool
 # TODO: apply null masks if needed
 ############################### numpy ufuncs #################################

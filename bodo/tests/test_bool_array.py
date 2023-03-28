@@ -368,15 +368,23 @@ def test_and_null_scalar(memory_leak_check):
     [
         pytest.param(pd.array([True] * 10, dtype="boolean"), id="true"),
         pytest.param(
-            pd.array([True, False] + [True] * 10, dtype="boolean"), id="false"
+            pd.array([True, False] + [True] * 10, dtype="boolean"),
+            id="false",
+            marks=pytest.mark.slow,
         ),
-        pytest.param(pd.array([True] * 10 + [None], dtype="boolean"), id="true-na"),
+        pytest.param(
+            pd.array([True] * 10 + [None], dtype="boolean"),
+            id="true-na",
+            marks=pytest.mark.slow,
+        ),
         pytest.param(
             pd.array([True, False] + [True] * 10 + [None], dtype="boolean"),
             id="false-na",
         ),
-        pytest.param(pd.array([None] * 10, dtype="boolean"), id="all-na"),
-        pytest.param(pd.array([], dtype="boolean"), id="empty"),
+        pytest.param(
+            pd.array([None] * 10, dtype="boolean"), id="all-na", marks=pytest.mark.slow
+        ),
+        pytest.param(pd.array([], dtype="boolean"), id="empty", marks=pytest.mark.slow),
     ],
 )
 @pytest.mark.slow
@@ -385,5 +393,18 @@ def test_all(arr, memory_leak_check):
 
     def impl(A):
         return A.all()
+
+    check_func(impl, (arr,))
+
+
+def test_to_numpy(memory_leak_check):
+    """Test BooleanArray.to_numpy()"""
+
+    # Note: we don't test with NAs because currently we cast null to False,
+    # which won't match pandas
+    arr = pd.array([True] * 10 + [False] * 10, dtype="boolean")
+
+    def impl(A):
+        return A.to_numpy()
 
     check_func(impl, (arr,))

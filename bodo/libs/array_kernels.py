@@ -1009,7 +1009,9 @@ def nlargest(A, index_arr, k, is_largest, cmp_f):  # pragma: no cover
     # algorithm: keep a min heap of k largest values, if a value is greater
     # than the minimum (root) in heap, replace the minimum and rebuild the heap
     # avoid nullable arrays (TODO: support directly)
-    A = bodo.utils.conversion.coerce_to_ndarray(A)
+    A = bodo.utils.conversion.ndarray_if_nullable_arr(A)
+    # avoid nullable arrays (TODO: support directly)
+    index_arr = bodo.utils.conversion.ndarray_if_nullable_arr(index_arr)
     m = len(A)
 
     # return empty arrays for k=0 corner case (min_heap_vals[0] below would be invalid)
