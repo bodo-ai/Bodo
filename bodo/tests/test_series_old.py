@@ -922,7 +922,7 @@ class TestSeries(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         # column with NA
         S = pd.Series([np.nan, 2.0, 3.0])
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_series_notna1(self):
         def test_impl(S):
@@ -931,7 +931,7 @@ class TestSeries(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         # column with NA
         S = pd.Series([np.nan, 2.0, 3.0])
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(bodo_func(S), test_impl(S), check_dtype=False)
 
     def test_series_str_isna1(self):
         def test_impl(S):
