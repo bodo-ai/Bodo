@@ -33,7 +33,11 @@ public class CastCodeGen {
     switch (outputTypeName) {
       case CHAR:
       case VARCHAR:
-        codeBuilder.append("bodo.libs.bodosql_array_kernels.to_char(").append(arg).append(")");
+        codeBuilder.append("bodo.libs.bodosql_array_kernels.to_char(").append(arg);
+        if (inputTypeName == SqlTypeName.DATE) {
+          codeBuilder.append(", treat_timestamp_as_date = True");
+        }
+        codeBuilder.append(")");
         break;
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         String tzStr = ((TZAwareSqlType) outputType).getTZInfo().getPyZone();

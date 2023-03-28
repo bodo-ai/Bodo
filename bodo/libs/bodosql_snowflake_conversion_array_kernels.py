@@ -16,6 +16,7 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_bool,
     is_literal_type,
+    is_overload_constant_bool,
     is_overload_constant_str,
     is_overload_none,
     is_str_arr_type,
@@ -538,34 +539,52 @@ def try_to_binary(arr):
 
 
 @numba.generated_jit(nopython=True)
-def to_char(arr):
+def to_char(arr, treat_timestamp_as_date=False):
     """Handles cases where TO_CHAR receives optional arguments and forwards
     to the appropriate version of the real implementation"""
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument("bodo.libs.bodosql_array_kernels.to_char", ["arr"], 0)
 
-    def impl(arr):  # pragma: no cover
-        return to_char_util(arr)
+    args = [arr, treat_timestamp_as_date]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                f"bodo.libs.bodosql_array_kernels.to_char",
+                ["arr", "treat_timestamp_as_date"],
+                i,
+            )
+
+    def impl(arr, treat_timestamp_as_date):  # pragma: no cover
+        return to_char_util(arr, treat_timestamp_as_date)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def to_char_util(arr):
+def to_char_util(arr, treat_timestamp_as_date=False):
     """A dedicated kernel for the SQL function TO_CHAR which takes in a
     number (or column) and returns a string representation of it.
 
     Args:
         arr (numerical array/series/scalar): the number(s) being operated on
         opt_fmt_str (string array/series/scalar): the format string(s) to use
+        treat_timestamp_as_date (constant boolean): A flag used in BodoSQL codegen
+        to control the formatting of timestamp conversion. When set to true,
+        any timestamp inputs will be converted to strings with date formatting.
+        IE:
+        Timestamp('2023-03-28 09:46:41.630549') ---> '2023-03-28 09:46:41.630549' (treat_timestamp_as_date = False)
+        Timestamp('2023-03-28 09:46:41.630549') ---> '2023-03-28' (treat_timestamp_as_date = True)
+
+        This argument is used to properly handle
+        converting both Timestamp and Date values while we are in the process of
+        transitioning to a dedicated date type.
 
     Returns:
         string series/scalar: the string representation of the number(s) with the
         specified null handling rules
     """
-    arg_names = ["arr"]
-    arg_types = [arr]
+    arg_names = ["arr", "treat_timestamp_as_date"]
+    arg_types = [arr, treat_timestamp_as_date]
     propagate_null = [True]
+    treat_timestamp_as_date = get_overload_const_bool(treat_timestamp_as_date)
 
     if is_str_arr_type(arr):
         # Strings are unchanged.
@@ -612,7 +631,16 @@ def to_char_util(arr):
     elif is_valid_datetime_or_date_arg(arr):
         if is_valid_date_arg(arr):
             scalar_text = "res[i] = str(arg0)\n"
+        elif (
+            is_valid_tz_naive_datetime_arg(arr) or is_valid_tz_aware_datetime_arg(arr)
+        ) and treat_timestamp_as_date:
+            # If we have a python timestamp object, which we are treating as a date in SQL
+            # we must convert to argument to a date object before calling str
+            # in order to get the correct formatting
+            # This will not be needed once we have a dedicated date type.
+            scalar_text = "res[i] = str(pd.Timestamp(arg0).date())\n"
         elif is_valid_tz_aware_datetime_arg(arr):
+
             # strftime returns (-/+) HHMM for UTC offset, when the default Bodo
             # timezone format is (-/+) HH:MM. So we must manually insert a ":" character
             scalar_text = "tz_raw = arg0.strftime('%z')\n"
