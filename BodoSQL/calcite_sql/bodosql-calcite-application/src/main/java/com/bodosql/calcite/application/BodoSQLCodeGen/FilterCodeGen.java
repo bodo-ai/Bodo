@@ -31,7 +31,7 @@ public class FilterCodeGen {
           .append(inVar)
           .append("), bodo.libs.bodosql_array_kernels.is_true(")
           .append(filterCode)
-          .append("))");
+          .append("), bodo.boolean_array_type)");
     } else {
       filterBuilder.append(filterCode);
     }
