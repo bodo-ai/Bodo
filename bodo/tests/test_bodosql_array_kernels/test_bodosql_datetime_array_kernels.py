@@ -6,7 +6,6 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import bodosql_use_date_type
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
