@@ -277,19 +277,19 @@ def test_try_to_boolean_scalars(spark_info):
             id="bool_with_nulls",
         ),
         pytest.param(
-            pd.DataFrame({"a": _dates[:5]}),
+            pd.DataFrame({"a": _dates[:]}),
             id="date",
         ),
         pytest.param(
-            pd.DataFrame({"a": _dates_nans[:5]}),
+            pd.DataFrame({"a": _dates_nans[:]}),
             id="date_with_nulls",
         ),
         pytest.param(
-            pd.DataFrame({"a": _times[:5]}),
+            pd.DataFrame({"a": _times[:]}),
             id="times",
         ),
         pytest.param(
-            pd.DataFrame({"a": _times_nans[:5]}),
+            pd.DataFrame({"a": _times_nans[:]}),
             id="times_with_nulls",
         ),
     ]
@@ -327,6 +327,52 @@ def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
             ctx,
             spark_info,
             check_dtype=False,
+            check_names=False,
+            expected_output=py_output,
+        )
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT TO_CHAR(a) FROM table1",
+        pytest.param("SELECT TO_CHAR(a::date) FROM table1", marks=pytest.mark.slow),
+        pytest.param("SELECT a::date::varchar FROM table1", marks=pytest.mark.slow),
+        pytest.param("SELECT a::varchar FROM table1", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "with_use_date_type",
+    [False, pytest.param(True, marks=pytest.mark.slow)],
+)
+def test_to_char_date(query, with_use_date_type, memory_leak_check):
+    """
+    Tests that to_char() works with date types.
+
+    This should already be tested in test_to_char_cols, but I'm adding an additional test
+    specific to the Faire query reproducer just to make sure it will work for them.
+    """
+    df = pd.DataFrame({"a": _dates_nans})
+    ctx = {"table1": df}
+
+    py_output = pd.DataFrame(
+        {"a": _dates_nans.apply(lambda x: np.nan if pd.isna(x) else str(x))}
+    )
+
+    if with_use_date_type:
+        with bodosql_use_date_type():
+            check_query(
+                query,
+                ctx,
+                None,
+                check_names=False,
+                expected_output=py_output,
+            )
+    else:
+        check_query(
+            query,
+            ctx,
+            None,
             check_names=False,
             expected_output=py_output,
         )

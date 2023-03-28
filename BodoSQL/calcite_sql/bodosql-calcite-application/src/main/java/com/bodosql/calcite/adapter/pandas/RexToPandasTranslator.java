@@ -447,7 +447,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       exprTypes.add(visitor.exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, nodeId)));
     }
 
-    // Handle IF, COALESCE, DECODE and their variants seperately
+    // Handle IF, COALESCE, DECODE and their variants separately
     if (fnName == "COALESCE"
         || fnName == "NVL"
         || fnName == "NVL2"
@@ -751,7 +751,13 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateToBinaryFnCode(operands, fnName);
           case "TO_CHAR":
           case "TO_VARCHAR":
-            return generateToCharFnCode(operands, fnName);
+            assert fnOperation.getOperands().size() == 1
+                : "Error: TO_CHAR supplied improper number of arguments, Bodo only supports one"
+                    + " argument.";
+            return generateToCharFnCode(
+                operands,
+                fnName,
+                fnOperation.getOperands().get(0).getType().getSqlTypeName() == SqlTypeName.DATE);
           case "TO_DOUBLE":
           case "TRY_TO_DOUBLE":
             return generateToDoubleFnCode(operands, fnName);
