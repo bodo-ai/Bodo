@@ -1,3 +1,4 @@
+import datetime
 import math
 import os
 
@@ -106,6 +107,18 @@ tz_aware_col = pd.Series(
         for i in range(window_col_size)
     ]
 )
+date_col = pd.Series(
+    [
+        None
+        if math.tan(i) < -2.0
+        else datetime.date(
+            2030 - (i**2) % 50,
+            1 + (i**3) % 12,
+            [1, 5, 10, 13, 20, 26][i % 6] + (1 + (i**3) % 12) % 5,
+        )
+        for i in range(window_col_size)
+    ]
+)
 
 
 def col_to_window_df(cols):
@@ -177,15 +190,13 @@ def all_numeric_window_col_names(request):
         pytest.param(boolean_col, id="boolean", marks=pytest.mark.slow),
         pytest.param(string_col, id="string", marks=pytest.mark.slow),
         pytest.param(binary_col, id="binary", marks=pytest.mark.slow),
-        pytest.param(
-            datetime64_col,
-            id="datetime64",
-        ),
+        pytest.param(datetime64_col, id="datetime64", marks=pytest.mark.slow),
         pytest.param(
             tz_aware_col,
             id="tz-aware-timestamp",
             marks=pytest.mark.tz_aware,
         ),
+        pytest.param(date_col, id="date"),
     ]
 )
 def all_types_window_df(request):
@@ -207,8 +218,8 @@ def all_window_df():
             "BI": binary_col,
             "DT": datetime64_col,
             "TZ": tz_aware_col,
+            "DA": date_col,
             # [BE-3891] add Timedelta tests
-            # [BE-3892] add Time tests
         }
     )
 
@@ -233,6 +244,7 @@ def all_window_col_names():
         # that includes a tz yet. In Snowflake this requires
         # an extra session parameter.
         "TZ": "NULL",
+        "DA": "DATE '1999-12-31'",
     }
 
 
