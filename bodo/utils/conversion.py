@@ -87,11 +87,10 @@ def overload_coerce_to_ndarray(
         )  # pragma: no cover
 
     # nullable boolean array
-    if data == bodo.libs.bool_arr_ext.boolean_array_type and not is_overload_none(
-        use_nullable_array
-    ):
-        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.get_bool_arr_data(
-            data
+    if data == bodo.libs.bool_arr_ext.boolean_array_type:
+        # Always keep nullable boolean arrays as nullable booleans.
+        return (
+            lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
         )  # pragma: no cover
 
     # numpy array
@@ -464,6 +463,10 @@ def ndarray_if_nullable_arr(data):
 @overload(ndarray_if_nullable_arr)
 def overload_ndarray_if_nullable_arr(data):
     """convert input to Numpy array if it is a nullable array but return any other input as-is."""
+    if data == bodo.libs.bool_arr_ext.boolean_array_type:
+        # Handle boolean arrays separately since coerce_to_ndarray keeps
+        # the nullable boolean type.
+        return lambda data: data.to_numpy()  # pragma: no cover
     if (
         isinstance(
             data,
