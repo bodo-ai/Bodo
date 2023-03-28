@@ -3158,7 +3158,7 @@ class DistributedAnalysis:
             # array.all() is supported for all distributions
             return
 
-        if func_name in ("astype", "copy", "view", "tz_convert"):
+        if func_name in ("astype", "copy", "view", "tz_convert", "to_numpy"):
             in_arr_name = arr.name
             self._meet_array_dists(lhs, in_arr_name, array_dists)
             return

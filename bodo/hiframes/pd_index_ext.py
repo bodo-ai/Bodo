@@ -2767,7 +2767,7 @@ def create_numeric_constructor(func, func_str, default_dtype):
             # if copy is False for sure, specialize to avoid branch
 
             def impl(data=None, dtype=None, copy=False, name=None):  # pragma: no cover
-                data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
+                data_arr = bodo.utils.conversion.coerce_to_array(data)
                 data_res = bodo.utils.conversion.fix_arr_dtype(
                     data_arr, np.dtype(default_dtype)
                 )
@@ -2781,7 +2781,7 @@ def create_numeric_constructor(func, func_str, default_dtype):
                 copy=False,
                 name=None,
             ):  # pragma: no cover
-                data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
+                data_arr = bodo.utils.conversion.coerce_to_array(data)
                 if copy:
                     data_arr = data_arr.copy()  # TODO: np.array() with copy
                 data_res = bodo.utils.conversion.fix_arr_dtype(

@@ -1719,7 +1719,7 @@ def overload_series_nlargest(S, n=5, keep="first"):
     def impl(S, n=5, keep="first"):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        index_arr = bodo.utils.conversion.coerce_to_ndarray(index)
+        index_arr = bodo.utils.conversion.coerce_to_array(index)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         out_arr, out_ind_arr = bodo.libs.array_kernels.nlargest(
             arr, index_arr, n, True, bodo.hiframes.series_kernels.gt_f
@@ -1753,7 +1753,7 @@ def overload_series_nsmallest(S, n=5, keep="first"):
     def impl(S, n=5, keep="first"):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        index_arr = bodo.utils.conversion.coerce_to_ndarray(index)
+        index_arr = bodo.utils.conversion.coerce_to_array(index)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         out_arr, out_ind_arr = bodo.libs.array_kernels.nlargest(
             arr, index_arr, n, False, bodo.hiframes.series_kernels.lt_f
