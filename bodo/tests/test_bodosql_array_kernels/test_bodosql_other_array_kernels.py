@@ -377,10 +377,10 @@ def test_cond(args, memory_leak_check):
         pytest.param(
             (
                 pd.Series(
-                    (list(pd.date_range("2018", "2019", periods=3)) + [None]) * 4
+                    (list(pd.date_range("2018", "2019", periods=3).date) + [None]) * 4
                 ),
                 pd.Series(
-                    list(pd.date_range("2018", "2019", periods=3)) + [None]
+                    list(pd.date_range("2018", "2019", periods=3).date) + [None]
                 ).repeat(4),
             ),
             id="date_vector_vector",
