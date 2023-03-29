@@ -35,14 +35,14 @@ public class WindowAggCodeGen {
   public static final String unboundedUpperBound = "UNUSABLE_UPPER_BOUND";
 
   // The name of the column used for performing the sort reversion
-  // This column should always be present in the input dataframe,
+  // This column should always be present in the input DataFrame,
   // Though it will be pruned fairly early on if it is not needed.
   public static final String revertSortColumnName = "ORIG_POSITION_COL";
 
   // The variable name for the input to the apply function
   private static final String argumentDfName = "argument_df";
 
-  // The variable name which stores the argument dataframe's original index
+  // The variable name which stores the argument DataFrame's original index
   private static final String argumentDfOriginalIndex = "argument_df_orig_index";
 
   // The variable name which stores the length of the argument dataframe
@@ -192,20 +192,20 @@ public class WindowAggCodeGen {
     addIndent(funcText, 1);
     funcText.append("def ").append(fn_name).append("(" + argumentDfName + "):\n");
 
-    /* Before doing anything else, filter the partition columns out of the input dataframe. This is
+    /* Before doing anything else, filter the partition columns out of the input DataFrame. This is
      * done to enable Bodo to know that these columns are unused within this function
      * and the aggregation columns. Looks as follows:
      *
-     * argument_df = argument_df.lloc[:, ["AGG_OP_0", "AGG_OP_1", "ORIG_POSITION_COL", "ASC_COL_0"]]
+     * argument_df = argument_df.iloc[:, ["AGG_OP_0", "AGG_OP_1", "ORIG_POSITION_COL", "ASC_COL_0"]]
      */
     pruneColumns(funcText, aggNames, argsListList, hasOrder, sortByCols);
 
     /* In the majority of cases (some exceptions like ROW NUMBER) we need to keep
-     * track of the original index of the input dataframe. This is needed due to
-     * some niche Pandas behavior where the rows of the output dataframe from this
-     * function are returned to their original locations in the dataframe that is
-     * the output of the overall groupby apply if the index of the output dataframe
-     * is the same as the input dataframe. Otherwise, the output of the overall
+     * track of the original index of the input DataFrame. This is needed due to
+     * some niche Pandas behavior where the rows of the output DataFrame from this
+     * function are returned to their original locations in the DataFrame that is
+     * the output of the overall groupby apply if the index of the output DataFrame
+     * is the same as the input DataFrame. Otherwise, the output of the overall
      * groupby apply will be multi-indexed. Looks as follows:
      *
      * argument_df_orig_index = argument_df.index
@@ -218,7 +218,7 @@ public class WindowAggCodeGen {
         .append(".index\n");
 
     /* There are also several locations where we need the length of the input
-     * dataframe. While we could omit this definition for certain aggregations,
+     * DataFrame. While we could omit this definition for certain aggregations,
      * it simplifies codegen if we always include it at the start of the function
      * definition. Looks as follows:
      *
@@ -294,7 +294,7 @@ public class WindowAggCodeGen {
       }
 
       // Case on the aggregation and redirect to the appropriate code-generating
-      // helper function (COUNT(*) should have already been handled seperately)
+      // helper function (COUNT(*) should have already been handled separately)
       switch (aggName) {
 
           /* Generate the code for a RANK call. Looks as follows:
@@ -366,7 +366,7 @@ public class WindowAggCodeGen {
             throw new BodoSQLCodegenException(errMsg);
           }
           /* If doing FIRST_VALUE/ANY_VALUE on a prefix window, or LAST_VALUE
-           * on a suffix window, the optimized verison can be used which
+           * on a suffix window, the optimized version can be used which
            * does NOT require the sorting to be reverted at the end.
            * Looks as follows:
            *
@@ -976,11 +976,11 @@ public class WindowAggCodeGen {
     WindowedAggregationArgument aggColArg = argsList.get(0);
     assertWithErrMsg(aggColArg.isDfCol(), "Lead/Lag's first argument must be a column");
 
-    String aggColName = aggColArg.getExprString();
+    Expr.StringLiteral aggColName = new Expr.StringLiteral(aggColArg.getExprString());
 
     // Default shift amount is 1
-    String shiftAmount = "1";
-    String fillValue = "";
+    Expr shiftAmount = new Expr.IntegerLiteral(1);
+    Expr fillValue = new Expr.None();
 
     // If there are 2 (or 3) arguments, use the 2nd argument to extract the shift amount
     if (num_arguments >= 2) {
@@ -990,7 +990,8 @@ public class WindowAggCodeGen {
           "Lead/Lag expects the offset to be a scalar literal, if it is provided. Got: "
               + argsList.toString());
 
-      shiftAmount = shiftAmountArg.getExprString();
+      // TODO: Remove Raw
+      shiftAmount = new Expr.Raw(shiftAmountArg.getExprString());
 
       // Add the default fill value (if it's present)
       if (num_arguments == 3) {
@@ -1000,29 +1001,264 @@ public class WindowAggCodeGen {
           throw new BodoSQLCodegenException(
               "Error! Only scalar fill value is supported for LEAD/LAG");
         }
-        fillValue = fillValueArg.getExprString();
+        // TODO: Remove Raw
+        fillValue = new Expr.Raw(fillValueArg.getExprString());
       }
     }
+    // TODO: Refactor all variable generation to use the temporary variables.
+    // This is only safe because we are inside a closure and adhere to our own conventions
+    Variable outputArray = new Variable("arr" + i);
+    Expr.Getitem aggColRef = new Expr.Getitem(new Expr.Raw("sorted_df"), aggColName);
 
-    // If using lead, flip the sign
-    if (isLead) {
-      shiftAmount = "(-" + shiftAmount + ")";
+    if (isRespectNulls) {
+      // If using lead, flip the sign
+      if (isLead) {
+        shiftAmount = new Expr.Unary("-", shiftAmount);
+      }
+      // If we are respecting nulls then we can call shift directly
+      Expr.Method functionCall =
+          new Expr.Method(
+              aggColRef,
+              "shift",
+              List.of(shiftAmount),
+              List.of(new kotlin.Pair<>("fill_value", fillValue)));
+      // TODO: Switch to using the builder.
+      addIndent(funcText, 2);
+      funcText.append(outputArray.emit()).append(" = ").append(functionCall.emit()).append("\n");
+    } else {
+      // See the design for IGNORE NULLS here:
+      // https://bodo.atlassian.net/wiki/spaces/~62c43badfa577c57c3b685b2/pages/1322745956/Ignore+Nulls+in+LEAD+LAG+design
+      // TODO: Refactor this to use a builder so we don't need to do the control flow/indent by hand
+
+      // If using lag, flip the sign
+      if (!isLead) {
+        shiftAmount = new Expr.Unary("-", shiftAmount);
+      }
+
+      // Some common constant
+      Expr.IntegerLiteral zeroLiteral = new Expr.IntegerLiteral(0);
+      Expr.IntegerLiteral oneLiteral = new Expr.IntegerLiteral(1);
+      Expr.IntegerLiteral negativeOneLiteral = new Expr.IntegerLiteral(-1);
+
+      // TODO: Refactor all variable generation to use the temporary variables.
+      // This is only safe because we are inside a closure and adhere to our own conventions
+      // Some common Vars
+      Variable inputArray = new Variable("input_arr" + i);
+      Variable lengthName = new Variable("input_length" + i);
+      Variable shiftAmountVar = new Variable("shift_amount" + i);
+      Variable startIndex = new Variable("start_index" + i);
+      Variable endIndex = new Variable("end_index" + i);
+      Variable valueCount = new Variable("value_count" + i);
+      Variable idxVar = new Variable("idx_var" + i);
+
+      // Some common Exprs
+      Expr.Binary validBelowThreshold = new Expr.Binary("<", valueCount, shiftAmountVar);
+      Expr.Call startIndexNACheck =
+          new Expr.Call("bodo.libs.array_kernels.isna", List.of(inputArray, startIndex));
+      Expr.Unary startNotNACheck = new Expr.Unary("not", startIndexNACheck);
+      Expr.Call endIndexNACheck =
+          new Expr.Call("bodo.libs.array_kernels.isna", List.of(inputArray, endIndex));
+      Expr.Call inArrayEndGetitem =
+          new Expr.Call(
+              "bodo.utils.conversion.unbox_if_tz_naive_timestamp",
+              List.of(new Expr.Getitem(inputArray, endIndex)));
+      // TODO: Create a setitem Op when we can use ops
+      Expr.Getitem outArrayStartGetitem = new Expr.Getitem(outputArray, startIndex);
+      // TODO: Create a setitem Op when we can use ops
+      Expr.Getitem outArrayIdxGetitem = new Expr.Getitem(outputArray, idxVar);
+      Expr.Range startToLengthRange = new Expr.Range(startIndex, lengthName, null);
+      Expr.Call fillValueUnboxed =
+          new Expr.Call("bodo.utils.conversion.unbox_if_tz_naive_timestamp", List.of(fillValue));
+
+      // Common initialization
+      addIndent(funcText, 2);
+      funcText
+          .append(inputArray.emit())
+          .append(" = ")
+          .append(
+              new Expr.Call("bodo.hiframes.pd_series_ext.get_series_data", List.of(aggColRef))
+                  .emit())
+          .append("\n");
+      addIndent(funcText, 2);
+      funcText
+          .append(lengthName.emit())
+          .append(" = ")
+          .append(new Expr.Call("len", List.of(inputArray)).emit())
+          .append("\n");
+      addIndent(funcText, 2);
+      funcText.append(shiftAmountVar.emit()).append(" = ").append(shiftAmount.emit()).append("\n");
+      addIndent(funcText, 2);
+      funcText
+          .append("if ")
+          .append(new Expr.Binary("==", shiftAmountVar, zeroLiteral).emit())
+          .append(":\n");
+      // Offset = 0 case. Input and output match because this is undefined.
+      addIndent(funcText, 4);
+      funcText.append(outputArray.emit()).append(" = ").append(inputArray.emit()).append("\n");
+      addIndent(funcText, 2);
+      funcText.append("else:\n");
+      // Allocate the output array
+      Expr.Call allocCall =
+          new Expr.Call(
+              "bodo.utils.utils.alloc_type",
+              List.of(lengthName, inputArray, new Expr.Tuple(List.of(negativeOneLiteral))));
+
+      // Initialize the common variables to the else case
+      addIndent(funcText, 4);
+      funcText.append(startIndex.emit()).append(" = ").append(zeroLiteral.emit()).append("\n");
+      addIndent(funcText, 4);
+      funcText.append(valueCount.emit()).append(" = ").append(zeroLiteral.emit()).append("\n");
+
+      addIndent(funcText, 4);
+      funcText.append(outputArray.emit()).append(" = ").append(allocCall.emit()).append("\n");
+
+      // Generate the positive vs negative offset case
+      addIndent(funcText, 4);
+      funcText
+          .append("if ")
+          .append(new Expr.Binary(">", shiftAmountVar, zeroLiteral).emit())
+          .append(":\n");
+
+      // Positive Offset case
+      // Initialize endIndex
+      addIndent(funcText, 6);
+      funcText.append(endIndex.emit()).append(" = ").append(zeroLiteral.emit()).append("\n");
+
+      // Generate the Find K valid step
+      Expr.Binary endIndexInWindowCheck = new Expr.Binary("<", endIndex, lengthName);
+      Expr.Binary whileCond = new Expr.Binary("and", endIndexInWindowCheck, validBelowThreshold);
+      addIndent(funcText, 6);
+      funcText.append("while ").append(whileCond.emit()).append(":\n");
+      // Check if this value is NA
+      Expr.Unary endNotNACheck = new Expr.Unary("not", endIndexNACheck);
+      addIndent(funcText, 8);
+      funcText.append("if ").append(endNotNACheck.emit()).append(":\n");
+      addIndent(funcText, 10);
+      funcText.append(valueCount.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
+      addIndent(funcText, 8);
+      funcText.append("if ").append(validBelowThreshold.emit()).append(":\n");
+      addIndent(funcText, 10);
+      funcText.append(endIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
+
+      // Generate the Iterate Forward step
+      addIndent(funcText, 6);
+      funcText.append("while ").append(endIndexInWindowCheck.emit()).append(":\n");
+      addIndent(funcText, 8);
+      funcText.append("if ").append(startNotNACheck.emit()).append(":\n");
+      addIndent(funcText, 10);
+      funcText.append(endIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
+      // Generate an end is na var
+      // TODO: Refactor all variable generation to use the temporary variables.
+      // This is only safe because we are inside a closure and adhere to our own conventions
+      Variable endIsNAVar = new Variable("end_is_na" + i);
+      addIndent(funcText, 10);
+      funcText.append(endIsNAVar.emit()).append(" = ").append(endIndexNACheck.emit()).append("\n");
+      Expr.Binary NAAndInBounds = new Expr.Binary("and", endIsNAVar, endIndexInWindowCheck);
+      addIndent(funcText, 10);
+      funcText.append("while ").append(NAAndInBounds.emit()).append(":\n");
+      // Update end_index and end_is_na
+      addIndent(funcText, 12);
+      funcText.append(endIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
+      addIndent(funcText, 12);
+      funcText.append(endIsNAVar.emit()).append(" = ").append(endIndexNACheck.emit()).append("\n");
+      // Escape if we are outside the window
+      Expr.Binary endIndexOutWindowCheck = new Expr.Binary(">=", endIndex, lengthName);
+      addIndent(funcText, 10);
+      funcText.append("if ").append(endIndexOutWindowCheck.emit()).append(":\n");
+      addIndent(funcText, 12);
+      funcText.append("break\n");
+      addIndent(funcText, 8);
+      funcText
+          .append(outArrayStartGetitem.emit())
+          .append(" = ")
+          .append(inArrayEndGetitem.emit())
+          .append("\n");
+      addIndent(funcText, 8);
+      funcText.append(startIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
+
+      // Generate the FILL NAs step
+      addIndent(funcText, 6);
+      funcText
+          .append("for ")
+          .append(idxVar.emit())
+          .append(" in ")
+          .append(startToLengthRange.emit())
+          .append(":\n");
+      addIndent(funcText, 8);
+      funcText
+          .append(outArrayIdxGetitem.emit())
+          .append(" = ")
+          .append(fillValueUnboxed.emit())
+          .append("\n");
+
+      addIndent(funcText, 4);
+      funcText.append("else:\n");
+
+      // Negative Offset Case
+      // Initialize endIndex
+      addIndent(funcText, 6);
+      funcText.append(endIndex.emit()).append(" = ").append(negativeOneLiteral.emit()).append("\n");
+      // Negate shift_Amount
+      addIndent(funcText, 6);
+      funcText
+          .append(shiftAmountVar.emit())
+          .append(" = ")
+          .append(new Expr.Unary("-", shiftAmountVar).emit())
+          .append("\n");
+
+      // Find K valid + Fill NAs fused step
+      Expr.Binary startIndexInWindowCheck = new Expr.Binary("<", startIndex, lengthName);
+      Expr.Binary negativeFindKCheck =
+          new Expr.Binary("and", startIndexInWindowCheck, validBelowThreshold);
+      addIndent(funcText, 6);
+      funcText.append("while ").append(negativeFindKCheck.emit()).append(":\n");
+      // Find K Valid step
+      addIndent(funcText, 8);
+      funcText.append("if ").append(startNotNACheck.emit()).append(":\n");
+      addIndent(funcText, 10);
+      funcText.append(valueCount.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
+      addIndent(funcText, 10);
+      Expr.Binary endIsNegativeOne = new Expr.Binary("==", endIndex, negativeOneLiteral);
+      funcText.append("if ").append(endIsNegativeOne.emit()).append(":\n");
+      addIndent(funcText, 12);
+      funcText.append(endIndex.emit()).append(" = ").append(startIndex.emit()).append("\n");
+      // Fill NAs Step
+      addIndent(funcText, 8);
+      funcText
+          .append(outArrayStartGetitem.emit())
+          .append(" = ")
+          .append(fillValueUnboxed.emit())
+          .append("\n");
+      addIndent(funcText, 8);
+      funcText.append(startIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
+
+      // Iterate Forward Step
+      addIndent(funcText, 6);
+      funcText
+          .append("for ")
+          .append(idxVar.emit())
+          .append(" in ")
+          .append(startToLengthRange.emit())
+          .append(":\n");
+      addIndent(funcText, 8);
+      funcText
+          .append(outArrayIdxGetitem.emit())
+          .append(" = ")
+          .append(inArrayEndGetitem.emit())
+          .append("\n");
+      Expr.Unary idxNotNACheck =
+          new Expr.Unary(
+              "not", new Expr.Call("bodo.libs.array_kernels.isna", List.of(inputArray, idxVar)));
+      addIndent(funcText, 8);
+      funcText.append("if ").append(idxNotNACheck.emit()).append(":\n");
+      addIndent(funcText, 10);
+      funcText.append(endIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
+      addIndent(funcText, 10);
+      funcText.append("while ").append(endIndexNACheck.emit()).append(":\n");
+      addIndent(funcText, 12);
+      funcText.append(endIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
     }
-
-    // Perform the shift operation
-    String aggColRef = "sorted_df[" + makeQuoted(aggColName) + "]";
-    String arrName = "arr" + String.valueOf(i);
-    addIndent(funcText, 2);
-    funcText.append(arrName).append(" = " + aggColRef + ".shift(" + shiftAmount);
-
-    // If there is a default value, provide the extra argument to shift
-    if (!fillValue.equals("")) {
-      funcText.append(", fill_value=").append(fillValue);
-    }
-
-    funcText.append(")\n");
-
-    arraysToSort.add(arrName);
+    arraysToSort.add(outputArray.emit());
   }
 
   /**
@@ -1244,15 +1480,15 @@ public class WindowAggCodeGen {
   }
 
   /**
-   * Helper function that generates the dataframe to be returned by the groupby apply lambda
+   * Helper function that generates the DataFrame to be returned by the groupby apply lambda
    * function. This helper function also revert the sorts of the array containing the returned data,
    * if needs be.
    *
    * @param arrsToSort the list arrays that needs to be sorted/returned
-   * @param sorted_df_name the name of the dataframe to be sorted/returned. Must contain
+   * @param sorted_df_name the name of the DataFrame to be sorted/returned. Must contain
    *     revertSortColumnName if a sort reversion is needed.
    * @param expectedOutputColNames the list of string column names in which to store each of the
-   *     arrays in the returned dataframe
+   *     arrays in the returned DataFrame
    * @param needsRevertSort Does the above array need to be revert sorted before return. We need to
    *     revert the sort of the returned array if we had to sort the input data.
    * @return returns a string that contains the input columns stored in the specified output column
@@ -1269,13 +1505,13 @@ public class WindowAggCodeGen {
         "The number of arrays to sort should be equivalent to the number of expected output"
             + " columns");
 
-    // TODO: if arrsToSort.size() == 1, we could return an array instead of a dataframe.
+    // TODO: if arrsToSort.size() == 1, we could return an array instead of a DataFrame.
     // see BS-616
 
     StringBuilder funcText = new StringBuilder();
     List<String> outputCols = new ArrayList<>();
     // If we didn't have to do a sort on the input data, we can just return the arrays wrapped in a
-    // dataframe.
+    // DataFrame.
     if (!needsRevertSort) {
       addIndent(funcText, 2);
       funcText.append("retval = pd.DataFrame({");
@@ -1287,7 +1523,7 @@ public class WindowAggCodeGen {
 
       funcText.append("}, index = " + argumentDfOriginalIndex + ")\n");
     } else {
-      // If we did need to do a sort on the dataframe, we need to revert the sort
+      // If we did need to do a sort on the DataFrame, we need to revert the sort
       // on the output column(s) before returning them.
       addIndent(funcText, 2);
       funcText.append("_tmp_sorted_df = pd.DataFrame({");
@@ -1326,7 +1562,7 @@ public class WindowAggCodeGen {
   }
 
   /**
-   * Generates the code to prune the columnns of the input DataFrame
+   * Generates the code to prune the columns of the input DataFrame
    *
    * @param funcText the string builder where we store the closure
    * @param aggNames the list of function names
@@ -1391,11 +1627,11 @@ public class WindowAggCodeGen {
   }
 
   /**
-   * Takes an input dataframe, performs a sort on it (if needed), and stores it to the specified
+   * Takes an input DataFrame, performs a sort on it (if needed), and stores it to the specified
    * output variable.
    *
-   * @param input_df_name The name of the dataframe to sort.
-   * @param output_sorted_df_name The variable name where the output dataframe will be stored.
+   * @param input_df_name The name of the DataFrame to sort.
+   * @param output_sorted_df_name The variable name where the output DataFrame will be stored.
    * @param sortByCols The string representing the list of string column names by which to sort
    * @param ascendingList The string representing the list of boolean values, which determining if
    *     the columns in sortByCols will be sorted ascending or descending
@@ -1412,9 +1648,9 @@ public class WindowAggCodeGen {
     // TODO: performance upgrade
     // Currently we are appending a column (ORIG_COL_POSITION) that keeps track of
     // the original positions. Then, in the groupby, if we sort each of the partitioned
-    // dataframes on each rank, before returning the sorted dataframe it might be
+    // DataFrames on each rank, before returning the sorted DataFrame it might be
     // faster to do one sort on the entire data, instead of a sort on each of
-    // the partitioned dataframes.
+    // the partitioned DataFrames.
     StringBuilder sortText = new StringBuilder();
     if (!sortByCols.equals("")) {
       addIndent(sortText, 2);
