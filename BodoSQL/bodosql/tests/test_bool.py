@@ -2,6 +2,7 @@
 """
 Test correctness of SQL boolean functions on BodoSQL
 """
+import datetime
 
 import pandas as pd
 import pytest
@@ -303,6 +304,9 @@ def test_boolnot(args, numeric_truthy_df, spark_info, memory_leak_check):
         pytest.param(None, True, False, id="bool"),
         pytest.param(
             None, Time(12, 30, 0), Time(16, 59, 30, nanosecond=999999999), id="time"
+        ),
+        pytest.param(
+            None, datetime.date(2000, 1, 1), datetime.date(2023, 12, 31), id="date"
         ),
     ],
 )
