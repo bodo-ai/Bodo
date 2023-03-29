@@ -83,10 +83,74 @@ abstract class Expr {
 
         override fun emit(): String {
             // Generate the keyword args
-            val keywordArgs = listOf(Pair("as_index", BooleanLiteral(asIndex)), Pair("dropna", BooleanLiteral(dropna)), Pair("_is_bodosql", BooleanLiteral(true)));
+            val keywordArgs = listOf(Pair("as_index", BooleanLiteral(asIndex)), Pair("dropna", BooleanLiteral(dropna)), Pair("_is_bodosql", BooleanLiteral(true)))
             return Method(inputVar, "groupby", listOf(keys), keywordArgs).emit()
         }
     }
+
+    /**
+     * Represents an array or DataFrame getitem call with the given
+     * index.
+     *
+     * @param inputExpr: The input array/DataFrame.
+     * @param index: The index into the array/DataFrame
+     */
+    data class Getitem(val inputExpr: Expr, val index: Expr) : Expr() {
+
+        override fun emit(): String {
+            return "${inputExpr.emit()}[${index.emit()}]"
+        }
+    }
+
+    /**
+     * Represents the unary operator. This should only
+     * be called on scalars because it doesn't match SQL NULL
+     * semantics
+     *
+     * @param opString: The string for the input binop. This is a symbol
+     * not a name.
+     * @param inputExpr: The input expression to apply the op to.
+     */
+    data class Unary(val opString: String, val inputExpr: Expr) : Expr() {
+
+        override fun emit(): String {
+            return "${opString}(${inputExpr.emit()})"
+        }
+    }
+
+    /**
+     * Represents the binary operator. This should only
+     * be called on scalars because it doesn't match SQL NULL
+     * semantics
+     *
+     * @param opString: The string for the input binop. This is a symbol
+     * not a name.
+     * @param input1: The first input to the op.
+     * @param input2: The second input to the op.
+     */
+    data class Binary(val opString: String, val input1: Expr, val input2: Expr) : Expr() {
+
+        override fun emit(): String {
+            return "(${input1.emit()} $opString ${input2.emit()})"
+        }
+    }
+
+    /**
+     * Represents a range creation.
+     * @param start The start Expr.
+     * @param stop The stop Expr.
+     * @param step The step Expr. Null if there is no step.
+     */
+    data class Range(val start: Expr, val stop: Expr, val step: Expr? = null) : Expr() {
+        override fun emit(): String {
+            if (step == null) {
+                return "range(${start.emit()}, ${stop.emit()})"
+            } else {
+                return "range(${start.emit()}, ${stop.emit()}, ${step.emit()})"
+            }
+        }
+    }
+
 
     /**
      * Represents a tuple creation.
@@ -143,5 +207,20 @@ abstract class Expr {
                 return "False"
             }
         }
+    }
+
+    /**
+     * Represents an Integer Literal.
+     * @param arg The value of the literal.
+     */
+    data class IntegerLiteral(val arg: kotlin.Int) : Expr() {
+        override fun emit(): String = arg.toString()
+    }
+
+    /**
+     * Represents a Python None value.
+     */
+    class None : Expr() {
+        override fun emit(): String = "None"
     }
 }

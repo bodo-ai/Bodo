@@ -47,26 +47,33 @@ def gen_lead_lag_queries(
 
 @pytest.mark.timeout(750)
 @pytest.mark.parametrize(
-    "cols_to_use, window_frame",
+    "cols_to_use, window_frame, nulls_handling",
     [
         pytest.param(
-            ["U8", "I64", "F64", "BO"], "PARTITION BY W1 ORDER BY W4", id="numerics"
+            ["U8", "I64", "F64", "BO"],
+            "PARTITION BY W1 ORDER BY W4",
+            "RESPECT NULLS",
+            id="numerics",
         ),
         pytest.param(
             ["ST", "BI", "DT", "TZ", "DA"],
             "PARTITION BY W2 ORDER BY W3, W4",
+            "IGNORE NULLS",
             id="non_numerics",
         ),
     ],
 )
-def test_lead_lag_respect_nulls(
-    all_window_df, all_window_col_names, cols_to_use, window_frame, spark_info
+def test_lead_lag_handle_nulls(
+    all_window_df,
+    all_window_col_names,
+    cols_to_use,
+    window_frame,
+    nulls_handling,
+    spark_info,
 ):
     """Tests LEAD/LAG window functions with many queries in the same groupby-apply
     from different types. Each type is tested with either LEAD or LAG, and
     with 1 and 3 arguments (sometimes 2).
-
-    Currently only tests RESPECT NULLS
 
     Binary data has its 3-argument case skipped since for now."""
     selects = []
@@ -81,14 +88,13 @@ def test_lead_lag_respect_nulls(
             f"({window_frame})",
             col,
             fill_value,
-            "RESPECT NULLS",
+            nulls_handling,
             include_two_arg_test,
             lead_or_lag_value,
         )
         if col == "BI":
             cols_that_need_bytearray_conv.extend(lead_lag_names)
         if col == "TZ":
-            tz = all_window_df["table1"]["TZ"].dtype.tz.zone
             cols_to_remove_tz.append("TZ")
         selects.append(lead_lag_queries)
         include_two_arg_test = not include_two_arg_test
