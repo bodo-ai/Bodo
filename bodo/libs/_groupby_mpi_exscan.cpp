@@ -19,15 +19,15 @@
  */
 
 int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
-                               int* ftypes, int* func_offsets,
-                               bool input_has_index) {
+                               int8_t* ncols_per_func, int64_t num_funcs,
+                               int* ftypes, bool input_has_index) {
     // First decision: If it is cumulative, then we can use the MPI_Exscan.
     // Otherwise no
     bool has_non_cumulative_op = false;
     bool has_cumulative_op = false;
+    bool has_multi_col_input = false;
     int index_i = int(input_has_index);
-    for (int i = 0; i < func_offsets[in_table->ncols() - num_keys - index_i];
-         i++) {
+    for (int i = 0; i < num_funcs; i++) {
         int ftype = ftypes[i];
         if (ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cummin ||
             ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummax) {
@@ -35,12 +35,21 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
         } else {
             has_non_cumulative_op = true;
         }
+        if (ncols_per_func[i] != 1) {
+            has_multi_col_input = true;
+        }
     }
     if (has_non_cumulative_op) {
         return 0;  // No choice, we have to use the classic hash scheme
     }
     if (!has_cumulative_op) {
         return 0;  // It does not make sense to use MPI_exscan here.
+    }
+    if (has_multi_col_input) {
+        // All cumulative operations expect only a single function input.
+        // The framework assumes we use exactly 1 input column per function
+        // so if this has changed we must use the classic hash scheme.
+        return 0;
     }
     // Second decision: Whether it is arithmetic or not. If arithmetic, we can
     // use MPI_Exscan. If not, we may make it work for cumsum of strings or list

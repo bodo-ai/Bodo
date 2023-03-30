@@ -8,15 +8,31 @@ from bodosql.tests.test_window.window_common import (  # noqa
 from bodosql.tests.utils import bodosql_use_date_type, check_query
 
 
-def test_row_number_orderby(datapath, memory_leak_check):
+@pytest.mark.parametrize(
+    "orderby_multiple_columns",
+    [
+        pytest.param(False, id="single_column"),
+        pytest.param(True, id="multi_column", marks=pytest.mark.slow),
+    ],
+)
+def test_row_number_orderby(datapath, memory_leak_check, orderby_multiple_columns):
     """Test that row_number properly handles the orderby."""
-    query = "select uuid, ROW_NUMBER() OVER(PARTITION BY store_id, ret_product_id ORDER BY last_seen DESC) as row_num from table1"
+    # Note we test multiple columns to confirm we still use the C++
+    # infrastructure, not for checking direct correctness. The order
+    # is entirely determined by last_seen
+    # TODO: Verify the C++ path is used (this is tested as a Codegen unit test)
+    if orderby_multiple_columns:
+        orderby_cols = "in_stock ASC, last_seen DESC"
+    else:
+        orderby_cols = "last_seen DESC"
+
+    query = f"select uuid, ROW_NUMBER() OVER(PARTITION BY store_id, ret_product_id ORDER BY {orderby_cols}) as row_num from table1"
 
     parquet_path = datapath("sample-parquet-data/rphd_sample.pq")
 
     ctx = {
         "table1": pd.read_parquet(parquet_path)[
-            ["uuid", "store_id", "ret_product_id", "last_seen"]
+            ["uuid", "store_id", "ret_product_id", "in_stock", "last_seen"]
         ]
     }
     py_output = pd.DataFrame(

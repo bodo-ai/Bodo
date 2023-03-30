@@ -536,7 +536,8 @@ def get_agg_typ(
                 ind_arr_t, types.StringLiteral(grp.keys[0])
             )
 
-    # gb_info maps (in_col, func_name) -> out_col
+    # gb_info maps (in_cols, func_name) -> out_col
+    # where in_cols is a tuple of input column names
     gb_info = {}
     list_err_msg = []
     if func_name in ("size", "count"):
@@ -546,12 +547,12 @@ def get_agg_typ(
         # size always produces one integer output and doesn't depend on any input
         out_data.append(types.Array(types.int64, 1, "C"))
         out_columns.append("size")
-        gb_info[(None, "size")] = "size"
+        gb_info[((), "size")] = "size"
     elif func_name == "ngroup":
         # ngroup always produces one integer output and doesn't depend on any input
         out_data.append(types.Array(types.int64, 1, "C"))
         out_columns.append("ngroup")
-        gb_info[(None, "ngroup")] = "ngroup"
+        gb_info[((), "ngroup")] = "ngroup"
         # arguments passed to ngroup(ascending=True)
         kws = dict(kws) if kws else {}
         ascending = args[0] if len(args) > 0 else kws.pop("ascending", True)
@@ -719,9 +720,9 @@ def get_agg_typ(
                     udf_name = bodo.ir.aggregate._get_udf_name(
                         bodo.ir.aggregate._get_const_agg_func(func, None)
                     )
-                    gb_info[(c, udf_name)] = c
+                    gb_info[((c,), udf_name)] = c
                 else:
-                    gb_info[(c, func_name)] = c
+                    gb_info[((c,), func_name)] = c
                 out_column_type.append(e_column_type)
             else:
                 if raise_on_any_error:
@@ -746,11 +747,13 @@ def get_agg_typ(
                 for x, y in zip(out_columns, out_column_type)
                 if y != ColumnType.NonNumericalColumn.value
             ]
+            # gb_info maps (in_cols, func_name) -> out_col
+            # where in_cols is a tuple of input column names
             gb_info = {}
             for c in out_columns:
                 if grp.as_index is False and c in grp.keys:
                     continue
-                gb_info[(c, func_name)] = c
+                gb_info[((c,), func_name)] = c
     nb_drop = len(list_err_msg)
     if len(out_data) == 0:
         if nb_drop == 0:
@@ -936,6 +939,8 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
             )
 
         # get output names and output types
+        # gb_info maps (in_cols, func_name) -> out_col
+        # where in_cols is a tuple of input column names
         gb_info = {}
         out_columns = []
         out_data = []
@@ -969,7 +974,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                     # This happens, for example, with
                     # df.groupby(...).agg({"A": [f1, f2]})
                     out_columns.append((col_name, f_name))
-                    gb_info[(col_name, f_name)] = (col_name, f_name)
+                    gb_info[((col_name,), f_name)] = (col_name, f_name)
                     _append_out_type(grp, out_data, out_tp)
             else:
                 f_name, out_tp = get_agg_funcname_and_outtyp(
@@ -983,10 +988,10 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                 has_cumulative_ops = f_name in list_cumulative
                 if multi_level_names:
                     out_columns.append((col_name, f_name))
-                    gb_info[(col_name, f_name)] = (col_name, f_name)
+                    gb_info[((col_name,), f_name)] = (col_name, f_name)
                 elif not relabeling:
                     out_columns.append(col_name)
-                    gb_info[(col_name, f_name)] = col_name
+                    gb_info[((col_name,), f_name)] = col_name
                 elif relabeling:
                     f_names.append(f_name)
                 _append_out_type(grp, out_data, out_tp)
@@ -995,7 +1000,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         if relabeling:
             for i, out_col in enumerate(kws.keys()):
                 out_columns.append(out_col)
-                gb_info[in_col_names[i], f_names[i]] = out_col
+                gb_info[(in_col_names[i],), f_names[i]] = out_col
 
         if has_cumulative_ops:
             # result of groupby.cumsum, etc. doesn't have a group index
@@ -1034,6 +1039,8 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         lambda_count = 0
         if not grp.as_index:
             get_keys_not_as_index(grp, out_columns, out_data, out_column_type)
+        # gb_info maps (in_cols, func_name) -> out_col
+        # where in_cols is a tuple of input column names
         gb_info = {}
         in_col_name = grp.selection[0]
         for f_val in func_vals:
@@ -1052,7 +1059,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                 f_name = "<lambda_" + str(lambda_count) + ">"
                 lambda_count += 1
             out_columns.append(f_name)
-            gb_info[(in_col_name, f_name)] = f_name
+            gb_info[((in_col_name,), f_name)] = f_name
             _append_out_type(grp, out_data, out_tp)
         if has_cumulative_ops:
             # result of groupby.cumsum, etc. doesn't have a group index
@@ -1147,10 +1154,12 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
             module_name="GroupBy",
         )
 
+    # gb_info maps (in_cols, func_name) -> out_col
+    # where in_cols is a tuple of input column names
     gb_info = {}
     for c in grp.selection:
         out_columns.append(c)
-        gb_info[(c, name_operation)] = c
+        gb_info[((c,), name_operation)] = c
         ind = grp.df_type.column_index[c]
         data = grp.df_type.data[ind]
         operation = (
@@ -1244,38 +1253,47 @@ def resolve_window_funcs(
     out_columns = []
     out_data = []
     kws = dict(kws)
+    default_tuple = types.Tuple([])
     # Extract the relevant arguments from kws or args
     window_func = get_literal_value(
         args[0] if len(args) > 0 else kws.pop("func", types.none)
     )
     order_by = get_literal_value(
-        args[1] if len(args) > 1 else kws.pop("order_by", types.none)
+        args[1] if len(args) > 1 else kws.pop("order_by", default_tuple)
     )
     ascending = get_literal_value(
-        args[2] if len(args) > 2 else kws.pop("ascending", types.none)
+        args[2] if len(args) > 2 else kws.pop("ascending", default_tuple)
     )
     na_position = get_literal_value(
-        args[3] if len(args) > 3 else kws.pop("na_position", types.none)
+        args[3] if len(args) > 3 else kws.pop("na_position", default_tuple)
     )
     if window_func not in ("row_number", "min_row_number_filter"):
         raise_bodo_error(msg)
     # We currently require only a single order by column as that satisfies the initial
     
-    if not isinstance(order_by, str):
+    if not (
+        isinstance(order_by, tuple)
+        and all(isinstance(col_name, str) for col_name in order_by)
+    ):
         raise_bodo_error(
-            "Groupby.window: 'order_by' argument must be a list of column names if provided."
+            "Groupby.window: 'order_by' argument must be a tuple of column names if provided."
         )
-    if not isinstance(ascending, bool):
+    if not (
+        isinstance(ascending, tuple) and all(isinstance(val, bool) for val in ascending)
+    ):
         raise_bodo_error(
-            "Groupby.window: 'ascending' argument must be a list of booleans if provided."
+            "Groupby.window: 'ascending' argument must be a tuple of booleans if provided."
         )
-    if not isinstance(na_position, str):
+    if not (
+        isinstance(na_position, tuple)
+        and all(isinstance(val, str) for val in na_position)
+    ):
         raise_bodo_error(
-            "Groupby.window: 'na_position' argument must be a list of 'first' or 'last' if provided."
+            "Groupby.window: 'na_position' argument must be a tuple of 'first' or 'last' if provided."
         )
 
     # Verify that every order_by column exists in the
-    if order_by not in grp.df_type.columns:
+    if any(col_name not in grp.df_type.column_index for col_name in order_by):
         raise_bodo_error(
             f"Groupby.window: Column '{order_by}' does not exist in the input dataframe."
         )
@@ -1289,6 +1307,8 @@ def resolve_window_funcs(
         # TODO: min_row_number_filter never outputs null
         out_data = [bodo.boolean_array_type]
     # Generate the gb_info
+    # gb_info maps (in_cols, func_name) -> out_col
+    # where in_cols is a tuple of input column names
     gb_info = {(order_by, "window"): out_columns[0]}
 
     out_res = DataFrameType(

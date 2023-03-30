@@ -1280,10 +1280,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // Visit the order by key. This is required to be a single column.
       // The RHS of order keys is a set of SqlKind Values. These are used to stored information
       // about ascending and nulls first/last
-      RexNode node = window.orderKeys.get(0).left;
-      Expr curRexInfo = node.accept(translator);
-      childExprs.add(curRexInfo);
-      childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
+      for (int i = 0; i < window.orderKeys.size(); i++) {
+        RexNode node = window.orderKeys.get(i).left;
+        Expr curRexInfo = node.accept(translator);
+        childExprs.add(curRexInfo);
+        childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
+      }
       Variable outputVar = new Variable(this.genWindowedAggDfName());
       Expr outputCode =
           generateOptimizedEngineKernelCode(
@@ -1588,8 +1590,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
         childExprs.add(curRexInfo);
         orderKeys.add(makeQuoted(colName));
       }
-      orderAscending.add(getAscendingBoolString(dir));
-      orderNAPosition.add(getNAPositionString(nullDir));
+      orderAscending.add(getAscendingExpr(dir).emit());
+      orderNAPosition.add(getNAPositionStringLiteral(nullDir).emit());
       exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
     }
 

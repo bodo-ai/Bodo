@@ -133,17 +133,18 @@ class WindowColSet : public BasicColSet {
    public:
     /**
      * Construct Window column set
-     * @param in_col input column of groupby associated with this column set.
-     * This is a column that we will sort on.
+     * @param in_cols input columns of groupby associated with this column set.
+     * There are the columns that we will sort on.
      * @param _window_func: What function are we computing.
-     * @param _asc: Is the sort ascending on the input column.
-     * @param _na_pos: Are NAs last in the sort
+     * @param _asc: Are the sort columns ascending on the input column.
+     * @param _na_pos: Are NAs last in the sort columns
      * @param _is_parallel: flag to identify whether data is distributed
      * @param use_sql_rules: Do we use SQL or Pandas null handling rules.
      *
      */
-    WindowColSet(array_info* in_col, int64_t _window_func, bool _asc,
-                 bool _na_pos, bool _is_parallel, bool use_sql_rules);
+    WindowColSet(std::vector<array_info*>& in_cols, int64_t _window_func,
+                 std::vector<bool>& _asc, std::vector<bool>& _na_pos,
+                 bool _is_parallel, bool use_sql_rules);
     virtual ~WindowColSet();
 
     /**
@@ -169,9 +170,10 @@ class WindowColSet : public BasicColSet {
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
    private:
+    std::vector<array_info*> input_cols;
     int64_t window_func;
-    bool asc;
-    bool na_pos;
+    std::vector<bool> asc;
+    std::vector<bool> na_pos;
     bool is_parallel;  // whether input column data is distributed or
                        // replicated
 };
@@ -374,7 +376,7 @@ class TransformColSet : public BasicColSet {
 
    private:
     int64_t transform_func;
-    std::shared_ptr<BasicColSet> transform_op_col;
+    std::unique_ptr<BasicColSet> transform_op_col;
 };
 
 /**
@@ -439,8 +441,9 @@ class NgroupColSet : public BasicColSet {
 
 /**
  * Construct and return a column set based on the ftype.
- * @param[in] in_col The input column upon which the function will
- * be computed.
+ * @param[in] in_col Vector of input columns upon which the function will
+ * be computed. All functions should have at most 1 input column except for
+ * the window functions which can have more.
  * @param[in] index_col The index column used by some operations. If
  * unused this will be a nullptr.
  * @param ftype function type associated with this column set.
@@ -451,8 +454,10 @@ class NgroupColSet : public BasicColSet {
  * @param transform_func option used for identifying transform function
  *        (currently groupby operation that are already supported)
  * @param is_parallel is the groupby implementation distributed?
- * @param window_ascending For the window ftype is the window ascending?
- * @param window_na_position For the window ftype are NA values last?
+ * @param window_ascending For the window ftype is each orderby column in the
+ * window ascending?
+ * @param window_na_position For the window ftype does each orderby column have
+ * NA values last?
  * @param[in] udf_n_redvars For groupby udf functions these are the reduction
  * variables. For other operations this will be a nullptr.
  * @param[in] udf_table For groupby udf functions this is the table of used
@@ -465,12 +470,12 @@ class NgroupColSet : public BasicColSet {
  * values.
  * @return A pointer to the created col set.
  */
-std::shared_ptr<BasicColSet> makeColSet(
-    array_info* in_col, array_info* index_col, int ftype, bool do_combine,
-    bool skipna, int64_t periods, int64_t transform_func, int n_udf,
-    bool is_parallel, bool window_ascending, bool window_na_position,
-    int* udf_n_redvars = nullptr, table_info* udf_table = nullptr,
-    int udf_table_idx = 0, table_info* nunique_table = nullptr,
-    bool use_sql_rules = false);
+std::unique_ptr<BasicColSet> makeColSet(
+    std::vector<array_info*> in_cols, array_info* index_col, int ftype,
+    bool do_combine, bool skipna, int64_t periods, int64_t transform_func,
+    int n_udf, bool is_parallel, std::vector<bool> window_ascending,
+    std::vector<bool> window_na_position, int* udf_n_redvars = nullptr,
+    table_info* udf_table = nullptr, int udf_table_idx = 0,
+    table_info* nunique_table = nullptr, bool use_sql_rules = false);
 
 #endif  // _GROUPBY_COL_SET_H_INCLUDED

@@ -1,8 +1,8 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.generateProjectedDataframe;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getAscendingBoolString;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getNAPositionString;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getAscendingExpr;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getNAPositionStringLiteral;
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToNullableBodoArray;
 import static com.bodosql.calcite.application.Utils.Utils.addIndent;
 import static com.bodosql.calcite.application.Utils.Utils.assertWithErrMsg;
@@ -12,6 +12,7 @@ import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 import com.bodosql.calcite.application.*;
 import com.bodosql.calcite.ir.*;
 import com.bodosql.calcite.ir.Module;
+import com.google.common.collect.*;
 import java.util.*;
 import org.apache.calcite.rel.*;
 import org.apache.calcite.rel.type.*;
@@ -1672,8 +1673,8 @@ public class WindowAggCodeGen {
 
   /**
    * Determine if this group of window operations can be computed in the Bodo-Engine optimized C++
-   * kernel. Right now we only support computing a single ROW_NUMBER function with exactly 1 order
-   * by column. We also require partition keys.
+   * kernel. Right now we only support computing a single ROW_NUMBER and MIN_ROW_NUMBER_FILTER with
+   * partition keys.
    *
    * @param aggOperations The list of RexOver operations that are being computed.
    * @return Can these operations take the optimized C++ kernel path.
@@ -1683,7 +1684,7 @@ public class WindowAggCodeGen {
       RexOver windowFunc = aggOperations.get(0);
       String fnName = windowFunc.getAggOperator().getName();
       RexWindow window = windowFunc.getWindow();
-      if (window.orderKeys.size() == 1 && window.partitionKeys.size() > 0) {
+      if (window.partitionKeys.size() > 0) {
         // Right now it's simpler to add more functions, so we separate these conditions.
         return fnName.equals("ROW_NUMBER") || fnName.equals("MIN_ROW_NUMBER_FILTER");
       }
@@ -1712,20 +1713,28 @@ public class WindowAggCodeGen {
       groupByColNames.add(new Expr.StringLiteral(colName));
       childColNames.add(colName);
     }
+    ImmutableList<RexFieldCollation> orderbyKeys = window.orderKeys;
+    int numOrderByKeys = orderbyKeys.size();
+    List<Expr.StringLiteral> orderByLiteralList = new ArrayList<>(numOrderByKeys);
+    List<Expr.BooleanLiteral> ascendingList = new ArrayList<>(numOrderByKeys);
+    List<Expr.StringLiteral> NAPositionList = new ArrayList<>(numOrderByKeys);
 
-    final String orderByColName;
-    RelFieldCollation.Direction dir = window.orderKeys.get(0).getDirection();
-    RelFieldCollation.NullDirection nullDir = window.orderKeys.get(0).getNullDirection();
-    if (dir == RelFieldCollation.Direction.ASCENDING) {
-      orderByColName = "ASC_COL_" + col_id_var;
-    } else {
-      assert dir == RelFieldCollation.Direction.DESCENDING;
-      orderByColName = "DEC_COL_" + col_id_var;
+    for (int i = 0; i < numOrderByKeys; i++) {
+      final String orderByColName;
+      RelFieldCollation.Direction dir = window.orderKeys.get(i).getDirection();
+      RelFieldCollation.NullDirection nullDir = window.orderKeys.get(i).getNullDirection();
+      if (dir == RelFieldCollation.Direction.ASCENDING) {
+        orderByColName = "ASC_COL_" + col_id_var;
+      } else {
+        assert dir == RelFieldCollation.Direction.DESCENDING;
+        orderByColName = "DEC_COL_" + col_id_var;
+      }
+      childColNames.add(orderByColName);
+      orderByLiteralList.add(new Expr.StringLiteral(orderByColName));
+      ascendingList.add(getAscendingExpr(dir));
+      NAPositionList.add(getNAPositionStringLiteral(nullDir));
+      col_id_var++;
     }
-    childColNames.add(orderByColName);
-    final Expr.StringLiteral orderByKey = new Expr.StringLiteral(orderByColName);
-    final String orderAscending = getAscendingBoolString(dir);
-    final String orderNAPosition = getNAPositionString(nullDir);
 
     // Generate a projection in case we needed to compute anything for the orderby/partition by
     // columns
@@ -1745,9 +1754,9 @@ public class WindowAggCodeGen {
             List.of(
                 new Expr.StringLiteral(
                     windowFunc.getAggOperator().getName().toLowerCase(Locale.ROOT)),
-                orderByKey,
-                new Expr.Raw(orderAscending),
-                new Expr.Raw(orderNAPosition)),
+                new Expr.Tuple(orderByLiteralList),
+                new Expr.Tuple(ascendingList),
+                new Expr.Tuple(NAPositionList)),
             List.of());
 
     // Add the window function to the codegen
