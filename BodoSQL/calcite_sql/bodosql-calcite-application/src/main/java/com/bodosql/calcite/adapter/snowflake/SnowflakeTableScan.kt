@@ -1,5 +1,8 @@
 package com.bodosql.calcite.adapter.snowflake
 
+import com.bodosql.calcite.adapter.pandas.PandasRel
+import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.table.CatalogTableImpl
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
@@ -14,7 +17,7 @@ import org.apache.calcite.rel.type.RelDataTypeFieldImpl
 import org.apache.calcite.rel.type.RelRecordType
 
 class SnowflakeTableScan(cluster: RelOptCluster?, traitSet: RelTraitSet?, table: RelOptTable?, val catalogTable: CatalogTableImpl, private val preserveCase: Boolean) :
-    TableScan(cluster, traitSet, ImmutableList.of(), table) {
+    TableScan(cluster, traitSet, ImmutableList.of(), table), PandasRel {
 
     constructor(cluster: RelOptCluster?, table: RelOptTable?, catalogTable: CatalogTableImpl) : this(cluster, cluster?.traitSet(), table, catalogTable, false)
 
@@ -61,6 +64,10 @@ class SnowflakeTableScan(cluster: RelOptCluster?, traitSet: RelTraitSet?, table:
         // Remove when we have proper converters.
         return super.explainTerms(pw)
             .item("preserveCase", preserveCase)
+    }
+
+    override fun emit(builder: Module.Builder, inputs: () -> List<Dataframe>): Dataframe {
+        TODO("Don't implement")
     }
 
     override fun register(planner: RelOptPlanner?) {

@@ -3,10 +3,10 @@ package com.bodosql.calcite.application;
 import java.util.HashMap;
 import java.util.Set;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
-import org.apache.calcite.rel.logical.LogicalFilter;
-import org.apache.calcite.rel.logical.LogicalProject;
-import org.apache.calcite.rel.logical.LogicalValues;
+import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.core.Values;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.*;
@@ -289,15 +289,15 @@ public class ExprTypeVisitor {
     if (node instanceof Join) {
       determineRexNodeExprType(
           ((Join) node).getCondition(), exprTypes, node.getId(), searchMap, builder);
-    } else if (node instanceof LogicalProject) {
-      for (RexNode child : ((LogicalProject) node).getProjects()) {
+    } else if (node instanceof Project) {
+      for (RexNode child : ((Project) node).getProjects()) {
         determineRexNodeExprType(child, exprTypes, node.getId(), searchMap, builder);
       }
-    } else if (node instanceof LogicalFilter) {
+    } else if (node instanceof Filter) {
       determineRexNodeExprType(
-          ((LogicalFilter) node).getCondition(), exprTypes, node.getId(), searchMap, builder);
-    } else if (node instanceof LogicalValues) {
-      LogicalValues logicalValuesNode = (LogicalValues) node;
+          ((Filter) node).getCondition(), exprTypes, node.getId(), searchMap, builder);
+    } else if (node instanceof Values) {
+      Values logicalValuesNode = (Values) node;
       if (logicalValuesNode.getTuples().size() == 0) {
         return;
       }

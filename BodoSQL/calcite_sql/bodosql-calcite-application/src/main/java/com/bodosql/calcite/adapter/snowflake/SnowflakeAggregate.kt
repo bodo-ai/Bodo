@@ -1,6 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.application.PandasRel
+import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Expr
