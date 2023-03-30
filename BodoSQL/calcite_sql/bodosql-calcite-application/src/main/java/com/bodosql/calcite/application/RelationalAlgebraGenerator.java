@@ -174,7 +174,17 @@ public class RelationalAlgebraGenerator {
               String catalogName = catalog.getCatalogName();
               // Create a schema object with the name of the catalog,
               // and register all the schemas with this catalog as sub-schemas
-              defaults.add(root.add(catalogName, new CatalogSchemaImpl(catalogName, catalog)));
+              // Note that the order of adding to default matters. Earlier
+              // elements are given higher priority during resolution.
+              // The correct attempted order of resolution should be:
+              //     catalog_default_path1.(table_identifier)
+              //     catalog_default_path2.(table_identifier)
+              //     ...
+              //     __bodo_local__.(table_identifier)
+              //     (table_identifier) (Note: this case will never yield a match,
+              //     as the root schema is currently always empty. This may change
+              //     in the future)
+              root.add(catalogName, new CatalogSchemaImpl(catalogName, catalog));
               Set<String> remainingSchemaNamesToAdd = catalog.getSchemaNames();
 
               for (String schemaName : catalog.getDefaultSchema()) {
@@ -193,6 +203,7 @@ public class RelationalAlgebraGenerator {
                 root.getSubSchema(catalogName)
                     .add(schemaName, new CatalogSchemaImpl(schemaName, catalog));
               }
+              defaults.add(root.getSubSchema(catalogName));
               defaults.add(root.add(newSchema.getName(), newSchema));
             });
 

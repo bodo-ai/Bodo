@@ -722,12 +722,6 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
 
-    def impl(bc, query):
-        bc.sql(query)
-        # Return an arbitrary value. This is just to enable a py_output
-        # so we can reuse the check_func infrastructure.
-        return 5
-
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
     # Create the table
@@ -751,6 +745,7 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
     succsess_query = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
     # This should succseed, since the table does not exist
 
+    exception_occured_in_test_body = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
         check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
@@ -775,9 +770,21 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
         output_df.columns = output_df.columns.str.upper()
         result_df.columns = result_df.columns.str.upper()
         assert_tables_equal(output_df, result_df)
+    except Exception as e:
+        # In the case that another exception ocurred within the body of the try,
+        # We may not have created a table to drop.
+        # because of this, we call drop_snowflake_table in a try/except, to avoid
+        # masking the original exception
+        exception_occured_in_test_body = True
+        raise e
     finally:
-        # dropping the table for us
-        drop_snowflake_table(table_name, db, schema)
+        if exception_occured_in_test_body:
+            try:
+                drop_snowflake_table(table_name, db, schema)
+            except:
+                pass
+        else:
+            drop_snowflake_table(table_name, db, schema)
 
 
 def test_snowflake_catalog_create_table_already_exists_error(

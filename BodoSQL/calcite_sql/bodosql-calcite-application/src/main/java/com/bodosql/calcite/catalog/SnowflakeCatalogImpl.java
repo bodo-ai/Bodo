@@ -432,8 +432,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     try {
       Connection conn = getConnection();
       Statement stmt = conn.createStatement();
-      // For Snowflake, the attempted order of resolution should be the list of schemas provided by
-      // CURRENT_SCHEMAS()
+
+      // For Snowflake, the attempted order of resolution should be the
+      // list of schemas provided by CURRENT_SCHEMAS()
       ResultSet schemaInfo = stmt.executeQuery("select current_schemas()");
       while (schemaInfo.next()) {
         // Output in column 1
