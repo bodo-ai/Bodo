@@ -315,6 +315,76 @@ def test_to_date_format_string_err(dt_fn_dataframe, test_fn, memory_leak_check):
         bc.sql(query)
 
 
+@pytest.mark.parametrize(
+    "input_type",
+    [
+        pytest.param("datetime_strings", id="valid_datetime_strings"),
+        pytest.param("digit_strings", id="valid_digit_strings"),
+        pytest.param("timestamps", id="valid_timestamps"),
+    ]
+)
+def test_date_casting_with_colon(dt_fn_dataframe, input_type, memory_leak_check):
+    """tests ::DATE on valid datetime string/digit string/timestamp values"""
+    query = f"SELECT {input_type}::DATE from table1"
+
+    expected_output = pd.DataFrame(
+        {
+            "foo": dt_fn_dataframe["table1"][input_type].apply(
+                lambda val: None
+                if scalar_to_date_equiv_fn(val) is None
+                else scalar_to_date_equiv_fn(val).date()
+            )
+        }
+    )
+
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            dt_fn_dataframe,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=expected_output,
+        )
+
+
+def test_date_casting_with_colon_tz_aware(memory_leak_check):
+    """tests ::DATE on valid datetime values in a case statment"""
+    df = pd.DataFrame(
+        {
+            "timestamps": pd.date_range(
+                "1/18/2022", periods=20, freq="10D5H", tz="US/PACIFIC"
+            )
+        }
+    )
+    ctx = {"table1": df}
+    query = "SELECT (timestamps)::DATE from table1"
+    expected_output = pd.DataFrame({"foo": df["timestamps"].dt.date})
+
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=expected_output,
+        )
+
+
+# [BE-3774] Leaks Memory
+def test_date_casting_with_colon_invalid_args(dt_fn_dataframe):
+    """tests ::DATE throws correct error for invalid inputs"""
+
+    query = "SELECT (invalid_dt_strings)::DATE from table1"
+
+    msg = "Invalid input while converting to date value"
+    with pytest.raises(Exception, match=msg):
+        with bodosql_use_date_type():
+            bc = bodosql.BodoSQLContext(dt_fn_dataframe)
+            bc.sql(query)
+
+
 _to_timestamp_string_data = [
     pytest.param(
         (

@@ -150,6 +150,14 @@ public class Utils {
         }
         break;
       case DATE:
+        if (useDateRuntime) {
+          if (outputScalar) {
+            dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_pd_to_datetime";
+          } else {
+            dtype = "datetime.date";
+          }
+          break;
+        }
       case TIMESTAMP:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_pd_to_datetime";
