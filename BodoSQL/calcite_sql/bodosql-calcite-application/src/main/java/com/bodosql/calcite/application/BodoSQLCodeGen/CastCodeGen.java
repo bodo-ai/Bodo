@@ -70,6 +70,10 @@ public class CastCodeGen {
         }
         break;
       case DATE:
+        if (useDateRuntime) {
+          codeBuilder.append("bodo.libs.bodosql_array_kernels.to_date(").append(arg).append(", None)");
+          break;
+        }
       case TIMESTAMP:
         // If we cast from tz-aware to naive there is special handling. Otherwise, we
         // fall back to the default case.
@@ -100,18 +104,7 @@ public class CastCodeGen {
               .append(dtype)
               .append(", _bodo_nan_to_str=False))");
         }
-        // Date needs special handling to truncate timestamp. We always round down.
-        // TODO: Remove once we support Date type natively
-        if (typeName == SqlTypeName.DATE) {
-          // Generate a dummy visitor so we can reuse DATE_TRUNC code.
-          RexNodeVisitorInfo dayVisitor = new RexNodeVisitorInfo("day");
-          codeBuilder.append(
-              generateDateTruncCode(
-                      dayVisitor.getExprCode(), new Expr.Raw(asTypeBuilder.toString()))
-                  .emit());
-        } else {
-          codeBuilder.append(asTypeBuilder);
-        }
+        codeBuilder.append(asTypeBuilder);
     }
     return codeBuilder.toString();
   }

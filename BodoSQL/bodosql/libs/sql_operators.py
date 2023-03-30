@@ -91,3 +91,8 @@ def null_equal_runtime(arg0, arg1):
 @register_jitable
 def pd_to_datetime_with_format(s, my_format):
     return pd.to_datetime(s, format=my_format)
+
+
+@register_jitable
+def pd_to_date(arg0):
+    return pd.to_datetime(arg0).date()
