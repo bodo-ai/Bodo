@@ -3,7 +3,6 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 import static java.util.Objects.requireNonNull;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,7 +11,6 @@ import org.apache.calcite.plan.*;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.Project;
-import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.rules.PushProjector;
@@ -20,6 +18,7 @@ import org.apache.calcite.rel.rules.TransformationRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.*;
+import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.immutables.value.Value;
 
@@ -208,21 +207,6 @@ public class AliasPreservingProjectJoinTransposeRule
     // If not, add a new projection Node that projects the values to the correct names
     if (topProject instanceof Join) {
       if (!topProject.getRowType().getFieldList().equals(origProject.getRowType().getFieldList())) {
-        // RelHints are used to pass around some metadata that might allow for faster execution of
-        // the logical plan
-        // for our purposes, this can be left blank
-        List<RelHint> newRelHints = Collections.emptyList();
-
-        // A cluster is an object containing the environmental context for a particular query
-        // As such, the new project should share the same cluster as the original project
-        RelOptCluster newCluster = origProject.getCluster();
-
-        // The relTraitSet is used to pass around reltraits, which indicate if a particular
-        // operation has a property like reflexive, anti-symmetric, transitive... etc
-        // It might assist some optimization rules to add any relevant traits, but for now, I'm
-        // simply leaving it blank.
-        RelTraitSet newRelTraitSet = RelTraitSet.createEmpty();
-
         // Create a list of projections from input 0 -> fieldname 0, input 1 -> fieldname 1... and
         // so on
         List<RexInputRef> projections = new ArrayList<>();
@@ -232,14 +216,10 @@ public class AliasPreservingProjectJoinTransposeRule
           projections.add(cur_input);
         }
 
-        topProject =
-            new LogicalProject(
-                newCluster,
-                newRelTraitSet,
-                newRelHints,
-                topProject,
-                projections,
-                origProject.getRowType());
+        final RelBuilder relBuilder = call.builder();
+        relBuilder.push(topProject);
+        relBuilder.project(projections, origProject.getRowType().getFieldNames(), true);
+        topProject = relBuilder.build();
       }
     }
     call.transformTo(topProject);

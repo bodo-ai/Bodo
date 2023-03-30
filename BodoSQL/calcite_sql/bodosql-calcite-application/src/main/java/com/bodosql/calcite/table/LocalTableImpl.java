@@ -94,7 +94,8 @@ public class LocalTableImpl extends BodoSqlTable {
    */
   @Override
   public String generateWriteCode(String varName) {
-    assert this.isWriteable: "Internal error: Local table not writeable in call to generateWriteCode";
+    assert this.isWriteable
+        : "Internal error: Local table not writeable in call to generateWriteCode";
     return String.format(this.writeCodeFormatString, varName, "");
   }
 

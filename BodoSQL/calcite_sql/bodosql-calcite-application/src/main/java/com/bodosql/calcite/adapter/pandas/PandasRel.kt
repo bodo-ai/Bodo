@@ -1,10 +1,16 @@
-package com.bodosql.calcite.application
+package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Module
+import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 
 interface PandasRel : RelNode {
+    companion object {
+        @JvmField
+        val CONVENTION = Convention.Impl("PANDAS", PandasRel::class.java)
+    }
+
     /**
      * Emits the code necessary for implementing this relational operator.
      *
