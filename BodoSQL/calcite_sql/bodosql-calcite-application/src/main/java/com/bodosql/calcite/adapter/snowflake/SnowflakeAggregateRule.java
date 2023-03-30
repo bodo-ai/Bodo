@@ -34,7 +34,8 @@ public class SnowflakeAggregateRule extends AbstractSnowflakeAggregateRule {
                                 b1.operand(LogicalFilter.class)
                                     .predicate(SnowflakeAggregateRule::isPushableFilter)
                                     .oneInput(
-                                        b2 -> b2.operand(SnowflakeTableScan.class).noInputs())));
+                                        b2 -> b2.operand(SnowflakeTableScan.class).noInputs())))
+            .withDescription("SnowflakeAggregateRule::WithFilter");
 
     @Override
     default @NotNull SnowflakeAggregateRule toRule() {

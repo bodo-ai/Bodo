@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application;
 
+import com.bodosql.calcite.adapter.pandas.PandasRel;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.prepare.PlannerImpl;
@@ -13,6 +14,7 @@ import java.util.function.BiConsumer;
 import javax.annotation.Nullable;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexNode;
@@ -250,8 +252,14 @@ public class RelationalAlgebraGenerator {
   public RelNode getNonOptimizedRelationalAlgebra(String sql, boolean closePlanner)
       throws SqlSyntaxException, SqlValidationException, RelConversionException {
     SqlNode validatedSqlNode = validateQuery(sql);
-    RelNode result = planner.transform(0, null, planner.rel(validatedSqlNode).project());
+    RelNode result =
+        planner.transform(0, planner.getEmptyTraitSet(), planner.rel(validatedSqlNode).project());
     if (closePlanner) {
+      // TODO(jsternberg): Rework this logic because these are some incredibly leaky abstractions.
+      // We won't be doing optimizations so transform the relational algebra to use the pandas nodes
+      // now. This is a temporary thing while we transition to using the volcano planner.
+      RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
+      result = planner.transform(2, requiredOutputTraits, result);
       planner.close();
     }
     // Close any open connections from catalogs
@@ -263,7 +271,11 @@ public class RelationalAlgebraGenerator {
 
   public RelNode getOptimizedRelationalAlgebra(RelNode nonOptimizedPlan)
       throws RelConversionException {
-    RelNode optimizedPlan = planner.transform(1, null, nonOptimizedPlan);
+    RelNode optimizedPlan = planner.transform(1, planner.getEmptyTraitSet(), nonOptimizedPlan);
+    // Transform the now optimized plan to use the pandas relational nodes.
+    // This is temporary while we transition to using the volcano planner.
+    RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
+    optimizedPlan = planner.transform(2, requiredOutputTraits, optimizedPlan);
     planner.close();
     return optimizedPlan;
   }

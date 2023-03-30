@@ -14,7 +14,7 @@ import static com.bodosql.calcite.application.Utils.AggHelpers.*;
 import static com.bodosql.calcite.application.Utils.Utils.*;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 
-import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
+import com.bodosql.calcite.adapter.pandas.*;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
@@ -35,7 +35,6 @@ import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.*;
-import org.apache.calcite.rel.logical.*;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.schema.Schema;
@@ -142,7 +141,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     super();
     this.exprTypesMap = exprTypesMap;
     this.searchMap = searchMap;
-    this.varCache = new HashMap<Integer, String>();
+    this.varCache = new HashMap<>();
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
     this.typeSystem = typeSystem;
@@ -283,35 +282,35 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   @Override
   public void visit(RelNode node, int ordinal, RelNode parent) {
-    if (node instanceof PandasRel) {
-      this.visitPandasRel((PandasRel) node);
-    } else if (node instanceof TableScan) {
-      this.visitTableScan((TableScan) node, !(parent instanceof LogicalFilter));
+    if (node instanceof TableScan) {
+      this.visitTableScan((TableScan) node, !(parent instanceof Filter));
     } else if (node instanceof Join) {
       this.visitJoin((Join) node);
-    } else if (node instanceof LogicalSort) {
-      this.visitLogicalSort((LogicalSort) node);
-    } else if (node instanceof LogicalProject) {
-      this.visitLogicalProject((LogicalProject) node);
-    } else if (node instanceof LogicalAggregate) {
-      this.visitLogicalAggregate((LogicalAggregate) node);
-    } else if (node instanceof LogicalUnion) {
-      this.visitLogicalUnion((LogicalUnion) node);
-    } else if (node instanceof LogicalIntersect) {
-      this.visitLogicalIntersect((LogicalIntersect) node);
-    } else if (node instanceof LogicalMinus) {
-      this.visitLogicalMinus((LogicalMinus) node);
-    } else if (node instanceof LogicalFilter) {
-      this.visitLogicalFilter((LogicalFilter) node);
-    } else if (node instanceof LogicalValues) {
-      this.visitLogicalValues((LogicalValues) node);
-    } else if (node instanceof LogicalTableModify) {
-      this.visitLogicalTableModify((LogicalTableModify) node);
-    } else if (node instanceof LogicalTableCreate) {
-      visitLogicalTableCreate((LogicalTableCreate) node);
-    } else if (node instanceof LogicalCorrelate) {
+    } else if (node instanceof PandasSort) {
+      this.visitLogicalSort((Sort) node);
+    } else if (node instanceof PandasProject) {
+      this.visitLogicalProject((Project) node);
+    } else if (node instanceof PandasAggregate) {
+      this.visitLogicalAggregate((Aggregate) node);
+    } else if (node instanceof PandasUnion) {
+      this.visitLogicalUnion((Union) node);
+    } else if (node instanceof PandasIntersect) {
+      this.visitLogicalIntersect((Intersect) node);
+    } else if (node instanceof PandasMinus) {
+      this.visitLogicalMinus((Minus) node);
+    } else if (node instanceof PandasFilter) {
+      this.visitLogicalFilter((Filter) node);
+    } else if (node instanceof PandasValues) {
+      this.visitLogicalValues((Values) node);
+    } else if (node instanceof PandasTableModify) {
+      this.visitLogicalTableModify((TableModify) node);
+    } else if (node instanceof PandasTableCreate) {
+      visitLogicalTableCreate((PandasTableCreate) node);
+    } else if (node instanceof Correlate) {
       throw new BodoSQLCodegenException(
           "Internal Error: BodoSQL does not support Correlated Queries");
+    } else if (node instanceof PandasRel) {
+      this.visitPandasRel((PandasRel) node);
     } else {
       throw new BodoSQLCodegenException(
           "Internal Error: Encountered Unsupported Calcite Node " + node.getClass().toString());
@@ -379,7 +378,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node RelNode to be visited
    */
-  private void visitLogicalValues(LogicalValues node) {
+  private void visitLogicalValues(Values node) {
     String outVar = this.genDfVar();
     List<String> exprCodes = new ArrayList<>();
     int id = node.getId();
@@ -405,7 +404,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node RelNode to be visited
    */
-  private void visitLogicalFilter(LogicalFilter node) {
+  private void visitLogicalFilter(Filter node) {
     String outVar = genDfVar();
     int nodeId = node.getId();
     if (this.isNodeCached(node)) {
@@ -427,7 +426,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
               inVar,
               outVar,
               expr.emit(),
-              exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node.getCondition(), nodeId))));
+              exprTypesMap.get(
+                  ExprTypeVisitor.generateRexNodeKey(node.getCondition(), node.getId()))));
       this.varCache.put(nodeId, outVar);
       this.genRelnodeTimerStop(node);
     }
@@ -439,7 +439,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node LogicalUnion node to be visited
    */
-  private void visitLogicalUnion(LogicalUnion node) {
+  private void visitLogicalUnion(Union node) {
     List<String> childExprs = new ArrayList<>();
     List<List<String>> childExprsColumns = new ArrayList<>();
     // Visit all of the inputs
@@ -462,7 +462,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node LogicalIntersect node to be visited
    */
-  private void visitLogicalIntersect(LogicalIntersect node) {
+  private void visitLogicalIntersect(Intersect node) {
     // We always assume intersect is between exactly two inputs
     if (node.getInputs().size() != 2) {
       throw new BodoSQLCodegenException(
@@ -497,7 +497,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node LogicalMinus node to be visited
    */
-  private void visitLogicalMinus(LogicalMinus node) {
+  private void visitLogicalMinus(Minus node) {
     // We always assume minus is between exactly two inputs
     if (node.getInputs().size() != 2) {
       throw new BodoSQLCodegenException(
@@ -536,7 +536,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node Logical Sort node to be visited
    */
-  public void visitLogicalSort(LogicalSort node) {
+  public void visitLogicalSort(Sort node) {
     RelNode input = node.getInput();
     this.visit(input, 0, node);
     this.genRelnodeTimerStart(node);
@@ -599,7 +599,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node LogicalProject node to be visited
    */
-  public void visitLogicalProject(LogicalProject node) {
+  public void visitLogicalProject(Project node) {
     String projectOutVar = this.genDfVar();
     List<String> colNames = node.getInput().getRowType().getFieldNames();
     // Output column names selected.
@@ -692,7 +692,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           Pair<RexNode, String> named_r = node.getNamedProjects().get(i);
           RexNode r = named_r.getKey();
           outputColumns.add(named_r.getValue());
-          exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(r, nodeId)));
+          exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(r, node.getId())));
           sqlTypes.add(fields.get(i).getType());
 
           if (r instanceof RexOver) {
@@ -727,7 +727,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         // handle windowed Aggregations
         Dataframe dfInput = new Dataframe(projectInVar, node.getInput());
         List<Expr> windowAggInfo =
-            visitAggOverOp(windowAggList, colNames, nodeId, dfInput, false, new BodoCtx());
+            visitAggOverOp(windowAggList, colNames, node.getId(), dfInput, false, new BodoCtx());
         // check that these all have the same len
         assert windowAggInfo.size() == windowAggList.size()
             && windowAggInfo.size() == idx_list.size();
@@ -759,7 +759,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     varGenStack.push(projectOutVar);
   }
 
-  public void visitLogicalTableCreate(LogicalTableCreate node) {
+  public void visitLogicalTableCreate(PandasTableCreate node) {
     this.visit(node.getInput(0), 0, node);
     // Not going to do a relNodeTimer on this
 
@@ -793,7 +793,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node LogicalTableModify node to be visited
    */
-  public void visitLogicalTableModify(LogicalTableModify node) {
+  public void visitLogicalTableModify(TableModify node) {
     switch (node.getOperation()) {
       case INSERT:
         this.visitInsertInto(node);
@@ -817,7 +817,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node
    */
-  public void visitMergeInto(LogicalTableModify node) {
+  public void visitMergeInto(TableModify node) {
     assert node.getOperation() == TableModify.Operation.MERGE;
 
     RelNode input = node.getInput();
@@ -843,7 +843,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           .append("])\n");
       this.generatedCode.append(getBodoIndent()).append("return " + deltaDfVar);
     } else {
-      // Assert that we've encountered a LogicalTargetTableScan in the codegen, and
+      // Assert that we've encountered a PandasTargetTableScan in the codegen, and
       // set the appropriate variables
       assert targetTableDf != null;
       assert fileListAndSnapshotIdArgs != null;
@@ -898,7 +898,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node LogicalTableModify node to be visited
    */
-  public void visitInsertInto(LogicalTableModify node) {
+  public void visitInsertInto(TableModify node) {
     // Insert into consists of two steps:
     // 1. Create a projection to write
     // 2. Generate the "write" code.
@@ -981,7 +981,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * <p>Note: This operation DOES NOT support caching as it has side effects.
    */
-  public void visitDelete(LogicalTableModify node) {
+  public void visitDelete(TableModify node) {
     RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
     BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
     String outputVar = this.genDfVar();
@@ -1031,7 +1031,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node LogicalAggregate node to be visited
    */
-  public void visitLogicalAggregate(LogicalAggregate node) {
+  public void visitLogicalAggregate(Aggregate node) {
     final List<Integer> groupingVariables = node.getGroupSet().asList();
     final List<ImmutableBitSet> groups = node.getGroupSets();
 
@@ -1900,14 +1900,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitTableScan(TableScan node, boolean canLoadFromCache) {
 
     boolean supportedTableScan =
-        node instanceof LogicalTableScan
-            || node instanceof LogicalTargetTableScan
+        node instanceof PandasTableScan
+            || node instanceof PandasTargetTableScan
             || node instanceof SnowflakeTableScan;
     if (!supportedTableScan) {
       throw new BodoSQLCodegenException(
           "Internal error: unsupported tableScan node generated:" + node.toString());
     }
-    boolean isTargetTableScan = node instanceof LogicalTargetTableScan;
+    boolean isTargetTableScan = node instanceof PandasTargetTableScan;
 
     // Determine how many \n characters have appears. This indicates the line
     // in which to insert the IO for table scans.
@@ -1977,7 +1977,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       if (!isTargetTableScan) {
         // Add the table to cached values. We only support this for regular
         // tables and not the target table in merge into.
-        this.varCache.put(node.getId(), outVar);
+        this.varCache.put(nodeId, outVar);
       }
     }
 

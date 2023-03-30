@@ -22,6 +22,7 @@
  */
 package com.bodosql.calcite.prepare
 
+import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregateRule
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*
 import com.bodosql.calcite.application.bodo_sql_rules.*
@@ -35,6 +36,7 @@ import org.apache.calcite.plan.*
 import org.apache.calcite.plan.hep.HepPlanner
 import org.apache.calcite.plan.hep.HepProgramBuilder
 import org.apache.calcite.prepare.CalciteCatalogReader
+import org.apache.calcite.rel.RelHomogeneousShuttle
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.RelFactories
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
@@ -77,7 +79,8 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 .sqlToRelConverterConfig(
                     SqlToRelConverter.config()
                         .withExpand(false)
-                        .withInSubQueryThreshold(Integer.MAX_VALUE))
+                        .withInSubQueryThreshold(Integer.MAX_VALUE)
+                )
                 .parserConfig(
                     SqlParser.Config.DEFAULT
                         .withCaseSensitive(false)
@@ -85,14 +88,17 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                         .withQuotedCasing(Casing.UNCHANGED)
                         .withUnquotedCasing(Casing.UNCHANGED)
                         .withConformance(SqlConformanceEnum.LENIENT)
-                        .withParserFactory(SqlBodoParserImpl.FACTORY))
+                        .withParserFactory(SqlBodoParserImpl.FACTORY)
+                )
                 .convertletTable(
-                    StandardConvertletTable(StandardConvertletTableConfig(false, false)))
+                    StandardConvertletTable(StandardConvertletTableConfig(false, false))
+                )
                 .sqlValidatorConfig(
                     SqlValidator.Config.DEFAULT
                         .withNamedParamTableName(config.namedParamTableName)
                         .withDefaultNullCollation(NullCollation.LOW)
-                        .withCallRewrite(false))
+                        .withCallRewrite(false)
+                )
                 .programs(
                     // We create a new program each time we construct a new planner.
                     // This is because calcite 1.30.0's hep program is not threadsafe
@@ -102,6 +108,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                     // necessary there.
                     SubQueryRemoveProgram(),
                     OptimizerProgram(),
+                    PandasProgram(),
                 )
                 .build()
         }
@@ -175,7 +182,8 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
             // able to test the VolcanoPlanner.
             var lastOptimizedPlan = rel
             for (i in 1..25) {
-                val curOptimizedPlan = program.run(planner, lastOptimizedPlan, requiredOutputTraits, materializations, lattices)
+                val curOptimizedPlan =
+                    program.run(planner, lastOptimizedPlan, requiredOutputTraits, materializations, lattices)
                 if (curOptimizedPlan.deepEquals(lastOptimizedPlan)) {
                     return lastOptimizedPlan
                 }
@@ -424,6 +432,40 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
             rel.cluster.planner.executor = RexExecutorImpl(null)
             hepPlanner.root = rel
             return hepPlanner.findBestExp()
+        }
+    }
+
+    private class PandasProgram : Program by Programs.sequence(
+        Programs.ofRules(PandasRules.rules()),
+        MergeRelProgram(),
+    )
+
+    /**
+     * Merges relational nodes that have identical digests.
+     *
+     * The calcite planners will generally try to merge nodes that are identical using
+     * the digest, but it sometimes doesn't succeed. This program iterates through the
+     * plan and finds nodes with identical digests and replaces duplicates with each other.
+     *
+     * This is generally performed as a final step before code generation to allow
+     * for the caching code to work properly.
+     */
+    private class MergeRelProgram : Program {
+        override fun run(
+            planner: RelOptPlanner,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet,
+            materializations: MutableList<RelOptMaterialization>,
+            lattices: MutableList<RelOptLattice>
+        ): RelNode {
+            return rel.accept(object : RelHomogeneousShuttle() {
+                val mapDigestToRel: HashMap<String, RelNode> = hashMapOf()
+
+                override fun visit(other: RelNode): RelNode {
+                    val node = visitChildren(other)
+                    return mapDigestToRel.computeIfAbsent(node.digest) { node }
+                }
+            })
         }
     }
 }
