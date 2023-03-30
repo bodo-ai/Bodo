@@ -1540,3 +1540,99 @@ def test_snowflake_catalog_table_find_able_if_not_default(memory_leak_check):
         reset_index=True,
         only_seq=True,
     )
+
+
+def test_snowflake_catalog_create_table_like(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+        Test Snowflake CREATE TABLE LIKE.
+
+    NOTE: The current behavior of CREATE TABLE LIKE does not exactly match the behavior of Snowflake.
+    It doesn't copy permissions, and some column types are not copied exactly:
+
+
+    Expected:
+                   name          type    kind null? default  ... unique key check expression comment policy name
+    ...
+    7             L_TAX  NUMBER(12,2)  COLUMN     Y    None  ...          N  None       None    None        None
+    8      L_RETURNFLAG    VARCHAR(1)  COLUMN     Y    None  ...          N  None       None    None        None
+    9      L_LINESTATUS    VARCHAR(1)  COLUMN     Y    None  ...          N  None       None    None        None
+    10       L_SHIPDATE          DATE  COLUMN     Y    None  ...          N  None       None    None        None
+    ...
+
+    Actuall:
+                   name               type    kind null?  ... check expression comment policy name
+    7             L_TAX              FLOAT  COLUMN     Y  ...  None       None    None        None
+    8      L_RETURNFLAG  VARCHAR(16777216)  COLUMN     Y  ...  None       None    None        None
+    9      L_LINESTATUS  VARCHAR(16777216)  COLUMN     Y  ...  None       None    None        None
+    10       L_SHIPDATE   TIMESTAMP_NTZ(9)  COLUMN     Y  ...  None       None    None        None
+    ...
+
+    In order to properly implement this, we would likely need to push the query directly to Snowflake.
+    However, I'm going to leave this to a followup issue, since this will likely be easier post
+    Jonathan's refactor to the volcanno planner:
+    https://bodo.atlassian.net/browse/BE-4578
+
+    """
+
+    comm = MPI.COMM_WORLD
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn_str = get_snowflake_connection_string(db, schema)
+
+    output_table_name = None
+    if bodo.get_rank() == 0:
+        output_table_name = gen_unique_table_id("LINEITEM_EMPTY_COPY")
+    output_table_name = comm.bcast(output_table_name)
+
+    query = f"CREATE TABLE {output_table_name} LIKE LINEITEM1"
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    try_body_threw_error = False
+    try:
+
+        # Only test with only_1D=True so we only create the table once.
+        check_func(impl, (bc, query), only_1D=True, py_output=5)
+
+        output_df = None
+        expected_output = None
+        # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+        # to reduce the demand on Snowflake.
+        if bodo.get_rank() == 0:
+            expected_output = pd.read_sql(f"select * from LINEITEM1 LIMIT 0", conn_str)
+            output_df = pd.read_sql(f"select * from {output_table_name}", conn_str)
+            # Reset the columns to the original names for simpler testing.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+            expected_output.columns = [
+                colname.upper() for colname in expected_output.columns
+            ]
+
+        output_df = comm.bcast(output_df)
+        expected_output = comm.bcast(expected_output)
+        # Recreate the expected output by manually doing an append.
+        output_df.columns = output_df.columns.str.upper()
+        expected_output.columns = expected_output.columns.str.upper()
+        assert_tables_equal(output_df, expected_output)
+    except Exception as e:
+        try_body_threw_error = True
+        raise e
+    finally:
+        # Drop the table. In the case that the try body throws an error,
+        # we may not have succseeded in creating the table. Therefore, we
+        # need to try to drop the table, but we don't want to mask the
+        # original error, so we use a try/except block.
+        if try_body_threw_error:
+            try:
+                drop_snowflake_table(output_table_name, db, schema)
+            except:
+                pass
+        else:
+            drop_snowflake_table(output_table_name, db, schema)
