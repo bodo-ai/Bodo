@@ -126,7 +126,7 @@ def test_groupby_window_all_dead():
     """
 
     def impl(df):
-        res1 = df.groupby(["A"]).window("row_number", "B", True, "last")
+        res1 = df.groupby(["A"]).window("row_number", ("B",), (True,), ("last",))
         return len(res1)
 
     df = pd.DataFrame(

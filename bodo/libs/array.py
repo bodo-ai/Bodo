@@ -2961,6 +2961,8 @@ def groupby_and_aggregate(
     typingctx,
     table_t,
     n_keys_t,
+    cols_per_func_t,
+    n_funcs_t,
     input_has_index,
     ftypes,
     func_offsets,
@@ -2998,6 +3000,8 @@ def groupby_and_aggregate(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
@@ -3016,8 +3020,8 @@ def groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
-                lir.IntType(1),  # window_ascending
-                lir.IntType(1),  # window_na_position
+                lir.IntType(8).as_pointer(),  # window_ascending
+                lir.IntType(8).as_pointer(),  # window_na_position
                 lir.IntType(1),  # maintain_input_size
                 lir.IntType(64),  # n_shuffle_keys_t
                 lir.IntType(1),  # use_sql_rules_t
@@ -3035,6 +3039,8 @@ def groupby_and_aggregate(
     return (
         table_type(
             table_t,
+            types.int64,
+            types.voidptr,
             types.int64,
             types.boolean,
             types.voidptr,
@@ -3054,8 +3060,8 @@ def groupby_and_aggregate(
             types.voidptr,
             table_t,
             types.voidptr,
-            types.boolean,  # window_ascending
-            types.boolean,  # window_na_position
+            types.voidptr,  # window_ascending
+            types.voidptr,  # window_na_position
             types.boolean,  # maintain_input_size
             types.int64,  # n_shuffle_keys_t
             types.boolean,  # use_sql_rules_t

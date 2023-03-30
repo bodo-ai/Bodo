@@ -6,7 +6,6 @@ Creates specialized IR nodes for complex operations like Join.
 """
 import operator
 import warnings
-from collections import defaultdict
 from typing import List
 
 import numba
@@ -1779,7 +1778,7 @@ class DataFramePass:
 
         args = tuple([self.typemap[v.name] for v in rhs.args])
         kws = {k: self.typemap[v.name] for k, v in rhs.kws}
-        # gb_info maps (in_col, func_name) -> out_col
+        # gb_info maps (in_cols, func_name) -> out_col
         _, gb_info = bodo.hiframes.pd_groupby_ext.resolve_gb(
             grp_typ,
             args,
@@ -1789,10 +1788,8 @@ class DataFramePass:
             numba.core.registry.cpu_target.target_context,
         )
 
-        # Populate gb_info_in and gb_info_out (to store in Aggregate node)
-        # gb_info_in: maps in_col -> list of (func, out_col)
-        # gb_info_out: maps out_col -> (in_col, func)
-        gb_info_in = defaultdict(list)
+        # Populate gb_info_out (to store in Aggregate node)
+        # gb_info_out: maps out_col -> (in_cols, func)
         gb_info_out = {}
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
         if not isinstance(agg_func, list):
@@ -1804,8 +1801,8 @@ class DataFramePass:
 
         used_colnames = set(grp_typ.keys)
         i = 0
-        for (in_col, fname), out_col in gb_info.items():
-            in_col_ind = df_type.column_index[in_col] if in_col is not None else None
+        for (in_cols, fname), out_col in gb_info.items():
+            in_col_inds = tuple(df_type.column_index[in_col] for in_col in in_cols)
             out_col_ind = (
                 out_typ.column_index[out_col]
                 if not isinstance(out_typ, SeriesType)
@@ -1813,9 +1810,8 @@ class DataFramePass:
             )
             f = agg_funcs[i]
             assert fname == f.fname
-            gb_info_in[in_col_ind].append((f, out_col_ind))
-            gb_info_out[out_col_ind] = (in_col_ind, f)
-            used_colnames.add(in_col)
+            gb_info_out[out_col_ind] = (in_col_inds, f)
+            used_colnames.update(in_cols)
             i += 1
 
         # input_has_index=True means we have to pass Index of input dataframe to groupby
@@ -1830,22 +1826,21 @@ class DataFramePass:
         # Is the output df defined to maintain the same size as the input.
         maintain_input_size = False
 
-        for funcs in gb_info_in.values():
-            for func, _ in funcs:
-                if func.ftype in (list_cumulative | {"shift", "transform", "ngroup"}):
-                    input_has_index = True
-                    same_index = True
-                    return_key = False
-                    maintain_input_size = True
-                elif func.ftype in {"idxmin", "idxmax"}:
-                    input_has_index = True
-                elif func.ftype == "head":
-                    input_has_index = True
-                    same_index = True
-                    return_key = False
-                elif func.ftype == "window":
-                    return_key = False
-                    maintain_input_size = True
+        for _, func in gb_info_out.values():
+            if func.ftype in (list_cumulative | {"shift", "transform", "ngroup"}):
+                input_has_index = True
+                same_index = True
+                return_key = False
+                maintain_input_size = True
+            elif func.ftype in {"idxmin", "idxmax"}:
+                input_has_index = True
+            elif func.ftype == "head":
+                input_has_index = True
+                same_index = True
+                return_key = False
+            elif func.ftype == "window":
+                return_key = False
+                maintain_input_size = True
 
         # TODO: comment on when this case is possible and necessary
         if (
@@ -1913,7 +1908,6 @@ class DataFramePass:
             lhs.name,
             df_var.name,  # input dataframe var name
             grp_typ.keys,  # name of key columns, for printing only
-            gb_info_in,
             gb_info_out,
             out_vars,
             in_vars,

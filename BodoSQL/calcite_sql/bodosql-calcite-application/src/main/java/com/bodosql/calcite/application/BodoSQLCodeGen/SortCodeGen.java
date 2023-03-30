@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
+import com.bodosql.calcite.ir.*;
 import java.util.List;
 import org.apache.calcite.rel.RelFieldCollation;
 
@@ -48,8 +49,10 @@ public class SortCodeGen {
       for (RelFieldCollation order : sortOrders) {
         int index = order.getFieldIndex();
         sortString.append(makeQuoted(colNames.get(index))).append(", ");
-        orderString.append(getAscendingBoolString(order.getDirection())).append(", ");
-        naPositionString.append(getNAPositionString(order.nullDirection)).append(", ");
+        orderString.append(getAscendingExpr(order.getDirection()).emit()).append(", ");
+        naPositionString
+            .append(getNAPositionStringLiteral(order.nullDirection).emit())
+            .append(", ");
       }
       orderString.append("]");
       naPositionString.append("]");
@@ -86,12 +89,12 @@ public class SortCodeGen {
    * @param direction whether Order by is ascending or descending
    * @return true if ascending order false otherwise.
    */
-  public static String getAscendingBoolString(RelFieldCollation.Direction direction) {
-    String result = "False";
+  public static Expr.BooleanLiteral getAscendingExpr(RelFieldCollation.Direction direction) {
+    boolean val = false;
     if (direction == RelFieldCollation.Direction.ASCENDING) {
-      result = "True";
+      val = true;
     }
-    return result;
+    return new Expr.BooleanLiteral(val);
   }
 
   /**
@@ -100,11 +103,12 @@ public class SortCodeGen {
    * @param direction whether NA position is first or last
    * @return String "first" if first and "last" if last.
    */
-  public static String getNAPositionString(RelFieldCollation.NullDirection direction) {
-    String result = makeQuoted("last");
+  public static Expr.StringLiteral getNAPositionStringLiteral(
+      RelFieldCollation.NullDirection direction) {
+    String result = "last";
     if (direction == RelFieldCollation.NullDirection.FIRST) {
-      result = makeQuoted("first");
+      result = "first";
     }
-    return result;
+    return new Expr.StringLiteral(result);
   }
 }
