@@ -88,6 +88,11 @@ def generate_and_write_library():
             generate_standard_python_fn_call("pd.to_datetime"),
             1,
         ),
+        (
+            "scalar_conv_pd_to_date",
+            generate_standard_python_fn_call("bodosql.libs.sql_operators.pd_to_date"),
+            1,
+        ),
     ]
 
     library_fn_strings = []

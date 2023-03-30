@@ -147,6 +147,7 @@ public class LiteralCodeGen {
             codeBuilder.append(node.getValue().toString());
             break;
           case DATE:
+            // TODO:[BE-4593]Stop calcite from converting DATE literal
             {
               GregorianCalendar calendar = (GregorianCalendar) node.getValue();
               int year = calendar.get(Calendar.YEAR);
