@@ -146,21 +146,23 @@ void nunique_computation(array_info* arr, array_info* out_arr,
  * or equivalent). The output size is always the same size as the original
  * input
  *
- * @param[in] orderby_arr The array that is being "sorted" to determine
+ * @param[in] orderby_arrs The arrays that is being "sorted" to determine
  * the groups. In some situations it may be possible to do a partial sort
  * or avoid sorting.
  * @param[in] window_func The name of the window function being computed.
  * Currently we only support row_number.
  * @param[out] out_arr The output array being population.
  * @param[in] grp_info Struct containing information about the groups.
- * @param[in] asc Should the array be sorted in ascending order?
- * @param[in] na_pos Should NA's be placed at the end of the array?
+ * @param[in] asc Should the arrays be sorted in ascending order?
+ * @param[in] na_pos Should NA's be placed at the end of the arrays?
  * @param[in] is_parallel Is the data distributed? This is used for tracing
  * @param[in] use_sql_rules Do we use SQL or Pandas Null rules?
  */
-void window_computation(array_info* orderby_arr, int64_t window_func,
-                        array_info* out_arr, grouping_info const& grp_info,
-                        bool asc, bool na_pos, bool is_parallel,
+void window_computation(std::vector<array_info*>& orderby_arrs,
+                        int64_t window_func, array_info* out_arr,
+                        grouping_info const& grp_info,
+                        std::vector<bool>& asc_vect,
+                        std::vector<bool>& na_pos_vect, bool is_parallel,
                         bool use_sql_rules);
 
 #endif  // _GROUPBY_UPDATE_H_INCLUDED

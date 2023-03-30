@@ -541,8 +541,8 @@ TransformColSet::TransformColSet(array_info* in_col, int ftype, int _func_num,
     : BasicColSet(in_col, ftype, false, use_sql_rules),
       transform_func(_func_num) {
     transform_op_col =
-        makeColSet(in_col, nullptr, transform_func, do_combine, false, 0,
-                   transform_func, 0, is_parallel, false, false, nullptr,
+        makeColSet({in_col}, nullptr, transform_func, do_combine, false, 0,
+                   transform_func, 0, is_parallel, {false}, {false}, nullptr,
                    nullptr, 0, nullptr, use_sql_rules);
 }
 
@@ -606,9 +606,13 @@ void HeadColSet::set_head_row_list(std::vector<int64_t> row_list) {
     head_row_list = row_list;
 }
 
-WindowColSet::WindowColSet(array_info* in_col, int64_t _window_func, bool _asc,
-                           bool _na_pos, bool _is_parallel, bool use_sql_rules)
-    : BasicColSet(in_col, Bodo_FTypes::window, false, use_sql_rules),
+WindowColSet::WindowColSet(std::vector<array_info*>& in_cols,
+                           int64_t _window_func, std::vector<bool>& _asc,
+                           std::vector<bool>& _na_pos, bool _is_parallel,
+                           bool use_sql_rules)
+    :  // Note the inputCol in BasicColSet is not used by WindowColSet
+      BasicColSet(nullptr, Bodo_FTypes::window, false, use_sql_rules),
+      input_cols(in_cols),
       window_func(_window_func),
       asc(_asc),
       na_pos(_na_pos),
@@ -618,23 +622,26 @@ WindowColSet::~WindowColSet() {}
 
 void WindowColSet::alloc_update_columns(size_t num_groups,
                                         std::vector<array_info*>& out_cols) {
-    bodo_array_type::arr_type_enum arr_type = this->in_col->arr_type;
-    Bodo_CTypes::CTypeEnum dtype = this->in_col->dtype;
-    int64_t num_categories = this->in_col->num_categories;
+    // arr_type and dtype are assigned dummy default values.
+    // This is simple to ensure they are initialized but should
+    // always be modified by get_groupby_output_dtype.
+    bodo_array_type::arr_type_enum arr_type =
+        bodo_array_type::NULLABLE_INT_BOOL;
+    Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT64;
     // calling this modifies arr_type and dtype
     // Output dtype is based on the window function.
-    get_groupby_output_dtype(window_func, arr_type, dtype);
-    // NOTE: output size of window is the same as input size
+    get_groupby_output_dtype(this->window_func, arr_type, dtype);
+    // NOTE: output size of ngroup is the same as input size
     //       (NOT the number of groups)
-    array_info* c = alloc_array(this->in_col->length, 1, 1, arr_type, dtype, 0,
-                                num_categories);
+    array_info* c = alloc_array(this->input_cols[0]->length, -1, -1, arr_type,
+                                dtype, 0, -1);
     aggfunc_output_initialize(c, window_func, use_sql_rules);
     out_cols.push_back(c);
     this->update_cols.push_back(c);
 }
 
 void WindowColSet::update(const std::vector<grouping_info>& grp_infos) {
-    window_computation(this->in_col, window_func, this->update_cols[0],
+    window_computation(this->input_cols, window_func, this->update_cols[0],
                        grp_infos[0], asc, na_pos, is_parallel, use_sql_rules);
 }
 
@@ -664,68 +671,76 @@ void NgroupColSet::update(const std::vector<grouping_info>& grp_infos) {
                        is_parallel);
 }
 
-std::shared_ptr<BasicColSet> makeColSet(
-    array_info* in_col, array_info* index_col, int ftype, bool do_combine,
-    bool skipna, int64_t periods, int64_t transform_func, int n_udf,
-    bool is_parallel, bool window_ascending, bool window_na_position,
-    int* udf_n_redvars, table_info* udf_table, int udf_table_idx,
-    table_info* nunique_table, bool use_sql_rules) {
+std::unique_ptr<BasicColSet> makeColSet(
+    std::vector<array_info*> in_cols, array_info* index_col, int ftype,
+    bool do_combine, bool skipna, int64_t periods, int64_t transform_func,
+    int n_udf, bool is_parallel, std::vector<bool> window_ascending,
+    std::vector<bool> window_na_position, int* udf_n_redvars,
+    table_info* udf_table, int udf_table_idx, table_info* nunique_table,
+    bool use_sql_rules) {
     BasicColSet* colset;
+    if (ftype != Bodo_FTypes::window && in_cols.size() != 1) {
+        throw std::runtime_error(
+            "Only window functions can have multiple input columns");
+    }
     switch (ftype) {
         case Bodo_FTypes::udf:
-            colset = new UdfColSet(in_col, do_combine, udf_table, udf_table_idx,
-                                   udf_n_redvars[n_udf], use_sql_rules);
+            colset =
+                new UdfColSet(in_cols[0], do_combine, udf_table, udf_table_idx,
+                              udf_n_redvars[n_udf], use_sql_rules);
             break;
         case Bodo_FTypes::gen_udf:
-            colset = new GeneralUdfColSet(in_col, udf_table, udf_table_idx,
+            colset = new GeneralUdfColSet(in_cols[0], udf_table, udf_table_idx,
                                           use_sql_rules);
             break;
         case Bodo_FTypes::median:
-            colset = new MedianColSet(in_col, skipna, use_sql_rules);
+            colset = new MedianColSet(in_cols[0], skipna, use_sql_rules);
             break;
         case Bodo_FTypes::nunique:
-            colset = new NUniqueColSet(in_col, skipna, nunique_table,
+            colset = new NUniqueColSet(in_cols[0], skipna, nunique_table,
                                        do_combine, is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::cumsum:
         case Bodo_FTypes::cummin:
         case Bodo_FTypes::cummax:
         case Bodo_FTypes::cumprod:
-            colset = new CumOpColSet(in_col, ftype, skipna, use_sql_rules);
+            colset = new CumOpColSet(in_cols[0], ftype, skipna, use_sql_rules);
             break;
         case Bodo_FTypes::mean:
-            colset = new MeanColSet(in_col, do_combine, use_sql_rules);
+            colset = new MeanColSet(in_cols[0], do_combine, use_sql_rules);
             break;
         case Bodo_FTypes::var:
         case Bodo_FTypes::std:
-            colset = new VarStdColSet(in_col, ftype, do_combine, use_sql_rules);
+            colset =
+                new VarStdColSet(in_cols[0], ftype, do_combine, use_sql_rules);
             break;
         case Bodo_FTypes::idxmin:
         case Bodo_FTypes::idxmax:
-            colset = new IdxMinMaxColSet(in_col, index_col, ftype, do_combine,
-                                         use_sql_rules);
+            colset = new IdxMinMaxColSet(in_cols[0], index_col, ftype,
+                                         do_combine, use_sql_rules);
             break;
         case Bodo_FTypes::shift:
-            colset = new ShiftColSet(in_col, ftype, periods, use_sql_rules);
+            colset = new ShiftColSet(in_cols[0], ftype, periods, use_sql_rules);
             break;
         case Bodo_FTypes::transform:
             colset =
-                new TransformColSet(in_col, ftype, transform_func, do_combine,
-                                    is_parallel, use_sql_rules);
+                new TransformColSet(in_cols[0], ftype, transform_func,
+                                    do_combine, is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::head:
-            colset = new HeadColSet(in_col, ftype, use_sql_rules);
+            colset = new HeadColSet(in_cols[0], ftype, use_sql_rules);
             break;
         case Bodo_FTypes::ngroup:
-            colset = new NgroupColSet(in_col, is_parallel, use_sql_rules);
+            colset = new NgroupColSet(in_cols[0], is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::window:
-            colset = new WindowColSet(in_col, transform_func, window_ascending,
+            colset = new WindowColSet(in_cols, transform_func, window_ascending,
                                       window_na_position, is_parallel,
                                       use_sql_rules);
             break;
         default:
-            colset = new BasicColSet(in_col, ftype, do_combine, use_sql_rules);
+            colset =
+                new BasicColSet(in_cols[0], ftype, do_combine, use_sql_rules);
     }
-    return std::shared_ptr<BasicColSet>(colset);
+    return std::unique_ptr<BasicColSet>(colset);
 }

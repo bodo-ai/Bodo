@@ -871,9 +871,11 @@ void nunique_computation(array_info* arr, array_info* out_arr,
 
 // WINDOW
 
-void window_computation(array_info* orderby_arr, int64_t window_func,
-                        array_info* out_arr, grouping_info const& grp_info,
-                        bool asc, bool na_pos, bool is_parallel,
+void window_computation(std::vector<array_info*>& orderby_arrs,
+                        int64_t window_func, array_info* out_arr,
+                        grouping_info const& grp_info,
+                        std::vector<bool>& asc_vect,
+                        std::vector<bool>& na_pos_vect, bool is_parallel,
                         bool use_sql_rules) {
     switch (window_func) {
         case Bodo_FTypes::row_number: {
@@ -888,10 +890,12 @@ void window_computation(array_info* orderby_arr, int64_t window_func,
             // Create a new table. We want to sort the table first by
             // the groups and second by the orderby_arr.
             table_info* sort_table = new table_info();
-            // sort_values_table_local steals a reference
-            incref_array(orderby_arr);
             sort_table->columns.push_back(group_arr);
-            sort_table->columns.push_back(orderby_arr);
+            for (array_info* orderby_arr : orderby_arrs) {
+                // sort_values_table_local steals a reference
+                incref_array(orderby_arr);
+                sort_table->columns.push_back(orderby_arr);
+            }
             // Append an index column so we can find the original
             // index in the out array.
             array_info* idx_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
@@ -899,8 +903,16 @@ void window_computation(array_info* orderby_arr, int64_t window_func,
                 getv<int64_t>(idx_arr, i) = i;
             }
             sort_table->columns.push_back(idx_arr);
-            int64_t vect_ascending[2] = {asc, asc};
-            int64_t na_position[2] = {na_pos, na_pos};
+            int64_t n_keys = orderby_arrs.size() + 1;
+            int64_t vect_ascending[n_keys];
+            int64_t na_position[n_keys];
+            // Initialize the group ordering
+            vect_ascending[0] = asc_vect[0];
+            na_position[0] = na_pos_vect[0];
+            for (int64_t i = 1; i < n_keys; i++) {
+                vect_ascending[i] = asc_vect[i - 1];
+                na_position[i] = na_pos_vect[i - 1];
+            }
 
             // Sort the table
             // XXX: We don't need the entire chunk of data sorted,
@@ -909,10 +921,10 @@ void window_computation(array_info* orderby_arr, int64_t window_func,
             // we may be want to explore if we can use hashing
             // instead to avoid sort overhead.
             table_info* iter_table = sort_values_table_local(
-                sort_table, 2, vect_ascending, na_position, nullptr,
+                sort_table, n_keys, vect_ascending, na_position, nullptr,
                 is_parallel /* This is just used for tracing */);
             array_info* sorted_groups = iter_table->columns[0];
-            array_info* sorted_idx = iter_table->columns[2];
+            array_info* sorted_idx = iter_table->columns[n_keys];
             // sort_values_table_local steals a reference so
             // we don't need to decref
             delete sort_table;
@@ -943,6 +955,10 @@ void window_computation(array_info* orderby_arr, int64_t window_func,
             // initialized all other locations to false.
             int64_t ftype;
             bodo_array_type::arr_type_enum idx_arr_type;
+            // We currently only support 1 input column.
+            array_info* orderby_arr = orderby_arrs[0];
+            bool asc = asc_vect[0];
+            bool na_pos = na_pos_vect[0];
             if (asc) {
                 // The first value of an array in ascending order is the min.
                 if (na_pos) {

@@ -449,7 +449,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
             window_func not in bodo.ir.aggregate.supported_window_funcs
         ):  # pragma: no cover
             raise BodoError(f"unsupported window function {window_func}")
-        # Note: Orderby column is in the gb_info
+        # Note: Orderby columns are in the gb_info
         ascending_var = get_call_expr_arg(func_name, rhs.args, kws, 2, "ascending", "")
         if ascending_var == "":  # pragma: no cover
             raise BodoError("window function requires an ascending argument")
@@ -467,7 +467,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_post_shuffle = 1
         func.window_func = supported_agg_funcs.index(window_func)
         func.ascending = ascending
-        func.na_position_b = na_position == "last"
+        func.na_position_b = [na_pos == "last" for na_pos in na_position]
         return func
 
     # agg case
@@ -632,7 +632,6 @@ class Aggregate(ir.Stmt):
         df_out,
         df_in,
         key_names,
-        gb_info_in,
         gb_info_out,
         out_vars,
         in_vars,
@@ -657,29 +656,17 @@ class Aggregate(ir.Stmt):
             df_out (str): name of output variable, just for IR printing
             df_in (str): name of input variable, just for IR printing
             key_names (tuple(str)): names of key columns, just for IR printing
-            gb_info_in (dict[int, list(tuple(func, int))]):
-                in_col -> list of (func, out_col)
-                map input logical column numbers to the list of output functions and
-                logical columns numbers created from them.
-                Examples (["A", "B", "C"] input column names):
-                For `df.groupby("A").agg({"B": "min", "C": "max"})`
-                gb_info_in = {1: [(min_func, 0)], 2: [(max_func, 1)]}
-                For `df.groupby("A").agg(
-                   E=pd.NamedAgg(column="B", aggfunc=lambda A: A.sum()),
-                   F=pd.NamedAgg(column="B", aggfunc="min"),
-                )`
-                gb_info_in = {1: [(lambda_func, 0), (min_func, 1)]}
-            gb_info_out (dict[int, tuple(int, func)]): out_col -> (in_col, func)
+            gb_info_out (dict[int, tuple(tuple(int), func)]): out_col -> (tuple(in_col), func)
                 map each output logical column number to the input logical number and
                 function that creates it.
                 Examples (["A", "B", "C"] input column names):
                 For `df.groupby("A").agg({"B": "min", "C": "max"})`
-                gb_info_out = {0: (1, min_func), 1: (2, max_func)}
+                gb_info_out = {0: ((1,), min_func), 1: ((2,), max_func)}
                 For `df.groupby("A").agg(
                    E=pd.NamedAgg(column="B", aggfunc=lambda A: A.sum()),
                    F=pd.NamedAgg(column="B", aggfunc="min"),
                 )`
-                gb_info_out = {0: (1, lambda_func), 1: (1, min_func)}
+                gb_info_out = {0: ((1,), lambda_func), 1: ((1,), min_func)}
             out_vars (list(ir.Var)): list of output variables to assign
             in_vars (list(ir.Var)): list of variables with input data
             in_key_inds (list(int)): logical column number of keys in input (i.e. table
@@ -709,8 +696,6 @@ class Aggregate(ir.Stmt):
         self.df_out = df_out
         self.df_in = df_in
         self.key_names = key_names
-        # TODO(ehsan): remove gb_info_in and use gb_info_out in dead code elimination
-        self.gb_info_in = gb_info_in
         self.gb_info_out = gb_info_out
         self.out_vars = out_vars
         self.in_vars = in_vars
@@ -813,32 +798,27 @@ class Aggregate(ir.Stmt):
     def update_dead_col_info(self):
         """updates all internal data structures when there are more output dead columns
         added in dead_out_inds.
-        gb_info_out, gb_info_in, dead_in_inds need updated and dead input variables need
+        gb_info_out and dead_in_inds need updated and dead input variables need
         to be set to None.
         """
         # remove dead output columns from gb_info_out
         for col_no in self.dead_out_inds:
             self.gb_info_out.pop(col_no, None)
 
+        # Map live inputs
+        live_in_inds = set(self.in_key_inds)
         # Index column (which is last) is not passed if input_as_index=False
-        if not self.input_has_index:
+        if self.input_has_index:
+            live_in_inds.add(self.n_in_cols - 1)
+        else:
             self.dead_in_inds.add(self.n_in_cols - 1)
             self.dead_out_inds.add(self.n_out_cols - 1)
 
-        # remove dead outputs from gb_info_in, remove dead inputs (have no live output)
-        for in_col, outs in self.gb_info_in.copy().items():
-            new_outs = []
-            for (f, out_col) in outs:
-                if out_col not in self.dead_out_inds:
-                    new_outs.append((f, out_col))
-            if not new_outs:
-                # in_col can be None for size() function
-                # output columns can be keys too, e.g. df.groupby("A")["A"].sum()
-                if in_col is not None and in_col not in self.in_key_inds:
-                    self.dead_in_inds.add(in_col)
-                self.gb_info_in.pop(in_col)
-            else:
-                self.gb_info_in[in_col] = new_outs
+        # remove dead inputs (have no live output)
+        for in_cols, _ in self.gb_info_out.values():
+            live_in_inds.update(in_cols)
+        dead_in_inds = set(range(self.n_in_cols)) - live_in_inds
+        self.dead_in_inds.update(dead_in_inds)
 
         # update input variables
         if self.is_in_table_format:
@@ -1207,10 +1187,10 @@ def agg_distributed_run(
     in_col_typs = []
     funcs = []
     func_out_types = []
-    # See comment about use of gb_info_in vs gb_info_out in gen_top_level_agg_func
+    # See comment about use of gb_info_out in gen_top_level_agg_func
     # when laying out input columns and functions for C++
-    for out_col, (in_col, func) in agg_node.gb_info_out.items():
-        if in_col is not None:
+    for out_col, (in_cols, func) in agg_node.gb_info_out.items():
+        for in_col in in_cols:
             t = agg_node.in_col_types[in_col]
             in_col_typs.append(t)
         funcs.append(func)
@@ -1811,13 +1791,13 @@ def gen_top_level_agg_func(
 
     in_cpp_col_inds = []
     if agg_node.is_in_table_format:
-        in_cpp_col_inds = agg_node.in_key_inds + [
-            in_col for in_col, _ in agg_node.gb_info_out.values() if in_col is not None
-        ]
+        gb_info_in_cols = []
+        for in_cols, _ in agg_node.gb_info_out.values():
+            gb_info_in_cols.extend(in_cols)
+        in_cpp_col_inds = agg_node.in_key_inds + gb_info_in_cols
         if agg_node.input_has_index:
             # Index is always last input
             in_cpp_col_inds.append(agg_node.n_in_cols - 1)
-
         comma = "," if len(agg_node.in_vars) - 1 == 1 else ""
         other_vars = []
         for i in range(agg_node.n_in_table_arrays, agg_node.n_in_cols):
@@ -1829,11 +1809,10 @@ def gen_top_level_agg_func(
         func_text += f"    table = py_data_to_cpp_table({first_arg}, ({', '.join(other_vars)}{comma}), in_col_inds, {agg_node.n_in_table_arrays})\n"
     else:
         key_in_arrs = [f"arg{i}" for i in agg_node.in_key_inds]
-        data_in_arrs = [
-            f"arg{in_col}"
-            for in_col, _ in agg_node.gb_info_out.values()
-            if in_col is not None
-        ]
+        data_in_arrs = []
+        for in_cols, _ in agg_node.gb_info_out.values():
+            for in_col in in_cols:
+                data_in_arrs.append(f"arg{in_col}")
         all_in_arrs = key_in_arrs + data_in_arrs
         if agg_node.input_has_index:
             # Index is always last input
@@ -1854,6 +1833,8 @@ def gen_top_level_agg_func(
     func_offsets = []
     # map index of function i in allfuncs to the column in input table
     func_idx_to_in_col = []
+    # Map the number of columns used by each function
+    func_ncols = []
     # number of redvars for each udf function
     udf_ncols = []
     skipdropna = False
@@ -1861,12 +1842,21 @@ def gen_top_level_agg_func(
     head_n = -1
     num_cum_funcs = 0
     transform_func = 0
-    window_ascending = False
-    window_na_position = False
+    window_ascending = []
+    window_na_position = []
 
-    funcs = [func for _, func in agg_node.gb_info_out.values()]
+    funcs = []
+    input_cols_lst = []
+    for input_cols, func in agg_node.gb_info_out.values():
+        funcs.append(func)
+        input_cols_lst.append(input_cols)
+    f_offset = 0
     for f_idx, func in enumerate(funcs):
+        in_cols = input_cols_lst[f_idx]
+        num_in_cols = len(in_cols)
         func_offsets.append(len(allfuncs))
+        ascending = [False] * num_in_cols
+        na_position = [False] * num_in_cols
         if func.ftype in {"median", "nunique", "ngroup"}:
             # these operations require shuffle at the beginning, so a
             # local aggregation followed by combine is not necessary
@@ -1884,14 +1874,22 @@ def gen_top_level_agg_func(
         if func.ftype == "window":
             transform_func = func.window_func
             do_combine = False  # See median/nunique note ^
-            window_ascending = func.ascending
-            window_na_position = func.na_position_b
+            ascending = func.ascending
+            na_position = func.na_position_b
+
+        # Update the current window_ascending and window_na_position
+        window_ascending.extend(ascending)
+        window_na_position.extend(na_position)
 
         if func.ftype == "head":
             head_n = func.head_n
             do_combine = False  # This operation just retruns n rows. No combine needed.
         allfuncs.append(func)
-        func_idx_to_in_col.append(f_idx)
+        func_idx_to_in_col.append(f_offset)
+        # Update the column start location for each function + indicate
+        # how many columns are used by each function
+        f_offset += num_in_cols
+        func_ncols.append(num_in_cols)
         if func.ftype == "udf":
             udf_ncols.append(func.n_redvars)
         elif func.ftype == "gen_udf":
@@ -2021,7 +2019,23 @@ def gen_top_level_agg_func(
 
     # NOTE: adding extra zero to make sure the list is never empty to avoid Numba
     # typing issues
-    func_text += "    ftypes = np.array([{}, 0], dtype=np.int32)\n".format(
+    func_text += "    cols_per_func = np.array([{}], dtype=np.int8)\n".format(
+        ", ".join([str(i) for i in func_ncols] + ["0"])
+    )
+    # NOTE: adding extra False to make sure the list is never empty to avoid Numba
+    # typing issues
+    func_text += "    window_ascending = np.array([{}], dtype=np.bool_)\n".format(
+        ", ".join([str(i) for i in window_ascending] + ["False"])
+    )
+    # NOTE: adding extra False to make sure the list is never empty to avoid Numba
+    # typing issues
+    func_text += "    window_na_position = np.array([{}], dtype=np.bool_)\n".format(
+        ", ".join([str(i) for i in window_na_position] + ["False"])
+    )
+
+    # NOTE: adding extra zero to make sure the list is never empty to avoid Numba
+    # typing issues
+    func_text += "    ftypes = np.array([{}], dtype=np.int32)\n".format(
         ", ".join([str(supported_agg_funcs.index(f.ftype)) for f in allfuncs] + ["0"])
     )
     # TODO: pass these constant arrays as globals to make compilation faster
@@ -2040,13 +2054,13 @@ def gen_top_level_agg_func(
         agg_node._num_shuffle_keys if agg_node._num_shuffle_keys != -1 else n_keys
     )
     func_text += (
-        f"    out_table = groupby_and_aggregate(table, {n_keys}, "
-        f"{agg_node.input_has_index}, ftypes.ctypes, func_offsets.ctypes, "
+        f"    out_table = groupby_and_aggregate(table, {n_keys}, cols_per_func.ctypes, "
+        f"{len(allfuncs)}, {agg_node.input_has_index}, ftypes.ctypes, func_offsets.ctypes, "
         f"udf_ncols.ctypes, {parallel}, {skipdropna}, {shift_periods}, "
         f"{transform_func}, {head_n}, {agg_node.return_key}, {agg_node.same_index}, "
         f"{agg_node.dropna}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, "
-        f"cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes, {window_ascending}, "
-        f"{window_na_position}, {agg_node.maintain_input_size}, {n_shuffle_keys}, "
+        f"cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes, window_ascending.ctypes, "
+        f"window_na_position.ctypes, {agg_node.maintain_input_size}, {n_shuffle_keys}, "
         f"{agg_node._use_sql_rules})\n"
     )
 
@@ -2094,7 +2108,13 @@ def gen_top_level_agg_func(
     for i, t in enumerate(out_col_typs):
         if i not in agg_node.dead_out_inds and type_has_unknown_cats(t):
             if i in agg_node.gb_info_out:
-                in_col = agg_node.gb_info_out[i][0]
+                in_cols = agg_node.gb_info_out[i][0]
+                # Currently we only support functions that take exactly 1 input
+                # array and output categorical data
+                assert (
+                    len(in_cols) == 1
+                ), "Internal error: Categorical output requires a groupby function with 1 input column"
+                in_col = in_cols[0]
             else:
                 assert (
                     agg_node.return_key
@@ -2259,13 +2279,11 @@ def agg_table_column_use(
     )
 
     # get used input data columns
-    in_used_cols = set(
-        agg_node.gb_info_out[i][0]
-        for i in out_used_cols
+    in_used_cols = set()
+    for i in out_used_cols:
         # output keys (as_index=False) are not part of gb_info_out
-        # size() has None as input (just uses keys)
-        if i in agg_node.gb_info_out and agg_node.gb_info_out[i][0] is not None
-    )
+        if i in agg_node.gb_info_out:
+            in_used_cols.update(agg_node.gb_info_out[i][0])
     in_used_cols |= table_in_key_set | orig_used_cols
     in_use_all = len(set(range(agg_node.n_in_table_arrays)) - in_used_cols) == 0
 
@@ -2282,7 +2300,7 @@ ir_extension_table_column_use[Aggregate] = agg_table_column_use
 def agg_remove_dead_column(agg_node, column_live_map, equiv_vars, typemap):
     """Remove dead table columns from Aggregate node (if in table format).
     Updates all of Aggregate node's internal data structures (dead_out_inds,
-    dead_in_inds, gb_info_out, gb_info_in).
+    dead_in_inds, gb_info_out).
 
     Args:
         agg_node (Aggregate): Aggregate node to update

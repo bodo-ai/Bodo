@@ -72,7 +72,9 @@ struct grouping_info {
  *
  * @param in_table: input table
  * @param num_keys: number of key columns in the table
- * @param input_has_index:
+ * @param ncols_per_func: number of columns used by each function
+ * @param num_funcs: number of functions to apply
+ * @param input_has_index: whether the input table has an index column
  * @param ftypes: functions to apply (see Bodo_FTypes::FTypeEnum)
  * @param func_offset: the functions to apply to input col i are in ftypes, in
  * range func_offsets[i] to func_offsets[i+1]
@@ -101,8 +103,8 @@ struct grouping_info {
  * redvars columns for udfs
  * @param n_out_rows: the total number of rows in output table, necessary if
  * all the output columns are dead and only number of rows is used.
- * @param window_ascending: For groupby.window is the orderby column asc?
- * @param window_na_position: For groupby.window is the orderby column na last?
+ * @param window_ascending: For groupby.window is each orderby column asc?
+ * @param window_na_position: For groupby.window is each orderby column na last?
  * @param maintain_input_size: Will the input df and output df have the same
  * length?
  * @param n_shuffle_keys: the number of keys to use when shuffling data across
@@ -111,13 +113,14 @@ struct grouping_info {
  * @param use_sql_rules: whether to use SQL rules for group by or Pandas.
  */
 table_info* groupby_and_aggregate(
-    table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
-    int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
-    int64_t periods, int64_t transform_func, int64_t head_n, bool return_key,
-    bool return_index, bool key_dropna, void* update_cb, void* combine_cb,
-    void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table,
-    int64_t* n_out_rows, bool window_ascending, bool window_na_position,
-    bool maintain_input_size, int64_t n_shuffle_keys, bool use_sql_rules);
+    table_info* in_table, int64_t num_keys, int8_t* ncols_per_func,
+    int64_t num_funcs, bool input_has_index, int* ftypes, int* func_offsets,
+    int* udf_nredvars, bool is_parallel, bool skipdropna, int64_t periods,
+    int64_t transform_func, int64_t head_n, bool return_key, bool return_index,
+    bool key_dropna, void* update_cb, void* combine_cb, void* eval_cb,
+    void* general_udfs_cb, table_info* udf_dummy_table, int64_t* n_out_rows,
+    bool* window_ascending, bool* window_na_position, bool maintain_input_size,
+    int64_t n_shuffle_keys, bool use_sql_rules);
 
 /**
  * @brief Get total number of groups for input key arrays

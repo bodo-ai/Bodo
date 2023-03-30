@@ -16,10 +16,11 @@ const int max_global_number_groups_exscan = 1000;
  * This computation is done whether a strategy is possible. But it also
    makes heuristic computation in order to reach a decision.
  *
- * @param in_table input table
+ * @param[in] in_table input table
  * @param num_keys number of keys
- * @param ftypes the type of operations used by groupby
- * @param func_offsets The offsets for the columns used in the functions.
+ * @param[in] ncols_per_func the number of columns used by each function
+ * @param num_funcs number of functions
+ * @param[in] ftypes the type of operations used by groupby
  * @param input_has_index whether input table contains index col in last
    position
  * @return strategy to use :
@@ -28,8 +29,8 @@ const int max_global_number_groups_exscan = 1000;
  * ---2 will use the MPI_Exscan strategy with determination of the columns
  */
 int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
-                               int* ftypes, int* func_offsets,
-                               bool input_has_index);
+                               int8_t* ncols_per_func, int64_t num_funcs,
+                               int* ftypes, bool input_has_index);
 
 /**
  * @brief This function is used to compute the groupby using the MPI_Exscan
