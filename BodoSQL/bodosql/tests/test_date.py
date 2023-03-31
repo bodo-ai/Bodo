@@ -407,3 +407,63 @@ def test_date_next_day(func_name, expected, memory_leak_check):
     expected_output = pd.DataFrame({"A": [expected]})
     with bodosql_use_date_type():
         check_query(query, ctx, None, expected_output=expected_output)
+
+
+def test_max_date(date_df, memory_leak_check):
+    """
+    Test that max is working for date type columns
+    """
+    query = "SELECT MAX(A) FROM table1"
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            date_df,
+            None,
+            check_names=False,
+            expected_output=pd.DataFrame({"A": [datetime.date(2024, 1, 1)]}),
+            is_out_distributed=False,
+        )
+
+
+def test_min_date(date_df, memory_leak_check):
+    """
+    Test that min is working for date type columns
+    """
+    query = "SELECT MIN(B) FROM table1"
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            date_df,
+            None,
+            check_names=False,
+            expected_output=pd.DataFrame({"B": [datetime.date(1700, 2, 4)]}),
+            is_out_distributed=False,
+        )
+
+
+def test_max_date_group_by(date_df, spark_info, memory_leak_check):
+    """
+    Test that max with group by is working for date type columns
+    """
+    query = "SELECT MAX(A) FROM table1 GROUP BY C"
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            date_df,
+            spark_info,
+            check_names=False,
+        )
+
+
+def test_min_date_group_by(date_df, spark_info, memory_leak_check):
+    """
+    Test that min with group by is working for date type columns
+    """
+    query = "SELECT MIN(B) FROM table1 GROUP BY C"
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            date_df,
+            spark_info,
+            check_names=False,
+        )
