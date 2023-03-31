@@ -136,28 +136,27 @@ void copy_values(array_info* update_col, array_info* tmp_col,
  * */
 void copy_dict_string_values_transform(array_info* update_col,
                                        array_info* tmp_col,
-                                       const grouping_info& grp_info) {
-    int64_t length = update_col->length;
-    array_info* indices_arr =
-        alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
-    copy_values<int32_t>(indices_arr, tmp_col->child_arrays[1], grp_info);
+                                       const grouping_info& grp_info,
+                                       bool is_parallel) {
+    copy_values<int32_t>(update_col->child_arrays[1], tmp_col->child_arrays[1],
+                         grp_info);
+    decref_array(update_col->child_arrays[0]);
     incref_array(tmp_col->child_arrays[0]);  // increase reference because we
                                              // reuse the underlying data array.
-    array_info* out_col =
-        create_dict_string_array(tmp_col->child_arrays[0], indices_arr);
-    *update_col = std::move(*out_col);
+    delete update_col->child_arrays[0];
+    update_col->child_arrays[0] = tmp_col->child_arrays[0];
     // reverse_shuffle_table needs the dictionary to be global
     // copy_dict_string_values_transform is only called on distributed data
     // Does this implementation require the dictionary is sorted.
     // Similarly does it require that there are no duplicates.
-    make_dictionary_global_and_unique(update_col, true);
-    delete out_col;
+    make_dictionary_global_and_unique(update_col, is_parallel);
 }
 
 void copy_values_transform(array_info* update_col, array_info* tmp_col,
-                           const grouping_info& grp_info) {
+                           const grouping_info& grp_info, bool is_parallel) {
     if (tmp_col->arr_type == bodo_array_type::DICT) {
-        copy_dict_string_values_transform(update_col, tmp_col, grp_info);
+        copy_dict_string_values_transform(update_col, tmp_col, grp_info,
+                                          is_parallel);
     } else if (tmp_col->arr_type == bodo_array_type::STRING) {
         copy_string_values_transform(update_col, tmp_col, grp_info);
     } else {

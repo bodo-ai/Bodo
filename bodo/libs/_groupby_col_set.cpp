@@ -539,6 +539,7 @@ TransformColSet::TransformColSet(array_info* in_col, int ftype, int _func_num,
                                  bool do_combine, bool is_parallel,
                                  bool use_sql_rules)
     : BasicColSet(in_col, ftype, false, use_sql_rules),
+      is_parallel(is_parallel),
       transform_func(_func_num) {
     transform_op_col =
         makeColSet({in_col}, nullptr, transform_func, do_combine, false, 0,
@@ -580,8 +581,9 @@ void TransformColSet::eval(const grouping_info& grp_info) {
     // copy_values need to know type of the data it'll copy.
     // Hence we use switch case on the column dtype
     array_info* child_out_col = this->transform_op_col->getOutputColumn();
-    copy_values_transform(this->update_cols[0], child_out_col, grp_info);
-    delete_info_decref_array(child_out_col);
+    copy_values_transform(this->update_cols[0], child_out_col, grp_info,
+                          this->is_parallel);
+    decref_array(child_out_col);
 }
 
 HeadColSet::HeadColSet(array_info* in_col, int ftype, bool use_sql_rules)

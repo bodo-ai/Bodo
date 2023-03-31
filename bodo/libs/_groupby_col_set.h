@@ -375,6 +375,7 @@ class TransformColSet : public BasicColSet {
     virtual void eval(const grouping_info& grp_info);
 
    private:
+    bool is_parallel;
     int64_t transform_func;
     std::unique_ptr<BasicColSet> transform_op_col;
 };

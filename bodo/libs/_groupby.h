@@ -146,6 +146,6 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
  *
  */
 void copy_values_transform(array_info* update_col, array_info* tmp_col,
-                           const grouping_info& grp_info);
+                           const grouping_info& grp_info, bool is_parallel);
 
 #endif  // _GROUPBY_H_INCLUDED
