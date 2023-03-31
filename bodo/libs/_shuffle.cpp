@@ -731,7 +731,7 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     dict_value_to_global_index.reserve(0);  // try to force dealloc of hashmap
     hashes_local_dict.reset();
     hashes_global_dict.reset();
-    delete_info_decref_array(local_dictionary);
+    decref_array(local_dictionary);
 
     // --------------
     // remap old (local) indices to global ones
