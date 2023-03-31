@@ -669,6 +669,16 @@ def date_df():
                         datetime.date(1700, 2, 4),
                     ]
                 ),
+                "C": pd.Series(
+                    [
+                        datetime.date(2012, 4, 22),
+                        datetime.date(2043, 11, 3),
+                        datetime.date(1998, 9, 11),
+                        datetime.date(2100, 4, 19),
+                        datetime.date(1832, 1, 7),
+                    ]
+                    * 2
+                ),
             }
         )
     }
