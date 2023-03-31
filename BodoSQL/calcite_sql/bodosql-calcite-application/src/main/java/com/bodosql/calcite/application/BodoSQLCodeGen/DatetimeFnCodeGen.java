@@ -14,7 +14,6 @@ public class DatetimeFnCodeGen {
   static List<String> fnList =
       Arrays.asList(
           "DAYNAME",
-          "LAST_DAY",
           "MONTHNAME",
           "MONTH_NAME",
           "NEXT_DAY",
@@ -243,6 +242,18 @@ public class DatetimeFnCodeGen {
   }
 
   /**
+   * Helper function that handles the codegen for snowflake SQL's LAST_DAY
+   *
+   * @param arg0 A date or timestamp expression.
+   * @param unit The time unit for calculating the last day.
+   * @return the rexNodeVisitorInfo for the function call
+   */
+  public static Expr generateLastDayCode(String arg0, String unit) {
+    String outputExpression = "bodo.libs.bodosql_array_kernels.last_day_" + unit + "(" + arg0 + ")";
+    return new Expr.Raw(outputExpression);
+  }
+
+  /**
    * Helper function that handles the codegen for DATE_FROM_PARTS, TIME_FROM_PARTS,
    * TIMESTAMP_FROM_PARTS and all of their variants/aliases
    *
@@ -307,6 +318,11 @@ public class DatetimeFnCodeGen {
 
     return new Expr.Raw(code.toString());
   }
+
+  public static ArrayList<String> TIME_PART_UNITS =
+      new ArrayList<String>(
+          Arrays.asList("hour", "minute", "second", "millisecond", "microsecond", "nanosecond")
+      );
 
   public enum DateTimeType {
     TIMESTAMP,
@@ -517,7 +533,7 @@ public class DatetimeFnCodeGen {
         break;
 
       default:
-        throw new BodoSQLCodegenException("Unsupported unit for" + fnName + ": " + inputTimeStr);
+        throw new BodoSQLCodegenException("Unsupported unit for " + fnName + ": " + inputTimeStr);
     }
     return unit;
   }

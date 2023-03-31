@@ -394,19 +394,20 @@ def int_to_days(arr):
     return impl
 
 
-@numba.generated_jit(nopython=True)
-def last_day(arr):
-    """Handles cases where LAST_DAY receives optional arguments and forwards
-    to the appropriate version of the real implementation"""
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.last_day_util", ["arr"], 0
-        )
+def last_day_year(date_or_time_expr):  # pragma: no cover
+    return
 
-    def impl(arr):  # pragma: no cover
-        return last_day_util(arr)
 
-    return impl
+def last_day_quarter(date_or_time_expr):  # pragma: no cover
+    return
+
+
+def last_day_month(date_or_time_expr):  # pragma: no cover
+    return
+
+
+def last_day_week(date_or_time_expr):  # pragma: no cover
+    return
 
 
 @numba.generated_jit(nopython=True)
@@ -915,6 +916,113 @@ def _install_add_interval_overload():
 
 
 _install_add_interval_overload()
+
+
+def last_day_year_util(arr):  # pragma: no cover
+    return
+
+
+def last_day_quarter_util(arr):  # pragma: no cover
+    return
+
+
+def last_day_month_util(arr):  # pragma: no cover
+    return
+
+
+def last_day_week_util(arr):  # pragma: no cover
+    return
+
+
+def create_last_day_func_overload(unit):  # pragma: no cover
+    def overload_func(date_or_time_expr):
+        """Handles cases where LAST_DAY receives optional arguments and forwards
+        to the appropriate version of the real implementation"""
+
+        if isinstance(date_or_time_expr, types.optional):  # pragma: no cover
+            return unopt_argument(
+                f"bodo.libs.bodosql_array_kernels.last_day_{unit}",
+                ["date_or_time_expr"],
+                0,
+            )
+
+        func_text = "def impl(date_or_time_expr):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.last_day_{unit}_util(date_or_time_expr)"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+
+        return loc_vars["impl"]
+
+    return overload_func
+
+
+def create_last_day_util_overload(unit):
+    def overload_last_day_util(date_or_time_expr):
+        verify_datetime_arg_allow_tz(
+            date_or_time_expr, "last_day_" + unit, "date_or_time_expr"
+        )
+        box_str = (
+            "bodo.utils.conversion.box_if_dt64"
+            if bodo.utils.utils.is_array_typ(date_or_time_expr, True)
+            else ""
+        )
+
+        arg_names = ["date_or_time_expr"]
+        arg_types = [date_or_time_expr]
+        propagate_null = [True]
+
+        scalar_text = f"arg0 = {box_str}(arg0)\n"
+        if unit == "year":
+            scalar_text += "res[i] = datetime.date(arg0.year, 12, 31)\n"
+        elif unit == "quarter":
+            # month 1-3 is the first quarter in a year,
+            # and the last month of the nth quarter is the (3*n)th month
+            scalar_text += "y = arg0.year\n"
+            scalar_text += "m = ((arg0.month - 1) // 3 + 1) * 3\n"
+            scalar_text += "d = bodo.hiframes.pd_offsets_ext.get_days_in_month(y, m)\n"
+            scalar_text += "res[i] = datetime.date(y, m, d)\n"
+        elif unit == "month":
+            scalar_text += "y = arg0.year\n"
+            scalar_text += "m = arg0.month\n"
+            scalar_text += "d = bodo.hiframes.pd_offsets_ext.get_days_in_month(y, m)\n"
+            scalar_text += "res[i] = datetime.date(y, m, d)\n"
+        else:  # week
+            if is_valid_date_arg(date_or_time_expr):
+                scalar_text += (
+                    "res[i] = arg0 + datetime.timedelta(days=(6-arg0.weekday()))\n"
+                )
+            else:  # timestamp need to be transformed to date first
+                scalar_text += "res[i] = arg0.date() + datetime.timedelta(days=(6-arg0.weekday()))\n"
+
+        out_dtype = (
+            DatetimeDateArrayType()
+            if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
+            else types.Array(bodo.datetime64ns, 1, "C")
+        )
+
+        return gen_vectorized(
+            arg_names, arg_types, propagate_null, scalar_text, out_dtype
+        )
+
+    return overload_last_day_util
+
+
+def _install_last_day_overload():
+    """Creates and installs the overloads for last_day functions"""
+    funcs_utils_names = [
+        ("year", last_day_year, last_day_year_util),
+        ("quarter", last_day_quarter, last_day_quarter_util),
+        ("month", last_day_month, last_day_month_util),
+        ("week", last_day_week, last_day_week_util),
+    ]
+    for unit, func, util in funcs_utils_names:
+        func_overload_impl = create_last_day_func_overload(unit)
+        overload(func)(func_overload_impl)
+        util_overload_impl = create_last_day_util_overload(unit)
+        overload(util)(util_overload_impl)
+
+
+_install_last_day_overload()
 
 
 def dayofmonth_util(arr):  # pragma: no cover
@@ -1770,54 +1878,6 @@ def int_to_days_util(arr):
     scalar_text = f"res[i] = {unbox_str}(pd.Timedelta(days=arg0))"
 
     out_dtype = np.dtype("timedelta64[ns]")
-
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
-
-
-@numba.generated_jit(nopython=True)
-def last_day_util(arr):
-    """A dedicated kernel for the SQL function LAST_DAY which takes in a datetime
-    and returns the last day from that month
-
-
-    Args:
-        arr (datetime array/series/scalar): the timestamp whose last day is being
-        searched for
-
-    Returns:
-        datetime series/scalar: the last day(s) from the month(s)
-    """
-
-    verify_datetime_arg_allow_tz(arr, "LAST_DAY", "arr")
-    time_zone = get_tz_if_exists(arr)
-
-    # When returning a scalar we return a pd.Timestamp type.
-    box_str = (
-        "bodo.utils.conversion.box_if_dt64"
-        if bodo.utils.utils.is_array_typ(arr, True)
-        else ""
-    )
-    unbox_str = (
-        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-        if bodo.utils.utils.is_array_typ(arr, True)
-        else ""
-    )
-
-    arg_names = ["arr"]
-    arg_types = [arr]
-    propagate_null = [True]
-
-    if time_zone is None:
-        scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) + pd.tseries.offsets.MonthEnd(n=0, normalize=True))"
-        out_dtype = np.dtype("datetime64[ns]")
-    else:
-        scalar_text = "y = arg0.year\n"
-        scalar_text += "m = arg0.month\n"
-        scalar_text += "d = bodo.hiframes.pd_offsets_ext.get_days_in_month(y, m)\n"
-        scalar_text += (
-            f"res[i] = pd.Timestamp(year=y, month=m, day=d, tz={repr(time_zone)})\n"
-        )
-        out_dtype = bodo.DatetimeArrayType(time_zone)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 

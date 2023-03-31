@@ -1145,34 +1145,24 @@ def test_int_to_days(days, memory_leak_check):
     )
 
 
-def test_last_day(dates_scalar_vector, memory_leak_check):
-    def impl(arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.last_day(arr))
-
-    # avoid pd.Series() conversion for scalar output
-    if isinstance(dates_scalar_vector, pd.Timestamp):
-        impl = lambda arr: bodo.libs.bodosql_array_kernels.last_day(arr)
-
-    # Simulates LAST_DAY on a single row
-    def last_day_scalar_fn(elem):
-        if pd.isna(elem):
-            return None
-        else:
-            return elem + pd.tseries.offsets.MonthEnd(n=0, normalize=True)
-
-    last_day_answer = vectorized_sol((dates_scalar_vector,), last_day_scalar_fn, None)
-    check_func(
-        impl,
-        (dates_scalar_vector,),
-        py_output=last_day_answer,
-        check_dtype=False,
-        reset_index=True,
-    )
-
-
 @pytest.mark.parametrize(
-    "arr",
+    "dt, date_part",
     [
+        pytest.param(
+            pd.Series(pd.date_range("2019-01-01", "2020-01-01", periods=20)),
+            "month",
+            id="timestamp-vector",
+        ),
+        pytest.param(
+            pd.Timestamp("2019-01-01 12:34:56"),
+            "year",
+            id="timestamp-scalar",
+        ),
+        pytest.param(
+            pd.Series(pd.date_range("2019-01-01", "2020-01-01", periods=20).date),
+            "week",
+            id="date-vector",
+        ),
         pytest.param(
             pd.Series(
                 [
@@ -1185,6 +1175,7 @@ def test_last_day(dates_scalar_vector, memory_leak_check):
                     pd.Timestamp("2020-06-21 05:40:01", tz="US/Pacific"),
                     None,
                     pd.Timestamp("2021-07-19", tz="US/Pacific"),
+                    None,
                     pd.Timestamp("2022-08-17 07:48:01.254654976", tz="US/Pacific"),
                     pd.Timestamp("2023-09-15 08:00:00", tz="US/Pacific"),
                     None,
@@ -1197,34 +1188,57 @@ def test_last_day(dates_scalar_vector, memory_leak_check):
                     pd.Timestamp("2024-11-1", tz="US/Pacific"),
                 ]
             ),
-            id="vector-pacific",
+            "year",
+            id="timestamp-tz-vector",
         ),
-        pytest.param(pd.Timestamp("2022-3-1", tz="Poland"), id="scalar-poland"),
+        pytest.param(
+            pd.Timestamp("2022-3-1", tz="Poland"),
+            "quarter",
+            id="timestamp-tz-scalar",
+        ),
     ],
 )
-def test_last_day_tz_aware(arr, memory_leak_check):
-    def impl(arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.last_day(arr))
+def test_last_day(dt, date_part, memory_leak_check):
+    if isinstance(dt, pd.Series):
+        fn_str = f"lambda date_or_time_expr: pd.Series(bodo.libs.bodosql_array_kernels.last_day_{date_part}(date_or_time_expr))"
+    else:
+        fn_str = f"lambda date_or_time_expr: bodo.libs.bodosql_array_kernels.last_day_{date_part}(date_or_time_expr)"
+    impl = eval(fn_str)
 
-    # avoid pd.Series() conversion for scalar output
-    if isinstance(arr, pd.Timestamp):
-        impl = lambda arr: bodo.libs.bodosql_array_kernels.last_day(arr)
-
-    # Simulates LAST_DAY on a single row
-    def last_day_scalar_fn(elem):
-        if pd.isna(elem):
-            return None
-        else:
-            return elem + pd.tseries.offsets.MonthEnd(n=0, normalize=True)
-
-    last_day_answer = vectorized_sol((arr,), last_day_scalar_fn, None)
-    check_func(
-        impl,
-        (arr,),
-        py_output=last_day_answer,
-        check_dtype=False,
-        reset_index=True,
+    last_day_answer = vectorized_sol(
+        (dt, date_part),
+        last_day_scalar_fn,
+        None,
     )
+    with bodosql_use_date_type():
+        check_func(
+            impl,
+            (dt,),
+            py_output=last_day_answer,
+        )
+
+
+def last_day_scalar_fn(elem, unit):
+    """
+    Simulates LAST_DAY on a single row
+    """
+    if pd.isna(elem) or pd.isna(unit):
+        return None
+    else:
+        if unit == "year":
+            return datetime.date(elem.year, 12, 31)
+        elif unit == "quarter":
+            y = elem.year
+            m = ((elem.month - 1) // 3 + 1) * 3
+            d = bodo.hiframes.pd_offsets_ext.get_days_in_month(y, m)
+            return datetime.date(y, m, d)
+        elif unit == "month":
+            y = elem.year
+            m = elem.month
+            d = bodo.hiframes.pd_offsets_ext.get_days_in_month(y, m)
+            return datetime.date(y, m, d)
+        elif unit == "week":
+            return (pd.Timestamp(elem) + pd.Timedelta(days=(6 - elem.weekday()))).date()
 
 
 @pytest.mark.parametrize(
@@ -2435,7 +2449,6 @@ def test_calendar_optional(memory_leak_check):
         arg1 = B if flag1 else None
         arg2 = C if flag2 else None
         return (
-            bodo.libs.bodosql_array_kernels.last_day(arg0),
             bodo.libs.bodosql_array_kernels.dayname(arg0),
             bodo.libs.bodosql_array_kernels.monthname(arg0),
             bodo.libs.bodosql_array_kernels.weekday(arg0),
