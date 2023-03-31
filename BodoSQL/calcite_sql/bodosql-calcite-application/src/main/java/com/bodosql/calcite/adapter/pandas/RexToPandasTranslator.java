@@ -884,13 +884,25 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "MONTH_NAME":
           case "DAYNAME":
           case "WEEKDAY":
-          case "LAST_DAY":
           case "YEAROFWEEK":
           case "YEAROFWEEKISO":
             assert operands.size() == 1;
             if (getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.TIME)
               throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             return getSingleArgDatetimeFnInfo(fnName, operands.get(0).emit());
+          case "LAST_DAY":
+            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(0));
+            if (dateTimeExprType == DateTimeType.TIME)
+              throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
+            if (operands.size() == 2) {
+              unit = standardizeTimeUnit(fnName, operands.get(1).emit(), dateTimeExprType);
+              if (unit.equals("day") || TIME_PART_UNITS.contains(unit))
+                throw new BodoSQLCodegenException(operands.get(1).emit() + " is not a valid time unit for " + fnName);
+              return generateLastDayCode(operands.get(0).emit(), unit);
+            }
+            assert  operands.size() == 1;
+            // the default time unit is month
+            return generateLastDayCode(operands.get(0).emit(), "month");
           case "NEXT_DAY":
           case "PREVIOUS_DAY":
             assert operands.size() == 2;

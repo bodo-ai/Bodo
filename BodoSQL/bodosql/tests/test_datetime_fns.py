@@ -9,11 +9,17 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import bodosql_use_date_type, check_query
 
+from bodo.libs.bodosql_datetime_array_kernels import (
+    standardize_snowflake_date_time_part_compile_time,
+)
 from bodo.tests.conftest import (  # noqa
     date_df,
     day_part_strings,
     time_df,
     time_part_strings,
+)
+from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels import (
+    last_day_scalar_fn,
 )
 from bodo.tests.timezone_common import (  # noqa
     generate_date_trunc_date_func,
@@ -306,19 +312,6 @@ def dt_fn_dataframe():
                 ),
             ),
             id="WEEKDAY",
-        )
-    ]
-    + [
-        pytest.param(
-            (
-                "LAST_DAY",
-                ["timestamps"],
-                (
-                    "TIMESTAMP '1971-02-02'",
-                    "TIMESTAMP '2021-03-03'",
-                ),
-            ),
-            id="LAST_DAY",
         )
     ]
     + [
@@ -3246,13 +3239,7 @@ def test_tz_aware_next_day(memory_leak_check):
     )
     py_output = pd.DataFrame({"m": out_series})
     with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=py_output,
-            check_dtype=False
-        )
+        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3280,13 +3267,7 @@ def test_tz_aware_next_day_case(
     week_series[~df.C] = None
     py_output = pd.DataFrame({"m": week_series})
     with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=py_output,
-            check_dtype=False
-        )
+        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3310,13 +3291,7 @@ def test_tz_aware_previous_day(memory_leak_check):
     )
     py_output = pd.DataFrame({"m": out_series})
     with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=py_output,
-            check_dtype=False
-        )
+        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3344,13 +3319,7 @@ def test_tz_aware_previous_day_case(
     week_series[~df.C] = None
     py_output = pd.DataFrame({"m": week_series})
     with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=py_output,
-            check_dtype=False
-        )
+        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3900,7 +3869,9 @@ def date_only_single_arg_fns(request):
     return request.param
 
 
-def date_only_single_arg_fns_time_input_handling(date_only_single_arg_fns, time_df, memory_leak_check):
+def date_only_single_arg_fns_time_input_handling(
+    date_only_single_arg_fns, time_df, memory_leak_check
+):
     query = f"SELECT {date_only_single_arg_fns}(A) as output from table1"
     output = pd.DataFrame({"output": []})
     with pytest.raises(
@@ -3930,4 +3901,84 @@ def next_previous_day_time_input_handling(next_or_prev, time_df, memory_leak_che
             check_names=False,
             check_dtype=False,
             expected_output=output,
+        )
+
+
+def test_last_day_no_date_part(date_df, memory_leak_check):
+    """
+    Tests LAST_DAY function without specifying date units
+    """
+    query = "SELECT LAST_DAY(A) as output from table1"
+    output = pd.DataFrame(
+        {
+            "output": [
+                last_day_scalar_fn(date_df["table1"]["A"][i], "month")
+                for i in range(len(date_df["table1"]["A"]))
+            ]
+        }
+    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            date_df,
+            None,
+            check_names=False,
+            expected_output=output,
+        )
+
+
+def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
+    """
+    Tests LAST_DAY function with specifying date units
+    """
+    query = f"SELECT LAST_DAY(B, '{day_part_strings}') as output from table1"
+    unit = standardize_snowflake_date_time_part_compile_time(day_part_strings)(
+        day_part_strings
+    )
+    output = pd.DataFrame(
+        {
+            "output": [
+                last_day_scalar_fn(date_df["table1"]["B"][i], unit)
+                for i in range(len(date_df["table1"]["B"]))
+            ]
+        }
+    )
+    if unit == "day":
+        with pytest.raises(
+            Exception,
+            match=f'"{day_part_strings}" is not a valid time unit for LAST_DAY',
+        ):
+            check_query(
+                query,
+                date_df,
+                None,
+                check_names=False,
+                expected_output=pd.DataFrame({}),
+            )
+    else:
+        with bodosql_use_date_type():
+            check_query(
+                query,
+                date_df,
+                None,
+                check_names=False,
+                expected_output=output,
+            )
+
+
+def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
+    """
+    Tests LAST_DAY function can throw correct error when input
+    """
+    query = f"SELECT LAST_DAY(B, '{time_part_strings}') as output from table1"
+    with pytest.raises(
+        Exception,
+        match=f'"{time_part_strings}" is not a valid time unit for LAST_DAY',
+    ):
+        check_query(
+            query,
+            date_df,
+            None,
+            check_names=False,
+            expected_output=pd.DataFrame({}),
         )
