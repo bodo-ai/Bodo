@@ -710,7 +710,7 @@ void* pd_pyarrow_array_from_string_array(const array_info* str_arr) {
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
     bodo_array_to_arrow(::arrow::default_memory_pool(), str_arr, &arrow_arr,
                         false /*convert_timedelta_to_int64*/, "", time_unit,
-                        true, false /*downcast_time_ns_to_us*/);
+                        false /*downcast_time_ns_to_us*/);
 
     // https://arrow.apache.org/docs/python/integration/extending.html
     CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
