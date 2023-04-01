@@ -262,7 +262,7 @@ int64_t pq_write(
         auto nullable = true;
         auto arrow_type = bodo_array_to_arrow(
             pool, col, &columns[i], convert_timedelta_to_int64, tz, time_unit,
-            false, downcast_time_ns_to_us);
+            downcast_time_ns_to_us);
 
         // Cast the Arrow arrays to their expected type and nullability
         // This is currently only used for enforcing the output of Iceberg
@@ -341,13 +341,13 @@ int64_t pq_write(
         if (strcmp(idx_name, "null") != 0) {
             auto arrow_type = bodo_array_to_arrow(
                 pool, index, &arr, convert_timedelta_to_int64, tz, time_unit,
-                false, downcast_time_ns_to_us);
+                downcast_time_ns_to_us);
             index_field = arrow::field(idx_name, arrow_type);
 
         } else {
             auto arrow_type = bodo_array_to_arrow(
                 pool, index, &arr, convert_timedelta_to_int64, tz, time_unit,
-                false, downcast_time_ns_to_us);
+                downcast_time_ns_to_us);
             index_field = arrow::field("__index_level_0__", arrow_type);
         }
 

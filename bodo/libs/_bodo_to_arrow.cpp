@@ -65,7 +65,7 @@ static void CastBodoDateToArrowDate32(const int64_t *input, int64_t length,
 std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const array_info *array,
     std::shared_ptr<arrow::Array> *out, bool convert_timedelta_to_int64,
-    const std::string &tz, arrow::TimeUnit::type &time_unit, bool copy,
+    const std::string &tz, arrow::TimeUnit::type &time_unit,
     bool downcast_time_ns_to_us) {
     // Return DataType value
     std::shared_ptr<arrow::DataType> ret_type = nullptr;
@@ -132,15 +132,13 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         std::shared_ptr<arrow::Array> index_array;
 
         // Recurse on the dictionary
-        auto dict_type =
-            bodo_array_to_arrow(pool, array->child_arrays[0], &dictionary,
-                                convert_timedelta_to_int64, tz, time_unit, copy,
-                                downcast_time_ns_to_us);
+        auto dict_type = bodo_array_to_arrow(
+            pool, array->child_arrays[0], &dictionary,
+            convert_timedelta_to_int64, tz, time_unit, downcast_time_ns_to_us);
         // Recurse on the index array
-        auto index_type =
-            bodo_array_to_arrow(pool, array->child_arrays[1], &index_array,
-                                convert_timedelta_to_int64, tz, time_unit, copy,
-                                downcast_time_ns_to_us);
+        auto index_type = bodo_array_to_arrow(
+            pool, array->child_arrays[1], &index_array,
+            convert_timedelta_to_int64, tz, time_unit, downcast_time_ns_to_us);
 
         // Extract the types from the dictionary call.
         // TODO: Can we provide ordered?
@@ -284,17 +282,23 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         }
 
         ret_type = type;
-        std::shared_ptr<arrow::Buffer> out_buffer;
 
         if (array->dtype == Bodo_CTypes::DATE) {
             // allocate buffer to store date32 values in Arrow format
+            std::shared_ptr<arrow::Buffer> out_buffer;
             arrow::Result<std::unique_ptr<arrow::Buffer>> res =
                 AllocateBuffer(sizeof(int32_t) * array->length, pool);
             CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
             CastBodoDateToArrowDate32((int64_t *)array->data1, array->length,
                                       (int32_t *)out_buffer->mutable_data());
+
+            auto arr_data = arrow::ArrayData::Make(
+                type, array->length, {null_bitmap, out_buffer}, null_count_, 0);
+            *out = arrow::MakeArray(arr_data);
+
         } else if (array->dtype == Bodo_CTypes::TIME &&
                    (array->precision != 9 || downcast_time_ns_to_us)) {
+            std::shared_ptr<arrow::Buffer> out_buffer;
             if (array->precision == 6 ||
                 (array->precision == 9 && downcast_time_ns_to_us)) {
                 int64_t divide_factor = 1000;
@@ -320,6 +324,10 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                     new_data1[i] = array->at<int64_t>(i) / divide_factor;
                 }
             }
+
+            auto arr_data = arrow::ArrayData::Make(
+                type, array->length, {null_bitmap, out_buffer}, null_count_, 0);
+            *out = arrow::MakeArray(arr_data);
 
         } else if (array->dtype == Bodo_CTypes::DATETIME &&
                    time_unit != arrow::TimeUnit::NANO) {
@@ -349,6 +357,7 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
             // format. We cannot reuse Bodo buffers, since we don't want to
             // modify values there as they might be used elsewhere.
             // in_num_bytes in this case is (sizeof(int64_t) * array->length)
+            std::shared_ptr<arrow::Buffer> out_buffer;
             arrow::Result<std::unique_ptr<arrow::Buffer>> res =
                 AllocateBuffer(in_num_bytes, pool);
             CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
@@ -358,26 +367,23 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                 // convert to the specified time unit
                 new_data1[i] = array->at<int64_t>(i) / divide_factor;
             }
+
+            auto arr_data = arrow::ArrayData::Make(
+                type, array->length, {null_bitmap, out_buffer}, null_count_, 0);
+            *out = arrow::MakeArray(arr_data);
+
         } else {
-            // we can use the same input buffer (no need to cast or convert)
-            out_buffer = std::make_shared<arrow::Buffer>(
-                (uint8_t *)array->data1, in_num_bytes);
+            // Reuse the same input Bodo buffers wrapped in BodoBuffers, which
+            // track refcounts and deallocate if necessary
+            MemInfo *out_meminfo = array->meminfos[0];
+            std::shared_ptr<BodoBuffer> out_buffer =
+                std::make_shared<BodoBuffer>((uint8_t *)array->data1,
+                                             in_num_bytes, out_meminfo);
 
-            // copy buffers if necessary (resulting buffers will be
-            // managed/de-allocated by Arrow)
-            // TODO: eliminate the need to copy in callers as much as possible
-            if (copy) {
-                auto out_buffer_copy_res = arrow::Buffer::Copy(
-                    out_buffer, arrow::default_cpu_memory_manager());
-                CHECK_ARROW_AND_ASSIGN(out_buffer_copy_res, "Buffer::Copy",
-                                       out_buffer);
-            }
+            auto arr_data = arrow::ArrayData::Make(
+                type, array->length, {null_bitmap, out_buffer}, null_count_, 0);
+            *out = arrow::MakeArray(arr_data);
         }
-
-        auto arr_data = arrow::ArrayData::Make(
-            type, array->length, {null_bitmap, out_buffer}, null_count_, 0);
-        *out = arrow::MakeArray(arr_data);
-
     } else if (array->arr_type == bodo_array_type::STRING) {
         std::shared_ptr<arrow::DataType> arrow_type;
         if (array->dtype == Bodo_CTypes::BINARY) {
@@ -586,7 +592,7 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(table_info *table) {
         arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
         auto arrow_type = bodo_array_to_arrow(
             ::arrow::default_memory_pool(), arr, &arrow_arrs[i],
-            false /*convert_timedelta_to_int64*/, "", time_unit, false,
+            false /*convert_timedelta_to_int64*/, "", time_unit,
             false /*downcast_time_ns_to_us*/);
         schema_vector.push_back(
             arrow::field("A" + std::to_string(i), arrow_type, true));
