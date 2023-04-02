@@ -275,14 +275,16 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
         (char*)sub_payload->null_bitmap.data, {meminfo});
 }
 
-array_info* string_array_to_info(uint64_t n_items, char* data, char* offsets,
-                                 char* null_bitmap, NRT_MemInfo* meminfo,
+array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
+                                 NRT_MemInfo* offsets, NRT_MemInfo* null_bitmap,
                                  int is_bytes) {
     // TODO: better memory management of struct, meminfo refcount?
     auto dtype = Bodo_CTypes::STRING;
     if (is_bytes) dtype = Bodo_CTypes::BINARY;
-    return new array_info(bodo_array_type::STRING, dtype, n_items, data,
-                          offsets, NULL, null_bitmap, NULL, {meminfo});
+    return new array_info(bodo_array_type::STRING, dtype, n_items,
+                          (char*)data->data, (char*)offsets->data, NULL,
+                          (char*)null_bitmap->data, NULL,
+                          {data, offsets, null_bitmap});
 }
 
 array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
@@ -407,14 +409,37 @@ void info_to_nested_array(array_info* info, int64_t* lengths,
     }
 }
 
-void info_to_string_array(array_info* info, NRT_MemInfo** meminfo) {
+void info_to_string_array(array_info* info, int64_t* length,
+                          numpy_arr_payload* data_arr,
+                          numpy_arr_payload* offsets_arr,
+                          numpy_arr_payload* null_bitmap_arr) {
     if (info->arr_type != bodo_array_type::STRING) {
         PyErr_SetString(PyExc_RuntimeError,
                         "_array.cpp::info_to_string_array: "
                         "info_to_string_array requires string input.");
         return;
     }
-    *meminfo = info->meminfos[0];
+    *length = info->length;
+
+    // create Numpy arrays for char/offset/null_bitmap buffers as expected by
+    // Python data model
+    int64_t n_chars = info->n_sub_elems();
+    int64_t char_itemsize = numpy_item_size[Bodo_CTypes::INT8];
+    *data_arr = make_numpy_array_payload(
+        info->meminfos[0], NULL, n_chars, char_itemsize,
+        (char*)info->meminfos[0]->data, n_chars, char_itemsize);
+
+    int64_t n_offsets = info->length + 1;
+    int64_t offset_itemsize = numpy_item_size[Bodo_CType_offset];
+    *offsets_arr = make_numpy_array_payload(
+        info->meminfos[1], NULL, n_offsets, offset_itemsize,
+        (char*)info->meminfos[1]->data, n_offsets, offset_itemsize);
+
+    int64_t n_null_bytes = (info->length + 7) >> 3;
+    int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
+    *null_bitmap_arr = make_numpy_array_payload(
+        info->meminfos[2], NULL, n_null_bytes, null_itemsize,
+        (char*)info->meminfos[2]->data, n_null_bytes, null_itemsize);
 }
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
@@ -488,13 +513,13 @@ array_info* info_from_table(table_info* table, int64_t col_ind) {
  * @brief create a Bodo string array from a PyArrow string array
  *
  * @param obj PyArrow string array
- * @return NRT_MemInfo* meminfo of array(item) array containing string data
+ * @return array_info* Bodo string array
  */
-NRT_MemInfo* string_array_from_pyarrow(PyObject* pyarrow_arr) {
+array_info* string_array_from_pyarrow(PyObject* pyarrow_arr) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
-        return NULL;                   \
+        return nullptr;                \
     }
 
     // https://arrow.apache.org/docs/python/integration/extending.html
@@ -509,8 +534,7 @@ NRT_MemInfo* string_array_from_pyarrow(PyObject* pyarrow_arr) {
     std::shared_ptr<arrow::LargeStringArray> arrow_str_arr =
         std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr);
 
-    array_info* arr = arrow_array_to_bodo(arrow_str_arr);
-    return arr->meminfos[0];
+    return arrow_array_to_bodo(arrow_str_arr);
 
 #undef CHECK
 }
@@ -521,27 +545,37 @@ NRT_MemInfo* string_array_from_pyarrow(PyObject* pyarrow_arr) {
  *
  * @param obj numpy array of strings, pd.arrays.StringArray, or
  * pd.arrays.ArrowStringArray
+ * @param[out] data_arr pointer to Numpy array for characters in output string
+ * array
+ * @param[out] offsets_arr pointer to Numpy array for offsets in output string
+ * array
+ * @param[out] null_bitmap_arr pointer to Numpy array for null bitmap in output
+ * string array
  * @param is_bytes whether the contents are bytes objects instead of str
- * @return NRT_MemInfo* meminfo of array(item) array containing string data
  */
-NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
+void string_array_from_sequence(PyObject* obj, int64_t* length,
+                                numpy_arr_payload* data_arr,
+                                numpy_arr_payload* offsets_arr,
+                                numpy_arr_payload* null_bitmap_arr,
+                                int is_bytes) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
-        return NULL;                   \
+        return;                        \
     }
 
     CHECK(PySequence_Check(obj), "expecting a PySequence");
 
     Py_ssize_t n = PyObject_Size(obj);
+    *length = n;
     if (n == 0) {
         // empty sequence, this is not an error, need to set size
-        array_info* out_arr =
-            alloc_array(0, 0, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
-                        Bodo_CTypes::UINT8, 0, 0);
-        NRT_MemInfo* out_meminfo = out_arr->meminfos[0];
+        array_info* out_arr = alloc_array(0, 0, -1, bodo_array_type::STRING,
+                                          Bodo_CTypes::STRING, 0, 0);
+        info_to_string_array(out_arr, length, data_arr, offsets_arr,
+                             null_bitmap_arr);
         delete out_arr;
-        return out_meminfo;
+        return;
     }
 
     // check if obj is ArrowStringArray to unbox it properly
@@ -578,11 +612,14 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
             PyObject_CallMethod(pyarrow_arr, "cast", "s", "large_string");
         CHECK(pyarrow_arr_large_str, "array.cast(\"large_string\") failed");
 
-        NRT_MemInfo* out = string_array_from_pyarrow(pyarrow_arr_large_str);
+        array_info* arr = string_array_from_pyarrow(pyarrow_arr_large_str);
+        info_to_string_array(arr, length, data_arr, offsets_arr,
+                             null_bitmap_arr);
+        delete arr;
         Py_DECREF(pyarrow_chunked_arr);
         Py_DECREF(pyarrow_arr);
         Py_DECREF(pyarrow_arr_large_str);
-        return out;
+        return;
     }
 
     // allocate null bitmap
@@ -649,16 +686,10 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
     Py_DECREF(C_NA);
     Py_DECREF(pd_mod);
 
-    NRT_MemInfo* meminfo_array_item = alloc_array_item_arr_meminfo();
-    array_item_arr_numpy_payload* payload =
-        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
-
-    payload->n_arrays = n;
-    payload->data = outbuf_payload;
-    payload->offsets = offsets_payload;
-    payload->null_bitmap = null_bitmap_payload;
-
-    return meminfo_array_item;
+    *data_arr = outbuf_payload;
+    *offsets_arr = offsets_payload;
+    *null_bitmap_arr = null_bitmap_payload;
+    return;
 #undef CHECK
 }
 
@@ -1601,6 +1632,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&sample_table)));
     PyObject_SetAttrString(m, "sort_values_table",
                            PyLong_FromVoidPtr((void*)(&sort_values_table)));
+    PyObject_SetAttrString(m, "incref_array",
+                           PyLong_FromVoidPtr((void*)(&incref_array)));
     PyObject_SetAttrString(
         m, "sort_table_for_interval_join",
         PyLong_FromVoidPtr(
