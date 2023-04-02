@@ -39,6 +39,7 @@ from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
     ArrayItemArrayType,
     _get_array_item_arr_payload,
+    define_array_item_dtor,
     np_offset_type,
     offset_type,
 )
@@ -2571,34 +2572,62 @@ def unbox_str_series(typ, val, c):
 
     is_bytes = c.context.get_constant(types.int32, int(typ == binary_array_type))
 
+    string_array = c.context.make_helper(c.builder, typ)
+    array_item_data_type = ArrayItemArrayType(char_arr_type)
+    array_item_array = c.context.make_helper(c.builder, array_item_data_type)
+
+    # create payload type
+    payload_type = ArrayItemArrayPayloadType(array_item_data_type)
+    alloc_type = c.context.get_value_type(payload_type)
+    alloc_size = c.context.get_abi_sizeof(alloc_type)
+
+    # define dtor
+    dtor_fn = define_array_item_dtor(
+        c.context, c.builder, array_item_data_type, payload_type
+    )
+
+    # create meminfo
+    meminfo = c.context.nrt.meminfo_alloc_dtor(
+        c.builder, c.context.get_constant(types.uintp, alloc_size), dtor_fn
+    )
+    meminfo_void_ptr = c.context.nrt.meminfo_data(c.builder, meminfo)
+    meminfo_data_ptr = c.builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
+
+    # alloc values in payload
+    payload = cgutils.create_struct_proxy(payload_type)(c.context, c.builder)
+
     # TODO: check python errors
     # function signature: NRT_MemInfo* string_array_from_sequence(PyObject* obj)
     # returns meminfo for underlying array(item) array
     fnty = lir.FunctionType(
-        lir.IntType(8).as_pointer(),
+        lir.VoidType(),
         [
             lir.IntType(8).as_pointer(),
+            lir.IntType(64).as_pointer(),
+            c.context.get_value_type(char_arr_type).as_pointer(),
+            c.context.get_value_type(offset_arr_type).as_pointer(),
+            c.context.get_value_type(null_bitmap_arr_type).as_pointer(),
             lir.IntType(32),
         ],
     )
     fn = cgutils.get_or_insert_function(
         c.builder.module, fnty, name="string_array_from_sequence"
     )
-    array_item_meminfo = c.builder.call(
+    c.builder.call(
         fn,
         [
             val,
+            payload._get_ptr_by_name("n_arrays"),
+            payload._get_ptr_by_name("data"),
+            payload._get_ptr_by_name("offsets"),
+            payload._get_ptr_by_name("null_bitmap"),
             is_bytes,
         ],
     )
 
-    # create array(item) array and string array structs and set meminfo
-    array_item_data_type = ArrayItemArrayType(char_arr_type)
-    array_item_array = c.context.make_helper(c.builder, array_item_data_type)
-    array_item_array.meminfo = array_item_meminfo
-    string_array = c.context.make_helper(c.builder, typ)
-    data_arr = array_item_array._getvalue()
-    string_array.data = data_arr
+    c.builder.store(payload._getvalue(), meminfo_data_ptr)
+    array_item_array.meminfo = meminfo
+    string_array.data = array_item_array._getvalue()
 
     # FIXME how to check that the returned size is > 0?
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
