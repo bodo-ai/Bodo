@@ -221,21 +221,26 @@ array_info* alloc_nullable_array_all_nulls(int64_t length,
 
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes) {
-    // allocate underlying array(item) data array
-    array_info* data_arr = alloc_array(
-        length, n_chars, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
-        Bodo_CTypes::UINT8, extra_null_bytes, 0);
+    // allocate data/offsets/null_bitmap arrays
+    MemInfo* data_meminfo =
+        allocate_numpy_payload(n_chars, Bodo_CTypes::UINT8).meminfo;
+    MemInfo* offsets_meminfo =
+        allocate_numpy_payload(length + 1, Bodo_CType_offset).meminfo;
+    int64_t n_bytes = (int64_t)((length + 7) / 8) + extra_null_bytes;
+    MemInfo* null_bitmap_meminfo =
+        allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8).meminfo;
+    // setting all to non-null to avoid unexpected issues
+    memset(null_bitmap_meminfo->data, 0xff, n_bytes);
 
-    NRT_MemInfo* out_meminfo = data_arr->meminfos[0];
-    array_item_arr_numpy_payload* payload =
-        (array_item_arr_numpy_payload*)(out_meminfo->data);
+    // set offsets for boundaries
+    offset_t* offsets_ptr = (offset_t*)offsets_meminfo->data;
+    offsets_ptr[0] = 0;
+    offsets_ptr[length] = n_chars;
 
-    array_info* out_arr =
-        new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
-                       payload->data.data, (char*)payload->offsets.data, NULL,
-                       (char*)payload->null_bitmap.data, NULL, {out_meminfo});
-    delete data_arr;
-    return out_arr;
+    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
+                          (char*)data_meminfo->data, (char*)offsets_ptr, NULL,
+                          (char*)null_bitmap_meminfo->data, NULL,
+                          {data_meminfo, offsets_meminfo, null_bitmap_meminfo});
 }
 
 array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
@@ -401,7 +406,27 @@ void dtor_array_item_arr(array_item_arr_payload* payload, int64_t size,
 
 array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr,
                                     int64_t extra_null_bytes) {
-    NRT_MemInfo* meminfo_string_array = string_arr->meminfos[0];
+    // create array(item) meminfo for string data array
+    NRT_MemInfo* meminfo_string_array = alloc_array_item_arr_meminfo();
+    array_item_arr_numpy_payload* str_payload =
+        (array_item_arr_numpy_payload*)(meminfo_string_array->data);
+
+    str_payload->n_arrays = string_arr->length;
+    int64_t n_chars = string_arr->n_sub_elems();
+    int64_t char_itemsize = numpy_item_size[Bodo_CTypes::INT8];
+    str_payload->data = make_numpy_array_payload(
+        string_arr->meminfos[0], NULL, n_chars, char_itemsize,
+        (char*)string_arr->meminfos[0]->data, n_chars, char_itemsize);
+    int64_t n_offsets = string_arr->length + 1;
+    int64_t offset_itemsize = numpy_item_size[Bodo_CType_offset];
+    str_payload->offsets = make_numpy_array_payload(
+        string_arr->meminfos[1], NULL, n_offsets, offset_itemsize,
+        (char*)string_arr->meminfos[1]->data, n_offsets, offset_itemsize);
+    int64_t n_null_bytes = (string_arr->length + 7) >> 3;
+    int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
+    str_payload->null_bitmap = make_numpy_array_payload(
+        string_arr->meminfos[2], NULL, n_null_bytes, null_itemsize,
+        (char*)string_arr->meminfos[2]->data, n_null_bytes, null_itemsize);
     delete string_arr;
 
     // allocate array(item) array payload
@@ -431,9 +456,9 @@ array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr,
 array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
                                     int64_t n_chars, int64_t extra_null_bytes) {
     // allocate string data array
-    array_info* data_arr = alloc_array(
-        n_strings, n_chars, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
-        Bodo_CTypes::UINT8, extra_null_bytes, 0);
+    array_info* data_arr = alloc_array(n_strings, n_chars, -1,
+                                       bodo_array_type::arr_type_enum::STRING,
+                                       Bodo_CTypes::UINT8, extra_null_bytes, 0);
 
     return alloc_list_string_array(n_lists, data_arr, extra_null_bytes);
 }

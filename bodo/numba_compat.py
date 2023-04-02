@@ -4434,12 +4434,26 @@ def make_constant_array(self, builder, typ, ary):
 
     nitems = self.get_constant(types.intp, math.prod(ary.shape))
 
+    # create a constant meminfo with the same data model as Numba:
+    # https://github.com/numba/numba/blob/0499b906a850af34f0e2fdcc6b3b3836cdc95297/numba/core/runtime/nrtdynmod.py#L14
+    # https://github.com/numba/numba/blob/2776e1a7cf49aeb513e0319fe4a94a12836a995b/numba/core/runtime/nrt.c#L16
+    # we set refcount=-1 to avoid calling the destructor (see _define_atomic_inc_dec
+    # patch in numba_compat and test_constant_lowering_refcount)
+    minus_one = self.get_constant(types.int64, -1)
+    null_ptr = self.get_constant_null(types.voidptr)
+    meminfo = lir.Constant.literal_struct(
+        [minus_one, null_ptr, null_ptr, data, minus_one]
+    )
+    meminfo = cgutils.global_constant(builder, ".const.meminfo", meminfo).bitcast(
+        cgutils.voidptr_t
+    )
+
     # create a literal struct that matches data model of arrays in Numba:
     # https://github.com/numba/numba/blob/0499b906a850af34f0e2fdcc6b3b3836cdc95297/numba/core/datamodel/models.py#L862
     return lir.Constant.literal_struct(
         [
             # meminfo
-            self.get_constant_null(types.MemInfoPointer(typ.dtype)),
+            meminfo,
             # parent
             self.get_constant_null(types.pyobject),
             # nitems

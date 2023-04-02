@@ -618,10 +618,11 @@ class GroupbyPipeline {
         }
         if (n_udf > 0) {
             int n_gen_udf = gen_udf_col_sets.size();
-            if (n_udf > n_gen_udf)
+            if (n_udf > n_gen_udf) {
                 // regular UDFs
                 udf_info.update(in_table, update_table,
                                 grp_info.row_to_group.data());
+            }
             if (n_gen_udf > 0) {
                 table_info* general_in_table = new table_info();
                 for (auto udf_col_set : gen_udf_col_sets)

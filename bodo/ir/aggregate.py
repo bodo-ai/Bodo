@@ -51,6 +51,7 @@ from bodo.libs.array import (
     delete_table,
     delete_table_decref_arrays,
     groupby_and_aggregate,
+    incref_array_info,
     info_from_table,
     info_to_array,
     py_data_to_cpp_table,
@@ -1432,11 +1433,11 @@ def gen_update_cb(
     func_text += "\n    # initialize redvar cols\n"
     func_text += "    init_vals = __init_func()\n"
     for i in range(n_red_vars):
-        func_text += "    redvar_arr_{} = info_to_array(info_from_table(out_table, {}), data_redvar_dummy[{}])\n".format(
-            i, redvar_offsets[i], i
-        )
-        # incref needed so that arrays aren't deleted after this function exits
-        func_text += "    incref(redvar_arr_{})\n".format(i)
+        func_text += f"    redvar_arr_info{i} = info_from_table(out_table, {redvar_offsets[i]})\n"
+        # info_to_array() doesn't incref so needs to be done manually currently to give
+        # Python a reference (which it will delete after use).
+        func_text += f"    incref_array_info(redvar_arr_info{i})\n"
+        func_text += f"    redvar_arr_{i} = info_to_array(redvar_arr_info{i}, data_redvar_dummy[{i}])\n"
         func_text += "    redvar_arr_{}.fill(init_vals[{}])\n".format(i, i)
     func_text += "    redvars = ({}{})\n".format(
         ",".join(["redvar_arr_{}".format(i) for i in range(n_red_vars)]),
@@ -1445,11 +1446,15 @@ def gen_update_cb(
 
     func_text += "\n"
     for i in range(n_data_cols):
-        func_text += "    data_in_{} = info_to_array(info_from_table(in_table, {}), data_in_dummy[{}])\n".format(
-            i, in_col_offsets[i], i
+        func_text += (
+            f"    data_in_info{i} = info_from_table(in_table, {in_col_offsets[i]})\n"
         )
-        # incref needed so that arrays aren't deleted after this function exits
-        func_text += "    incref(data_in_{})\n".format(i)
+        # info_to_array() doesn't incref so needs to be done manually currently to give
+        # Python a reference (which it will delete after use).
+        func_text += f"    incref_array_info(data_in_info{i})\n"
+        func_text += (
+            f"    data_in_{i} = info_to_array(data_in_info{i}, data_in_dummy[{i}])\n"
+        )
     func_text += "    data_in = ({}{})\n".format(
         ",".join(["data_in_{}".format(i) for i in range(n_data_cols)]),
         "," if n_data_cols == 1 else "",
@@ -1477,6 +1482,7 @@ def gen_update_cb(
             "is_null_pointer": is_null_pointer,
             "dt64_dtype": np.dtype("datetime64[ns]"),
             "td64_dtype": np.dtype("timedelta64[ns]"),
+            "incref_array_info": incref_array_info,
         },
         loc_vars,
     )
