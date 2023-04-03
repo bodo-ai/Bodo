@@ -23,7 +23,8 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.pandas.PandasRules
-import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregateRule
+import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
+import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*
 import com.bodosql.calcite.application.bodo_sql_rules.*
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
@@ -38,7 +39,9 @@ import org.apache.calcite.plan.hep.HepProgramBuilder
 import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.rel.RelHomogeneousShuttle
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.core.RelFactories
+import org.apache.calcite.rel.core.TableScan
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
 import org.apache.calcite.rel.rules.*
 import org.apache.calcite.rel.type.RelDataTypeSystem
@@ -391,9 +394,6 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
             // projection. See the rule docstring for more detail.
             .addRuleInstance(ProjectFilterProjectColumnEliminationRule.Config.DEFAULT.toRule())
             .addRuleInstance(MinRowNumberFilterRule.Config.DEFAULT.toRule())
-            // Push down aggregates on snowflake tables directly to snowflake.
-            .addRuleInstance(SnowflakeAggregateRule.Config.DEFAULT.toRule())
-            .addRuleInstance(SnowflakeAggregateRule.Config.WITH_FILTER.toRule())
             .build()
 
         override fun run(
@@ -436,6 +436,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
     }
 
     private class PandasProgram : Program by Programs.sequence(
+        SnowflakeTraitAdder(),
         Programs.ofRules(PandasRules.rules()),
         MergeRelProgram(),
     )
@@ -467,5 +468,29 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 }
             })
         }
+    }
+
+    /**
+     * Adds SnowflakeRel.CONVENTION to any SnowflakeTableScan nodes.
+     * See the comment in SnowflakeTableScan about why this is needed.
+     */
+    private class SnowflakeTraitAdder : Program {
+        override fun run(
+            planner: RelOptPlanner,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet,
+            materializations: List<RelOptMaterialization>,
+            lattices: List<RelOptLattice>
+        ): RelNode {
+            return rel.accept(object : RelShuttleImpl() {
+                override fun visit(scan: TableScan): RelNode {
+                    return when (scan) {
+                        is SnowflakeTableScan -> scan.copy(scan.traitSet.replace(SnowflakeRel.CONVENTION), scan.inputs)
+                        else -> super.visit(scan)
+                    }
+                }
+            })
+        }
+
     }
 }

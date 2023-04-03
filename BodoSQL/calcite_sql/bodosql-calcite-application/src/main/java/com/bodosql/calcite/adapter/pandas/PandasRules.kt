@@ -44,43 +44,6 @@ class PandasRules private constructor() {
         @JvmField
         val PANDAS_TARGET_TABLE_SCAN: RelOptRule = PandasTargetTableScanRule.DEFAULT_CONFIG.toRule()
 
-        // TODO(jsternberg): These are temporary rules until we have the snowflake convention.
-        @JvmField
-        val SNOWFLAKE_TABLE_SCAN: RelOptRule = ConverterRule.Config.INSTANCE
-            .withConversion(
-                SnowflakeTableScan::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "SnowflakeTraitRule::SnowflakeTableScan")
-            .withRuleFactory { config -> SnowflakeTraitRule(config) }
-            .toRule()
-
-        @JvmField
-        val SNOWFLAKE_FILTER: RelOptRule = ConverterRule.Config.INSTANCE
-            .withConversion(
-                SnowflakeFilter::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "SnowflakeTraitRule::SnowflakeFilter")
-            .withRuleFactory { config -> SnowflakeTraitRule(config) }
-            .toRule()
-
-        @JvmField
-        val SNOWFLAKE_AGGREGATE: RelOptRule = ConverterRule.Config.INSTANCE
-            .withConversion(
-                SnowflakeAggregate::class.java, Convention.NONE, PandasRel.CONVENTION,
-                "SnowflakeTraitRule::SnowflakeAggregate")
-            .withRuleFactory { config -> SnowflakeTraitRule(config) }
-            .toRule()
-
-        private class SnowflakeTraitRule(config: Config) : ConverterRule(config) {
-            override fun convert(rel: RelNode): RelNode {
-                val inputs = rel.inputs.map { input ->
-                    val traitSet = input.traitSet.replace(PandasRel.CONVENTION)
-                    input.copy(traitSet, input.inputs)
-                }
-
-                val traitSet = rel.traitSet.replace(PandasRel.CONVENTION)
-                return rel.copy(traitSet, inputs)
-            }
-        }
-
         @JvmField
         val PANDAS_RULES: List<RelOptRule> = listOf(
             PANDAS_PROJECT_RULE,
@@ -96,9 +59,6 @@ class PandasRules private constructor() {
             PANDAS_TABLE_CREATE_RULE,
             PANDAS_TABLE_SCAN,
             PANDAS_TARGET_TABLE_SCAN,
-            SNOWFLAKE_TABLE_SCAN,
-            SNOWFLAKE_FILTER,
-            SNOWFLAKE_AGGREGATE,
         )
 
         fun rules(): List<RelOptRule> = PANDAS_RULES

@@ -79,7 +79,6 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * uses the real names instead of normalized lowercase names), we need to have this little hack.
    *
    * @param name column index.
-   * @param preserveCase whether to use the real name or the normalized lowercase one.
    * @return the column name.
    */
   public String getPreservedColumnName(String name) {
@@ -212,6 +211,6 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     // bit before the refactor and directly create it here rather than refactor the entire
     // chain. That should reduce the scope of the code change to make it more easily reviewed
     // and separate the new feature from the refactor.
-    return new SnowflakeTableScan(toRelContext.getCluster(), relOptTable, this);
+    return SnowflakeTableScan.create(toRelContext.getCluster(), relOptTable, this);
   }
 }

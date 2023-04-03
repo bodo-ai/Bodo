@@ -27,14 +27,14 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
         val (aggregate, filter, scan) = extractNodes(call)
         val catalogTable = scan.catalogTable
 
-        val newNode = scan.withPreserveCase(true).let { input ->
+        val newNode = scan.let { input ->
             filter?.let { f ->
                 // TODO(jsternberg): There should be another planner rule that's already
                 // constructed the SnowflakeFilter and this rule should not have to do that.
                 // That would simplify this rule some amount, but we don't presently have
                 // proper code generation for the snowflake filter and it may conflict
                 // with pushdowns in the bodosql code so we're just using this as a placeholder.
-                SnowflakeFilter(
+                SnowflakeFilter.create(
                     f.cluster,
                     f.traitSet,
                     input,
@@ -43,7 +43,7 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
                 )
             } ?: input
         }.let { input ->
-            SnowflakeAggregate(
+            SnowflakeAggregate.create(
                 aggregate.cluster,
                 aggregate.traitSet,
                 input,
