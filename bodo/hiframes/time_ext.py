@@ -20,6 +20,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -181,53 +182,102 @@ class Time:
         return self.value % _nanos_per_micro
 
 
-def time_from_str(time_str, precision=9):
+@register_jitable
+def parse_time_string(time_str):  # pragma: no cover
     """Parse a time string into its components.
     `time_str` is passed in the formats:
-    - 'hh:mm:ss'
-    - 'hh:mm:ss.mmm'
-    - 'hh:mm:SS.mmmμμμ'
-    - 'hh:mm:SS.mmmμμμnnn'
+    - Format 1: 'num_seconds' (can be any non-negative integer)
+    - Format 2: 'hh:mm'
+    - Format 3: 'hh:mm:ss'
+    - Format 4: 'hh:mm:ss.'
+    - Format 5: 'hh:mm:ss.ns'
+    - hh can be any number from 0 to 23 (with or without a leading zero)
+    - mm can be any number from 0 to 59 (with or without a leading zero)
+    - ss can be any number from 0 to 59 (with or without a leading zero)
+    - ns can be any non-negative number (though digits after the first 9 are ignored)
 
-    This function is used both by the native Python Time class as well as Bodo's
-    compiled Time constructor.
+    Outputs a tuple in the form: (hh, mm, ss, ns, succ) where the first four
+    terms are as mentioned above (defaults are zero if not present), and
+    succeded is a boolean indicating whether or not the parse succeeded.
     """
-    hour = 0
-    minute = 0
-    second = 0
-    millisecond = 0
-    microsecond = 0
-    nanosecond = 0
-    hour = int(time_str[:2])
-    assert time_str[2] == ":", "Invalid time string"
-    minute = int(time_str[3:5])
-    assert time_str[5] == ":", "Invalid time string"
-    second = int(time_str[6:8])
-
-    if len(time_str) > 8:
-        assert time_str[8] == ".", "Invalid time string"
-        millisecond = int(time_str[9:12])
-        if len(time_str) > 12:
-            microsecond = int(time_str[12:15])
-            if len(time_str) > 15:
-                nanosecond = int(time_str[15:18])
-
-    return Time(
-        hour,
-        minute,
-        second,
-        millisecond,
-        microsecond,
-        nanosecond,
-        precision=precision,
-    )
-
-
-@overload(time_from_str)
-def overload_time_from_str(time_str, precision=9):
-    """Overload time_from_str."""
-
-    return time_from_str
+    hr = 0
+    mi = 0
+    sc = 0
+    ns = 0
+    # [FORMAT 1] String is a number: it represents the total seconds
+    if time_str.isdigit():
+        sc = int(time_str)
+        return hr, mi, sc, ns, True
+    # The string must be at least 3 characters (i.e. 0:0)
+    if len(time_str) < 3:
+        return 0, 0, 0, 0, False
+    # [FORMAT 2/3/4/5] String starts with a digit and a colon: the digit is the hour
+    if time_str[0].isdigit() and time_str[1] == ":":
+        hr = int(time_str[0])
+        time_str = time_str[2:]
+    # [FORMAT 2/3/4/5] String starts with 2 digits and a colon: the two digits
+    # are the hour so long as they are less than 24
+    elif time_str[:2].isdigit() and time_str[2] == ":" and int(time_str[:2]) < 24:
+        hr = int(time_str[:2])
+        time_str = time_str[3:]
+    else:
+        return 0, 0, 0, 0, False
+    # [FORMAT 2] Rest of the string is just a number: the number is the minute
+    # so long as it is less than 60
+    if time_str.isdigit():
+        mi = int(time_str)
+        return hr, mi, sc, ns, mi < 60
+    # [FORMAT 3/4/5] Next section starts with a digit and a colon: the digit
+    # is the minute
+    if len(time_str) > 1 and time_str[0].isdigit() and time_str[1] == ":":
+        mi = int(time_str[0])
+        time_str = time_str[2:]
+    # [FORMAT 3/4/5] Next section starts with 2 digits and a colon: the two digits
+    # are the minute so long as they are less than 60
+    elif (
+        len(time_str) > 2
+        and time_str[:2].isdigit()
+        and time_str[2] == ":"
+        and int(time_str[:2]) < 60
+    ):
+        mi = int(time_str[:2])
+        time_str = time_str[3:]
+    else:
+        return 0, 0, 0, 0, False
+    # [FORMAT 3] Rest of the string is just a number: the number is the second
+    # so long as it is less than 60
+    if time_str.isdigit():
+        sc = int(time_str)
+        return hr, mi, sc, ns, sc < 60
+    # [FORMAT 4/5] Next section starts with a digit and a dot: the digit is
+    # the second
+    if len(time_str) > 1 and time_str[0].isdigit() and time_str[1] == ".":
+        sc = int(time_str[0])
+        time_str = time_str[2:]
+    # [FORMAT 4/5] Next section starts with 2 digits and a dot: the two digits
+    # are the second so long as they are less than 60
+    elif (
+        len(time_str) > 2
+        and time_str[:2].isdigit()
+        and time_str[2] == "."
+        and int(time_str[:2]) < 60
+    ):
+        sc = int(time_str[:2])
+        time_str = time_str[3:]
+    else:
+        return 0, 0, 0, 0, False
+    # [FORMAT 4] The rest of the string is empty: we are done
+    if len(time_str) == 0:
+        return hr, mi, sc, ns, True
+    # [FORMAT 5] The rest of the string is a number: that number is the nanoseconds.
+    # all digits after the first 9 are ignored, and trailing zeros are added
+    if time_str.isdigit():
+        digits = min(9, len(time_str))
+        ns = int(time_str[:9])
+        ns *= 10 ** (9 - digits)
+        return hr, mi, sc, ns, True
+    # Any other case is malformed
+    return 0, 0, 0, 0, False
 
 
 ll.add_symbol("box_time_array", hdatetime_ext.box_time_array)

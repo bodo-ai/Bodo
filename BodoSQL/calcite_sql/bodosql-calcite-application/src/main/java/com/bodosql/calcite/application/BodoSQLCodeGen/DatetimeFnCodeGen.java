@@ -124,7 +124,7 @@ public class DatetimeFnCodeGen {
   public static Expr generateCurrTimeCode(String opName, BodoTZInfo tzInfo) {
     String fnExpression =
         String.format(
-            "bodo.libs.bodosql_array_kernels.to_time_util(pd.Timestamp.now(%s))",
+            "bodo.libs.bodosql_array_kernels.to_time(pd.Timestamp.now(%s), True)",
             tzInfo == null ? "" : tzInfo.getPyZone());
     return new Expr.Raw(fnExpression);
   }
@@ -229,15 +229,20 @@ public class DatetimeFnCodeGen {
   }
 
   /**
-   * Helper function that handles the codegen for snowflake SQL's TIME and TO_TIME
+   * Helper function that handles the codegen for snowflake SQL's TIME, TO_TIME, and TRY_TO_TIME
    *
    * @param arg1Type The type of the first argument.
    * @param arg1Info The VisitorInfo for the first argument.
-   * @param opName should be either "TIME" or "TO_TIME"
+   * @param opName should be either "TIME", "TO_TIME", or "TRY_TO_TIME"
    * @return the rexNodeVisitorInfo for the function call
    */
   public static Expr generateToTimeCode(SqlTypeName arg1Type, Expr arg1Info, String opName) {
-    String outputExpression = "bodo.libs.bodosql_array_kernels.to_time(" + arg1Info.emit() + ")";
+    String outputExpression =
+        "bodo.libs.bodosql_array_kernels.to_time("
+            + arg1Info.emit()
+            + ", _try="
+            + (opName.contains("TRY") ? "True" : "False")
+            + ")";
     return new Expr.Raw(outputExpression);
   }
 
