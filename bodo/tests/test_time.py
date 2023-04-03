@@ -12,37 +12,129 @@ from bodo.utils.testing import ensure_clean
 
 
 @pytest.mark.parametrize(
-    "str_time,int_time",
+    "time_str, answer",
     [
         pytest.param(
-            bodo.time_from_str("12:34:56", precision=0),
-            bodo.Time(12, 34, 56, precision=0),
-            id="second_str",
+            "0",
+            bodo.Time(0, 0, 0, precision=9),
+            id="numeric_string-zero",
         ),
         pytest.param(
-            bodo.time_from_str("12:34:56.789", precision=3),
-            bodo.Time(12, 34, 56, 789, precision=3),
-            id="millisecond_str",
+            "30",
+            bodo.Time(0, 0, 30, precision=9),
+            id="numeric_string-thirty",
         ),
         pytest.param(
-            bodo.time_from_str("12:34:56.789123", precision=6),
-            bodo.Time(12, 34, 56, 789, 123, precision=6),
-            id="microsecond_str",
+            "10000",
+            bodo.Time(2, 46, 40, precision=9),
+            id="numeric_string-ten_thousand",
         ),
         pytest.param(
-            bodo.time_from_str("12:34:56.789123456", precision=9),
-            bodo.Time(12, 34, 56, 789, 123, 456, precision=9),
-            id="nanosecond_str",
+            "12:30",
+            bodo.Time(12, 30, 0, precision=9),
+            id="hour_minute-no_leading",
         ),
         pytest.param(
-            bodo.time_from_str("12:34:56.789123456"),
-            bodo.Time(12, 34, 56, 789, 123, 456),
-            id="non_specified_str",
+            "10:5",
+            bodo.Time(10, 5, 0, precision=9),
+            id="hour_minute-short_minute",
+        ),
+        pytest.param(
+            "7:45",
+            bodo.Time(7, 45, 0, precision=9),
+            id="hour_minute-short_hour",
+        ),
+        pytest.param(
+            "1:6",
+            bodo.Time(1, 6, 0, precision=9),
+            id="hour_minute-short_both",
+        ),
+        pytest.param(
+            "10:20:30",
+            bodo.Time(10, 20, 30, precision=9),
+            id="hour_minute_second-no_leading",
+        ),
+        pytest.param(
+            "23:01:59",
+            bodo.Time(23, 1, 59, precision=9),
+            id="hour_minute_second-short_minute",
+        ),
+        pytest.param(
+            "20:50:03",
+            bodo.Time(20, 50, 3, precision=9),
+            id="hour_minute_second-short_second",
+        ),
+        pytest.param(
+            "1:2:3",
+            bodo.Time(1, 2, 3, precision=9),
+            id="hour_minute_second-short_all",
+        ),
+        pytest.param(
+            "16:17:18.",
+            bodo.Time(16, 17, 18, precision=9),
+            id="hour_minute_second_dot-no_leading",
+        ),
+        pytest.param(
+            "6:30:9.",
+            bodo.Time(6, 30, 9, precision=9),
+            id="hour_minute_second_dot-short_hour_sec",
+        ),
+        pytest.param(
+            "00:4:0.",
+            bodo.Time(0, 4, 0, precision=9),
+            id="hour_minute_second_dot-short_minute_sec",
+        ),
+        pytest.param(
+            "12:30:15.5",
+            bodo.Time(12, 30, 15, nanosecond=500_000_000, precision=9),
+            id="hour_minute_second_nanoseconds-one_digit",
+        ),
+        pytest.param(
+            "12:30:15.99",
+            bodo.Time(12, 30, 15, nanosecond=990_000_000, precision=9),
+            id="hour_minute_second_nanoseconds-two_digits",
+        ),
+        pytest.param(
+            "12:30:15.607",
+            bodo.Time(12, 30, 15, nanosecond=607_000_000, precision=9),
+            id="hour_minute_second_nanoseconds-three_digits",
+        ),
+        pytest.param(
+            "12:30:15.0034",
+            bodo.Time(12, 30, 15, nanosecond=3_400_000, precision=9),
+            id="hour_minute_second_nanoseconds-four_digits",
+        ),
+        pytest.param(
+            "12:30:15.000250",
+            bodo.Time(12, 30, 15, nanosecond=250_000, precision=9),
+            id="hour_minute_second_nanoseconds-six_digits",
+        ),
+        pytest.param(
+            "12:30:15.67108864",
+            bodo.Time(12, 30, 15, nanosecond=671_088_640, precision=9),
+            id="hour_minute_second_nanoseconds-eight_digits",
+        ),
+        pytest.param(
+            "12:30:15.123456789",
+            bodo.Time(12, 30, 15, nanosecond=123_456_789, precision=9),
+            id="hour_minute_second_nanoseconds-nine_digits",
+        ),
+        pytest.param(
+            "12:30:15.989796859493",
+            bodo.Time(12, 30, 15, nanosecond=989_796_859, precision=9),
+            id="hour_minute_second_nanoseconds-twelve_digits",
         ),
     ],
 )
-def test_time_python_constructor(str_time, int_time):
-    assert str_time == int_time
+def test_time_parsing(time_str, answer):
+    def impl(time_str):
+        hr, mi, sc, ns, succeeded = bodo.parse_time_string(time_str)
+        if succeeded:
+            return bodo.Time(hr, mi, sc, nanosecond=ns, precision=9)
+        else:
+            return bodo.Time(0, 0, 0, nanosecond=0, precision=9)
+
+    check_func(impl, (time_str,), py_output=answer)
 
 
 @pytest.mark.parametrize(
@@ -80,25 +172,6 @@ def test_time_python_constructor(str_time, int_time):
         pytest.param(
             lambda: bodo.Time(12, 34, 56, 78, 12, 34, precision=9),
             id="nanosecond",
-        ),
-        pytest.param(
-            lambda: bodo.time_from_str("12:34:56", precision=0),
-            id="second_str",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            lambda: bodo.time_from_str("12:34:56.789", precision=3),
-            id="millisecond_str",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            lambda: bodo.time_from_str("12:34:56.789123", precision=6),
-            id="microsecond_str",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            lambda: bodo.time_from_str("12:34:56.789123456", precision=9),
-            id="nanosecond_str",
         ),
     ],
 )
@@ -581,6 +654,7 @@ def test_compare_with_none(memory_leak_check):
     """
     Tests to compare Time with None
     """
+
     def impl1():
         return bodo.Time(1, 2, 3) < None
 
@@ -595,6 +669,7 @@ def test_compare_with_none(memory_leak_check):
         return bodo.Time(1, 2, 3) != None
 
     check_func(impl3, (), py_output=True)
+
     def impl4():
         return None == bodo.Time(4, 5, 6)
 
@@ -606,6 +681,7 @@ def test_compare_different_precisions(memory_leak_check):
     """
     Tests to compare Time objects with different precisions
     """
+
     def impl1():
         return bodo.Time(5, 6, 7, 8) != bodo.Time(5, 6, 7, 8, precision=3)
 
@@ -632,6 +708,7 @@ def test_compare_same_precision(memory_leak_check):
     """
     Tests to compare Time objects with the same precision
     """
+
     def impl1():
         return bodo.Time(12) != bodo.Time(12, 13, 14)
 

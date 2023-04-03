@@ -201,7 +201,12 @@ import bodo.libs.binops_ext
 import bodo.libs.array_ops
 from bodo.utils.utils import cprint
 from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type
-from bodo.hiframes.time_ext import TimeType, TimeArrayType, Time, time_from_str
+from bodo.hiframes.time_ext import (
+    TimeType,
+    TimeArrayType,
+    Time,
+    parse_time_string,
+)
 from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_type,
     datetime_timedelta_array_type,

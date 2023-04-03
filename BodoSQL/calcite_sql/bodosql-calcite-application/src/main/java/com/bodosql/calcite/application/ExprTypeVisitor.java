@@ -48,6 +48,7 @@ public class ExprTypeVisitor {
           "FACTORIAL",
           "TO_TIME",
           "TIME",
+          "TRY_TO_TIME",
           "FROM_DAYS",
           "FROM_UNIXTIME",
           "HOUR",
