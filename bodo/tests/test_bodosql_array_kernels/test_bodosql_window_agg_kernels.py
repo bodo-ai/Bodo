@@ -2,6 +2,7 @@
 """Test Bodo's array kernel utilities for BodoSQL window/aggregation functions
 """
 
+import datetime
 import math
 
 import numpy as np
@@ -9,7 +10,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import bodosql_use_date_type, check_func
 
 
 @bodo.jit(distributed=False)
@@ -373,18 +374,50 @@ def window_kernel_all_types_data():
                 for i in range(450)
             ]
         ),
-        "datetime": pd.Series(
+        "timestamp": pd.Series(
             [
-                None if year is None else pd.datetime(2000 + year, 1, 1)
+                None
+                if days is None
+                else pd.Timestamp("2026-1-1") - pd.Timedelta(days=days)
                 for tup in zip(
-                    [i for i in range(50)],
-                    [((i + 3) ** 2) % 22 for i in range(50)],
-                    [None] * 50,
-                    [((i + 4) ** 3) % 22 for i in range(50)],
-                    [((i + 5) ** 4) % 22 for i in range(50)],
-                    [((i + 6) ** 5) % 22 for i in range(50)],
+                    [(i + 10) ** 2 for i in range(50)],
+                    [int(1.2**i) for i in range(50)],
+                    [None, 100, 100, None, 256] * 10,
+                    [(2**i) % 10000 for i in range(50)],
+                    [(i**3) % 10000 for i in range(50)],
+                    [7 ** int(math.log2(i + 1)) for i in range(50)],
                 )
-                for year in tup
+                for days in tup
+            ]
+        ),
+        "date": pd.Series(
+            [
+                None if days is None else datetime.date.fromordinal(738705 - days)
+                for tup in zip(
+                    [(i**3) % 9000 for i in range(50)],
+                    [(i + 7) ** 2 for i in range(50)],
+                    [6 ** int(math.log2(i + 1)) for i in range(50)],
+                    [None, 100, 100, None, 256] * 10,
+                    [(2**i) % 9000 for i in range(50)],
+                    [int(1.19**i) for i in range(50)],
+                )
+                for days in tup
+            ]
+        ),
+        "time": pd.Series(
+            [
+                None
+                if ns is None
+                else bodo.Time(0, 0, 0, nanosecond=123456789 * ns, precision=9)
+                for tup in zip(
+                    [(i**3) % 900000 for i in range(50)],
+                    [(i + 15) ** 2 for i in range(50)],
+                    [6 ** int(math.log2(i + 1)) for i in range(50)],
+                    [None, 10**12, 10**13, None, 10**13] * 10,
+                    [(3**i) % 900000 for i in range(50)],
+                    [int(2**i) for i in range(50)],
+                )
+                for ns in tup
             ]
         ),
     }
@@ -621,16 +654,36 @@ def test_windowed_kernels_numeric(
         pytest.param("binary", 1, 3, id="binary-leading_3", marks=pytest.mark.slow),
         pytest.param("binary", 3, -3, id="binary-backward", marks=pytest.mark.slow),
         pytest.param(
-            "datetime", -1000, 0, id="datetime-suffix_exclusive", marks=pytest.mark.slow
+            "timestamp",
+            -1000,
+            0,
+            id="timestamp-suffix_exclusive",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
-            "datetime", -1000, 1000, id="datetime-entire_window", marks=pytest.mark.slow
+            "timestamp",
+            -1000,
+            1000,
+            id="timestamp-entire_window",
+            marks=pytest.mark.slow,
         ),
-        pytest.param("datetime", 0, 0, id="datetime-current", marks=pytest.mark.slow),
+        pytest.param("timestamp", 0, 0, id="timestamp-current", marks=pytest.mark.slow),
         pytest.param(
-            "datetime", -20, 20, id="datetime-rolling_41", marks=pytest.mark.slow
+            "timestamp", -20, 20, id="timestamp-rolling_41", marks=pytest.mark.slow
         ),
-        pytest.param("datetime", 3, -3, id="datetime-backward", marks=pytest.mark.slow),
+        pytest.param("timestamp", -13, -1, id="timestamp-lagging_13"),
+        pytest.param(
+            "timestamp", 3, -3, id="timestamp-backward", marks=pytest.mark.slow
+        ),
+        pytest.param("date", -1000, 0, id="date-prefix"),
+        pytest.param("date", -10, -1, id="date-leading_10"),
+        pytest.param("date", -1000, 1000, id="date-entire_window"),
+        pytest.param("date", 7, -7, id="date-backward"),
+        pytest.param("time", 0, 1000, id="time-suffix"),
+        pytest.param("time", -3, 3, id="time-rolling_7"),
+        pytest.param("time", 5, 30, id="time-leading_26"),
+        pytest.param("time", -1000, 1000, id="time-entire_window"),
+        pytest.param("time", 1000, 2000, id="time-too_large"),
     ],
 )
 def test_windowed_mode(
@@ -703,19 +756,20 @@ def test_windowed_mode(
         else:
             return pd.Series(L, dtype=S.dtype)
 
-    check_func(
-        impl,
-        (data, lower_bound, upper_bound),
-        py_output=generate_answers(
-            data, lower_bound, upper_bound, dataset == "float64_nan"
-        ),
-        check_dtype=False,
-        reset_index=True,
-        # For now, only works sequentially because it can only be used inside
-        # of a Window function with a partition
-        only_seq=True,
-        is_out_distributed=False,
-    )
+    with bodosql_use_date_type():
+        check_func(
+            impl,
+            (data, lower_bound, upper_bound),
+            py_output=generate_answers(
+                data, lower_bound, upper_bound, dataset == "float64_nan"
+            ),
+            check_dtype=False,
+            reset_index=True,
+            # For now, only works sequentially because it can only be used inside
+            # of a Window function with a partition
+            only_seq=True,
+            is_out_distributed=False,
+        )
 
 
 @pytest.mark.parametrize(
