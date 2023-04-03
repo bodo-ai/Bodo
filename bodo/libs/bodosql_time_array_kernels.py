@@ -7,53 +7,56 @@ import numba
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import raise_bodo_error
+from bodo.utils.typing import get_overload_const_bool, raise_bodo_error
 
 
 @numba.generated_jit(nopython=True)
-def to_time(arr):
-    """Handles TIME/TO_TIME and forwards
+def to_time(arr, _try):
+    """Handles TIME/TO_TIME/TRY_TO_TIME and forwards
     to the appropriate version of the real implementation"""
+
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.to_time_util",
             [
                 "arr",
+                "_try",
             ],
             0,
         )
 
-    def impl(arr):  # pragma: no cover
-        return to_time_util(arr)
+    def impl(arr, _try):  # pragma: no cover
+        return to_time_util(arr, _try)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def to_time_util(arr):  # pragma: no cover
-    """Kernel for `TO_TIME` and `TIME`"""
+def to_time_util(arr, _try):  # pragma: no cover
+    """Kernel for `TO_TIME`, `TIME`, and `TRY_TO_TIME`"""
 
-    arg_names = ["arr"]
-    arg_types = [arr]
+    arg_names = ["arr", "_try"]
+    arg_types = [arr, _try]
     propagate_null = [True]
 
-    if is_valid_int_arg(arr):
-        scalar_text = "res[i] = bodo.Time(0, 0, arg0)"
-    elif (
-        is_valid_date_arg(arr)
-        or is_valid_tz_naive_datetime_arg(arr)
-        or is_valid_tz_aware_datetime_arg(arr)
-    ):
-        scalar_text = (
-            "res[i] = bodo.Time(arg0.hour, arg0.minute, arg0.second, arg0.nanosecond)"
-        )
-    elif is_valid_string_arg(arr):
-        scalar_text = "res[i] = bodo.time_from_str(arg0)"
+    _try = get_overload_const_bool(_try)
+
+    if is_valid_string_arg(arr) or is_overload_none(arr):
+        scalar_text = "hr, mi, sc, ns, succeeded = bodo.parse_time_string(arg0)\n"
+        scalar_text += "if succeeded:\n"
+        scalar_text += "   res[i] = bodo.Time(hr, mi, sc, nanosecond=ns, precision=9)\n"
+        scalar_text += "else:\n"
+        if _try:
+            scalar_text += "  bodo.libs.array_kernels.setna(res, i)"
+        else:
+            scalar_text += "  raise ValueError('Invalid time string')"
+    elif is_valid_tz_naive_datetime_arg(arr) or is_valid_tz_aware_datetime_arg(arr):
+        scalar_text = "ts = bodo.utils.conversion.box_if_dt64(arg0)\n"
+        scalar_text += "res[i] = bodo.Time(ts.hour, ts.minute, ts.second, microsecond=ts.microsecond, nanosecond=ts.nanosecond, precision=9)\n"
     else:
         raise_bodo_error(
-            f"TO_TIME/TIME argument must be an integer, datetime, string, integer or string column, or null"
+            "TIME/TO_TIME/TRY_TO_TIME argument must be a string, timestamp, or null"
         )
-
     out_dtype = bodo.TimeArrayType(9)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
@@ -66,7 +69,7 @@ def time_from_parts(hour, minute, second, nanosecond):
     for i in range(len(args)):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.time_from_arts",
+                "bodo.libs.bodosql_array_kernels.time_from_parts",
                 ["hour", "minute", "second", "nanosecond"],
                 i,
             )

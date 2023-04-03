@@ -142,8 +142,8 @@ public class BodoArrayHelpers {
         return String.format("bodo.DatetimeArrayType(%s)", tzAwareType.getTZInfo().getPyZone());
       case TIME:
         // TODO: Add nullable support
-        int precision = type.getPrecision();
-        return String.format("bodo.TimeArrayType(%d)", precision);
+        // TODO: Add precision support once Bodo stores value differently based on precision
+        return "bodo.TimeArrayType(9)";
       case VARCHAR:
       case CHAR:
         // TODO: Add nullable support

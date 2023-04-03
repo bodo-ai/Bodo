@@ -938,6 +938,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateFromDaysCode(operands.get(0));
           case "TIME":
           case "TO_TIME":
+          case "TRY_TO_TIME":
             return generateToTimeCode(
                 fnOperation.getOperands().get(0).getType().getSqlTypeName(),
                 operands.get(0),

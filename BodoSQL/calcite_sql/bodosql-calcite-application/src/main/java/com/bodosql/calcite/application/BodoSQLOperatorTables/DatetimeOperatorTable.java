@@ -126,7 +126,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(OperandTypes.INTEGER, OperandTypes.STRING),
+          OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -140,7 +140,21 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(OperandTypes.INTEGER, OperandTypes.STRING),
+          OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TRY_TO_TIME =
+      new SqlFunction(
+          "TRY_TO_TIME",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.TIME_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -973,6 +987,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           YEARWEEK,
           WEEKDAY,
           TO_TIME,
+          TRY_TO_TIME,
           TIMEFROMPARTS,
           TIME_FROM_PARTS,
           TIME,
