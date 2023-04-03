@@ -1,9 +1,12 @@
+import datetime
+
 import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.test_window.window_common import count_window_applies
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import bodosql_use_date_type, check_query
 
+from bodo import Time
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_window_agg_kernels import (
     nullable_float_arr_maker,
 )
@@ -489,6 +492,78 @@ def test_ratio_to_report(data_col, partition_col, answer, memory_leak_check):
             id="tz-aware-overinclusive_prefix",
             marks=pytest.mark.tz_aware,
         ),
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.date(2024, 1, 1),
+                    datetime.date(2024, 1, 1),
+                    None,
+                    datetime.date(2022, 7, 4),
+                    None,
+                    datetime.date(1999, 12, 31),
+                    datetime.date(1999, 12, 31),
+                    datetime.date(1999, 12, 31),
+                    datetime.date(2022, 7, 4),
+                    datetime.date(2022, 7, 4),
+                ]
+            ),
+            ("CURRENT ROW", "UNBOUNDED FOLLOWING"),
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [
+                            datetime.date(2024, 1, 1),
+                            datetime.date(2024, 1, 1),
+                            datetime.date(2022, 7, 4),
+                            datetime.date(2022, 7, 4),
+                            None,
+                            datetime.date(1999, 12, 31),
+                            datetime.date(1999, 12, 31),
+                            datetime.date(2022, 7, 4),
+                            datetime.date(2022, 7, 4),
+                            datetime.date(2022, 7, 4),
+                        ]
+                    )
+                }
+            ),
+            id="date-suffix",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    Time(6, 10, 0, microsecond=500, precision=9),
+                    Time(7, 45, 59, precision=9),
+                    Time(7, 45, 59, precision=9),
+                    Time(6, 10, 0, microsecond=500, precision=9),
+                    Time(7, 45, 59, nanosecond=1, precision=9),
+                    None,
+                    Time(12, 30, 0, precision=9),
+                    Time(10, 0, 1, precision=9),
+                    Time(10, 0, 1, precision=9),
+                    Time(12, 30, 0, precision=9),
+                ]
+            ),
+            ("UNBOUNDED PRECEDING", "CURRENT ROW"),
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [
+                            Time(6, 10, 0, microsecond=500, precision=9),
+                            Time(6, 10, 0, microsecond=500, precision=9),
+                            Time(7, 45, 59, precision=9),
+                            Time(6, 10, 0, microsecond=500, precision=9),
+                            Time(6, 10, 0, microsecond=500, precision=9),
+                            None,
+                            Time(12, 30, 0, precision=9),
+                            Time(12, 30, 0, precision=9),
+                            Time(10, 0, 1, precision=9),
+                            Time(12, 30, 0, precision=9),
+                        ]
+                    )
+                }
+            ),
+            id="time-prefix",
+        ),
     ],
 )
 def test_mode(data_col, bounds, answer, memory_leak_check):
@@ -509,16 +584,17 @@ def test_mode(data_col, bounds, answer, memory_leak_check):
         )
     }
 
-    check_query(
-        query,
-        ctx,
-        None,
-        check_dtype=False,
-        check_names=False,
-        sort_output=False,
-        expected_output=answer,
-        only_jit_1DVar=True,
-    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
+            None,
+            check_dtype=False,
+            check_names=False,
+            sort_output=False,
+            expected_output=answer,
+            only_jit_1DVar=True,
+        )
 
 
 def test_variance_stddev_nan(memory_leak_check):

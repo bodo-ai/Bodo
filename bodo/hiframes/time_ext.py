@@ -91,6 +91,9 @@ class Time:
     def __str__(self):
         return f"{self.hour}:{self.minute}:{self.second}.{self.microsecond}{self.nanosecond}"
 
+    def __hash__(self):
+        return int(self.value)
+
     def __eq__(self, other):
         if not isinstance(other, Time):  # pragma: no cover
             return False
@@ -153,9 +156,6 @@ class Time:
         if self.precision == 0:
             return self.value // _nanos_per_second
         raise BodoError(f"Unsupported precision: {self.precision}")
-
-    def __hash__(self):
-        return hash((self.value, self.precision))
 
     @property
     def hour(self):
@@ -372,6 +372,16 @@ def time_nanosecond_attribute(val):  # pragma: no cover
 @overload_attribute(TimeType, "value")
 def time_value_attribute(val):  # pragma: no cover
     return lambda val: cast_time_to_int(val)
+
+
+@overload_method(TimeType, "__hash__")
+def __hash__(t):
+    """Hashcode for Time types."""
+
+    def impl(t):  # pragma: no cover
+        return t.value
+
+    return impl
 
 
 def _to_nanos_codegen(
