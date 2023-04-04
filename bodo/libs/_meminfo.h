@@ -123,28 +123,7 @@ typedef struct MemInfo NRT_MemInfo;
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
 #endif
 
-inline void NRT_Free(void *ptr) {
-    NRT_MemSys::instance()->allocator.free(ptr);
-    NRT_MemSys::instance()->stats_free++;
-}
-
-inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
-    NRT_Free(mi);
-    NRT_MemSys::instance()->stats_mi_free++;
-}
-
-/* This function is to be called only from C++.
-   For Python the NUMBA decref functions are called.
-   Assert statements are made for controlling that the reference count is 0.
- */
-inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
-    assert(mi->refct == 0);  // The reference count should be exactly 0
-    if (mi->dtor && !NRT_MemSys::instance()->shutting)
-        /* We have a destructor and the system is not shutting down */
-        mi->dtor(mi->data, mi->size, mi->dtor_info);
-    /* Clear and release MemInfo */
-    NRT_MemInfo_destroy(mi);
-}
+/* ------- Wrappers around MemSys.allocator functions ------- */
 
 inline void *NRT_Allocate(size_t size) {
     void *ptr = NRT_MemSys::instance()->allocator.malloc(size);
@@ -157,60 +136,83 @@ inline void *NRT_Allocate(size_t size) {
     return ptr;
 }
 
+inline void NRT_Free(void *ptr) {
+    NRT_MemSys::instance()->allocator.free(ptr);
+    NRT_MemSys::instance()->stats_free++;
+}
+
+/* ----------------------------------------------------------- */
+
+/**
+ * @brief This only frees the MemInfo struct, and not the underlying
+ * data (since they are allocated separately).
+ *
+ * @param mi MemInfo struct to free.
+ */
+inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
+    NRT_Free(mi);
+    NRT_MemSys::instance()->stats_mi_free++;
+}
+
+/**
+ * @brief Destructor for the Meminfo struct, which will also free the underlying
+ * data through the dtor in the meminfo.
+ *
+ * NOTE: This function is to be called only from C++.
+ *       For Python the NUMBA decref functions are called.
+ *       Assert statements are made for controlling that the reference count is
+ *       0.
+ *
+ *
+ * @param mi MemInfo to destroy.
+ */
+inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
+    assert(mi->refct == 0);  // The reference count should be exactly 0
+    if (mi->dtor && !NRT_MemSys::instance()->shutting) {
+        // We have a destructor and the system is not shutting down.
+        // This dtor will free the underlying data.
+        mi->dtor(mi->data, mi->size, mi->dtor_info);
+    }
+    // Clear and release MemInfo struct.
+    NRT_MemInfo_destroy(mi);
+}
+
+/**
+ * @brief Main function where memory for the Meminfo struct and the
+ * underlying data is allocated.
+ * We make separate allocations for the MemInfo struct itself and the underlying
+ * data.
+ * In the future, the data allocation will go through our buffer pool.
+ *
+ * @param size Size of data to allocate.
+ * @param [out] mi_out Allocated MemInfo struct.
+ * @return void* Pointer to allocated data buffer.
+ */
 inline void *nrt_allocate_meminfo_and_data(size_t size, NRT_MemInfo **mi_out) {
     NRT_MemInfo *mi;
-    char *base = (char *)NRT_Allocate(sizeof(NRT_MemInfo) + size);
-    mi = (NRT_MemInfo *)base;
+    char *data = (char *)NRT_Allocate(size);
+    mi = (NRT_MemInfo *)NRT_Allocate(sizeof(NRT_MemInfo));
     *mi_out = mi;
-    return base + sizeof(NRT_MemInfo);
+    return data;
 }
 
-inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
-                             NRT_dtor_function dtor, void *dtor_info,
-                             void *external_allocator) {
-    mi->refct = 1; /* starts with 1 refct */
-    mi->dtor = dtor;
-    mi->dtor_info = dtor_info;
-    mi->data = data;
-    mi->size = size;
-    mi->external_allocator = external_allocator;
-    /* Update stats */
-    NRT_MemSys::instance()->stats_mi_alloc++;
-}
-
-inline void nrt_internal_dtor_safe(void *ptr, size_t size, void *info) {
-    /* See NRT_MemInfo_alloc_safe() */
-    memset(ptr, 0xDE, MIN(size, 256));
-}
-
-inline void nrt_internal_custom_dtor_safe(void *ptr, size_t size, void *info) {
-    NRT_dtor_function dtor = (NRT_dtor_function)info;
-
-    if (dtor) {
-        dtor(ptr, size, NULL);
-    }
-
-    nrt_internal_dtor_safe(ptr, size, NULL);
-}
-
-inline NRT_MemInfo *NRT_MemInfo_alloc_dtor_safe(size_t size,
-                                                NRT_dtor_function dtor) {
-    NRT_MemInfo *mi;
-    void *data = nrt_allocate_meminfo_and_data(size, &mi);
-    /* Only fill up a couple cachelines with debug markers, to minimize
-       overhead. */
-    memset(data, 0xCB, MIN(size, 256));
-    NRT_MemInfo_init(mi, data, size, nrt_internal_custom_dtor_safe,
-                     (void *)dtor, NULL);
-    return mi;
-}
-
-inline NRT_MemInfo *NRT_MemInfo_alloc_safe(size_t size) {
-    return NRT_MemInfo_alloc_dtor_safe(size, NULL);
-}
-
+/**
+ * @brief Wrapper around nrt_allocate_meminfo_and_data (previous function) which
+ * additionally ensures that the allocated underlying data is aligned.
+ * It returns a pointer to the "aligned" address. Address to the original
+ * allocation address is returned through the base_data_ptr parameter for
+ * use during deallocation.
+ *
+ * @param size Allocation size.
+ * @param align Alignment for the data buffer.
+ * @param [out] mi Allocated MemInfo struct.
+ * @param [out] base_data_ptr Address to the data allocation that can be used
+ * with 'free' during de-allocation.
+ * @return void* Aligned data pointer.
+ */
 inline void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
-                                                 NRT_MemInfo **mi) {
+                                                 NRT_MemInfo **mi,
+                                                 void **base_data_ptr) {
     size_t offset, intptr, remainder;
     size_t capacity = size + 2 * align;
     char *base = (char *)nrt_allocate_meminfo_and_data(capacity, mi);
@@ -228,20 +230,108 @@ inline void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
     // https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/buffer.h#L125
     memset(base + offset + size, 0, capacity - size - offset);
 
+    *base_data_ptr = base;
     return base + offset;
 }
 
-inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size,
-                                                   unsigned align) {
+/**
+ * @brief Set attributes of a newly created Meminfo struct.
+ * Must be called right after a Meminfo struct is created.
+ *
+ */
+inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
+                             NRT_dtor_function dtor, void *dtor_info,
+                             void *external_allocator) {
+    mi->refct = 1; /* starts with 1 refct */
+    mi->dtor = dtor;
+    mi->dtor_info = dtor_info;
+    mi->data = data;
+    mi->size = size;
+    mi->external_allocator = external_allocator;
+    /* Update stats */
+    NRT_MemSys::instance()->stats_mi_alloc++;
+}
+
+/* ------ MemInfo + Data Allocation CodePath 1 ------ */
+
+/// @brief Destructor for Meminfo (and underlying data) allocated
+/// through  NRT_MemInfo_alloc_dtor_safe.
+inline void nrt_internal_custom_safe_dtor(void *ptr, size_t size,
+                                          void *custom_dtor) {
+    NRT_dtor_function dtor = (NRT_dtor_function)custom_dtor;
+
+    if (dtor) {
+        dtor(ptr, size, NULL);
+    }
+
+    // In this case, ptr points to the underlying data.
+    // Since there was no alignment offset, we can call 'free'
+    // directly on this location.
+    memset(ptr, 0xDE, MIN(size, 256));  // XXX Get rid of this?
+    NRT_Free(ptr);
+}
+
+/// @brief Allocate MemInfo and data (no alignment constraints)
+/// with a custom destructor.
+inline NRT_MemInfo *NRT_MemInfo_alloc_dtor_safe(size_t size,
+                                                NRT_dtor_function dtor) {
     NRT_MemInfo *mi;
-    void *data = nrt_allocate_meminfo_and_data_align(size, align, &mi);
+
+    // Since we are not re-aligning the data, we don't need to store
+    // additional information about the base data pointer (unlike
+    // NRT_MemInfo_alloc_safe_aligned). In the destructor, we will
+    // call 'free' on the data pointer directly.
+    void *data = nrt_allocate_meminfo_and_data(size, &mi);
     /* Only fill up a couple cachelines with debug markers, to minimize
        overhead. */
     memset(data, 0xCB, MIN(size, 256));
-    NRT_MemInfo_init(mi, data, size, nrt_internal_dtor_safe, (void *)size,
-                     NULL);
+    NRT_MemInfo_init(mi, data, size, nrt_internal_custom_safe_dtor,
+                     (void *)dtor, NULL);
     return mi;
 }
+
+/// @brief Wrapper around NRT_MemInfo_alloc_dtor_safe when no
+/// custom destructor is required.
+inline NRT_MemInfo *NRT_MemInfo_alloc_safe(size_t size) {
+    return NRT_MemInfo_alloc_dtor_safe(size, NULL);
+}
+
+/* -------------------------------------------------- */
+
+/* ------ MemInfo + Data Allocation CodePath 2 ------ */
+
+/// @brief Destructor for MemInfo (and underlying data) allocated through
+/// the NRT_MemInfo_alloc_safe_aligned function.
+inline void nrt_internal_safe_aligned_dtor(void *ptr, size_t size,
+                                           void *dtor_info) {
+    /* See NRT_MemInfo_alloc_safe() */
+    memset(ptr, 0xDE, MIN(size, 256));  // XXX Get rid of this?
+
+    // Free the underlying data.
+    void *base_data_ptr = dtor_info;
+    NRT_Free(base_data_ptr);
+}
+
+/// @brief Allocate MemInfo and data (aligned as per 'align').
+inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size,
+                                                   unsigned align) {
+    NRT_MemInfo *mi;
+    // nrt_allocate_meminfo_and_data_align will return a data pointer
+    // with some offset (for alignment purposes). However, we need
+    // to retain a pointer to the original buffer since that's
+    // what we'll need to eventually call "free" on.
+    void *base_data_ptr;
+    void *data =
+        nrt_allocate_meminfo_and_data_align(size, align, &mi, &base_data_ptr);
+    /* Only fill up a couple cachelines with debug markers, to minimize
+       overhead. */
+    memset(data, 0xCB, MIN(size, 256));
+    NRT_MemInfo_init(mi, data, size, nrt_internal_safe_aligned_dtor,
+                     base_data_ptr, NULL);
+    return mi;
+}
+
+/* -------------------------------------------------- */
 
 }  // extern "C"
 
