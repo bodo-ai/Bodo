@@ -3,10 +3,6 @@
 
 std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
 
-// Global memory allocation tracker to allow finding memory leaks in unit tests.
-// Each extension module is a separate shared library and has a copy.
-NRT_MemSys TheMSys(malloc, realloc, free);
-
 void bodo_common_init() {
     static bool initialized = false;
     if (initialized) {
