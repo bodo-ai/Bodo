@@ -3982,3 +3982,19 @@ def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
             check_names=False,
             expected_output=pd.DataFrame({}),
         )
+
+
+@pytest.mark.parametrize("fn_name", ["CURDATE", "CURRENT_DATE"])
+def test_current_date(fn_name, memory_leak_check):
+    """
+    Test CURRENT_DATE function and its alias CURDATE
+    """
+    query = f"SELECT {fn_name}()"
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            {},
+            None,
+            check_names=False,
+            expected_output=pd.DataFrame({"output": [datetime.date.today()]}),
+        )
