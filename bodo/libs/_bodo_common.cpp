@@ -404,53 +404,26 @@ void dtor_array_item_arr(array_item_arr_payload* payload, int64_t size,
         NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
 }
 
-array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr,
+array_info* alloc_list_string_array(int64_t length, array_info* string_arr,
                                     int64_t extra_null_bytes) {
-    // create array(item) meminfo for string data array
-    NRT_MemInfo* meminfo_string_array = alloc_array_item_arr_meminfo();
-    array_item_arr_numpy_payload* str_payload =
-        (array_item_arr_numpy_payload*)(meminfo_string_array->data);
-
-    str_payload->n_arrays = string_arr->length;
-    int64_t n_chars = string_arr->n_sub_elems();
-    int64_t char_itemsize = numpy_item_size[Bodo_CTypes::INT8];
-    str_payload->data = make_numpy_array_payload(
-        string_arr->meminfos[0], NULL, n_chars, char_itemsize,
-        (char*)string_arr->meminfos[0]->data, n_chars, char_itemsize);
-    int64_t n_offsets = string_arr->length + 1;
-    int64_t offset_itemsize = numpy_item_size[Bodo_CType_offset];
-    str_payload->offsets = make_numpy_array_payload(
-        string_arr->meminfos[1], NULL, n_offsets, offset_itemsize,
-        (char*)string_arr->meminfos[1]->data, n_offsets, offset_itemsize);
-    int64_t n_null_bytes = (string_arr->length + 7) >> 3;
-    int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
-    str_payload->null_bitmap = make_numpy_array_payload(
-        string_arr->meminfos[2], NULL, n_null_bytes, null_itemsize,
-        (char*)string_arr->meminfos[2]->data, n_null_bytes, null_itemsize);
-    delete string_arr;
-
-    // allocate array(item) array payload
-    NRT_MemInfo* meminfo_array_item = NRT_MemInfo_alloc_dtor_safe(
-        sizeof(array_item_arr_payload), (NRT_dtor_function)dtor_array_item_arr);
-    array_item_arr_payload* payload =
-        (array_item_arr_payload*)(meminfo_array_item->data);
-    payload->n_arrays = n_lists;
-    payload->offsets = allocate_numpy_payload(n_lists + 1, Bodo_CType_offset);
-    int64_t n_bytes = (int64_t)((n_lists + 7) / 8) + extra_null_bytes;
-    payload->null_bitmap =
-        allocate_numpy_payload(n_bytes, Bodo_CTypes::CTypeEnum::UINT8);
-    payload->data = meminfo_string_array;
+    MemInfo* offsets_meminfo =
+        allocate_numpy_payload(length + 1, Bodo_CType_offset).meminfo;
+    int64_t n_bytes = (int64_t)((length + 7) / 8) + extra_null_bytes;
+    MemInfo* null_bitmap_meminfo =
+        allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8).meminfo;
     // setting all to non-null to avoid unexpected issues
-    memset(payload->null_bitmap.data, 0xff, n_bytes);
+    memset(null_bitmap_meminfo->data, 0xff, n_bytes);
 
-    array_item_arr_numpy_payload* sub_payload =
-        (array_item_arr_numpy_payload*)(meminfo_string_array->data);
+    // set offsets for boundaries
+    offset_t* offsets_ptr = (offset_t*)offsets_meminfo->data;
+    offsets_ptr[0] = 0;
+    offsets_ptr[length] = string_arr->length;
 
     return new array_info(
-        bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_lists,
-        (char*)sub_payload->data.data, (char*)sub_payload->offsets.data,
-        (char*)payload->offsets.data, (char*)payload->null_bitmap.data,
-        (char*)sub_payload->null_bitmap.data, {meminfo_array_item});
+        bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, length,
+        string_arr->data1, string_arr->data2, (char*)offsets_meminfo->data,
+        (char*)null_bitmap_meminfo->data, string_arr->null_bitmask,
+        {offsets_meminfo, null_bitmap_meminfo}, {string_arr});
 }
 
 array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
@@ -867,12 +840,12 @@ void decref_table_arrays(table_info* table) {
   Thus we have two calls for destructors when they are not NULL.
  */
 void decref_array(array_info* arr) {
-    // dictionary-encoded string array uses nested infos
-    if (arr->arr_type == bodo_array_type::DICT) {
-        if (arr->child_arrays[0] != nullptr) decref_array(arr->child_arrays[0]);
-        if (arr->child_arrays[1] != nullptr) decref_array(arr->child_arrays[1]);
-        return;
+    for (array_info* inner_arr : arr->child_arrays) {
+        if (inner_arr != nullptr) {
+            decref_array(inner_arr);
+        }
     }
+
     for (MemInfo* meminfo : arr->meminfos) {
         decref_meminfo(meminfo);
     }
@@ -892,11 +865,10 @@ void incref_meminfo(MemInfo* meminfo) {
 }
 
 void incref_array(const array_info* arr) {
-    // dictionary-encoded string array uses nested infos
-    if (arr->arr_type == bodo_array_type::DICT) {
-        if (arr->child_arrays[0] != nullptr) incref_array(arr->child_arrays[0]);
-        if (arr->child_arrays[1] != nullptr) incref_array(arr->child_arrays[1]);
-        return;
+    for (array_info* inner_arr : arr->child_arrays) {
+        if (inner_arr != nullptr) {
+            incref_array(inner_arr);
+        }
     }
 
     for (MemInfo* meminfo : arr->meminfos) {

@@ -261,18 +261,14 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
     }
 }
 
-array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
-    array_item_arr_payload* payload = (array_item_arr_payload*)meminfo->data;
-    int64_t n_items = payload->n_arrays;
-
-    array_item_arr_numpy_payload* sub_payload =
-        (array_item_arr_numpy_payload*)payload->data->data;
-
-    return new array_info(
-        bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_items,
-        (char*)sub_payload->data.data, (char*)sub_payload->offsets.data,
-        (char*)payload->offsets.data, (char*)payload->null_bitmap.data,
-        (char*)sub_payload->null_bitmap.data, {meminfo});
+array_info* list_string_array_to_info(uint64_t n_items, array_info* str_data,
+                                      NRT_MemInfo* offsets,
+                                      NRT_MemInfo* null_bitmap) {
+    return new array_info(bodo_array_type::LIST_STRING,
+                          Bodo_CTypes::LIST_STRING, n_items, str_data->data1,
+                          str_data->data2, (char*)offsets->data,
+                          (char*)null_bitmap->data, str_data->null_bitmask,
+                          {offsets, null_bitmap}, {str_data});
 }
 
 array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
@@ -383,17 +379,33 @@ array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
                           {}, NULL, precision);
 }
 
-void info_to_list_string_array(array_info* info,
-                               NRT_MemInfo** array_item_meminfo) {
+array_info* info_to_list_string_array(array_info* info, int64_t* length,
+                                      numpy_arr_payload* offsets_arr,
+                                      numpy_arr_payload* null_bitmap_arr) {
     if (info->arr_type != bodo_array_type::LIST_STRING) {
         PyErr_SetString(
             PyExc_RuntimeError,
             "_array.cpp::info_to_list_string_array: info_to_list_string_array "
             "requires list string input.");
-        return;
+        return nullptr;
     }
+    *length = info->length;
 
-    *array_item_meminfo = info->meminfos[0];
+    // create Numpy arrays for char/offset/null_bitmap buffers as expected by
+    // Python data model
+    int64_t n_offsets = info->length + 1;
+    int64_t offset_itemsize = numpy_item_size[Bodo_CType_offset];
+    *offsets_arr = make_numpy_array_payload(
+        info->meminfos[0], NULL, n_offsets, offset_itemsize,
+        (char*)info->meminfos[0]->data, n_offsets, offset_itemsize);
+
+    int64_t n_null_bytes = (info->length + 7) >> 3;
+    int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
+    *null_bitmap_arr = make_numpy_array_payload(
+        info->meminfos[1], NULL, n_null_bytes, null_itemsize,
+        (char*)info->meminfos[1]->data, n_null_bytes, null_itemsize);
+
+    return info->child_arrays[0];
 }
 
 void info_to_nested_array(array_info* info, int64_t* lengths,

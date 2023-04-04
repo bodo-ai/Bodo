@@ -226,10 +226,39 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
 
     if isinstance(arr_type, ArrayItemArrayType) and arr_type.dtype == string_array_type:
         # map ArrayItemArrayType(StringArrayType()) to array_info of type LIST_STRING
-        array_item_array = context.make_helper(builder, arr_type, in_arr)
+
+        payload = _get_array_item_arr_payload(context, builder, arr_type, in_arr)
+        str_arr = payload.data
+        str_arr_info = array_to_info_codegen(
+            context, builder, array_info_type(arr_type.dtype), (str_arr,), False
+        )
+        offsets = context.make_helper(builder, offset_arr_type, payload.offsets)
+        null_bitmap = context.make_helper(
+            builder, null_bitmap_arr_type, payload.null_bitmap
+        )
+
+        # Update refcounts to match references held in array_info in C++ (see string
+        # array case below).
+        if incref:
+            context.nrt.incref(builder, string_array_type, str_arr)
+            context.nrt.incref(builder, offset_arr_type, payload.offsets)
+            context.nrt.incref(builder, null_bitmap_arr_type, payload.null_bitmap)
+            context.nrt.decref(builder, arr_type, in_arr)
+
+            str_payload = _get_str_binary_arr_payload(
+                context, builder, str_arr, string_array_type
+            )
+            context.nrt.incref(builder, char_arr_type, str_payload.data)
+            context.nrt.incref(builder, offset_arr_type, str_payload.offsets)
+            context.nrt.incref(builder, null_bitmap_arr_type, str_payload.null_bitmap)
+            context.nrt.decref(builder, string_array_type, str_arr)
+
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
             ],
         )
@@ -239,7 +268,10 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         return builder.call(
             fn_tp,
             [
-                array_item_array.meminfo,
+                payload.n_arrays,
+                str_arr_info,
+                offsets.meminfo,
+                null_bitmap.meminfo,
             ],
         )
 
@@ -908,30 +940,69 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
     return arr._getvalue()
 
 
-def _lower_info_to_array_list_string_array(arr_type, context, builder, in_info):
-    array_item_array_from_cpp = context.make_helper(builder, arr_type)
+def _lower_info_to_array_list_string_array(context, builder, in_info):
+    """Convert C++ array_info* to array(array(string)).
+    Allocates an array(array(item)) payload and uses C++ to fill n_arrays/offsets/
+    null_bitmap fields.
+    Converts the internal string array array_info* to set the data array.
+    """
+
+    array_item_data_type = ArrayItemArrayType(string_array_type)
+
+    # create payload type
+    payload_type = ArrayItemArrayPayloadType(array_item_data_type)
+    alloc_type = context.get_value_type(payload_type)
+    alloc_size = context.get_abi_sizeof(alloc_type)
+
+    # define dtor
+    dtor_fn = define_array_item_dtor(
+        context, builder, array_item_data_type, payload_type
+    )
+
+    # create meminfo
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+    )
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
+
+    # alloc values in payload
+    payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+
     fnty = lir.FunctionType(
-        lir.VoidType(),
+        lir.IntType(8).as_pointer(),
         [
             lir.IntType(8).as_pointer(),  # info
-            lir.IntType(8).as_pointer().as_pointer(),  # meminfo
+            lir.IntType(64).as_pointer(),  # n_arrays
+            context.get_value_type(offset_arr_type).as_pointer(),
+            context.get_value_type(null_bitmap_arr_type).as_pointer(),
         ],
     )
     fn_tp = cgutils.get_or_insert_function(
         builder.module, fnty, name="info_to_list_string_array"
     )
-    builder.call(
+    str_arr_info = builder.call(
         fn_tp,
         [
             in_info,
-            array_item_array_from_cpp._get_ptr_by_name("meminfo"),
+            payload._get_ptr_by_name("n_arrays"),
+            payload._get_ptr_by_name("offsets"),
+            payload._get_ptr_by_name("null_bitmap"),
         ],
     )
     context.compile_internal(
         builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
     )  # pragma: no cover
 
-    return array_item_array_from_cpp._getvalue()
+    # The data array of array(array(string)) is a string array
+    payload.data = _gen_info_to_string_array(
+        context, builder, string_array_type, str_arr_info
+    )
+    builder.store(payload._getvalue(), meminfo_data_ptr)
+
+    array_item_array = context.make_helper(builder, array_item_data_type)
+    array_item_array.meminfo = meminfo
+    return array_item_array._getvalue()
 
 
 def nested_to_array(
@@ -1153,9 +1224,7 @@ def info_to_array_codegen(context, builder, sig, args):
     # TODO: update meminfo?
 
     if isinstance(arr_type, ArrayItemArrayType) and arr_type.dtype == string_array_type:
-        return _lower_info_to_array_list_string_array(
-            arr_type, context, builder, in_info
-        )
+        return _lower_info_to_array_list_string_array(context, builder, in_info)
 
     if isinstance(
         arr_type,
