@@ -78,20 +78,35 @@ struct MemSys {
     size_t stats_alloc, stats_free, stats_mi_alloc, stats_mi_free;
     /* System allocation functions */
     Allocator allocator;
+
+    /// @brief Get pointer to singleton MemSys object.
+    /// Used to allow finding memory leaks in unit tests.
+    /// All the C extensions will use the same object.
+    /// Ref:
+    /// https://betterprogramming.pub/3-tips-for-using-singletons-in-c-c6822dc42649
+    static MemSys *instance() {
+        static MemSys base(malloc, realloc, free);
+        return &base;
+    }
 };
 
 typedef struct MemSys NRT_MemSys;
 
-/* The Memory System object */
-extern NRT_MemSys TheMSys;
+inline size_t NRT_MemSys_get_stats_alloc() {
+    return NRT_MemSys::instance()->stats_alloc;
+}
 
-inline size_t NRT_MemSys_get_stats_alloc() { return TheMSys.stats_alloc; }
+inline size_t NRT_MemSys_get_stats_free() {
+    return NRT_MemSys::instance()->stats_free;
+}
 
-inline size_t NRT_MemSys_get_stats_free() { return TheMSys.stats_free; }
+inline size_t NRT_MemSys_get_stats_mi_alloc() {
+    return NRT_MemSys::instance()->stats_mi_alloc;
+}
 
-inline size_t NRT_MemSys_get_stats_mi_alloc() { return TheMSys.stats_mi_alloc; }
-
-inline size_t NRT_MemSys_get_stats_mi_free() { return TheMSys.stats_mi_free; }
+inline size_t NRT_MemSys_get_stats_mi_free() {
+    return NRT_MemSys::instance()->stats_mi_free;
+}
 
 struct MemInfo {
     int64_t refct;
@@ -109,13 +124,13 @@ typedef struct MemInfo NRT_MemInfo;
 #endif
 
 inline void NRT_Free(void *ptr) {
-    TheMSys.allocator.free(ptr);
-    TheMSys.stats_free++;
+    NRT_MemSys::instance()->allocator.free(ptr);
+    NRT_MemSys::instance()->stats_free++;
 }
 
 inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
     NRT_Free(mi);
-    TheMSys.stats_mi_free++;
+    NRT_MemSys::instance()->stats_mi_free++;
 }
 
 /* This function is to be called only from C++.
@@ -124,7 +139,7 @@ inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
  */
 inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
     assert(mi->refct == 0);  // The reference count should be exactly 0
-    if (mi->dtor && !TheMSys.shutting)
+    if (mi->dtor && !NRT_MemSys::instance()->shutting)
         /* We have a destructor and the system is not shutting down */
         mi->dtor(mi->data, mi->size, mi->dtor_info);
     /* Clear and release MemInfo */
@@ -132,13 +147,13 @@ inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
 }
 
 inline void *NRT_Allocate(size_t size) {
-    void *ptr = TheMSys.allocator.malloc(size);
+    void *ptr = NRT_MemSys::instance()->allocator.malloc(size);
     if (!ptr) {
         std::cerr << "bad alloc: possible Out of Memory error\n";
         exit(9);
     }
 
-    TheMSys.stats_alloc++;
+    NRT_MemSys::instance()->stats_alloc++;
     return ptr;
 }
 
@@ -160,7 +175,7 @@ inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
     mi->size = size;
     mi->external_allocator = external_allocator;
     /* Update stats */
-    TheMSys.stats_mi_alloc++;
+    NRT_MemSys::instance()->stats_mi_alloc++;
 }
 
 inline void nrt_internal_dtor_safe(void *ptr, size_t size, void *info) {
