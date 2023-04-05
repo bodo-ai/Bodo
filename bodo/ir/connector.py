@@ -13,11 +13,7 @@ from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 
 import bodo
 from bodo.hiframes.table import TableType
-from bodo.ir.filter import (
-    Filter,
-    supported_funcs_no_arg_map,
-    string_funcs_one_arg_map,
-)
+from bodo.ir.filter import Filter, supported_arrow_funcs_map
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import get_live_column_nums_block
 from bodo.utils.py_objs import install_py_obj_class
@@ -576,8 +572,8 @@ def _get_filter_column_arrow_expr(col_val, filter_map):
         )
         return f"pa.compute.coalesce({filter}, ds.scalar({scalar_val}))"
 
-    elif column_compute_func in supported_funcs_no_arg_map:  # pragma: no cover
-        arrow_func_name = supported_funcs_no_arg_map[column_compute_func][1]
+    elif column_compute_func in supported_arrow_funcs_map:  # pragma: no cover
+        arrow_func_name = supported_arrow_funcs_map[column_compute_func]
         return f"pa.compute.{arrow_func_name}({filter})"
 
 
@@ -975,9 +971,9 @@ def _generate_column_expr_filter(
                 # by ilike
                 expr_val = f"(pa.compute.ascii_lower({col_expr}{column_cast}) == pa.compute.ascii_lower(ds.scalar({filter_var}){scalar_cast}))"
 
-            elif p1 in string_funcs_one_arg_map:  # pragma: no cover
+            elif p1 in supported_arrow_funcs_map:  # pragma: no cover
                 op = p1
-                func_name = string_funcs_one_arg_map[p1][1]
+                func_name = supported_arrow_funcs_map[p1]
                 scalar_arg = filter_var
 
                 # Handle if its case insensitive
