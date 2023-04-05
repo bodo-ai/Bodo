@@ -871,8 +871,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               throw new BodoSQLCodegenException(
                   "Error DATE_FORMAT(): 'Format' must be a string literal");
             }
-            return generateDateFormatCode(
-                operands.get(0), exprTypes.get(0), operands.get(1), isSingleRow);
+            return generateDateFormatCode(operands.get(0), operands.get(1));
           case "CURRENT_DATE":
           case "CURDATE":
             assert operands.size() == 0;
