@@ -12,7 +12,6 @@ https://arrow.apache.org/docs/cpp/api/array.html#dictionary-encoded
 import operator
 import re
 
-import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -37,7 +36,6 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.libs import hstr_ext
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     StringArrayType,
@@ -52,8 +50,6 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 from bodo.utils.utils import synchronize_error_njit
-
-ll.add_symbol("box_dict_str_array", hstr_ext.box_dict_str_array)
 
 # we use nullable int32 for dictionary indices to match Arrow for faster and easier IO.
 # more than 2 billion unique values doesn't make sense for a dictionary-encoded array.
@@ -254,61 +250,28 @@ def box_dict_arr(typ, val, c):
     if typ == dict_str_arr_type:
 
         # box to Pandas ArrowStringArray to minimize boxing overhead
-        if bodo.libs.str_arr_ext.use_pd_pyarrow_string_array:
-            from bodo.libs.array import array_info_type, array_to_info_codegen
+        from bodo.libs.array import array_info_type, array_to_info_codegen
 
-            arr_info = array_to_info_codegen(
-                c.context, c.builder, array_info_type(typ), (val,), incref=False
-            )
-            fnty = lir.FunctionType(
-                c.pyapi.pyobj,
-                [
-                    lir.IntType(8).as_pointer(),
-                ],
-            )
-            box_fname = "pd_pyarrow_array_from_string_array"
-            fn_get = cgutils.get_or_insert_function(
-                c.builder.module, fnty, name=box_fname
-            )
-            arr = c.builder.call(
-                fn_get,
-                [
-                    arr_info,
-                ],
-            )
-            c.context.nrt.decref(c.builder, typ, val)
-            return arr
-
-        # Box the dictionary array for string interning
-        c.context.nrt.incref(c.builder, typ.data, dict_arr.data)
-        data_arr_obj = c.box(typ.data, dict_arr.data)
-        index_arr = cgutils.create_struct_proxy(dict_indices_arr_type)(
-            c.context, c.builder, dict_arr.indices
+        arr_info = array_to_info_codegen(
+            c.context, c.builder, array_info_type(typ), (val,), incref=False
         )
         fnty = lir.FunctionType(
             c.pyapi.pyobj,
             [
-                lir.IntType(64),
-                c.pyapi.pyobj,
-                lir.IntType(32).as_pointer(),
                 lir.IntType(8).as_pointer(),
             ],
         )
-        fn_get = cgutils.get_or_insert_function(
-            c.builder.module, fnty, name="box_dict_str_array"
+        box_fname = "pd_pyarrow_array_from_string_array"
+        fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
+        arr = c.builder.call(
+            fn_get,
+            [
+                arr_info,
+            ],
         )
-        indices_struct = cgutils.create_struct_proxy(types.Array(types.int32, 1, "C"))(
-            c.context, c.builder, index_arr.data
-        )
-        n = c.builder.extract_value(indices_struct.shape, 0)
-        indices_data = indices_struct.data
-        null_bitmap = cgutils.create_struct_proxy(types.Array(types.int8, 1, "C"))(
-            c.context, c.builder, index_arr.null_bitmap
-        ).data
-        np_str_arr_obj = c.builder.call(
-            fn_get, [n, data_arr_obj, indices_data, null_bitmap]
-        )
-        c.pyapi.decref(data_arr_obj)
+        c.context.nrt.decref(c.builder, typ, val)
+        return arr
+
     else:
         # create a PyArrow dictionary array fron indices and data
         # pa.DictionaryArray.from_arrays(dict_arr.data, dict_arr.indices)
