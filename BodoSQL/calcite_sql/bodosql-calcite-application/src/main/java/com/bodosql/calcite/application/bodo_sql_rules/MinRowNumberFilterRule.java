@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.bodo_sql_rules;
 
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*;
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import java.util.*;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.rel.*;

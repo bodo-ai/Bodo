@@ -3341,11 +3341,15 @@ def overload_dataframe_merge(
     indicator=False,
     validate=None,
     _bodo_na_equal=True,
+    _bodo_rebalance_output_if_skewed=False,
 ):
     # _bodo_na_equal is a bodo extension to Pandas used to indicate
     # that NA values should not be considered equal. BodoSQL uses
     # this behavior because NA is not considered equal in SQL (while
     # Pandas does)
+    # _bodo_rebalance_output_if_skewed is a BodoSQL plan based attribute to
+    # check for skew and potentially rebalance because we expect to do
+    # several independent operations over the output before the next shuffle.
     check_runtime_cols_unsupported(left, "DataFrame.merge()")
     check_runtime_cols_unsupported(right, "DataFrame.merge()")
     unsupported_args = dict(sort=sort, copy=copy, validate=validate)
@@ -3426,9 +3430,16 @@ def overload_dataframe_merge(
     indicator_val = get_overload_const_bool(indicator)
     if not is_overload_bool(_bodo_na_equal):
         raise_bodo_error(
-            "DataFrame.merge(): bodo extension _bodo_na_equal must be a constant boolean"
+            "DataFrame.merge(): bodo extension '_bodo_na_equal' must be a constant boolean"
         )
     _bodo_na_equal_val = get_overload_const_bool(_bodo_na_equal)
+    if not is_overload_bool(_bodo_rebalance_output_if_skewed):
+        raise_bodo_error(
+            "DataFrame.merge(): bodo extension '_bodo_rebalance_output_if_skewed' must be a constant boolean"
+        )
+    _bodo_rebalance_output_if_skewed_val = get_overload_const_bool(
+        _bodo_rebalance_output_if_skewed
+    )
 
     validate_keys_length(left_index, right_index, left_keys, right_keys)
     validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_keys)
@@ -3457,8 +3468,8 @@ def overload_dataframe_merge(
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"
     func_text += "    right_on=None, left_index=False, right_index=False, sort=False,\n"
-    func_text += "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None, _bodo_na_equal=True):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}', False, {}, {}, '{}')\n".format(
+    func_text += "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None, _bodo_na_equal=True, _bodo_rebalance_output_if_skewed=False):\n"
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}', False, {}, {}, {}, '{}')\n".format(
         left_keys,
         right_keys,
         how,
@@ -3466,6 +3477,7 @@ def overload_dataframe_merge(
         suffix_y,
         indicator_val,
         _bodo_na_equal_val,
+        _bodo_rebalance_output_if_skewed_val,
         gen_cond,
     )
 
@@ -3829,7 +3841,7 @@ def overload_dataframe_join(
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}', True, False, True, '')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}', True, False, True, False, '')\n".format(
         left_keys, right_keys, how, lsuffix, rsuffix
     )
 
@@ -4010,7 +4022,7 @@ def overload_dataframe_merge_asof(
     func_text += "    allow_exact_matches=True, direction='backward'):\n"
     func_text += "  suffix_x = suffixes[0]\n"
     func_text += "  suffix_y = suffixes[1]\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}', False, False, True, '')\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}', False, False, True, False, '')\n".format(
         left_keys, right_keys, suffix_x, suffix_y
     )
 

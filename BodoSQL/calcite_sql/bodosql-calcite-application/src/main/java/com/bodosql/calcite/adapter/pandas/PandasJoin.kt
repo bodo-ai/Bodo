@@ -7,8 +7,10 @@ import com.google.common.collect.ImmutableSet
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
+import org.apache.calcite.rel.hint.RelHint
 import org.apache.calcite.rex.RexNode
 
 class PandasJoin(
@@ -18,12 +20,22 @@ class PandasJoin(
     right: RelNode,
     condition: RexNode,
     joinType: JoinRelType,
+    val rebalanceOutput: Boolean,
 ) : Join(cluster, traitSet, ImmutableList.of(), left, right, condition,
     ImmutableSet.of(), joinType), PandasRel {
 
     init {
         assert(convention == PandasRel.CONVENTION)
     }
+
+    constructor(
+        cluster: RelOptCluster,
+        traitSet: RelTraitSet,
+        left: RelNode,
+        right: RelNode,
+        condition: RexNode,
+        joinType: JoinRelType
+    ) : this(cluster, traitSet, left, right, condition, joinType, false)
 
     override fun copy(
         traitSet: RelTraitSet,
@@ -33,11 +45,20 @@ class PandasJoin(
         joinType: JoinRelType,
         semiJoinDone: Boolean
     ): Join {
-        return PandasJoin(cluster, traitSet, left, right, condition, joinType)
+        return PandasJoin(cluster, traitSet, left, right, condition, joinType, rebalanceOutput)
     }
 
     override fun emit(builder: Module.Builder, inputs: () -> List<Dataframe>): Dataframe {
         TODO("Not yet implemented")
+    }
+
+    override fun explainTerms(pw: RelWriter?): RelWriter {
+        return super.explainTerms(pw)
+            .itemIf("rebalanceOutput", rebalanceOutput, rebalanceOutput)
+    }
+
+    fun withRebalanceOutput(rebalanceOutput: Boolean): PandasJoin {
+        return PandasJoin(cluster, traitSet, left, right, condition, joinType, rebalanceOutput)
     }
 
     companion object {

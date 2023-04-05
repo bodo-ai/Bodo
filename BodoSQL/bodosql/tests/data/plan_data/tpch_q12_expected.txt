@@ -1,7 +1,7 @@
 PandasSort(sort0=[$0], dir0=[ASC-nulls-first])
   PandasAggregate(group=[{0}], high_line_count=[SUM($1)], low_line_count=[SUM($2)])
     PandasProject(l_shipmode=[$3], $f1=[CASE(SEARCH($1, Sarg['1-URGENT':VARCHAR CHARACTER SET "UTF-8", '2-HIGH':VARCHAR CHARACTER SET "UTF-8"]:VARCHAR CHARACTER SET "UTF-8"), 1, 0)], $f2=[CASE(SEARCH($1, Sarg[(-∞..'1-URGENT':VARCHAR CHARACTER SET "UTF-8"), ('1-URGENT':VARCHAR CHARACTER SET "UTF-8"..'2-HIGH':VARCHAR CHARACTER SET "UTF-8"), ('2-HIGH':VARCHAR CHARACTER SET "UTF-8"..+∞)]:VARCHAR CHARACTER SET "UTF-8"), 1, 0)])
-      PandasJoin(condition=[=($0, $2)], joinType=[inner])
+      PandasJoin(condition=[=($0, $2)], joinType=[inner], rebalanceOutput=[true])
         PandasProject(O_ORDERKEY=[$0], O_ORDERPRIORITY=[$5])
           PandasTableScan(table=[[__bodolocal__, orders]])
         PandasProject(L_ORDERKEY=[$0], L_SHIPMODE=[$14])

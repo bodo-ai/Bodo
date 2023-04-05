@@ -101,6 +101,8 @@ typedef void (*cond_expr_fn_batch_t)(
  *    Categorical column with name _merge that says if the data source is from
  * left_only, right_only, or both.
  * @param is_na_equal: When doing a merge, are NA values considered equal?
+ * @param rebalance_if_skewed: After the merge should we check the data for
+ *   skew and rebalance if needed?
  * @param cond_func function generated in Python to evaluate general join
  * conditions. It takes data pointers for left/right tables and row indices.
  * @param cond_func_left_columns: Array of column numbers in the left table
@@ -123,9 +125,10 @@ table_info* hash_join_table(
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
     bool is_join, bool extra_data_col, bool indicator, bool is_na_equal,
-    cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
-    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
-    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr);
+    bool rebalance_if_skewed, cond_expr_fn_t cond_func,
+    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
+    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
+    uint64_t* num_rows_ptr);
 
 /**
  * @brief cross join two tables (parallel if any input is parallel)
@@ -142,6 +145,8 @@ table_info* hash_join_table(
  * @param vect_need_typechange : a vector specifying whether a column's type
  * needs to be changed to nullable or not. Only application to Numpy
  * integer/float columns currently.
+ * @param rebalance_if_skewed: After the merge should we check the data for
+ *   skew and rebalance if needed?
  * @param cond_func function generated in Python to evaluate general join
  * conditions. It takes data pointers for left/right tables and row indices.
  * @param cond_func_left_columns: Array of column numbers in the left table
@@ -158,10 +163,10 @@ table_info* hash_join_table(
 table_info* cross_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
     bool right_parallel, bool is_left, bool is_right, bool* key_in_output,
-    int64_t* vect_need_typechange, cond_expr_fn_batch_t cond_func,
-    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
-    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
-    uint64_t* num_rows_ptr);
+    int64_t* vect_need_typechange, bool rebalance_if_skewed,
+    cond_expr_fn_batch_t cond_func, uint64_t* cond_func_left_columns,
+    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr);
 
 /**
  * @brief Point-in-interval or interval-overlap join of two tables (parallel if
@@ -194,6 +199,8 @@ table_info* cross_join_table(
  * @param use_nullable_arr_type a vector specifying whether a column's type
  * needs to be changed to nullable or not. Only application to Numpy integer
  * columns currently.
+ * @param rebalance_if_skewed: After the merge should we check the data for
+ *   skew and rebalance if needed?
  * @param cond_func function generated in Python to evaluate general join
  * conditions. It takes data pointers for left/right tables and row indices.
  * @param cond_func_left_columns Array of column numbers in the left table
@@ -212,8 +219,9 @@ table_info* interval_join_table(
     bool strict_start, bool strict_end, uint64_t point_col_id,
     uint64_t interval_start_col_id, uint64_t interval_end_col_id,
     bool* key_in_output, int64_t* use_nullable_arr_type,
-    cond_expr_fn_batch_t cond_func, uint64_t* cond_func_left_columns,
-    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
-    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr);
+    bool rebalance_if_skewed, cond_expr_fn_batch_t cond_func,
+    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
+    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
+    uint64_t* num_rows_ptr);
 
 #endif  // _JOIN_H_INCLUDED

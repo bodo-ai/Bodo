@@ -19,6 +19,7 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 
 import static com.bodosql.calcite.application.bodo_sql_rules.FilterRulesCommon.rexNodeContainsCase;
 
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import java.util.ArrayDeque;

@@ -3059,7 +3059,10 @@ table_info* shuffle_renormalization_group(table_info* in_table,
                                           const int random, int64_t random_seed,
                                           bool parallel, int64_t n_dest_ranks,
                                           int* dest_ranks) {
+    tracing::Event ev("shuffle_renormalization_group", parallel);
     if (!parallel && !random) return in_table;
+    ev.add_attribute("n_dest_ranks", n_dest_ranks);
+    ev.add_attribute("random", random);
     int64_t n_rows = in_table->nrows();
     int n_src_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_src_pes);
@@ -3076,6 +3079,8 @@ table_info* shuffle_renormalization_group(table_info* in_table,
     } else {
         n_rows_tot = n_rows;
     }
+    ev.add_attribute("nrows", n_rows);
+    ev.add_attribute("g_nrows", n_rows_tot);
 
     std::vector<int64_t> random_order;
     std::mt19937 g;  // rng
@@ -3134,6 +3139,7 @@ table_info* shuffle_renormalization_group(table_info* in_table,
         delete_table(ret_table);
         ret_table = shuffled_table;
     }
+    ev.add_attribute("ret_table_nrows", ret_table->nrows());
     return ret_table;
 }
 
@@ -3154,7 +3160,6 @@ table_info* shuffle_renormalization_group_py_entrypt(
  */
 table_info* shuffle_renormalization(table_info* in_table, int random,
                                     int64_t random_seed, bool parallel) {
-    tracing::Event ev("shuffle_renormalization", parallel);
     return shuffle_renormalization_group(in_table, random, random_seed,
                                          parallel, 0, nullptr);
 }

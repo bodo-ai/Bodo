@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application.bodo_sql_rules;
 
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import java.util.*;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptUtil;
@@ -8,7 +9,6 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.rules.*;
 import org.apache.calcite.rex.*;
-import org.apache.calcite.sql.*;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.util.Permutation;
 import org.immutables.value.Value;
@@ -54,7 +54,8 @@ public class DependencyCheckingProjectMergeRule
   }
 
   /**
-   * Determine if the given node contains any inputRefs that are not simple references to inputRefs in the bottom project.
+   * Determine if the given node contains any inputRefs that are not simple references to inputRefs
+   * in the bottom project.
    *
    * @param node RexNode to check.
    * @param bottomProject The Project an inputRef may refer to. We allow an inputRef if it's also an

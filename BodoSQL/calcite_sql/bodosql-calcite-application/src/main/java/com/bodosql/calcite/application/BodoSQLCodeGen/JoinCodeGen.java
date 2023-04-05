@@ -25,6 +25,9 @@ public class JoinCodeGen {
    * @param leftColNames The names of the columns in the left table
    * @param expectedOutColumns The expected names of the columns in the output table
    * @param joinCond Expression to be passed to Bodo for pd.merge.
+   * @param mergeCols Set of column names that overlap for merging. Used for renamed columns.
+   * @param tryRebalanceOutput Should we set a flag to try and rebalance the output if there is
+   *     skew.
    * @return The code generated for the Join expression.
    */
   public static String generateJoinCode(
@@ -36,7 +39,8 @@ public class JoinCodeGen {
       List<String> leftColNames,
       List<String> expectedOutColumns,
       String joinCond,
-      HashSet<String> mergeCols) {
+      HashSet<String> mergeCols,
+      boolean tryRebalanceOutput) {
 
     List<String> allColNames = new ArrayList<>();
     StringBuilder generatedJoinCode = new StringBuilder();
@@ -128,7 +132,9 @@ public class JoinCodeGen {
       rightTable = rightTable + rightRename.toString();
     }
 
-    if (joinType.equals("full")) joinType = "outer";
+    if (joinType.equals("full")) {
+      joinType = "outer";
+    }
     onStr = onStr.equals("") ? "" : ", on=" + onStr;
     StringBuilder joinBuilder = new StringBuilder();
     joinBuilder
@@ -138,7 +144,11 @@ public class JoinCodeGen {
         .append(onStr)
         .append(", how=")
         .append(makeQuoted(joinType))
-        .append(", _bodo_na_equal=False)");
+        .append(", _bodo_na_equal=False");
+    if (tryRebalanceOutput) {
+      joinBuilder.append(", _bodo_rebalance_output_if_skewed=True");
+    }
+    joinBuilder.append(")");
 
     // Determine if we need to do a rename to convert names
     // back.

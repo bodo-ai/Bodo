@@ -1,7 +1,7 @@
 PandasSort(sort0=[$0], sort1=[$1], sort2=[$2], dir0=[ASC-nulls-first], dir1=[ASC-nulls-first], dir2=[ASC-nulls-first])
   PandasAggregate(group=[{0, 1, 2}], revenue=[SUM($3)])
     PandasProject(supp_nation=[$4], cust_nation=[$8], l_year=[EXTRACT(FLAG(YEAR), $2)], volume=[*($0, -(1, $1))])
-      PandasJoin(condition=[AND(=($3, $7), OR(AND($5, $9), AND($6, $10)))], joinType=[inner])
+      PandasJoin(condition=[AND(=($3, $7), OR(AND($5, $9), AND($6, $10)))], joinType=[inner], rebalanceOutput=[true])
         PandasProject(L_EXTENDEDPRICE=[$1], L_DISCOUNT=[$2], L_SHIPDATE=[$3], C_NATIONKEY=[$4], N_NAME=[$6], EXPR$0=[=($6, 'FRANCE')], EXPR$1=[=($6, 'GERMANY')])
           PandasJoin(condition=[=($0, $5)], joinType=[inner])
             PandasProject(S_NATIONKEY=[$0], L_EXTENDEDPRICE=[$1], L_DISCOUNT=[$2], L_SHIPDATE=[$3], C_NATIONKEY=[$6])
