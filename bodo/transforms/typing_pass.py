@@ -3352,6 +3352,33 @@ class TypingTransforms:
         if not isinstance(_bodo_read_as_dict, list):
             raise BodoError(err_msg)
 
+        # _bodo_detect_dict_cols allows users to disable dict-encoding detection
+        # This is useful when getting a list of files from the table takes too long.
+        # This is possible when:
+        # - The table is too large and has a lot of files
+        # - The table is located on a high-latency filesystem
+        # - There are some other entities (firewalls) slowing filesystem ops
+        # Note that columns passed in via _bodo_read_as_dict will still be dictionary-encoded
+        _bodo_detect_dict_cols_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_detect_dict_cols",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_detect_dict_cols', if provided, must be a constant boolean."
+        detect_dict_cols = (
+            self._get_const_value(
+                _bodo_detect_dict_cols_var, label, rhs.loc, err_msg=err_msg
+            )
+            if _bodo_detect_dict_cols_var
+            else True
+        )
+        if not isinstance(detect_dict_cols, bool):
+            raise BodoError(err_msg)
+
         (
             col_names,
             arr_types,
@@ -3373,28 +3400,34 @@ class TypingTransforms:
                     f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not a string column"
                 )
 
-        # estimate which string columns should be dict-encoded using existing Parquet
-        # infrastructure.
-        # setting get_row_counts=False since row counts of all files are only needed
-        # during runtime.
-        iceberg_pq_dset = bodo.io.iceberg.get_iceberg_pq_dataset(
-            con, database_schema, table_name, pyarrow_table_schema, get_row_counts=False
-        )
-        str_columns = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
-            pyarrow_table_schema
-        )
-        # remove user provided dict-encoded columns
-        str_columns = list(set(str_columns) - set(_bodo_read_as_dict))
-        # Sort the columns to ensure same order on all ranks
-        str_columns = sorted(str_columns)
+        all_dict_str_cols = set(_bodo_read_as_dict)
+        if detect_dict_cols:
+            # estimate which string columns should be dict-encoded using existing Parquet
+            # infrastructure.
+            # setting get_row_counts=False since row counts of all files are only needed
+            # during runtime.
+            iceberg_pq_dset = bodo.io.iceberg.get_iceberg_pq_dataset(
+                con,
+                database_schema,
+                table_name,
+                pyarrow_table_schema,
+                get_row_counts=False,
+            )
+            str_columns = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
+                pyarrow_table_schema
+            )
+            # remove user provided dict-encoded columns
+            str_columns = list(set(str_columns) - set(_bodo_read_as_dict))
+            # Sort the columns to ensure same order on all ranks
+            str_columns = sorted(str_columns)
 
-        dict_str_cols = bodo.io.parquet_pio.determine_str_as_dict_columns(
-            iceberg_pq_dset.pq_dataset,
-            pyarrow_table_schema,
-            str_columns,
-            is_iceberg=True,
-        )
-        all_dict_str_cols = set(dict_str_cols) | set(_bodo_read_as_dict)
+            dict_str_cols = bodo.io.parquet_pio.determine_str_as_dict_columns(
+                iceberg_pq_dset.pq_dataset,
+                pyarrow_table_schema,
+                str_columns,
+                is_iceberg=True,
+            )
+            all_dict_str_cols.update(dict_str_cols)
 
         # change string array types to dict-encoded
         for c in all_dict_str_cols:

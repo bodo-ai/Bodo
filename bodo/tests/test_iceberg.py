@@ -10,6 +10,7 @@ from typing import List, Optional
 
 import bodo_iceberg_connector
 import mmh3
+import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -643,6 +644,62 @@ def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
         passed = 0
     passed = reduce_sum(passed)
     assert passed == bodo.get_size(), "Datatype validation failed on one or more ranks."
+
+
+def test_disable_dict_detection(iceberg_database, iceberg_table_conn):
+    """
+    Test reading string arrays as dictionary-encoded when specified by the user or
+    determined from properties of table data.
+    """
+
+    table_name = "dont_dict_encode_table"
+
+    db_schema, warehouse_loc = iceberg_database
+    spark = get_spark()
+
+    # Write a simple dataset with strings (repetitive/non-repetitive) and non-strings
+    df = pd.DataFrame(
+        {
+            # non-string
+            "A": np.arange(2000) + 1.1,
+            # should be dictionary encoded
+            "B": ["awe", "awv2"] * 1000,
+            # should not be dictionary encoded
+            "C": [str(i) for i in range(2000)],
+            # non-string column
+            "D": np.arange(2000) + 3,
+            # should be dictionary encoded
+            "E": ["r32"] * 2000,
+            # non-string column
+            "F": np.arange(2000),
+        }
+    )
+    sql_schema = [
+        ("A", "double", True),
+        ("B", "string", False),
+        ("C", "string", True),
+        ("D", "long", False),
+        ("E", "string", True),
+        ("F", "long", True),
+    ]
+    if bodo.get_rank() == 0:
+        create_iceberg_table(df, sql_schema, table_name, spark)
+    bodo.barrier()
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    # Ensure that dict encoding is not reported during compilation for any columns other than B.
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema, _bodo_read_as_dict=["B"], _bodo_detect_dict_cols=False)  # type: ignore
+        return df
+
+    table_name_type = numba.types.literal(table_name)
+    db_schema_type = numba.types.literal(db_schema)
+    conn_type = numba.types.literal(conn)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        bodo.jit((table_name_type, conn_type, db_schema_type))(impl)
+        check_logger_msg(stream, "Columns ['B'] using dictionary encoding")
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
