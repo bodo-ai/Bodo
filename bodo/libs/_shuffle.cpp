@@ -233,7 +233,7 @@ void mpi_comm_info::set_counts(
         if (arr_info->arr_type == bodo_array_type::STRING) {
             // send counts
             std::vector<int64_t>& sub_counts = send_count_sub[i];
-            offset_t const* const offsets = (offset_t*)arr_info->data2;
+            offset_t const* const offsets = (offset_t*)arr_info->data2();
             for (size_t i = 0; i < n_rows; i++) {
                 offset_t str_len = offsets[i + 1] - offsets[i];
                 if (row_dest[i] == -1) continue;
@@ -251,8 +251,8 @@ void mpi_comm_info::set_counts(
             // send counts
             std::vector<int64_t>& sub_counts = send_count_sub[i];
             std::vector<int64_t>& sub_sub_counts = send_count_sub_sub[i];
-            offset_t const* const index_offsets = (offset_t*)arr_info->data3;
-            offset_t const* const data_offsets = (offset_t*)arr_info->data2;
+            offset_t const* const index_offsets = (offset_t*)arr_info->data3();
+            offset_t const* const data_offsets = (offset_t*)arr_info->data2();
             for (size_t i = 0; i < n_rows; i++) {
                 const int node = row_dest[i];
                 if (node == -1) continue;
@@ -467,44 +467,44 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
     // dispatch to proper function
     // TODO: general dispatcher
     if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL)
-        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask,
-                                   (uint8_t*)in_arr->null_bitmask,
+        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask(),
+                                   (uint8_t*)in_arr->null_bitmask(),
                                    send_disp_null, n_pes, n_rows, row_dest);
     if (in_arr->dtype == Bodo_CTypes::_BOOL)
         return fill_send_array_inner<bool>(
-            (bool*)send_arr->data1, (bool*)in_arr->data1, send_disp, n_rows,
+            (bool*)send_arr->data1(), (bool*)in_arr->data1(), send_disp, n_rows,
             row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::INT8)
         return fill_send_array_inner<int8_t>(
-            (int8_t*)send_arr->data1, (int8_t*)in_arr->data1, send_disp, n_rows,
-            row_dest, filter, is_parallel);
+            (int8_t*)send_arr->data1(), (int8_t*)in_arr->data1(), send_disp,
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::UINT8)
         return fill_send_array_inner<uint8_t>(
-            (uint8_t*)send_arr->data1, (uint8_t*)in_arr->data1, send_disp,
+            (uint8_t*)send_arr->data1(), (uint8_t*)in_arr->data1(), send_disp,
             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::INT16)
         return fill_send_array_inner<int16_t>(
-            (int16_t*)send_arr->data1, (int16_t*)in_arr->data1, send_disp,
+            (int16_t*)send_arr->data1(), (int16_t*)in_arr->data1(), send_disp,
             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::UINT16)
         return fill_send_array_inner<uint16_t>(
-            (uint16_t*)send_arr->data1, (uint16_t*)in_arr->data1, send_disp,
+            (uint16_t*)send_arr->data1(), (uint16_t*)in_arr->data1(), send_disp,
             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::INT32)
         return fill_send_array_inner<int32_t>(
-            (int32_t*)send_arr->data1, (int32_t*)in_arr->data1, send_disp,
+            (int32_t*)send_arr->data1(), (int32_t*)in_arr->data1(), send_disp,
             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::UINT32)
         return fill_send_array_inner<uint32_t>(
-            (uint32_t*)send_arr->data1, (uint32_t*)in_arr->data1, send_disp,
+            (uint32_t*)send_arr->data1(), (uint32_t*)in_arr->data1(), send_disp,
             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::INT64)
         return fill_send_array_inner<int64_t>(
-            (int64_t*)send_arr->data1, (int64_t*)in_arr->data1, send_disp,
+            (int64_t*)send_arr->data1(), (int64_t*)in_arr->data1(), send_disp,
             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::UINT64)
         return fill_send_array_inner<uint64_t>(
-            (uint64_t*)send_arr->data1, (uint64_t*)in_arr->data1, send_disp,
+            (uint64_t*)send_arr->data1(), (uint64_t*)in_arr->data1(), send_disp,
             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::DATE ||
         in_arr->dtype == Bodo_CTypes::DATETIME ||
@@ -512,40 +512,40 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
         in_arr->dtype == Bodo_CTypes::TIMEDELTA)
         // TODO: [BE-4106] Split Time into Time32 and Time64
         return fill_send_array_inner<int64_t>(
-            (int64_t*)send_arr->data1, (int64_t*)in_arr->data1, send_disp,
+            (int64_t*)send_arr->data1(), (int64_t*)in_arr->data1(), send_disp,
             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::FLOAT32)
         return fill_send_array_inner<float>(
-            (float*)send_arr->data1, (float*)in_arr->data1, send_disp, n_rows,
-            row_dest, filter, is_parallel);
+            (float*)send_arr->data1(), (float*)in_arr->data1(), send_disp,
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::FLOAT64)
         return fill_send_array_inner<double>(
-            (double*)send_arr->data1, (double*)in_arr->data1, send_disp, n_rows,
-            row_dest, filter, is_parallel);
+            (double*)send_arr->data1(), (double*)in_arr->data1(), send_disp,
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::DECIMAL)
-        return fill_send_array_inner_decimal((uint8_t*)send_arr->data1,
-                                             (uint8_t*)in_arr->data1, send_disp,
-                                             n_rows, row_dest, is_parallel);
+        return fill_send_array_inner_decimal(
+            (uint8_t*)send_arr->data1(), (uint8_t*)in_arr->data1(), send_disp,
+            n_rows, row_dest, is_parallel);
     if (in_arr->arr_type == bodo_array_type::STRING) {
         fill_send_array_string_inner(
             /// XXX casting data2 offset_t to uint32
-            (char*)send_arr->data1, (uint32_t*)send_arr->data2,
-            (char*)in_arr->data1, (offset_t*)in_arr->data2, send_disp,
+            (char*)send_arr->data1(), (uint32_t*)send_arr->data2(),
+            (char*)in_arr->data1(), (offset_t*)in_arr->data2(), send_disp,
             send_disp_sub, n_rows, row_dest, is_parallel);
-        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask,
-                                   (uint8_t*)in_arr->null_bitmask,
+        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask(),
+                                   (uint8_t*)in_arr->null_bitmask(),
                                    send_disp_null, n_pes, n_rows, row_dest);
         return;
     }
     if (in_arr->arr_type == bodo_array_type::LIST_STRING) {
         fill_send_array_list_string_inner(
             /// XXX casting data2 and data3 offset_t to uint32
-            (char*)send_arr->data1, (uint32_t*)send_arr->data2,
-            (uint32_t*)send_arr->data3, (char*)in_arr->data1,
-            (offset_t*)in_arr->data2, (offset_t*)in_arr->data3, send_disp,
+            (char*)send_arr->data1(), (uint32_t*)send_arr->data2(),
+            (uint32_t*)send_arr->data3(), (char*)in_arr->data1(),
+            (offset_t*)in_arr->data2(), (offset_t*)in_arr->data3(), send_disp,
             send_disp_sub, send_disp_sub_sub, n_pes, n_rows, row_dest);
-        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask,
-                                   (uint8_t*)in_arr->null_bitmask,
+        fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask(),
+                                   (uint8_t*)in_arr->null_bitmask(),
                                    send_disp_null, n_pes, n_rows, row_dest);
         return;
     }
@@ -744,10 +744,9 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
         array_info* dict_indices = copy_array(dict_array->child_arrays[1]);
         delete_info_decref_array(dict_array->child_arrays[1]);
         dict_array->child_arrays[1] = dict_indices;
-        dict_array->null_bitmask = dict_indices->null_bitmask;
     }
 
-    uint8_t* null_bitmask = (uint8_t*)dict_array->null_bitmask;
+    uint8_t* null_bitmask = (uint8_t*)dict_array->null_bitmask();
     for (size_t i = 0; i < dict_array->child_arrays[1]->length; i++) {
         if (GetBit(null_bitmask, i)) {
             dict_indices_t& index =
@@ -803,7 +802,7 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     int64_t n_rows = in_arr->length;
     int n_pes = comm_info.n_pes;
     std::vector<int64_t> send_count(n_pes), recv_count(n_pes);
-    offset_t* index_offset = (offset_t*)in_arr->data3;
+    offset_t* index_offset = (offset_t*)in_arr->data3();
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
         int node = row_dest[i_row];
         if (node == -1) continue;
@@ -830,7 +829,7 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     std::vector<uint8_t> Vsend(send_count_sum);
     std::vector<uint8_t> Vrecv(recv_count_sum);
     offset_t pos_index = 0;
-    uint8_t* sub_null_bitmap = (uint8_t*)in_arr->sub_null_bitmask;
+    uint8_t* sub_null_bitmap = (uint8_t*)in_arr->sub_null_bitmask();
     std::vector<int64_t> shift(n_pes, 0);
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
         int node = row_dest[i_row];
@@ -847,7 +846,7 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     bodo_alltoallv(Vsend.data(), send_count_null, send_disp_null, mpi_typ8,
                    Vrecv.data(), recv_count_null, recv_disp_null, mpi_typ8,
                    MPI_COMM_WORLD);
-    copy_gathered_null_bytes((uint8_t*)out_arr->sub_null_bitmask, Vrecv,
+    copy_gathered_null_bytes((uint8_t*)out_arr->sub_null_bitmask(), Vrecv,
                              recv_count_null, recv_count);
 }
 
@@ -879,69 +878,70 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
         // index_offsets
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
 #if OFFSET_BITWIDTH == 32
-        bodo_alltoallv(send_arr->data3, send_count, send_disp, mpi_typ,
-                       out_arr->data3, recv_count, recv_disp, mpi_typ,
+        bodo_alltoallv(send_arr->data3(), send_count, send_disp, mpi_typ,
+                       out_arr->data3(), recv_count, recv_disp, mpi_typ,
                        MPI_COMM_WORLD);
-        convert_len_arr_to_offset32((uint32_t*)out_arr->data3,
+        convert_len_arr_to_offset32((uint32_t*)out_arr->data3(),
                                     (size_t)out_arr->length);
         // data_offsets
-        bodo_alltoallv(send_arr->data2, send_count_sub, send_disp_sub, mpi_typ,
-                       out_arr->data2, recv_count_sub, recv_disp_sub, mpi_typ,
-                       MPI_COMM_WORLD);
-        offset_t* data3_offset_t = (offset_t*)out_arr->data3;
+        bodo_alltoallv(send_arr->data2(), send_count_sub, send_disp_sub,
+                       mpi_typ, out_arr->data2(), recv_count_sub, recv_disp_sub,
+                       mpi_typ, MPI_COMM_WORLD);
+        offset_t* data3_offset_t = (offset_t*)out_arr->data3();
         size_t len = data3_offset_t[out_arr->length];
-        convert_len_arr_to_offset32((offset_t*)out_arr->data2, len);
+        convert_len_arr_to_offset32((offset_t*)out_arr->data2(), len);
 #else
         std::vector<uint32_t> lens(out_arr->length);
-        bodo_alltoallv(send_arr->data3, send_count, send_disp, mpi_typ,
+        bodo_alltoallv(send_arr->data3(), send_count, send_disp, mpi_typ,
                        lens.data(), recv_count, recv_disp, mpi_typ,
                        MPI_COMM_WORLD);
-        convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data3,
+        convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data3(),
                                   (size_t)out_arr->length);
         lens.resize(out_arr->n_sub_elems());
         // data_offsets
-        bodo_alltoallv(send_arr->data2, send_count_sub, send_disp_sub, mpi_typ,
-                       lens.data(), recv_count_sub, recv_disp_sub, mpi_typ,
-                       MPI_COMM_WORLD);
-        offset_t* data3_offset_t = (offset_t*)out_arr->data3;
+        bodo_alltoallv(send_arr->data2(), send_count_sub, send_disp_sub,
+                       mpi_typ, lens.data(), recv_count_sub, recv_disp_sub,
+                       mpi_typ, MPI_COMM_WORLD);
+        offset_t* data3_offset_t = (offset_t*)out_arr->data3();
         size_t len = data3_offset_t[out_arr->length];
-        convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data2, len);
+        convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data2(),
+                                  len);
 #endif
         // data
         mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-        bodo_alltoallv(send_arr->data1, send_count_sub_sub, send_disp_sub_sub,
-                       mpi_typ, out_arr->data1, recv_count_sub_sub,
+        bodo_alltoallv(send_arr->data1(), send_count_sub_sub, send_disp_sub_sub,
+                       mpi_typ, out_arr->data1(), recv_count_sub_sub,
                        recv_disp_sub_sub, mpi_typ, MPI_COMM_WORLD);
     }
     if (send_arr->arr_type == bodo_array_type::STRING) {
         // string lengths
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
 #if OFFSET_BITWIDTH == 32
-        bodo_alltoallv(send_arr->data2, send_count, send_disp, mpi_typ,
-                       out_arr->data2, recv_count, recv_disp, mpi_typ,
+        bodo_alltoallv(send_arr->data2(), send_count, send_disp, mpi_typ,
+                       out_arr->data2(), recv_count, recv_disp, mpi_typ,
                        MPI_COMM_WORLD);
-        convert_len_arr_to_offset32((uint32_t*)out_arr->data2,
+        convert_len_arr_to_offset32((uint32_t*)out_arr->data2(),
                                     (size_t)out_arr->length);
 #else
         std::vector<uint32_t> lens(out_arr->length);
-        bodo_alltoallv(send_arr->data2, send_count, send_disp, mpi_typ,
+        bodo_alltoallv(send_arr->data2(), send_count, send_disp, mpi_typ,
                        lens.data(), recv_count, recv_disp, mpi_typ,
                        MPI_COMM_WORLD);
-        convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data2,
+        convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data2(),
                                   (size_t)out_arr->length);
 #endif
         // string data
         mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-        bodo_alltoallv(send_arr->data1, send_count_sub, send_disp_sub, mpi_typ,
-                       out_arr->data1, recv_count_sub, recv_disp_sub, mpi_typ,
-                       MPI_COMM_WORLD);
+        bodo_alltoallv(send_arr->data1(), send_count_sub, send_disp_sub,
+                       mpi_typ, out_arr->data1(), recv_count_sub, recv_disp_sub,
+                       mpi_typ, MPI_COMM_WORLD);
     }
     if (send_arr->arr_type == bodo_array_type::NUMPY ||
         send_arr->arr_type == bodo_array_type::CATEGORICAL ||
         send_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         MPI_Datatype mpi_typ = get_MPI_typ(send_arr->dtype);
-        bodo_alltoallv(send_arr->data1, send_count, send_disp, mpi_typ,
-                       out_arr->data1, recv_count, recv_disp, mpi_typ,
+        bodo_alltoallv(send_arr->data1(), send_count, send_disp, mpi_typ,
+                       out_arr->data1(), recv_count, recv_disp, mpi_typ,
                        MPI_COMM_WORLD);
     }
     if (send_arr->arr_type == bodo_array_type::STRING ||
@@ -949,10 +949,11 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
         send_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // nulls
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-        bodo_alltoallv(send_arr->null_bitmask, send_count_null, send_disp_null,
-                       mpi_typ, tmp_null_bytes.data(), recv_count_null,
-                       recv_disp_null, mpi_typ, MPI_COMM_WORLD);
-        copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask,
+        bodo_alltoallv(send_arr->null_bitmask(), send_count_null,
+                       send_disp_null, mpi_typ, tmp_null_bytes.data(),
+                       recv_count_null, recv_disp_null, mpi_typ,
+                       MPI_COMM_WORLD);
+        copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask(),
                                  tmp_null_bytes, recv_count_null, recv_count);
     }
     if (send_arr->arr_type == bodo_array_type::DICT) {
@@ -1418,9 +1419,9 @@ table_info* shuffle_table_kernel(table_info* in_table,
             // Should get the value from the output array
             int64_t n_items = out_array->length();
             NRT_MemInfo* meminfo = NULL;
-            out_arr = new array_info(
-                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_items,
-                NULL, NULL, NULL, NULL, NULL, {meminfo}, {}, out_array);
+            out_arr = new array_info(bodo_array_type::ARROW,
+                                     Bodo_CTypes::INT8 /*dummy*/, n_items,
+                                     {meminfo}, {}, out_array);
         }
         // release reference of input array
         // This is a steal reference case. The idea is to release memory as
@@ -1432,8 +1433,7 @@ table_info* shuffle_table_kernel(table_info* in_table,
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
             array_info* out_dict_arr = new array_info(
-                bodo_array_type::DICT, in_arr->dtype, out_arr->length, NULL,
-                NULL, NULL, out_arr->null_bitmask, NULL, {},
+                bodo_array_type::DICT, in_arr->dtype, out_arr->length, {},
                 {in_arr->child_arrays[0], out_arr}, NULL, 0, 0, 0, true, true,
                 in_arr->has_sorted_dictionary);
             // info1 is dictionary. incref so it doesn't get deleted since
@@ -1465,8 +1465,8 @@ array_info* reverse_shuffle_numpy_array(array_info* in_arr,
                                         comm_info.send_count.end(), size_t(0));
     array_info* out_arr = alloc_array(n_rows_ret, 0, 0, in_arr->arr_type,
                                       in_arr->dtype, 0, in_arr->num_categories);
-    char* data1_i = in_arr->data1;
-    char* data1_o = out_arr->data1;
+    char* data1_i = in_arr->data1();
+    char* data1_o = out_arr->data1();
     std::vector<char> tmp_recv(out_arr->length * siztype);
     bodo_alltoallv(data1_i, comm_info.recv_count, comm_info.recv_disp, mpi_typ,
                    tmp_recv.data(), comm_info.send_count, comm_info.send_disp,
@@ -1486,7 +1486,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr,
                                          mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_string_array");
     // 1: computing the recv_count_sub and related
-    offset_t* in_offset = (offset_t*)in_arr->data2;
+    offset_t* in_offset = (offset_t*)in_arr->data2();
     int n_pes = comm_info.n_pes;
     std::vector<int64_t> recv_count_sub(n_pes),
         recv_disp_sub(n_pes);  // we continue using here the recv/send
@@ -1512,7 +1512,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr,
     int64_t out_len = out_arr->length;
     // 3: the offsets
     std::vector<uint32_t> list_len_send(in_len);
-    offset_t* out_offset = (offset_t*)out_arr->data2;
+    offset_t* out_offset = (offset_t*)out_arr->data2();
     for (int64_t i = 0; i < in_len; i++)
         list_len_send[i] = in_offset[i + 1] - in_offset[i];
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
@@ -1536,7 +1536,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr,
                                        send_count_sub.end(), int64_t(0));
     std::vector<uint8_t> tmp_recv(tot_char);
     mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-    bodo_alltoallv(in_arr->data1, recv_count_sub, recv_disp_sub, mpi_typ,
+    bodo_alltoallv(in_arr->data1(), recv_count_sub, recv_disp_sub, mpi_typ,
                    tmp_recv.data(), send_count_sub, send_disp_sub, mpi_typ,
                    MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
@@ -1544,7 +1544,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr,
         size_t node = hash_to_rank(hashes[i], n_pes);
         offset_t str_len = out_offset[i + 1] - out_offset[i];
         int64_t c_ind = tmp_offset_sub[node];
-        char* out_ptr = out_arr->data1 + out_offset[i];
+        char* out_ptr = out_arr->data1() + out_offset[i];
         char* in_ptr = (char*)tmp_recv.data() + c_ind;
         memcpy(out_ptr, in_ptr, str_len);
         tmp_offset_sub[node] += str_len;
@@ -1570,8 +1570,8 @@ void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
     calc_disp(send_disp_null, send_count_null);
     calc_disp(recv_disp_null, recv_count_null);
     std::vector<uint8_t> mask_send(n_recv_null_tot);
-    uint8_t* null_bitmask_in = (uint8_t*)in_arr->null_bitmask;
-    uint8_t* null_bitmask_out = (uint8_t*)out_arr->null_bitmask;
+    uint8_t* null_bitmask_in = (uint8_t*)in_arr->null_bitmask();
+    uint8_t* null_bitmask_out = (uint8_t*)out_arr->null_bitmask();
     int64_t pos = 0;
     for (int i = 0; i < n_pes; i++) {
         for (int64_t i_row = 0; i_row < comm_info.recv_count[i]; i_row++) {
@@ -1601,7 +1601,7 @@ array_info* reverse_shuffle_list_string_array(
     tracing::Event ev("reverse_shuffle_list_string_array");
     // 1: computing the recv_count_sub and related
     int n_pes = comm_info.n_pes;
-    offset_t* in_str_offset = (offset_t*)in_arr->data3;
+    offset_t* in_str_offset = (offset_t*)in_arr->data3();
     std::vector<int64_t> recv_count_sub(n_pes),
         recv_disp_sub(n_pes);  // we continue using here the recv/send
     for (int i = 0; i < n_pes; i++)
@@ -1614,7 +1614,7 @@ array_info* reverse_shuffle_list_string_array(
     calc_disp(send_disp_sub, send_count_sub);
     calc_disp(recv_disp_sub, recv_count_sub);
     // 2: computing the recv_count_sub_sub and related
-    offset_t* in_data_offset = (offset_t*)in_arr->data2;
+    offset_t* in_data_offset = (offset_t*)in_arr->data2();
     std::vector<int64_t> recv_count_sub_sub(n_pes),
         recv_disp_sub_sub(n_pes);  // we continue using here the recv/send
     for (int i = 0; i < n_pes; i++)
@@ -1639,7 +1639,7 @@ array_info* reverse_shuffle_list_string_array(
     int64_t out_len = out_arr->length;
     // 4: the string offsets
     std::vector<uint32_t> list_str_len_send(in_len);
-    offset_t* out_str_offset = (offset_t*)out_arr->data3;
+    offset_t* out_str_offset = (offset_t*)out_arr->data3();
     for (int64_t i = 0; i < in_len; i++)
         list_str_len_send[i] = in_str_offset[i + 1] - in_str_offset[i];
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
@@ -1662,7 +1662,7 @@ array_info* reverse_shuffle_list_string_array(
     int32_t in_sub_len = in_str_offset[in_len];
     int32_t out_sub_len = out_str_offset[out_len];
     std::vector<uint32_t> list_char_len_send(in_sub_len);
-    offset_t* out_data_offset = (offset_t*)out_arr->data2;
+    offset_t* out_data_offset = (offset_t*)out_arr->data2();
     for (int64_t i = 0; i < in_sub_len; i++)
         list_char_len_send[i] = in_data_offset[i + 1] - in_data_offset[i];
     std::vector<uint32_t> list_char_len_recv(out_sub_len);
@@ -1693,8 +1693,8 @@ array_info* reverse_shuffle_list_string_array(
 #endif
     // 6: the characters themselves
     int32_t out_sub_sub_len = out_data_offset[out_sub_len];
-    char* in_char = in_arr->data1;
-    char* out_char = out_arr->data1;
+    char* in_char = in_arr->data1();
+    char* out_char = out_arr->data1();
     MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
     std::vector<char> list_char_recv(out_sub_sub_len);
     bodo_alltoallv(in_char, recv_count_sub_sub, recv_disp_sub_sub, mpi_typ8,
@@ -1727,8 +1727,8 @@ array_info* reverse_shuffle_list_string_array(
     calc_disp(send_disp_sub_null, send_count_sub_null);
     calc_disp(recv_disp_sub_null, recv_count_sub_null);
     std::vector<uint8_t> mask_send(n_recv_sub_null_tot);
-    uint8_t* sub_null_bitmask_in = (uint8_t*)in_arr->sub_null_bitmask;
-    uint8_t* sub_null_bitmask_out = (uint8_t*)out_arr->sub_null_bitmask;
+    uint8_t* sub_null_bitmask_in = (uint8_t*)in_arr->sub_null_bitmask();
+    uint8_t* sub_null_bitmask_out = (uint8_t*)out_arr->sub_null_bitmask();
     for (int i_p = 0; i_p < n_pes; i_p++) {
         for (int64_t i_str = 0; i_str < recv_count_sub[i_p]; i_str++) {
             int64_t pos = i_str + recv_disp_sub[i_p];
@@ -1821,8 +1821,7 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table,
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
             array_info* out_dict_arr = new array_info(
-                bodo_array_type::DICT, in_arr->dtype, out_arr->length, NULL,
-                NULL, NULL, out_arr->null_bitmask, NULL, {},
+                bodo_array_type::DICT, in_arr->dtype, out_arr->length, {},
                 {in_arr->child_arrays[0], out_arr}, NULL, 0, 0, 0, true, true,
                 in_arr->has_sorted_dictionary);
             // info1 is dictionary. incref so it doesn't get deleted since
@@ -2298,10 +2297,10 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 broadcast_arrow_array(ref_array, in_array);
             uint64_t n_rows = array->length();
             NRT_MemInfo* meminfo = NULL;
-            out_arr = new array_info(
-                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows,
-                NULL, NULL, NULL, NULL, NULL, {meminfo}, {}, array,
-                /*precision=*/precision);
+            out_arr = new array_info(bodo_array_type::ARROW,
+                                     Bodo_CTypes::INT8 /*dummy*/, n_rows,
+                                     {meminfo}, {}, array,
+                                     /*precision=*/precision);
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||
@@ -2312,7 +2311,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             else
                 out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype, 0, 0);
             out_arr->precision = precision;
-            MPI_Bcast(out_arr->data1, n_rows, mpi_typ, mpi_root,
+            MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, mpi_root,
                       MPI_COMM_WORLD);
         }
         if (arr_type == bodo_array_type::INTERVAL) {
@@ -2321,9 +2320,9 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 out_arr = copy_array(in_arr);
             else
                 out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype, 0, 0);
-            MPI_Bcast(out_arr->data1, n_rows, mpi_typ, mpi_root,
+            MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, mpi_root,
                       MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data2, n_rows, mpi_typ, mpi_root,
+            MPI_Bcast(out_arr->data2(), n_rows, mpi_typ, mpi_root,
                       MPI_COMM_WORLD);
         }
         if (arr_type == bodo_array_type::STRING) {
@@ -2334,9 +2333,9 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             else
                 out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
                                       arr_type, dtype, 0, num_categories);
-            MPI_Bcast(out_arr->data1, n_sub_elems, mpi_typ8, mpi_root,
+            MPI_Bcast(out_arr->data1(), n_sub_elems, mpi_typ8, mpi_root,
                       MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data2, n_rows, mpi_typ_offset, mpi_root,
+            MPI_Bcast(out_arr->data2(), n_rows, mpi_typ_offset, mpi_root,
                       MPI_COMM_WORLD);
         }
         if (arr_type == bodo_array_type::LIST_STRING) {
@@ -2347,23 +2346,23 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             else
                 out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
                                       arr_type, dtype, 0, num_categories);
-            MPI_Bcast(out_arr->data1, n_sub_sub_elems, mpi_typ8, mpi_root,
+            MPI_Bcast(out_arr->data1(), n_sub_sub_elems, mpi_typ8, mpi_root,
                       MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data2, n_sub_elems, mpi_typ_offset, mpi_root,
+            MPI_Bcast(out_arr->data2(), n_sub_elems, mpi_typ_offset, mpi_root,
                       MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data3, n_rows, mpi_typ_offset, mpi_root,
+            MPI_Bcast(out_arr->data3(), n_rows, mpi_typ_offset, mpi_root,
                       MPI_COMM_WORLD);
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
             int n_sub_bytes = (n_sub_elems + 7) >> 3;
-            MPI_Bcast(out_arr->sub_null_bitmask, n_sub_bytes, mpi_typ, mpi_root,
-                      MPI_COMM_WORLD);
+            MPI_Bcast(out_arr->sub_null_bitmask(), n_sub_bytes, mpi_typ,
+                      mpi_root, MPI_COMM_WORLD);
         }
         if (arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
             arr_type == bodo_array_type::STRING ||
             arr_type == bodo_array_type::LIST_STRING) {
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
             int n_bytes = (n_rows + 7) >> 3;
-            MPI_Bcast(out_arr->null_bitmask, n_bytes, mpi_typ, mpi_root,
+            MPI_Bcast(out_arr->null_bitmask(), n_bytes, mpi_typ, mpi_root,
                       MPI_COMM_WORLD);
         }
 
@@ -2384,8 +2383,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             array_info* dict_arr = ref_table->columns[i_col]->child_arrays[0];
             // Create a DICT out_arr
             out_arr = new array_info(
-                bodo_array_type::DICT, dict_arr->dtype, out_arr->length, NULL,
-                NULL, NULL, out_arr->null_bitmask, NULL, {},
+                bodo_array_type::DICT, dict_arr->dtype, out_arr->length, {},
                 {dict_arr, out_arr}, NULL, 0, 0, 0,
                 /*has_global_dictionary=*/true,
                 /*has_deduped_local_dictionary=*/true,
@@ -2773,9 +2771,9 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             NRT_MemInfo* meminfo = NULL;
             if (myrank == mpi_root || all_gather)
                 n_rows_tot = out_array->length();
-            out_arr = new array_info(
-                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows_tot,
-                NULL, NULL, NULL, NULL, NULL, {meminfo}, {}, out_array);
+            out_arr = new array_info(bodo_array_type::ARROW,
+                                     Bodo_CTypes::INT8 /*dummy*/, n_rows_tot,
+                                     {meminfo}, {}, out_array);
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||
@@ -2790,9 +2788,9 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, 0,
                                       num_categories);
-                data1_ptr = out_arr->data1;
+                data1_ptr = out_arr->data1();
             }
-            MPI_Gengatherv(in_arr->data1, n_rows, mpi_typ, data1_ptr,
+            MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
                            rows_counts.data(), rows_disps.data(), mpi_typ,
                            mpi_root, MPI_COMM_WORLD, all_gather);
         }
@@ -2808,13 +2806,13 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, 0,
                                       num_categories);
-                data1_ptr = out_arr->data1;
-                data2_ptr = out_arr->data2;
+                data1_ptr = out_arr->data1();
+                data2_ptr = out_arr->data2();
             }
-            MPI_Gengatherv(in_arr->data1, n_rows, mpi_typ, data1_ptr,
+            MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
                            rows_counts.data(), rows_disps.data(), mpi_typ,
                            mpi_root, MPI_COMM_WORLD, all_gather);
-            MPI_Gengatherv(in_arr->data2, n_rows, mpi_typ, data2_ptr,
+            MPI_Gengatherv(in_arr->data2(), n_rows, mpi_typ, data2_ptr,
                            rows_counts.data(), rows_disps.data(), mpi_typ,
                            mpi_root, MPI_COMM_WORLD, all_gather);
         }
@@ -2833,7 +2831,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, n_chars_tot, -1, arr_type,
                                       dtype, 0, num_categories);
-                data1_ptr = out_arr->data1;
+                data1_ptr = out_arr->data1();
             }
             std::vector<int> char_disps(n_pes), char_counts(n_pes);
             int pos = 0;
@@ -2843,12 +2841,12 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 char_counts[i_p] = siz;
                 pos += siz;
             }
-            MPI_Gengatherv(in_arr->data1, n_sub_elems, mpi_typ8, data1_ptr,
+            MPI_Gengatherv(in_arr->data1(), n_sub_elems, mpi_typ8, data1_ptr,
                            char_counts.data(), char_disps.data(), mpi_typ8,
                            mpi_root, MPI_COMM_WORLD, all_gather);
             // Collecting the offsets data
             std::vector<uint32_t> list_count_loc(n_rows);
-            offset_t* offsets_i = (offset_t*)in_arr->data2;
+            offset_t* offsets_i = (offset_t*)in_arr->data2();
             offset_t curr_offset = 0;
             for (int64_t pos = 0; pos < n_rows; pos++) {
                 offset_t new_offset = offsets_i[pos + 1];
@@ -2861,7 +2859,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                            rows_disps.data(), mpi_typ32, mpi_root,
                            MPI_COMM_WORLD, all_gather);
             if (myrank == mpi_root || all_gather) {
-                offset_t* offsets_o = (offset_t*)out_arr->data2;
+                offset_t* offsets_o = (offset_t*)out_arr->data2();
                 offsets_o[0] = 0;
                 for (int64_t pos = 0; pos < n_rows_tot; pos++)
                     offsets_o[pos + 1] = offsets_o[pos] + list_count_tot[pos];
@@ -2893,7 +2891,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             int64_t n_sub_bytes_tot = std::accumulate(
                 n_sub_bytes_count.begin(), n_sub_bytes_count.end(), int64_t(0));
             std::vector<uint8_t> V(n_sub_bytes_tot, 0);
-            uint8_t* sub_null_bitmask_i = (uint8_t*)in_arr->sub_null_bitmask;
+            uint8_t* sub_null_bitmask_i = (uint8_t*)in_arr->sub_null_bitmask();
             int n_bytes = (n_sub_elems + 7) >> 3;
             MPI_Gengatherv(sub_null_bitmask_i, n_bytes, mpi_typ8, V.data(),
                            n_sub_bytes_count.data(), n_sub_bytes_disp.data(),
@@ -2903,9 +2901,9 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 out_arr = alloc_array(n_rows_tot, n_sub_elems_tot,
                                       n_sub_sub_elems_tot, arr_type, dtype, 0,
                                       num_categories);
-                data1_ptr = out_arr->data1;
+                data1_ptr = out_arr->data1();
                 uint8_t* sub_null_bitmask_o =
-                    (uint8_t*)out_arr->sub_null_bitmask;
+                    (uint8_t*)out_arr->sub_null_bitmask();
                 copy_gathered_null_bytes(sub_null_bitmask_o, V,
                                          n_sub_bytes_count, string_count);
             }
@@ -2917,9 +2915,9 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 char_counts[i_p] = siz;
                 pos += siz;
             }
-            MPI_Gengatherv(in_arr->data1, n_sub_sub_elems, mpi_typ8, data1_ptr,
-                           char_counts.data(), char_disps.data(), mpi_typ8,
-                           mpi_root, MPI_COMM_WORLD, all_gather);
+            MPI_Gengatherv(in_arr->data1(), n_sub_sub_elems, mpi_typ8,
+                           data1_ptr, char_counts.data(), char_disps.data(),
+                           mpi_typ8, mpi_root, MPI_COMM_WORLD, all_gather);
             // Sending of the data_offsets
             std::vector<int> data_offsets_disps(n_pes),
                 data_offsets_counts(n_pes);
@@ -2931,7 +2929,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 pos_data += siz;
             }
             std::vector<uint32_t> len_strings_loc(n_sub_elems);
-            offset_t* data_offsets_i = (offset_t*)in_arr->data2;
+            offset_t* data_offsets_i = (offset_t*)in_arr->data2();
             offset_t curr_data_offset = 0;
             for (int64_t pos = 0; pos < n_sub_elems; pos++) {
                 offset_t new_data_offset = data_offsets_i[pos + 1];
@@ -2945,7 +2943,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                            data_offsets_disps.data(), mpi_typ32, mpi_root,
                            MPI_COMM_WORLD, all_gather);
             if (myrank == mpi_root || all_gather) {
-                offset_t* data_offsets_o = (offset_t*)out_arr->data2;
+                offset_t* data_offsets_o = (offset_t*)out_arr->data2();
                 data_offsets_o[0] = 0;
                 for (int64_t pos = 0; pos < n_sub_elems_tot; pos++)
                     data_offsets_o[pos + 1] =
@@ -2962,7 +2960,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 pos_index += siz;
             }
             std::vector<uint32_t> n_strings_loc(n_rows);
-            offset_t* index_offsets_i = (offset_t*)in_arr->data3;
+            offset_t* index_offsets_i = (offset_t*)in_arr->data3();
             offset_t curr_index_offset = 0;
             for (int64_t pos = 0; pos < n_rows; pos++) {
                 offset_t new_index_offset = index_offsets_i[pos + 1];
@@ -2976,7 +2974,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                            index_offsets_disps.data(), mpi_typ32, mpi_root,
                            MPI_COMM_WORLD, all_gather);
             if (myrank == mpi_root || all_gather) {
-                offset_t* index_offsets_o = (offset_t*)out_arr->data3;
+                offset_t* index_offsets_o = (offset_t*)out_arr->data3();
                 index_offsets_o[0] = 0;
                 for (int64_t pos = 0; pos < n_rows_tot; pos++)
                     index_offsets_o[pos + 1] =
@@ -2986,7 +2984,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
         if (arr_type == bodo_array_type::STRING ||
             arr_type == bodo_array_type::LIST_STRING ||
             arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            char* null_bitmask_i = in_arr->null_bitmask;
+            char* null_bitmask_i = in_arr->null_bitmask();
             std::vector<int> recv_count_null(n_pes), recv_disp_null(n_pes);
             for (int i_p = 0; i_p < n_pes; i_p++)
                 recv_count_null[i_p] = (rows_counts[i_p] + 7) >> 3;
@@ -3001,7 +2999,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                            recv_disp_null.data(), mpi_typ, mpi_root,
                            MPI_COMM_WORLD, all_gather);
             if (myrank == mpi_root || all_gather) {
-                char* null_bitmask_o = out_arr->null_bitmask;
+                char* null_bitmask_o = out_arr->null_bitmask();
                 copy_gathered_null_bytes((uint8_t*)null_bitmask_o,
                                          tmp_null_bytes, recv_count_null,
                                          rows_counts);
@@ -3011,8 +3009,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             in_arr = in_table->columns[i_col];
             if (all_gather || myrank == mpi_root) {
                 out_arr = new array_info(
-                    bodo_array_type::DICT, in_arr->dtype, out_arr->length, NULL,
-                    NULL, NULL, out_arr->null_bitmask, NULL, {},
+                    bodo_array_type::DICT, in_arr->dtype, out_arr->length, {},
                     {in_arr->child_arrays[0], out_arr}, NULL, 0, 0, 0,
                     /*has_global_dictionary=*/true,
                     /*has_deduped_local_dictionary=*/true,

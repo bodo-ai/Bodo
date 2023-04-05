@@ -214,14 +214,14 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr,
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     uint64_t siztype = numpy_item_size[dtype];
     std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-    char* in_data1 = in_arr->data1;
+    char* in_data1 = in_arr->data1();
     // use nullable int/float/bool array if dtype is integer/float/bool and
     // use_nullable_arr is specified
     if (use_nullable_arr &&
         (is_integer(dtype) || is_float(dtype) || dtype == Bodo_CTypes::_BOOL)) {
         out_arr = alloc_array(nRowOut, -1, -1,
                               bodo_array_type::NULLABLE_INT_BOOL, dtype, 0, 0);
-        char* out_data1 = out_arr->data1;
+        char* out_data1 = out_arr->data1();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             char* out_ptr = out_data1 + siztype * iRow;
@@ -241,8 +241,8 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr,
             using T = int32_t;
             T na_val;
             memcpy(&na_val, (T*)vectNaN.data(), sizeof(T));
-            T* out_data1 = (T*)out_arr->data1;
-            T* in_data1 = (T*)in_arr->data1;
+            T* out_data1 = (T*)out_arr->data1();
+            T* in_data1 = (T*)in_arr->data1();
 
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
@@ -256,8 +256,8 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr,
             using T = int64_t;
             T na_val;
             memcpy(&na_val, (T*)vectNaN.data(), sizeof(T));
-            T* out_data1 = (T*)out_arr->data1;
-            T* in_data1 = (T*)in_arr->data1;
+            T* out_data1 = (T*)out_arr->data1();
+            T* in_data1 = (T*)in_arr->data1();
 
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
@@ -266,7 +266,7 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr,
             return out_arr;
         }
 
-        char* out_data1 = out_arr->data1;
+        char* out_data1 = out_arr->data1();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             char* out_ptr = out_data1 + siztype * iRow;
@@ -302,8 +302,8 @@ array_info* RetrieveArray_SingleColumn_F_nullable(array_info* in_arr,
 
     if (siztype == sizeof(int32_t)) {
         using T = int32_t;
-        T* in_data1 = (T*)in_arr->data1;
-        T* out_data1 = (T*)out_arr->data1;
+        T* in_data1 = (T*)in_arr->data1();
+        T* out_data1 = (T*)out_arr->data1();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             bool bit = false;
@@ -324,8 +324,8 @@ array_info* RetrieveArray_SingleColumn_F_nullable(array_info* in_arr,
     // TODO: refactor duplicate code
     if (siztype == sizeof(int64_t)) {
         using T = int64_t;
-        T* in_data1 = (T*)in_arr->data1;
-        T* out_data1 = (T*)out_arr->data1;
+        T* in_data1 = (T*)in_arr->data1();
+        T* out_data1 = (T*)out_arr->data1();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             bool bit = false;
@@ -340,8 +340,8 @@ array_info* RetrieveArray_SingleColumn_F_nullable(array_info* in_arr,
         return out_arr;
     }
 
-    char* in_data1 = in_arr->data1;
-    char* out_data1 = out_arr->data1;
+    char* in_data1 = in_arr->data1();
+    char* out_data1 = out_arr->data1();
     for (size_t iRow = 0; iRow < nRowOut; iRow++) {
         int64_t idx = in_arr_idxs[iRow];
         bool bit = false;
@@ -378,8 +378,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
         std::vector<offset_t> ListSizes_data(nRowOut);
         int64_t tot_size_index = 0;
         int64_t tot_size_data = 0;
-        offset_t* index_offsets = (offset_t*)in_arr->data3;
-        offset_t* data_offsets = (offset_t*)in_arr->data2;
+        offset_t* index_offsets = (offset_t*)in_arr->data3();
+        offset_t* data_offsets = (offset_t*)in_arr->data2();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             offset_t size_index = 0;
@@ -400,17 +400,17 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
         }
         out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data, arr_type,
                               dtype, 0, 0);
-        uint8_t* out_sub_null_bitmask = (uint8_t*)out_arr->sub_null_bitmask;
+        uint8_t* out_sub_null_bitmask = (uint8_t*)out_arr->sub_null_bitmask();
         offset_t pos_index = 0;
         offset_t pos_data = 0;
-        offset_t* out_index_offsets = (offset_t*)out_arr->data3;
-        offset_t* out_data_offsets = (offset_t*)out_arr->data2;
-        char* out_data1 = out_arr->data1;
+        offset_t* out_index_offsets = (offset_t*)out_arr->data3();
+        offset_t* out_data_offsets = (offset_t*)out_arr->data2();
+        char* out_data1 = out_arr->data1();
         out_data_offsets[0] = 0;
-        uint8_t* in_sub_null_bitmask = (uint8_t*)in_arr->sub_null_bitmask;
-        offset_t* in_index_offsets = (offset_t*)in_arr->data3;
-        offset_t* in_data_offsets = (offset_t*)in_arr->data2;
-        char* in_data1 = in_arr->data1;
+        uint8_t* in_sub_null_bitmask = (uint8_t*)in_arr->sub_null_bitmask();
+        offset_t* in_index_offsets = (offset_t*)in_arr->data3();
+        offset_t* in_data_offsets = (offset_t*)in_arr->data2();
+        char* in_data1 = in_arr->data1();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             offset_t size_index = ListSizes_index[iRow];
@@ -449,8 +449,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
         // bitmask is set to false.
         int64_t n_chars = 0;
         std::vector<offset_t> ListSizes(nRowOut);
-        offset_t* in_offsets = (offset_t*)in_arr->data2;
-        char* in_data1 = in_arr->data1;
+        offset_t* in_offsets = (offset_t*)in_arr->data2();
+        char* in_data1 = in_arr->data1();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             offset_t size = 0;
@@ -464,8 +464,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
             n_chars += size;
         }
         out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
-        offset_t* out_offsets = (offset_t*)out_arr->data2;
-        char* out_data1 = out_arr->data1;
+        offset_t* out_offsets = (offset_t*)out_arr->data2();
+        char* out_data1 = out_arr->data1();
         offset_t pos = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
@@ -492,8 +492,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
             in_indices, in_arr_idxs, nRowOut);
 
         out_arr = new array_info(
-            bodo_array_type::DICT, in_arr->dtype, out_indices->length, NULL,
-            NULL, NULL, out_indices->null_bitmask, NULL, {},
+            bodo_array_type::DICT, in_arr->dtype, out_indices->length, {},
             {in_arr->child_arrays[0], out_indices}, NULL, 0, 0, 0,
             in_arr->has_global_dictionary, in_arr->has_deduped_local_dictionary,
             in_arr->has_sorted_dictionary);
@@ -508,11 +507,11 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
         // Interval array requires copying left and right data
         uint64_t siztype = numpy_item_size[dtype];
         std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-        char* left_data = in_arr->data1;
-        char* right_data = in_arr->data2;
+        char* left_data = in_arr->data1();
+        char* right_data = in_arr->data2();
         out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
-        char* out_left_data = out_arr->data1;
-        char* out_right_data = out_arr->data2;
+        char* out_left_data = out_arr->data1();
+        char* out_right_data = out_arr->data2();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             char* out_left_ptr = out_left_data + siztype * iRow;
@@ -537,10 +536,10 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
         uint64_t siztype = numpy_item_size[dtype];
         std::vector<char> vectNaN =
             RetrieveNaNentry(dtype);  // returns a -1 for integer values.
-        char* in_data1 = in_arr->data1;
+        char* in_data1 = in_arr->data1();
         int64_t num_categories = in_arr->num_categories;
         out_arr = alloc_categorical(nRowOut, dtype, num_categories);
-        char* out_data1 = out_arr->data1;
+        char* out_data1 = out_arr->data1();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             int64_t idx = in_arr_idxs[iRow];
             char* out_ptr = out_data1 + siztype * iRow;
@@ -581,10 +580,9 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
         std::shared_ptr<arrow::Array> out_arrow_array;
         // TODO: assert builder is not null (at least one row added)
         (void)builder->Finish(&out_arrow_array);
-        out_arr =
-            new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                           nRowOut, NULL, NULL, NULL, NULL, NULL,
-                           /*meminfo TODO*/ {}, {}, out_arrow_array);
+        out_arr = new array_info(bodo_array_type::ARROW,
+                                 Bodo_CTypes::INT8 /*dummy*/, nRowOut,
+                                 /*meminfo TODO*/ {}, {}, out_arrow_array);
     }
     out_arr->precision = in_arr->precision;
     return out_arr;
@@ -605,7 +603,8 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
         return nullptr;
     }
     size_t siz = idx_arr->length;
-    return RetrieveArray_SingleColumn_F(in_arr, (int64_t*)idx_arr->data1, siz);
+    return RetrieveArray_SingleColumn_F(in_arr, (int64_t*)idx_arr->data1(),
+                                        siz);
 }
 
 array_info* RetrieveArray_TwoColumns(
@@ -653,8 +652,8 @@ array_info* RetrieveArray_TwoColumns(
             offset_t size_index = 0;
             offset_t size_data = 0;
             if (ArrRow.second >= 0) {
-                offset_t* index_offsets = (offset_t*)ArrRow.first->data3;
-                offset_t* data_offsets = (offset_t*)ArrRow.first->data2;
+                offset_t* index_offsets = (offset_t*)ArrRow.first->data3();
+                offset_t* data_offsets = (offset_t*)ArrRow.first->data2();
                 offset_t start_offset_index = index_offsets[ArrRow.second];
                 offset_t end_offset_index = index_offsets[ArrRow.second + 1];
                 size_index = end_offset_index - start_offset_index;
@@ -669,11 +668,11 @@ array_info* RetrieveArray_TwoColumns(
         }
         out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data, arr_type,
                               dtype, 0, 0);
-        uint8_t* out_sub_null_bitmask = (uint8_t*)out_arr->sub_null_bitmask;
+        uint8_t* out_sub_null_bitmask = (uint8_t*)out_arr->sub_null_bitmask();
         offset_t pos_index = 0;
         offset_t pos_data = 0;
-        offset_t* out_index_offsets = (offset_t*)out_arr->data3;
-        offset_t* out_data_offsets = (offset_t*)out_arr->data2;
+        offset_t* out_index_offsets = (offset_t*)out_arr->data3();
+        offset_t* out_data_offsets = (offset_t*)out_arr->data2();
         out_data_offsets[0] = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
@@ -684,11 +683,11 @@ array_info* RetrieveArray_TwoColumns(
             if (ArrRow.second >= 0) {
                 array_info* e_col = ArrRow.first;
                 size_t i_row = ArrRow.second;
-                offset_t* in_index_offsets = (offset_t*)e_col->data3;
-                offset_t* in_data_offsets = (offset_t*)e_col->data2;
-                char* data1 = e_col->data1;
+                offset_t* in_index_offsets = (offset_t*)e_col->data3();
+                offset_t* in_data_offsets = (offset_t*)e_col->data2();
+                char* data1 = e_col->data1();
                 uint8_t* in_sub_null_bitmask =
-                    (uint8_t*)e_col->sub_null_bitmask;
+                    (uint8_t*)e_col->sub_null_bitmask();
                 offset_t start_index_offset = in_index_offsets[i_row];
                 offset_t start_data_offset =
                     in_data_offsets[start_index_offset];
@@ -702,7 +701,7 @@ array_info* RetrieveArray_TwoColumns(
                         GetBit(in_sub_null_bitmask, start_index_offset + u);
                     SetBitTo(out_sub_null_bitmask, pos_index + u, bit);
                 }
-                memcpy(&out_arr->data1[pos_data], &data1[start_data_offset],
+                memcpy(&out_arr->data1()[pos_data], &data1[start_data_offset],
                        size_data);
                 bit = e_col->get_null_bit(ArrRow.second);
             }
@@ -723,7 +722,7 @@ array_info* RetrieveArray_TwoColumns(
             std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             offset_t size = 0;
             if (ArrRow.second >= 0) {
-                offset_t* in_offsets = (offset_t*)ArrRow.first->data2;
+                offset_t* in_offsets = (offset_t*)ArrRow.first->data2();
                 offset_t end_offset = in_offsets[ArrRow.second + 1];
                 offset_t start_offset = in_offsets[ArrRow.second];
                 size = end_offset - start_offset;
@@ -733,7 +732,7 @@ array_info* RetrieveArray_TwoColumns(
         }
         out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
         offset_t pos = 0;
-        offset_t* out_offsets = (offset_t*)out_arr->data2;
+        offset_t* out_offsets = (offset_t*)out_arr->data2();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             offset_t size = ListSizes[iRow];
@@ -741,10 +740,10 @@ array_info* RetrieveArray_TwoColumns(
             bool bit = false;
             if (ArrRow.second >= 0) {
                 array_info* e_col = ArrRow.first;
-                offset_t* in_offsets = (offset_t*)e_col->data2;
+                offset_t* in_offsets = (offset_t*)e_col->data2();
                 offset_t start_offset = in_offsets[ArrRow.second];
-                char* out_ptr = out_arr->data1 + pos;
-                char* in_ptr = e_col->data1 + start_offset;
+                char* out_ptr = out_arr->data1() + pos;
+                char* in_ptr = e_col->data1() + start_offset;
                 memcpy(out_ptr, in_ptr, size);
                 pos += size;
                 bit = e_col->get_null_bit(ArrRow.second);
@@ -765,11 +764,11 @@ array_info* RetrieveArray_TwoColumns(
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             bool bit = false;
-            char* out_ptr = out_indices->data1 + siztype * iRow;
+            char* out_ptr = out_indices->data1() + siztype * iRow;
             if (ArrRow.second >= 0) {
                 array_info* e_col = ArrRow.first;
                 char* in_ptr =
-                    e_col->child_arrays[1]->data1 + siztype * ArrRow.second;
+                    e_col->child_arrays[1]->data1() + siztype * ArrRow.second;
                 memcpy(out_ptr, in_ptr, siztype);
                 bit = e_col->child_arrays[1]->get_null_bit(ArrRow.second);
             } else {
@@ -780,8 +779,7 @@ array_info* RetrieveArray_TwoColumns(
             out_indices->set_null_bit(iRow, bit);
         }
         out_arr = new array_info(
-            bodo_array_type::DICT, arr1->dtype, out_indices->length, NULL, NULL,
-            NULL, out_indices->null_bitmask, NULL, {},
+            bodo_array_type::DICT, arr1->dtype, out_indices->length, {},
             {arr1->child_arrays[0], out_indices}, NULL, 0, 0, 0,
             arr1->has_global_dictionary, arr1->has_deduped_local_dictionary,
             arr1->has_sorted_dictionary);
@@ -801,8 +799,8 @@ array_info* RetrieveArray_TwoColumns(
             bool bit = false;
             if (ArrRow.second >= 0) {
                 array_info* e_col = ArrRow.first;
-                char* out_ptr = out_arr->data1 + siztype * iRow;
-                char* in_ptr = e_col->data1 + siztype * ArrRow.second;
+                char* out_ptr = out_arr->data1() + siztype * iRow;
+                char* in_ptr = e_col->data1() + siztype * ArrRow.second;
                 memcpy(out_ptr, in_ptr, siztype);
                 bit = e_col->get_null_bit(ArrRow.second);
             }
@@ -820,10 +818,10 @@ array_info* RetrieveArray_TwoColumns(
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             //
-            char* out_ptr = out_arr->data1 + siztype * iRow;
+            char* out_ptr = out_arr->data1() + siztype * iRow;
             char* in_ptr;
             if (ArrRow.second >= 0)
-                in_ptr = ArrRow.first->data1 + siztype * ArrRow.second;
+                in_ptr = ArrRow.first->data1() + siztype * ArrRow.second;
             else
                 in_ptr = vectNaN.data();
             memcpy(out_ptr, in_ptr, siztype);
@@ -844,10 +842,10 @@ array_info* RetrieveArray_TwoColumns(
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             //
-            char* out_ptr = out_arr->data1 + siztype * iRow;
+            char* out_ptr = out_arr->data1() + siztype * iRow;
             char* in_ptr;
             if (ArrRow.second >= 0)
-                in_ptr = ArrRow.first->data1 + siztype * ArrRow.second;
+                in_ptr = ArrRow.first->data1() + siztype * ArrRow.second;
             else
                 in_ptr = vectNaN.data();
             memcpy(out_ptr, in_ptr, siztype);
@@ -880,10 +878,9 @@ array_info* RetrieveArray_TwoColumns(
         std::shared_ptr<arrow::Array> out_arrow_array;
         // TODO: assert builder is not null (at least one row added)
         (void)builder->Finish(&out_arrow_array);
-        out_arr =
-            new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                           nRowOut, NULL, NULL, NULL, NULL, NULL,
-                           /*meminfo TODO*/ {}, {}, out_arrow_array);
+        out_arr = new array_info(bodo_array_type::ARROW,
+                                 Bodo_CTypes::INT8 /*dummy*/, nRowOut,
+                                 /*meminfo TODO*/ {}, {}, out_arrow_array);
     }
     return out_arr;
 };
@@ -1103,8 +1100,8 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
         arr1->arr_type == bodo_array_type::CATEGORICAL) {
         // In the case of NUMPY, we compare the values for concluding.
         uint64_t siztype = numpy_item_size[arr1->dtype];
-        char* ptr1 = arr1->data1 + siztype * pos1;
-        char* ptr2 = arr2->data1 + siztype * pos2;
+        char* ptr1 = arr1->data1() + siztype * pos1;
+        char* ptr2 = arr2->data1() + siztype * pos2;
         if (memcmp(ptr1, ptr2, siztype) != 0) return false;
         // Check for null if NA is not considered equal
         if (!is_na_equal) {
@@ -1143,8 +1140,8 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
         // they are storing. Comparison is the same as for NUMPY.
         if (bit1) {
             uint64_t siztype = numpy_item_size[arr1->dtype];
-            char* ptr1 = arr1->data1 + siztype * pos1;
-            char* ptr2 = arr2->data1 + siztype * pos2;
+            char* ptr1 = arr1->data1() + siztype * pos1;
+            char* ptr2 = arr2->data1() + siztype * pos2;
             if (memcmp(ptr1, ptr2, siztype) != 0) return false;
         } else {
             return is_na_equal;
@@ -1154,23 +1151,23 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
         // For STRING case we need to deal bitmask and the values.
         bool bit1 = arr1->get_null_bit(pos1);
         bool bit2 = arr2->get_null_bit(pos2);
-        uint8_t* sub_null_bitmask1 = (uint8_t*)arr1->sub_null_bitmask;
-        uint8_t* sub_null_bitmask2 = (uint8_t*)arr2->sub_null_bitmask;
+        uint8_t* sub_null_bitmask1 = (uint8_t*)arr1->sub_null_bitmask();
+        uint8_t* sub_null_bitmask2 = (uint8_t*)arr2->sub_null_bitmask();
         // (1): If bitmasks are different then we conclude they are not equal.
         if (bit1 != bit2) return false;
         // If bitmasks are both false, then no need to compare the string
         // values.
         if (bit1) {
             // Here we consider the shifts in data2 for the comparison.
-            offset_t* data3_1 = (offset_t*)arr1->data3;
-            offset_t* data3_2 = (offset_t*)arr2->data3;
+            offset_t* data3_1 = (offset_t*)arr1->data3();
+            offset_t* data3_2 = (offset_t*)arr2->data3();
             offset_t len1 = data3_1[pos1 + 1] - data3_1[pos1];
             offset_t len2 = data3_2[pos2 + 1] - data3_2[pos2];
             // (2): If number of strings are different the they are different
             if (len1 != len2) return false;
             // (3): Checking that the string lengths are the same
-            offset_t* data2_1 = (offset_t*)arr1->data2;
-            offset_t* data2_2 = (offset_t*)arr2->data2;
+            offset_t* data2_1 = (offset_t*)arr1->data2();
+            offset_t* data2_2 = (offset_t*)arr2->data2();
             offset_t pos1_prev = data3_1[pos1];
             offset_t pos2_prev = data3_2[pos2];
             for (offset_t u = 0; u < len1; u++) {
@@ -1188,8 +1185,8 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
             // (4): Checking the data1 array
             offset_t pos1_B = data2_1[data3_1[pos1]];
             offset_t pos2_B = data2_2[data3_2[pos2]];
-            char* data1_1_comp = arr1->data1 + pos1_B;
-            char* data1_2_comp = arr2->data1 + pos2_B;
+            char* data1_1_comp = arr1->data1() + pos1_B;
+            char* data1_2_comp = arr2->data1() + pos2_B;
             if (memcmp(data1_1_comp, data1_2_comp, tot_nb_char) != 0)
                 return false;
         } else {
@@ -1206,8 +1203,8 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
         // values.
         if (bit1) {
             // Here we consider the shifts in data2 for the comparison.
-            offset_t* data2_1 = (offset_t*)arr1->data2;
-            offset_t* data2_2 = (offset_t*)arr2->data2;
+            offset_t* data2_1 = (offset_t*)arr1->data2();
+            offset_t* data2_2 = (offset_t*)arr2->data2();
             offset_t len1 = data2_1[pos1 + 1] - data2_1[pos1];
             offset_t len2 = data2_2[pos2 + 1] - data2_2[pos2];
             // If string lengths are different then they are different.
@@ -1215,8 +1212,8 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
             // Now we iterate over the characters for the comparison.
             offset_t pos1_prev = data2_1[pos1];
             offset_t pos2_prev = data2_2[pos2];
-            char* data1_1 = arr1->data1 + pos1_prev;
-            char* data1_2 = arr2->data1 + pos2_prev;
+            char* data1_1 = arr1->data1() + pos1_prev;
+            char* data1_2 = arr2->data1() + pos2_prev;
             if (memcmp(data1_1, data1_2, len1) != 0) return false;
         } else {
             return is_na_equal;
@@ -1239,8 +1236,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
     if (arr1->arr_type == bodo_array_type::NUMPY) {
         // In the case of NUMPY, we compare the values for concluding.
         uint64_t siztype = numpy_item_size[arr1->dtype];
-        char* ptr1 = arr1->data1 + (siztype * iRow1);
-        char* ptr2 = arr2->data1 + (siztype * iRow2);
+        char* ptr1 = arr1->data1() + (siztype * iRow1);
+        char* ptr2 = arr2->data1() + (siztype * iRow2);
         return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
     }
     auto process_bits = [&](bool bit1, bool bit2) -> int {
@@ -1257,8 +1254,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
     if (arr1->arr_type == bodo_array_type::CATEGORICAL) {
         // In the case of CATEGORICAL, we need to check for null
         uint64_t siztype = numpy_item_size[arr1->dtype];
-        char* ptr1 = arr1->data1 + (siztype * iRow1);
-        char* ptr2 = arr2->data1 + (siztype * iRow2);
+        char* ptr1 = arr1->data1() + (siztype * iRow1);
+        char* ptr2 = arr2->data1() + (siztype * iRow2);
         bool is_not_na1 = !isnan_categorical_ptr(arr1->dtype, ptr1);
         bool is_not_na2 = !isnan_categorical_ptr(arr2->dtype, ptr2);
         int reply = process_bits(is_not_na1, is_not_na2);
@@ -1269,8 +1266,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
     }
     if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // NULLABLE case. We need to consider the bitmask and the values.
-        uint8_t* null_bitmask1 = (uint8_t*)arr1->null_bitmask;
-        uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask;
+        uint8_t* null_bitmask1 = (uint8_t*)arr1->null_bitmask();
+        uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask();
         bool bit1 = GetBit(null_bitmask1, iRow1);
         bool bit2 = GetBit(null_bitmask2, iRow2);
         // If one bitmask is T and the other the reverse then they are
@@ -1281,8 +1278,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         // they are storing. Comparison is the same as for NUMPY.
         if (bit1) {
             uint64_t siztype = numpy_item_size[arr1->dtype];
-            char* ptr1 = arr1->data1 + (siztype * iRow1);
-            char* ptr2 = arr2->data1 + (siztype * iRow2);
+            char* ptr1 = arr1->data1() + (siztype * iRow1);
+            char* ptr2 = arr2->data1() + (siztype * iRow2);
             int test =
                 NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
             if (test) return test;
@@ -1292,16 +1289,16 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         // For LIST_STRING case we need to deal bitmask and the values.
         bool bit1 = arr1->get_null_bit(iRow1);
         bool bit2 = arr2->get_null_bit(iRow2);
-        uint8_t* sub_null_bitmask1 = (uint8_t*)arr1->sub_null_bitmask;
-        uint8_t* sub_null_bitmask2 = (uint8_t*)arr2->sub_null_bitmask;
+        uint8_t* sub_null_bitmask1 = (uint8_t*)arr1->sub_null_bitmask();
+        uint8_t* sub_null_bitmask2 = (uint8_t*)arr2->sub_null_bitmask();
         // If bitmasks are different then we can conclude the comparison
         int reply = process_bits(bit1, bit2);
         if (reply != 0) return reply;
         if (bit1) {  // here bit1 = bit2
-            offset_t* data3_1 = (offset_t*)arr1->data3;
-            offset_t* data3_2 = (offset_t*)arr2->data3;
-            offset_t* data2_1 = (offset_t*)arr1->data2;
-            offset_t* data2_2 = (offset_t*)arr2->data2;
+            offset_t* data3_1 = (offset_t*)arr1->data3();
+            offset_t* data3_2 = (offset_t*)arr2->data3();
+            offset_t* data2_1 = (offset_t*)arr1->data2();
+            offset_t* data2_2 = (offset_t*)arr2->data2();
             // Computing the number of strings and their minimum
             offset_t nb_string1 = data3_1[iRow1 + 1] - data3_1[iRow1];
             offset_t nb_string2 = data3_2[iRow2 + 1] - data3_2[iRow2];
@@ -1324,8 +1321,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                 if (str_bit1) {  // here str_bit1 = str_bit2
                     offset_t minlen = len1;
                     if (len2 < len1) minlen = len2;
-                    char* data1_1 = arr1->data1 + pos1_prev;
-                    char* data1_2 = arr2->data1 + pos2_prev;
+                    char* data1_1 = arr1->data1() + pos1_prev;
+                    char* data1_2 = arr2->data1() + pos2_prev;
                     // We check the strings for comparison and check if we can
                     // conclude.
                     int test = std::memcmp(data1_2, data1_1, minlen);
@@ -1351,8 +1348,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         // values.
         if (bit1) {
             // Here we consider the shifts in data2 for the comparison.
-            offset_t* data2_1 = (offset_t*)arr1->data2;
-            offset_t* data2_2 = (offset_t*)arr2->data2;
+            offset_t* data2_1 = (offset_t*)arr1->data2();
+            offset_t* data2_2 = (offset_t*)arr2->data2();
             offset_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
             offset_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
             // Compute minimal length
@@ -1361,8 +1358,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
             // From the common characters, we may be able to conclude.
             offset_t pos1_prev = data2_1[iRow1];
             offset_t pos2_prev = data2_2[iRow2];
-            char* data1_1 = (char*)arr1->data1 + pos1_prev;
-            char* data1_2 = (char*)arr2->data1 + pos2_prev;
+            char* data1_1 = (char*)arr1->data1() + pos1_prev;
+            char* data1_2 = (char*)arr2->data1() + pos2_prev;
             int test = std::memcmp(data1_2, data1_1, minlen);
             if (test) return test;
             // If not, we may be able to conclude via the string length.
@@ -1459,7 +1456,7 @@ template <Bodo_CTypes::CTypeEnum DType>
 requires(NullSentinelDtype<DType>) void fill_null_bitmask_numpy(
     uint8_t* bitmask, const array_info* arr) {
     using T = typename dtype_to_type<DType>::type;
-    T* data = (T*)(arr->data1);
+    T* data = (T*)(arr->data1());
     for (size_t i = 0; i < arr->length; i++) {
         SetBitTo(bitmask, i, !isnan_alltype<T, DType>(data[i]));
     }
@@ -1501,7 +1498,7 @@ uint8_t* create_temp_null_bitmask_for_array(const array_info* arr) {
         }
         case bodo_array_type::CATEGORICAL: {
             uint64_t siztype = numpy_item_size[arr->dtype];
-            char* data_ptr = arr->data1;
+            char* data_ptr = arr->data1();
             for (size_t i = 0; i < arr->length; i++) {
                 SetBitTo(bitmask, i,
                          !isnan_categorical_ptr(arr->dtype,
@@ -1561,9 +1558,9 @@ uint8_t* bitwise_and_null_bitmasks(const std::vector<array_info*>& arrays,
     for (array_info* arr : arrays) {
         uint8_t* arr_null_bitmask;
         bool free_bitmask = false;
-        if (arr->null_bitmask) {
+        if (arr->null_bitmask()) {
             // Use existing bitmask if one exists
-            arr_null_bitmask = (uint8_t*)(arr->null_bitmask);
+            arr_null_bitmask = (uint8_t*)(arr->null_bitmask());
         } else {
             // Create a temporary one for NUMPY, CATEGORICAL and ARROW arrays.
             // The remaining array types are not supported as join keys.
@@ -1828,7 +1825,7 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             bool bit = arr->get_null_bit(iRow);
             if (bit) {
-                char* ptrdata1 = &(arr->data1[siztype * iRow]);
+                char* ptrdata1 = &(arr->data1()[siztype * iRow]);
                 strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
             } else {
                 strOut = "NA";
@@ -1842,7 +1839,7 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
 #endif
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            char* ptrdata1 = &(arr->data1[siztype * iRow]);
+            char* ptrdata1 = &(arr->data1()[siztype * iRow]);
             strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
             ListStr[iRow] = strOut;
         }
@@ -1867,8 +1864,8 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
 #ifdef DEBUG_DEBUG
         std::cout << "DEBUG, Case STRING\n";
 #endif
-        offset_t* data2 = (offset_t*)arr->data2;
-        char* data1 = arr->data1;
+        offset_t* data2 = (offset_t*)arr->data2();
+        char* data1 = arr->data1();
 #ifdef DEBUG_DEBUG
         std::cout << "DEBUG, We have the pointers\n";
 #endif
@@ -1900,10 +1897,10 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
 #ifdef DEBUG_DEBUG
         std::cout << "DEBUG, Case LIST_STRING\n";
 #endif
-        offset_t* index_offset = (offset_t*)arr->data3;
-        offset_t* data_offset = (offset_t*)arr->data2;
-        uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
-        char* data1 = arr->data1;
+        offset_t* index_offset = (offset_t*)arr->data3();
+        offset_t* data_offset = (offset_t*)arr->data2();
+        uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask();
+        char* data1 = arr->data1();
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             bool bit = arr->get_null_bit(iRow);
             if (bit) {
@@ -1954,7 +1951,7 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
 #endif
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            char* ptrdata1 = &(arr->data1[siztype * iRow]);
+            char* ptrdata1 = &(arr->data1()[siztype * iRow]);
             strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
             ListStr[iRow] = strOut;
         }

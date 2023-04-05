@@ -118,11 +118,6 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         this->length = other.length;
         this->arr_type = other.arr_type;
         this->dtype = other.dtype;
-        this->data1 = other.data1;
-        this->data2 = other.data2;
-        this->data3 = other.data3;
-        this->null_bitmask = other.null_bitmask;
-        this->sub_null_bitmask = other.sub_null_bitmask;
         this->meminfos = std::move(other.meminfos);
         this->array = other.array;
         this->precision = other.precision;
@@ -134,11 +129,6 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         this->child_arrays = std::move(other.child_arrays);
 
         // reset the other array_info's pointers
-        other.data1 = nullptr;
-        other.data2 = nullptr;
-        other.data3 = nullptr;
-        other.null_bitmask = nullptr;
-        other.sub_null_bitmask = nullptr;
         other.array = nullptr;
     }
     return *this;
@@ -147,9 +137,7 @@ array_info& array_info::operator=(array_info&& other) noexcept {
 array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
     int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
-    char* data = (char*)meminfo->data;
-    return new array_info(bodo_array_type::NUMPY, typ_enum, length, data, NULL,
-                          NULL, NULL, NULL, {meminfo});
+    return new array_info(bodo_array_type::NUMPY, typ_enum, length, {meminfo});
 }
 
 array_info* alloc_interval_array(int64_t length,
@@ -158,10 +146,7 @@ array_info* alloc_interval_array(int64_t length,
     NRT_MemInfo* left_meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     NRT_MemInfo* right_meminfo =
         NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
-    char* left_data = (char*)left_meminfo->data;
-    char* right_data = (char*)right_meminfo->data;
     return new array_info(bodo_array_type::INTERVAL, typ_enum, length,
-                          left_data, right_data, NULL, NULL, NULL,
                           {left_meminfo, right_meminfo});
 }
 
@@ -169,10 +154,8 @@ array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
                               int64_t num_categories) {
     int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
-    char* data = (char*)meminfo->data;
-    return new array_info(bodo_array_type::CATEGORICAL, typ_enum, length, data,
-                          NULL, NULL, NULL, NULL, {meminfo}, {}, NULL, 0, 0,
-                          num_categories);
+    return new array_info(bodo_array_type::CATEGORICAL, typ_enum, length,
+                          {meminfo}, {}, NULL, 0, 0, num_categories);
 }
 
 array_info* alloc_nullable_array(int64_t length,
@@ -181,12 +164,9 @@ array_info* alloc_nullable_array(int64_t length,
     int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
-    char* data = (char*)meminfo->data;
     NRT_MemInfo* meminfo_bitmask =
         NRT_MemInfo_alloc_safe_aligned(n_bytes * sizeof(uint8_t), ALIGNMENT);
-    char* null_bitmap = (char*)meminfo_bitmask->data;
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL, typ_enum, length,
-                          data, NULL, NULL, null_bitmap, NULL,
                           {meminfo, meminfo_bitmask});
 }
 
@@ -199,7 +179,7 @@ array_info* alloc_nullable_array_no_nulls(int64_t length,
     // string arrays such as input_file_name column where nulls are not possible
     array_info* arr = alloc_nullable_array(length, typ_enum, extra_null_bytes);
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    memset(arr->null_bitmask, 0xff, n_bytes);  // null not possible
+    memset(arr->null_bitmask(), 0xff, n_bytes);  // null not possible
     return arr;
 }
 
@@ -211,7 +191,7 @@ array_info* alloc_nullable_array_all_nulls(int64_t length,
     // Useful for cases like the iceberg void transform.
     array_info* arr = alloc_nullable_array(length, typ_enum, extra_null_bytes);
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    memset(arr->null_bitmask, 0x00, n_bytes);  // all nulls
+    memset(arr->null_bitmask(), 0x00, n_bytes);  // all nulls
     return arr;
 }
 
@@ -234,8 +214,6 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
     offsets_ptr[length] = n_chars;
 
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
-                          (char*)data_meminfo->data, (char*)offsets_ptr, NULL,
-                          (char*)null_bitmap_meminfo->data, NULL,
                           {data_meminfo, offsets_meminfo, null_bitmap_meminfo});
 }
 
@@ -249,11 +227,10 @@ array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
     array_info* indices_data_arr =
         alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
 
-    return new array_info(
-        bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, NULL,
-        NULL, NULL, indices_data_arr->null_bitmask, NULL, {},
-        {dict_data_arr, indices_data_arr}, NULL, 0, 0, 0, has_global_dictionary,
-        has_deduped_local_dictionary, false);
+    return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
+                          length, {}, {dict_data_arr, indices_data_arr}, NULL,
+                          0, 0, 0, has_global_dictionary,
+                          has_deduped_local_dictionary, false);
 }
 
 array_info* create_string_array(std::vector<uint8_t> const& null_bitmap,
@@ -271,8 +248,8 @@ array_info* create_string_array(std::vector<uint8_t> const& null_bitmap,
     size_t extra_bytes = 0;
     array_info* out_col = alloc_string_array(len, nb_char, extra_bytes);
     // update string array payload to reflect change
-    char* data_o = out_col->data1;
-    offset_t* offsets_o = (offset_t*)out_col->data2;
+    char* data_o = out_col->data1();
+    offset_t* offsets_o = (offset_t*)out_col->data2();
     offset_t pos = 0;
     iter = list_string.begin();
     for (size_t i_grp = 0; i_grp < len; i_grp++) {
@@ -318,11 +295,11 @@ array_info* create_list_string_array(
 
     array_info* new_out_col =
         alloc_list_string_array(len, nb_string, nb_char, 0);
-    offset_t* index_offsets_o = (offset_t*)new_out_col->data3;
-    offset_t* data_offsets_o = (offset_t*)new_out_col->data2;
-    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask;
+    offset_t* index_offsets_o = (offset_t*)new_out_col->data3();
+    offset_t* data_offsets_o = (offset_t*)new_out_col->data2();
+    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask();
     // Writing the list_strings in output
-    char* data_o = new_out_col->data1;
+    char* data_o = new_out_col->data1();
     data_offsets_o[0] = 0;
     offset_t pos_index = 0;
     offset_t pos_data = 0;
@@ -358,11 +335,11 @@ array_info* create_dict_string_array(array_info* dict_arr,
                                      bool has_global_dictionary,
                                      bool has_deduped_local_dictionary,
                                      bool has_sorted_dictionary) {
-    array_info* out_col = new array_info(
-        bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-        indices_arr->length, NULL, NULL, NULL, indices_arr->null_bitmask, NULL,
-        {}, {dict_arr, indices_arr}, NULL, 0, 0, 0, has_global_dictionary,
-        has_deduped_local_dictionary, has_sorted_dictionary);
+    array_info* out_col =
+        new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
+                       indices_arr->length, {}, {dict_arr, indices_arr}, NULL,
+                       0, 0, 0, has_global_dictionary,
+                       has_deduped_local_dictionary, has_sorted_dictionary);
     return out_col;
 }
 
@@ -415,11 +392,9 @@ array_info* alloc_list_string_array(int64_t length, array_info* string_arr,
     offsets_ptr[0] = 0;
     offsets_ptr[length] = string_arr->length;
 
-    return new array_info(
-        bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, length,
-        string_arr->data1, string_arr->data2, (char*)offsets_meminfo->data,
-        (char*)null_bitmap_meminfo->data, string_arr->null_bitmask,
-        {offsets_meminfo, null_bitmap_meminfo}, {string_arr});
+    return new array_info(bodo_array_type::LIST_STRING,
+                          Bodo_CTypes::LIST_STRING, length,
+                          {offsets_meminfo, null_bitmap_meminfo}, {string_arr});
 }
 
 array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
@@ -534,8 +509,7 @@ array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
     offsets_ptr[n_arrays] = n_total_items;
 
     return new array_info(bodo_array_type::ARRAY_ITEM, dtype, n_arrays,
-                          (char*)payload->data.data, (char*)offsets_ptr, NULL,
-                          NULL, NULL, {meminfo_array_item});
+                          {meminfo_array_item});
 }
 
 /**
@@ -704,9 +678,8 @@ array_info* copy_array(array_info* earr) {
         array_info* dictionary = copy_array(earr->child_arrays[0]);
         array_info* indices = copy_array(earr->child_arrays[1]);
         farr = new array_info(
-            bodo_array_type::DICT, earr->dtype, indices->length, NULL, NULL,
-            NULL, indices->null_bitmask, NULL, {}, {dictionary, indices}, NULL,
-            0, 0, 0, earr->has_global_dictionary,
+            bodo_array_type::DICT, earr->dtype, indices->length, {},
+            {dictionary, indices}, NULL, 0, 0, 0, earr->has_global_dictionary,
             earr->has_deduped_local_dictionary, earr->has_sorted_dictionary);
     } else {
         farr = alloc_array(earr->length, earr->n_sub_elems(),
@@ -716,34 +689,36 @@ array_info* copy_array(array_info* earr) {
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
-        memcpy(farr->data1, earr->data1, siztype * earr->length);
+        memcpy(farr->data1(), earr->data1(), siztype * earr->length);
     }
     if (earr->arr_type == bodo_array_type::INTERVAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
-        memcpy(farr->data1, earr->data1, siztype * earr->length);
-        memcpy(farr->data2, earr->data2, siztype * earr->length);
+        memcpy(farr->data1(), earr->data1(), siztype * earr->length);
+        memcpy(farr->data2(), earr->data2(), siztype * earr->length);
     }
     if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
-        memcpy(farr->data1, earr->data1, siztype * earr->length);
+        memcpy(farr->data1(), earr->data1(), siztype * earr->length);
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
+        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
     }
     if (earr->arr_type == bodo_array_type::STRING) {
-        memcpy(farr->data1, earr->data1, earr->n_sub_elems());
-        memcpy(farr->data2, earr->data2, sizeof(offset_t) * (earr->length + 1));
+        memcpy(farr->data1(), earr->data1(), earr->n_sub_elems());
+        memcpy(farr->data2(), earr->data2(),
+               sizeof(offset_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
+        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
     }
     if (earr->arr_type == bodo_array_type::LIST_STRING) {
-        memcpy(farr->data1, earr->data1, earr->n_sub_sub_elems());
-        memcpy(farr->data2, earr->data2,
+        memcpy(farr->data1(), earr->data1(), earr->n_sub_sub_elems());
+        memcpy(farr->data2(), earr->data2(),
                sizeof(offset_t) * (earr->n_sub_elems() + 1));
-        memcpy(farr->data3, earr->data3, sizeof(offset_t) * (earr->length + 1));
+        memcpy(farr->data3(), earr->data3(),
+               sizeof(offset_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
+        memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
         int64_t n_sub_bytes = ((earr->n_sub_elems() + 7) >> 3);
-        memcpy(farr->sub_null_bitmask, earr->sub_null_bitmask, n_sub_bytes);
+        memcpy(farr->sub_null_bitmask(), earr->sub_null_bitmask(), n_sub_bytes);
     }
     return farr;
 }
@@ -914,11 +889,11 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         // NOTE: this should just do a memcpy if the bidwidths of input and
         // output match
         std::copy_n((int64_t*)(list_array->value_offsets()->data()),
-                    list_array->length() + 1, (offset_t*)offsets->data1);
-        memset(nulls->data1, 0, n_null_bytes);
+                    list_array->length() + 1, (offset_t*)offsets->data1());
+        memset(nulls->data1(), 0, n_null_bytes);
         for (int64_t i = 0; i < list_array->length(); i++) {
             if (!list_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1, i, true);
+                SetBitTo((uint8_t*)nulls->data1(), i, true);
         }
 
         infos[infos_pos++] = offsets;
@@ -940,11 +915,11 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                                         Bodo_CTypes::UINT8, 0, 0);
 
         std::copy_n((int32_t*)(list_array->value_offsets()->data()),
-                    list_array->length() + 1, (offset_t*)offsets->data1);
-        memset(nulls->data1, 0, n_null_bytes);
+                    list_array->length() + 1, (offset_t*)offsets->data1());
+        memset(nulls->data1(), 0, n_null_bytes);
         for (int64_t i = 0; i < list_array->length(); i++) {
             if (!list_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1, i, true);
+                SetBitTo((uint8_t*)nulls->data1(), i, true);
         }
 
         infos[infos_pos++] = offsets;
@@ -963,10 +938,10 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         array_info* nulls = alloc_array(n_null_bytes, -1, -1,
                                         bodo_array_type::arr_type_enum::NUMPY,
                                         Bodo_CTypes::UINT8, 0, 0);
-        memset(nulls->data1, 0, n_null_bytes);
+        memset(nulls->data1(), 0, n_null_bytes);
         for (int64_t i = 0; i < struct_array->length(); i++) {
             if (!struct_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1, i, true);
+                SetBitTo((uint8_t*)nulls->data1(), i, true);
         }
         infos[infos_pos++] = nulls;
         // Now outputing the fields.
@@ -984,17 +959,17 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         int64_t n_chars =
             ((int64_t*)str_array->value_offsets()->data())[n_strings];
         array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
-        memcpy(str_arr_info->data1, str_array->value_data()->data(),
+        memcpy(str_arr_info->data1(), str_array->value_data()->data(),
                sizeof(char) * n_chars);  // data
         // NOTE: this should just do a memcpy if the bidwidths of input and
         // output match
         std::copy_n((int64_t*)(str_array->value_offsets()->data()),
-                    n_strings + 1, (offset_t*)str_arr_info->data2);
+                    n_strings + 1, (offset_t*)str_arr_info->data2());
         int64_t n_null_bytes = (n_strings + 7) >> 3;
-        memset(str_arr_info->null_bitmask, 0, n_null_bytes);
+        memset(str_arr_info->null_bitmask(), 0, n_null_bytes);
         for (int64_t i = 0; i < n_strings; i++) {
             if (!str_array->IsNull(i))
-                SetBitTo((uint8_t*)str_arr_info->null_bitmask, i, true);
+                SetBitTo((uint8_t*)str_arr_info->null_bitmask(), i, true);
         }
         infos[infos_pos++] = str_arr_info;
     } else if (array->type_id() == arrow::Type::STRING) {
@@ -1004,15 +979,15 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         int64_t n_chars =
             ((uint32_t*)str_array->value_offsets()->data())[n_strings];
         array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
-        memcpy(str_arr_info->data1, str_array->value_data()->data(),
+        memcpy(str_arr_info->data1(), str_array->value_data()->data(),
                sizeof(char) * n_chars);  // data
         std::copy_n((int32_t*)(str_array->value_offsets()->data()),
-                    n_strings + 1, (offset_t*)str_arr_info->data2);
+                    n_strings + 1, (offset_t*)str_arr_info->data2());
         int64_t n_null_bytes = (n_strings + 7) >> 3;
-        memset(str_arr_info->null_bitmask, 0, n_null_bytes);
+        memset(str_arr_info->null_bitmask(), 0, n_null_bytes);
         for (int64_t i = 0; i < n_strings; i++) {
             if (!str_array->IsNull(i))
-                SetBitTo((uint8_t*)str_arr_info->null_bitmask, i, true);
+                SetBitTo((uint8_t*)str_arr_info->null_bitmask(), i, true);
         }
         infos[infos_pos++] = str_arr_info;
     } else {
@@ -1032,15 +1007,15 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                                         bodo_array_type::arr_type_enum::NUMPY,
                                         Bodo_CTypes::UINT8, 0, 0);
         uint64_t siztype = numpy_item_size[dtype];
-        memcpy(data->data1, primitive_array->values()->data(),
+        memcpy(data->data1(), primitive_array->values()->data(),
                siztype * primitive_array->length());
-        memset(nulls->data1, 0, n_null_bytes);
+        memset(nulls->data1(), 0, n_null_bytes);
         std::vector<char> vectNaN = RetrieveNaNentry(dtype);
         for (int64_t i = 0; i < primitive_array->length(); i++) {
             if (!primitive_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1, i, true);
+                SetBitTo((uint8_t*)nulls->data1(), i, true);
             else
-                memcpy(data->data1 + siztype * i, vectNaN.data(), siztype);
+                memcpy(data->data1() + siztype * i, vectNaN.data(), siztype);
         }
         infos[infos_pos++] = nulls;
         infos[infos_pos++] = data;

@@ -222,8 +222,8 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
             }
 
             // Equivalent to np.arange(*total_rows_out, dtype=np.int64)
-            std::iota((int64_t*)row_id_col_arr->data1,
-                      (int64_t*)row_id_col_arr->data1 + num_local_rows,
+            std::iota((int64_t*)row_id_col_arr->data1(),
+                      (int64_t*)row_id_col_arr->data1() + num_local_rows,
                       init_val);
 
             read_output->columns.push_back(row_id_col_arr);

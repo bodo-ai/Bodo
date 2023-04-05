@@ -1246,15 +1246,15 @@ void hash_join_compute_tuples_helper(
     std::vector<void*> null_bitmap_right(n_tot_right);
     for (size_t i = 0; i < n_tot_left; i++) {
         col_ptrs_left[i] =
-            static_cast<void*>(work_left_table->columns[i]->data1);
+            static_cast<void*>(work_left_table->columns[i]->data1());
         null_bitmap_left[i] =
-            static_cast<void*>(work_left_table->columns[i]->null_bitmask);
+            static_cast<void*>(work_left_table->columns[i]->null_bitmask());
     }
     for (size_t i = 0; i < n_tot_right; i++) {
         col_ptrs_right[i] =
-            static_cast<void*>(work_right_table->columns[i]->data1);
+            static_cast<void*>(work_right_table->columns[i]->data1());
         null_bitmap_right[i] =
-            static_cast<void*>(work_right_table->columns[i]->null_bitmask);
+            static_cast<void*>(work_right_table->columns[i]->null_bitmask());
     }
 
     // Keep track of which table to use to populate the second level hash
@@ -2161,13 +2161,13 @@ table_info* hash_join_table_inner(
             }
             // Left is null
             if ((*left_write_idxs)[rownum] == -1) {
-                indicator_col->data1[rownum] = 1;
+                indicator_col->data1()[rownum] = 1;
                 // Right is null
             } else if ((*right_write_idxs)[rownum] == -1) {
-                indicator_col->data1[rownum] = 0;
+                indicator_col->data1()[rownum] = 0;
                 // Neither is null
             } else {
-                indicator_col->data1[rownum] = 2;
+                indicator_col->data1()[rownum] = 2;
             }
         }
         out_arrs.emplace_back(indicator_col);
@@ -2255,8 +2255,8 @@ get_gen_cond_data_ptrs(table_info* table) {
     std::vector<void*> null_bitmaps(table->ncols());
 
     for (size_t i = 0; i < table->ncols(); i++) {
-        col_ptrs[i] = static_cast<void*>(table->columns[i]->data1);
-        null_bitmaps[i] = static_cast<void*>(table->columns[i]->null_bitmask);
+        col_ptrs[i] = static_cast<void*>(table->columns[i]->data1());
+        null_bitmaps[i] = static_cast<void*>(table->columns[i]->null_bitmask());
     }
     return std::make_tuple(table_infos, col_ptrs, null_bitmaps);
 }
@@ -2731,7 +2731,7 @@ bool is_point_right_of_interval_start(array_info* left_interval_col,
                                       array_info* point_col,
                                       const size_t& point_idx,
                                       bool strictly_right) {
-    if (point_col->null_bitmask != nullptr &&
+    if (point_col->null_bitmask() != nullptr &&
         !point_col->get_null_bit((size_t)point_idx)) {
         return false;
     }

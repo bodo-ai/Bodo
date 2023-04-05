@@ -489,7 +489,7 @@ collecting_non_nan_entries(std::vector<T> &my_array, array_info *arr,
                            local_global_stat_nan const &e_stat) {
     if (e_stat.loc_nb_miss == 0) {
         // Remark: The data is indeed copied in that case as well.
-        T *data = (T *)arr->data1;
+        T *data = (T *)arr->data1();
         my_array = std::vector<T>(data, data + e_stat.loc_nb_ok);
     } else {
         if (arr->arr_type == bodo_array_type::NUMPY) {
@@ -501,7 +501,7 @@ collecting_non_nan_entries(std::vector<T> &my_array, array_info *arr,
         }
         if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             for (size_t i_row = 0; i_row < arr->length; i_row++) {
-                if (GetBit((uint8_t *)arr->null_bitmask, i_row)) {
+                if (GetBit((uint8_t *)arr->null_bitmask(), i_row)) {
                     T eVal = arr->at<T>(i_row);
                     my_array.emplace_back(eVal);
                 }
@@ -525,7 +525,7 @@ inline typename std::enable_if<is_decimal<dtype>::value, void>::type
 collecting_non_nan_entries(std::vector<T> &my_array, array_info *arr,
                            local_global_stat_nan const &e_stat) {
     for (size_t i_row = 0; i_row < arr->length; i_row++) {
-        if (GetBit((uint8_t *)arr->null_bitmask, i_row)) {
+        if (GetBit((uint8_t *)arr->null_bitmask(), i_row)) {
             __int128 eVal = arr->at<__int128>(i_row);
             double eVal_d = decimal_to_double(eVal);
             my_array.emplace_back(eVal_d);
@@ -568,7 +568,7 @@ std::pair<int64_t, int64_t> nb_entries_local(array_info *arr) {
     int64_t nb_ok = 0, nb_miss = 0;
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         for (size_t i_row = 0; i_row < arr->length; i_row++) {
-            if (GetBit((uint8_t *)arr->null_bitmask, i_row))
+            if (GetBit((uint8_t *)arr->null_bitmask(), i_row))
                 nb_ok++;
             else
                 nb_miss++;
@@ -868,7 +868,7 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
             siz_recv = ghost_length - pos_index;
         if (siz_recv > 0) {
             MPI_Request mpi_recv;
-            char *ptr_recv = ghost_arr->data1 + siztype * pos_index;
+            char *ptr_recv = ghost_arr->data1() + siztype * pos_index;
             int tag = 2046 + n_pes * i_next + myrank;
             int pe = myrank + 1 + i_next;
             MPI_Irecv((void *)ptr_recv, siz_recv, mpi_typ, pe, tag,
@@ -891,7 +891,7 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
         }
         if (siz_send > 0) {
             MPI_Request mpi_send;
-            char *ptr_send = arr->data1;
+            char *ptr_send = arr->data1();
             int pe = myrank - 1 - i_prev;
             int tag = 2046 + n_pes * i_prev + pe;
             MPI_Isend((void *)ptr_send, siz_send, mpi_typ, pe, tag,
@@ -925,8 +925,8 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
         // First checking monotonicity locally
         auto do_local_computation = [&]() -> int {
             for (int64_t i_row = 0; i_row < n_rows - 1; i_row++) {
-                char *ptr1 = arr->data1 + siztype * i_row;
-                char *ptr2 = arr->data1 + siztype * (i_row + 1);
+                char *ptr1 = arr->data1() + siztype * i_row;
+                char *ptr2 = arr->data1() + siztype * (i_row + 1);
                 bool na_position = false;
                 int test =
                     NumericComparison(arr->dtype, ptr1, ptr2, na_position);
@@ -960,8 +960,8 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
         if (ghost_arr->length > 0 &&
             n_rows >
                 0) {  // It will be empty on the last node and maybe others.
-            char *ptr1 = arr->data1 + siztype * (n_rows - 1);
-            char *ptr2 = ghost_arr->data1;
+            char *ptr1 = arr->data1() + siztype * (n_rows - 1);
+            char *ptr2 = ghost_arr->data1();
             bool na_position = false;
             int test = NumericComparison(arr->dtype, ptr1, ptr2, na_position);
             if (test == -1) {  // this corresponds to *ptr1 > *ptr2
@@ -997,8 +997,8 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
             }
             double sum1 = 0, sum2 = 0, sum12 = 0, sum11 = 0, sum22 = 0;
             for (uint64_t i_row = 0; i_row < n_rows - lag; i_row++) {
-                char *ptr1 = arr->data1 + siztype * i_row;
-                char *ptr2 = arr->data1 + siztype * (i_row + lag);
+                char *ptr1 = arr->data1() + siztype * i_row;
+                char *ptr2 = arr->data1() + siztype * (i_row + lag);
                 double val1 = GetDoubleEntry(arr->dtype, ptr1);
                 double val2 = GetDoubleEntry(arr->dtype, ptr2);
                 sum1 += val1;
@@ -1040,13 +1040,14 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
                 n_rows + ghost_siz -
                 lag;  // the ghost may provide the additional rows or may not
             for (uint64_t i_row = 0; i_row < n_rows_cons; i_row++) {
-                char *ptr1 = arr->data1 + siztype * i_row;
+                char *ptr1 = arr->data1() + siztype * i_row;
                 double val1 = GetDoubleEntry(arr->dtype, ptr1);
                 char *ptr2;
                 if (i_row < n_rows - lag) {
-                    ptr2 = arr->data1 + siztype * (i_row + lag);
+                    ptr2 = arr->data1() + siztype * (i_row + lag);
                 } else {
-                    ptr2 = ghost_arr->data1 + siztype * (i_row - n_rows + lag);
+                    ptr2 =
+                        ghost_arr->data1() + siztype * (i_row - n_rows + lag);
                 }
                 double val2 = GetDoubleEntry(arr->dtype, ptr2);
                 sum1 += val1;

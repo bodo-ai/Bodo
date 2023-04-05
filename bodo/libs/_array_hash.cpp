@@ -486,9 +486,9 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
         return hash_arrow_array(out_hashes, list_offsets, n_rows, array->array);
     }
     if (array->arr_type == bodo_array_type::STRING) {
-        return hash_array_string(out_hashes, (char*)array->data1,
-                                 (offset_t*)array->data2,
-                                 (uint8_t*)array->null_bitmask, n_rows, seed,
+        return hash_array_string(out_hashes, (char*)array->data1(),
+                                 (offset_t*)array->data2(),
+                                 (uint8_t*)array->null_bitmask(), n_rows, seed,
                                  is_parallel, use_murmurhash);
     }
     if (array->arr_type == bodo_array_type::DICT) {
@@ -500,8 +500,8 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
             // operation where hashing based on local dictionary won't affect
             // correctness or performance
             return hash_array_inner<dict_indices_t>(
-                out_hashes, (dict_indices_t*)array->child_arrays[1]->data1,
-                n_rows, seed, (uint8_t*)array->child_arrays[1]->null_bitmask,
+                out_hashes, (dict_indices_t*)array->child_arrays[1]->data1(),
+                n_rows, seed, (uint8_t*)array->child_arrays[1]->null_bitmask(),
                 use_murmurhash);
         } else {
             // 3 options:
@@ -519,59 +519,59 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
         return hash_array_list_string(
-            out_hashes, (char*)array->data1, (offset_t*)array->data2,
-            (offset_t*)array->data3, (uint8_t*)array->null_bitmask,
-            (uint8_t*)array->sub_null_bitmask, n_rows, seed, use_murmurhash);
+            out_hashes, (char*)array->data1(), (offset_t*)array->data2(),
+            (offset_t*)array->data3(), (uint8_t*)array->null_bitmask(),
+            (uint8_t*)array->sub_null_bitmask(), n_rows, seed, use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::_BOOL) {
-        return hash_array_inner<bool>(out_hashes, (bool*)array->data1, n_rows,
-                                      seed, (uint8_t*)array->null_bitmask,
+        return hash_array_inner<bool>(out_hashes, (bool*)array->data1(), n_rows,
+                                      seed, (uint8_t*)array->null_bitmask(),
                                       use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::INT8) {
         return hash_array_inner<int8_t>(
-            out_hashes, (int8_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask, use_murmurhash);
+            out_hashes, (int8_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::UINT8) {
         return hash_array_inner<uint8_t>(
-            out_hashes, (uint8_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask, use_murmurhash);
+            out_hashes, (uint8_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::INT16) {
         return hash_array_inner<int16_t>(
-            out_hashes, (int16_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask, use_murmurhash);
+            out_hashes, (int16_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::UINT16) {
         return hash_array_inner<uint16_t>(
-            out_hashes, (uint16_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask, use_murmurhash);
+            out_hashes, (uint16_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::INT32) {
         return hash_array_inner<int32_t>(
-            out_hashes, (int32_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask, use_murmurhash);
+            out_hashes, (int32_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::UINT32) {
         return hash_array_inner<uint32_t>(
-            out_hashes, (uint32_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask, use_murmurhash);
+            out_hashes, (uint32_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::INT64) {
         return hash_array_inner<int64_t>(
-            out_hashes, (int64_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask, use_murmurhash);
+            out_hashes, (int64_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::DECIMAL) {
         return hash_array_inner<__int128>(
-            out_hashes, (__int128*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask, use_murmurhash);
+            out_hashes, (__int128*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::UINT64) {
         return hash_array_inner<uint64_t>(
-            out_hashes, (uint64_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask, use_murmurhash);
+            out_hashes, (uint64_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     // TODO: [BE-4106] Split Time into Time32 and Time64
     if (array->dtype == Bodo_CTypes::DATE ||
@@ -579,15 +579,15 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
         array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_inner<int64_t>(
-            out_hashes, (int64_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask, use_murmurhash);
+            out_hashes, (int64_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::FLOAT32) {
-        return hash_array_inner<float>(out_hashes, (float*)array->data1, n_rows,
-                                       seed, use_murmurhash);
+        return hash_array_inner<float>(out_hashes, (float*)array->data1(),
+                                       n_rows, seed, use_murmurhash);
     }
     if (array->dtype == Bodo_CTypes::FLOAT64) {
-        return hash_array_inner<double>(out_hashes, (double*)array->data1,
+        return hash_array_inner<double>(out_hashes, (double*)array->data1(),
                                         n_rows, seed, use_murmurhash);
     }
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash");
@@ -698,8 +698,8 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
     }
     if (array->arr_type == bodo_array_type::STRING) {
         return hash_array_combine_string(
-            out_hashes, (char*)array->data1, (offset_t*)array->data2,
-            (uint8_t*)array->null_bitmask, n_rows, seed);
+            out_hashes, (char*)array->data1(), (offset_t*)array->data2(),
+            (uint8_t*)array->null_bitmask(), n_rows, seed);
     }
     if (array->arr_type == bodo_array_type::DICT) {
         if ((array->has_global_dictionary &&
@@ -710,8 +710,8 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             // operation where hashing based on local dictionary won't affect
             // correctness or performance
             return hash_array_combine_inner<dict_indices_t>(
-                out_hashes, (dict_indices_t*)array->child_arrays[1]->data1,
-                n_rows, seed, (uint8_t*)array->null_bitmask);
+                out_hashes, (dict_indices_t*)array->child_arrays[1]->data1(),
+                n_rows, seed, (uint8_t*)array->null_bitmask());
         } else {
             // 3 options:
             // - Convert to global dictionary now
@@ -728,54 +728,54 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
         return combine_hash_array_list_string(
-            out_hashes, (char*)array->data1, (offset_t*)array->data2,
-            (offset_t*)array->data3, (uint8_t*)array->null_bitmask,
-            (uint8_t*)array->sub_null_bitmask, n_rows);
+            out_hashes, (char*)array->data1(), (offset_t*)array->data2(),
+            (offset_t*)array->data3(), (uint8_t*)array->null_bitmask(),
+            (uint8_t*)array->sub_null_bitmask(), n_rows);
     }
     if (array->dtype == Bodo_CTypes::_BOOL) {
-        return hash_array_combine_inner<bool>(out_hashes, (bool*)array->data1,
+        return hash_array_combine_inner<bool>(out_hashes, (bool*)array->data1(),
                                               n_rows, seed,
-                                              (uint8_t*)array->null_bitmask);
+                                              (uint8_t*)array->null_bitmask());
     }
     if (array->dtype == Bodo_CTypes::INT8) {
         return hash_array_combine_inner<int8_t>(
-            out_hashes, (int8_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask);
+            out_hashes, (int8_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
     }
     if (array->dtype == Bodo_CTypes::UINT8) {
         return hash_array_combine_inner<uint8_t>(
-            out_hashes, (uint8_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask);
+            out_hashes, (uint8_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
     }
     if (array->dtype == Bodo_CTypes::INT16) {
         return hash_array_combine_inner<int16_t>(
-            out_hashes, (int16_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask);
+            out_hashes, (int16_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
     }
     if (array->dtype == Bodo_CTypes::UINT16) {
         return hash_array_combine_inner<uint16_t>(
-            out_hashes, (uint16_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask);
+            out_hashes, (uint16_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
     }
     if (array->dtype == Bodo_CTypes::INT32) {
         return hash_array_combine_inner<int32_t>(
-            out_hashes, (int32_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask);
+            out_hashes, (int32_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
     }
     if (array->dtype == Bodo_CTypes::UINT32) {
         return hash_array_combine_inner<uint32_t>(
-            out_hashes, (uint32_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask);
+            out_hashes, (uint32_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
     }
     if (array->dtype == Bodo_CTypes::INT64) {
         return hash_array_combine_inner<int64_t>(
-            out_hashes, (int64_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask);
+            out_hashes, (int64_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
     }
     if (array->dtype == Bodo_CTypes::UINT64) {
         return hash_array_combine_inner<uint64_t>(
-            out_hashes, (uint64_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask);
+            out_hashes, (uint64_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
     }
     // TODO: [BE-4106] Split Time into Time32 and Time64
     if (array->dtype == Bodo_CTypes::DATE ||
@@ -783,22 +783,22 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
         array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_combine_inner<int64_t>(
-            out_hashes, (int64_t*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask);
+            out_hashes, (int64_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
     }
     if (array->dtype == Bodo_CTypes::FLOAT32) {
-        return hash_array_combine_inner<float>(out_hashes, (float*)array->data1,
-                                               n_rows, seed);
+        return hash_array_combine_inner<float>(
+            out_hashes, (float*)array->data1(), n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::FLOAT64) {
         return hash_array_combine_inner<double>(
-            out_hashes, (double*)array->data1, n_rows, seed);
+            out_hashes, (double*)array->data1(), n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::DECIMAL ||
         array->dtype == Bodo_CTypes::INT128) {
         return hash_array_combine_inner<__int128>(
-            out_hashes, (__int128*)array->data1, n_rows, seed,
-            (uint8_t*)array->null_bitmask);
+            out_hashes, (__int128*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
     }
     Bodo_PyErr_SetString(PyExc_RuntimeError,
                          "Invalid data type for hash combine");
@@ -823,14 +823,14 @@ template <typename T>
 void coherent_hash_array_inner_uint64(std::unique_ptr<uint32_t[]>& out_hashes,
                                       array_info* array, size_t n_rows,
                                       const uint32_t seed) {
-    T* data = (T*)array->data1;
+    T* data = (T*)array->data1();
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
             uint64_t val = data[i];
             hash_inner_32<uint64_t>(&val, seed, &out_hashes[i]);
         }
     } else {  // We are in NULLABLE_INT_BOOL
-        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask();
         uint32_t na_hash;
         hash_na_val(seed, &na_hash);
         for (size_t i = 0; i < n_rows; i++) {
@@ -845,7 +845,7 @@ template <typename T>
 void coherent_hash_array_inner_int64(std::unique_ptr<uint32_t[]>& out_hashes,
                                      array_info* array, size_t n_rows,
                                      const uint32_t seed) {
-    T* data = (T*)array->data1;
+    T* data = (T*)array->data1();
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
             int64_t val = data[i];
@@ -853,7 +853,7 @@ void coherent_hash_array_inner_int64(std::unique_ptr<uint32_t[]>& out_hashes,
             // For numpy, all entries are true, no need to increment.
         }
     } else {  // We are in NULLABLE_INT_BOOL
-        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask();
         uint32_t na_hash;
         hash_na_val(seed, &na_hash);
         for (size_t i = 0; i < n_rows; i++) {
@@ -868,14 +868,14 @@ template <typename T>
 void coherent_hash_array_inner_double(std::unique_ptr<uint32_t[]>& out_hashes,
                                       array_info* array, size_t n_rows,
                                       const uint32_t seed) {
-    T* data = (T*)array->data1;
+    T* data = (T*)array->data1();
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
             double val = get_value(data[i]);
             hash_inner_32<double>(&val, seed, &out_hashes[i]);
         }
     } else {  // We are in NULLABLE_INT_BOOL
-        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask();
         for (size_t i = 0; i < n_rows; i++) {
             bool bit = GetBit(null_bitmask, i);
             double val;
@@ -1020,7 +1020,7 @@ template <typename T>
 void coherent_hash_array_combine_inner_uint64(
     std::unique_ptr<uint32_t[]>& out_hashes, array_info* array, size_t n_rows,
     const uint32_t seed) {
-    T* data = (T*)array->data1;
+    T* data = (T*)array->data1();
     uint32_t out_hash;
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
@@ -1029,7 +1029,7 @@ void coherent_hash_array_combine_inner_uint64(
             hash_combine_boost(out_hashes[i], out_hash);
         }
     } else {  // We are in NULLABLE_INT_BOOL
-        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask();
         for (size_t i = 0; i < n_rows; i++) {
             uint64_t val = data[i];
             hash_inner_32<uint64_t>(&val, seed, &out_hash);
@@ -1043,7 +1043,7 @@ template <typename T>
 void coherent_hash_array_combine_inner_int64(
     std::unique_ptr<uint32_t[]>& out_hashes, array_info* array, size_t n_rows,
     const uint32_t seed) {
-    T* data = (T*)array->data1;
+    T* data = (T*)array->data1();
     uint32_t out_hash;
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
@@ -1053,7 +1053,7 @@ void coherent_hash_array_combine_inner_int64(
             hash_combine_boost(out_hashes[i], out_hash);
         }
     } else {  // We are in NULLABLE_INT_BOOL
-        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask();
         for (size_t i = 0; i < n_rows; i++) {
             int64_t val = data[i];
             hash_inner_32<int64_t>(&val, seed, &out_hash);
@@ -1067,7 +1067,7 @@ template <typename T>
 void coherent_hash_array_combine_inner_double(
     std::unique_ptr<uint32_t[]>& out_hashes, array_info* array, size_t n_rows,
     const uint32_t seed) {
-    T* data = (T*)array->data1;
+    T* data = (T*)array->data1();
     uint32_t out_hash;
     if (array->arr_type == bodo_array_type::NUMPY) {
         uint32_t out_hash;
@@ -1077,7 +1077,7 @@ void coherent_hash_array_combine_inner_double(
             hash_combine_boost(out_hashes[i], out_hash);
         }
     } else {  // We are in NULLABLE_INT_BOOL
-        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask();
         for (size_t i = 0; i < n_rows; i++) {
             bool bit = GetBit(null_bitmask, i);
             double val;
@@ -1429,10 +1429,9 @@ void replace_dict_arr_indices(array_info* arr,
         array_info* indices = copy_array(arr->child_arrays[1]);
         delete_info_decref_array(arr->child_arrays[1]);
         arr->child_arrays[1] = indices;
-        arr->null_bitmask = indices->null_bitmask;
     }
 
-    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask();
 
     for (size_t j = 0; j < arr->child_arrays[1]->length; j++) {
         if (GetBit(null_bitmask, j)) {
@@ -1464,7 +1463,7 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
     // unified dictionary.
     array_info* base_dict = arrs[0]->child_arrays[0];
     const size_t base_len = static_cast<size_t>(base_dict->length);
-    offset_t const* const base_offsets = (offset_t*)base_dict->data2;
+    offset_t const* const base_offsets = (offset_t*)base_dict->data2();
     bool added_first = false;
     size_t arr_num = 1;
     size_t n_chars = 0;
@@ -1481,7 +1480,7 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
         // entries in arr{i} can never modify the indices of arr{i-1}.
         array_info* curr_arr = arrs[i];
         array_info* curr_dict = curr_arr->child_arrays[0];
-        offset_t const* const curr_dict_offsets = (offset_t*)curr_dict->data2;
+        offset_t const* const curr_dict_offsets = (offset_t*)curr_dict->data2();
 
         // Using this realization, we can then conclude that we can simply
         // process the dictionaries in order and then update the dictionaries at
@@ -1530,7 +1529,7 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
     // to get the length of the dictionary.
     size_t n_strings = next_index - 1;
     array_info* new_dict = alloc_string_array(n_strings, n_chars, 0);
-    offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2;
+    offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2();
 
     // Initialize the offset and string index to the end of the base dictionary
     offset_t cur_offset = base_offsets[base_len];
@@ -1540,19 +1539,19 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
     memcpy(new_dict_str_offsets, base_offsets,
            cur_offset_idx * sizeof(offset_t));
     // copy strings from arr1 into new_dict
-    memcpy(new_dict->data1, base_dict->data1, cur_offset);
+    memcpy(new_dict->data1(), base_dict->data1(), cur_offset);
     for (size_t i = 0; i < unique_indices_all_arrs.size(); i++) {
         std::vector<dict_indices_t>*& arr_unique_indices =
             unique_indices_all_arrs[i];
         // Load the relevant array. This is the i+1 array we stored for the
         // hashmap because we skip the base array.
         array_info* dict_arr = stored_arrs[i + 1];
-        offset_t const* const arr_offsets = (offset_t*)dict_arr->data2;
+        offset_t const* const arr_offsets = (offset_t*)dict_arr->data2();
 
         for (dict_indices_t j : *arr_unique_indices) {
             offset_t str_len = arr_offsets[j + 1] - arr_offsets[j];
-            memcpy(new_dict->data1 + cur_offset,
-                   dict_arr->data1 + arr_offsets[j], str_len);
+            memcpy(new_dict->data1() + cur_offset,
+                   dict_arr->data1() + arr_offsets[j], str_len);
             cur_offset += str_len;
             new_dict_str_offsets[cur_offset_idx++] = cur_offset;
         }
@@ -1626,7 +1625,7 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     arr2_unique_strs.reserve(arr2_dictionary_len);
 
     offset_t const* const arr1_str_offsets =
-        (offset_t*)arr1->child_arrays[0]->data2;
+        (offset_t*)arr1->child_arrays[0]->data2();
     int64_t n_chars = arr1_str_offsets[arr1_dictionary_len];
 
     dict_indices_t next_index = 1;
@@ -1639,7 +1638,7 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     }
 
     offset_t const* const arr2_str_offsets =
-        (offset_t*)arr2->child_arrays[0]->data2;
+        (offset_t*)arr2->child_arrays[0]->data2();
     for (size_t i = 0; i < arr2_dictionary_len; i++) {
         dict_indices_t& index =
             (*dict_value_to_unified_index)[i + arr1_dictionary_len];
@@ -1657,7 +1656,7 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     arr2_hashes.reset();
 
     array_info* new_dict = alloc_string_array(n_strings, n_chars, 0);
-    offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2;
+    offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2();
 
     // Initialize the offset and string index to the end of arr1's dictionary
     offset_t cur_offset = arr1_str_offsets[arr1_dictionary_len];
@@ -1667,11 +1666,11 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     memcpy(new_dict_str_offsets, arr1_str_offsets,
            cur_offset_idx * sizeof(offset_t));
     // copy strings from arr1 into new_dict
-    memcpy(new_dict->data1, arr1->child_arrays[0]->data1, cur_offset);
+    memcpy(new_dict->data1(), arr1->child_arrays[0]->data1(), cur_offset);
     for (auto i : arr2_unique_strs) {
         offset_t str_len = arr2_str_offsets[i + 1] - arr2_str_offsets[i];
-        memcpy(new_dict->data1 + cur_offset,
-               arr2->child_arrays[0]->data1 + arr2_str_offsets[i], str_len);
+        memcpy(new_dict->data1() + cur_offset,
+               arr2->child_arrays[0]->data1() + arr2_str_offsets[i], str_len);
         cur_offset += str_len;
         new_dict_str_offsets[cur_offset_idx++] = cur_offset;
     }

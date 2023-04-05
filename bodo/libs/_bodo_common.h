@@ -236,14 +236,6 @@ struct array_info {
     uint64_t length;  // number of elements in the array (not bytes) For DICT
                       // arrays this is the length of indices array
 
-    // data1 is the main data pointer. some arrays have multiple data pointers
-    // e.g. string offsets
-    char* data1;
-    char* data2;
-    char* data3;
-    char* null_bitmask;      // for nullable arrays like strings
-    char* sub_null_bitmask;  // for second level nullable like list-string
-
     // Data buffer meminfos for this array, e.g. data/offsets/null_bitmap for
     // string array. Last element is always the null bitmap buffer.
     std::vector<NRT_MemInfo*> meminfos;
@@ -259,10 +251,15 @@ struct array_info {
     bool has_deduped_local_dictionary;  // for dict-encoded arrays
     bool has_sorted_dictionary;         // for dict-encoded arrays
 
+    // Starting point into the physical data buffer (in bytes, not logical
+    // values) for NUMPY, NULLABLE_INT_BOOL, CATEGORICAL arrays. This is needed
+    // since Numpy array slicing creates views on MemInfo buffers with an offset
+    // from the MemInfo data pointer. For example, A[2:4] will have
+    // an offset of 16 bytes for int64 arrays (and n_items=2).
+    int64_t offset;
+
     explicit array_info(bodo_array_type::arr_type_enum _arr_type,
                         Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
-                        char* _data1, char* _data2, char* _data3,
-                        char* _null_bitmask, char* _sub_null_bitmask,
                         std::vector<NRT_MemInfo*> _meminfos,
                         std::vector<array_info*> _child_arrays = {},
                         std::shared_ptr<arrow::Array> _array = nullptr,
@@ -270,24 +267,136 @@ struct array_info {
                         int64_t _num_categories = 0,
                         bool _has_global_dictionary = false,
                         bool _has_deduped_local_dictionary = false,
-                        bool _has_sorted_dictionary = false)
+                        bool _has_sorted_dictionary = false,
+                        int64_t _offset = 0)
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
-          data1(_data1),
-          data2(_data2),
-          data3(_data3),
-          null_bitmask(_null_bitmask),
-          sub_null_bitmask(_sub_null_bitmask),
           array(_array),
           precision(_precision),
           scale(_scale),
           num_categories(_num_categories),
           has_global_dictionary(_has_global_dictionary),
           has_deduped_local_dictionary(_has_deduped_local_dictionary),
-          has_sorted_dictionary(_has_sorted_dictionary) {
+          has_sorted_dictionary(_has_sorted_dictionary),
+          offset(_offset) {
         this->meminfos = std::move(_meminfos);
         this->child_arrays = std::move(_child_arrays);
+    }
+
+    /**
+     * @brief returns the first data pointer for the array if any.
+     *
+     * @return char* data pointer
+     */
+    char* data1() const {
+        switch (arr_type) {
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::STRING:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            case bodo_array_type::INTERVAL:
+                return (char*)this->meminfos[0]->data + this->offset;
+            case bodo_array_type::LIST_STRING:
+            case bodo_array_type::ARRAY_ITEM:
+                return this->child_arrays[0]->data1();
+            case bodo_array_type::DICT:
+            case bodo_array_type::ARROW:
+            default:
+                return nullptr;
+        }
+    }
+
+    /**
+     * @brief returns the second data pointer for the array if any.
+     *
+     * @return char* data pointer
+     */
+    char* data2() const {
+        switch (arr_type) {
+            case bodo_array_type::STRING:
+            case bodo_array_type::INTERVAL:
+                return (char*)this->meminfos[1]->data;
+            case bodo_array_type::LIST_STRING:
+            case bodo_array_type::ARRAY_ITEM:
+                return this->child_arrays[0]->data2();
+            case bodo_array_type::DICT:
+            case bodo_array_type::ARROW:
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            default:
+                return nullptr;
+        }
+    }
+
+    /**
+     * @brief returns the third data pointer for the array if any.
+     *
+     * @return char* data pointer
+     */
+    char* data3() const {
+        switch (arr_type) {
+            case bodo_array_type::LIST_STRING:
+            case bodo_array_type::ARRAY_ITEM:
+                return (char*)this->meminfos[0]->data;
+            case bodo_array_type::STRING:
+            case bodo_array_type::INTERVAL:
+            case bodo_array_type::DICT:
+            case bodo_array_type::ARROW:
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            default:
+                return nullptr;
+        }
+    }
+
+    /**
+     * @brief returns the pointer to null bitmask buffer for the array if any.
+     *
+     * @return char* null bitmask pointer
+     */
+    char* null_bitmask() const {
+        switch (arr_type) {
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::LIST_STRING:
+            case bodo_array_type::ARRAY_ITEM:
+                return (char*)this->meminfos[1]->data;
+            case bodo_array_type::STRING:
+                return (char*)this->meminfos[2]->data;
+            case bodo_array_type::DICT:
+                return (char*)this->child_arrays[1]->null_bitmask();
+            case bodo_array_type::INTERVAL:
+            case bodo_array_type::ARROW:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            default:
+                return nullptr;
+        }
+    }
+
+    /**
+     * @brief returns the pointer to null bitmask buffer for the nested array if
+     * any.
+     *
+     * @return char* null bitmask pointer of nested array
+     */
+    char* sub_null_bitmask() const {
+        switch (arr_type) {
+            case bodo_array_type::LIST_STRING:
+            case bodo_array_type::ARRAY_ITEM:
+                return this->child_arrays[0]->null_bitmask();
+            case bodo_array_type::STRING:
+            case bodo_array_type::DICT:
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::INTERVAL:
+            case bodo_array_type::ARROW:
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::CATEGORICAL:
+            default:
+                return nullptr;
+        }
     }
 
     /**
@@ -302,11 +411,11 @@ struct array_info {
     int64_t n_sub_elems() {
         if (arr_type == bodo_array_type::STRING ||
             arr_type == bodo_array_type::ARRAY_ITEM) {
-            offset_t* offsets = (offset_t*)data2;
+            offset_t* offsets = (offset_t*)data2();
             return offsets[length];
         }
         if (arr_type == bodo_array_type::LIST_STRING) {
-            offset_t* offsets = (offset_t*)data3;
+            offset_t* offsets = (offset_t*)data3();
             return offsets[length];
         }
         return -1;
@@ -322,7 +431,7 @@ struct array_info {
     int64_t n_sub_sub_elems() {
         if (arr_type == bodo_array_type::LIST_STRING) {
             int64_t n_strings = n_sub_elems();
-            offset_t* offsets = (offset_t*)data2;
+            offset_t* offsets = (offset_t*)data2();
             return offsets[n_strings];
         }
         return -1;
@@ -330,16 +439,16 @@ struct array_info {
 
     template <typename T>
     T& at(size_t idx) {
-        return ((T*)data1)[idx];
+        return ((T*)data1())[idx];
     }
 
     template <typename T>
     const T& at(size_t idx) const {
-        return ((T*)data1)[idx];
+        return ((T*)data1())[idx];
     }
 
     bool get_null_bit(size_t idx) const {
-        return GetBit((uint8_t*)null_bitmask, idx);
+        return GetBit((uint8_t*)null_bitmask(), idx);
     }
 
     /**
@@ -395,8 +504,8 @@ struct array_info {
                     return this->child_arrays[0]->val_to_str(
                         this->child_arrays[1]->at<int32_t>(idx));
                 }
-                offset_t* offsets = (offset_t*)data2;
-                return std::string(data1 + offsets[idx],
+                offset_t* offsets = (offset_t*)data2();
+                return std::string(data1() + offsets[idx],
                                    offsets[idx + 1] - offsets[idx]);
             }
             case Bodo_CTypes::DATE: {
@@ -426,7 +535,7 @@ struct array_info {
     }
 
     void set_null_bit(size_t idx, bool bit) {
-        SetBitTo((uint8_t*)null_bitmask, idx, bit);
+        SetBitTo((uint8_t*)null_bitmask(), idx, bit);
     }
 
     array_info& operator=(
@@ -527,7 +636,7 @@ array_info* create_dict_string_array(array_info* dict_arr,
 
 template <typename T>
 inline T& getv(array_info* arr, size_t idx) {
-    return ((T*)arr->data1)[idx];
+    return ((T*)arr->data1())[idx];
 }
 
 struct mpi_comm_info {
