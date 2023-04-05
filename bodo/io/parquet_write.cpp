@@ -242,8 +242,8 @@ int64_t pq_write(
 
     // copy column names to a std::vector<string>
     std::vector<std::string> col_names;
-    char *cur_str = col_names_arr->data1;
-    offset_t *offsets = (offset_t *)col_names_arr->data2;
+    char *cur_str = col_names_arr->data1();
+    offset_t *offsets = (offset_t *)col_names_arr->data2();
     for (size_t i = 0; i < col_names_arr->length; i++) {
         size_t len = offsets[i + 1] - offsets[i];
         col_names.emplace_back(cur_str, len);
@@ -499,13 +499,13 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
         std::vector<bool> is_part_col(table->ncols(), false);
         std::vector<array_info *> partition_cols;
         std::vector<std::string> part_col_names;
-        offset_t *offsets = (offset_t *)col_names_arr->data2;
+        offset_t *offsets = (offset_t *)col_names_arr->data2();
         for (int i = 0; i < num_partition_cols; i++) {
             int j = partition_cols_idx[i];
             is_part_col[j] = true;
             partition_cols.push_back(table->columns[j]);
             new_table->columns.push_back(table->columns[j]);
-            char *cur_str = col_names_arr->data1 + offsets[j];
+            char *cur_str = col_names_arr->data1() + offsets[j];
             size_t len = offsets[j + 1] - offsets[j];
             part_col_names.emplace_back(cur_str, len);
         }
@@ -561,28 +561,28 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                         // in the dictionary of the dict-encoded arrays (since
                         // `has_deduped_local_dictionary` means no nulls in the
                         // dict)
-                        bool isna = !GetBit(
-                            (uint8_t *)part_col->child_arrays[1]->null_bitmask,
-                            i);
+                        bool isna = !GetBit((uint8_t *)part_col->child_arrays[1]
+                                                ->null_bitmask(),
+                                            i);
                         if (isna) {
                             value_str = "null";
                         } else {
                             int32_t dict_ind =
                                 ((int32_t *)part_col->child_arrays[1]
-                                     ->data1)[i];
+                                     ->data1())[i];
                             // get start_offset and end_offset of the string
                             // value referred to by dict_index i
                             offset_t start_offset =
                                 ((offset_t *)part_col->child_arrays[0]
-                                     ->data2)[dict_ind];
+                                     ->data2())[dict_ind];
                             offset_t end_offset =
                                 ((offset_t *)part_col->child_arrays[0]
-                                     ->data2)[dict_ind + 1];
+                                     ->data2())[dict_ind + 1];
                             // get length of the string value
                             offset_t len = end_offset - start_offset;
                             // extract string value from string buffer
                             std::string val(&((char *)part_col->child_arrays[0]
-                                                  ->data1)[start_offset],
+                                                  ->data1())[start_offset],
                                             len);
                             value_str = val;
                         }

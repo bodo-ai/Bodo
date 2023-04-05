@@ -994,8 +994,8 @@ class GroupbyPipeline {
                 for (size_t j = 0; j < num_groups; j++) {
                     std::tie(key_col, key_row) =
                         find_key_for_group(j, from_tables, i);
-                    memcpy(new_key_col->data1 + j * dtype_size,
-                           key_col->data1 + key_row * dtype_size, dtype_size);
+                    memcpy(new_key_col->data1() + j * dtype_size,
+                           key_col->data1() + key_row * dtype_size, dtype_size);
                 }
                 if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
                     for (size_t j = 0; j < num_groups; j++) {
@@ -1038,24 +1038,24 @@ class GroupbyPipeline {
                 for (size_t j = 0; j < num_groups; j++) {
                     std::tie(key_col, key_row) =
                         find_key_for_group(j, from_tables, i);
-                    in_offsets = (offset_t*)key_col->data2;
+                    in_offsets = (offset_t*)key_col->data2();
                     n_chars += in_offsets[key_row + 1] - in_offsets[key_row];
                 }
                 new_key_col =
                     alloc_array(num_groups, n_chars, 1, key_col->arr_type,
                                 key_col->dtype, 0, key_col->num_categories);
 
-                offset_t* out_offsets = (offset_t*)new_key_col->data2;
+                offset_t* out_offsets = (offset_t*)new_key_col->data2();
                 offset_t pos = 0;
                 for (size_t j = 0; j < num_groups; j++) {
                     std::tie(key_col, key_row) =
                         find_key_for_group(j, from_tables, i);
-                    in_offsets = (offset_t*)key_col->data2;
+                    in_offsets = (offset_t*)key_col->data2();
                     offset_t start_offset = in_offsets[key_row];
                     offset_t str_len = in_offsets[key_row + 1] - start_offset;
                     out_offsets[j] = pos;
-                    memcpy(&new_key_col->data1[pos],
-                           &key_col->data1[start_offset], str_len);
+                    memcpy(&new_key_col->data1()[pos],
+                           &key_col->data1()[start_offset], str_len);
                     pos += str_len;
                     bool bit = key_col->get_null_bit(key_row);
                     new_key_col->set_null_bit(j, bit);
@@ -1074,8 +1074,8 @@ class GroupbyPipeline {
                 for (size_t j = 0; j < num_groups; j++) {
                     std::tie(key_col, key_row) =
                         find_key_for_group(j, from_tables, i);
-                    in_index_offsets = (offset_t*)key_col->data3;
-                    in_data_offsets = (offset_t*)key_col->data2;
+                    in_index_offsets = (offset_t*)key_col->data3();
+                    in_data_offsets = (offset_t*)key_col->data2();
                     n_strings += in_index_offsets[key_row + 1] -
                                  in_index_offsets[key_row];
                     n_chars += in_data_offsets[in_index_offsets[key_row + 1]] -
@@ -1085,11 +1085,11 @@ class GroupbyPipeline {
                                           key_col->arr_type, key_col->dtype, 0,
                                           key_col->num_categories);
                 uint8_t* in_sub_null_bitmask =
-                    (uint8_t*)key_col->sub_null_bitmask;
+                    (uint8_t*)key_col->sub_null_bitmask();
                 uint8_t* out_sub_null_bitmask =
-                    (uint8_t*)new_key_col->sub_null_bitmask;
-                offset_t* out_index_offsets = (offset_t*)new_key_col->data3;
-                offset_t* out_data_offsets = (offset_t*)new_key_col->data2;
+                    (uint8_t*)new_key_col->sub_null_bitmask();
+                offset_t* out_index_offsets = (offset_t*)new_key_col->data3();
+                offset_t* out_data_offsets = (offset_t*)new_key_col->data2();
                 offset_t pos_data = 0;
                 offset_t pos_index = 0;
                 out_data_offsets[0] = 0;
@@ -1097,8 +1097,8 @@ class GroupbyPipeline {
                 for (size_t j = 0; j < num_groups; j++) {
                     std::tie(key_col, key_row) =
                         find_key_for_group(j, from_tables, i);
-                    in_index_offsets = (offset_t*)key_col->data3;
-                    in_data_offsets = (offset_t*)key_col->data2;
+                    in_index_offsets = (offset_t*)key_col->data3();
+                    in_data_offsets = (offset_t*)key_col->data2();
                     offset_t size_index = in_index_offsets[key_row + 1] -
                                           in_index_offsets[key_row];
                     offset_t pos_start = in_index_offsets[key_row];
@@ -1120,8 +1120,8 @@ class GroupbyPipeline {
                     offset_t n_chars_o =
                         in_data_offsets[in_index_offsets[key_row + 1]] -
                         in_data_offsets[in_index_offsets[key_row]];
-                    memcpy(&new_key_col->data1[pos_data],
-                           &key_col->data1[in_start_offset], n_chars_o);
+                    memcpy(&new_key_col->data1()[pos_data],
+                           &key_col->data1()[in_start_offset], n_chars_o);
                     pos_data += n_chars_o;
                     bool bit = key_col->get_null_bit(key_row);
                     new_key_col->set_null_bit(j, bit);

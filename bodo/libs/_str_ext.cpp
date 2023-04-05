@@ -925,7 +925,7 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
 
     // Dictionary Indices Array
     auto indices_arr = alloc_nullable_array(arr_len, Bodo_CTypes::INT32);
-    memcpy(indices_arr->null_bitmask, str_arr->null_bitmask,
+    memcpy(indices_arr->null_bitmask(), str_arr->null_bitmask(),
            num_null_bitmask_bytes);
 
     // Map string to its new index in dictionary values array
@@ -935,10 +935,10 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
     uint32_t num_dict_strs = 0;
     uint64_t total_dict_chars = 0;
 
-    offset_t* offsets = (offset_t*)str_arr->data2;
+    offset_t* offsets = (offset_t*)str_arr->data2();
     for (uint64_t i = 0; i < arr_len; i++) {
         if (!str_arr->get_null_bit(i)) continue;
-        std::string_view elem(str_arr->data1 + offsets[i],
+        std::string_view elem(str_arr->data1() + offsets[i],
                               offsets[i + 1] - offsets[i]);
 
         int32_t elem_idx;
@@ -960,20 +960,19 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
     array_info* values_arr =
         alloc_string_array(num_dict_strs, total_dict_chars);
     int64_t n_null_bytes = (num_dict_strs + 7) >> 3;
-    memset(values_arr->null_bitmask, 0xFF, n_null_bytes);  // No nulls
+    memset(values_arr->null_bitmask(), 0xFF, n_null_bytes);  // No nulls
 
-    offset_t* out_offsets = (offset_t*)values_arr->data2;
+    offset_t* out_offsets = (offset_t*)values_arr->data2();
     out_offsets[0] = 0;
     for (auto& it : str_to_ind) {
-        memcpy(values_arr->data1 + it.second.second, it.first.c_str(),
+        memcpy(values_arr->data1() + it.second.second, it.first.c_str(),
                it.first.size());
         out_offsets[it.second.first] = it.second.second;
     }
     out_offsets[num_dict_strs] = static_cast<offset_t>(total_dict_chars);
 
     return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-                          arr_len, NULL, NULL, NULL, indices_arr->null_bitmask,
-                          NULL, {}, {values_arr, indices_arr}, NULL, 0, 0, 0,
+                          arr_len, {}, {values_arr, indices_arr}, NULL, 0, 0, 0,
                           false, false, false);
 }
 

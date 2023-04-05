@@ -391,12 +391,13 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
                 arr->null_count() == 0 ? nullptr : arr->null_bitmap_data();
 
             uint8_t* data_ptr = reinterpret_cast<uint8_t*>(
-                out_array->data1 + cur_offset * dtype_size);
+                out_array->data1() + cur_offset * dtype_size);
             copy_data(data_ptr, buff, in_offset, in_length, arrow_type,
                       null_bitmap_buff, out_array->dtype);
             if (is_nullable)
-                copy_nulls(reinterpret_cast<uint8_t*>(out_array->null_bitmask),
-                           null_bitmap_buff, in_offset, in_length, cur_offset);
+                copy_nulls(
+                    reinterpret_cast<uint8_t*>(out_array->null_bitmask()),
+                    null_bitmap_buff, in_offset, in_length, cur_offset);
 
             // Arrow uses nullable arrays for categorical codes, but we use
             // regular numpy arrays and store -1 for null, so nulls have to be
@@ -463,10 +464,10 @@ class StringBuilder : public TableBuilder::BuilderColumn {
         out_array = alloc_array(total_n_strings, total_n_chars, -1,
                                 bodo_array_type::STRING, dtype, 0, -1);
         int64_t n_null_bytes = (total_n_strings + 7) >> 3;
-        memset(out_array->null_bitmask, 0, n_null_bytes);
+        memset(out_array->null_bitmask(), 0, n_null_bytes);
         int64_t n_strings_copied = 0;
         int64_t n_chars_copied = 0;
-        offset_t* out_offsets = (offset_t*)out_array->data2;
+        offset_t* out_offsets = (offset_t*)out_array->data2();
         out_offsets[0] = 0;
         for (auto arr : arrays) {
             if (arrow::is_binary_like(arr->type_id())) {
@@ -513,7 +514,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
 
         const int64_t n_chars = in_offsets[str_start_offset + n_strings] -
                                 in_offsets[str_start_offset];
-        memcpy(out_array->data1 + n_chars_copied,
+        memcpy(out_array->data1() + n_chars_copied,
                str_arr->value_data()->data() + in_offsets[str_start_offset],
                sizeof(char) * n_chars);  // data
         for (int64_t i = 0; i < n_strings; i++) {
@@ -522,7 +523,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                 in_offsets[str_start_offset + i + 1] -
                 in_offsets[str_start_offset + i];
             if (!str_arr->IsNull(i))
-                SetBitTo((uint8_t*)out_array->null_bitmask,
+                SetBitTo((uint8_t*)out_array->null_bitmask(),
                          n_strings_copied + i, true);
         }
         n_strings_copied += n_strings;
@@ -623,10 +624,9 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         array_info* bodo_indices = indices_builder.get_output();
 
         out_array = new array_info(bodo_array_type::DICT,
-                                   Bodo_CTypes::CTypeEnum::STRING, length, NULL,
-                                   NULL, NULL, bodo_indices->null_bitmask, NULL,
-                                   {}, {bodo_dictionary, bodo_indices}, NULL, 0,
-                                   0, 0, false, false, false);
+                                   Bodo_CTypes::CTypeEnum::STRING, length, {},
+                                   {bodo_dictionary, bodo_indices}, NULL, 0, 0,
+                                   0, false, false, false);
 
         all_chunks.clear();
         return out_array;
@@ -697,13 +697,13 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
             alloc_array(total_distinct_strings, total_distinct_chars, -1,
                         bodo_array_type::STRING, dtype, 0, -1);
         int64_t n_null_bytes = (total_distinct_strings + 7) >> 3;
-        offset_t* out_offsets = (offset_t*)dict_arr->data2;
+        offset_t* out_offsets = (offset_t*)dict_arr->data2();
         // We know there's no nulls in the dictionary, so memset the
         // null_bitmask
-        memset(dict_arr->null_bitmask, 0xFF, n_null_bytes);
+        memset(dict_arr->null_bitmask(), 0xFF, n_null_bytes);
         out_offsets[0] = 0;
         for (auto& it : str_to_ind) {
-            memcpy(dict_arr->data1 + it.second.second, it.first.c_str(),
+            memcpy(dict_arr->data1() + it.second.second, it.first.c_str(),
                    it.first.size());
             out_offsets[it.second.first] = it.second.second;
         }
@@ -713,8 +713,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         // dictionary ourselves and made sure not to put nulls in the
         // dictionary.
         out_array = new array_info(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, NULL,
-            NULL, NULL, indices_arr->null_bitmask, NULL, {},
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, {},
             {dict_arr, indices_arr}, NULL, 0, 0, 0, false,
             /*_has_deduped_local_dictionary=*/true, false);
         return out_array;
@@ -822,7 +821,7 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
 
         // copy list offsets and null bitmap
         int64_t n_lists_copied = 0;
-        offset_t* out_offsets = (offset_t*)out_array->data3;  // list offsets
+        offset_t* out_offsets = (offset_t*)out_array->data3();  // list offsets
         out_offsets[0] = 0;
         for (auto arr : arrays) {
             auto list_arr = std::dynamic_pointer_cast<arrow::ListArray>(arr);
@@ -836,7 +835,7 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
                     in_offsets[list_start_offset + i + 1] -
                     in_offsets[list_start_offset + i];
                 if (!list_arr->IsNull(i))
-                    SetBitTo((uint8_t*)out_array->null_bitmask,
+                    SetBitTo((uint8_t*)out_array->null_bitmask(),
                              n_lists_copied + i, true);
             }
             n_lists_copied += n_lists;
@@ -883,10 +882,10 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
             arrow::Concatenate(arrays, arrow::default_memory_pool())
                 .ValueOrDie();
         arrays.clear();  // memory of each array will be freed now
-        out_array = new array_info(
-            bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-            out_arrow_array->length(), NULL, NULL, NULL, NULL, NULL,
-            /*meminfo TODO*/ {}, {}, out_arrow_array);
+        out_array =
+            new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
+                           out_arrow_array->length(),
+                           /*meminfo TODO*/ {}, {}, out_arrow_array);
         return out_array;
     }
 
@@ -902,10 +901,10 @@ class AllNullsBuilder : public TableBuilder::BuilderColumn {
         out_array = alloc_array(length, 0, 0, bodo_array_type::STRING,
                                 Bodo_CTypes::STRING, 0, -1);
         // set offsets to zero
-        memset(out_array->data2, 0, sizeof(offset_t) * length);
+        memset(out_array->data2(), 0, sizeof(offset_t) * length);
         // setting all to null
         int64_t n_null_bytes = ((length + 7) >> 3);
-        memset(out_array->null_bitmask, 0, n_null_bytes);
+        memset(out_array->null_bitmask(), 0, n_null_bytes);
     }
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {}

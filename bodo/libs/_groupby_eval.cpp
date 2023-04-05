@@ -55,8 +55,8 @@ void copy_string_values_transform(array_info* update_col, array_info* tmp_col,
     int64_t nRowOut = update_col->length;
     // Store size of data per row
     std::vector<offset_t> ListSizes(nRowOut);
-    offset_t* in_offsets = (offset_t*)tmp_col->data2;
-    char* in_data1 = tmp_col->data1;
+    offset_t* in_offsets = (offset_t*)tmp_col->data2();
+    char* in_data1 = tmp_col->data1();
     // 1. Determine needed length (total number of characters)
     // and number of characters per element/row
     // All rows in same group gets same data
@@ -74,8 +74,8 @@ void copy_string_values_transform(array_info* update_col, array_info* tmp_col,
         }
     }
     out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
-    offset_t* out_offsets = (offset_t*)out_arr->data2;
-    char* out_data1 = out_arr->data1;
+    offset_t* out_offsets = (offset_t*)out_arr->data2();
+    char* out_data1 = out_arr->data1();
     // keep track of output array position
     offset_t pos = 0;
     // 2. Copy data from tmp_col to corresponding rows in out_arr

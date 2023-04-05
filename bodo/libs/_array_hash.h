@@ -147,42 +147,43 @@ struct multi_col_key {
                                                     // (value -1) this works
                 case bodo_array_type::NUMPY:
                     siztype = numpy_item_size[c1->dtype];
-                    if (memcmp(c1->data1 + siztype * row,
-                               c2->data1 + siztype * other.row, siztype) != 0) {
+                    if (memcmp(c1->data1() + siztype * row,
+                               c2->data1() + siztype * other.row,
+                               siztype) != 0) {
                         return false;
                     }
                     continue;
                 case bodo_array_type::STRING: {
-                    uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask;
-                    uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask;
+                    uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask();
+                    uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask();
                     if (GetBit(c1_null_bitmask, row) !=
                         GetBit(c2_null_bitmask, other.row))
                         return false;
-                    offset_t* c1_offsets = (offset_t*)c1->data2;
-                    offset_t* c2_offsets = (offset_t*)c2->data2;
+                    offset_t* c1_offsets = (offset_t*)c1->data2();
+                    offset_t* c2_offsets = (offset_t*)c2->data2();
                     offset_t c1_str_len = c1_offsets[row + 1] - c1_offsets[row];
                     offset_t c2_str_len =
                         c2_offsets[other.row + 1] - c2_offsets[other.row];
                     if (c1_str_len != c2_str_len) return false;
-                    char* c1_str = c1->data1 + c1_offsets[row];
-                    char* c2_str = c2->data1 + c2_offsets[other.row];
+                    char* c1_str = c1->data1() + c1_offsets[row];
+                    char* c2_str = c2->data1() + c2_offsets[other.row];
                     if (memcmp(c1_str, c2_str, c1_str_len) != 0) return false;
                 }
                     continue;
                 case bodo_array_type::LIST_STRING: {
-                    uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask;
-                    uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask;
+                    uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask();
+                    uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask();
                     if (GetBit(c1_null_bitmask, row) !=
                         GetBit(c2_null_bitmask, other.row))
                         return false;
                     uint8_t* c1_sub_null_bitmask =
-                        (uint8_t*)c1->sub_null_bitmask;
+                        (uint8_t*)c1->sub_null_bitmask();
                     uint8_t* c2_sub_null_bitmask =
-                        (uint8_t*)c2->sub_null_bitmask;
-                    offset_t* c1_index_offsets = (offset_t*)c1->data3;
-                    offset_t* c2_index_offsets = (offset_t*)c2->data3;
-                    offset_t* c1_data_offsets = (offset_t*)c1->data2;
-                    offset_t* c2_data_offsets = (offset_t*)c2->data2;
+                        (uint8_t*)c2->sub_null_bitmask();
+                    offset_t* c1_index_offsets = (offset_t*)c1->data3();
+                    offset_t* c2_index_offsets = (offset_t*)c2->data3();
+                    offset_t* c1_data_offsets = (offset_t*)c1->data2();
+                    offset_t* c2_data_offsets = (offset_t*)c2->data2();
                     // Comparing the number of strings.
                     offset_t c1_index_len =
                         c1_index_offsets[row + 1] - c1_index_offsets[row];
@@ -211,9 +212,9 @@ struct multi_col_key {
                         c1_data_offsets[c1_index_offsets[row + 1]] -
                         c1_data_offsets[c1_index_offsets[row]];
                     char* c1_strB =
-                        c1->data1 + c1_data_offsets[c1_index_offsets[row]];
+                        c1->data1() + c1_data_offsets[c1_index_offsets[row]];
                     char* c2_strB =
-                        c2->data1 +
+                        c2->data1() +
                         c2_data_offsets[c2_index_offsets[other.row]];
                     if (memcmp(c1_strB, c2_strB, common_len) != 0) return false;
                     continue;
@@ -356,10 +357,10 @@ class ElementComparator {
         }
         this->arr1 = arr1_;
         this->arr2 = arr2_;
-        this->data_ptr_1 = arr1_->data1;
-        this->data_ptr_2 = arr2_->data1;
-        this->null_bitmask_1 = (uint8_t*)arr1_->null_bitmask;
-        this->null_bitmask_2 = (uint8_t*)arr2_->null_bitmask;
+        this->data_ptr_1 = arr1_->data1();
+        this->data_ptr_2 = arr2_->data1();
+        this->null_bitmask_1 = (uint8_t*)arr1_->null_bitmask();
+        this->null_bitmask_2 = (uint8_t*)arr2_->null_bitmask();
     }
 
     // Numpy arrays with nullable dtypes (float, datetime/timedelta)

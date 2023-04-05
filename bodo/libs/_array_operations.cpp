@@ -130,13 +130,13 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
         MPI_Datatype mpi_typ = get_MPI_typ(out_arr->dtype);
         size_t n_rows = out_arr->length;
         std::vector<uint8_t> tmp_recv(n_rows);
-        bodo_alltoallv(shuf_out_arr->data1, comm_info.recv_count,
+        bodo_alltoallv(shuf_out_arr->data1(), comm_info.recv_count,
                        comm_info.recv_disp, mpi_typ, tmp_recv.data(),
                        comm_info.send_count, comm_info.send_disp, mpi_typ,
                        MPI_COMM_WORLD);
-        fill_recv_data_inner<uint8_t>(tmp_recv.data(), (uint8_t*)out_arr->data1,
-                                      hashes, comm_info.send_disp,
-                                      comm_info.n_pes, n_rows);
+        fill_recv_data_inner<uint8_t>(
+            tmp_recv.data(), (uint8_t*)out_arr->data1(), hashes,
+            comm_info.send_disp, comm_info.n_pes, n_rows);
         // free temporary shuffle array
         delete_info_decref_array(shuf_out_arr);
         // release extra reference for output array (array_info wrapper's
@@ -2109,8 +2109,8 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
     int64_t num_match = 0;
     if (in_arr->arr_type == bodo_array_type::STRING) {
         offset_t const* const data2 =
-            reinterpret_cast<offset_t*>(in_arr->data2);
-        char const* const data1 = in_arr->data1;
+            reinterpret_cast<offset_t*>(in_arr->data2());
+        char const* const data1 = in_arr->data1();
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             bool bit = in_arr->get_null_bit(iRow);
             if (bit) {
@@ -2209,8 +2209,9 @@ array_info* get_replace_regex_slice(array_info* in_arr, char const* const pat,
     const boost::xpressive::cregex pattern =
         boost::xpressive::cregex::compile(pat, flag);
 
-    offset_t const* const in_data2 = reinterpret_cast<offset_t*>(in_arr->data2);
-    char const* const in_data1 = in_arr->data1;
+    offset_t const* const in_data2 =
+        reinterpret_cast<offset_t*>(in_arr->data2());
+    char const* const in_data1 = in_arr->data1();
 
     // Look at the pattern length for assumptions about allocated space.
     size_t repLen = strlen(replacement);
@@ -2258,10 +2259,10 @@ array_info* get_replace_regex_slice(array_info* in_arr, char const* const pat,
     // Allocate the output array. We add 1 because regex_replace
     // may insert a null terminator
     array_info* out_arr = alloc_string_array(out_arr_len, num_chars, 0);
-    offset_t* const out_data2 = reinterpret_cast<offset_t*>(out_arr->data2);
+    offset_t* const out_data2 = reinterpret_cast<offset_t*>(out_arr->data2());
     // Initialize the first offset to 0
     out_data2[0] = 0;
-    char* const out_data1 = out_arr->data1;
+    char* const out_data1 = out_arr->data1();
     for (size_t outRow = 0, iRow = start_idx; iRow < end_idx;
          iRow++, outRow++) {
         bool bit = in_arr->get_null_bit(iRow);
@@ -2333,10 +2334,8 @@ array_info* get_replace_regex(array_info* in_arr, char const* const pat,
         }
         array_info* new_indices = copy_array(indices_arr);
         out_arr = new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
-                                 in_arr->length, NULL, NULL, NULL,
-                                 new_indices->null_bitmask, NULL, {},
-                                 {new_dict, new_indices}, NULL, 0, 0, 0,
-                                 in_arr->has_global_dictionary,
+                                 in_arr->length, {}, {new_dict, new_indices},
+                                 NULL, 0, 0, 0, in_arr->has_global_dictionary,
                                  false,  // Note replace can create collisions.
                                  false);
     } else {

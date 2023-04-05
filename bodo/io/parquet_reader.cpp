@@ -107,7 +107,8 @@ void ParquetReader::add_piece(PyObject* piece, int64_t num_rows,
         }
         // fill a range in the indices array
         fill_input_file_name_col_indices(
-            file_paths.size() - 1, this->input_file_name_col_indices_arr->data1,
+            file_paths.size() - 1,
+            this->input_file_name_col_indices_arr->data1(),
             this->input_file_name_col_indices_offset, num_rows);
         this->input_file_name_col_indices_offset += num_rows;
         this->input_file_name_col_dict_arr_total_chars +=
@@ -246,9 +247,10 @@ void ParquetReader::read_all(TableBuilder& builder) {
                     for (size_t i = 0; i < part_cols.size(); i++) {
                         int64_t part_val =
                             part_vals[cur_piece][selected_part_cols[i]];
-                        fill_partition_column(
-                            part_val, part_cols[i]->data1, part_cols_offset[i],
-                            rows_read_from_piece, part_cols[i]->dtype);
+                        fill_partition_column(part_val, part_cols[i]->data1(),
+                                              part_cols_offset[i],
+                                              rows_read_from_piece,
+                                              part_cols[i]->dtype);
                         part_cols_offset[i] += rows_read_from_piece;
                     }
                     if (rows_left_cur_piece == 0 &&
@@ -282,22 +284,21 @@ void ParquetReader::read_all(TableBuilder& builder) {
             this->file_paths.size(),
             this->input_file_name_col_dict_arr_total_chars, 0);
         offset_t* offsets =
-            (offset_t*)this->input_file_name_col_dict_arr->data2;
+            (offset_t*)this->input_file_name_col_dict_arr->data2();
         offsets[0] = 0;
         fill_input_file_name_col_dict(
             this->file_paths, this->prefix,
-            this->input_file_name_col_dict_arr->data1,
-            this->input_file_name_col_dict_arr->data2);
+            this->input_file_name_col_dict_arr->data1(),
+            this->input_file_name_col_dict_arr->data2());
 
         // create the final dictionary-encoded input_file_name
         // column from the indices array and dictionary
-        this->input_file_name_col_arr = new array_info(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, this->count,
-            NULL, NULL, NULL,
-            this->input_file_name_col_indices_arr->null_bitmask, NULL, {},
-            {this->input_file_name_col_dict_arr,
-             this->input_file_name_col_indices_arr},
-            NULL, 0, 0, 0, false, false, false);
+        this->input_file_name_col_arr =
+            new array_info(bodo_array_type::DICT,
+                           Bodo_CTypes::CTypeEnum::STRING, this->count, {},
+                           {this->input_file_name_col_dict_arr,
+                            this->input_file_name_col_indices_arr},
+                           NULL, 0, 0, 0, false, false, false);
     }
 }
 
