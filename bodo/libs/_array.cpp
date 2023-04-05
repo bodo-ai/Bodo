@@ -253,8 +253,8 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
                                 buf_pos, length_pos, name_pos);
         // TODO: better memory management of struct, meminfo refcount?
         return new array_info(bodo_array_type::ARROW,
-                              Bodo_CTypes::INT8 /*dummy*/, lengths[0], NULL,
-                              NULL, NULL, NULL, NULL, {meminfo}, {}, ai.array);
+                              Bodo_CTypes::INT8 /*dummy*/, lengths[0],
+                              {meminfo}, {}, ai.array);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -265,9 +265,7 @@ array_info* list_string_array_to_info(uint64_t n_items, array_info* str_data,
                                       NRT_MemInfo* offsets,
                                       NRT_MemInfo* null_bitmap) {
     return new array_info(bodo_array_type::LIST_STRING,
-                          Bodo_CTypes::LIST_STRING, n_items, str_data->data1,
-                          str_data->data2, (char*)offsets->data,
-                          (char*)null_bitmap->data, str_data->null_bitmask,
+                          Bodo_CTypes::LIST_STRING, n_items,
                           {offsets, null_bitmap}, {str_data});
 }
 
@@ -278,8 +276,6 @@ array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
     auto dtype = Bodo_CTypes::STRING;
     if (is_bytes) dtype = Bodo_CTypes::BINARY;
     return new array_info(bodo_array_type::STRING, dtype, n_items,
-                          (char*)data->data, (char*)offsets->data, NULL,
-                          (char*)null_bitmap->data, NULL,
                           {data, offsets, null_bitmap});
 }
 
@@ -288,11 +284,10 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                                    int32_t has_deduped_local_dictionary) {
     // For now has_sorted_dictionary is only available and exposed in the C++
     // struct, so we set it to false
-    return new array_info(
-        bodo_array_type::DICT, Bodo_CTypes::STRING, indices_arr->length, NULL,
-        NULL, NULL, indices_arr->null_bitmask, NULL, {}, {str_arr, indices_arr},
-        NULL, 0, 0, 0, bool(has_global_dictionary),
-        bool(has_deduped_local_dictionary), false);
+    return new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                          indices_arr->length, {}, {str_arr, indices_arr}, NULL,
+                          0, 0, 0, bool(has_global_dictionary),
+                          bool(has_deduped_local_dictionary), false);
 }
 
 array_info* get_nested_info(array_info* dict_arr, int32_t info_no) {
@@ -317,10 +312,15 @@ int32_t get_has_deduped_local_dictionary(array_info* dict_arr) {
 
 array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                 NRT_MemInfo* meminfo) {
-    // TODO: better memory management of struct, meminfo refcount?
+    // Numpy array slicing creates views on MemInfo buffers with an offset
+    // from the MemInfo data pointer. For example, A[2:4] will have
+    // an offset of 16 bytes for int64 arrays (and n_items=2).
+    // We use pointer arithmetic to get the offset since not explicitly stored
+    // in Numpy struct.
     return new array_info(bodo_array_type::NUMPY,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
-                          NULL, NULL, NULL, {meminfo});
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, {meminfo},
+                          {}, nullptr, 0, 0, 0, false, false, false,
+                          /*offset*/ data - (char*)meminfo->data);
 }
 
 #undef DEBUG_CATEGORICAL
@@ -328,34 +328,34 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
 array_info* categorical_array_to_info(uint64_t n_items, char* data,
                                       int typ_enum, int64_t num_categories,
                                       NRT_MemInfo* meminfo) {
-// TODO: better memory management of struct, meminfo refcount?
-#ifdef DEBUG_CATEGORICAL
-    std::cout << "num_categories=" << num_categories << " n_items=" << n_items
-              << "\n";
-    std::cout << "typ_enum=" << typ_enum << "\n";
-#endif
     return new array_info(bodo_array_type::CATEGORICAL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
-                          NULL, NULL, NULL, {meminfo}, {}, nullptr, 0, 0,
-                          num_categories);
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, {meminfo},
+                          {}, nullptr, 0, 0, num_categories, false, false,
+                          false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                    char* null_bitmap, NRT_MemInfo* meminfo,
                                    NRT_MemInfo* meminfo_bitmask) {
     // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
-                          NULL, null_bitmap, NULL, {meminfo, meminfo_bitmask});
+    return new array_info(
+        bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
+        n_items, {meminfo, meminfo_bitmask}, {}, nullptr, 0, 0, 0, false, false,
+        false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* interval_array_to_info(uint64_t n_items, char* left_data,
                                    char* right_data, int typ_enum,
                                    NRT_MemInfo* left_meminfo,
                                    NRT_MemInfo* right_meminfo) {
-    return new array_info(
-        bodo_array_type::INTERVAL, (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
-        left_data, right_data, NULL, NULL, NULL, {left_meminfo, right_meminfo});
+    if (left_data - (char*)left_meminfo->data != 0 ||
+        right_data - (char*)right_meminfo->data != 0) {
+        throw std::runtime_error(
+            "interval_array_to_info: offsets not supported for interval array");
+    }
+    return new array_info(bodo_array_type::INTERVAL,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
+                          {left_meminfo, right_meminfo});
 }
 
 array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -363,20 +363,20 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   NRT_MemInfo* meminfo_bitmask,
                                   int32_t precision, int32_t scale) {
     // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
-                          NULL, null_bitmap, NULL, {meminfo, meminfo_bitmask},
-                          {}, NULL, precision, scale);
+    return new array_info(
+        bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
+        n_items, {meminfo, meminfo_bitmask}, {}, NULL, precision, scale, 0,
+        false, false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                char* null_bitmap, NRT_MemInfo* meminfo,
                                NRT_MemInfo* meminfo_bitmask,
                                int32_t precision) {
-    return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, data, NULL,
-                          NULL, null_bitmap, NULL, {meminfo, meminfo_bitmask},
-                          {}, NULL, precision);
+    return new array_info(
+        bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
+        n_items, {meminfo, meminfo_bitmask}, {}, NULL, precision, 0, 0, false,
+        false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* info_to_list_string_array(array_info* info, int64_t* length,
@@ -465,7 +465,7 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
         return;
     }
     *n_items = info->length;
-    *data = info->data1;
+    *data = info->data1();
     *meminfo = info->meminfos[0];
 }
 
@@ -481,8 +481,8 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
     }
     *n_items = info->length;
     *n_bytes = (info->length + 7) >> 3;
-    *data = info->data1;
-    *null_bitmap = info->null_bitmask;
+    *data = info->data1();
+    *null_bitmap = info->null_bitmask();
     *meminfo = info->meminfos[0];
     *meminfo_bitmask = info->meminfos[1];
 }
@@ -498,8 +498,8 @@ void info_to_interval_array(array_info* info, uint64_t* n_items,
         return;
     }
     *n_items = info->length;
-    *left_data = info->data1;
-    *right_data = info->data2;
+    *left_data = info->data1();
+    *right_data = info->data2();
     *left_meminfo = info->meminfos[0];
     *right_meminfo = info->meminfos[1];
 }
@@ -1505,8 +1505,8 @@ char* array_info_getitem(array_info* arr, int64_t row_num,
     bodo_array_type::arr_type_enum arr_type = arr->arr_type;
     if (arr_type == bodo_array_type::STRING) {
         // In the first case of STRING, we have to check the offsets.
-        offset_t* offsets = (offset_t*)arr->data2;
-        char* in_data1 = arr->data1;
+        offset_t* offsets = (offset_t*)arr->data2();
+        char* in_data1 = arr->data1();
         offset_t start_offset = offsets[row_num];
         offset_t end_offset = offsets[row_num + 1];
         offset_t size = end_offset - start_offset;
@@ -1516,7 +1516,7 @@ char* array_info_getitem(array_info* arr, int64_t row_num,
     throw std::runtime_error("array_info_getitem : Unsupported type");
 }
 
-char* array_info_getdata1(array_info* arr) { return arr->data1; }
+char* array_info_getdata1(array_info* arr) { return arr->data1(); }
 
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;

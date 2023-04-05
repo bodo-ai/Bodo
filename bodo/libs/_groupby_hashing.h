@@ -125,7 +125,7 @@ struct HashEqualComputeCategoricalIndex {
  */
 struct HashNuniqueComputationNumpyOrNullableIntBool {
     uint32_t operator()(const int64_t i) const {
-        char* ptr = arr->data1 + i * siztype;
+        char* ptr = arr->data1() + i * siztype;
         uint32_t retval = 0;
         hash_string_32(ptr, siztype, seed, &retval);
         return retval;
@@ -142,8 +142,8 @@ struct HashNuniqueComputationNumpyOrNullableIntBool {
  */
 struct KeyEqualNuniqueComputationNumpyOrNullableIntBool {
     bool operator()(const int64_t i1, const int64_t i2) const {
-        char* ptr1 = arr->data1 + i1 * siztype;
-        char* ptr2 = arr->data1 + i2 * siztype;
+        char* ptr1 = arr->data1() + i1 * siztype;
+        char* ptr2 = arr->data1() + i2 * siztype;
         return memcmp(ptr1, ptr2, siztype) == 0;
     }
 
@@ -160,7 +160,7 @@ struct HashNuniqueComputationListString {
     size_t operator()(const int64_t i) const {
         // We do not put the lengths and bitmask in the hash
         // computation. after all, it is just a hash
-        char* val_chars = arr->data1 + in_data_offsets[in_index_offsets[i]];
+        char* val_chars = arr->data1() + in_data_offsets[in_index_offsets[i]];
         int len = in_data_offsets[in_index_offsets[i + 1]] -
                   in_data_offsets[in_index_offsets[i]];
         uint32_t val;
@@ -211,9 +211,9 @@ struct KeyEqualNuniqueComputationListString {
         if (nb_char1 != nb_char2) {
             return false;
         }
-        char* ptr1 = arr->data1 +
+        char* ptr1 = arr->data1() +
                      sizeof(offset_t) * in_data_offsets[in_index_offsets[i1]];
-        char* ptr2 = arr->data1 +
+        char* ptr2 = arr->data1() +
                      sizeof(offset_t) * in_data_offsets[in_index_offsets[i2]];
         return memcmp(ptr1, ptr2, len1) == 0;
     }
@@ -232,7 +232,7 @@ struct KeyEqualNuniqueComputationListString {
  */
 struct HashNuniqueComputationString {
     size_t operator()(const int64_t i) const {
-        char* val_chars = arr->data1 + in_offsets[i];
+        char* val_chars = arr->data1() + in_offsets[i];
         size_t len = in_offsets[i + 1] - in_offsets[i];
         uint32_t val;
         hash_string_32(val_chars, len, seed, &val);
@@ -255,8 +255,8 @@ struct KeyEqualNuniqueComputationString {
         if (len1 != len2) {
             return false;
         }
-        char* ptr1 = arr->data1 + in_offsets[i1];
-        char* ptr2 = arr->data1 + in_offsets[i2];
+        char* ptr1 = arr->data1() + in_offsets[i1];
+        char* ptr2 = arr->data1() + in_offsets[i2];
         return memcmp(ptr1, ptr2, len1) == 0;
     }
 

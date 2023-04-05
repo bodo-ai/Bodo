@@ -139,7 +139,7 @@ array_info* convert_date_to_days_since_epoch(array_info* in_arr) {
     }
     int64_t n_bytes = ((nRow + 7) >> 3);
     // Copy the null bitmask as is
-    memcpy(out_arr->null_bitmask, in_arr->null_bitmask, n_bytes);
+    memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
     return out_arr;
 }
 
@@ -230,7 +230,7 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
 
     array_info* out_arr = alloc_nullable_array(nRow, Bodo_CTypes::UINT32, 0);
     std::unique_ptr<uint32_t[]> hashes =
-        std::unique_ptr<uint32_t[]>((uint32_t*)out_arr->data1);
+        std::unique_ptr<uint32_t[]>((uint32_t*)out_arr->data1());
 
     int64_t n_bytes = ((nRow + 7) >> 3);
 
@@ -258,7 +258,7 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
             }
         }
         // Copy the null bitmask from the indices array
-        memcpy(out_arr->null_bitmask, in_arr->child_arrays[1]->null_bitmask,
+        memcpy(out_arr->null_bitmask(), in_arr->child_arrays[1]->null_bitmask(),
                n_bytes);
     } else {
         // hash_array doesn't hash nulls
@@ -273,7 +273,7 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
             // in in_arr. The array could have NaTs though, which
             // convert_datetime_ns_to_us will convert to nulls, so we can
             // use the bitmask from us_array as is for the out_arr.
-            memcpy(out_arr->null_bitmask, us_array->null_bitmask, n_bytes);
+            memcpy(out_arr->null_bitmask(), us_array->null_bitmask(), n_bytes);
             hash_array(hashes, us_array, nRow, 0, is_parallel, false,
                        /*use_murmurhash=*/true);
             decref_array(us_array);
@@ -293,7 +293,7 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
             // DATE arrays are always NULLABLE_INT_BOOL arrays, so we can copy
             // over the null_bitmask as is. convert_date_to_days_since_epoch
             // also copies over the null_bitmask, so it's the same.
-            memcpy(out_arr->null_bitmask, in_arr->null_bitmask, n_bytes);
+            memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
             decref_array(days_since_epoch_array);
             delete days_since_epoch_array;
         } else if (in_arr->dtype == Bodo_CTypes::INT32) {
@@ -303,16 +303,18 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
                 alloc_array(in_arr->length, in_arr->n_sub_elems(),
                             in_arr->n_sub_sub_elems(), in_arr->arr_type,
                             Bodo_CTypes::INT64, 0, 0);
-            if (in_arr->null_bitmask) {
+            if (in_arr->null_bitmask()) {
                 // Copy the null bitmask if it exists for the arr type
-                memcpy(int64_arr->null_bitmask, in_arr->null_bitmask, n_bytes);
+                memcpy(int64_arr->null_bitmask(), in_arr->null_bitmask(),
+                       n_bytes);
                 // Copy it over to the out_arr null_bitmask as well
-                memcpy(out_arr->null_bitmask, in_arr->null_bitmask, n_bytes);
+                memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(),
+                       n_bytes);
             } else {
                 // In case this array type (NUMPY) doesn't have a null_bitmask
                 // there should be no nulls in the array and we can set
                 // null_bitmask to all 1s.
-                memset(out_arr->null_bitmask, 0xFF, n_bytes);
+                memset(out_arr->null_bitmask(), 0xFF, n_bytes);
             }
             for (uint64_t i = 0; i < nRow; i++) {
                 int64_arr->at<int64_t>(i) = (int64_t)in_arr->at<int32_t>(i);
@@ -324,16 +326,17 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
         } else {
             hash_array(hashes, in_arr, nRow, 0, is_parallel, false,
                        /*use_murmurhash=*/true);
-            if (in_arr->null_bitmask) {
+            if (in_arr->null_bitmask()) {
                 // Copy the null bitmask if it exists for the arr type
-                memcpy(out_arr->null_bitmask, in_arr->null_bitmask, n_bytes);
+                memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(),
+                       n_bytes);
             } else {
                 // Otherwise set it to all 1s.
                 // DATETIME which uses a NUMPY array (but can have NaTs)
                 // is handled separately above, and floats (which can have NaNs)
                 // are not supported for the bucket transform at all, so this
                 // should be safe.
-                memset(out_arr->null_bitmask, 0xFF, n_bytes);
+                memset(out_arr->null_bitmask(), 0xFF, n_bytes);
             }
         }
     }
@@ -362,7 +365,7 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
 
     array_info* out_arr;
     if (in_arr->arr_type == bodo_array_type::STRING) {
-        offset_t* in_offsets = (offset_t*)in_arr->data2;
+        offset_t* in_offsets = (offset_t*)in_arr->data2();
         offset_t str_len;
         uint64_t n_chars = 0;
         // Calculate the total chars first
@@ -376,7 +379,7 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
         // Allocate output array
         out_arr = alloc_string_array(nRow, n_chars, 0);
         // Copy over truncated strings to the new array
-        offset_t* out_offsets = (offset_t*)out_arr->data2;
+        offset_t* out_offsets = (offset_t*)out_arr->data2();
         out_offsets[0] = 0;
         for (uint64_t i = 0; i < nRow; i++) {
             if (!in_arr->get_null_bit(i)) {
@@ -386,8 +389,8 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
             }
             str_len = in_offsets[i + 1] - in_offsets[i];
             str_len = std::min(str_len, (offset_t)width);
-            memcpy(out_arr->data1 + out_offsets[i],
-                   in_arr->data1 + in_offsets[i], sizeof(char) * str_len);
+            memcpy(out_arr->data1() + out_offsets[i],
+                   in_arr->data1() + in_offsets[i], sizeof(char) * str_len);
             out_offsets[i + 1] = out_offsets[i] + str_len;
             out_arr->set_null_bit(i, true);
         }
@@ -455,8 +458,7 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
         // it's just a truncation. It might not have all
         // unique elements though.
         out_arr = new array_info(
-            bodo_array_type::DICT, in_arr->dtype, in_arr->length, NULL, NULL,
-            NULL, indices_copy->null_bitmask, NULL, {},
+            bodo_array_type::DICT, in_arr->dtype, in_arr->length, {},
             {trunc_dict_data_arr, indices_copy}, NULL, 0, 0, 0,
             in_arr->has_global_dictionary, in_arr->has_deduped_local_dictionary,
             in_arr->has_sorted_dictionary);
@@ -490,7 +492,7 @@ array_info* array_transform_year(array_info* in_arr, bool is_parallel) {
                 get_years_since_epoch_from_date(&in_arr->at<int64_t>(i));
         }
         // Copy the null bitmask as is
-        memcpy(out_arr->null_bitmask, in_arr->null_bitmask, n_bytes);
+        memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
         return out_arr;
     }
     if ((in_arr->arr_type == bodo_array_type::NUMPY) &&
@@ -531,7 +533,7 @@ array_info* array_transform_month(array_info* in_arr, bool is_parallel) {
                 get_months_since_epoch_from_date(&in_arr->at<int64_t>(i));
         }
         // Copy the null bitmask as is
-        memcpy(out_arr->null_bitmask, in_arr->null_bitmask, n_bytes);
+        memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
         return out_arr;
     }
 
@@ -576,7 +578,7 @@ array_info* array_transform_day(array_info* in_arr, bool is_parallel) {
                 get_days_since_epoch_from_date(&in_arr->at<int64_t>(i));
         }
         // Copy the null bitmask as is
-        memcpy(out_arr->null_bitmask, in_arr->null_bitmask, n_bytes);
+        memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
         return out_arr;
     }
 
@@ -766,17 +768,18 @@ PyObject* iceberg_transformed_val_to_py(array_info* arr, size_t idx) {
             switch (arr->arr_type) {
                 case bodo_array_type::DICT: {
                     int32_t dict_idx = arr->child_arrays[1]->at<int32_t>(idx);
-                    offset_t* offsets = (offset_t*)arr->child_arrays[0]->data2;
+                    offset_t* offsets =
+                        (offset_t*)arr->child_arrays[0]->data2();
                     return PyUnicode_FromString(
                         std::string(
-                            arr->child_arrays[0]->data1 + offsets[dict_idx],
+                            arr->child_arrays[0]->data1() + offsets[dict_idx],
                             offsets[dict_idx + 1] - offsets[dict_idx])
                             .c_str());
                 }
                 default: {
-                    offset_t* offsets = (offset_t*)arr->data2;
+                    offset_t* offsets = (offset_t*)arr->data2();
                     return PyUnicode_FromString(
-                        std::string(arr->data1 + offsets[idx],
+                        std::string(arr->data1() + offsets[idx],
                                     offsets[idx + 1] - offsets[idx])
                             .c_str());
                 }

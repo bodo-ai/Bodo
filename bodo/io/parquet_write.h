@@ -70,7 +70,7 @@ Bodo_Fs::FsEnum filesystem_type(const char *fname);
  * Datetime (/timestamp) arrays. Bodo arrays store information in nanoseconds.
  * When this is not nanoseconds, the data is converted to the specified type
  * before being copied to the Arrow array. Note that in case it's not
- * nanoseconds, we make a copy of the integer array (array->data1) since we
+ * nanoseconds, we make a copy of the integer array (array->data1()) since we
  * cannot modify the existing array, as it might be used elsewhere. This is
  * primarily required for Iceberg which requires data to be written in
  * microseconds.

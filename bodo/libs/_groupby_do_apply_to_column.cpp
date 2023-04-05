@@ -53,10 +53,10 @@ void apply_to_column_list_string(array_info* in_col, array_info* out_col,
     size_t num_groups = grp_info.num_groups;
     std::vector<std::vector<std::pair<std::string, bool>>> ListListPair(
         num_groups);
-    char* data_i = in_col->data1;
-    offset_t* index_offsets_i = (offset_t*)in_col->data3;
-    offset_t* data_offsets_i = (offset_t*)in_col->data2;
-    uint8_t* sub_null_bitmask_i = (uint8_t*)in_col->sub_null_bitmask;
+    char* data_i = in_col->data1();
+    offset_t* index_offsets_i = (offset_t*)in_col->data3();
+    offset_t* data_offsets_i = (offset_t*)in_col->data2();
+    uint8_t* sub_null_bitmask_i = (uint8_t*)in_col->sub_null_bitmask();
     // Computing the strings used in output.
     uint64_t n_bytes = (num_groups + 7) >> 3;
     std::vector<uint8_t> Vmask(n_bytes, 0);
@@ -219,14 +219,14 @@ void apply_sum_to_column_string(array_info* in_col, array_info* out_col,
     int64_t n_chars = in_col->n_sub_elems();
     array_info* out_arr = alloc_string_array(num_groups, n_chars, 0);
     size_t n_bytes = (num_groups + 7) >> 3;
-    memset(out_arr->null_bitmask, 0xff, n_bytes);  // null not possible
+    memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
 
     // find offsets for each output string
     std::vector<offset_t> str_offsets(num_groups + 1, 0);
-    char* data_i = in_col->data1;
-    offset_t* offsets_i = (offset_t*)in_col->data2;
-    char* data_o = out_arr->data1;
-    offset_t* offsets_o = (offset_t*)out_arr->data2;
+    char* data_i = in_col->data1();
+    offset_t* offsets_i = (offset_t*)in_col->data2();
+    char* data_o = out_arr->data1();
+    offset_t* offsets_o = (offset_t*)out_arr->data2();
 
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
@@ -275,8 +275,8 @@ void apply_to_column_string(array_info* in_col, array_info* out_col,
     size_t n_bytes = (num_groups + 7) >> 3;
     std::vector<uint8_t> V(n_bytes, 0);
     std::vector<std::string> ListString(num_groups);
-    char* data_i = in_col->data1;
-    offset_t* offsets_i = (offset_t*)in_col->data2;
+    char* data_i = in_col->data1();
+    offset_t* offsets_i = (offset_t*)in_col->data2();
     switch (ftype) {
         case Bodo_FTypes::count: {
             for (size_t i = 0; i < in_col->length; i++) {
@@ -392,8 +392,8 @@ void apply_sum_to_column_dict(array_info* in_col, array_info* out_col,
     // every string has a start and end offset so len(offsets) == (len(data) +
     // 1)
     std::vector<offset_t> str_offsets(num_groups + 1, 0);
-    char* data_i = in_col->child_arrays[0]->data1;
-    offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2;
+    char* data_i = in_col->child_arrays[0]->data1();
+    offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2();
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
         if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
@@ -405,9 +405,9 @@ void apply_sum_to_column_dict(array_info* in_col, array_info* out_col,
     }
 
     array_info* out_arr = alloc_string_array(num_groups, n_chars, 0);
-    memset(out_arr->null_bitmask, 0xff, n_bytes);  // null not possible
-    char* data_o = out_arr->data1;
-    offset_t* offsets_o = (offset_t*)out_arr->data2;
+    memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
+    char* data_o = out_arr->data1();
+    offset_t* offsets_o = (offset_t*)out_arr->data2();
 
     std::partial_sum(str_offsets.begin(), str_offsets.end(),
                      str_offsets.begin());
@@ -453,8 +453,8 @@ void apply_to_column_dict(array_info* in_col, array_info* out_col,
     }
     std::vector<uint8_t> V(n_bytes,
                            0);  // bitmask to mark if group's been updated
-    char* data_i = in_col->child_arrays[0]->data1;
-    offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2;
+    char* data_i = in_col->child_arrays[0]->data1();
+    offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2();
     switch (ftype) {
         case Bodo_FTypes::count: {
             for (size_t i = 0; i < in_col->length; i++) {

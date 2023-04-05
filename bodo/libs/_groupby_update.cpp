@@ -172,11 +172,11 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
     int64_t n = arr->length;
     using T = std::pair<bool, std::vector<std::pair<std::string, bool>>>;
     std::vector<T> null_bit_val_vec(n);
-    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
-    uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
-    char* data = arr->data1;
-    offset_t* data_offsets = (offset_t*)arr->data2;
-    offset_t* index_offsets = (offset_t*)arr->data3;
+    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask();
+    uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask();
+    char* data = arr->data1();
+    offset_t* data_offsets = (offset_t*)arr->data2();
+    offset_t* index_offsets = (offset_t*)arr->data3();
     auto get_entry = [&](int64_t i) -> T {
         bool isna = !GetBit(null_bitmask, i);
         offset_t start_idx_offset = index_offsets[i];
@@ -255,9 +255,9 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
     int64_t n = arr->length;
     using T = std::pair<bool, std::string>;
     std::vector<T> null_bit_val_vec(n);
-    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
-    char* data = arr->data1;
-    offset_t* offsets = (offset_t*)arr->data2;
+    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask();
+    char* data = arr->data1();
+    offset_t* offsets = (offset_t*)arr->data2();
     auto get_entry = [&](int64_t i) -> T {
         bool isna = !GetBit(null_bitmask, i);
         offset_t start_offset = offsets[i];
@@ -337,15 +337,15 @@ void cumulative_computation_dict_encoded_string(array_info* arr,
     using T = std::pair<bool, std::string>;
     std::vector<T> null_bit_val_vec(n);  // a temporary vector that stores the
                                          // null bit and value for each row
-    uint8_t* null_bitmask = (uint8_t*)arr->child_arrays[1]->null_bitmask;
-    char* data = arr->child_arrays[0]->data1;
-    offset_t* offsets = (offset_t*)arr->child_arrays[0]->data2;
+    uint8_t* null_bitmask = (uint8_t*)arr->child_arrays[1]->null_bitmask();
+    char* data = arr->child_arrays[0]->data1();
+    offset_t* offsets = (offset_t*)arr->child_arrays[0]->data2();
     auto get_entry = [&](int64_t i) -> T {
         bool isna = !GetBit(null_bitmask, i);
         if (isna) {
             return {isna, ""};
         }
-        int32_t dict_ind = ((int32_t*)arr->child_arrays[1]->data1)[i];
+        int32_t dict_ind = ((int32_t*)arr->child_arrays[1]->data1())[i];
         offset_t start_offset = offsets[dict_ind];
         offset_t end_offset = offsets[dict_ind + 1];
         offset_t len = end_offset - start_offset;
@@ -518,7 +518,7 @@ void median_computation(array_info* arr, array_info* out_arr,
                     break;
                 }
                 if (!isnan_entry(i)) {
-                    char* ptr = arr->data1 + i * siztype;
+                    char* ptr = arr->data1() + i * siztype;
                     double eVal = GetDoubleEntry(arr->dtype, ptr);
                     ListValue.emplace_back(eVal);
                 } else {
@@ -743,7 +743,7 @@ void nunique_computation(array_info* arr, array_info* out_arr,
             eset.clear();
             bool HasNullRow = false;
             while (true) {
-                char* ptr = arr->data1 + (i * siztype);
+                char* ptr = arr->data1() + (i * siztype);
                 if (!isnan_entry(ptr)) {
                     eset.insert(i);
                 } else {
@@ -757,9 +757,9 @@ void nunique_computation(array_info* arr, array_info* out_arr,
             out_arr->at<int64_t>(igrp) = size;
         }
     } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
-        offset_t* in_index_offsets = (offset_t*)arr->data3;
-        offset_t* in_data_offsets = (offset_t*)arr->data2;
-        uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
+        offset_t* in_index_offsets = (offset_t*)arr->data3();
+        offset_t* in_data_offsets = (offset_t*)arr->data2();
+        uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask();
         const uint32_t seed = SEED_HASH_CONTAINER;
 
         HashNuniqueComputationListString hash_fct{arr, in_index_offsets,
@@ -795,7 +795,7 @@ void nunique_computation(array_info* arr, array_info* out_arr,
             out_arr->at<int64_t>(igrp) = size;
         }
     } else if (arr->arr_type == bodo_array_type::STRING) {
-        offset_t* in_offsets = (offset_t*)arr->data2;
+        offset_t* in_offsets = (offset_t*)arr->data2();
         const uint32_t seed = SEED_HASH_CONTAINER;
 
         HashNuniqueComputationString hash_fct{arr, in_offsets, seed};

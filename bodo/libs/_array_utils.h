@@ -721,14 +721,14 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
         if (key_col->arr_type == bodo_array_type::CATEGORICAL) {
             std::vector<char> vectNaN = RetrieveNaNentry(key_col->dtype);
             size_t siztype = numpy_item_size[key_col->dtype];
-            if (memcmp(key_col->data1 + i * siztype, vectNaN.data(), siztype) ==
-                0)
+            if (memcmp(key_col->data1() + i * siztype, vectNaN.data(),
+                       siztype) == 0)
                 return true;
         } else if (key_col->arr_type == bodo_array_type::STRING ||
                    key_col->arr_type == bodo_array_type::LIST_STRING ||
                    key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
                    key_col->arr_type == bodo_array_type::DICT) {
-            if (!GetBit((uint8_t*)key_col->null_bitmask, i)) return true;
+            if (!GetBit((uint8_t*)key_col->null_bitmask(), i)) return true;
         } else if (key_col->arr_type == bodo_array_type::NUMPY) {
             if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&
                  isnan(key_col->at<float>(i))) ||
