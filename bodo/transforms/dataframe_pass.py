@@ -1580,6 +1580,7 @@ class DataFramePass:
             is_join_var,
             is_indicator_var,
             _bodo_na_equal_var,
+            _bodo_rebalance_output_if_skewed_var,
             gen_cond_var,
         ) = rhs.args
 
@@ -1600,6 +1601,12 @@ class DataFramePass:
         assert is_indicator is not None, "Internal error with Join IR node"
         is_na_equal = guard(find_const, self.func_ir, _bodo_na_equal_var)
         assert is_na_equal is not None, "Internal error with Join IR node"
+        rebalance_output_if_skewed = guard(
+            find_const, self.func_ir, _bodo_rebalance_output_if_skewed_var
+        )
+        assert (
+            rebalance_output_if_skewed is not None
+        ), "Internal error with Join IR node"
         gen_cond_expr = guard(find_const, self.func_ir, gen_cond_var)
         assert gen_cond_expr is not None, "Internal error with Join IR node"
         out_typ = self.typemap[lhs.name]
@@ -1714,6 +1721,7 @@ class DataFramePass:
                 right_index,
                 indicator_col_num,
                 is_na_equal,
+                rebalance_output_if_skewed,
                 gen_cond_expr,
                 left_len_var,
                 right_len_var,

@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application.bodo_sql_rules;
 
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.RelNode;

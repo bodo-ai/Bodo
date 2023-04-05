@@ -17,15 +17,12 @@ package com.bodosql.calcite.application.bodo_sql_rules;
  * limitations under the License.
  */
 
-import org.apache.calcite.plan.*;
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
-import org.apache.calcite.rel.core.*;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.rules.*;
-import org.apache.calcite.tools.*;
 import org.apache.calcite.tools.RelBuilder;
-import org.immutables.value.*;
 import org.immutables.value.Value;
 
 /**

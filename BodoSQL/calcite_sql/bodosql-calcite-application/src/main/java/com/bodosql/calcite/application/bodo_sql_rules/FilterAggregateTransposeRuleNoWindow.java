@@ -17,6 +17,7 @@ package com.bodosql.calcite.application.bodo_sql_rules;
  * limitations under the License.
  */
 
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;

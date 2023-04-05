@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 
 import static com.bodosql.calcite.application.bodo_sql_rules.FilterRulesCommon.rexNodeContainsCase;
 
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import java.util.Collections;
 import java.util.function.Predicate;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -15,9 +16,7 @@ import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.rules.*;
 import org.apache.calcite.rex.*;
-import org.apache.calcite.sql.fun.*;
 import org.apache.calcite.tools.RelBuilder;
-import org.apache.calcite.util.*;
 import org.immutables.value.Value;
 
 /**

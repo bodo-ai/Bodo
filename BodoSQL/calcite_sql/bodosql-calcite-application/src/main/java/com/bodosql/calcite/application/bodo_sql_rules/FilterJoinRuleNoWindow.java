@@ -18,6 +18,7 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 
 import static org.apache.calcite.plan.RelOptUtil.conjunctions;
 
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import java.util.ArrayList;

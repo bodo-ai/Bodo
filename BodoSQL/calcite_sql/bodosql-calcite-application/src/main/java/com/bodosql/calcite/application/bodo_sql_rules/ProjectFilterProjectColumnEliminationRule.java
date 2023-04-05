@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application.bodo_sql_rules;
 
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import java.util.*;
 import javax.annotation.*;
 import kotlin.*;
@@ -13,28 +14,28 @@ import org.apache.calcite.tools.*;
 import org.immutables.value.*;
 
 /**
- * Rule that looks at two projections separated by a filter and determines if any computation in
- * the uppermost filter can be replaced by an RexInputRef. For example imagine we have the following
+ * Rule that looks at two projections separated by a filter and determines if any computation in the
+ * uppermost filter can be replaced by an RexInputRef. For example imagine we have the following
  * Plan:
  *
  * <p>Project(A=$0, B=$1+1)
  *
  * <p>Filter(cond=[$2=1])
  *
- * <p>Project(col0=$1, col1=$0, col3=$0+1 
- * 
- * Then this rule determines that we can replace B with col3.
- * The final plan after just this rule would look like
+ * <p>Project(col0=$1, col1=$0, col3=$0+1
+ *
+ * <p>Then this rule determines that we can replace B with col3. The final plan after just this rule
+ * would look like
  *
  * <p>Project(A=$0, B=$2)
  *
  * <p>Filter(cond=[$2=1])
  *
  * <p>Project(col0=$1, col1=$0, col3=$0+1
- * 
- * To do this we first determine that it would be safe to
- * reorder these instructions and then compare upper most projection after inlining any inputRefs
- * with the values of the column in the lower projection
+ *
+ * <p>To do this we first determine that it would be safe to reorder these instructions and then
+ * compare upper most projection after inlining any inputRefs with the values of the column in the
+ * lower projection
  */
 @BodoSQLStyleImmutable
 @Value.Enclosing
