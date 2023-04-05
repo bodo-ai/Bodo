@@ -600,8 +600,14 @@ def test_string_one_arg_fns(arg, memory_leak_check):
         pytest.param(("bodo", 3, 0, "ai"), "boaido", id="append_middle"),
         pytest.param(("bodo", 5, 2, "ai"), "bodoai", id="append_end"),
         pytest.param((b"bar", 1, 0, b"foo"), b"foobar", id="append_end_binary"),
-        pytest.param((b"The quick brown fox", 11, 5, b"red"), b"The quick red fox", id="delete_start_binary"),
-        pytest.param((b"the fast fox", 5, 4, b"foo"), b"the foo fox", id="replace_binary"),
+        pytest.param(
+            (b"The quick brown fox", 11, 5, b"red"),
+            b"The quick red fox",
+            id="delete_start_binary",
+        ),
+        pytest.param(
+            (b"the fast fox", 5, 4, b"foo"), b"the foo fox", id="replace_binary"
+        ),
     ],
 )
 def test_insert_scalar(inputs, answer, memory_leak_check):
@@ -2543,7 +2549,7 @@ def test_option_string_one_arg_fns(memory_leak_check):
             id="scalar_without_optional_characters",
         ),
         pytest.param(
-            ("*-ABC-*-", "*-"),
+            ("    *-ABC-*-   ", "*-"),
             id="scalar_with_optional_characters",
         ),
         pytest.param(
@@ -2554,7 +2560,12 @@ def test_option_string_one_arg_fns(memory_leak_check):
             id="all_vector",
         ),
         pytest.param(
-            (pd.Series(["asdfghja", "jhskdjfh", "fdsa", "  a  "] * 4), "a"),
+            (
+                pd.Series(
+                    ["asdfghja", "jhskdjfh", "fdsa", "  a  ", "   abcdefa   "] * 4
+                ),
+                "a",
+            ),
             id="vector_scalar_mix",
         ),
     ],
@@ -2564,54 +2575,55 @@ def test_trim_ltrim_rtrim(args, memory_leak_check):
     Tests BodoSQL array kernels for TRIM, LTRIM, RTRIM.
     """
     output_is_scalar = all(not isinstance(arg, pd.Series) for arg in args)
+    src, chars = args
 
     # impl for trim
-    def trim_impl(source, chars):
-        return pd.Series(bodo.libs.bodosql_array_kernels.trim(source, chars))
+    def trim_impl(src, chars):
+        return pd.Series(bodo.libs.bodosql_array_kernels.trim(src, chars))
 
     if output_is_scalar:
-        return lambda source, chars: bodo.libs.bodosql_array_kernels.trim(source, chars)
+        trim_impl = lambda src, chars: bodo.libs.bodosql_array_kernels.trim(src, chars)
 
     # impl for ltrim
-    def ltrim_impl(source, chars):
-        return pd.Series(bodo.libs.bodosql_array_kernels.ltrim(source, chars))
+    def ltrim_impl(src, chars):
+        return pd.Series(bodo.libs.bodosql_array_kernels.ltrim(src, chars))
 
     if output_is_scalar:
-        ltrim_impl = lambda source, chars: bodo.libs.bodosql_array_kernels.ltrim(
-            source, chars
+        ltrim_impl = lambda src, chars: bodo.libs.bodosql_array_kernels.ltrim(
+            src, chars
         )
 
     # impl for rtrim
-    def rtrim_impl(source, chars):
-        return pd.Series(bodo.libs.bodosql_array_kernels.rtrim(source, chars))
+    def rtrim_impl(src, chars):
+        return pd.Series(bodo.libs.bodosql_array_kernels.rtrim(src, chars))
 
     if output_is_scalar:
-        rtrim_impl = lambda source, chars: bodo.libs.bodosql_array_kernels.rtrim(
-            source, chars
+        rtrim_impl = lambda src, chars: bodo.libs.bodosql_array_kernels.rtrim(
+            src, chars
         )
 
-    def trim_scalar_fn(source, chars):
-        return source.strip(chars)
+    def trim_scalar_fn(src, chars):
+        return src.strip(chars)
 
-    def ltrim_scalar_fn(source, chars):
-        return source.lstrip(chars)
+    def ltrim_scalar_fn(src, chars):
+        return src.lstrip(chars)
 
-    def rtrim_scalar_fn(source, chars):
-        return source.rstrip(chars)
+    def rtrim_scalar_fn(src, chars):
+        return src.rstrip(chars)
 
-    source, chars = args
+    src, chars = args
 
     impls = (trim_impl, ltrim_impl, rtrim_impl)
     answers = (
-        vectorized_sol((source, chars), trim_scalar_fn, pd.StringDtype()),
-        vectorized_sol((source, chars), ltrim_scalar_fn, pd.StringDtype()),
-        vectorized_sol((source, chars), rtrim_scalar_fn, pd.StringDtype()),
+        vectorized_sol((src, chars), trim_scalar_fn, pd.StringDtype()),
+        vectorized_sol((src, chars), ltrim_scalar_fn, pd.StringDtype()),
+        vectorized_sol((src, chars), rtrim_scalar_fn, pd.StringDtype()),
     )
 
     for impl, answer in zip(impls, answers):
         check_func(
             impl,
-            (source, chars),
+            (src, chars),
             py_output=answer,
             check_dtype=False,
             reset_index=True,
