@@ -2734,3 +2734,67 @@ def test_create_timestamp_optional(memory_leak_check):
             (arg, flag),
             py_output=answer,
         )
+
+
+@pytest.mark.parametrize(
+    "expr, format_str, answer",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.date(2017, 6, 15),
+                    datetime.date(1971, 2, 2),
+                    None,
+                    datetime.date(2022, 11, 25),
+                    datetime.date(2001, 9, 30),
+                ]
+                * 4
+            ),
+            "%Y",
+            pd.Series(["2017", "1971", None, "2022", "2001"] * 4),
+            id="date-vector",
+        ),
+        pytest.param(
+            datetime.date(2017, 6, 15), "%M %d %Y", "June 15 2017", id="date-scalar"
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp("2015-3-14 00:00:01"),
+                    pd.Timestamp("2015-3-19 00:00:30"),
+                    pd.Timestamp("2015-3-13 23:59:50"),
+                    None,
+                    pd.Timestamp("2015-3-6 10:14:39"),
+                ]
+                * 4
+            ),
+            "%d %S",
+            pd.Series(["14 01", "19 30", "13 50", None, "06 39"] * 4),
+            id="timestamp-vector",
+        ),
+        pytest.param(
+            pd.Timestamp("2022-11-6 12:40:45"),
+            "%M %d %Y %H:%i:%S",
+            "Nov 06 2022 12:40:45",
+            id="timestamp-scalar",
+        ),
+    ],
+)
+def test_date_format(expr, format_str, answer, memory_leak_check):
+    """
+    Tests date_format kernel
+    """
+
+    def impl(expr, format_str):
+        return pd.Series(bodo.libs.bodosql_array_kernels.date_format(expr, format_str))
+
+    if isinstance(expr, (datetime.date, pd.Timestamp)):
+        return lambda expr, format: bodo.libs.bodosql_array_kernels.date_format(
+            expr, format_str
+        )
+
+    check_func(
+        impl,
+        (expr, format_str),
+        py_output=answer,
+    )
