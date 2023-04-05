@@ -59,10 +59,6 @@ void* np_array_from_string_array(int64_t no_strings,
                                  const offset_t* offset_table,
                                  const char* buffer, const uint8_t* null_bitmap,
                                  const int is_bytes);
-void* pd_array_from_string_array(int64_t no_strings,
-                                 const offset_t* offset_table,
-                                 const char* buffer,
-                                 const uint8_t* null_bitmap);
 void* pd_pyarrow_array_from_string_array(const array_info* str_arr);
 
 void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
@@ -109,8 +105,6 @@ void bytes_to_hex(char* output, char* data, int64_t data_len);
 int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
                       int64_t data_len);
 void int_to_hex(char* output, int64_t output_len, uint64_t int_val);
-void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
-                         const int32_t* indices, const uint8_t* null_bitmap);
 array_info* str_to_dict_str_array(array_info* str_arr);
 int64_t re_escape_length_kind1(char* pattern, int64_t length);
 int64_t re_escape_length_kind2(char* pattern, int64_t length);
@@ -169,9 +163,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&str_to_float32)));
     PyObject_SetAttrString(m, "get_str_len",
                            PyLong_FromVoidPtr((void*)(&get_str_len)));
-    PyObject_SetAttrString(
-        m, "pd_array_from_string_array",
-        PyLong_FromVoidPtr((void*)(&pd_array_from_string_array)));
     PyObject_SetAttrString(
         m, "pd_pyarrow_array_from_string_array",
         PyLong_FromVoidPtr((void*)(&pd_pyarrow_array_from_string_array)));
@@ -233,8 +224,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&bytes_fromhex)));
     PyObject_SetAttrString(m, "int_to_hex",
                            PyLong_FromVoidPtr((void*)(&int_to_hex)));
-    PyObject_SetAttrString(m, "box_dict_str_array",
-                           PyLong_FromVoidPtr((void*)(&box_dict_str_array)));
     PyObject_SetAttrString(m, "str_to_dict_str_array",
                            PyLong_FromVoidPtr((void*)(&str_to_dict_str_array)));
     PyObject_SetAttrString(m, "re_escape_length",
@@ -639,60 +628,6 @@ void* np_array_from_string_array(int64_t no_strings,
 #undef CHECK
 }
 
-/// @brief  Create Pandas StringArray from Bodo's packed StringArray
-/// @return Pandas StringArray of str objects
-/// @param[in] no_strings number of strings found in buffer
-/// @param[in] offset_table offsets for strings in buffer
-/// @param[in] buffer with concatenated strings (from StringArray)
-void* pd_array_from_string_array(int64_t no_strings,
-                                 const offset_t* offset_table,
-                                 const char* buffer,
-                                 const uint8_t* null_bitmap) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return NULL;                   \
-    }
-    auto gilstate = PyGILState_Ensure();
-
-    npy_intp dims[] = {no_strings};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* na_obj = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(na_obj, "getting pd.NA failed");
-
-    for (int64_t i = 0; i < no_strings; ++i) {
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, na_obj);
-        } else {
-            PyObject* s = PyUnicode_FromStringAndSize(
-                buffer + offset_table[i],
-                offset_table[i + 1] - offset_table[i]);
-            CHECK(s, "creating Python string/unicode object failed");
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
-            Py_DECREF(s);
-        }
-        CHECK(err == 0, "setting item in numpy array failed");
-    }
-
-    PyObject* str_arr_obj =
-        PyObject_CallMethod(pd_mod, "array", "Osl", ret, "string", 0);
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(na_obj);
-    Py_DECREF(ret);
-    PyGILState_Release(gilstate);
-    return str_arr_obj;
-#undef CHECK
-}
-
 /// @brief  Create Pandas ArrowStringArray from Bodo's packed StringArray or
 /// dict-encoded string array
 /// @return Pandas ArrowStringArray
@@ -975,52 +910,6 @@ void int_to_hex(char* output, int64_t output_len, uint64_t int_val) {
 }
 
 }  // extern "C"
-
-/**
- * @brief Box native dictionary encoded string array data to Numpy object array
- * of string items. To reduce memory usage we do string interning using the
- * dictionary encoding and have only boxed the dictionary array.
- * @return Numpy object array of strings
- * @param[in] n number of values
- * @param[in] dict_arr PyArrayObject containing the boxed dictionary
- * @param[in] indices Native int32 of dictionary indices for the strings.
- * @param[in] null_bitmap bitvector representing nulls (Arrow format)
- */
-void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
-                         const int32_t* indices, const uint8_t* null_bitmap) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-
-    npy_intp dims[] = {n};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-
-    for (int64_t i = 0; i < n; ++i) {
-        auto store_offset = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(store_offset, "getting offset in numpy array failed");
-        if (!is_na(null_bitmap, i)) {
-            int32_t index = indices[i];
-            auto load_offset = PyArray_GETPTR1(dict_arr, index);
-            PyObject* str = PyArray_GETITEM(dict_arr, (char*)load_offset);
-            CHECK(str, "Loading string from dictionary failed");
-            err =
-                PyArray_SETITEM((PyArrayObject*)ret, (char*)store_offset, str);
-            // Both PyArray_GETITEM and PyArray_SETITEM increment the refcount,
-            // so decref the getitem.
-            Py_DECREF(str);
-        } else {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)store_offset,
-                                  Py_None);
-        }
-        CHECK(err == 0, "setting item in numpy array failed");
-    }
-    return ret;
-#undef CHECK
-}
 
 /**
  * @brief Kernel to Convert String Arrays to Dictionary String Arrays

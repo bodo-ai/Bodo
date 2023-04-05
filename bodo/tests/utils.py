@@ -1998,8 +1998,6 @@ def gen_random_string_binary_array(n, max_str_len=10, is_binary=False):
         str_vals.append(val)
 
     # use consistent string array type with Bodo to avoid output comparison errors
-    if not is_binary and bodo.libs.str_arr_ext.use_pd_string_array:
-        return pd.array(str_vals, "string")
     return np.array(str_vals, dtype="object")  # avoid unichr dtype (TODO: support?)
 
 

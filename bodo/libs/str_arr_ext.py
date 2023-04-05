@@ -61,13 +61,6 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 
-# flag for creating pd.arrays.StringArray when boxing Bodo's native string array
-# Off currently since Pandas still has issues with this new type (e.g. low performance,
-# parquet write issues)
-use_pd_string_array = False
-use_pd_pyarrow_string_array = True
-
-
 char_type = types.uint8
 char_arr_type = types.Array(char_type, 1, "C")
 offset_arr_type = types.Array(offset_type, 1, "C")
@@ -1114,7 +1107,6 @@ ll.add_symbol("get_str_len", hstr_ext.get_str_len)
 ll.add_symbol("setitem_string_array", hstr_ext.setitem_string_array)
 ll.add_symbol("is_na", hstr_ext.is_na)
 ll.add_symbol("string_array_from_sequence", array_ext.string_array_from_sequence)
-ll.add_symbol("pd_array_from_string_array", hstr_ext.pd_array_from_string_array)
 ll.add_symbol("np_array_from_string_array", hstr_ext.np_array_from_string_array)
 ll.add_symbol(
     "pd_pyarrow_array_from_string_array", hstr_ext.pd_pyarrow_array_from_string_array
@@ -1459,12 +1451,8 @@ def box_str_arr(typ, val, c):
     )
     is_bytes = c.context.get_constant(types.int32, int(typ == binary_array_type))
 
-    box_fname = "np_array_from_string_array"
-    if use_pd_string_array and typ != binary_array_type:
-        box_fname = "pd_array_from_string_array"
-
     # box to Pandas ArrowStringArray to minimize boxing overhead
-    if use_pd_pyarrow_string_array and typ != binary_array_type:
+    if typ != binary_array_type:
         from bodo.libs.array import array_info_type, array_to_info_codegen
 
         arr_info = array_to_info_codegen(
@@ -1497,6 +1485,7 @@ def box_str_arr(typ, val, c):
             lir.IntType(32),
         ],
     )
+    box_fname = "np_array_from_string_array"
     fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
     offsets_ptr = c.context.make_array(offset_arr_type)(
         c.context, c.builder, payload.offsets
