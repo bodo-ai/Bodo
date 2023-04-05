@@ -20,6 +20,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
+import com.bodosql.calcite.application.bodo_sql_rules.*;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.*;
 import com.bodosql.calcite.ir.Module;
@@ -36,6 +37,8 @@ import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.*;
+import org.apache.calcite.rel.hint.*;
+import org.apache.calcite.rel.logical.*;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.schema.Schema;
@@ -301,8 +304,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     if (node instanceof TableScan) {
       this.visitTableScan((TableScan) node, !(parent instanceof Filter));
-    } else if (node instanceof Join) {
-      this.visitJoin((Join) node);
+    } else if (node instanceof PandasJoin) {
+      this.visitJoin((PandasJoin) node);
     } else if (node instanceof PandasSort) {
       this.visitLogicalSort((Sort) node);
     } else if (node instanceof PandasProject) {
@@ -2006,7 +2009,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node join node being visited
    */
-  public void visitJoin(Join node) {
+  public void visitJoin(PandasJoin node) {
     /* get left/right tables */
     String outVar = this.genDfVar();
     int nodeId = node.getId();
@@ -2039,6 +2042,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
         joinType = "cross";
       }
 
+      boolean tryRebalanceOutput = node.getRebalanceOutput();
+
       String joinCode =
           generateJoinCode(
               outVar,
@@ -2049,7 +2054,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
               leftColNames,
               outputColNames,
               joinCond,
-              mergeCols);
+              mergeCols,
+              tryRebalanceOutput);
       this.generatedCode.append(joinCode);
       this.varCache.put(nodeId, outVar);
       this.genRelnodeTimerStop(node);

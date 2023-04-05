@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 
 import static java.util.Objects.requireNonNull;
 
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import com.google.common.collect.ImmutableList;
 import java.util.*;
 import javax.annotation.Nullable;

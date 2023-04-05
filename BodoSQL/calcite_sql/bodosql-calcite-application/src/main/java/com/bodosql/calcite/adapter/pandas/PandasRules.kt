@@ -1,12 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.adapter.snowflake.SnowflakeAggregate
-import com.bodosql.calcite.adapter.snowflake.SnowflakeFilter
-import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
-import org.apache.calcite.plan.Convention
 import org.apache.calcite.plan.RelOptRule
-import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.logical.LogicalTargetTableScan
 
 class PandasRules private constructor() {
@@ -43,6 +37,9 @@ class PandasRules private constructor() {
         val PANDAS_TABLE_SCAN: RelOptRule = PandasTableScanRule.DEFAULT_CONFIG.toRule()
         @JvmField
         val PANDAS_TARGET_TABLE_SCAN: RelOptRule = PandasTargetTableScanRule.DEFAULT_CONFIG.toRule()
+
+        @JvmField
+        val PANDAS_JOIN_REBALANCE_OUTPUT_RULE: RelOptRule = PandasJoinRebalanceOutputRule.Config.DEFAULT.toRule()
 
         @JvmField
         val PANDAS_RULES: List<RelOptRule> = listOf(

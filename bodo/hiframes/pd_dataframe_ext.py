@@ -2616,6 +2616,7 @@ def join_dummy(
     is_join,
     indicator,
     _bodo_na_equal,
+    _bodo_rebalance_output_if_skewed,
     gen_cond,
 ):  # pragma: no cover
     return left_df
@@ -2638,6 +2639,7 @@ class JoinTyper(AbstractTemplate):
             suffix_y,
             is_join,  # True if this is DataFrame.join
             indicator,
+            _,
             _,
             _,
         ) = args

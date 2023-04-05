@@ -179,6 +179,7 @@ class Join(ir.Stmt):
         right_index: bool,
         indicator_col_num: int,
         is_na_equal: bool,
+        rebalance_output_if_skewed: bool,
         gen_cond_expr: str,
         left_len_var: ir.Var,
         right_len_var: ir.Var,
@@ -220,6 +221,7 @@ class Join(ir.Stmt):
         is_na_equal -- Should NA values be treated as equal when comparing keys?
                        In Pandas this is True, but conforming with SQL behavior
                        this is False.
+        rebalance_output_if_skewed -- Should the output be rebalanced if it is skewed?
         gen_cond_expr -- String used to describe the general merge condition. This
                          is used when a more general condition is needed than is
                          provided by equality.
@@ -240,6 +242,7 @@ class Join(ir.Stmt):
         self.right_index = right_index
         self.indicator_col_num = indicator_col_num
         self.is_na_equal = is_na_equal
+        self.rebalance_output_if_skewed = rebalance_output_if_skewed
         self.gen_cond_expr = gen_cond_expr
         self.left_len_var = left_len_var
         self.right_len_var = right_len_var
@@ -2549,6 +2552,7 @@ def _gen_join_cpp_call(
             f"{end_col_id_interval_side}, "
             f"key_in_output.ctypes, "
             f"use_nullable_arr_type.ctypes, "
+            f"{join_node.rebalance_output_if_skewed}, "
             f"cfunc_cond, "
             f"left_table_cond_columns.ctypes, "
             f"{len(left_col_nums)}, "
@@ -2575,6 +2579,7 @@ def _gen_join_cpp_call(
             f"{join_node.is_right}, "
             f"key_in_output.ctypes, "
             f"use_nullable_arr_type.ctypes, "
+            f"{join_node.rebalance_output_if_skewed}, "
             f"cfunc_cond, "
             f"left_table_cond_columns.ctypes, "
             f"{len(left_col_nums)}, "
@@ -2601,6 +2606,7 @@ def _gen_join_cpp_call(
             f"{join_node.extra_data_col_num != -1}, "
             f"{join_node.indicator_col_num != -1}, "
             f"{join_node.is_na_equal}, "
+            f"{join_node.rebalance_output_if_skewed}, "
             f"cfunc_cond, "
             f"left_table_cond_columns.ctypes, "
             f"{len(left_col_nums)}, "

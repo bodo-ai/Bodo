@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.bodo_sql_rules;
 import static com.bodosql.calcite.application.bodo_sql_rules.FilterRulesCommon.filterContainsOr;
 import static com.bodosql.calcite.application.bodo_sql_rules.FilterRulesCommon.updateConditionsExtractCommon;
 
+import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import java.util.HashSet;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;

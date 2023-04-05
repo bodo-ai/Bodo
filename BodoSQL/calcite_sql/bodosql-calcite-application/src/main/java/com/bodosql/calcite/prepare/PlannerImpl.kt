@@ -435,9 +435,24 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
         }
     }
 
+    /**
+     * Decorate Attributes Program.
+     *
+     * This will run the set of planner rules that won't change any of
+     * the orderings for the final plan but may decorate the nodes with additional
+     * information based on the contents of that node or the surrounding nodes.
+     *
+     * This information can then be utilized by the runtime stage to enable specific
+     * runtime checks.
+     */
+    private class DecorateAttributesProgram : Program by Programs.hep(
+        listOf(PandasRules.PANDAS_JOIN_REBALANCE_OUTPUT_RULE),
+        true, DefaultRelMetadataProvider.INSTANCE)
+
     private class PandasProgram : Program by Programs.sequence(
         SnowflakeTraitAdder(),
         Programs.ofRules(PandasRules.rules()),
+        DecorateAttributesProgram(),
         MergeRelProgram(),
     )
 

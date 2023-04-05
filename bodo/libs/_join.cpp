@@ -9,6 +9,94 @@
 #include "_shuffle.h"
 
 /**
+ * @brief Compute the skew of a population where
+ * each rank contains a single value. To do this we use the
+ * Adjusted Fisher-Pearson Standardized Moment Coefficient
+ * https://bodo.atlassian.net/wiki/spaces/B/pages/1287290894/Investigation+Dealing+with+Skews+in+Joins#How-to-measure-skew?
+ *
+ * @param val The input integer value for this rank.
+ * @return double The skew of the population.
+ */
+double compute_population_skew(int64_t val) {
+    int64_t nranks = dist_get_size();
+    std::vector<int64_t> vals_each_rank(nranks);
+    // Gather the values on all ranks.
+    c_gather_scalar(&val, vals_each_rank.data(), Bodo_CTypes::INT64, true, 0);
+    // population skew G = sum( ((x_i - x_avg) / x_stddev)^3 )
+    // Compute the components of the skew.
+    // Compute the mean
+    double sum =
+        std::accumulate(vals_each_rank.begin(), vals_each_rank.end(), 0.0);
+    double mean = sum / nranks;
+    // Compute Xi - mu
+    std::vector<double> diff(nranks);
+    std::transform(vals_each_rank.begin(), vals_each_rank.end(), diff.begin(),
+                   [mean](double x) { return x - mean; });
+    // Compute sum(xi^2)
+    double sq_sum =
+        std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
+    if (sq_sum == 0.0) {
+        // If sq_sum is 0 stddev will be 0 so we have 0 skew.
+        return 0.0;
+    }
+    // compute the standard deviation
+    double stddev = std::sqrt(sq_sum / nranks);
+    std::vector<double> elems(nranks);
+    // Compute (Xi - mu) / stdev
+    std::transform(diff.begin(), diff.end(), elems.begin(),
+                   [stddev](double x) { return x / stddev; });
+    // Compute elem^3
+    std::vector<double> cubes(nranks);
+    std::transform(elems.begin(), elems.end(), cubes.begin(),
+                   [](double x) { return x * x * x; });
+    // Compute skew = sum(cubes)
+    double skew = std::accumulate(cubes.begin(), cubes.end(), 0.0);
+    return skew;
+}
+
+/**
+ * @brief Rebalance the output of a join if there is significant
+ * skew across ranks. This is only called once the join has been
+ * given a hint and the output is distributed. The original output
+ * is freed by this function.
+ *
+ * @param original_output The original output of the join. If
+ * there is not significant skew this will be returned.
+ * @return table_info* The table output after rebalancing the ranks.
+ */
+table_info* rebalance_join_output(table_info* original_output) {
+    tracing::Event ev("rebalance_join_output", true);
+    // Communicate the number of rows on each rank.
+    int64_t nrows = original_output->nrows();
+    double skew = compute_population_skew(nrows);
+    // Skew can be positive of negative. Here we only care about
+    // the magnitude of the skew.
+    skew = std::abs(skew);
+    ev.add_attribute("g_skew", skew);
+    double skew_threshold = 3.0;
+    char* env_skew_threshold =
+        std::getenv("BODO_JOIN_REBALANCE_SKEW_THRESHOLD");
+    if (env_skew_threshold) {
+        skew_threshold = std::stoi(env_skew_threshold);
+    }
+    if (skew > skew_threshold) {
+        // 1.0 is a highly skewed population according to the internet,
+        // but our relevant example with only 2 outlier has a skew of nearly
+        // 2600. As a result we use 3.0 as the threshold for rebalancing to be
+        // slightly more conservative until we have more data/have done further
+        // testing.
+        table_info* out_table =
+            shuffle_renormalization(original_output, 0, 0, true);
+        // shuffle_renormalization calls shuffle_table_kernel which decrefs the
+        // input arrays.
+        delete original_output;
+        return out_table;
+    } else {
+        return original_output;
+    }
+}
+
+/**
  * @brief Validate the input to the equi_join_table function.
  *
  * @param left_table The left input table.
@@ -1451,9 +1539,10 @@ table_info* hash_join_table_inner(
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
     bool is_join, bool extra_data_col, bool indicator, bool is_na_equal,
-    cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
-    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
-    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
+    bool rebalance_if_skewed, cond_expr_fn_t cond_func,
+    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
+    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
+    uint64_t* num_rows_ptr) {
     // Does this join need an additional cond_func
     const bool uses_cond_func = cond_func != nullptr;
     const bool parallel_trace = (left_parallel || right_parallel);
@@ -1486,6 +1575,7 @@ table_info* hash_join_table_inner(
         ev.add_attribute("g_is_left", is_left_outer);
         ev.add_attribute("g_is_right", is_right_outer);
         ev.add_attribute("g_extra_data_col", extra_data_col);
+        ev.add_attribute("g_rebalance_if_skewed", rebalance_if_skewed);
     }
     // Handle dict encoding
     equi_join_keys_handle_dict_encoded(left_table, right_table, left_parallel,
@@ -1971,7 +2061,6 @@ table_info* hash_join_table_inner(
     // Determine the number of rows in your local chunk of the output.
     // This is passed to Python in case all columns are dead.
     uint64_t num_rows = probe_write_idxs.size();
-    *num_rows_ptr = num_rows;
 
     // Construct the output tables. This merges the results in the left and
     // right tables. We resume using work_left_table and work_right_table to
@@ -2177,14 +2266,24 @@ table_info* hash_join_table_inner(
     // Delete the inputs
     delete_table(work_left_table);
     delete_table(work_right_table);
-
     // Only return a table if there is at least 1
     // output column.
-    if (out_arrs.size() > 0) {
-        return new table_info(out_arrs);
-    } else {
+    if (out_arrs.size() == 0) {
+        // Update the length in case its needed.
+        *num_rows_ptr = num_rows;
         return nullptr;
     }
+
+    table_info* out_table = new table_info(out_arrs);
+
+    // Check for skew if BodoSQL suggested we should
+    if (rebalance_if_skewed && (left_parallel || right_parallel)) {
+        out_table = rebalance_join_output(out_table);
+    }
+
+    *num_rows_ptr = out_table->nrows();
+
+    return out_table;
 }
 
 table_info* hash_join_table(
@@ -2193,16 +2292,17 @@ table_info* hash_join_table(
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
     bool is_join, bool extra_data_col, bool indicator, bool is_na_equal,
-    cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
-    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
-    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
+    bool rebalance_if_skewed, cond_expr_fn_t cond_func,
+    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
+    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
+    uint64_t* num_rows_ptr) {
     try {
         return hash_join_table_inner(
             left_table, right_table, left_parallel, right_parallel, n_key_t,
             n_data_left_t, n_data_right_t, vect_same_key, key_in_output,
             use_nullable_arr_type, is_left_outer, is_right_outer, is_join,
-            extra_data_col, indicator, is_na_equal, cond_func,
-            cond_func_left_columns, cond_func_left_column_len,
+            extra_data_col, indicator, is_na_equal, rebalance_if_skewed,
+            cond_func, cond_func_left_columns, cond_func_left_column_len,
             cond_func_right_columns, cond_func_right_column_len, num_rows_ptr);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -2510,9 +2610,10 @@ table_info* cross_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
     bool right_parallel, bool is_left_outer, bool is_right_outer,
     bool* key_in_output, int64_t* use_nullable_arr_type,
-    cond_expr_fn_batch_t cond_func, uint64_t* cond_func_left_columns,
-    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
-    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
+    bool rebalance_if_skewed, cond_expr_fn_batch_t cond_func,
+    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
+    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
+    uint64_t* num_rows_ptr) {
     try {
         cross_join_handle_dict_encoded(left_table, right_table, left_parallel,
                                        right_parallel);
@@ -2713,6 +2814,11 @@ table_info* cross_join_table(
                 cond_func_left_column_len, cond_func_right_columns,
                 cond_func_right_column_len);
         }
+        // Check for skew if BodoSQL suggested we should
+        if (rebalance_if_skewed && (left_parallel || right_parallel)) {
+            out_table = rebalance_join_output(out_table);
+        }
+
         // NOTE: no need to delete table pointers since done in generated Python
         // code in join.py
 
@@ -2952,9 +3058,10 @@ table_info* interval_join_table(
     bool strict_start, bool strict_end, uint64_t point_col_id,
     uint64_t interval_start_col_id, uint64_t interval_end_col_id,
     bool* key_in_output, int64_t* use_nullable_arr_type,
-    cond_expr_fn_batch_t cond_func, uint64_t* cond_func_left_columns,
-    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
-    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
+    bool rebalance_if_skewed, cond_expr_fn_batch_t cond_func,
+    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
+    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
+    uint64_t* num_rows_ptr) {
     try {
         // TODO: Make this an assertion
         if ((is_left_point && is_right) || (!is_left_point && is_left)) {
@@ -3048,6 +3155,11 @@ table_info* interval_join_table(
             key_in_output, use_nullable_arr_type, cond_func_left_columns,
             cond_func_left_column_len, cond_func_right_columns,
             cond_func_right_column_len);
+
+        // Check for skew if BodoSQL suggested we should
+        if (rebalance_if_skewed && (left_parallel || right_parallel)) {
+            out_table = rebalance_join_output(out_table);
+        }
 
         // number of local output rows is passed to Python in case all output
         // columns are dead.

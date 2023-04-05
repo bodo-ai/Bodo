@@ -1628,7 +1628,7 @@ def test_pivot_to_parquet(df, memory_leak_check):
         if bodo.get_rank() == 0:
             try:
                 result = pd.read_parquet(output_filename)
-                # Reorder the columns since this can't be done in _test_equals_guard.
+                # Reorder the columns since this can't be done in _test_equal_guard.
                 result.sort_index(axis=1, inplace=True)
                 passed = _test_equal_guard(
                     result,
