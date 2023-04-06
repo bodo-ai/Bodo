@@ -1297,9 +1297,8 @@ def struct_arr_getitem(arr, ind):
 
         return struct_arr_getitem_impl
 
-    # Note nullable boolean arrays are handled in
-    # bool_arr_ind_getitem to ensure NAs are converted to False.
-    if ind != bodo.boolean_array_type:
+    # Boolean array handling.
+    if is_list_like_index_type(ind) or isinstance(ind, types.SliceType):
         # other getitem cases return an array, so just call getitem on underlying arrays
         n_fields = len(arr.data)
         func_text = "def impl(arr, ind):\n"
@@ -1335,6 +1334,10 @@ def struct_arr_getitem(arr, ind):
         )
         impl = loc_vars["impl"]
         return impl
+
+    raise BodoError(
+        f"getitem for StructArray with indexing type {ind} not supported."
+    )  # pragma: no cover
 
 
 @overload(operator.setitem, no_unliteral=True)

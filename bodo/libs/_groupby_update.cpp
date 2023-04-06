@@ -54,7 +54,7 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
     if (arr->arr_type == bodo_array_type::STRING ||
         arr->arr_type == bodo_array_type::LIST_STRING ||
         arr->arr_type == bodo_array_type::DICT) {
-        throw new std::runtime_error(
+        throw std::runtime_error(
             "There is no cumulative operation for the string or list string "
             "case");
     }
@@ -209,7 +209,8 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
                     null_bit_val_vec[i] = ePair;
                 }
             } else {  // The value is a normal one.
-                for (auto& eStr : fPair.second) ePair.second.push_back(eStr);
+                for (auto& eStr : fPair.second)
+                    ePair.second.push_back(eStr);
                 null_bit_val_vec[i] = ePair;
             }
             i = grp_info.next_row_in_group[i];
@@ -750,10 +751,12 @@ void nunique_computation(array_info* arr, array_info* out_arr,
                     HasNullRow = true;
                 }
                 i = grp_info.next_row_in_group[i];
-                if (i == -1) break;
+                if (i == -1)
+                    break;
             }
             int64_t size = eset.size();
-            if (HasNullRow && !dropna) size++;
+            if (HasNullRow && !dropna)
+                size++;
             out_arr->at<int64_t>(igrp) = size;
         }
     } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
@@ -788,10 +791,12 @@ void nunique_computation(array_info* arr, array_info* out_arr,
                     HasNullRow = true;
                 }
                 i = grp_info.next_row_in_group[i];
-                if (i == -1) break;
+                if (i == -1)
+                    break;
             }
             int64_t size = eset.size();
-            if (HasNullRow && !dropna) size++;
+            if (HasNullRow && !dropna)
+                size++;
             out_arr->at<int64_t>(igrp) = size;
         }
     } else if (arr->arr_type == bodo_array_type::STRING) {
@@ -822,10 +827,12 @@ void nunique_computation(array_info* arr, array_info* out_arr,
                     HasNullRow = true;
                 }
                 i = grp_info.next_row_in_group[i];
-                if (i == -1) break;
+                if (i == -1)
+                    break;
             }
             int64_t size = eset.size();
-            if (HasNullRow && !dropna) size++;
+            if (HasNullRow && !dropna)
+                size++;
             out_arr->at<int64_t>(igrp) = size;
         }
     } else if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -856,10 +863,12 @@ void nunique_computation(array_info* arr, array_info* out_arr,
                     HasNullRow = true;
                 }
                 i = grp_info.next_row_in_group[i];
-                if (i == -1) break;
+                if (i == -1)
+                    break;
             }
             int64_t size = eset.size();
-            if (HasNullRow && !dropna) size++;
+            if (HasNullRow && !dropna)
+                size++;
             out_arr->at<int64_t>(igrp) = size;
         }
     } else {
@@ -1016,13 +1025,13 @@ void window_computation(std::vector<array_info*>& orderby_arrs,
             // indices to true.
             for (size_t i = 0; i < idx_col->length; i++) {
                 int64_t idx = getv<int64_t>(idx_col, i);
-                getv<bool>(out_arr, idx) = true;
+                SetBitTo((uint8_t*)out_arr->data1(), idx, true);
             }
             // Delete the idx_col
             delete_info_decref_array(idx_col);
             break;
         }
         default:
-            throw new std::runtime_error("Invalid window function");
+            throw std::runtime_error("Invalid window function");
     }
 }

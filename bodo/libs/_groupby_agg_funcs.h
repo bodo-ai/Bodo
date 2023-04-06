@@ -27,7 +27,8 @@ int compare_list_string(std::vector<std::pair<std::string, bool>> const& v1,
     size_t len1 = v1.size();
     size_t len2 = v2.size();
     size_t minlen = len1;
-    if (len2 < len1) minlen = len2;
+    if (len2 < len1)
+        minlen = len2;
     for (size_t i = 0; i < minlen; i++) {
         bool bit1 = v1[i].second;
         bool bit2 = v2[i].second;
@@ -98,7 +99,7 @@ struct bool_aggfunc {
      * @param[in,out] current aggregate value, holds the result
      * @param[in] other input value.
      */
-    static void apply(bool& v1, T& v2);
+    static void apply(array_info* arr, int64_t idx, T& v2);
 };
 
 /**
@@ -165,27 +166,18 @@ struct aggfunc<T, dtype, Bodo_FTypes::sum> {
     }
 };
 
-// This is also used by count_if.
-template <typename T, int dtype, typename Enable = void>
-struct bool_sum {
-    /**
-     * Aggregation function for sum of booleans. Increases total by 1 if the
-     * value is not null and truthy.
-     *
-     * @param[in,out] current sum
-     * @param second input value.
-     */
-    static void apply(int64_t& v1, T& v2);
-};
-
-template <typename T, int dtype>
-struct bool_sum<T, dtype> {
-    inline static void apply(int64_t& v1, T& v2) {
-        if (v2) {
-            v1 += 1;
-        }
+/**
+ * Aggregation function for sum of booleans. Increases total by 1 if the
+ * value is not null and truthy. This is used by count_if and sum.
+ *
+ * @param[in,out] current sum
+ * @param second input value.
+ */
+inline static void bool_sum(int64_t& v1, bool& v2) {
+    if (v2) {
+        v1 += 1;
     }
-};
+}
 
 template <>
 struct aggliststring<Bodo_FTypes::sum> {
@@ -244,6 +236,17 @@ struct aggliststring<Bodo_FTypes::min> {
     }
 };
 
+// nullable boolean implementation
+template <>
+struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::min> {
+    inline static void apply(array_info* arr, int64_t idx, bool& v2) {
+        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        // And to get the output.
+        v1 = v1 && v2;
+        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+    }
+};
+
 // max
 
 template <typename T, int dtype>
@@ -293,6 +296,17 @@ struct aggliststring<Bodo_FTypes::max> {
     }
 };
 
+// nullable boolean implementation
+template <>
+struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::max> {
+    inline static void apply(array_info* arr, int64_t idx, bool& v2) {
+        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        // OR to get the output.
+        v1 = v1 || v2;
+        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+    }
+};
+
 // prod
 // Note: product of date and timedelta is not possible
 
@@ -315,6 +329,16 @@ struct aggfunc<T, dtype, Bodo_FTypes::prod> {
 template <>
 struct aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::prod> {
     inline static void apply(bool& v1, bool& v2) { v1 = v1 && v2; }
+};
+
+// nullable boolean implementation
+template <>
+struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::prod> {
+    inline static void apply(array_info* arr, int64_t idx, bool& v2) {
+        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        v1 = v1 && v2;
+        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+    }
 };
 
 // idxmin
@@ -369,6 +393,15 @@ inline static void idxmin_dict(int32_t& v1, int32_t& v2, std::string& s1,
     // TODO: Optimize on sorted dictionary to only compare integers
     if (s1.compare(s2) > 0) {
         v1 = v2;
+        index_pos = i;
+    }
+}
+
+inline static void idxmin_bool(array_info* arr, int64_t grp_num, bool& v2,
+                               uint64_t& index_pos, int64_t i) {
+    bool v1 = GetBit((uint8_t*)arr->data1(), grp_num);
+    if (v2 < v1) {
+        SetBitTo((uint8_t*)arr->data1(), grp_num, v2);
         index_pos = i;
     }
 }
@@ -429,6 +462,15 @@ inline static void idxmax_dict(int32_t& v1, int32_t& v2, std::string& s1,
     }
 }
 
+inline static void idxmax_bool(array_info* arr, int64_t grp_num, bool& v2,
+                               uint64_t& index_pos, int64_t i) {
+    bool v1 = GetBit((uint8_t*)arr->data1(), grp_num);
+    if (v2 > v1) {
+        SetBitTo((uint8_t*)arr->data1(), grp_num, v2);
+        index_pos = i;
+    }
+}
+
 // boolor_agg
 
 template <typename T, int dtype>
@@ -438,10 +480,16 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
      * Aggregation function for boolor_agg. Note this implementation
      * handles both integer and floating point data.
      *
-     * @param[in,out] current aggregate value, holds the result
-     * @param other input value.
+     * @param[in,out] arr The array holding the current aggregation info. This
+     * is necessary because nullable booleans have 1 bit per boolean
+     * @param idx The index to load/store for array.
+     * @param v2 other input value.
      */
-    inline static void apply(bool& v1, T& v2) { v1 = (v1 || (v2 != 0)); }
+    inline static void apply(array_info* arr, int64_t idx, T& v2) {
+        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        v1 = (v1 || (v2 != 0));
+        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+    }
 };
 
 template <typename T, int dtype>
@@ -449,14 +497,18 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
                     typename std::enable_if<is_decimal<dtype>::value>::type> {
     /**
      * Aggregation function for boolor_agg. Note this implementation
-     * handles only decimal data.
+     * handles both integer and floating point data.
      *
-     * @param[in,out] current aggregate value, holds the result
-     * @param other input value.
+     * @param[in,out] arr The array holding the current aggregation info. This
+     * is necessary because nullable booleans have 1 bit per boolean
+     * @param idx The index to load/store for array.
+     * @param v2 other input value.
      */
     // TODO: Compare decimal directly?
-    inline static void apply(bool& v1, T& v2) {
+    inline static void apply(array_info* arr, int64_t idx, T& v2) {
+        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         v1 = v1 || ((decimal_to_double(v2)) != 0.0);
+        SetBitTo((uint8_t*)arr->data1(), idx, v1);
     }
 };
 
@@ -492,6 +544,14 @@ struct aggliststring<Bodo_FTypes::last> {
     inline static void apply(std::vector<std::pair<std::string, bool>>& v1,
                              std::vector<std::pair<std::string, bool>>& v2) {
         v1 = v2;
+    }
+};
+
+// nullable boolean implementation
+template <>
+struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::last> {
+    inline static void apply(array_info* arr, int64_t idx, bool& v2) {
+        SetBitTo((uint8_t*)arr->data1(), idx, v2);
     }
 };
 
@@ -572,20 +632,6 @@ struct var_agg {
             m2 += delta * delta2;
         }
     }
-};
-
-// ngroup
-
-template <typename T, int dtype>
-struct ngroup_agg {
-    /**
-     * Aggregation function for ngroup.
-     * Assign v2 (group number) to v1 (output_column[i])
-     *
-     * @param v1 [out] output value
-     * @param v2 input value.
-     */
-    static void apply(int64_t& v1, T& v2) { v1 = v2; }
 };
 
 #endif  // _GROUPBY_AGG_FUNCS_H_INCLUDED

@@ -104,8 +104,16 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
         case Bodo_FTypes::prod:
             switch (out_col->dtype) {
                 case Bodo_CTypes::_BOOL:
-                    std::fill((bool*)out_col->data1(),
-                              (bool*)out_col->data1() + out_col->length, true);
+                    if (out_col->arr_type ==
+                        bodo_array_type::NULLABLE_INT_BOOL) {
+                        // Nullable booleans store 1 bit per value
+                        InitializeBitMask((uint8_t*)out_col->data1(),
+                                          out_col->length, true);
+                    } else {
+                        std::fill((bool*)out_col->data1(),
+                                  (bool*)out_col->data1() + out_col->length,
+                                  true);
+                    }
                     return;
                 case Bodo_CTypes::INT8:
                     std::fill((int8_t*)out_col->data1(),
@@ -156,8 +164,16 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
         case Bodo_FTypes::min:
             switch (out_col->dtype) {
                 case Bodo_CTypes::_BOOL:
-                    std::fill((bool*)out_col->data1(),
-                              (bool*)out_col->data1() + out_col->length, true);
+                    if (out_col->arr_type ==
+                        bodo_array_type::NULLABLE_INT_BOOL) {
+                        // Nullable booleans store 1 bit per value
+                        InitializeBitMask((uint8_t*)out_col->data1(),
+                                          out_col->length, true);
+                    } else {
+                        std::fill((bool*)out_col->data1(),
+                                  (bool*)out_col->data1() + out_col->length,
+                                  true);
+                    }
                     return;
                 case Bodo_CTypes::INT8:
                     std::fill((int8_t*)out_col->data1(),
@@ -241,8 +257,16 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
         case Bodo_FTypes::max:
             switch (out_col->dtype) {
                 case Bodo_CTypes::_BOOL:
-                    std::fill((bool*)out_col->data1(),
-                              (bool*)out_col->data1() + out_col->length, false);
+                    if (out_col->arr_type ==
+                        bodo_array_type::NULLABLE_INT_BOOL) {
+                        // Nullable booleans store 1 bit per value
+                        InitializeBitMask((uint8_t*)out_col->data1(),
+                                          out_col->length, false);
+                    } else {
+                        std::fill((bool*)out_col->data1(),
+                                  (bool*)out_col->data1() + out_col->length,
+                                  false);
+                    }
                     return;
                 case Bodo_CTypes::INT8:
                     std::fill((int8_t*)out_col->data1(),
@@ -360,14 +384,21 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
             }
         case Bodo_FTypes::min_row_number_filter: {
             // Initialize all values to false
-            std::fill((bool*)out_col->data1(),
-                      (bool*)out_col->data1() + out_col->length, false);
+            InitializeBitMask((uint8_t*)out_col->data1(), out_col->length,
+                              false);
             return;
         }
         default:
             // zero initialize
-            memset(out_col->data1(), 0,
-                   numpy_item_size[out_col->dtype] * out_col->length);
+            if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                out_col->dtype == Bodo_CTypes::_BOOL) {
+                // Nullable booleans store 1 bit per value
+                InitializeBitMask((uint8_t*)out_col->data1(), out_col->length,
+                                  false);
+            } else {
+                memset(out_col->data1(), 0,
+                       numpy_item_size[out_col->dtype] * out_col->length);
+            }
     }
 }
 

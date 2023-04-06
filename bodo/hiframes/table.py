@@ -1325,12 +1325,12 @@ def alloc_empty_list_type(typingctx, size_typ, data_typ):
     return sig, codegen
 
 
-def _get_idx_length(idx):  # pragma: no cover
+def _get_idx_num_true(idx):  # pragma: no cover
     pass
 
 
-@overload(_get_idx_length)
-def overload_get_idx_length(idx, n):
+@overload(_get_idx_num_true)
+def overload_get_idx_num_true(idx, n):
     """get length of boolean array or slice index"""
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
         return lambda idx, n: idx.sum()  # pragma: no cover
@@ -1369,7 +1369,7 @@ def table_filter(T, idx, used_cols=None):
         "set_table_block": set_table_block,
         "set_table_len": set_table_len,
         "alloc_list_like": alloc_list_like,
-        "_get_idx_length": _get_idx_length,
+        "_get_idx_num_true": _get_idx_num_true,
         "ensure_contig_if_np": ensure_contig_if_np,
     }
     if not is_overload_none(used_cols):
@@ -1387,8 +1387,8 @@ def table_filter(T, idx, used_cols=None):
 
     # set table length using index value and return if no table column is used
     if used_cols_data is not None and len(used_cols_data) == 0:
-        # avoiding _get_idx_length in the general case below since it has extra overhead
-        func_text += f"  l = _get_idx_length(idx, len(T))\n"
+        # avoiding _get_idx_num_true in the general case below since it has extra overhead
+        func_text += f"  l = _get_idx_num_true(idx, len(T))\n"
         func_text += f"  T2 = set_table_len(T2, l)\n"
         func_text += f"  return T2\n"
         loc_vars = {}

@@ -882,13 +882,8 @@ def array_item_arr_getitem_array(arr, ind):
 
         return array_item_arr_getitem_impl
 
-    # bool arr indexing. Note nullable boolean arrays are handled in
-    # bool_arr_ind_getitem to ensure NAs are converted to False.
-    if (
-        ind != bodo.boolean_array_type
-        and is_list_like_index_type(ind)
-        and ind.dtype == types.bool_
-    ):
+    # bool arr indexing.
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
         data_arr_type = arr.dtype
 
@@ -904,7 +899,7 @@ def array_item_arr_getitem_array(arr, ind):
             n_arrays = 0
             nested_counts = init_nested_counts(data_arr_type)
             for i in range(n):
-                if ind[i]:
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
                     n_arrays += 1
                     arr_item = arr[i]
                     nested_counts = add_nested_counts(nested_counts, arr_item)
@@ -914,11 +909,11 @@ def array_item_arr_getitem_array(arr, ind):
 
             # write output
             out_ind = 0
-            for ii in range(n):
-                if ind[ii]:
-                    out_arr[out_ind] = arr[ii]
+            for j in range(n):
+                if not bodo.libs.array_kernels.isna(ind, j) and ind[j]:
+                    out_arr[out_ind] = arr[j]
                     # set NA
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(null_bitmap, ii)
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(null_bitmap, j)
                     bodo.libs.int_arr_ext.set_bit_to_arr(out_null_bitmap, out_ind, bit)
                     out_ind += 1
 
@@ -968,6 +963,12 @@ def array_item_arr_getitem_array(arr, ind):
             return arr[arr_ind]
 
         return impl_slice
+
+    # This should be the only ArrayItemArray implementation.
+    # We only expect to reach this case if more ind options are added.
+    raise BodoError(
+        f"getitem for ArrayItemArray with indexing type {ind} not supported."
+    )  # pragma: no cover
 
 
 @overload(operator.setitem)

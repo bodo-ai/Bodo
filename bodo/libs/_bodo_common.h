@@ -69,20 +69,30 @@ typedef uint64_t offset_t;
 #define Bodo_CType_offset Bodo_CTypes::CTypeEnum::UINT64
 
 inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
-    if (typ == Bodo_CTypes::UINT8) return true;
-    if (typ == Bodo_CTypes::UINT16) return true;
-    if (typ == Bodo_CTypes::UINT32) return true;
-    if (typ == Bodo_CTypes::UINT64) return true;
+    if (typ == Bodo_CTypes::UINT8)
+        return true;
+    if (typ == Bodo_CTypes::UINT16)
+        return true;
+    if (typ == Bodo_CTypes::UINT32)
+        return true;
+    if (typ == Bodo_CTypes::UINT64)
+        return true;
     return false;
 }
 
 inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
-    if (is_unsigned_integer(typ)) return true;
-    if (typ == Bodo_CTypes::INT8) return true;
-    if (typ == Bodo_CTypes::INT16) return true;
-    if (typ == Bodo_CTypes::INT32) return true;
-    if (typ == Bodo_CTypes::INT64) return true;
-    if (typ == Bodo_CTypes::INT128) return true;
+    if (is_unsigned_integer(typ))
+        return true;
+    if (typ == Bodo_CTypes::INT8)
+        return true;
+    if (typ == Bodo_CTypes::INT16)
+        return true;
+    if (typ == Bodo_CTypes::INT32)
+        return true;
+    if (typ == Bodo_CTypes::INT64)
+        return true;
+    if (typ == Bodo_CTypes::INT128)
+        return true;
     return false;
 }
 
@@ -111,7 +121,8 @@ inline std::vector<char> GetCharVector(T const& val) {
     const T* valptr = &val;
     const char* charptr = (char*)valptr;
     std::vector<char> V(sizeof(T));
-    for (size_t u = 0; u < sizeof(T); u++) V[u] = charptr[u];
+    for (size_t u = 0; u < sizeof(T); u++)
+        V[u] = charptr[u];
     return V;
 }
 
@@ -129,15 +140,24 @@ inline std::vector<char> GetCharVector(T const& val) {
  * @return the list of characters in output.
  */
 inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
-    if (dtype == Bodo_CTypes::_BOOL) return GetCharVector<bool>(false);
-    if (dtype == Bodo_CTypes::INT8) return GetCharVector<int8_t>(-1);
-    if (dtype == Bodo_CTypes::UINT8) return GetCharVector<uint8_t>(0);
-    if (dtype == Bodo_CTypes::INT16) return GetCharVector<int16_t>(-1);
-    if (dtype == Bodo_CTypes::UINT16) return GetCharVector<uint16_t>(0);
-    if (dtype == Bodo_CTypes::INT32) return GetCharVector<int32_t>(-1);
-    if (dtype == Bodo_CTypes::UINT32) return GetCharVector<uint32_t>(0);
-    if (dtype == Bodo_CTypes::INT64) return GetCharVector<int64_t>(-1);
-    if (dtype == Bodo_CTypes::UINT64) return GetCharVector<uint64_t>(0);
+    if (dtype == Bodo_CTypes::_BOOL)
+        return GetCharVector<bool>(false);
+    if (dtype == Bodo_CTypes::INT8)
+        return GetCharVector<int8_t>(-1);
+    if (dtype == Bodo_CTypes::UINT8)
+        return GetCharVector<uint8_t>(0);
+    if (dtype == Bodo_CTypes::INT16)
+        return GetCharVector<int16_t>(-1);
+    if (dtype == Bodo_CTypes::UINT16)
+        return GetCharVector<uint16_t>(0);
+    if (dtype == Bodo_CTypes::INT32)
+        return GetCharVector<int32_t>(-1);
+    if (dtype == Bodo_CTypes::UINT32)
+        return GetCharVector<uint32_t>(0);
+    if (dtype == Bodo_CTypes::INT64)
+        return GetCharVector<int64_t>(-1);
+    if (dtype == Bodo_CTypes::UINT64)
+        return GetCharVector<uint64_t>(0);
     if (dtype == Bodo_CTypes::DATE) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "In DATE case missing values are handled by "
@@ -516,15 +536,26 @@ struct array_info {
                 std::string date_str;
                 date_str.reserve(10);
                 date_str += std::to_string(year) + "-";
-                if (month < 10) date_str += "0";
+                if (month < 10)
+                    date_str += "0";
                 date_str += std::to_string(month) + "-";
-                if (day < 10) date_str += "0";
+                if (day < 10)
+                    date_str += "0";
                 date_str += std::to_string(day);
                 return date_str;
             }
             case Bodo_CTypes::_BOOL:
-                if (this->at<bool>(idx)) return "True";
-                return "False";
+                bool val;
+                if (this->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                    val = GetBit((uint8_t*)data1(), idx);
+                } else {
+                    val = this->at<bool>(idx);
+                }
+                if (val) {
+                    return "True";
+                } else {
+                    return "False";
+                }
             default: {
                 std::vector<char> error_msg(100);
                 snprintf(error_msg.data(), error_msg.size(),
@@ -856,8 +887,7 @@ void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
                            void* in);
 NRT_MemInfo* alloc_array_item_arr_meminfo();
 
-Bodo_CTypes::CTypeEnum arrow_to_bodo_type(
-    std::shared_ptr<arrow::DataType> type);
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
 
 void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                        array_info** infos, int64_t& lengths_pos,

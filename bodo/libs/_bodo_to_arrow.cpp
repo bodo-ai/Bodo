@@ -68,58 +68,43 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     const std::string &tz, arrow::TimeUnit::type &time_unit,
     bool downcast_time_ns_to_us) {
     // Return DataType value
-    std::shared_ptr<arrow::DataType> ret_type = nullptr;
+    std::shared_ptr<arrow::DataType> ret_type =
+        std::shared_ptr<arrow::DataType>(nullptr);
 
     // Allocate null bitmap
-    std::shared_ptr<arrow::ResizableBuffer> null_bitmap;
-    int64_t null_bytes = arrow::bit_util::BytesForBits(array->length);
-    arrow::Result<std::unique_ptr<arrow::ResizableBuffer>> res =
-        AllocateResizableBuffer(null_bytes, pool);
-    CHECK_ARROW_AND_ASSIGN(res, "AllocateResizableBuffer", null_bitmap);
-    // Padding zeroed by AllocateResizableBuffer
-    memset(null_bitmap->mutable_data(), 0, static_cast<size_t>(null_bytes));
-
+    // TODO: Switch to 0 copy
+    std::shared_ptr<arrow::Buffer> null_bitmap;
     int64_t null_count_ = 0;
+    if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        array->arr_type == bodo_array_type::STRING) {
+        MemInfo *bitmask_meminfo;
+        if (array->arr_type == bodo_array_type::STRING) {
+            bitmask_meminfo = array->meminfos[2];
+        } else {
+            bitmask_meminfo = array->meminfos[1];
+        }
+        null_bitmap = std::make_shared<BodoBuffer>(
+            (uint8_t *)array->null_bitmask(), (array->length + 7) >> 3,
+            bitmask_meminfo);
+        for (size_t i = 0; i < array->length; i++) {
+            if (!GetBit((uint8_t *)array->null_bitmask(), i)) {
+                null_count_++;
+            }
+        }
+    } else {
+        // TODO: Remove for arrays that don't need it
+        int64_t null_bytes = arrow::bit_util::BytesForBits(array->length);
+        arrow::Result<std::unique_ptr<arrow::Buffer>> res =
+            AllocateBuffer(null_bytes, pool);
+        CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", null_bitmap);
+        // Padding zeroed by AllocateBuffer
+        memset(null_bitmap->mutable_data(), 0xFF,
+               static_cast<size_t>(null_bytes));
+    }
     if (array->arr_type == bodo_array_type::ARROW) {
         ret_type = array->array->type();
         std::shared_ptr<arrow::ArrayData> typ_data = array->array->data();
         *out = array->array;
-    }
-
-    if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
-        array->arr_type == bodo_array_type::STRING) {
-        // set arrow bit mask based on bodo bitmask
-        for (size_t i = 0; i < array->length; i++) {
-            if (!GetBit((uint8_t *)array->null_bitmask(), i)) {
-                null_count_++;
-                SetBitTo(null_bitmap->mutable_data(), i, false);
-            } else {
-                SetBitTo(null_bitmap->mutable_data(), i, true);
-            }
-        }
-        if (array->dtype == Bodo_CTypes::_BOOL) {
-            // special case: nullable bool column are bit vectors in Arrow
-            ret_type = arrow::boolean();
-
-            int64_t nbytes = ::arrow::bit_util::BytesForBits(array->length);
-            std::shared_ptr<::arrow::Buffer> buffer;
-            arrow::Result<std::unique_ptr<arrow::Buffer>> res =
-                AllocateBuffer(nbytes, pool);
-            CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", buffer);
-
-            int64_t i = 0;
-            uint8_t *in_data = (uint8_t *)array->data1();
-            const auto generate = [&in_data, &i]() -> bool {
-                return in_data[i++] != 0;
-            };
-            ::arrow::internal::GenerateBitsUnrolled(buffer->mutable_data(), 0,
-                                                    array->length, generate);
-
-            auto arr_data =
-                arrow::ArrayData::Make(arrow::boolean(), array->length,
-                                       {null_bitmap, buffer}, null_count_, 0);
-            *out = arrow::MakeArray(arr_data);
-        }
     }
     // TODO: Reuse some of this code to enable to_parquet with Categorical
     // Arrays?
@@ -153,13 +138,42 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         *out = dict_array;
     }
 
-    if (array->arr_type == bodo_array_type::NUMPY ||
-        (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-         array->dtype != Bodo_CTypes::_BOOL)) {
+    if (array->arr_type == bodo_array_type::NUMPY &&
+        array->dtype == Bodo_CTypes::_BOOL) {
+        // Special case: Numpy boolean cannot do 0 copy.
+        ret_type = arrow::boolean();
+
+        int64_t nbytes = ::arrow::bit_util::BytesForBits(array->length);
+
+        std::shared_ptr<::arrow::Buffer> buffer;
+        arrow::Result<std::unique_ptr<arrow::Buffer>> res =
+            AllocateBuffer(nbytes, pool);
+        CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", buffer);
+
+        bool *in_data = (bool *)array->data1();
+        for (size_t i = 0; i < array->length; i++) {
+            bool bit = in_data[i];
+            SetBitTo(buffer->mutable_data(), i, bit);
+        }
+
+        auto arr_data =
+            arrow::ArrayData::Make(arrow::boolean(), array->length,
+                                   {null_bitmap, buffer}, null_count_, 0);
+        *out = arrow::MakeArray(arr_data);
+    }
+
+    if ((array->arr_type == bodo_array_type::NUMPY &&
+         array->dtype != Bodo_CTypes::_BOOL) ||
+        array->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         int64_t in_num_bytes;
         std::shared_ptr<arrow::DataType> type;
         arrow::Result<std::shared_ptr<arrow::DataType>> type_res;
         switch (array->dtype) {
+            case Bodo_CTypes::_BOOL:
+                // Boolean arrays store 1 bit per boolean value.
+                in_num_bytes = (array->length + 7) >> 3;
+                type = arrow::boolean();
+                break;
             case Bodo_CTypes::INT8:
                 in_num_bytes = sizeof(int8_t) * array->length;
                 type = arrow::int8();
@@ -575,7 +589,10 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         *out = dict_array;
     }
 
-    assert(ret_type != nullptr);
+    if (!ret_type) {
+        throw std::runtime_error(
+            "bodo_array_to_arrow(): unexpected null return type");
+    }
     return ret_type;
 }
 

@@ -30,6 +30,7 @@ from bodo.libs.str_arr_ext import (
     offset_arr_type,
     string_array_type,
 )
+from bodo.utils.typing import BodoError, is_list_like_index_type
 
 ll.add_symbol("array_setitem", hstr_ext.array_setitem)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
@@ -466,8 +467,7 @@ def overload_split_view_arr_shape(A):
 def str_arr_split_view_getitem_overload(A, ind):
     if A != string_array_split_view_type:
         return
-    if A == string_array_split_view_type and isinstance(ind, types.Integer):
-        kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+    if isinstance(ind, types.Integer):
 
         def _impl(A, ind):  # pragma: no cover
             # In the case of missing data, we return an empty array [] instead of np.nan
@@ -497,7 +497,7 @@ def str_arr_split_view_getitem_overload(A, ind):
 
         return _impl
 
-    if A == string_array_split_view_type and ind == types.Array(types.bool_, 1, "C"):
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
         n_bytes_per_offset = offset_type.bitwidth // 8
 
         def _impl(A, ind):  # pragma: no cover
@@ -510,7 +510,7 @@ def str_arr_split_view_getitem_overload(A, ind):
             num_items = 0
             num_offsets = 0
             for i in range(n):
-                if ind[i]:
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
                     num_items += 1
                     start_index = getitem_c_arr(A._index_offsets, i)
                     end_index = getitem_c_arr(A._index_offsets, i + 1)
@@ -520,7 +520,7 @@ def str_arr_split_view_getitem_overload(A, ind):
             item_ind = 0
             offset_ind = 0
             for i in range(n):
-                if ind[i]:
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
                     start_index = getitem_c_arr(A._index_offsets, i)
                     end_index = getitem_c_arr(A._index_offsets, i + 1)
                     n_offsets = end_index - start_index
@@ -541,3 +541,7 @@ def str_arr_split_view_getitem_overload(A, ind):
             return out_arr
 
         return _impl
+
+    raise BodoError(
+        f"getitem for StringArraySplitView with indexing type {ind} not supported."
+    )  # pragma: no cover

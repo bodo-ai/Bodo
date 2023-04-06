@@ -64,7 +64,8 @@ void apply_to_column_list_string(array_info* in_col, array_info* out_col,
         int64_t i_grp = get_group_for_row(grp_info, i);
         if ((i_grp != -1) && in_col->get_null_bit(i)) {
             bool out_bit_set = out_col->get_null_bit(i_grp);
-            if (ftype == Bodo_FTypes::first && out_bit_set) continue;
+            if (ftype == Bodo_FTypes::first && out_bit_set)
+                continue;
             offset_t start_offset = index_offsets_i[i];
             offset_t end_offset = index_offsets_i[i + 1];
             offset_t len = end_offset - start_offset;
@@ -705,7 +706,7 @@ void apply_to_column_categorical(array_info* in_col, array_info* out_col,
             return;
         }
         default:
-            throw new std::runtime_error(
+            throw std::runtime_error(
                 std::string(
                     "do_apply_to_column: unsupported Categorical function: ") +
                 std::string(get_name_for_Bodo_FTypes(ftype)));
@@ -937,8 +938,8 @@ void apply_to_column_numpy(array_info* in_col, array_info* out_col,
                     T val2 = getv<T>(in_col, i);
                     // Skip NA values
                     if (!isnan_alltype<T, dtype>(val2)) {
-                        bool_aggfunc<T, dtype, ftype>::apply(
-                            getv<bool>(out_col, i_grp), val2);
+                        bool_aggfunc<T, dtype, ftype>::apply(out_col, i_grp,
+                                                             val2);
                         out_col->set_null_bit(i_grp, true);
                     }
                 }
@@ -949,8 +950,8 @@ void apply_to_column_numpy(array_info* in_col, array_info* out_col,
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
-                    bool_sum<bool, dtype>::apply(getv<int64_t>(out_col, i_grp),
-                                                 getv<bool>(in_col, i));
+                    bool_sum(getv<int64_t>(out_col, i_grp),
+                             getv<bool>(in_col, i));
                 }
             }
             break;
@@ -1063,8 +1064,14 @@ void apply_to_column_nullable(array_info* in_col, array_info* out_col,
 #define APPLY_TO_COLUMN_REGULAR_CASE                                           \
     switch (ftype) {                                                           \
         case Bodo_FTypes::count:                                               \
-            count_agg<T, dtype>::apply(getv<int64_t>(out_col, i_grp),          \
-                                       getv<T>(in_col, i));                    \
+            if (dtype == Bodo_CTypes::_BOOL) {                                 \
+                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                count_agg<bool, dtype>::apply(getv<int64_t>(out_col, i_grp),   \
+                                              data_bit);                       \
+            } else {                                                           \
+                count_agg<T, dtype>::apply(getv<int64_t>(out_col, i_grp),      \
+                                           getv<T>(in_col, i));                \
+            }                                                                  \
             break;                                                             \
         case Bodo_FTypes::mean:                                                \
             mean_agg<T, dtype>::apply(getv<double>(out_col, i_grp),            \
@@ -1099,43 +1106,82 @@ void apply_to_column_nullable(array_info* in_col, array_info* out_col,
             out_col->set_null_bit(i, true);                                    \
             break;                                                             \
         case Bodo_FTypes::first:                                               \
-            getv<T>(out_col, i_grp) = getv<T>(in_col, i);                      \
+            if (dtype == Bodo_CTypes::_BOOL) {                                 \
+                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                SetBitTo((uint8_t*)out_col->data1(), i_grp, data_bit);         \
+            } else {                                                           \
+                getv<T>(out_col, i_grp) = getv<T>(in_col, i);                  \
+            }                                                                  \
             out_col->set_null_bit(i_grp, true);                                \
             break;                                                             \
         case Bodo_FTypes::idxmax:                                              \
         case Bodo_FTypes::idxmax_na_first:                                     \
-            idxmax_agg<T, dtype>::apply(                                       \
-                getv<T>(out_col, i_grp), getv<T>(in_col, i),                   \
-                getv<uint64_t>(aux_cols[0], i_grp), i);                        \
+            if (dtype == Bodo_CTypes::_BOOL) {                                 \
+                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                idxmax_bool(out_col, i_grp, data_bit,                          \
+                            getv<uint64_t>(aux_cols[0], i_grp), i);            \
+            } else {                                                           \
+                idxmax_agg<T, dtype>::apply(                                   \
+                    getv<T>(out_col, i_grp), getv<T>(in_col, i),               \
+                    getv<uint64_t>(aux_cols[0], i_grp), i);                    \
+            }                                                                  \
             out_col->set_null_bit(i_grp, true);                                \
             break;                                                             \
         case Bodo_FTypes::idxmin:                                              \
         case Bodo_FTypes::idxmin_na_first:                                     \
-            idxmin_agg<T, dtype>::apply(                                       \
-                getv<T>(out_col, i_grp), getv<T>(in_col, i),                   \
-                getv<uint64_t>(aux_cols[0], i_grp), i);                        \
+            if (dtype == Bodo_CTypes::_BOOL) {                                 \
+                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                idxmin_bool(out_col, i_grp, data_bit,                          \
+                            getv<uint64_t>(aux_cols[0], i_grp), i);            \
+            } else {                                                           \
+                idxmin_agg<T, dtype>::apply(                                   \
+                    getv<T>(out_col, i_grp), getv<T>(in_col, i),               \
+                    getv<uint64_t>(aux_cols[0], i_grp), i);                    \
+            }                                                                  \
             out_col->set_null_bit(i_grp, true);                                \
             break;                                                             \
         case Bodo_FTypes::boolor_agg:                                          \
-            bool_aggfunc<T, dtype, ftype>::apply(getv<bool>(out_col, i_grp),   \
-                                                 getv<T>(in_col, i));          \
+            if (dtype == Bodo_CTypes::_BOOL) {                                 \
+                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool_aggfunc<bool, dtype, ftype>::apply(out_col, i_grp,        \
+                                                        data_bit);             \
+            } else {                                                           \
+                bool_aggfunc<T, dtype, ftype>::apply(out_col, i_grp,           \
+                                                     getv<T>(in_col, i));      \
+            }                                                                  \
             out_col->set_null_bit(i_grp, true);                                \
             break;                                                             \
-        case Bodo_FTypes::count_if:                                            \
-            bool_sum<bool, dtype>::apply(getv<int64_t>(out_col, i_grp),        \
-                                         getv<bool>(in_col, i));               \
+        case Bodo_FTypes::count_if: {                                          \
+            bool data_bit = GetBit((uint8_t*)in_col->data1(), i);              \
+            bool_sum(getv<int64_t>(out_col, i_grp), data_bit);                 \
             break;                                                             \
+        }                                                                      \
         case Bodo_FTypes::sum:                                                 \
             if (dtype == Bodo_CTypes::_BOOL) {                                 \
-                bool_sum<bool, dtype>::apply(getv<int64_t>(out_col, i_grp),    \
-                                             getv<bool>(in_col, i));           \
+                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool_sum(getv<int64_t>(out_col, i_grp), data_bit);             \
+                out_col->set_null_bit(i_grp, true);                            \
+                break;                                                         \
+            }                                                                  \
+        case Bodo_FTypes::min:                                                 \
+            if (dtype == Bodo_CTypes::_BOOL) {                                 \
+                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool_aggfunc<bool, dtype, ftype>::apply(out_col, i_grp,        \
+                                                        data_bit);             \
                 out_col->set_null_bit(i_grp, true);                            \
                 break;                                                         \
             }                                                                  \
         default:                                                               \
-            aggfunc<T, dtype, ftype>::apply(getv<T>(out_col, i_grp),           \
-                                            getv<T>(in_col, i));               \
-            out_col->set_null_bit(i_grp, true);                                \
+            if (dtype == Bodo_CTypes::_BOOL) {                                 \
+                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                bool_aggfunc<bool, dtype, ftype>::apply(out_col, i_grp,        \
+                                                        data_bit);             \
+                out_col->set_null_bit(i_grp, true);                            \
+            } else {                                                           \
+                aggfunc<T, dtype, ftype>::apply(getv<T>(out_col, i_grp),       \
+                                                getv<T>(in_col, i));           \
+                out_col->set_null_bit(i_grp, true);                            \
+            }                                                                  \
     }
 
 #endif
@@ -1204,8 +1250,7 @@ void apply_to_column(array_info* in_col, array_info* out_col,
             return apply_to_column_nullable<T, ftype, dtype>(
                 in_col, out_col, aux_cols, grp_info);
         default:
-            throw new std::runtime_error(
-                "apply_to_column: incorrect array type");
+            throw std::runtime_error("apply_to_column: incorrect array type");
     }
 }
 
@@ -1621,7 +1666,7 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                                                          aux_cols, grp_info);
     }
 #undef APPLY_TO_COLUMN_CALL
-    throw new std::runtime_error(
+    throw std::runtime_error(
         std::string("do_apply_to_column: unsupported array dtype: ") +
         std::string(GetDtype_as_string(in_col->dtype)));
 }

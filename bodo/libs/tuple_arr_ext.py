@@ -26,6 +26,7 @@ from bodo.libs.struct_arr_ext import (
     box_struct_arr,
     unbox_struct_array,
 )
+from bodo.utils.typing import BodoError, is_list_like_index_type
 
 
 class TupleArrayType(types.ArrayCompatible):
@@ -161,14 +162,21 @@ def tuple_arr_getitem(arr, ind):
         impl = loc_vars["impl"]
         return impl
 
-    # Note nullable boolean arrays are handled in
-    # bool_arr_ind_getitem to ensure NAs are converted to False.
-    if ind != bodo.boolean_array_type:
+    if (
+        is_list_like_index_type(ind)
+        and (ind.dtype == types.bool_ or isinstance(ind.dtype, types.Integer))
+    ) or isinstance(ind, types.SliceType):
         # other getitem cases return an array, so just call getitem on underlying data array
         def impl_arr(arr, ind):  # pragma: no cover
             return init_tuple_arr(arr._data[ind])
 
         return impl_arr
+
+    # This should be the only TupleArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"getitem for TupleArray with indexing type {ind} not supported."
+    )  # pragma: no cover
 
 
 @overload(operator.setitem, no_unliteral=True)

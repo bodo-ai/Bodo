@@ -1391,13 +1391,8 @@ def dt_timedelta_arr_getitem(A, ind):
 
         return impl_int
 
-    # bool arr indexing. Note nullable boolean arrays are handled in
-    # bool_arr_ind_getitem to ensure NAs are converted to False.
-    if (
-        ind != bodo.boolean_array_type
-        and is_list_like_index_type(ind)
-        and ind.dtype == types.bool_
-    ):
+    # bool arr indexing.
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
         def impl_bool(A, ind):  # pragma: no cover
             # Heavily influenced by array_getitem_bool_index.
@@ -1452,13 +1447,11 @@ def dt_timedelta_arr_getitem(A, ind):
 
         return impl_slice
 
-    # This should be the only DatetimeTimedeltaArray implementation
-    # except for converting a Nullable boolean index to non-nullable.
+    # This should be the only DatetimeTimedeltaArray implementation.
     # We only expect to reach this case if more idx options are added.
-    if ind != bodo.boolean_array_type:  # pragma: no cover
-        raise BodoError(
-            f"getitem for DatetimeTimedeltaArray with indexing type {ind} not supported."
-        )
+    raise BodoError(
+        f"getitem for DatetimeTimedeltaArray with indexing type {ind} not supported."
+    )  # pragma: no cover
 
 
 @overload(operator.setitem, no_unliteral=True)

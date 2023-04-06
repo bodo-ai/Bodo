@@ -1272,7 +1272,7 @@ class DistributedAnalysis:
         ):
             # The BodoSQLContext behaves like a tuple. We need to verify that
             # each entry matches.
-            if func_mod not in array_dists:
+            if func_mod.name not in array_dists:
                 self._set_var_dist(func_mod.name, array_dists, Distribution.OneD)
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD)

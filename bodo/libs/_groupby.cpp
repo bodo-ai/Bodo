@@ -706,7 +706,8 @@ class GroupbyPipeline {
      */
     void eval() {
         tracing::Event ev("eval", is_parallel);
-        for (auto col_set : col_sets) col_set->eval(grp_infos[0]);
+        for (auto col_set : col_sets)
+            col_set->eval(grp_infos[0]);
         // only regular UDFs need eval step
         if (n_udf - gen_udf_col_sets.size() > 0) {
             udf_info.eval(cur_table);
@@ -897,7 +898,8 @@ class GroupbyPipeline {
             // to the original input arrays are going to be decremented (by
             // either drop_duplicates_table_inner or shuffle_table), but we
             // still need the references for the code after C++ groupby
-            for (auto a : tmp->columns) incref_array(a);
+            for (auto a : tmp->columns)
+                incref_array(a);
             table_info* tmp2 = nullptr;
             if (drop_duplicates) {
                 // Set dropna to false because skipna is handled at
@@ -990,12 +992,24 @@ class GroupbyPipeline {
                 new_key_col =
                     alloc_array(num_groups, 1, 1, key_col->arr_type,
                                 key_col->dtype, 0, key_col->num_categories);
-                int64_t dtype_size = numpy_item_size[key_col->dtype];
-                for (size_t j = 0; j < num_groups; j++) {
-                    std::tie(key_col, key_row) =
-                        find_key_for_group(j, from_tables, i);
-                    memcpy(new_key_col->data1() + j * dtype_size,
-                           key_col->data1() + key_row * dtype_size, dtype_size);
+                if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                    key_col->dtype == Bodo_CTypes::_BOOL) {
+                    // Nullable booleans store 1 bit per boolean
+                    for (size_t j = 0; j < num_groups; j++) {
+                        std::tie(key_col, key_row) =
+                            find_key_for_group(j, from_tables, i);
+                        bool bit = GetBit((uint8_t*)key_col->data1(), key_row);
+                        SetBitTo((uint8_t*)new_key_col->data1(), j, bit);
+                    }
+                } else {
+                    int64_t dtype_size = numpy_item_size[key_col->dtype];
+                    for (size_t j = 0; j < num_groups; j++) {
+                        std::tie(key_col, key_row) =
+                            find_key_for_group(j, from_tables, i);
+                        memcpy(new_key_col->data1() + j * dtype_size,
+                               key_col->data1() + key_row * dtype_size,
+                               dtype_size);
+                    }
                 }
                 if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
                     for (size_t j = 0; j < num_groups; j++) {
