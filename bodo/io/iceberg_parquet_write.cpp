@@ -458,7 +458,7 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
                         transformed_part_col, i);
                     inner_path += partition_names[j] + "=" + value_str + "/";
                     // Get python representation of the partition value
-                    // and then add it to the icberg-file-info tuple.
+                    // and then add it to the iceberg-file-info tuple.
                     PyObject *partition_val_py =
                         iceberg_transformed_val_to_py(transformed_part_col, i);
                     PyTuple_SET_ITEM(p.iceberg_file_info_py, 3 + j,
@@ -474,7 +474,8 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
                 // TODO: Make our path handling more consistent between C++ and
                 // Java
                 p.fpath = std::string(table_data_loc);
-                if (p.fpath.back() != '/') p.fpath += "/";
+                if (p.fpath.back() != '/')
+                    p.fpath += "/";
                 p.fpath += inner_path;
             }
             p.rows.push_back(i);
@@ -504,7 +505,8 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
              it++) {
             const partition_write_info &p = it->second;
             // RetrieveTable steals the reference but we still need them
-            for (auto a : new_table->columns) incref_array(a);
+            for (auto a : new_table->columns)
+                incref_array(a);
             table_info *part_table =
                 RetrieveTable(new_table, p.rows, new_table->ncols());
             // NOTE: we pass is_parallel=False because we already took care of
@@ -548,7 +550,8 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         int64_t record_count;
         int64_t file_size_in_bytes;
         std::string fpath(table_data_loc);
-        if (fpath.back() != '/') fpath += "/";
+        if (fpath.back() != '/')
+            fpath += "/";
         fpath += fname;
         Bodo_Fs::FsEnum fs_type = filesystem_type(fpath.c_str());
         if (fs_type == Bodo_Fs::FsEnum::posix) {

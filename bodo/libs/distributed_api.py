@@ -218,12 +218,28 @@ def isend(arr, size, pe, tag, cond=True):
 
         return impl
 
+    if arr == boolean_array_type:
+        # Nullable booleans need their own implementation because the
+        # data array stores 1 bit per boolean. As a result, the data array
+        # requires separate handling.
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def impl_bool(arr, size, pe, tag, cond=True):  # pragma: no cover
+            n_bytes = (size + 7) >> 3
+            data_req = _isend(arr._data.ctypes, n_bytes, char_typ_enum, pe, tag, cond)
+            null_req = _isend(
+                arr._null_bitmap.ctypes, n_bytes, char_typ_enum, pe, tag, cond
+            )
+            return (data_req, null_req)
+
+        return impl_bool
+
     # nullable arrays
-    if isinstance(
-        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
-    ) or arr in (
-        boolean_array_type,
-        datetime_date_array_type,
+    if (
+        isinstance(
+            arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
+        )
+        or arr == datetime_date_array_type
     ):
         # return a tuple of requests for data and null arrays
         type_enum = np.int32(numba_to_c_type(arr.dtype))
@@ -315,12 +331,28 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
 
         return impl
 
+    if arr == boolean_array_type:
+        # Nullable booleans need their own implementation because the
+        # data array stores 1 bit per boolean. As a result, the data array
+        # requires separate handling.
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def impl_bool(arr, size, pe, tag, cond=True):  # pragma: no cover
+            n_bytes = (size + 7) >> 3
+            data_req = _irecv(arr._data.ctypes, n_bytes, char_typ_enum, pe, tag, cond)
+            null_req = _irecv(
+                arr._null_bitmap.ctypes, n_bytes, char_typ_enum, pe, tag, cond
+            )
+            return (data_req, null_req)
+
+        return impl_bool
+
     # nullable arrays
-    if isinstance(
-        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
-    ) or arr in (
-        boolean_array_type,
-        datetime_date_array_type,
+    if (
+        isinstance(
+            arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
+        )
+        or arr == datetime_date_array_type
     ):
         # return a tuple of requests for data and null arrays
         type_enum = np.int32(numba_to_c_type(arr.dtype))
@@ -750,12 +782,75 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
         return gatherv_impl_int_arr
 
-    if isinstance(
-        data,
-        (IntegerArrayType, FloatingArrayType, DecimalArrayType, bodo.TimeArrayType),
-    ) or data in (
-        boolean_array_type,
-        datetime_date_array_type,
+    if data == boolean_array_type:
+        # Nullable booleans need their own implementation because the
+        # data array stores 1 bit per boolean. As a result, the data array
+        # requires separate handling.
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def gatherv_impl_bool_arr(
+            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+        ):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            n_loc = len(data)
+            n_bytes = (n_loc + 7) >> 3
+            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
+            n_total = recv_counts.sum()
+            all_data = empty_like_type(n_total, data)
+            # displacements
+            recv_counts_bytes = np.empty(1, np.int32)
+            displs_bytes = np.empty(1, np.int32)
+            tmp_null_bytes = np.empty(1, np.uint8)
+            if rank == root or allgather:
+                recv_counts_bytes = np.empty(len(recv_counts), np.int32)
+                for i in range(len(recv_counts)):
+                    recv_counts_bytes[i] = (recv_counts[i] + 7) >> 3
+                displs_bytes = bodo.ir.join.calc_disp(recv_counts_bytes)
+                tmp_data_bytes = np.empty(recv_counts_bytes.sum(), np.uint8)
+                tmp_null_bytes = np.empty(recv_counts_bytes.sum(), np.uint8)
+
+            c_gatherv(
+                data._data.ctypes,
+                np.int32(n_bytes),
+                tmp_data_bytes.ctypes,
+                recv_counts_bytes.ctypes,
+                displs_bytes.ctypes,
+                char_typ_enum,
+                allgather,
+                np.int32(root),
+            )
+            c_gatherv(
+                data._null_bitmap.ctypes,
+                np.int32(n_bytes),
+                tmp_null_bytes.ctypes,
+                recv_counts_bytes.ctypes,
+                displs_bytes.ctypes,
+                char_typ_enum,
+                allgather,
+                np.int32(root),
+            )
+            copy_gathered_null_bytes(
+                all_data._data.ctypes,
+                tmp_data_bytes,
+                recv_counts_bytes,
+                recv_counts,
+            )
+            copy_gathered_null_bytes(
+                all_data._null_bitmap.ctypes,
+                tmp_null_bytes,
+                recv_counts_bytes,
+                recv_counts,
+            )
+            return all_data
+
+        return gatherv_impl_bool_arr
+
+    if (
+        isinstance(
+            data,
+            (IntegerArrayType, FloatingArrayType, DecimalArrayType, bodo.TimeArrayType),
+        )
+        or data == datetime_date_array_type
     ):
         typ_val = numba_to_c_type(data.dtype)
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
@@ -2038,11 +2133,70 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
 
         return scatterv_array_item_impl
 
-    if isinstance(
-        data, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
-    ) or data in (
-        boolean_array_type,
-        datetime_date_array_type,
+    if data == boolean_array_type:
+        # Nullable booleans need their own implementation because the
+        # data array stores 1 bit per boolean. As a result, the counts may split
+        # may split the data array mid-byte, so we need to handle it the same
+        # way we handle the null bitmap. The send count also doesn't reflect the
+        # number of bytes to send, so we need to calculate that separately.
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def scatterv_impl_bool_arr(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            n_pes = bodo.libs.distributed_api.get_size()
+            data_in = data._data
+            null_bitmap = data._null_bitmap
+            # Calculate the displacements for nulls and data, each of
+            # which is a single bit.
+            n_in = len(data)
+            n_all = bcast_scalar(n_in)
+
+            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
+            # Calculate the local N for how many elements are in the array
+            n_loc = np.int64(send_counts[rank])
+            # compute send counts bytes
+            send_counts_bytes = np.empty(n_pes, np.int32)
+            for i in range(n_pes):
+                send_counts_bytes[i] = (send_counts[i] + 7) >> 3
+
+            displs_bytes = bodo.ir.join.calc_disp(send_counts_bytes)
+
+            send_data_bitmap = get_scatter_null_bytes_buff(
+                data_in.ctypes, send_counts, send_counts_bytes
+            )
+            send_null_bitmap = get_scatter_null_bytes_buff(
+                null_bitmap.ctypes, send_counts, send_counts_bytes
+            )
+            # Allocate the output arrays
+            n_recv_bytes = send_counts_bytes[rank]
+            data_recv = np.empty(n_recv_bytes, np.uint8)
+            bitmap_recv = np.empty(n_recv_bytes, np.uint8)
+
+            c_scatterv(
+                send_data_bitmap.ctypes,
+                send_counts_bytes.ctypes,
+                displs_bytes.ctypes,
+                data_recv.ctypes,
+                np.int32(n_recv_bytes),
+                char_typ_enum,
+            )
+            c_scatterv(
+                send_null_bitmap.ctypes,
+                send_counts_bytes.ctypes,
+                displs_bytes.ctypes,
+                bitmap_recv.ctypes,
+                np.int32(n_recv_bytes),
+                char_typ_enum,
+            )
+            return bodo.libs.bool_arr_ext.init_bool_array(data_recv, bitmap_recv, n_loc)
+
+        return scatterv_impl_bool_arr
+
+    if (
+        isinstance(data, (IntegerArrayType, FloatingArrayType, DecimalArrayType))
+        or data == datetime_date_array_type
     ):
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
@@ -2060,8 +2214,6 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
                     d, b, precision, scale
                 )  # pragma: no cover
             )
-        if data == boolean_array_type:
-            init_func = bodo.libs.bool_arr_ext.init_bool_array
         if data == datetime_date_array_type:
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
 
@@ -3031,6 +3183,8 @@ def alltoallv(
         boolean_array_type,
         datetime_date_array_type,
     ):
+        # TODO: Move boolean_array_type to its own section because we use 1 bit per boolean
+        # TODO: Send the null bitmap
         return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
             send_data._data.ctypes,
             out_data._data.ctypes,

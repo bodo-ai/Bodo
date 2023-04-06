@@ -125,9 +125,16 @@ struct HashEqualComputeCategoricalIndex {
  */
 struct HashNuniqueComputationNumpyOrNullableIntBool {
     uint32_t operator()(const int64_t i) const {
-        char* ptr = arr->data1() + i * siztype;
         uint32_t retval = 0;
-        hash_string_32(ptr, siztype, seed, &retval);
+        if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+            arr->dtype == Bodo_CTypes::_BOOL) {
+            // Nullable booleans store 1 bit per boolean
+            bool bit = GetBit((uint8_t*)arr->data1(), i);
+            hash_inner_32<bool>(&bit, seed, &retval);
+        } else {
+            char* ptr = arr->data1() + i * siztype;
+            hash_string_32(ptr, siztype, seed, &retval);
+        }
         return retval;
     }
     array_info* arr;
@@ -142,9 +149,17 @@ struct HashNuniqueComputationNumpyOrNullableIntBool {
  */
 struct KeyEqualNuniqueComputationNumpyOrNullableIntBool {
     bool operator()(const int64_t i1, const int64_t i2) const {
-        char* ptr1 = arr->data1() + i1 * siztype;
-        char* ptr2 = arr->data1() + i2 * siztype;
-        return memcmp(ptr1, ptr2, siztype) == 0;
+        if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+            arr->dtype == Bodo_CTypes::_BOOL) {
+            // Nullable booleans store 1 bit per boolean
+            bool bit1 = GetBit((uint8_t*)arr->data1(), i1);
+            bool bit2 = GetBit((uint8_t*)arr->data1(), i2);
+            return bit1 == bit2;
+        } else {
+            char* ptr1 = arr->data1() + i1 * siztype;
+            char* ptr2 = arr->data1() + i2 * siztype;
+            return memcmp(ptr1, ptr2, siztype) == 0;
+        }
     }
 
     array_info* arr;

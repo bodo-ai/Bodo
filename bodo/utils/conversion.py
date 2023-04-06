@@ -1938,27 +1938,3 @@ def overload_struct_if_heter_dict(values, names):
     exec(func_text, {}, loc_vars)
     impl = loc_vars["f"]
     return impl
-
-
-def nullable_bool_to_bool_na_false(arr):
-    """Takes a nullable boolean array and converts
-    it to a numpy boolean array but it each entry
-    that is NA is set to False.
-    """
-
-
-@overload(nullable_bool_to_bool_na_false)
-def overload_nullable_bool_to_bool_na_false(arr):
-    if arr == bodo.boolean_array_type:
-
-        def impl(arr):  # pragma: no cover
-            output_arr = bodo.libs.bool_arr_ext.get_bool_arr_data(arr)
-            for i in range(len(arr)):
-                output_arr[i] = output_arr[i] and (
-                    not bodo.libs.array_kernels.isna(arr, i)
-                )
-            return output_arr
-
-        return impl
-    else:
-        return lambda arr: arr  # pragma: no cover

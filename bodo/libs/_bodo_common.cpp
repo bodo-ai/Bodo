@@ -9,7 +9,9 @@ void bodo_common_init() {
         return;
     }
     initialized = true;
-
+    // Note: This is only true for Numpy Boolean arrays
+    // and should be removed when we purge Numpy Boolean arrays
+    // from C++.
     numpy_item_size[Bodo_CTypes::_BOOL] = sizeof(bool);
     numpy_item_size[Bodo_CTypes::INT8] = sizeof(int8_t);
     numpy_item_size[Bodo_CTypes::UINT8] = sizeof(uint8_t);
@@ -56,9 +58,8 @@ void bodo_common_init() {
     }
 }
 
-Bodo_CTypes::CTypeEnum arrow_to_bodo_type(
-    std::shared_ptr<arrow::DataType> type) {
-    switch (type->id()) {
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
+    switch (type) {
         case arrow::Type::INT8:
             return Bodo_CTypes::INT8;
         case arrow::Type::UINT8:
@@ -101,10 +102,10 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(
             return Bodo_CTypes::TIME;
         case arrow::Type::BOOL:
             return Bodo_CTypes::_BOOL;
-        // TODO Date, Datetime, Timedelta, String, Bool
+        // TODO Timedelta
         default: {
-            throw std::runtime_error("arrow_to_bodo_type : Unsupported type " +
-                                     type->ToString());
+            // TODO: Construct the type from the id
+            throw std::runtime_error("arrow_to_bodo_type");
         }
     }
 }
@@ -162,7 +163,16 @@ array_info* alloc_nullable_array(int64_t length,
                                  Bodo_CTypes::CTypeEnum typ_enum,
                                  int64_t extra_null_bytes) {
     int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
-    int64_t size = length * numpy_item_size[typ_enum];
+    int64_t size;
+    if (typ_enum == Bodo_CTypes::_BOOL) {
+        // Boolean arrays store 1 bit per element.
+        // Note extra_null_bytes are used for padding when we need
+        // to shuffle and split the entries into separate bytes, so
+        // we need these for the data as well.
+        size = n_bytes;
+    } else {
+        size = length * numpy_item_size[typ_enum];
+    }
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     NRT_MemInfo* meminfo_bitmask =
         NRT_MemInfo_alloc_safe_aligned(n_bytes * sizeof(uint8_t), ALIGNMENT);
@@ -282,7 +292,9 @@ array_info* create_list_string_array(
         if (GetBit(null_bitmap.data(), i_grp)) {
             std::vector<std::pair<std::string, bool>> e_list = *iter;
             nb_string += e_list.size();
-            for (auto& e_str : e_list) nb_char += e_str.first.size();
+            for (auto& e_str : e_list) {
+                nb_char += e_str.first.size();
+            }
         }
         iter++;
     }
@@ -363,18 +375,26 @@ NRT_MemInfo* alloc_meminfo(int64_t length) {
  */
 void dtor_array_item_arr(array_item_arr_payload* payload, int64_t size,
                          void* in) {
-    if (payload->data->refct != -1) payload->data->refct--;
-    if (payload->data->refct == 0) NRT_MemInfo_call_dtor(payload->data);
+    if (payload->data->refct != -1) {
+        payload->data->refct--;
+    }
+    if (payload->data->refct == 0) {
+        NRT_MemInfo_call_dtor(payload->data);
+    }
 
-    if (payload->offsets.meminfo->refct != -1)
+    if (payload->offsets.meminfo->refct != -1) {
         payload->offsets.meminfo->refct--;
-    if (payload->offsets.meminfo->refct == 0)
+    }
+    if (payload->offsets.meminfo->refct == 0) {
         NRT_MemInfo_call_dtor(payload->offsets.meminfo);
+    }
 
-    if (payload->null_bitmap.meminfo->refct != -1)
+    if (payload->null_bitmap.meminfo->refct != -1) {
         payload->null_bitmap.meminfo->refct--;
-    if (payload->null_bitmap.meminfo->refct == 0)
+    }
+    if (payload->null_bitmap.meminfo->refct == 0) {
         NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
+    }
 }
 
 array_info* alloc_list_string_array(int64_t length, array_info* string_arr,
@@ -431,12 +451,16 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
  * @param arr
  */
 void decref_numpy_payload(numpy_arr_payload arr) {
-    if (arr.meminfo->refct != -1) arr.meminfo->refct--;
-    if (arr.meminfo->refct == 0) NRT_MemInfo_call_dtor(arr.meminfo);
+    if (arr.meminfo->refct != -1) {
+        arr.meminfo->refct--;
+    }
+    if (arr.meminfo->refct == 0) {
+        NRT_MemInfo_call_dtor(arr.meminfo);
+    }
 }
 
 /**
- * @brief destrcutor for array(item) array meminfo. Decrefs the underlying data,
+ * @brief destructor for array(item) array meminfo. Decrefs the underlying data,
  * offsets and null_bitmap arrays.
  *
  * @param payload array(item) array meminfo payload
@@ -445,19 +469,26 @@ void decref_numpy_payload(numpy_arr_payload arr) {
  */
 void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
                            void* in) {
-    if (payload->data.meminfo->refct != -1) payload->data.meminfo->refct--;
-    if (payload->data.meminfo->refct == 0)
+    if (payload->data.meminfo->refct != -1) {
+        payload->data.meminfo->refct--;
+    }
+    if (payload->data.meminfo->refct == 0) {
         NRT_MemInfo_call_dtor(payload->data.meminfo);
+    }
 
-    if (payload->offsets.meminfo->refct != -1)
+    if (payload->offsets.meminfo->refct != -1) {
         payload->offsets.meminfo->refct--;
-    if (payload->offsets.meminfo->refct == 0)
+    }
+    if (payload->offsets.meminfo->refct == 0) {
         NRT_MemInfo_call_dtor(payload->offsets.meminfo);
+    }
 
-    if (payload->null_bitmap.meminfo->refct != -1)
+    if (payload->null_bitmap.meminfo->refct != -1) {
         payload->null_bitmap.meminfo->refct--;
-    if (payload->null_bitmap.meminfo->refct == 0)
+    }
+    if (payload->null_bitmap.meminfo->refct == 0) {
         NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
+    }
 }
 
 /**
@@ -536,33 +567,36 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
                         bodo_array_type::arr_type_enum arr_type,
                         Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
                         int64_t num_categories) {
-    if (arr_type == bodo_array_type::LIST_STRING)
-        return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                       extra_null_bytes);
+    switch (arr_type) {
+        case bodo_array_type::LIST_STRING:
+            return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems,
+                                           extra_null_bytes);
 
-    if (arr_type == bodo_array_type::STRING)
-        return alloc_string_array(length, n_sub_elems, extra_null_bytes);
+        case bodo_array_type::STRING:
+            return alloc_string_array(length, n_sub_elems, extra_null_bytes);
 
-    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
-        return alloc_nullable_array(length, dtype, extra_null_bytes);
+        case bodo_array_type::NULLABLE_INT_BOOL:
+            return alloc_nullable_array(length, dtype, extra_null_bytes);
 
-    if (arr_type == bodo_array_type::INTERVAL)
-        return alloc_interval_array(length, dtype);
+        case bodo_array_type::INTERVAL:
+            return alloc_interval_array(length, dtype);
 
-    if (arr_type == bodo_array_type::NUMPY) return alloc_numpy(length, dtype);
+        case bodo_array_type::NUMPY:
+            return alloc_numpy(length, dtype);
 
-    if (arr_type == bodo_array_type::CATEGORICAL)
-        return alloc_categorical(length, dtype, num_categories);
+        case bodo_array_type::CATEGORICAL:
+            return alloc_categorical(length, dtype, num_categories);
 
-    if (arr_type == bodo_array_type::ARRAY_ITEM)
-        return alloc_array_item(length, n_sub_elems, dtype, extra_null_bytes);
+        case bodo_array_type::ARRAY_ITEM:
+            return alloc_array_item(length, n_sub_elems, dtype,
+                                    extra_null_bytes);
 
-    if (arr_type == bodo_array_type::DICT)
-        return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                       false, false);
-
-    Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
-    return nullptr;
+        case bodo_array_type::DICT:
+            return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
+                                           false, false);
+        default:
+            throw std::runtime_error("Type not covered in alloc_array");
+    }
 }
 
 int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
@@ -611,9 +645,17 @@ int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
         int64_t siz_null_bitmap = n_bytes;
         std::shared_ptr<arrow::PrimitiveArray> prim_arr =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr);
-        Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(prim_arr->type());
-        int64_t siz_typ = numpy_item_size[bodo_typ];
-        int64_t siz_primitive_data = siz_typ * n_rows;
+        std::shared_ptr<arrow::DataType> arrow_type = prim_arr->type();
+        int64_t siz_primitive_data;
+        if (arrow_type->id() == arrow::Type::BOOL) {
+            // Arrow boolean arrays store 1 bit per boolean
+            siz_primitive_data = n_bytes;
+        } else {
+            Bodo_CTypes::CTypeEnum bodo_typ =
+                arrow_to_bodo_type(prim_arr->type()->id());
+            int64_t siz_typ = numpy_item_size[bodo_typ];
+            siz_primitive_data = siz_typ * n_rows;
+        }
         return siz_null_bitmap + siz_primitive_data;
     }
 }
@@ -626,14 +668,20 @@ int64_t array_memory_size(array_info* earr) {
     }
     if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         earr->arr_type == bodo_array_type::DICT) {
-        if (earr->arr_type == bodo_array_type::DICT)
+        if (earr->arr_type == bodo_array_type::DICT) {
             // TODO also contribute dictionary size, but note that when
             // table_global_memory_size() calls this function, it's not supposed
             // to add the size of dictionaries of all ranks
             earr = earr->child_arrays[1];
-        uint64_t siztype = numpy_item_size[earr->dtype];
+        }
         int64_t n_bytes = ((earr->length + 7) >> 3);
-        return n_bytes + siztype * earr->length;
+        if (earr->dtype == Bodo_CTypes::_BOOL) {
+            // Nullable boolean arrays store 1 bit per boolean.
+            return n_bytes * 2;
+        } else {
+            uint64_t siztype = numpy_item_size[earr->dtype];
+            return n_bytes + siztype * earr->length;
+        }
     }
     if (earr->arr_type == bodo_array_type::STRING) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
@@ -697,9 +745,14 @@ array_info* copy_array(array_info* earr) {
         memcpy(farr->data2(), earr->data2(), siztype * earr->length);
     }
     if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        uint64_t siztype = numpy_item_size[earr->dtype];
-        memcpy(farr->data1(), earr->data1(), siztype * earr->length);
+        int64_t data_copy_size;
         int64_t n_bytes = ((earr->length + 7) >> 3);
+        if (earr->dtype == Bodo_CTypes::_BOOL) {
+            data_copy_size = n_bytes;
+        } else {
+            data_copy_size = earr->length * numpy_item_size[earr->dtype];
+        }
+        memcpy(farr->data1(), earr->data1(), data_copy_size);
         memcpy(farr->null_bitmask(), earr->null_bitmask(), n_bytes);
     }
     if (earr->arr_type == bodo_array_type::STRING) {
@@ -825,7 +878,9 @@ void decref_array(array_info* arr) {
 void decref_meminfo(MemInfo* meminfo) {
     if (meminfo != NULL && meminfo->refct != -1) {
         meminfo->refct--;
-        if (meminfo->refct == 0) NRT_MemInfo_call_dtor(meminfo);
+        if (meminfo->refct == 0) {
+            NRT_MemInfo_call_dtor(meminfo);
+        }
     }
 }
 
@@ -944,7 +999,7 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                 SetBitTo((uint8_t*)nulls->data1(), i, true);
         }
         infos[infos_pos++] = nulls;
-        // Now outputing the fields.
+        // Now outputting the fields.
         for (int i = 0; i < struct_type->num_fields();
              i++) {  // each field is an array
             nested_array_to_c(struct_array->field(i), lengths, infos,
@@ -996,26 +1051,39 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         lengths[lengths_pos++] = primitive_array->length();
 
         Bodo_CTypes::CTypeEnum dtype =
-            arrow_to_bodo_type(primitive_array->type());
+            arrow_to_bodo_type(primitive_array->type()->id());
+        uint64_t siztype = numpy_item_size[dtype];
 
         // allocate output arrays and copy data
+        size_t buffer_size;
+        size_t arr_len;
+        if (primitive_array->type()->id() == arrow::Type::BOOL) {
+            dtype = Bodo_CTypes::UINT8;
+            buffer_size = (primitive_array->length() + 7) >> 3;
+            arr_len = buffer_size;
+        } else {
+            buffer_size = primitive_array->length() * siztype;
+            arr_len = primitive_array->length();
+        }
         array_info* data =
-            alloc_array(primitive_array->length(), -1, -1,
-                        bodo_array_type::arr_type_enum::NUMPY, dtype, 0, 0);
+            alloc_array(arr_len, -1, -1, bodo_array_type::arr_type_enum::NUMPY,
+                        dtype, 0, 0);
         int64_t n_null_bytes = (primitive_array->length() + 7) >> 3;
         array_info* nulls = alloc_array(n_null_bytes, -1, -1,
                                         bodo_array_type::arr_type_enum::NUMPY,
                                         Bodo_CTypes::UINT8, 0, 0);
-        uint64_t siztype = numpy_item_size[dtype];
-        memcpy(data->data1(), primitive_array->values()->data(),
-               siztype * primitive_array->length());
+        memcpy(data->data1(), primitive_array->values()->data(), buffer_size);
         memset(nulls->data1(), 0, n_null_bytes);
         std::vector<char> vectNaN = RetrieveNaNentry(dtype);
         for (int64_t i = 0; i < primitive_array->length(); i++) {
-            if (!primitive_array->IsNull(i))
+            if (!primitive_array->IsNull(i)) {
                 SetBitTo((uint8_t*)nulls->data1(), i, true);
-            else
-                memcpy(data->data1() + siztype * i, vectNaN.data(), siztype);
+            } else {
+                if (primitive_array->type()->id() != arrow::Type::BOOL) {
+                    memcpy(data->data1() + siztype * i, vectNaN.data(),
+                           siztype);
+                }
+            }
         }
         infos[infos_pos++] = nulls;
         infos[infos_pos++] = data;

@@ -140,7 +140,7 @@ inline void CheckEqualityArrayType(array_info* arr1, array_info* arr2) {
 
 /** Getting the expression of a string of characters as a T value
  *
- * The template paramter is T.
+ * The template parameter is T.
  * @param dtype the bodo data type.
  * @param ptr the value of the pointer passed in argument
  * @return the value as a T value.
@@ -158,19 +158,32 @@ inline T GetTentry(char* ptr) {
  * @return the value as a double.
  */
 inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
-    if (dtype == Bodo_CTypes::INT8) return double(GetTentry<int8_t>(ptr));
-    if (dtype == Bodo_CTypes::UINT8) return double(GetTentry<uint8_t>(ptr));
-    if (dtype == Bodo_CTypes::INT16) return double(GetTentry<int16_t>(ptr));
-    if (dtype == Bodo_CTypes::UINT16) return double(GetTentry<uint16_t>(ptr));
-    if (dtype == Bodo_CTypes::INT32) return double(GetTentry<int32_t>(ptr));
-    if (dtype == Bodo_CTypes::UINT32) return double(GetTentry<uint32_t>(ptr));
-    if (dtype == Bodo_CTypes::INT64) return double(GetTentry<int64_t>(ptr));
-    if (dtype == Bodo_CTypes::UINT64) return double(GetTentry<uint64_t>(ptr));
-    if (dtype == Bodo_CTypes::FLOAT32) return double(GetTentry<float>(ptr));
-    if (dtype == Bodo_CTypes::FLOAT64) return double(GetTentry<double>(ptr));
-    if (dtype == Bodo_CTypes::DATE) return double(GetTentry<int64_t>(ptr));
-    if (dtype == Bodo_CTypes::DATETIME) return double(GetTentry<int64_t>(ptr));
-    if (dtype == Bodo_CTypes::TIMEDELTA) return double(GetTentry<int64_t>(ptr));
+    if (dtype == Bodo_CTypes::INT8)
+        return double(GetTentry<int8_t>(ptr));
+    if (dtype == Bodo_CTypes::UINT8)
+        return double(GetTentry<uint8_t>(ptr));
+    if (dtype == Bodo_CTypes::INT16)
+        return double(GetTentry<int16_t>(ptr));
+    if (dtype == Bodo_CTypes::UINT16)
+        return double(GetTentry<uint16_t>(ptr));
+    if (dtype == Bodo_CTypes::INT32)
+        return double(GetTentry<int32_t>(ptr));
+    if (dtype == Bodo_CTypes::UINT32)
+        return double(GetTentry<uint32_t>(ptr));
+    if (dtype == Bodo_CTypes::INT64)
+        return double(GetTentry<int64_t>(ptr));
+    if (dtype == Bodo_CTypes::UINT64)
+        return double(GetTentry<uint64_t>(ptr));
+    if (dtype == Bodo_CTypes::FLOAT32)
+        return double(GetTentry<float>(ptr));
+    if (dtype == Bodo_CTypes::FLOAT64)
+        return double(GetTentry<double>(ptr));
+    if (dtype == Bodo_CTypes::DATE)
+        return double(GetTentry<int64_t>(ptr));
+    if (dtype == Bodo_CTypes::DATETIME)
+        return double(GetTentry<int64_t>(ptr));
+    if (dtype == Bodo_CTypes::TIMEDELTA)
+        return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::DECIMAL)
         return decimal_to_double(GetTentry<__int128>(ptr));
     throw std::runtime_error(
@@ -218,14 +231,16 @@ array_info* RetrieveArray_SingleColumn(array_info* in_arr,
                                        bool use_nullable_arr = false);
 
 /** This function uses the combinatorial information computed in the
- * "ListIdx" array and return the coulm with the selecetd rows.
+ * "ListIdx" array and return the column with the selected rows.
  *
  * @param in_arr : the input column
  * @param idx_arr : the index column
+ * @param use_nullable_arr use nullable int/float output for Numpy array input
  * @return one array
  */
 array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
-                                           array_info* idx_arr);
+                                           array_info* idx_arr,
+                                           bool use_nullable_arr = false);
 
 /** This function takes a table, a list of rows and returns the rows obtained
  * by selecting the rows.
@@ -308,7 +323,9 @@ inline bool TestEqual(std::vector<array_info*> const& columns,
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         bool test = TestEqualColumn(columns[shift_key1 + iKey], iRow1,
                                     columns[shift_key2 + iKey], iRow2, true);
-        if (!test) return false;
+        if (!test) {
+            return false;
+        }
     }
     // If all keys are equal then we are ok and the keys are equals.
     return true;
@@ -335,7 +352,9 @@ inline bool TestEqualJoin(const table_info* table1, const table_info* table2,
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         bool test = TestEqualColumn(table1->columns[iKey], iRow1,
                                     table2->columns[iKey], iRow2, is_na_equal);
-        if (!test) return false;
+        if (!test) {
+            return false;
+        }
     }
     // If all keys are equal then we are ok and the keys are equals.
     return true;
@@ -463,9 +482,13 @@ template <typename T>
 int NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
-    if (*ptr1_T > *ptr2_T) return -1;
-    if (*ptr1_T < *ptr2_T) return 1;
-    return 0;
+    if (*ptr1_T > *ptr2_T) {
+        return -1;
+    } else if (*ptr1_T < *ptr2_T) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 /**
@@ -483,9 +506,13 @@ inline int NumericComparison_decimal(char* ptr1, char* ptr2,
     __int128* ptr2_dec = (__int128*)ptr2;
     double value1 = decimal_to_double(*ptr1_dec);
     double value2 = decimal_to_double(*ptr2_dec);
-    if (value1 > value2) return -1;
-    if (value1 < value2) return 1;
-    return 0;
+    if (value1 > value2) {
+        return -1;
+    } else if (value1 < value2) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 /**
@@ -503,18 +530,27 @@ int NumericComparison_float(char* ptr1, char* ptr2, bool const& na_position) {
     T* ptr2_T = (T*)ptr2;
     T val1 = *ptr1_T;
     T val2 = *ptr2_T;
-    if (isnan(val1) && isnan(val2)) return 0;
-    if (isnan(val2)) {
-        if (na_position) return 1;
+    if (isnan(val1) && isnan(val2)) {
+        return 0;
+    } else if (isnan(val2)) {
+        if (na_position) {
+            return 1;
+        } else {
+            return -1;
+        }
+    } else if (isnan(val1)) {
+        if (na_position) {
+            return -1;
+        } else {
+            return 1;
+        }
+    } else if (val1 > val2) {
         return -1;
-    }
-    if (isnan(val1)) {
-        if (na_position) return -1;
+    } else if (val1 < val2) {
         return 1;
+    } else {
+        return 0;
     }
-    if (val1 > val2) return -1;
-    if (val1 < val2) return 1;
-    return 0;
 }
 
 /**
@@ -536,18 +572,27 @@ int NumericComparison_date(char* ptr1, char* ptr2, bool const& na_position) {
     auto isnan_date = [&](T const& val) {
         return val == std::numeric_limits<T>::min();
     };
-    if (isnan_date(val1) && isnan_date(val2)) return 0;
-    if (isnan_date(val2)) {
-        if (na_position) return 1;
+    if (isnan_date(val1) && isnan_date(val2)) {
+        return 0;
+    } else if (isnan_date(val2)) {
+        if (na_position) {
+            return 1;
+        } else {
+            return -1;
+        }
+    } else if (isnan_date(val1)) {
+        if (na_position) {
+            return -1;
+        } else {
+            return 1;
+        }
+    } else if (val1 > val2) {
         return -1;
-    }
-    if (isnan_date(val1)) {
-        if (na_position) return -1;
+    } else if (val1 < val2) {
         return 1;
+    } else {
+        return 0;
     }
-    if (val1 > val2) return -1;
-    if (val1 < val2) return 1;
-    return 0;
 }
 
 /**
@@ -722,13 +767,16 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
             std::vector<char> vectNaN = RetrieveNaNentry(key_col->dtype);
             size_t siztype = numpy_item_size[key_col->dtype];
             if (memcmp(key_col->data1() + i * siztype, vectNaN.data(),
-                       siztype) == 0)
+                       siztype) == 0) {
                 return true;
+            }
         } else if (key_col->arr_type == bodo_array_type::STRING ||
                    key_col->arr_type == bodo_array_type::LIST_STRING ||
                    key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
                    key_col->arr_type == bodo_array_type::DICT) {
-            if (!GetBit((uint8_t*)key_col->null_bitmask(), i)) return true;
+            if (!GetBit((uint8_t*)key_col->null_bitmask(), i)) {
+                return true;
+            }
         } else if (key_col->arr_type == bodo_array_type::NUMPY) {
             if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&
                  isnan(key_col->at<float>(i))) ||
@@ -739,8 +787,9 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
                      std::numeric_limits<int64_t>::min()) ||
                 (key_col->dtype == Bodo_CTypes::TIMEDELTA &&
                  key_col->at<int64_t>(i) ==
-                     std::numeric_limits<int64_t>::min()))
+                     std::numeric_limits<int64_t>::min())) {
                 return true;
+            }
         }
     }
     return false;

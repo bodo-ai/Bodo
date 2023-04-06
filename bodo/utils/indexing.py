@@ -23,7 +23,7 @@ def get_new_null_mask_bool_index(old_mask, ind, n):  # pragma: no cover
     new_mask = np.empty(n_bytes, np.uint8)
     curr_bit = 0
     for i in range(len(ind)):
-        if ind[i]:
+        if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
             bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
             bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
             curr_bit += 1

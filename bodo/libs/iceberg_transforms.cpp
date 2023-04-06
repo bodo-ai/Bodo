@@ -646,7 +646,7 @@ array_info* iceberg_identity_transform(array_info* in_arr, bool* new_alloc,
     ev.add_attribute("nRows", nRow);
 
     if (in_arr->dtype == Bodo_CTypes::DATETIME) {
-        // For paritioning, we need the partition value to be in microseconds
+        // For partitioning, we need the partition value to be in microseconds
         // instead of the default which is nanoseconds. Note that it is
         // important due to precision issues during partitioning. e.g. two
         // different nanosecond values could correspond to the same microsecond
@@ -727,9 +727,13 @@ std::string transform_val_to_str(std::string transform_name, array_info* in_arr,
         std::string date_str;
         date_str.reserve(10);
         date_str += std::to_string(year) + "-";
-        if (month < 10) date_str += "0";
+        if (month < 10) {
+            date_str += "0";
+        }
         date_str += std::to_string(month) + "-";
-        if (day < 10) date_str += "0";
+        if (day < 10) {
+            date_str += "0";
+        }
         date_str += std::to_string(day);
         return date_str;
     }
@@ -761,8 +765,18 @@ PyObject* iceberg_transformed_val_to_py(array_info* arr, size_t idx) {
             return PyFloat_FromDouble(arr->at<double>(idx));
 
         case Bodo_CTypes::_BOOL:
-            if (arr->at<bool>(idx)) return Py_True;
-            return Py_False;
+            bool is_true;
+            if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                // Nullable booleans have 1 bit per boolean
+                is_true = GetBit((uint8_t*)arr->data1(), idx);
+            } else {
+                is_true = arr->at<bool>(idx);
+            }
+            if (is_true) {
+                return Py_True;
+            } else {
+                return Py_False;
+            }
 
         case Bodo_CTypes::STRING: {
             switch (arr->arr_type) {

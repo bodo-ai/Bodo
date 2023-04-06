@@ -124,7 +124,8 @@ bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
 
     // Dictionary array's codes are always read into proper integer array type,
     // so buffer data types are the same
-    if (arrow_type->id() == Type::DICTIONARY) return true;
+    if (arrow_type->id() == Type::DICTIONARY)
+        return true;
     return false;
 }
 
@@ -210,27 +211,40 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
                       int64_t rows_to_skip, int64_t rows_to_read,
                       std::shared_ptr<arrow::DataType> arrow_type,
                       const uint8_t* null_bitmap_buff,
-                      Bodo_CTypes::CTypeEnum out_dtype) {
+                      bodo_array_type::arr_type_enum array_type,
+                      Bodo_CTypes::CTypeEnum out_dtype, int64_t curr_offset,
+                      int dtype_size) {
     // unpack booleans from bits
     if (out_dtype == Bodo_CTypes::_BOOL) {
-        if (arrow_type->id() != Type::BOOL)
-            std::cerr << "boolean type error" << '\n';
-
-        for (int64_t i = 0; i < rows_to_read; i++) {
-            out_data[i] =
-                (uint8_t)::arrow::bit_util::GetBit(buff, i + rows_to_skip);
+        if (arrow_type->id() != Type::BOOL) {
+            throw std::runtime_error(
+                "arrow read: invalid dtype conversion for " +
+                arrow_type->ToString() + " to " +
+                GetDtype_as_string(out_dtype));
+        }
+        // TODO: Replace with zero copy when the buffer can be copied
+        // entirely (or copied via a view).
+        if (array_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            for (int64_t i = 0; i < rows_to_read; i++) {
+                auto bit = ::arrow::bit_util::GetBit(buff, i + rows_to_skip);
+                SetBitTo(out_data, curr_offset + i, bit);
+            }
+        } else {
+            for (int64_t i = 0; i < rows_to_read; i++) {
+                auto bit = ::arrow::bit_util::GetBit(buff, i + rows_to_skip);
+                out_data[curr_offset + i] = bit;
+            }
         }
         return;
     }
 
     if (arrowBodoTypesEqual(arrow_type, out_dtype)) {
-        int dtype_size = numpy_item_size[out_dtype];
         // fast path if no conversion required
-        memcpy(out_data, buff + rows_to_skip * dtype_size,
-               rows_to_read * dtype_size);
+        memcpy(out_data + (curr_offset * dtype_size),
+               buff + rows_to_skip * dtype_size, rows_to_read * dtype_size);
     } else {
-        copy_data_dispatch(out_data, buff, rows_to_skip, rows_to_read,
-                           arrow_type, out_dtype);
+        copy_data_dispatch(out_data + (curr_offset * dtype_size), buff,
+                           rows_to_skip, rows_to_read, arrow_type, out_dtype);
     }
     // set NaNs for double values
     if (null_bitmap_buff != nullptr && out_dtype == Bodo_CTypes::FLOAT64) {
@@ -239,7 +253,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
             if (!::arrow::bit_util::GetBit(null_bitmap_buff,
                                            i + rows_to_skip)) {
                 // TODO: use NPY_NAN
-                double_data[i] = std::nan("");
+                double_data[i + curr_offset] = std::nan("");
             }
         }
     }
@@ -250,7 +264,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
             if (!::arrow::bit_util::GetBit(null_bitmap_buff,
                                            i + rows_to_skip)) {
                 // TODO: use NPY_NAN
-                float_data[i] = std::nanf("");
+                float_data[i + curr_offset] = std::nanf("");
             }
         }
     }
@@ -260,7 +274,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
         for (int64_t i = 0; i < rows_to_read; i++) {
             if (!::arrow::bit_util::GetBit(null_bitmap_buff,
                                            i + rows_to_skip)) {
-                data[i] = std::numeric_limits<int64_t>::min();
+                data[i + curr_offset] = std::numeric_limits<int64_t>::min();
             }
         }
     }
@@ -292,7 +306,8 @@ inline void copy_nulls_categorical_inner(uint8_t* out_data,
     T* data = (T*)out_data;
     for (size_t i = 0; i < size_t(num_values); i++) {
         auto bit = ::arrow::bit_util::GetBit(null_bitmap_buff, skip + i);
-        if (!bit) data[i] = -1;
+        if (!bit)
+            data[i] = -1;
     }
 }
 
@@ -309,20 +324,26 @@ inline void copy_nulls_categorical_inner(uint8_t* out_data,
 inline void copy_nulls_categorical(uint8_t* out_data,
                                    const uint8_t* null_bitmap_buff,
                                    int64_t skip, int64_t num_values,
+                                   int64_t curr_offset, int64_t dtype_size,
                                    int out_dtype) {
     // codes array can only be signed int 8/16/32/64
-    if (out_dtype == Bodo_CTypes::INT8)
-        copy_nulls_categorical_inner<int8_t>(out_data, null_bitmap_buff, skip,
-                                             num_values);
-    if (out_dtype == Bodo_CTypes::INT16)
-        copy_nulls_categorical_inner<int16_t>(out_data, null_bitmap_buff, skip,
-                                              num_values);
-    if (out_dtype == Bodo_CTypes::INT32)
-        copy_nulls_categorical_inner<int32_t>(out_data, null_bitmap_buff, skip,
-                                              num_values);
-    if (out_dtype == Bodo_CTypes::INT64)
-        copy_nulls_categorical_inner<int64_t>(out_data, null_bitmap_buff, skip,
-                                              num_values);
+    if (out_dtype == Bodo_CTypes::INT8) {
+        copy_nulls_categorical_inner<int8_t>(
+            out_data + (curr_offset * dtype_size), null_bitmap_buff, skip,
+            num_values);
+    } else if (out_dtype == Bodo_CTypes::INT16) {
+        copy_nulls_categorical_inner<int16_t>(
+            out_data + (curr_offset * dtype_size), null_bitmap_buff, skip,
+            num_values);
+    } else if (out_dtype == Bodo_CTypes::INT32) {
+        copy_nulls_categorical_inner<int32_t>(
+            out_data + (curr_offset * dtype_size), null_bitmap_buff, skip,
+            num_values);
+    } else if (out_dtype == Bodo_CTypes::INT64) {
+        copy_nulls_categorical_inner<int64_t>(
+            out_data + (curr_offset * dtype_size), null_bitmap_buff, skip,
+            num_values);
+    }
 }
 
 // -------------------- TableBuilder --------------------
@@ -342,26 +363,29 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
     PrimitiveBuilder(std::shared_ptr<arrow::DataType> type, int64_t length,
                      bool is_nullable, bool is_categorical)
         : is_nullable(is_nullable), is_categorical(is_categorical) {
-        if (is_nullable)
+        Bodo_CTypes::CTypeEnum dtype = arrow_to_bodo_type(type->id());
+        if (is_nullable) {
             out_array =
                 alloc_array(length, -1, -1, bodo_array_type::NULLABLE_INT_BOOL,
-                            arrow_to_bodo_type(type), 0, -1);
-        else
+                            dtype, 0, -1);
+        } else {
             out_array = alloc_array(length, -1, -1, bodo_array_type::NUMPY,
-                                    arrow_to_bodo_type(type), 0, -1);
+                                    dtype, 0, -1);
+        }
         dtype_size = numpy_item_size[out_array->dtype];
     }
 
     PrimitiveBuilder(Bodo_CTypes::CTypeEnum dtype, int64_t length,
                      bool is_nullable, bool is_categorical)
         : is_nullable(is_nullable), is_categorical(is_categorical) {
-        if (is_nullable)
+        if (is_nullable) {
             out_array =
                 alloc_array(length, -1, -1, bodo_array_type::NULLABLE_INT_BOOL,
                             dtype, 0, -1);
-        else
+        } else {
             out_array = alloc_array(length, -1, -1, bodo_array_type::NUMPY,
                                     dtype, 0, -1);
+        }
         dtype_size = numpy_item_size[out_array->dtype];
     }
 
@@ -382,29 +406,32 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
             int64_t in_offset = arr->data()->offset;
             int64_t in_length = arr->data()->length;
             auto buffers = arr->data()->buffers;
-            if (buffers.size() != 2)
+            if (buffers.size() != 2) {
                 throw std::runtime_error(
                     "PrimitiveBuilder: invalid number of array buffers");
+            }
 
             const uint8_t* buff = buffers[1]->data();
             const uint8_t* null_bitmap_buff =
                 arr->null_count() == 0 ? nullptr : arr->null_bitmap_data();
 
-            uint8_t* data_ptr = reinterpret_cast<uint8_t*>(
-                out_array->data1() + cur_offset * dtype_size);
+            uint8_t* data_ptr = reinterpret_cast<uint8_t*>(out_array->data1());
             copy_data(data_ptr, buff, in_offset, in_length, arrow_type,
-                      null_bitmap_buff, out_array->dtype);
-            if (is_nullable)
+                      null_bitmap_buff, out_array->arr_type, out_array->dtype,
+                      cur_offset, dtype_size);
+            if (is_nullable) {
                 copy_nulls(
                     reinterpret_cast<uint8_t*>(out_array->null_bitmask()),
                     null_bitmap_buff, in_offset, in_length, cur_offset);
+            }
 
             // Arrow uses nullable arrays for categorical codes, but we use
             // regular numpy arrays and store -1 for null, so nulls have to be
             // set in data array
             if (is_categorical && arr->null_count() != 0) {
                 copy_nulls_categorical(data_ptr, null_bitmap_buff, in_offset,
-                                       in_length, out_array->dtype);
+                                       in_length, cur_offset, dtype_size,
+                                       out_array->dtype);
             }
 
             cur_offset += in_length;
@@ -425,7 +452,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
      * @param type : Arrow type of input array
      */
     StringBuilder(std::shared_ptr<arrow::DataType> type)
-        : dtype(arrow_to_bodo_type(type)) {}
+        : dtype(arrow_to_bodo_type(type->id())) {}
 
     StringBuilder(Bodo_CTypes::CTypeEnum dtype) : dtype(dtype) {}
 
@@ -438,7 +465,9 @@ class StringBuilder : public TableBuilder::BuilderColumn {
     }
 
     virtual array_info* get_output() {
-        if (out_array != nullptr) return out_array;
+        if (out_array != nullptr) {
+            return out_array;
+        }
         // copy from Arrow arrays to Bodo array
         int64_t total_n_strings = 0;
         int64_t total_n_chars = 0;
@@ -522,9 +551,10 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                 out_offsets[n_strings_copied + i] +
                 in_offsets[str_start_offset + i + 1] -
                 in_offsets[str_start_offset + i];
-            if (!str_arr->IsNull(i))
+            if (!str_arr->IsNull(i)) {
                 SetBitTo((uint8_t*)out_array->null_bitmask(),
                          n_strings_copied + i, true);
+            }
         }
         n_strings_copied += n_strings;
         n_chars_copied += n_chars;
@@ -546,7 +576,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         //  'type' comes from the schema returned from
         //  bodo.io.parquet_pio.get_parquet_dataset() which always has
         //  string columns as STRING (not DICT)
-        Bodo_CTypes::CTypeEnum dtype = arrow_to_bodo_type(type);
+        Bodo_CTypes::CTypeEnum dtype = arrow_to_bodo_type(type->id());
         if (dtype != Bodo_CTypes::CTypeEnum::STRING &&
             dtype != Bodo_CTypes::CTypeEnum::BINARY) {
             throw std::runtime_error(
@@ -565,7 +595,9 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
     }
 
     virtual array_info* get_output() {
-        if (out_array != nullptr) return out_array;
+        if (out_array != nullptr) {
+            return out_array;
+        }
 
         if (length == 0) {
             this->out_array = alloc_dict_string_array(
@@ -648,7 +680,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
      */
     DictionaryEncodedFromStringBuilder(std::shared_ptr<arrow::DataType> type,
                                        int64_t length)
-        : dtype(arrow_to_bodo_type(type)), length(length) {
+        : dtype(arrow_to_bodo_type(type->id())), length(length) {
         //  This builder is currently only used for Snowflake, where we
         //  determine whether or not to dictionary-encode ourselves.
         if (dtype != Bodo_CTypes::CTypeEnum::STRING &&
@@ -658,9 +690,10 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
                 "BINARY data types");
         }
         // initialize the indices array
-        if (length > 0)
+        if (length > 0) {
             this->indices_arr =
                 alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
+        }
     }
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
@@ -685,7 +718,9 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
     }
 
     virtual array_info* get_output() {
-        if (out_array != nullptr) return out_array;
+        if (out_array != nullptr) {
+            return out_array;
+        }
 
         if (length == 0) {
             this->out_array = alloc_dict_string_array(
@@ -805,14 +840,17 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
     }
 
     virtual array_info* get_output() {
-        if (out_array != nullptr) return out_array;
+        if (out_array != nullptr) {
+            return out_array;
+        }
 
         // get output Bodo string array
         array_info* out_str_array = string_builder->get_output();
         int64_t total_n_strings = out_str_array->length;
         delete string_builder;
         int64_t total_n_lists = 0;
-        for (auto arr : arrays) total_n_lists += arr->length();
+        for (auto arr : arrays)
+            total_n_lists += arr->length();
 
         // allocate Bodo list of string array with preexisting string array
         // alloc_list_string_array deletes the string array_info struct
@@ -834,9 +872,10 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
                     out_offsets[n_lists_copied + i] +
                     in_offsets[list_start_offset + i + 1] -
                     in_offsets[list_start_offset + i];
-                if (!list_arr->IsNull(i))
+                if (!list_arr->IsNull(i)) {
                     SetBitTo((uint8_t*)out_array->null_bitmask(),
                              n_lists_copied + i, true);
+                }
             }
             n_lists_copied += n_lists;
         }
@@ -872,7 +911,9 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
     }
 
     virtual array_info* get_output() {
-        if (out_array != nullptr) return out_array;
+        if (out_array != nullptr) {
+            return out_array;
+        }
         std::shared_ptr<::arrow::Array> out_arrow_array;
         // TODO make this more efficient:
         // This copies to new buffers managed by Arrow, and then we copy
@@ -1070,10 +1111,11 @@ void ArrowDataframeReader::init_arrow_reader(
     Py_DECREF(all_pieces);
     PyObject* piece;
 
-    if (iterator == NULL)
+    if (iterator == NULL) {
         throw std::runtime_error(
             "ArrowDataframeReader::init_arrow_reader(): error getting pieces "
             "iterator");
+    }
 
     if (!parallel) {
         // The process will read the whole dataset
@@ -1100,7 +1142,8 @@ void ArrowDataframeReader::init_arrow_reader(
                 Py_DECREF(piece);
                 count_rows += num_rows_piece;
                 // finish when number of rows of my pieces covers my chunk
-                if (count_rows >= this->count) break;
+                if (count_rows >= this->count)
+                    break;
             }
         }
     } else {
@@ -1172,13 +1215,16 @@ void ArrowDataframeReader::init_arrow_reader(
 
                 count_rows += num_rows_piece;
                 // finish when number of rows of my pieces covers my chunk
-                if (rows_added == this->count) break;
+                if (rows_added == this->count)
+                    break;
             }
         }
     }
     Py_DECREF(iterator);
 
-    if (PyErr_Occurred()) throw std::runtime_error("python");
+    if (PyErr_Occurred()) {
+        throw std::runtime_error("python");
+    }
     release_gil();
 
     if (ev.is_tracing()) {

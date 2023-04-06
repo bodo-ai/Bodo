@@ -90,7 +90,7 @@ struct multi_col_key {
         for (int64_t i = 0; i < table->num_keys; i++) {
             array_info* c1 = table->columns[i];
             array_info* c2 = other.table->columns[i];
-            size_t siztype;
+            size_t size_type;
             switch (c1->arr_type) {
                 case bodo_array_type::ARROW: {
                     int64_t pos1_s = row;
@@ -101,7 +101,9 @@ struct multi_col_key {
                     int test = ComparisonArrowColumn(c1->array, pos1_s, pos1_e,
                                                      c2->array, pos2_s, pos2_e,
                                                      na_position_bis);
-                    if (test != 0) return false;
+                    if (test != 0) {
+                        return false;
+                    }
                 }
                     continue;
                 case bodo_array_type::DICT: {
@@ -140,16 +142,35 @@ struct multi_col_key {
                 }
                     continue;
                 case bodo_array_type::NULLABLE_INT_BOOL:
-                    if (c1->get_null_bit(row) != c2->get_null_bit(other.row))
+                    if (c1->get_null_bit(row) != c2->get_null_bit(other.row)) {
                         return false;
-                    if (!c1->get_null_bit(row)) continue;
+                    }
+                    if (!c1->get_null_bit(row)) {
+                        continue;
+                    }
+                    if (c1->dtype == Bodo_CTypes::_BOOL) {
+                        // Nullable bools are stored as 1 bit
+                        if (GetBit((uint8_t*)c1->data1(), row) !=
+                            GetBit((uint8_t*)c2->data1(), other.row)) {
+                            return false;
+                        }
+                    } else {
+                        size_type = numpy_item_size[c1->dtype];
+                        if (memcmp(c1->data1() + size_type * row,
+                                   c2->data1() + size_type * other.row,
+                                   size_type) != 0) {
+                            return false;
+                        }
+                    }
+                    continue;
+
                 case bodo_array_type::CATEGORICAL:  // Even in missing case
                                                     // (value -1) this works
                 case bodo_array_type::NUMPY:
-                    siztype = numpy_item_size[c1->dtype];
-                    if (memcmp(c1->data1() + siztype * row,
-                               c2->data1() + siztype * other.row,
-                               siztype) != 0) {
+                    size_type = numpy_item_size[c1->dtype];
+                    if (memcmp(c1->data1() + size_type * row,
+                               c2->data1() + size_type * other.row,
+                               size_type) != 0) {
                         return false;
                     }
                     continue;
@@ -157,25 +178,31 @@ struct multi_col_key {
                     uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask();
                     uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask();
                     if (GetBit(c1_null_bitmask, row) !=
-                        GetBit(c2_null_bitmask, other.row))
+                        GetBit(c2_null_bitmask, other.row)) {
                         return false;
+                    }
                     offset_t* c1_offsets = (offset_t*)c1->data2();
                     offset_t* c2_offsets = (offset_t*)c2->data2();
                     offset_t c1_str_len = c1_offsets[row + 1] - c1_offsets[row];
                     offset_t c2_str_len =
                         c2_offsets[other.row + 1] - c2_offsets[other.row];
-                    if (c1_str_len != c2_str_len) return false;
+                    if (c1_str_len != c2_str_len) {
+                        return false;
+                    }
                     char* c1_str = c1->data1() + c1_offsets[row];
                     char* c2_str = c2->data1() + c2_offsets[other.row];
-                    if (memcmp(c1_str, c2_str, c1_str_len) != 0) return false;
+                    if (memcmp(c1_str, c2_str, c1_str_len) != 0) {
+                        return false;
+                    }
                 }
                     continue;
                 case bodo_array_type::LIST_STRING: {
                     uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask();
                     uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask();
                     if (GetBit(c1_null_bitmask, row) !=
-                        GetBit(c2_null_bitmask, other.row))
+                        GetBit(c2_null_bitmask, other.row)) {
                         return false;
+                    }
                     uint8_t* c1_sub_null_bitmask =
                         (uint8_t*)c1->sub_null_bitmask();
                     uint8_t* c2_sub_null_bitmask =
@@ -189,7 +216,9 @@ struct multi_col_key {
                         c1_index_offsets[row + 1] - c1_index_offsets[row];
                     offset_t c2_index_len = c2_index_offsets[other.row + 1] -
                                             c2_index_offsets[other.row];
-                    if (c1_index_len != c2_index_len) return false;
+                    if (c1_index_len != c2_index_len) {
+                        return false;
+                    }
                     // comparing the length of the strings.
                     for (offset_t u = 0; u < c1_index_len; u++) {
                         offset_t size_data1 =
@@ -199,12 +228,16 @@ struct multi_col_key {
                             c2_data_offsets[c2_index_offsets[other.row] + u +
                                             1] -
                             c2_data_offsets[c2_index_offsets[other.row] + u];
-                        if (size_data1 != size_data2) return false;
+                        if (size_data1 != size_data2) {
+                            return false;
+                        }
                         bool str_bit1 = GetBit(c1_sub_null_bitmask,
                                                c1_index_offsets[row] + u);
                         bool str_bit2 = GetBit(c2_sub_null_bitmask,
                                                c2_index_offsets[other.row] + u);
-                        if (str_bit1 != str_bit2) return false;
+                        if (str_bit1 != str_bit2) {
+                            return false;
+                        }
                     }
                     // Now comparing the strings. Their length is the same since
                     // we pass above check
@@ -216,7 +249,8 @@ struct multi_col_key {
                     char* c2_strB =
                         c2->data1() +
                         c2_data_offsets[c2_index_offsets[other.row]];
-                    if (memcmp(c1_strB, c2_strB, common_len) != 0) return false;
+                    if (memcmp(c1_strB, c2_strB, common_len) != 0)
+                        return false;
                     continue;
                 }
                 default: {
@@ -409,11 +443,12 @@ class ElementComparator {
         return data1[iRowA] == data2[iRowB];
     }
 
-    // Nullable arrays
+    // Nullable non-boolean arrays
     // NAs equal case:
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
     requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
+             DType != Bodo_CTypes::CTypeEnum::_BOOL &&
              is_na_equal) constexpr bool
     operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
@@ -430,13 +465,41 @@ class ElementComparator {
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
     requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
-             !is_na_equal) constexpr bool
+             DType != Bodo_CTypes::_BOOL && !is_na_equal) constexpr bool
     operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
         T* data1 = (T*)this->data_ptr_1;
         T* data2 = (T*)this->data_ptr_2;
         T val1 = data1[iRowA];
         T val2 = data2[iRowB];
+        bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
+        bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
+        return !isna1 && !isna2 && (val1 == val2);
+    }
+
+    // Nullable boolean arrays
+    // NA equal case:
+    template <bodo_array_type::arr_type_enum ArrType,
+              Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
+    requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
+             DType == Bodo_CTypes::_BOOL && is_na_equal) constexpr bool
+    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        bool val1 = GetBit((uint8_t*)this->data_ptr_1, iRowA);
+        bool val2 = GetBit((uint8_t*)this->data_ptr_2, iRowB);
+        bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
+        bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
+        return (isna1 && isna2) || (!isna1 && !isna2 && val1 == val2);
+    }
+
+    // NAs not equal case:
+    template <bodo_array_type::arr_type_enum ArrType,
+              Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
+    requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
+             DType == Bodo_CTypes::CTypeEnum::_BOOL &&
+             !is_na_equal) constexpr bool
+    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        bool val1 = GetBit((uint8_t*)this->data_ptr_1, iRowA);
+        bool val2 = GetBit((uint8_t*)this->data_ptr_2, iRowB);
         bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
         bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
         return !isna1 && !isna2 && (val1 == val2);

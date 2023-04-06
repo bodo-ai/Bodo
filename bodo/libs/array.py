@@ -422,6 +422,10 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                     np_dtype = int128_type
                 elif arr_typ == datetime_date_array_type:
                     np_dtype = types.int64
+                elif arr_type == boolean_array_type:
+                    # BooleanArray is stored as uint8 because
+                    # we store 1 bit per boolean.
+                    np_dtype = types.uint8
                 arr = cgutils.create_struct_proxy(arr_typ)(context, builder, arr)
                 data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
                     context, builder, arr.data
@@ -476,7 +480,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                 l_field_names += get_field_names(_get_map_arr_data_type(arr_typ))
             return l_field_names
 
-        # get list of all types in the nested datastructure (to pass to C++)
+        # get list of all types in the nested data structure (to pass to C++)
         types_list = get_types(arr_type)
         types_array = cgutils.pack_array(
             builder, [context.get_constant(types.int32, t) for t in types_list]
@@ -748,12 +752,17 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         np_dtype = dtype
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
-        if arr_type == datetime_date_array_type:
+        elif arr_type == datetime_date_array_type:
             np_dtype = types.int64
+        elif arr_type == boolean_array_type:
+            np_dtype = types.int8
         data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
             context, builder, arr.data
         )
-        length = builder.extract_value(data_arr.shape, 0)
+        if arr_type == boolean_array_type:
+            length = arr.length
+        else:
+            length = builder.extract_value(data_arr.shape, 0)
         bitmap_arr = context.make_array(types.Array(types.uint8, 1, "C"))(
             context, builder, arr.null_bitmap
         )
@@ -1188,6 +1197,8 @@ def nested_to_array(
             np_dtype = int128_type
         elif arr_typ == datetime_date_array_type:
             np_dtype = types.int64
+        elif arr_typ == boolean_array_type:
+            np_dtype = types.uint8
 
         infos = builder.load(array_infos_ptr)
 
@@ -1198,6 +1209,9 @@ def nested_to_array(
         arr.null_bitmap = _lower_info_to_array_numpy(
             types.Array(types.uint8, 1, "C"), context, builder, nulls_info_ptr
         )
+        if arr_typ == boolean_array_type:
+            length_val = builder.extract_value(builder.load(lengths_ptr), lengths_pos)
+            arr.length = length_val
 
         # data array from array_info
         data_info_ptr = builder.bitcast(
@@ -1500,6 +1514,9 @@ def info_to_array_codegen(context, builder, sig, args):
             np_dtype = int128_type
         elif arr_type == datetime_date_array_type:
             np_dtype = types.int64
+        elif arr_type == boolean_array_type:
+            # Boolean array stores bits so we can't use boolean.
+            np_dtype = types.uint8
         data_arr_type = types.Array(np_dtype, 1, "C")
         data_arr = context.make_array(data_arr_type)(context, builder)
         nulls_arr_type = types.Array(types.uint8, 1, "C")
@@ -1546,7 +1563,13 @@ def info_to_array_codegen(context, builder, sig, args):
         intp_t = context.get_value_type(types.intp)
 
         # data array
-        shape_array = cgutils.pack_array(builder, [builder.load(length_ptr)], ty=intp_t)
+        if arr_type == boolean_array_type:
+            data_length_ptr = n_bytes_ptr
+        else:
+            data_length_ptr = length_ptr
+        shape_array = cgutils.pack_array(
+            builder, [builder.load(data_length_ptr)], ty=intp_t
+        )
         itemsize = context.get_constant(
             types.intp,
             context.get_abi_sizeof(context.get_data_type(np_dtype)),
@@ -1590,6 +1613,9 @@ def info_to_array_codegen(context, builder, sig, args):
             meminfo=builder.load(meminfo_nulls_ptr),
         )
         arr.null_bitmap = nulls_arr._getvalue()
+        if arr_type == boolean_array_type:
+            # Boolean array needs the total array length.
+            arr.length = builder.load(length_ptr)
         return arr._getvalue()
 
     # interval array
@@ -3362,15 +3388,31 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 # get data pointer for input column and cast to proper data type
                 col_ind = lir.Constant(lir.IntType(64), c_ind)
                 col_ptr = builder.load(builder.gep(table, [col_ind]))
-                col_ptr = builder.bitcast(
-                    col_ptr, context.get_data_type(col_dtype).as_pointer()
-                )
-                # Similar to Numpy array getitem in Numba:
-                # https://github.com/numba/numba/blob/2298ad6186d177f39c564046890263b0f1c74ecc/numba/np/arrayobj.py#L130
-                # makes sure we don't get LLVM i1 vs i8 mismatches for bool scalars
-                return context.unpack_value(
-                    builder, col_dtype, builder.gep(col_ptr, [row_ind])
-                )
+
+                if col_array_typ == boolean_array_type:
+                    # Boolean arrays store 1 bit per value, so we need a custom path to load the bit.
+                    col_ptr = builder.bitcast(
+                        col_ptr, context.get_data_type(types.uint8).as_pointer()
+                    )
+                    data_val = bodo.utils.cg_helpers.get_bitmap_bit(
+                        builder, col_ptr, row_ind
+                    )
+                    # Case the loaded bit to bool
+                    return context.cast(
+                        builder,
+                        data_val,
+                        types.uint8,
+                        col_dtype,
+                    )
+                else:
+                    col_ptr = builder.bitcast(
+                        col_ptr, context.get_data_type(col_dtype).as_pointer()
+                    )
+                    data_val = builder.gep(col_ptr, [row_ind])
+                    # Similar to Numpy array getitem in Numba:
+                    # https://github.com/numba/numba/blob/2298ad6186d177f39c564046890263b0f1c74ecc/numba/np/arrayobj.py#L130
+                    # makes sure we don't get LLVM i1 vs i8 mismatches for bool scalars
+                    return context.unpack_value(builder, col_dtype, data_val)
 
             return col_dtype(types.voidptr, types.int64), codegen
 

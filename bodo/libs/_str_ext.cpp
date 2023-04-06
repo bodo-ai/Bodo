@@ -90,6 +90,7 @@ int is_np_array(PyObject* obj);
 npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s);
+void bool_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* bool_arr, int64_t n);
 void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n);
 int is_bool_array(PyArrayObject* arr);
 int is_pd_boolean_array(PyObject* arr);
@@ -125,7 +126,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
         PyModuleDef_HEAD_INIT, "hstr_ext", "No docs", -1, NULL,
     };
     m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    if (m == NULL)
+        return NULL;
 
     // init numpy
     import_array();
@@ -209,6 +211,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&array_setitem)));
     PyObject_SetAttrString(m, "get_utf8_size",
                            PyLong_FromVoidPtr((void*)(&get_utf8_size)));
+    PyObject_SetAttrString(m, "bool_arr_to_bitmap",
+                           PyLong_FromVoidPtr((void*)(&bool_arr_to_bitmap)));
     PyObject_SetAttrString(m, "mask_arr_to_bitmap",
                            PyLong_FromVoidPtr((void*)(&mask_arr_to_bitmap)));
     PyObject_SetAttrString(m, "is_bool_array",
@@ -296,7 +300,8 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
             data_offs.push_back(data_ind);
             index_offsets[str_ind + 1] = data_offs.size();
             str_ind++;
-            if (str_ind == n_strs) break;  // all finished
+            if (str_ind == n_strs)
+                break;  // all finished
             // start new string
             data_offs.push_back(data_ind - 1);
             continue;  // stay on same data_ind for start of next string
@@ -374,7 +379,8 @@ void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
         return;                        \
     }
     // std::cout << "setitem str: " << *str << " " << index << std::endl;
-    if (index == 0) offsets[index] = 0;
+    if (index == 0)
+        offsets[index] = 0;
     offset_t start = offsets[index];
     offset_t utf8_len = 0;
     // std::cout << "start " << start << " len " << len << std::endl;
@@ -403,7 +409,8 @@ void setitem_binary_array(offset_t* offsets, char* data, uint64_t n_bytes,
     }
     offset_t utf8_len = (offset_t)len;
 
-    if (index == 0) offsets[index] = 0;
+    if (index == 0)
+        offsets[index] = 0;
     offset_t start = offsets[index];
 
     // Bytes objects in python are always just an array of chars,
@@ -428,7 +435,8 @@ void set_string_array_range(offset_t* out_offsets, char* out_data,
                             int64_t num_strs, int64_t num_chars) {
     // printf("%d %d\n", start_str_ind, start_chars_ind); fflush(stdout);
     offset_t curr_offset = 0;
-    if (start_str_ind != 0) curr_offset = out_offsets[start_str_ind];
+    if (start_str_ind != 0)
+        curr_offset = out_offsets[start_str_ind];
 
     // set offsets
     for (size_t i = 0; i < (size_t)num_strs; i++) {
@@ -690,12 +698,22 @@ void array_setitem(PyArrayObject* arr, char* p, PyObject* s) {
 #undef CHECK
 }
 
+void bool_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* bool_arr, int64_t n) {
+    for (int i = 0; i < n; i++) {
+        bitmap_arr[i / 8] ^=
+            static_cast<uint8_t>(-static_cast<uint8_t>(bool_arr[i] != 0) ^
+                                 bitmap_arr[i / 8]) &
+            kBitmask[i % 8];
+    }
+}
+
 void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n) {
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         bitmap_arr[i / 8] ^=
             static_cast<uint8_t>(-static_cast<uint8_t>(mask_arr[i] == 0) ^
                                  bitmap_arr[i / 8]) &
             kBitmask[i % 8];
+    }
 }
 
 int is_bool_array(PyArrayObject* arr) {
@@ -780,12 +798,15 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
             s == C_NA) {
             // null bit
             ClearBit(bitmap, i);
-            data[i] = 0;
+            ClearBit(data, i);
         } else {
             SetBit(bitmap, i);
             int is_true = PyObject_IsTrue(s);
             CHECK(is_true != -1, "invalid bool element");
-            data[i] = (uint8_t)is_true;
+            // Set the data bit
+            data[i / 8] ^= static_cast<uint8_t>(-static_cast<uint8_t>(is_true) ^
+                                                data[i / 8]) &
+                           kBitmask[i % 8];
         }
         Py_DECREF(s);
     }
@@ -883,7 +904,8 @@ int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
                 data++;
             } while (Py_ISSPACE(*data));
             // This break is taken if we end with a space character
-            if (data >= end) break;
+            if (data >= end)
+                break;
         }
         CHECK((end - data) >= 2,
               "bytes.fromhex, must provide two hex values per byte");
@@ -937,7 +959,8 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
 
     offset_t* offsets = (offset_t*)str_arr->data2();
     for (uint64_t i = 0; i < arr_len; i++) {
-        if (!str_arr->get_null_bit(i)) continue;
+        if (!str_arr->get_null_bit(i))
+            continue;
         std::string_view elem(str_arr->data1() + offsets[i],
                               offsets[i + 1] - offsets[i]);
 

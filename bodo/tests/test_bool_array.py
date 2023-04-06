@@ -195,9 +195,7 @@ def test_constant_lowering(bool_arr_value, memory_leak_check):
     def impl():
         return bool_arr_value
 
-    pd.testing.assert_series_equal(
-        pd.Series(bodo.jit(impl)()), pd.Series(bool_arr_value), check_dtype=False
-    )
+    check_func(impl, (), check_dtype=False, only_seq=True)
 
 
 @pytest.mark.smoke
@@ -263,9 +261,10 @@ def test_bool_arr_nbytes(bool_arr_value, memory_leak_check):
     def impl(A):
         return A.nbytes
 
-    py_out = 5 + bodo.get_size()  # 1 extra byte for null_bit_map per rank
+    # 1 byte per rank for data and 1 per null bitmap
+    py_out = 2 * bodo.get_size()
     check_func(impl, (bool_arr_value,), py_output=py_out, only_1D=True)
-    check_func(impl, (bool_arr_value,), py_output=6, only_seq=True)
+    check_func(impl, (bool_arr_value,), py_output=2, only_seq=True)
 
 
 def test_or_null(memory_leak_check):

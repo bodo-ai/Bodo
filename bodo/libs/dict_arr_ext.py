@@ -547,7 +547,7 @@ def dict_arr_ne(arr, val):  # pragma: no cover
             return out_arr
         return arr._indices != dict_ind
     else:
-        # In this case, we may have multiple indicies with a value
+        # In this case, we may have multiple indices with a value
         dict_ind_set = find_dict_ind_non_unique(arr, val)
 
         if len(dict_ind_set) == 0:

@@ -12,17 +12,25 @@
 
 /**
  * Append values from a byte buffer to a primitive array builder.
- * @param values: pointer to buffer containing data
+ * @param primitive_array: The arrow primitive array
  * @param offset: offset of starting element (not byte units)
  * @param length: number of elements to copy
  * @param builder: primitive array builder holding output array
  * @param valid_elems: non-zero if elem i is non-null
  */
-void append_to_primitive(const uint8_t* values, int64_t offset, int64_t length,
-                         arrow::ArrayBuilder* builder,
-                         const std::vector<uint8_t>& valid_elems) {
+void append_to_primitive(
+    std::shared_ptr<arrow::PrimitiveArray> const& primitive_array,
+    int64_t offset, int64_t length, arrow::ArrayBuilder* builder,
+    const std::vector<uint8_t>& valid_elems) {
     arrow::Type::type typ = builder->type()->id();
-    if (typ == arrow::Type::INT8) {
+    const uint8_t* values = primitive_array->values()->data();
+    if (typ == arrow::Type::BOOL) {
+        auto typed_builder = dynamic_cast<arrow::BooleanBuilder*>(builder);
+        // Boolean arrays reuse the null bitmap data
+        (void)typed_builder->AppendValues((uint8_t*)values, length,
+                                          primitive_array->null_bitmap_data(),
+                                          offset);
+    } else if (typ == arrow::Type::INT8) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::Int8Type>*>(builder);
         (void)typed_builder->AppendValues((int8_t*)values + offset, length,
@@ -179,17 +187,30 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         }
     } else {
         int64_t num_elems = end_offset - start_offset;
+        int64_t vect_size;
         // assume this is array of primitive values
         // TODO: decimal, date, etc.
         auto primitive_array =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
-        std::vector<uint8_t> valid_elems(num_elems, 0);
+        if (primitive_array->type()->id() == arrow::Type::BOOL) {
+            // Note the AppendValues API used by BOOL indexes into the
+            // null bitmap directly so we don't use valid_elems to track
+            // null values.
+            vect_size = 0;
+        } else {
+            vect_size = num_elems;
+        }
+        std::vector<uint8_t> valid_elems(vect_size, 0);
         // TODO: more efficient way of getting null data?
         size_t j = 0;
-        for (int64_t i = start_offset; i < start_offset + num_elems; i++)
-            valid_elems[j++] = !primitive_array->IsNull(i);
-        append_to_primitive(primitive_array->values()->data(), start_offset,
-                            num_elems, builder, valid_elems);
+        if (primitive_array->type()->id() != arrow::Type::BOOL) {
+            // Nullable boolean arrays use a bitmap just reuse the bitmap.
+            for (int64_t i = start_offset; i < start_offset + num_elems; i++) {
+                valid_elems[j++] = !primitive_array->IsNull(i);
+            }
+        }
+        append_to_primitive(primitive_array, start_offset, num_elems, builder,
+                            valid_elems);
     }
 }
 
@@ -222,17 +243,32 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr,
         out_arr = alloc_array(nRowOut, -1, -1,
                               bodo_array_type::NULLABLE_INT_BOOL, dtype, 0, 0);
         char* out_data1 = out_arr->data1();
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = in_arr_idxs[iRow];
-            char* out_ptr = out_data1 + siztype * iRow;
-            char* in_ptr;
-            bool bit = false;
-            if (idx >= 0) {
-                in_ptr = in_data1 + siztype * idx;
-                memcpy(out_ptr, in_ptr, siztype);
-                bit = true;
+        if (dtype == Bodo_CTypes::_BOOL) {
+            // Boolean needs a special implementation because the output
+            // array stores 1 bit per boolean.
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                bool bit = false;
+                if (idx >= 0) {
+                    bool data_bit = in_data1[idx] != 0;
+                    SetBitTo((uint8_t*)out_data1, iRow, data_bit);
+                    bit = true;
+                }
+                out_arr->set_null_bit(iRow, bit);
             }
-            out_arr->set_null_bit(iRow, bit);
+        } else {
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                char* out_ptr = out_data1 + siztype * iRow;
+                char* in_ptr;
+                bool bit = false;
+                if (idx >= 0) {
+                    in_ptr = in_data1 + siztype * idx;
+                    memcpy(out_ptr, in_ptr, siztype);
+                    bit = true;
+                }
+                out_arr->set_null_bit(iRow, bit);
+            }
         }
     } else {
         out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
@@ -286,7 +322,7 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr,
  * @brief Create a nullable array by selecting elements from input array as
  * provided by index array in_arr_idxs.
  *
- * @param in_arr Numpy array with input data
+ * @param in_arr Nullable array with input data
  * @param in_arr_idxs array of indices into input array to create the output
  * array
  * @param nRowOut number of rows in output array
@@ -299,6 +335,24 @@ array_info* RetrieveArray_SingleColumn_F_nullable(array_info* in_arr,
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     array_info* out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
     uint64_t siztype = numpy_item_size[dtype];
+
+    if (dtype == Bodo_CTypes::_BOOL) {
+        // Nullable boolean arrays use 1 bit per boolean
+        // so we need a specialized loop.
+        uint8_t* in_data1 = (uint8_t*)in_arr->data1();
+        uint8_t* out_data1 = (uint8_t*)out_arr->data1();
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            int64_t idx = in_arr_idxs[iRow];
+            bool null_bit = false;
+            if (idx >= 0) {
+                bool data_bit = GetBit(in_data1, idx);
+                SetBitTo(out_data1, iRow, data_bit);
+                null_bit = in_arr->get_null_bit(idx);
+            }
+            out_arr->set_null_bit(iRow, null_bit);
+        }
+        return out_arr;
+    }
 
     if (siztype == sizeof(int32_t)) {
         using T = int32_t;
@@ -332,8 +386,6 @@ array_info* RetrieveArray_SingleColumn_F_nullable(array_info* in_arr,
             if (idx >= 0) {
                 out_data1[iRow] = in_data1[idx];
                 bit = in_arr->get_null_bit(idx);
-            } else {
-                out_data1[iRow] = 0;
             }
             out_arr->set_null_bit(iRow, bit);
         }
@@ -350,11 +402,6 @@ array_info* RetrieveArray_SingleColumn_F_nullable(array_info* in_arr,
             char* in_ptr = in_data1 + siztype * idx;
             memcpy(out_ptr, in_ptr, siztype);
             bit = in_arr->get_null_bit(idx);
-        } else {
-            // set index value of dict-encoded string arrays to zero in case
-            // some other code accesses it by mistake. see
-            // https://bodo.atlassian.net/browse/BE-4146
-            memset(out_ptr, 0, siztype);
         }
         out_arr->set_null_bit(iRow, bit);
     }
@@ -365,224 +412,242 @@ array_info* RetrieveArray_SingleColumn_F_nullable(array_info* in_arr,
 array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
                                          const int64_t* in_arr_idxs,
                                          size_t nRowOut,
-                                         bool use_nullable_arr = false) {
+                                         bool use_nullable_arr) {
     array_info* out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
-    if (arr_type == bodo_array_type::LIST_STRING) {
-        // In the first case of STRING, we have to deal with offsets first so we
-        // need one first loop to determine the needed length. In the second
-        // loop, the assignation is made. If the entries are missing then the
-        // bitmask is set to false.
-        std::vector<offset_t> ListSizes_index(nRowOut);
-        std::vector<offset_t> ListSizes_data(nRowOut);
-        int64_t tot_size_index = 0;
-        int64_t tot_size_data = 0;
-        offset_t* index_offsets = (offset_t*)in_arr->data3();
-        offset_t* data_offsets = (offset_t*)in_arr->data2();
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = in_arr_idxs[iRow];
-            offset_t size_index = 0;
-            offset_t size_data = 0;
-            // To allow NaN values in the column
-            if (idx >= 0) {
-                offset_t start_offset_index = index_offsets[idx];
-                offset_t end_offset_index = index_offsets[idx + 1];
-                size_index = end_offset_index - start_offset_index;
-                offset_t start_offset_data = data_offsets[start_offset_index];
-                offset_t end_offset_data = data_offsets[end_offset_index];
-                size_data = end_offset_data - start_offset_data;
-            }
-            ListSizes_index[iRow] = size_index;
-            ListSizes_data[iRow] = size_data;
-            tot_size_index += size_index;
-            tot_size_data += size_data;
-        }
-        out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data, arr_type,
-                              dtype, 0, 0);
-        uint8_t* out_sub_null_bitmask = (uint8_t*)out_arr->sub_null_bitmask();
-        offset_t pos_index = 0;
-        offset_t pos_data = 0;
-        offset_t* out_index_offsets = (offset_t*)out_arr->data3();
-        offset_t* out_data_offsets = (offset_t*)out_arr->data2();
-        char* out_data1 = out_arr->data1();
-        out_data_offsets[0] = 0;
-        uint8_t* in_sub_null_bitmask = (uint8_t*)in_arr->sub_null_bitmask();
-        offset_t* in_index_offsets = (offset_t*)in_arr->data3();
-        offset_t* in_data_offsets = (offset_t*)in_arr->data2();
-        char* in_data1 = in_arr->data1();
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = in_arr_idxs[iRow];
-            offset_t size_index = ListSizes_index[iRow];
-            offset_t size_data = ListSizes_data[iRow];
-            out_index_offsets[iRow] = pos_index;
-            // To allow NaN values in the column.
-            bool bit = false;
-            if (idx >= 0) {
-                offset_t start_index_offset = in_index_offsets[idx];
-                offset_t start_data_offset =
-                    in_data_offsets[start_index_offset];
-                for (offset_t u = 0; u < size_index; u++) {
-                    offset_t len_str =
-                        in_data_offsets[start_index_offset + u + 1] -
-                        in_data_offsets[start_index_offset + u];
-                    out_data_offsets[pos_index + u + 1] =
-                        out_data_offsets[pos_index + u] + len_str;
-                    bool bit =
-                        GetBit(in_sub_null_bitmask, start_index_offset + u);
-                    SetBitTo(out_sub_null_bitmask, pos_index + u, bit);
+    switch (arr_type) {
+        case bodo_array_type::LIST_STRING: {
+            // In the first case of STRING, we have to deal with offsets first
+            // so we need one first loop to determine the needed length. In the
+            // second loop, the assignation is made. If the entries are missing
+            // then the bitmask is set to false.
+            std::vector<offset_t> ListSizes_index(nRowOut);
+            std::vector<offset_t> ListSizes_data(nRowOut);
+            int64_t tot_size_index = 0;
+            int64_t tot_size_data = 0;
+            offset_t* index_offsets = (offset_t*)in_arr->data3();
+            offset_t* data_offsets = (offset_t*)in_arr->data2();
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                offset_t size_index = 0;
+                offset_t size_data = 0;
+                // To allow NaN values in the column
+                if (idx >= 0) {
+                    offset_t start_offset_index = index_offsets[idx];
+                    offset_t end_offset_index = index_offsets[idx + 1];
+                    size_index = end_offset_index - start_offset_index;
+                    offset_t start_offset_data =
+                        data_offsets[start_offset_index];
+                    offset_t end_offset_data = data_offsets[end_offset_index];
+                    size_data = end_offset_data - start_offset_data;
                 }
-                memcpy(&out_data1[pos_data], &in_data1[start_data_offset],
-                       size_data);
-                bit = in_arr->get_null_bit(idx);
+                ListSizes_index[iRow] = size_index;
+                ListSizes_data[iRow] = size_data;
+                tot_size_index += size_index;
+                tot_size_data += size_data;
             }
-            pos_index += size_index;
-            pos_data += size_data;
-            out_arr->set_null_bit(iRow, bit);
-        }
-        out_index_offsets[nRowOut] = pos_index;
-    }
-    if (arr_type == bodo_array_type::STRING) {
-        // In the first case of STRING, we have to deal with offsets first so we
-        // need one first loop to determine the needed length. In the second
-        // loop, the assignation is made. If the entries are missing then the
-        // bitmask is set to false.
-        int64_t n_chars = 0;
-        std::vector<offset_t> ListSizes(nRowOut);
-        offset_t* in_offsets = (offset_t*)in_arr->data2();
-        char* in_data1 = in_arr->data1();
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = in_arr_idxs[iRow];
-            offset_t size = 0;
-            // To allow NaN values in the column
-            if (idx >= 0) {
-                offset_t start_offset = in_offsets[idx];
-                offset_t end_offset = in_offsets[idx + 1];
-                size = end_offset - start_offset;
+            out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data,
+                                  arr_type, dtype, 0, 0);
+            uint8_t* out_sub_null_bitmask =
+                (uint8_t*)out_arr->sub_null_bitmask();
+            offset_t pos_index = 0;
+            offset_t pos_data = 0;
+            offset_t* out_index_offsets = (offset_t*)out_arr->data3();
+            offset_t* out_data_offsets = (offset_t*)out_arr->data2();
+            char* out_data1 = out_arr->data1();
+            out_data_offsets[0] = 0;
+            uint8_t* in_sub_null_bitmask = (uint8_t*)in_arr->sub_null_bitmask();
+            offset_t* in_index_offsets = (offset_t*)in_arr->data3();
+            offset_t* in_data_offsets = (offset_t*)in_arr->data2();
+            char* in_data1 = in_arr->data1();
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                offset_t size_index = ListSizes_index[iRow];
+                offset_t size_data = ListSizes_data[iRow];
+                out_index_offsets[iRow] = pos_index;
+                // To allow NaN values in the column.
+                bool bit = false;
+                if (idx >= 0) {
+                    offset_t start_index_offset = in_index_offsets[idx];
+                    offset_t start_data_offset =
+                        in_data_offsets[start_index_offset];
+                    for (offset_t u = 0; u < size_index; u++) {
+                        offset_t len_str =
+                            in_data_offsets[start_index_offset + u + 1] -
+                            in_data_offsets[start_index_offset + u];
+                        out_data_offsets[pos_index + u + 1] =
+                            out_data_offsets[pos_index + u] + len_str;
+                        bool bit =
+                            GetBit(in_sub_null_bitmask, start_index_offset + u);
+                        SetBitTo(out_sub_null_bitmask, pos_index + u, bit);
+                    }
+                    memcpy(&out_data1[pos_data], &in_data1[start_data_offset],
+                           size_data);
+                    bit = in_arr->get_null_bit(idx);
+                }
+                pos_index += size_index;
+                pos_data += size_data;
+                out_arr->set_null_bit(iRow, bit);
             }
-            ListSizes[iRow] = size;
-            n_chars += size;
+            out_index_offsets[nRowOut] = pos_index;
+            break;
         }
-        out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
-        offset_t* out_offsets = (offset_t*)out_arr->data2();
-        char* out_data1 = out_arr->data1();
-        offset_t pos = 0;
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = in_arr_idxs[iRow];
-            offset_t size = ListSizes[iRow];
-            out_offsets[iRow] = pos;
-            // To allow NaN values in the column.
-            bool bit = false;
-            if (idx >= 0) {
-                offset_t start_offset = in_offsets[idx];
-                char* out_ptr = out_data1 + pos;
-                char* in_ptr = in_data1 + start_offset;
-                memcpy(out_ptr, in_ptr, size);
-                pos += size;
-                bit = in_arr->get_null_bit(idx);
+        case bodo_array_type::STRING: {
+            // In the first case of STRING, we have to deal with offsets first
+            // so we need one first loop to determine the needed length. In the
+            // second loop, the assignation is made. If the entries are missing
+            // then the bitmask is set to false.
+            int64_t n_chars = 0;
+            std::vector<offset_t> ListSizes(nRowOut);
+            offset_t* in_offsets = (offset_t*)in_arr->data2();
+            char* in_data1 = in_arr->data1();
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                offset_t size = 0;
+                // To allow NaN values in the column
+                if (idx >= 0) {
+                    offset_t start_offset = in_offsets[idx];
+                    offset_t end_offset = in_offsets[idx + 1];
+                    size = end_offset - start_offset;
+                }
+                ListSizes[iRow] = size;
+                n_chars += size;
             }
-            out_arr->set_null_bit(iRow, bit);
+            out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
+            offset_t* out_offsets = (offset_t*)out_arr->data2();
+            char* out_data1 = out_arr->data1();
+            offset_t pos = 0;
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                offset_t size = ListSizes[iRow];
+                out_offsets[iRow] = pos;
+                // To allow NaN values in the column.
+                bool bit = false;
+                if (idx >= 0) {
+                    offset_t start_offset = in_offsets[idx];
+                    char* out_ptr = out_data1 + pos;
+                    char* in_ptr = in_data1 + start_offset;
+                    memcpy(out_ptr, in_ptr, size);
+                    pos += size;
+                    bit = in_arr->get_null_bit(idx);
+                }
+                out_arr->set_null_bit(iRow, bit);
+            }
+            out_offsets[nRowOut] = pos;
+            break;
         }
-        out_offsets[nRowOut] = pos;
-    }
-    if (arr_type == bodo_array_type::DICT) {
-        array_info* in_indices = in_arr->child_arrays[1];
+        case bodo_array_type::DICT: {
+            array_info* in_indices = in_arr->child_arrays[1];
+            array_info* out_indices = RetrieveArray_SingleColumn_F_nullable(
+                in_indices, in_arr_idxs, nRowOut);
 
-        array_info* out_indices = RetrieveArray_SingleColumn_F_nullable(
-            in_indices, in_arr_idxs, nRowOut);
-
-        out_arr = new array_info(
-            bodo_array_type::DICT, in_arr->dtype, out_indices->length, {},
-            {in_arr->child_arrays[0], out_indices}, NULL, 0, 0, 0,
-            in_arr->has_global_dictionary, in_arr->has_deduped_local_dictionary,
-            in_arr->has_sorted_dictionary);
-        // input and output share the same dictionary array
-        incref_array(in_arr->child_arrays[0]);
-    }
-    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        out_arr =
-            RetrieveArray_SingleColumn_F_nullable(in_arr, in_arr_idxs, nRowOut);
-    }
-    if (arr_type == bodo_array_type::INTERVAL) {
-        // Interval array requires copying left and right data
-        uint64_t siztype = numpy_item_size[dtype];
-        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-        char* left_data = in_arr->data1();
-        char* right_data = in_arr->data2();
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
-        char* out_left_data = out_arr->data1();
-        char* out_right_data = out_arr->data2();
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = in_arr_idxs[iRow];
-            char* out_left_ptr = out_left_data + siztype * iRow;
-            char* out_right_ptr = out_right_data + siztype * iRow;
-            char* in_left_ptr;
-            char* in_right_ptr;
-            // To allow NaN values in the column.
-            if (idx >= 0) {
-                in_left_ptr = left_data + siztype * idx;
-                in_right_ptr = right_data + siztype * idx;
-            } else {
-                in_left_ptr = vectNaN.data();
-                in_right_ptr = vectNaN.data();
+            out_arr = new array_info(
+                bodo_array_type::DICT, in_arr->dtype, out_indices->length, {},
+                {in_arr->child_arrays[0], out_indices}, NULL, 0, 0, 0,
+                in_arr->has_global_dictionary,
+                in_arr->has_deduped_local_dictionary,
+                in_arr->has_sorted_dictionary);
+            // input and output share the same dictionary array
+            incref_array(in_arr->child_arrays[0]);
+            break;
+        }
+        case bodo_array_type::NULLABLE_INT_BOOL: {
+            out_arr = RetrieveArray_SingleColumn_F_nullable(in_arr, in_arr_idxs,
+                                                            nRowOut);
+            break;
+        }
+        case bodo_array_type::INTERVAL: {
+            // Interval array requires copying left and right data
+            uint64_t siztype = numpy_item_size[dtype];
+            std::vector<char> vectNaN = RetrieveNaNentry(dtype);
+            char* left_data = in_arr->data1();
+            char* right_data = in_arr->data2();
+            out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+            char* out_left_data = out_arr->data1();
+            char* out_right_data = out_arr->data2();
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                char* out_left_ptr = out_left_data + siztype * iRow;
+                char* out_right_ptr = out_right_data + siztype * iRow;
+                char* in_left_ptr;
+                char* in_right_ptr;
+                // To allow NaN values in the column.
+                if (idx >= 0) {
+                    in_left_ptr = left_data + siztype * idx;
+                    in_right_ptr = right_data + siztype * idx;
+                } else {
+                    in_left_ptr = vectNaN.data();
+                    in_right_ptr = vectNaN.data();
+                }
+                memcpy(out_left_ptr, in_left_ptr, siztype);
+                memcpy(out_right_ptr, in_right_ptr, siztype);
             }
-            memcpy(out_left_ptr, in_left_ptr, siztype);
-            memcpy(out_right_ptr, in_right_ptr, siztype);
+            break;
         }
-    }
-    if (arr_type == bodo_array_type::CATEGORICAL) {
-        // In the case of CATEGORICAL array we have only to put a single
-        // entry. For the NaN entry the value is -1.
-        uint64_t siztype = numpy_item_size[dtype];
-        std::vector<char> vectNaN =
-            RetrieveNaNentry(dtype);  // returns a -1 for integer values.
-        char* in_data1 = in_arr->data1();
-        int64_t num_categories = in_arr->num_categories;
-        out_arr = alloc_categorical(nRowOut, dtype, num_categories);
-        char* out_data1 = out_arr->data1();
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = in_arr_idxs[iRow];
-            char* out_ptr = out_data1 + siztype * iRow;
-            char* in_ptr;
-            // To allow NaN values in the column.
-            if (idx >= 0)
-                in_ptr = in_data1 + siztype * idx;
-            else
-                in_ptr = vectNaN.data();
-            memcpy(out_ptr, in_ptr, siztype);
+        case bodo_array_type::CATEGORICAL: {
+            // In the case of CATEGORICAL array we have only to put a single
+            // entry. For the NaN entry the value is -1.
+            uint64_t siztype = numpy_item_size[dtype];
+            std::vector<char> vectNaN =
+                RetrieveNaNentry(dtype);  // returns a -1 for integer values.
+            char* in_data1 = in_arr->data1();
+            int64_t num_categories = in_arr->num_categories;
+            out_arr = alloc_categorical(nRowOut, dtype, num_categories);
+            char* out_data1 = out_arr->data1();
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                char* out_ptr = out_data1 + siztype * iRow;
+                char* in_ptr;
+                // To allow NaN values in the column.
+                if (idx >= 0)
+                    in_ptr = in_data1 + siztype * idx;
+                else
+                    in_ptr = vectNaN.data();
+                memcpy(out_ptr, in_ptr, siztype);
+            }
+            break;
         }
-    }
-    if (arr_type == bodo_array_type::NUMPY) {
-        out_arr = RetrieveArray_SingleColumn_F_numpy(in_arr, in_arr_idxs,
-                                                     nRowOut, use_nullable_arr);
-    }
-    if (arr_type == bodo_array_type::ARROW) {
-        // Arrow builder for output array. builds it dynamically (buffer
-        // sizes are not known in advance)
-        std::unique_ptr<arrow::ArrayBuilder> builder;
-        std::shared_ptr<arrow::Array> in_arrow_array = in_arr->array;
-        (void)arrow::MakeBuilder(arrow::default_memory_pool(),
-                                 in_arrow_array->type(), &builder);
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = in_arr_idxs[iRow];
-            // append value in position 'row' of input array to builder's
-            // array (this is a recursive algorithm, can traverse nested
-            // arrays)
-            // To allow NaN values in the column.
-            if (idx >= 0)
-                append_to_out_array(in_arrow_array, idx, idx + 1,
-                                    builder.get());
-            else
-                (void)builder->AppendNull();
+        case bodo_array_type::NUMPY: {
+            out_arr = RetrieveArray_SingleColumn_F_numpy(
+                in_arr, in_arr_idxs, nRowOut, use_nullable_arr);
+            break;
         }
+        case bodo_array_type::ARROW: {
+            // Arrow builder for output array. builds it dynamically (buffer
+            // sizes are not known in advance)
+            std::unique_ptr<arrow::ArrayBuilder> builder;
+            std::shared_ptr<arrow::Array> in_arrow_array = in_arr->array;
+            (void)arrow::MakeBuilder(arrow::default_memory_pool(),
+                                     in_arrow_array->type(), &builder);
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                int64_t idx = in_arr_idxs[iRow];
+                // append value in position 'row' of input array to builder's
+                // array (this is a recursive algorithm, can traverse nested
+                // arrays)
+                // To allow NaN values in the column.
+                if (idx >= 0) {
+                    append_to_out_array(in_arrow_array, idx, idx + 1,
+                                        builder.get());
+                } else {
+                    (void)builder->AppendNull();
+                }
+            }
 
-        // get final output array from builder
-        std::shared_ptr<arrow::Array> out_arrow_array;
-        // TODO: assert builder is not null (at least one row added)
-        (void)builder->Finish(&out_arrow_array);
-        out_arr = new array_info(bodo_array_type::ARROW,
-                                 Bodo_CTypes::INT8 /*dummy*/, nRowOut,
-                                 /*meminfo TODO*/ {}, {}, out_arrow_array);
+            // get final output array from builder
+            std::shared_ptr<arrow::Array> out_arrow_array;
+            // TODO: assert builder is not null (at least one row added)
+            (void)builder->Finish(&out_arrow_array);
+            out_arr = new array_info(bodo_array_type::ARROW,
+                                     Bodo_CTypes::INT8 /*dummy*/, nRowOut,
+                                     /*meminfo TODO*/ {}, {}, out_arrow_array);
+            break;
+        }
+        default:
+            throw std::runtime_error(
+                "RetrieveArray_SingleColumn_F not implemented for this array "
+                "type: " +
+                GetArrType_as_string(arr_type));
     }
     out_arr->precision = in_arr->precision;
     return out_arr;
@@ -596,15 +661,16 @@ array_info* RetrieveArray_SingleColumn(array_info* in_arr,
 }
 
 array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
-                                           array_info* idx_arr) {
+                                           array_info* idx_arr,
+                                           bool use_nullable_arr) {
     if (idx_arr->dtype != Bodo_CTypes::UINT64) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "UINT64 is the only index type allowed");
         return nullptr;
     }
     size_t siz = idx_arr->length;
-    return RetrieveArray_SingleColumn_F(in_arr, (int64_t*)idx_arr->data1(),
-                                        siz);
+    return RetrieveArray_SingleColumn_F(in_arr, (int64_t*)idx_arr->data1(), siz,
+                                        use_nullable_arr);
 }
 
 array_info* RetrieveArray_TwoColumns(
@@ -631,8 +697,11 @@ array_info* RetrieveArray_TwoColumns(
     auto get_iRow =
         [&](size_t const& iRowIn) -> std::pair<array_info*, int64_t> {
         int64_t short_val = short_write_idxs[iRowIn];
-        if (short_val != -1) return {arr1, short_val};
-        return {arr2, long_write_idxs[iRowIn]};
+        if (short_val != -1) {
+            return {arr1, short_val};
+        } else {
+            return {arr2, long_write_idxs[iRowIn]};
+        }
     };
     // eshift is the in_table index used for the determination
     // of arr_type and dtype of the returned column.
@@ -793,18 +862,35 @@ array_info* RetrieveArray_TwoColumns(
         // In the case of missing array a value of false is assigned
         // to the bitmask.
         out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
-        uint64_t siztype = numpy_item_size[dtype];
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
-            bool bit = false;
-            if (ArrRow.second >= 0) {
-                array_info* e_col = ArrRow.first;
-                char* out_ptr = out_arr->data1() + siztype * iRow;
-                char* in_ptr = e_col->data1() + siztype * ArrRow.second;
-                memcpy(out_ptr, in_ptr, siztype);
-                bit = e_col->get_null_bit(ArrRow.second);
+        if (dtype == Bodo_CTypes::_BOOL) {
+            // Nullable boolean arrays store 1 bit per boolean so we
+            // need to use a different loop.
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+                bool null_bit = false;
+                if (ArrRow.second >= 0) {
+                    array_info* e_col = ArrRow.first;
+                    bool data_bit =
+                        GetBit((uint8_t*)e_col->data1(), ArrRow.second);
+                    SetBitTo((uint8_t*)out_arr->data1(), iRow, data_bit);
+                    null_bit = e_col->get_null_bit(ArrRow.second);
+                }
+                out_arr->set_null_bit(iRow, null_bit);
             }
-            out_arr->set_null_bit(iRow, bit);
+        } else {
+            uint64_t siztype = numpy_item_size[dtype];
+            for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+                std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+                bool bit = false;
+                if (ArrRow.second >= 0) {
+                    array_info* e_col = ArrRow.first;
+                    char* out_ptr = out_arr->data1() + siztype * iRow;
+                    char* in_ptr = e_col->data1() + siztype * ArrRow.second;
+                    memcpy(out_ptr, in_ptr, siztype);
+                    bit = e_col->get_null_bit(ArrRow.second);
+                }
+                out_arr->set_null_bit(iRow, bit);
+            }
         }
     }
     if (arr_type == bodo_array_type::CATEGORICAL) {
@@ -864,9 +950,9 @@ array_info* RetrieveArray_TwoColumns(
                 // non-null value for output
                 std::shared_ptr<arrow::Array> in_arr = ArrRow.first->array;
                 size_t row = ArrRow.second;
-                // append value in position 'row' of input array to builder's
-                // array (this is a recursive algorithm, can traverse nested
-                // arrays)
+                // append value in position 'row' of input array to
+                // builder's array (this is a recursive algorithm, can
+                // traverse nested arrays)
                 append_to_out_array(in_arr, row, row + 1, builder.get());
             } else {
                 // null value for output
@@ -883,17 +969,18 @@ array_info* RetrieveArray_TwoColumns(
                                  /*meminfo TODO*/ {}, {}, out_arrow_array);
     }
     return out_arr;
-};
+}
 
 table_info* RetrieveTable(table_info* const& in_table,
                           std::vector<int64_t> const& ListIdx,
                           int const& n_cols_arg) {
     std::vector<array_info*> out_arrs;
     size_t n_cols;
-    if (n_cols_arg == -1)
+    if (n_cols_arg == -1) {
         n_cols = (size_t)in_table->ncols();
-    else
+    } else {
         n_cols = n_cols_arg;
+    }
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         array_info* in_arr = in_table->columns[i_col];
         out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, ListIdx));
@@ -926,12 +1013,14 @@ std::pair<int, bool> process_arrow_bitmap(bool const& na_position_bis,
     bool bit2 = !arrow2->IsNull(pos2);
     if (bit1 && !bit2) {
         int val = -1;
-        if (na_position_bis) val = 1;
+        if (na_position_bis)
+            val = 1;
         return {val, true};
     }
     if (!bit1 && bit2) {
         int val = 1;
-        if (na_position_bis) val = -1;
+        if (na_position_bis)
+            val = -1;
         return {val, true};
     }
     return {0, bit1};
@@ -943,8 +1032,10 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                           int64_t pos2_s, int64_t pos2_e,
                           bool const& na_position_bis) {
     auto process_length = [](int const& len1, int const& len2) -> int {
-        if (len1 > len2) return -1;
-        if (len1 < len2) return 1;
+        if (len1 > len2)
+            return -1;
+        if (len1 < len2)
+            return 1;
         return 0;
     };
 #if OFFSET_BITWIDTH == 32
@@ -967,7 +1058,8 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             std::pair<int, bool> epair =
                 process_arrow_bitmap(na_position_bis, list_array1, pos1_s + idx,
                                      list_array2, pos2_s + idx);
-            if (epair.first != 0) return epair.first;
+            if (epair.first != 0)
+                return epair.first;
             if (epair.second) {
                 int n_pos1_s = list_array1->value_offset(pos1_s + idx);
                 int n_pos1_e = list_array1->value_offset(pos1_s + idx + 1);
@@ -976,7 +1068,8 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                 int test = ComparisonArrowColumn(
                     list_array1->values(), n_pos1_s, n_pos1_e,
                     list_array2->values(), n_pos2_s, n_pos2_e, na_position_bis);
-                if (test) return test;
+                if (test)
+                    return test;
             }
         }
         return process_length(len1, len2);
@@ -1001,14 +1094,16 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             std::pair<int, bool> epair =
                 process_arrow_bitmap(na_position_bis, struct_array1, n_pos1_s,
                                      struct_array2, n_pos2_s);
-            if (epair.first != 0) return epair.first;
+            if (epair.first != 0)
+                return epair.first;
             if (epair.second) {
                 for (int i = 0; i < num_fields; i++) {
                     int test = ComparisonArrowColumn(
                         struct_array1->field(i), n_pos1_s, n_pos1_e,
                         struct_array2->field(i), n_pos2_s, n_pos2_e,
                         na_position_bis);
-                    if (test) return test;
+                    if (test)
+                        return test;
                 }
             }
         }
@@ -1032,7 +1127,8 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             int n_pos2_s = pos2_s + idx;
             std::pair<int, bool> epair = process_arrow_bitmap(
                 na_position_bis, str_array1, n_pos1_s, str_array2, n_pos2_s);
-            if (epair.first != 0) return epair.first;
+            if (epair.first != 0)
+                return epair.first;
             if (epair.second) {
                 std::string_view str1 =
                     ArrowStrArrGetView(str_array1, pos1_s + idx);
@@ -1042,10 +1138,13 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                 size_t len2 = str2.size();
                 size_t minlen = std::min(len1, len2);
                 int test = std::memcmp(str2.data(), str1.data(), minlen);
-                if (test) return test;
+                if (test)
+                    return test;
                 // If not, we may be able to conclude via the string length.
-                if (len1 > len2) return -1;
-                if (len1 < len2) return 1;
+                if (len1 > len2)
+                    return -1;
+                if (len1 < len2)
+                    return 1;
             }
         }
         return process_length(len1, len2);
@@ -1057,25 +1156,60 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
         int64_t len1 = pos1_e - pos1_s;
         int64_t len2 = pos2_e - pos2_s;
         int64_t min_len = std::min(len1, len2);
-        for (int64_t idx = 0; idx < min_len; idx++) {
-            int n_pos1_s = pos1_s + idx;
-            int n_pos2_s = pos2_s + idx;
-            std::pair<int, bool> epair =
-                process_arrow_bitmap(na_position_bis, primitive_array1,
-                                     n_pos1_s, primitive_array2, n_pos2_s);
-            if (epair.first != 0) return epair.first;
-            if (epair.second) {
-                int test = 0;
-                // TODO: implement other types
-                Bodo_CTypes::CTypeEnum bodo_typ =
-                    arrow_to_bodo_type(primitive_array1->type());
-                size_t siz_typ = numpy_item_size[bodo_typ];
-                char* ptr1 = (char*)primitive_array1->values()->data() +
-                             siz_typ * n_pos1_s;
-                char* ptr2 = (char*)primitive_array2->values()->data() +
-                             siz_typ * n_pos2_s;
-                test = NumericComparison(bodo_typ, ptr1, ptr2, na_position_bis);
-                if (test) return test;
+        if (arr1->type()->id() == arrow::Type::BOOL) {
+            // Boolean arrays have 1 bit per boolean so we
+            // need a separate loop.
+            uint8_t* data_ptr1 = (uint8_t*)primitive_array1->values()->data();
+            uint8_t* data_ptr2 = (uint8_t*)primitive_array2->values()->data();
+            for (int64_t idx = 0; idx < min_len; idx++) {
+                int n_pos1_s = pos1_s + idx;
+                int n_pos2_s = pos2_s + idx;
+                std::pair<int, bool> epair =
+                    process_arrow_bitmap(na_position_bis, primitive_array1,
+                                         n_pos1_s, primitive_array2, n_pos2_s);
+                if (epair.first != 0) {
+                    return epair.first;
+                } else if (epair.second) {
+                    bool bit1 = arrow::bit_util::GetBit(data_ptr1, n_pos1_s);
+                    bool bit2 = arrow::bit_util::GetBit(data_ptr2, n_pos2_s);
+                    if (bit1 != bit2) {
+                        if (bit1) {
+                            // bit1 is true, bit2 is false so (bit1 < bit2) ==
+                            // False
+                            return -1;
+                        } else {
+                            // bit1 is false, bit2 is true so (bit1 < bit2) ==
+                            // True
+                            return 1;
+                        }
+                    }
+                }
+            }
+        } else {
+            for (int64_t idx = 0; idx < min_len; idx++) {
+                int n_pos1_s = pos1_s + idx;
+                int n_pos2_s = pos2_s + idx;
+                std::pair<int, bool> epair =
+                    process_arrow_bitmap(na_position_bis, primitive_array1,
+                                         n_pos1_s, primitive_array2, n_pos2_s);
+                if (epair.first != 0) {
+                    return epair.first;
+                } else if (epair.second) {
+                    int test = 0;
+                    // TODO: implement other types
+                    Bodo_CTypes::CTypeEnum bodo_typ =
+                        arrow_to_bodo_type(primitive_array1->type()->id());
+                    size_t siz_typ = numpy_item_size[bodo_typ];
+                    char* ptr1 = (char*)primitive_array1->values()->data() +
+                                 siz_typ * n_pos1_s;
+                    char* ptr2 = (char*)primitive_array2->values()->data() +
+                                 siz_typ * n_pos2_s;
+                    test = NumericComparison(bodo_typ, ptr1, ptr2,
+                                             na_position_bis);
+                    if (test) {
+                        return test;
+                    }
+                }
             }
         }
         return process_length(len1, len2);
@@ -1102,7 +1236,9 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
         uint64_t siztype = numpy_item_size[arr1->dtype];
         char* ptr1 = arr1->data1() + siztype * pos1;
         char* ptr2 = arr2->data1() + siztype * pos2;
-        if (memcmp(ptr1, ptr2, siztype) != 0) return false;
+        if (memcmp(ptr1, ptr2, siztype) != 0) {
+            return false;
+        }
         // Check for null if NA is not considered equal
         if (!is_na_equal) {
             if (arr1->arr_type == bodo_array_type::CATEGORICAL) {
@@ -1135,14 +1271,28 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
         bool bit2 = arr2->get_null_bit(pos2);
         // If one bitmask is T and the other the reverse then they are
         // clearly not equal.
-        if (bit1 != bit2) return false;
+        if (bit1 != bit2) {
+            return false;
+        }
         // If both bitmasks are false, then it does not matter what value
         // they are storing. Comparison is the same as for NUMPY.
         if (bit1) {
-            uint64_t siztype = numpy_item_size[arr1->dtype];
-            char* ptr1 = arr1->data1() + siztype * pos1;
-            char* ptr2 = arr2->data1() + siztype * pos2;
-            if (memcmp(ptr1, ptr2, siztype) != 0) return false;
+            if (arr1->dtype == Bodo_CTypes::_BOOL) {
+                // Boolean array store 1 bit per boolean value so
+                // we need a separate implementation.
+                bool val1 = GetBit((uint8_t*)arr1->data1(), pos1);
+                bool val2 = GetBit((uint8_t*)arr2->data1(), pos2);
+                if (val1 != val2) {
+                    return false;
+                }
+            } else {
+                uint64_t siztype = numpy_item_size[arr1->dtype];
+                char* ptr1 = arr1->data1() + siztype * pos1;
+                char* ptr2 = arr2->data1() + siztype * pos2;
+                if (memcmp(ptr1, ptr2, siztype) != 0) {
+                    return false;
+                }
+            }
         } else {
             return is_na_equal;
         }
@@ -1153,8 +1303,11 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
         bool bit2 = arr2->get_null_bit(pos2);
         uint8_t* sub_null_bitmask1 = (uint8_t*)arr1->sub_null_bitmask();
         uint8_t* sub_null_bitmask2 = (uint8_t*)arr2->sub_null_bitmask();
-        // (1): If bitmasks are different then we conclude they are not equal.
-        if (bit1 != bit2) return false;
+        // (1): If bitmasks are different then we conclude they are not
+        // equal.
+        if (bit1 != bit2) {
+            return false;
+        }
         // If bitmasks are both false, then no need to compare the string
         // values.
         if (bit1) {
@@ -1163,8 +1316,10 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
             offset_t* data3_2 = (offset_t*)arr2->data3();
             offset_t len1 = data3_1[pos1 + 1] - data3_1[pos1];
             offset_t len2 = data3_2[pos2 + 1] - data3_2[pos2];
-            // (2): If number of strings are different the they are different
-            if (len1 != len2) return false;
+            // (2): If number of strings are different the they are
+            // different
+            if (len1 != len2)
+                return false;
             // (3): Checking that the string lengths are the same
             offset_t* data2_1 = (offset_t*)arr1->data2();
             offset_t* data2_2 = (offset_t*)arr2->data2();
@@ -1175,10 +1330,12 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
                     data2_1[pos1_prev + u + 1] - data2_1[pos1_prev + u];
                 offset_t len2_str =
                     data2_2[pos2_prev + u + 1] - data2_2[pos2_prev + u];
-                if (len1_str != len2_str) return false;
+                if (len1_str != len2_str)
+                    return false;
                 bool str_bit1 = GetBit(sub_null_bitmask1, pos1_prev + u);
                 bool str_bit2 = GetBit(sub_null_bitmask2, pos2_prev + u);
-                if (str_bit1 != str_bit2) return false;
+                if (str_bit1 != str_bit2)
+                    return false;
             }
             offset_t tot_nb_char =
                 data2_1[data3_1[pos1 + 1]] - data2_1[data3_1[pos1]];
@@ -1198,7 +1355,8 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
         bool bit1 = arr1->get_null_bit(pos1);
         bool bit2 = arr2->get_null_bit(pos2);
         // If bitmasks are different then we conclude they are not equal.
-        if (bit1 != bit2) return false;
+        if (bit1 != bit2)
+            return false;
         // If bitmasks are both false, then no need to compare the string
         // values.
         if (bit1) {
@@ -1208,13 +1366,16 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
             offset_t len1 = data2_1[pos1 + 1] - data2_1[pos1];
             offset_t len2 = data2_2[pos2 + 1] - data2_2[pos2];
             // If string lengths are different then they are different.
-            if (len1 != len2) return false;
+            if (len1 != len2)
+                return false;
             // Now we iterate over the characters for the comparison.
             offset_t pos1_prev = data2_1[pos1];
             offset_t pos2_prev = data2_2[pos2];
             char* data1_1 = arr1->data1() + pos1_prev;
             char* data1_2 = arr2->data1() + pos2_prev;
-            if (memcmp(data1_1, data1_2, len1) != 0) return false;
+            if (memcmp(data1_1, data1_2, len1) != 0) {
+                return false;
+            }
         } else {
             return is_na_equal;
         }
@@ -1242,12 +1403,18 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
     }
     auto process_bits = [&](bool bit1, bool bit2) -> int {
         if (bit1 && !bit2) {
-            if (na_position_bis) return 1;
-            return -1;
+            if (na_position_bis) {
+                return 1;
+            } else {
+                return -1;
+            }
         }
         if (!bit1 && bit2) {
-            if (na_position_bis) return -1;
-            return 1;
+            if (na_position_bis) {
+                return -1;
+            } else {
+                return 1;
+            }
         }
         return 0;
     };
@@ -1259,7 +1426,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         bool is_not_na1 = !isnan_categorical_ptr(arr1->dtype, ptr1);
         bool is_not_na2 = !isnan_categorical_ptr(arr2->dtype, ptr2);
         int reply = process_bits(is_not_na1, is_not_na2);
-        if (reply != 0) return reply;
+        if (reply != 0)
+            return reply;
         if (is_not_na1) {
             return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
         }
@@ -1273,16 +1441,36 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         // If one bitmask is T and the other the reverse then they are
         // clearly not equal.
         int reply = process_bits(bit1, bit2);
-        if (reply != 0) return reply;
+        if (reply != 0) {
+            return reply;
+        }
         // If both bitmasks are false, then it does not matter what value
         // they are storing. Comparison is the same as for NUMPY.
         if (bit1) {
-            uint64_t siztype = numpy_item_size[arr1->dtype];
-            char* ptr1 = arr1->data1() + (siztype * iRow1);
-            char* ptr2 = arr2->data1() + (siztype * iRow2);
-            int test =
-                NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
-            if (test) return test;
+            if (arr1->dtype == Bodo_CTypes::_BOOL) {
+                uint8_t* data1 = (uint8_t*)arr1->data1();
+                uint8_t* data2 = (uint8_t*)arr2->data1();
+                bool bit1 = arrow::bit_util::GetBit(data1, iRow1);
+                bool bit2 = arrow::bit_util::GetBit(data2, iRow2);
+                if (bit1 == bit2) {
+                    return 0;
+                } else if (bit1) {
+                    // bit1 is true and bit2 is false
+                    // So (val1 < val2) == False
+                    return -1;
+                } else {
+                    // bit1 is false and bit2 is true
+                    // So (val1 < val2) == True
+                    return 1;
+                }
+            } else {
+                uint64_t siztype = numpy_item_size[arr1->dtype];
+                char* ptr1 = arr1->data1() + (siztype * iRow1);
+                char* ptr2 = arr2->data1() + (siztype * iRow2);
+                int test =
+                    NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
+                return test;
+            }
         }
     }
     if (arr1->arr_type == bodo_array_type::LIST_STRING) {
@@ -1293,7 +1481,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         uint8_t* sub_null_bitmask2 = (uint8_t*)arr2->sub_null_bitmask();
         // If bitmasks are different then we can conclude the comparison
         int reply = process_bits(bit1, bit2);
-        if (reply != 0) return reply;
+        if (reply != 0)
+            return reply;
         if (bit1) {  // here bit1 = bit2
             offset_t* data3_1 = (offset_t*)arr1->data3();
             offset_t* data3_2 = (offset_t*)arr2->data3();
@@ -1303,7 +1492,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
             offset_t nb_string1 = data3_1[iRow1 + 1] - data3_1[iRow1];
             offset_t nb_string2 = data3_2[iRow2 + 1] - data3_2[iRow2];
             offset_t min_nb_string = nb_string1;
-            if (nb_string2 < nb_string1) min_nb_string = nb_string2;
+            if (nb_string2 < nb_string1)
+                min_nb_string = nb_string2;
             // Iterating over the number of strings.
             for (size_t istr = 0; istr < min_nb_string; istr++) {
                 size_t pos1_prev = data2_1[istr + data3_1[iRow1]];
@@ -1317,24 +1507,32 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                 bool str_bit2 =
                     GetBit(sub_null_bitmask2, data3_2[iRow2] + istr);
                 int reply_str = process_bits(str_bit1, str_bit2);
-                if (reply_str != 0) return reply_str;
+                if (reply_str != 0)
+                    return reply_str;
                 if (str_bit1) {  // here str_bit1 = str_bit2
                     offset_t minlen = len1;
-                    if (len2 < len1) minlen = len2;
+                    if (len2 < len1) {
+                        minlen = len2;
+                    }
                     char* data1_1 = arr1->data1() + pos1_prev;
                     char* data1_2 = arr2->data1() + pos2_prev;
-                    // We check the strings for comparison and check if we can
-                    // conclude.
+                    // We check the strings for comparison and check if we
+                    // can conclude.
                     int test = std::memcmp(data1_2, data1_1, minlen);
-                    if (test) return test;
+                    if (test)
+                        return test;
                     // If not, we may be able to conclude via their length
-                    if (len1 > len2) return -1;
-                    if (len1 < len2) return 1;
+                    if (len1 > len2)
+                        return -1;
+                    if (len1 < len2)
+                        return 1;
                 }
             }
             // If the number of strings is different then we can conclude.
-            if (nb_string1 > nb_string2) return -1;
-            if (nb_string1 < nb_string2) return 1;
+            if (nb_string1 > nb_string2)
+                return -1;
+            if (nb_string1 < nb_string2)
+                return 1;
         }
     }
     if (arr1->arr_type == bodo_array_type::STRING) {
@@ -1343,7 +1541,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         bool bit2 = arr2->get_null_bit(iRow2);
         // If bitmasks are different then we can conclude the comparison
         int reply = process_bits(bit1, bit2);
-        if (reply != 0) return reply;
+        if (reply != 0)
+            return reply;
         // If bitmasks are both false, then no need to compare the string
         // values.
         if (bit1) {
@@ -1354,17 +1553,21 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
             offset_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
             // Compute minimal length
             offset_t minlen = len1;
-            if (len2 < len1) minlen = len2;
+            if (len2 < len1)
+                minlen = len2;
             // From the common characters, we may be able to conclude.
             offset_t pos1_prev = data2_1[iRow1];
             offset_t pos2_prev = data2_2[iRow2];
             char* data1_1 = (char*)arr1->data1() + pos1_prev;
             char* data1_2 = (char*)arr2->data1() + pos2_prev;
             int test = std::memcmp(data1_2, data1_1, minlen);
-            if (test) return test;
+            if (test)
+                return test;
             // If not, we may be able to conclude via the string length.
-            if (len1 > len2) return -1;
-            if (len1 < len2) return 1;
+            if (len1 > len2)
+                return -1;
+            if (len1 < len2)
+                return 1;
         }
     }
     if (arr1->arr_type == bodo_array_type::DICT) {
@@ -1397,11 +1600,12 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         // If one bitmask is T and the other the reverse then they are
         // clearly not equal.
         int reply = process_bits(bit1, bit2);
-        if (reply != 0) return reply;
+        if (reply != 0)
+            return reply;
 
         // Currently we assume there are no null values in the dictionary
-        // itself, so no special handling is needed, but this might change in
-        // the future.
+        // itself, so no special handling is needed, but this might change
+        // in the future.
 
         // If both bitmasks are false, then it does not matter what value
         // they are storing.
@@ -1433,7 +1637,8 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
             na_position_bis, columns1[shift_key1 + iKey], iRow1,
             columns2[shift_key2 + iKey], iRow2);
         if (test) {
-            if (ascending) return test > 0;
+            if (ascending)
+                return test > 0;
             return test < 0;
         }
     }
@@ -1445,12 +1650,12 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
  * @brief Helper function for create_temp_null_bitmask_for_array to fill the
  * bitmask for a NUMPY array.
  *
- * @param[out] bitmask Bitmask array to fill. It is pre-allocated to the correct
- * size and just needs to be filled up.
+ * @param[out] bitmask Bitmask array to fill. It is pre-allocated to the
+ * correct size and just needs to be filled up.
  * @param arr The array to create bitmask for.
  *
- * @tparam DType The dtype for the array. Only certain dtypes that can have have
- * sentinel nulls are supported.
+ * @tparam DType The dtype for the array. Only certain dtypes that can have
+ * have sentinel nulls are supported.
  */
 template <Bodo_CTypes::CTypeEnum DType>
 requires(NullSentinelDtype<DType>) void fill_null_bitmask_numpy(
@@ -1463,14 +1668,15 @@ requires(NullSentinelDtype<DType>) void fill_null_bitmask_numpy(
 }
 
 /**
- * @brief Helper function for bitwise_and_null_bitmasks to create a temp null
- * bitmask for the provided array. Only NUMPY, CATEGORICAL and ARROW array types
- * are supported. For other types, there's either a null-bitmask already, or the
- * array types are not supported as join keys (which is the use case for this).
+ * @brief Helper function for bitwise_and_null_bitmasks to create a temp
+ * null bitmask for the provided array. Only NUMPY, CATEGORICAL and ARROW
+ * array types are supported. For other types, there's either a null-bitmask
+ * already, or the array types are not supported as join keys (which is the
+ * use case for this).
  *
  * @param arr Array to build bitmask for.
- * @return uint8_t* Bitmask constructed for the array. Caller is responsible for
- * cleaning up the returned array using delete[].
+ * @return uint8_t* Bitmask constructed for the array. Caller is responsible
+ * for cleaning up the returned array using delete[].
  */
 uint8_t* create_temp_null_bitmask_for_array(const array_info* arr) {
     uint64_t length = arr->length;
@@ -1480,8 +1686,8 @@ uint8_t* create_temp_null_bitmask_for_array(const array_info* arr) {
     switch (arr->arr_type) {
         case bodo_array_type::NUMPY: {
             // Only some dtypes have the concept of a sentinel null,
-            // for the rest, there's no concept of a null, so we set all bits to
-            // not null.
+            // for the rest, there's no concept of a null, so we set all
+            // bits to not null.
             if (arr->dtype == Bodo_CTypes::FLOAT32) {
                 fill_null_bitmask_numpy<Bodo_CTypes::FLOAT32>(bitmask, arr);
             } else if (arr->dtype == Bodo_CTypes::FLOAT64) {
@@ -1508,8 +1714,9 @@ uint8_t* create_temp_null_bitmask_for_array(const array_info* arr) {
         }
         case bodo_array_type::ARROW: {
             // For robustness, we do a for loop and use the IsNull function
-            // to determine if an element is null. IsNull correctly handles all
-            // cases including no nulls, all nulls (Null array type), etc.
+            // to determine if an element is null. IsNull correctly handles
+            // all cases including no nulls, all nulls (Null array type),
+            // etc.
             for (size_t i = 0; i < arr->length; i++) {
                 SetBitTo(bitmask, i, !arr->array->IsNull(i));
             }
@@ -1562,8 +1769,9 @@ uint8_t* bitwise_and_null_bitmasks(const std::vector<array_info*>& arrays,
             // Use existing bitmask if one exists
             arr_null_bitmask = (uint8_t*)(arr->null_bitmask());
         } else {
-            // Create a temporary one for NUMPY, CATEGORICAL and ARROW arrays.
-            // The remaining array types are not supported as join keys.
+            // Create a temporary one for NUMPY, CATEGORICAL and ARROW
+            // arrays. The remaining array types are not supported as join
+            // keys.
             arr_null_bitmask = create_temp_null_bitmask_for_array(arr);
             free_bitmask = true;
         }
@@ -1655,10 +1863,29 @@ void DEBUG_append_to_primitive_T(const T* values, int64_t offset,
                                  const std::vector<uint8_t>& valid_elems) {
     string_builder += "[";
     for (int64_t i = 0; i < length; i++) {
-        if (i > 0) string_builder += ",";
+        if (i > 0)
+            string_builder += ",";
         if (valid_elems[i]) {
             T val = values[offset + i];
             string_builder += std::to_string(val);
+        } else {
+            string_builder += "None";
+        }
+    }
+    string_builder += "]";
+}
+
+void DEBUG_append_to_primitive_boolean(
+    const uint8_t* values, int64_t offset, int64_t length,
+    std::string& string_builder, const std::vector<uint8_t>& valid_elems) {
+    string_builder += "[";
+    for (int64_t i = 0; i < length; i++) {
+        if (i > 0) {
+            string_builder += ",";
+        }
+        if (valid_elems[i]) {
+            bool bit = arrow::bit_util::GetBit(values, offset + i);
+            string_builder += std::to_string(bit);
         } else {
             string_builder += "None";
         }
@@ -1671,7 +1898,8 @@ void DEBUG_append_to_primitive_decimal(
     std::string& string_builder, const std::vector<uint8_t>& valid_elems) {
     string_builder += "[";
     for (int64_t i = 0; i < length; i++) {
-        if (i > 0) string_builder += ",";
+        if (i > 0)
+            string_builder += ",";
         if (valid_elems[i]) {
             __int128 val = values[offset + i];
             int scale = 18;
@@ -1687,7 +1915,10 @@ void DEBUG_append_to_primitive(arrow::Type::type const& type,
                                const uint8_t* values, int64_t offset,
                                int64_t length, std::string& string_builder,
                                const std::vector<uint8_t>& valid_elems) {
-    if (type == arrow::Type::INT8) {
+    if (type == arrow::Type::BOOL) {
+        DEBUG_append_to_primitive_boolean((uint8_t*)values, offset, length,
+                                          string_builder, valid_elems);
+    } else if (type == arrow::Type::INT8) {
         DEBUG_append_to_primitive_T((int8_t*)values, offset, length,
                                     string_builder, valid_elems);
     } else if (type == arrow::Type::UINT8) {
@@ -1761,7 +1992,8 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         auto struct_type =
             std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
         for (int64_t idx = start_offset; idx < end_offset; idx++) {
-            if (idx > start_offset) string_builder += ",";
+            if (idx > start_offset)
+                string_builder += ",";
             if (struct_array->IsNull(idx)) {
                 string_builder += "None";
                 continue;
@@ -1769,7 +2001,8 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
             string_builder += "{";
             for (int i = 0; i < struct_type->num_fields();
                  i++) {  // each field is an array
-                if (i > 0) string_builder += ", ";
+                if (i > 0)
+                    string_builder += ", ";
                 DEBUG_append_to_out_array(struct_array->field(i), idx, idx + 1,
                                           string_builder);
             }
@@ -1786,7 +2019,8 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
 #endif
         string_builder += "[";
         for (int64_t i = start_offset; i < end_offset; i++) {
-            if (i > 0) string_builder += ", ";
+            if (i > 0)
+                string_builder += ", ";
             if (str_array->IsNull(i))
                 string_builder += "None";
             else
@@ -1814,29 +2048,34 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
     size_t nRow = arr->length;
     std::vector<std::string> ListStr(nRow);
     std::string strOut;
-#ifdef DEBUG_DEBUG
-    std::cout << "Beginning of DEBUG_PrintColumn\n";
-#endif
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-#ifdef DEBUG_DEBUG
-        std::cout << "DEBUG, Case NULLABLE_INT_BOOL\n";
-#endif
-        uint64_t siztype = numpy_item_size[arr->dtype];
-        for (size_t iRow = 0; iRow < nRow; iRow++) {
-            bool bit = arr->get_null_bit(iRow);
-            if (bit) {
-                char* ptrdata1 = &(arr->data1()[siztype * iRow]);
-                strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
-            } else {
-                strOut = "NA";
+        if (arr->dtype == Bodo_CTypes::_BOOL) {
+            for (size_t iRow = 0; iRow < nRow; iRow++) {
+                bool bit = arr->get_null_bit(iRow);
+                if (bit) {
+                    bool data_bit = GetBit((uint8_t*)arr->data1(), iRow);
+                    strOut = std::to_string(data_bit);
+                } else {
+                    strOut = "NA";
+                }
+                ListStr[iRow] = strOut;
             }
-            ListStr[iRow] = strOut;
+        } else {
+            uint64_t siztype = numpy_item_size[arr->dtype];
+            for (size_t iRow = 0; iRow < nRow; iRow++) {
+                bool bit = arr->get_null_bit(iRow);
+                if (bit) {
+                    char* ptrdata1 = &(arr->data1()[siztype * iRow]);
+                    strOut =
+                        GetStringExpression(arr->dtype, ptrdata1, arr->scale);
+                } else {
+                    strOut = "NA";
+                }
+                ListStr[iRow] = strOut;
+            }
         }
     }
     if (arr->arr_type == bodo_array_type::NUMPY) {
-#ifdef DEBUG_DEBUG
-        std::cout << "DEBUG, Case NUMPY\n";
-#endif
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             char* ptrdata1 = &(arr->data1()[siztype * iRow]);
@@ -1861,24 +2100,14 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::STRING) {
-#ifdef DEBUG_DEBUG
-        std::cout << "DEBUG, Case STRING\n";
-#endif
         offset_t* data2 = (offset_t*)arr->data2();
         char* data1 = arr->data1();
-#ifdef DEBUG_DEBUG
-        std::cout << "DEBUG, We have the pointers\n";
-#endif
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             bool bit = arr->get_null_bit(iRow);
             if (bit) {
                 offset_t start_pos = data2[iRow];
                 offset_t end_pos = data2[iRow + 1];
                 offset_t len = end_pos - start_pos;
-#ifdef DEBUG_DEBUG
-                std::cout << "start_pos=" << start_pos << " end_pos=" << end_pos
-                          << " len=" << len << "\n";
-#endif
                 char* strname;
                 strname = new char[len + 1];
                 for (offset_t i = 0; i < len; i++) {
@@ -1894,9 +2123,6 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::LIST_STRING) {
-#ifdef DEBUG_DEBUG
-        std::cout << "DEBUG, Case LIST_STRING\n";
-#endif
         offset_t* index_offset = (offset_t*)arr->data3();
         offset_t* data_offset = (offset_t*)arr->data2();
         uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask();
@@ -1909,7 +2135,8 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
                 for (offset_t u = 0; u < len; u++) {
                     bool str_bit =
                         GetBit(sub_null_bitmask, index_offset[iRow] + u);
-                    if (u > 0) strOut += ",";
+                    if (u > 0)
+                        strOut += ",";
                     if (str_bit) {
                         offset_t start_pos =
                             data_offset[index_offset[iRow] + u];
@@ -1935,9 +2162,6 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::ARROW) {
-#ifdef DEBUG_DEBUG
-        std::cout << "DEBUG, Case ARROW\n";
-#endif
         std::shared_ptr<arrow::Array> in_arr = arr->array;
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             strOut = "";
@@ -1946,9 +2170,6 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::CATEGORICAL) {
-#ifdef DEBUG_DEBUG
-        std::cout << "DEBUG, Case CATEGORICAL\n";
-#endif
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             char* ptrdata1 = &(arr->data1()[siztype * iRow]);
@@ -1970,7 +2191,8 @@ void DEBUG_PrintVectorArrayInfo(std::ostream& os,
     int nRowMax = 0;
     for (int iCol = 0; iCol < nCol; iCol++) {
         int nRow = ListArr[iCol]->length;
-        if (nRow > nRowMax) nRowMax = nRow;
+        if (nRow > nRowMax)
+            nRowMax = nRow;
         ListLen[iCol] = nRow;
     }
     std::vector<std::vector<std::string>> ListListStr;
@@ -1991,16 +2213,19 @@ void DEBUG_PrintVectorArrayInfo(std::ostream& os,
         for (int iRow = 0; iRow < nRowMax; iRow++) {
             size_t elen = ListListStr[iCol][iRow].size();
             ListLen[iRow] = elen;
-            if (elen > maxlen) maxlen = elen;
+            if (elen > maxlen)
+                maxlen = elen;
         }
         for (int iRow = 0; iRow < nRowMax; iRow++) {
             std::string str = ListStrOut[iRow] + " " + ListListStr[iCol][iRow];
             size_t diff = maxlen - ListLen[iRow];
-            for (size_t u = 0; u < diff; u++) str += " ";
+            for (size_t u = 0; u < diff; u++)
+                str += " ";
             ListStrOut[iRow] = str;
         }
     }
-    for (int iRow = 0; iRow < nRowMax; iRow++) os << ListStrOut[iRow] << "\n";
+    for (int iRow = 0; iRow < nRowMax; iRow++)
+        os << ListStrOut[iRow] << "\n";
 }
 
 void DEBUG_PrintSetOfColumn(std::ostream& os,
@@ -2016,7 +2241,8 @@ void DEBUG_PrintSetOfColumn(std::ostream& os,
     for (int iCol = 0; iCol < nCol; iCol++) {
         int nRow = ListArr[iCol]->length;
         os << " " << nRow;
-        if (nRow > nRowMax) nRowMax = nRow;
+        if (nRow > nRowMax)
+            nRowMax = nRow;
         ListLen[iCol] = nRow;
     }
     os << "\n";
@@ -2035,36 +2261,62 @@ void DEBUG_PrintUnorderedMap(std::ostream& os,
 }
 
 std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
-    if (dtype == Bodo_CTypes::INT8) return "INT8";
-    if (dtype == Bodo_CTypes::UINT8) return "UINT8";
-    if (dtype == Bodo_CTypes::INT16) return "INT16";
-    if (dtype == Bodo_CTypes::UINT16) return "UINT16";
-    if (dtype == Bodo_CTypes::INT32) return "INT32";
-    if (dtype == Bodo_CTypes::UINT32) return "UINT32";
-    if (dtype == Bodo_CTypes::INT64) return "INT64";
-    if (dtype == Bodo_CTypes::UINT64) return "UINT64";
-    if (dtype == Bodo_CTypes::FLOAT32) return "FLOAT32";
-    if (dtype == Bodo_CTypes::FLOAT64) return "FLOAT64";
-    if (dtype == Bodo_CTypes::STRING) return "STRING";
-    if (dtype == Bodo_CTypes::LIST_STRING) return "LIST_STRING";
-    if (dtype == Bodo_CTypes::BINARY) return "BINARY";
-    if (dtype == Bodo_CTypes::_BOOL) return "_BOOL";
-    if (dtype == Bodo_CTypes::DECIMAL) return "DECIMAL";
-    if (dtype == Bodo_CTypes::DATE) return "DATE";
-    if (dtype == Bodo_CTypes::DATETIME) return "DATETIME";
-    if (dtype == Bodo_CTypes::TIMEDELTA) return "TIMEDELTA";
-    if (dtype == Bodo_CTypes::TIME) return "TIME";
+    if (dtype == Bodo_CTypes::INT8)
+        return "INT8";
+    if (dtype == Bodo_CTypes::UINT8)
+        return "UINT8";
+    if (dtype == Bodo_CTypes::INT16)
+        return "INT16";
+    if (dtype == Bodo_CTypes::UINT16)
+        return "UINT16";
+    if (dtype == Bodo_CTypes::INT32)
+        return "INT32";
+    if (dtype == Bodo_CTypes::UINT32)
+        return "UINT32";
+    if (dtype == Bodo_CTypes::INT64)
+        return "INT64";
+    if (dtype == Bodo_CTypes::UINT64)
+        return "UINT64";
+    if (dtype == Bodo_CTypes::FLOAT32)
+        return "FLOAT32";
+    if (dtype == Bodo_CTypes::FLOAT64)
+        return "FLOAT64";
+    if (dtype == Bodo_CTypes::STRING)
+        return "STRING";
+    if (dtype == Bodo_CTypes::LIST_STRING)
+        return "LIST_STRING";
+    if (dtype == Bodo_CTypes::BINARY)
+        return "BINARY";
+    if (dtype == Bodo_CTypes::_BOOL)
+        return "_BOOL";
+    if (dtype == Bodo_CTypes::DECIMAL)
+        return "DECIMAL";
+    if (dtype == Bodo_CTypes::DATE)
+        return "DATE";
+    if (dtype == Bodo_CTypes::DATETIME)
+        return "DATETIME";
+    if (dtype == Bodo_CTypes::TIMEDELTA)
+        return "TIMEDELTA";
+    if (dtype == Bodo_CTypes::TIME)
+        return "TIME";
     return "unmatching dtype";
 }
 
 std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type) {
-    if (arr_type == bodo_array_type::NUMPY) return "NUMPY";
-    if (arr_type == bodo_array_type::STRING) return "STRING";
-    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) return "NULLABLE";
-    if (arr_type == bodo_array_type::LIST_STRING) return "LIST_STRING";
-    if (arr_type == bodo_array_type::ARROW) return "ARROW";
-    if (arr_type == bodo_array_type::CATEGORICAL) return "CATEGORICAL";
-    if (arr_type == bodo_array_type::DICT) return "DICT";
+    if (arr_type == bodo_array_type::NUMPY)
+        return "NUMPY";
+    if (arr_type == bodo_array_type::STRING)
+        return "STRING";
+    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
+        return "NULLABLE";
+    if (arr_type == bodo_array_type::LIST_STRING)
+        return "LIST_STRING";
+    if (arr_type == bodo_array_type::ARROW)
+        return "ARROW";
+    if (arr_type == bodo_array_type::CATEGORICAL)
+        return "CATEGORICAL";
+    if (arr_type == bodo_array_type::DICT)
+        return "DICT";
     return "Uncovered case of GetArrType_as_string\n";
 }
 
@@ -2072,7 +2324,8 @@ void DEBUG_PrintRefct(std::ostream& os,
                       std::vector<array_info*> const& ListArr) {
     int nCol = ListArr.size();
     auto GetNRTinfo = [](NRT_MemInfo* meminf) -> std::string {
-        if (meminf == NULL) return "NULL";
+        if (meminf == NULL)
+            return "NULL";
         return "(refct=" + std::to_string(meminf->refct) + ")";
     };
     for (int iCol = 0; iCol < nCol; iCol++) {

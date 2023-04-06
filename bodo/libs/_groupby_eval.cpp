@@ -67,7 +67,8 @@ void copy_string_values_transform(array_info* update_col, array_info* tmp_col,
         size = end_offset - start_offset;
         int64_t idx = grp_info.group_to_first_row[igrp];
         while (true) {
-            if (idx == -1) break;
+            if (idx == -1)
+                break;
             ListSizes[idx] = size;
             n_chars += size;
             idx = grp_info.next_row_in_group[idx];
@@ -110,7 +111,22 @@ template <typename T>
 void copy_values(array_info* update_col, array_info* tmp_col,
                  const grouping_info& grp_info) {
     if (tmp_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        copy_nullable_values_transform<T>(update_col, tmp_col, grp_info);
+        if (tmp_col->dtype == Bodo_CTypes::_BOOL) {
+            // Nullable booleans store 1 bit per boolean so we have
+            // a separate code path.
+            int64_t nrows = update_col->length;
+            for (int64_t iRow = 0; iRow < nrows; iRow++) {
+                int64_t igrp = grp_info.row_to_group[iRow];
+                // Update the bitmap
+                bool null_bit = tmp_col->get_null_bit(igrp);
+                update_col->set_null_bit(iRow, null_bit);
+                // Update the value
+                bool data_bit = GetBit((uint8_t*)tmp_col->data1(), igrp);
+                SetBitTo((uint8_t*)update_col->data1(), iRow, data_bit);
+            }
+        } else {
+            copy_nullable_values_transform<T>(update_col, tmp_col, grp_info);
+        }
     } else {
         // Numpy array. No bitmap
         // Copy result from tmp_col to corresponding group rows in
@@ -185,8 +201,8 @@ void copy_values_transform(array_info* update_col, array_info* tmp_col,
         COPY_VALUES_CALL(Bodo_CTypes::FLOAT32)
         COPY_VALUES_CALL(Bodo_CTypes::FLOAT64)
         // None of the calls match. If any matched we return from the macro.
-        throw new std::runtime_error("unsupported data type for eval: " +
-                                     GetDtype_as_string(tmp_col->dtype));
+        throw std::runtime_error("unsupported data type for eval: " +
+                                 GetDtype_as_string(tmp_col->dtype));
     }
 #undef COPY_VALUES_CALL
 }
