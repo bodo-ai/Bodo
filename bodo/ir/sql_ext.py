@@ -27,7 +27,7 @@ from bodo import objmode
 from bodo.hiframes.table import Table, TableType
 from bodo.io.helpers import PyArrowTableSchemaType, is_nullable
 from bodo.io.parquet_pio import ParquetPredicateType
-from bodo.ir.filter import Filter, supported_funcs_map
+from bodo.ir.filter import Filter, supported_funcs_no_arg_map
 from bodo.libs.array import (
     cpp_table_to_py_table,
     delete_table,
@@ -274,10 +274,8 @@ def remove_dead_sql(
 
 def _get_sql_column_str(
     p0: Union[str, Filter],
-    scalars_to_unpack,
     converted_colnames: Iterable[str],
     filter_map: Dict[str, str],
-    typemap,
 ) -> str:  # pragma: no cover
     """get SQL code for representing a column in filter pushdown.
     E.g. WHERE  ( ( coalesce(\"L_COMMITDATE\", {f0}) >= {f1} ) )
@@ -292,48 +290,26 @@ def _get_sql_column_str(
     Returns:
         str: code representing the column (e.g. "A", "coalesce(\"L_COMMITDATE\", {f0})")
     """
+    if isinstance(p0, tuple):
+        col_name = _get_sql_column_str(p0[0], converted_colnames, filter_map)
+        kernel_func_name = p0[1]
+        if kernel_func_name == "coalesce":
+            scalar_val = (
+                "{" + filter_map[p0[2].name] + "}"
+                if isinstance(p0[2], ir.Var)
+                else p0[2]
+            )
+            return f"coalesce({col_name}, {scalar_val})"
+        elif kernel_func_name in supported_funcs_no_arg_map:
+            return f"{supported_funcs_no_arg_map[kernel_func_name][0]}({col_name})"
+        else:
+            raise BodoError(
+                f"SQL Function {col_name} is not supported for filter pushdown!"
+            )
 
-    if isinstance(p0, str):
-        assert isinstance(p0, str), "_get_sql_column_str: expected string column name"
-        col_name = convert_col_name(p0, converted_colnames)
-        return '\\"' + col_name + '\\"'
-
-    assert isinstance(p0, tuple), "_get_sql_column_str: expected filter tuple"
-    col_name = _get_sql_column_str(
-        p0[0], scalars_to_unpack, converted_colnames, filter_map, typemap
-    )
-    kernel_func, func_args = p0[1], p0[2]
-    args_name = func_args.name
-
-    if kernel_func not in supported_funcs_map:
-        raise NotImplementedError(
-            f"Filter pushdown not implemented for {kernel_func} function"
-        )
-
-    sql_func = supported_funcs_map[kernel_func]
-    read_func_var = filter_map[args_name]
-    args_type_var = typemap[args_name]
-
-    args_str = ""
-
-    if isinstance(func_args, ir.Var):
-        if isinstance(args_type_var, types.BaseTuple):
-            scalars_to_unpack.append(args_name)
-
-            # If it's a tuple object, we need to iterate through
-            # the tuple to generate a filter of the form:
-            # "coalesce(\"L_COMMITDATE\", {f0[0]}, {f0[1]}) >= {f1}"
-            for i in range(len(args_type_var)):
-                args_str += f", {{{read_func_var}[{i}]}}"
-
-        # We need to distinguish whether or not this function
-        # takes in additional args, via the name of the IR variable
-        elif "dummy" not in func_args.name:
-            args_str = f", {{{read_func_var}}}"
-    else:
-        args_str = f", {func_args}"
-
-    return f"{sql_func}({col_name}{args_str})"
+    assert isinstance(p0, str), "_get_sql_column_str: expected string column name"
+    col_name = convert_col_name(p0, converted_colnames)
+    return '\\"' + col_name + '\\"'
 
 
 def sql_distributed_run(
@@ -696,7 +672,7 @@ def escape_column_names(col_names, db_type, converted_colnames):
 
 def _generate_column_filter(
     filter: Filter,
-    scalars_to_unpack,
+    scalars_to_unpack: List[str],
     converted_colnames: List[str],
     filter_map: Dict[str, str],
     typemap: Dict[str, types.Type],
@@ -734,9 +710,7 @@ def _generate_column_filter(
         return ["(", "NOT"] + inner_filter + [")"]
     else:
         # These operators must operate on a column that we will load.
-        p0 = _get_sql_column_str(
-            p0, scalars_to_unpack, converted_colnames, filter_map, typemap
-        )
+        p0 = _get_sql_column_str(p0, converted_colnames, filter_map)
         # If p2 is a constant that isn't in the IR (i.e. NULL)
         # just load the value directly, otherwise load the variable
         # at runtime.

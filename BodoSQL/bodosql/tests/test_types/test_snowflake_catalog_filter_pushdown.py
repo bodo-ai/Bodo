@@ -3,16 +3,16 @@
 Tests filter pushdown with a Snowflake Catalog object.
 """
 import io
+import numpy as np
+import math
 import os
 
 import bodosql
-import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     test_db_snowflake_catalog,
 )
-from bodosql.utils import levenshteinDistance
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -170,13 +170,20 @@ def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
     [
         pytest.param(("lower", "lower"), id="lower"),
         pytest.param(("upper", "upper"), id="upper"),
+        pytest.param(
+            ("initcap", "capitalize"),
+            id="capitalize",
+            marks=pytest.mark.skip(
+                "[BE-4445] Additional arg in filter pushdown not supported"
+            ),
+        ),
     ],
 )
-def test_no_arg_string_transform_functions(
+def test_snowflake_case_conversion_filter_pushdown(
     test_db_snowflake_catalog, func_args, memory_leak_check
 ):
     """
-    Test no-arg string transform function support in Snowflake filter pushdown
+    Test upper, lower, initcap support in Snowflake filter pushdown
     """
     sql_func, pd_func_name = func_args
     test_str_val = getattr("macedonia", pd_func_name)()
@@ -224,9 +231,7 @@ def test_no_arg_string_transform_functions(
             )
             check_logger_msg(stream, "Columns loaded ['a']")
             check_logger_msg(stream, "Filter pushdown successfully performed")
-            check_logger_msg(
-                stream, rf"WHERE  ( ( {sql_func.upper()}(\"A\") = {{f1}} ) )"
-            )
+            check_logger_msg(stream, f"WHERE  ( ( {sql_func}" r"(\"A\") = {f1} ) )")
 
 
 @pytest.mark.skipif(
@@ -275,7 +280,7 @@ def test_snowflake_coalesce_lower_pushdown(
             check_logger_msg(stream, "Columns loaded ['b']")
             check_logger_msg(stream, "Filter pushdown successfully performed")
             check_logger_msg(
-                stream, r"WHERE  ( ( COALESCE(LOWER(\"A\"), {f1}) = {f2} ) )"
+                stream, r"WHERE  ( ( coalesce(lower(\"A\"), {f1}) = {f2} ) )"
             )
 
 
@@ -325,7 +330,7 @@ def test_snowflake_upper_coalesce_pushdown(
             check_logger_msg(stream, "Columns loaded ['b']")
             check_logger_msg(stream, "Filter pushdown successfully performed")
             check_logger_msg(
-                stream, r"WHERE  ( ( UPPER(COALESCE(\"A\", {f0})) = {f2} ) )"
+                stream, r"WHERE  ( ( upper(coalesce(\"A\", {f0})) = {f2} ) )"
             )
 
 
@@ -1679,6 +1684,83 @@ def test_snowflake_length_filter_pushdown(test_db_snowflake_catalog, memory_leak
                 check_logger_msg(stream, "Columns loaded ['a']")
 
 
+@pytest.mark.parametrize(
+    "func_args",
+    [
+        pytest.param(
+            ("LTRIM", "lstrip"),
+            id="LTRIM",
+        ),
+        pytest.param(
+            ("RTRIM", "rstrip"),
+            id="RTRIM",
+        ),
+        pytest.param(
+            ("TRIM", "strip"),
+            id="TRIM",
+        ),
+    ],
+)
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+@pytest.mark.skip("[BE-4445] Extra arg in filter pushdown not supported")
+def test_snowflake_trim_filter_pushdown(
+    func_args, test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that queries with all variations of TRIM work with
+    filter pushdown (no optional chars).
+    """
+    sql_func_name, pd_func_name = func_args
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    df = pd.DataFrame(
+        {
+            "L_SHIPMODE": [
+                "   SHIP       ",
+                "  ship ",
+                None,
+                "qwerSHIP   ",
+                "asdfSHIPSdfasdfasdf",
+            ]
+            * 10,
+            "L_ORDERKEY": [1230, 4100, None, 9999, 0] * 10,
+        }
+    )
+
+    with create_snowflake_table(df, "trim_pushdown_table", db, schema) as table_name:
+        shipmode_col = getattr(df.L_SHIPMODE.str, pd_func_name)()
+        expected_output = df[shipmode_col == "SHIP"][["L_ORDERKEY"]]
+        expected_output.columns = [x.lower() for x in expected_output.columns]
+
+        test_query = f"""
+            select l_orderkey from {table_name}
+            WHERE {sql_func_name}({table_name}.l_shipmode) = 'SHIP'
+        """
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, test_query),
+                py_output=expected_output,
+                is_out_distributed=False,
+                reset_index=True,
+                sort_output=True,
+                # Pandas output is non-nullable
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "Filter pushdown successfully performed.")
+            check_logger_msg(stream, "Columns loaded ['l_orderkey']")
+
+
 @pytest.mark.skipif(
     "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
@@ -1737,6 +1819,48 @@ def test_snowflake_reverse_filter_pushdown(
             )
             check_logger_msg(stream, "Filter pushdown successfully performed.")
             check_logger_msg(stream, "Columns loaded ['l_orderkey']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_abs_filter_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that queries with ABS work with
+    filter pushdown.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame({"A": [-1, -100, None, 100, 10] * 10})
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(new_df, "abs_pushdown_table", db, schema) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select A from {table_name}", conn_str)
+        expected_output = py_output[abs(py_output.a) == 100]
+        # equality test
+
+        query = f"Select a from {table_name} where abs(A) = 100"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream,
+                "Filter pushdown successfully performed. Moving filter step:",
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
 
 
 num_to_pd_func = {
@@ -1802,8 +1926,7 @@ def test_no_arg_numeric_functions(
         check_logger_msg(stream, f"Columns loaded ['{num_col}']")
         check_logger_msg(stream, "Filter pushdown successfully performed")
         check_logger_msg(
-            stream,
-            rf"WHERE  ( ( {sql_func.upper()}(\"{num_col.upper()}\") = {{f1}} ) )",
+            stream, rf"WHERE  ( ( {sql_func}(\"{num_col.upper()}\") = {{f1}} ) )"
         )
 
 
@@ -1891,223 +2014,3 @@ def test_no_arg_datetime_functions(
                 stream,
                 rf"WHERE  ( ( {pushdown_sql_func.upper()}(\"{test_col.upper()}\") = {{f1}} ) )",
             )
-
-
-string_transform_func = {
-    "trim": lambda x: x.strip(),
-    "trim-opt-char": lambda x: x.strip("h"),
-    "ltrim": lambda x: x.lstrip(),
-    "ltrim-opt-char": lambda x: x.lstrip("h"),
-    "rtrim": lambda x: x.rstrip(),
-    "rtrim-opt-char": lambda x: x.rstrip("h"),
-    "initcap": lambda x: x.title(),
-    "initcap-opt-char": lambda x: ",".join([t.title() for t in x.split(",")]),
-    "lpad-opt-char": lambda x: x.rjust(4, "0"),
-    "rpad-opt-char": lambda x: x.ljust(7, "r"),
-    "repeat": lambda x: x * 3,
-    "strtok": lambda x: x.split()[0] if x else None,
-    "strtok-opt-delimiter": lambda x: x.split("h")[0] if x else None,
-    "strtok-opt-delimiter-partNr": lambda x: x.split("h")[2]
-    if len(list(x.split("h"))) >= 3
-    else None,
-    "translate": lambda x: x.translate(str.maketrans("abcdefgh", "ABCDEFGH")),
-    "concat": lambda x: x + "bodo",
-    "concat-binop": lambda x: x + "bodo",
-}
-
-
-@pytest.mark.parametrize(
-    "test_cases",
-    [
-        pytest.param(("TRIM(A)", "TRIM", "hi"), id="trim"),
-        pytest.param(("TRIM(A, 'h')", "TRIM", "i"), id="trim-opt-char"),
-        pytest.param(("LTRIM(A)", "LTRIM", "hi"), id="ltrim"),
-        pytest.param(("LTRIM(A, 'h')", "LTRIM", "i"), id="ltrim-opt-char"),
-        pytest.param(("RTRIM(A)", "RTRIM", "hi"), id="rtrim"),
-        pytest.param(("RTRIM(A, 'h')", "RTRIM", "i"), id="rtrim-opt-char"),
-        pytest.param(("INITCAP(A)", "INITCAP", "Hello"), id="initcap"),
-        pytest.param(
-            ("INITCAP(A, ',')", "INITCAP", "Hi,Hello"),
-            id="initcap-opt-char",
-        ),
-        pytest.param(("LPAD(A, 4, '0')", "LPAD", "00hi"), id="lpad-opt-char"),
-        pytest.param(("RPAD(A, 7, 'r')", "RPAD", "hellorr"), id="rpad-opt-char"),
-        pytest.param(("REPEAT(A, 3)", "REPEAT", "hihihi"), id="repeat"),
-        pytest.param(("STRTOK(A)", "STRTOK", "hello"), id="strtok"),
-        pytest.param(("STRTOK(A, 'h')", "STRTOK", "h"), id="strtok-opt-delimiter"),
-        pytest.param(
-            ("STRTOK(A, 'h', 2)", "STRTOK", "ello"), id="strtok-opt-delimiter-partNr"
-        ),
-        pytest.param(
-            ("TRANSLATE(A, 'abcdefgh', 'ABCDEFGH')", "TRANSLATE", "Hello"),
-            id="translate",
-        ),
-        pytest.param(
-            ("CONCAT(A, 'bodo')", "CONCAT", "hibodo"),
-            id="concat",
-            marks=pytest.mark.skip("Number of args in the IR for concat_ws is wrong"),
-        ),
-        pytest.param(
-            ("A || 'bodo'", "CONCAT", "hibodo"),
-            id="concat-binop",
-            marks=pytest.mark.skip("Number of args in the IR for concat_ws is wrong"),
-        ),
-    ],
-)
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
-def test_with_arg_string_transform_functions(
-    test_db_snowflake_catalog, test_cases, request, memory_leak_check
-):
-    filter_predicate, sql_func, answer = test_cases
-    sql_filter = f"{filter_predicate} = '{answer}'"
-
-    table_name = "STRING_DATA"
-    conn_str = get_snowflake_connection_string(
-        test_db_snowflake_catalog.database,
-        test_db_snowflake_catalog.connection_params["schema"],
-    )
-    df = pd.read_sql(f"select a from {table_name}", conn_str)
-
-    test_case = request.node.callspec.id[request.node.callspec.id.find("-") + 1 :]
-    pd_func = string_transform_func[test_case]
-
-    expected_output = df[df["a"].apply(pd_func) == answer].dropna()
-    expected_output.columns = [x.lower() for x in expected_output.columns]
-
-    query = f"select a from {table_name} where {sql_filter}"
-
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-
-    def impl(bc, query):
-        return bc.sql(query)
-
-    # make sure filter pushdown worked
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        check_func(
-            impl,
-            (bc, query),
-            py_output=expected_output,
-            sort_output=True,
-            reset_index=True,
-            check_dtype=False,
-        )
-
-        check_logger_msg(stream, f"Columns loaded ['a']")
-        check_logger_msg(stream, "Filter pushdown successfully performed")
-        # Each function may have different number of args,
-        # so we will just check that the SQL function got logged.
-        check_logger_msg(stream, sql_func)
-
-
-# Dictionary mapping test case to lambda function
-# used to generate expected output for
-# test_nonregex_string_match_functions
-nonregex_string_match_func = {
-    "left": lambda x: x[:3],
-    "right": lambda x: x[-4:],
-    "position": lambda x: "Hi, bye bodo.ai".find(x) + 1,
-    "position-alt": lambda x: "Hi, bye bodo.ai".find(x) + 1,
-    "replace": lambda x: x.replace("bodo", "snowflake"),
-    "replace-empty": lambda x: x.replace("hi", ""),
-    "substr": lambda x: x[3:7],
-    "substring": lambda x: x[:2],
-    "charindex": lambda x: "snowflake hi, hello".find(x) + 1,
-    "charindex-start-pos": lambda x: "snowflake hi, hello".find(x, 10) + 1,
-    "editdistance-no-max": lambda x: levenshteinDistance(x, "hi, hello"),
-    "editdistance-with-max": lambda x: levenshteinDistance(x, "hi, hello", 5),
-}
-
-
-@pytest.mark.parametrize(
-    "test_cases",
-    [
-        pytest.param(("LEFT(A, 3)", "LEFT", "hel"), id="left"),
-        pytest.param(("RIGHT(A, 4)", "RIGHT", "ello"), id="right"),
-        pytest.param(("POSITION(A, 'Hi, bye bodo.ai')", "POSITION", 5), id="position"),
-        pytest.param(
-            ("POSITION(A in 'Hi, bye bodo.ai')", "POSITION", 5), id="position-alt"
-        ),
-        pytest.param(
-            ("REPLACE(A, 'bodo', 'snowflake')", "REPLACE", "hi snowflake"), id="replace"
-        ),
-        pytest.param(
-            ("REPLACE(A, 'hi')", "REPLACE", "hi snowflake"),
-            id="replace-empty",
-            marks=pytest.mark.skip("[BE-4599] REPLACE with 2 args not supported yet"),
-        ),
-        pytest.param(("SUBSTR(A, 4, 4)", "SUBSTRING", "bodo"), id="substr"),
-        pytest.param(("SUBSTRING(A, 1, 2)", "SUBSTRING", "hi"), id="substring"),
-        pytest.param(
-            ("CHARINDEX(A, 'snowflake hi, hello')", "POSITION", 11), id="charindex"
-        ),
-        pytest.param(
-            ("CHARINDEX(A, 'snowflake hi, hello', 11)", "POSITION", 11),
-            id="charindex-start-pos",
-        ),
-        pytest.param(
-            ("EDITDISTANCE(A, 'hi, hello')", "EDITDISTANCE", 7),
-            id="editdistance-no-max",
-        ),
-        pytest.param(
-            ("EDITDISTANCE(A, 'hi, hello', 5)", "EDITDISTANCE", 5),
-            id="editdistance-with-max",
-        ),
-    ],
-)
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
-def test_nonregex_string_match_functions(
-    test_db_snowflake_catalog, test_cases, request, memory_leak_check
-):
-    filter_predicate, sql_func, answer = test_cases
-
-    if isinstance(answer, str):
-        sql_filter = f"{filter_predicate} = '{answer}'"
-    else:
-        sql_filter = f"{filter_predicate} = {answer}"
-
-    table_name = "STRING_DATA"
-    conn_str = get_snowflake_connection_string(
-        test_db_snowflake_catalog.database,
-        test_db_snowflake_catalog.connection_params["schema"],
-    )
-    df = pd.read_sql(f"select a from {table_name}", conn_str)
-
-    test_case = request.node.callspec.id[request.node.callspec.id.find("-") + 1 :]
-    pd_func = nonregex_string_match_func[test_case]
-
-    expected_output = df[df["a"].apply(pd_func) == answer].dropna()
-    expected_output.columns = [x.lower() for x in expected_output.columns]
-
-    query = f"select a from {table_name} where {sql_filter}"
-
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-
-    def impl(bc, query):
-        return bc.sql(query)
-
-    # make sure filter pushdown worked
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        check_func(
-            impl,
-            (bc, query),
-            py_output=expected_output,
-            sort_output=True,
-            reset_index=True,
-            check_dtype=False,
-        )
-
-        check_logger_msg(stream, f"Columns loaded ['a']")
-        check_logger_msg(stream, "Filter pushdown successfully performed")
-        # Each function may have different number of args,
-        # so we will just check that the SQL function got logged.
-        check_logger_msg(stream, sql_func)

@@ -792,8 +792,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What Input Types does the function accept. This function accepts only
           // (String, Literal String)
           OperandTypes.sequence(
-              "DATE_FORMAT(DATE/TIMESTAMP, STRING_LITERAL)",
-              OperandTypes.or(OperandTypes.DATE, OperandTypes.TIMESTAMP),
+              "DATE_FORMAT(TIMESTAMP, STRING_LITERAL)",
+              OperandTypes.TIMESTAMP,
               OperandTypes.and(OperandTypes.STRING, OperandTypes.LITERAL)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
