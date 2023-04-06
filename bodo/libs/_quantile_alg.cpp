@@ -17,8 +17,6 @@
 
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
-#undef DEBUG_GHOST_CODE
-
 template <class T>
 std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T> &my_array,
                                              int64_t total_size, int myrank,
@@ -82,7 +80,9 @@ PyMODINIT_FUNC PyInit_quantile_alg(void) {
     };
     bodo_common_init();
     m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    if (m == NULL) {
+        return NULL;
+    }
 
     PyObject_SetAttrString(m, "quantile_sequential",
                            PyLong_FromVoidPtr((void *)(&quantile_sequential)));
@@ -288,9 +288,15 @@ T get_nth_parallel(std::vector<T> &my_array, int64_t k, int myrank, int n_pes,
         int64_t local_l0_num = 0, local_l1_num = 0, local_l2_num = 0;
         int64_t l0_num = 0, l1_num = 0, l2_num = 0;
         for (auto val : my_array) {
-            if (val < k1_val) local_l0_num++;
-            if (val >= k1_val && val < k2_val) local_l1_num++;
-            if (val >= k2_val) local_l2_num++;
+            if (val < k1_val) {
+                local_l0_num++;
+            }
+            if (val >= k1_val && val < k2_val) {
+                local_l1_num++;
+            }
+            if (val >= k2_val) {
+                local_l2_num++;
+            }
         }
         MPI_Allreduce(&local_l0_num, &l0_num, 1, MPI_LONG_LONG_INT, MPI_SUM,
                       MPI_COMM_WORLD);
@@ -496,7 +502,9 @@ collecting_non_nan_entries(std::vector<T> &my_array, array_info *arr,
             for (size_t i_row = 0; i_row < arr->length; i_row++) {
                 T eVal = arr->at<T>(i_row);
                 bool isna = isnan_alltype<T, dtype>(eVal);
-                if (!isna) my_array.emplace_back(eVal);
+                if (!isna) {
+                    my_array.emplace_back(eVal);
+                }
             }
         }
         if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -599,7 +607,9 @@ std::pair<int64_t, int64_t> nb_entries_local(array_info *arr) {
 template <typename T, int dtype>
 local_global_stat_nan nb_entries_global(array_info *arr, bool parallel) {
     std::pair<int64_t, int64_t> pair = nb_entries_local<T, dtype>(arr);
-    if (!parallel) return {pair.first, pair.second, pair.first, pair.second};
+    if (!parallel) {
+        return {pair.first, pair.second, pair.first, pair.second};
+    }
     int64_t loc_nb_ok = pair.first, loc_nb_miss = pair.second, glob_nb_ok = 0,
             glob_nb_miss = 0;
     MPI_Allreduce(&loc_nb_ok, &glob_nb_ok, 1, MPI_LONG_LONG_INT, MPI_SUM,
@@ -825,8 +835,12 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
         if (ListReq.size() > 0) {
             MPI_Waitall(ListReq.size(), ListReq.data(), MPI_STATUSES_IGNORE);
             // Putting the values where they should be.
-            if (idx_recv_prev != -1) ListPrevSizes.push_back(V[idx_recv_prev]);
-            if (idx_recv_next != -1) ListNextSizes.push_back(V[idx_recv_next]);
+            if (idx_recv_prev != -1) {
+                ListPrevSizes.push_back(V[idx_recv_prev]);
+            }
+            if (idx_recv_next != -1) {
+                ListNextSizes.push_back(V[idx_recv_next]);
+            }
         }
         size_t sumprev = std::accumulate(ListPrevSizes.begin(),
                                          ListPrevSizes.end(), size_t(0));
@@ -846,7 +860,9 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
         // value=0 means all is ok. All nodes should be ok for the loop to
         // terminate
         MPI_Allreduce(&value, &value_tot, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-        if (value_tot == 0) break;
+        if (value_tot == 0) {
+            break;
+        }
     }
     // Now agglomerating the data
     int64_t n_next = ListNextSizes.size();
@@ -903,11 +919,6 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
     if (ListReq.size() > 0) {
         MPI_Waitall(ListReq.size(), ListReq.data(), MPI_STATUSES_IGNORE);
     }
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "ghost_length=" << ghost_length << "\n";
-    DEBUG_PrintColumn(std::cout, ghost_arr);
-    std::cout << "EXITING THE compute_ghost_rows\n";
-#endif
     return ghost_arr;
 }
 
@@ -931,20 +942,25 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
                 int test =
                     NumericComparison(arr->dtype, ptr1, ptr2, na_position);
                 if (test == -1) {  // this corresponds to *ptr1 > *ptr2
-                    if (inc_dec == 1) return 1;  // We reach a contradiction
+                    if (inc_dec == 1) {
+                        return 1;  // We reach a contradiction
+                    }
                 }
                 if (test == 1) {  // this corresponds to *ptr1 < *ptr2
-                    if (inc_dec == 2) return 1;  // We reach a contradiction
+                    if (inc_dec == 2) {
+                        return 1;  // We reach a contradiction
+                    }
                 }
             }
             return 0;
         };
         int value = do_local_computation();
         if (!is_parallel) {
-            if (value > 0)
+            if (value > 0) {
                 *res = 0.0;
-            else
+            } else {
                 *res = 1.0;
+            }
             return;
         }
         int value_tot;
@@ -965,10 +981,14 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
             bool na_position = false;
             int test = NumericComparison(arr->dtype, ptr1, ptr2, na_position);
             if (test == -1) {  // this corresponds to *ptr1 > *ptr2
-                if (inc_dec == 1) value_glob = 1;  // We reach a contradiction
+                if (inc_dec == 1) {
+                    value_glob = 1;  // We reach a contradiction
+                }
             }
             if (test == 1) {  // this corresponds to *ptr1 < *ptr2
-                if (inc_dec == 2) value_glob = 1;  // We reach a contradiction
+                if (inc_dec == 2) {
+                    value_glob = 1;  // We reach a contradiction
+                }
             }
         }
         MPI_Allreduce(&value_glob, &value_glob_tot, 1, MPI_INT, MPI_SUM,

@@ -1045,26 +1045,19 @@ def categorical_array_getitem(arr, ind):
 
         return categorical_getitem_impl
 
-    # bool/int/slice arr indexing. Note nullable boolean arrays are handled in
-    # bool_arr_ind_getitem to ensure NAs are converted to False.
-    if (
-        ind != bodo.boolean_array_type
-        and is_list_like_index_type(ind)
-        or isinstance(ind, types.SliceType)
-    ):
+    # bool/int/slice arr indexing.
+    if is_list_like_index_type(ind) or isinstance(ind, types.SliceType):
 
         def impl_bool(arr, ind):  # pragma: no cover
             return init_categorical_array(arr.codes[ind], arr.dtype)
 
         return impl_bool
 
-    # This should be the only CategoricalArrayType implementation
-    # except for converting a Nullable boolean index to non-nullable.
+    # This should be the only CategoricalArrayType implementation.
     # We only expect to reach this case if more idx options are added.
-    if ind != bodo.boolean_array_type:  # pragma: no cover
-        raise BodoError(
-            f"getitem for CategoricalArrayType with indexing type {ind} not supported."
-        )
+    raise BodoError(
+        f"getitem for CategoricalArray with indexing type {ind} not supported."
+    )  # pragma: no cover
 
 
 class CategoricalMatchingValues(enum.Enum):

@@ -84,7 +84,7 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
     }
     for (int64_t pos = 0; pos < len_in_arr; pos++) {
         bool test = eset.count(pos + len_values) == 1;
-        out_arr->at<bool>(pos) = test;
+        SetBitTo((uint8_t*)out_arr->data1(), pos, test);
     }
 }
 
@@ -125,18 +125,9 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
         // Deleting the data after usage
         delete_table_decref_arrays(shuf_table_in_values);
         delete_table_decref_arrays(shuf_table_in_arr);
-        // Now the reverse shuffling operation. Since the array out_arr is not
-        // directly handled by the comm_info, we have to get out hands dirty.
-        MPI_Datatype mpi_typ = get_MPI_typ(out_arr->dtype);
-        size_t n_rows = out_arr->length;
-        std::vector<uint8_t> tmp_recv(n_rows);
-        bodo_alltoallv(shuf_out_arr->data1(), comm_info.recv_count,
-                       comm_info.recv_disp, mpi_typ, tmp_recv.data(),
-                       comm_info.send_count, comm_info.send_disp, mpi_typ,
-                       MPI_COMM_WORLD);
-        fill_recv_data_inner<uint8_t>(
-            tmp_recv.data(), (uint8_t*)out_arr->data1(), hashes,
-            comm_info.send_disp, comm_info.n_pes, n_rows);
+        // Now the reverse shuffling operation.
+        reverse_shuffle_preallocated_data_array(shuf_out_arr, out_arr, hashes,
+                                                comm_info);
         // free temporary shuffle array
         delete_info_decref_array(shuf_out_arr);
         // release extra reference for output array (array_info wrapper's
@@ -271,7 +262,9 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
     std::vector<int64_t> ListIdx(n_rows);
-    for (size_t i = 0; i < n_rows; i++) ListIdx[i] = i;
+    for (size_t i = 0; i < n_rows; i++) {
+        ListIdx[i] = i;
+    }
 
     // The comparison operator gets called many times by timsort so any overhead
     // can influence the sort time significantly
@@ -289,8 +282,7 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
                                size_t const& iRow2) -> bool {
                 int test = KeyComparisonAsPython_Column(
                     na_position_bis, key_col, iRow1, key_col, iRow2);
-                if (test) return test > 0;
-                return false;
+                return test > 0;
             };
             gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
         } else {
@@ -299,8 +291,7 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
                                size_t const& iRow2) -> bool {
                 int test = KeyComparisonAsPython_Column(
                     na_position_bis, key_col, iRow1, key_col, iRow2);
-                if (test) return test < 0;
-                return false;
+                return test < 0;
             };
             gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
         }
@@ -450,11 +441,12 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     try {
         tracing::Event ev("sort_values_table", parallel);
 
-        if (out_n_rows != nullptr)
+        if (out_n_rows != nullptr) {
             // Initialize to the input because local sort won't
             // change the number of elements. If we do a
             // distributed source the rows per rank may change.
             *out_n_rows = (int64_t)in_table->nrows();
+        }
 
         // Convert all local dictionaries to global for dict columns.
         // Also sort the dictionaries, so the sorting process
@@ -470,9 +462,10 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 
         int64_t n_local = in_table->nrows();
         int64_t n_total = n_local;
-        if (parallel)
+        if (parallel) {
             MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
                           MPI_COMM_WORLD);
+        }
 
         // Want to keep dead keys only when we will perform a shuffle operation
         // later in the function
@@ -543,8 +536,9 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         // NOTE: local sort doesn't change the number of rows
         // ret_table cannot be used since all output columns may be dead (only
         // length is needed)
-        if (out_n_rows != nullptr)
+        if (out_n_rows != nullptr) {
             *out_n_rows = (int64_t)collected_table->nrows();
+        }
 
         // Final local sorting
         table_info* ret_table =
@@ -1265,7 +1259,9 @@ std::pair<table_info*, table_info*> sort_tables_for_point_in_interval_join(
             table_point, table_interval, table_point_parallel,
             table_interval_parallel, true, strict);
 
-    if (bounds_arr != nullptr) delete_info_decref_array(bounds_arr);
+    if (bounds_arr != nullptr) {
+        delete_info_decref_array(bounds_arr);
+    }
     return {sorted_point, sorted_interval};
 }
 
@@ -1358,8 +1354,7 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
     uint64_t next_ent = 0;
     bool has_nulls = dropna && does_keys_have_nulls(key_arrs);
     auto is_ok = [&](size_t i_row) -> bool {
-        if (!has_nulls) return true;
-        return !does_row_has_nulls(key_arrs, i_row);
+        return !has_nulls || !does_row_has_nulls(key_arrs, i_row);
     };
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         if (is_ok(i_row)) {
@@ -1372,8 +1367,11 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
         }
     }
     std::vector<int64_t> ListIdx;
-    for (auto& eRow : ListRow)
-        if (eRow != -1) ListIdx.push_back(eRow);
+    for (auto& eRow : ListRow) {
+        if (eRow != -1) {
+            ListIdx.push_back(eRow);
+        }
+    }
     // Now building the out_arrs array. We select only the first num_keys.
     table_info* ret_table = RetrieveTable(in_table, ListIdx, num_keys);
     //
@@ -1460,8 +1458,7 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
     // In the first case we keep only one entry.
     bool has_nulls = dropna && does_keys_have_nulls(key_arrs);
     auto is_ok = [&](size_t i_row) -> bool {
-        if (!has_nulls) return true;
-        return !does_row_has_nulls(key_arrs, i_row);
+        return !has_nulls || !does_row_has_nulls(key_arrs, i_row);
     };
     auto RetrieveListIdx1 = [&]() -> std::vector<int64_t> {
         std::vector<int64_t> ListRow;
@@ -1488,8 +1485,11 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
             }
         }
         std::vector<int64_t> ListIdx;
-        for (auto& eRow : ListRow)
-            if (eRow != -1) ListIdx.push_back(eRow);
+        for (auto& eRow : ListRow) {
+            if (eRow != -1) {
+                ListIdx.push_back(eRow);
+            }
+        }
         return ListIdx;
     };
     // In this case we store the pairs of values, the first and the last.
@@ -1513,16 +1513,21 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
         }
         std::vector<int64_t> ListIdx;
         for (auto& eRowPair : ListRowPair) {
-            if (eRowPair.first != -1) ListIdx.push_back(eRowPair.first);
-            if (eRowPair.second != -1) ListIdx.push_back(eRowPair.second);
+            if (eRowPair.first != -1) {
+                ListIdx.push_back(eRowPair.first);
+            }
+            if (eRowPair.second != -1) {
+                ListIdx.push_back(eRowPair.second);
+            }
         }
         return ListIdx;
     };
     std::vector<int64_t> ListIdx;
-    if (step == 1 || keep == 0 || keep == 1)
+    if (step == 1 || keep == 0 || keep == 1) {
         ListIdx = RetrieveListIdx1();
-    else
+    } else {
         ListIdx = RetrieveListIdx2();
+    }
     // Now building the out_arrs array.
     table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
     //
@@ -1552,9 +1557,6 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
  */
 table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
                                  bool is_parallel, bool dropna) {
-#ifdef DEBUG_DD
-    std::cout << "drop_duplicates_keys : is_parallel=" << is_parallel << "\n";
-#endif
     // serial case
     if (!is_parallel) {
         return drop_duplicates_keys_inner(in_table, num_keys, dropna,
@@ -1577,11 +1579,6 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
         drop_duplicates_table_inner(shuf_table, num_keys, keep, 1, is_parallel,
                                     false, /*drop_duplicates_dict=*/true);
     delete_table(shuf_table);
-#ifdef DEBUG_DD
-    std::cout << "OUTPUT : drop_duplicates_keys ret_table=\n";
-    DEBUG_PrintRefct(std::cout, ret_table->columns);
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-#endif
     // returning table
     return ret_table;
 }
@@ -1626,11 +1623,14 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
         table_info* shuf_table =
             shuffle_table(red_table, num_keys, is_parallel);
         // no need to decref since shuffle_table() steals a reference
-        if (drop_local_first) delete_table(red_table);
+        if (drop_local_first) {
+            delete_table(red_table);
+        }
         // reduction after shuffling
         // We don't drop NA values again because the first
         // drop_duplicates_table_inner should have already handled this
-        if (drop_local_first) dropna = false;
+        if (drop_local_first)
+            dropna = false;
         table_info* ret_table = drop_duplicates_table_inner(
             shuf_table, num_keys, keep, 1, is_parallel, dropna,
             /*drop_duplicates_dict=*/true);
@@ -2119,10 +2119,10 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
                 if (boost::xpressive::regex_search(data1 + start_pos,
                                                    data1 + end_pos, m, pattern,
                                                    match_flag)) {
-                    out_arr->at<bool>(iRow) = true;
+                    SetBitTo((uint8_t*)out_arr->data1(), iRow, true);
                     num_match++;
                 } else {
-                    out_arr->at<bool>(iRow) = false;
+                    SetBitTo((uint8_t*)out_arr->data1(), iRow, false);
                 }
             }
             out_arr->set_null_bit(iRow, bit);
@@ -2162,8 +2162,8 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
                 // Get index in the dictionary
                 int32_t iiRow = indices_arr->at<int32_t>(iRow);
                 // Get output from dict_arr_out for this dict value
-                bool value = dict_arr_out->at<bool>(iiRow);
-                out_arr->at<bool>(iRow) = value;
+                bool value = GetBit((uint8_t*)dict_arr_out->data1(), iiRow);
+                SetBitTo((uint8_t*)out_arr->data1(), iRow, value);
                 if (value) {
                     num_match++;
                 }

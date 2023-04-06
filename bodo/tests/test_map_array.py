@@ -132,3 +132,21 @@ def test_map_apply(memory_leak_check):
     )
     keys2 = [str(i + 1) for i in np.arange(6000)]
     check_func(impl, (df2, keys2))
+
+
+def test_map_bool_getitem(map_arr_value):
+    """
+    Tests using a boolean getitem to select map array values.
+    """
+    # TODO: Fix memory leak
+
+    def impl(map_arr, idx):
+        return map_arr[idx]
+
+    # Generate the index
+    idx = pd.array([True, None, False] * len(map_arr_value))[: len(map_arr_value)]
+    check_func(
+        impl,
+        (map_arr_value, idx),
+        py_output=map_arr_value[idx.fillna(False).to_numpy(np.bool_)],
+    )

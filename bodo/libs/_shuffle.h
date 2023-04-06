@@ -295,4 +295,17 @@ void make_dictionary_global_and_unique(
     array_info* dict_array, bool is_parallel,
     bool sort_dictionary_if_modified = false);
 
+/**
+ * @brief Perform a reverse shuffle for data1 of either a
+ * Numpy, Categorical, or Nullable array.
+ *
+ * @param[in] in_arr The input array to reverse-shuffle.
+ * @param[out] out_arr The output array to fill.
+ * @param[in] hashes The hashes to each rank of the reversed array.
+ * @param[in] comm_info The communication information from the original shuffle.
+ */
+void reverse_shuffle_preallocated_data_array(
+    array_info* in_arr, array_info* out_arr,
+    std::shared_ptr<uint32_t[]>& hashes, mpi_comm_info const& comm_info);
+
 #endif  // _SHUFFLE_H_INCLUDED

@@ -159,7 +159,8 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
                                                           (length + 7) >> 3);
             for (int64_t i_row = 0; i_row < length; i_row++) {
                 bool bit = GetBit(_null_bitmap, i_row);
-                if (!bit) null_count_++;
+                if (!bit)
+                    null_count_++;
             }
         }
         // The other buffers
@@ -185,21 +186,28 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
         // First the null bitmap of the array
         const uint8_t* _null_bitmap = buffers[buf_pos++];
         std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        if (_null_bitmap)
+        if (_null_bitmap) {
             null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
                                                           (length + 7) >> 3);
+        }
         // Second the array itself
         std::shared_ptr<arrow::Array> array;
         int64_t siz_typ = numpy_item_size[type];
-        std::shared_ptr<arrow::Buffer> data = std::make_shared<arrow::Buffer>(
-            buffers[buf_pos++], length * siz_typ);
-        // We canot change code below to something more generic since the
+        int64_t buffer_size;
+        if (type == Bodo_CTypes::_BOOL) {
+            // Boolean array uses 1 bit for each bool
+            buffer_size = (length + 7) >> 3;
+        } else {
+            buffer_size = length * siz_typ;
+        }
+        std::shared_ptr<arrow::Buffer> data =
+            std::make_shared<arrow::Buffer>(buffers[buf_pos++], buffer_size);
+        // We cannot change code below to something more generic since the
         // arrow::UInt8Type are really types and not enum values.
         if (type == Bodo_CTypes::_BOOL) {
-            // Arrow's boolean array uses 1 bit for each bool
-            // we use uint8 for now to avoid conversion
-            array = std::make_shared<arrow::NumericArray<arrow::UInt8Type>>(
-                length, data, null_bitmap);
+            // Note: Arrow's boolean array uses 1 bit for each bool
+            array = std::make_shared<arrow::BooleanArray>(length, data,
+                                                          null_bitmap);
         } else if (type == Bodo_CTypes::INT8) {
             array = std::make_shared<arrow::NumericArray<arrow::Int8Type>>(
                 length, data, null_bitmap);
@@ -274,7 +282,9 @@ array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
                                  int is_bytes) {
     // TODO: better memory management of struct, meminfo refcount?
     auto dtype = Bodo_CTypes::STRING;
-    if (is_bytes) dtype = Bodo_CTypes::BINARY;
+    if (is_bytes) {
+        dtype = Bodo_CTypes::BINARY;
+    }
     return new array_info(bodo_array_type::STRING, dtype, n_items,
                           {data, offsets, null_bitmap});
 }
@@ -322,8 +332,6 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
                           {}, nullptr, 0, 0, 0, false, false, false,
                           /*offset*/ data - (char*)meminfo->data);
 }
-
-#undef DEBUG_CATEGORICAL
 
 array_info* categorical_array_to_info(uint64_t n_items, char* data,
                                       int typ_enum, int64_t num_categories,
@@ -1524,7 +1532,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
         PyModuleDef_HEAD_INIT, "array_ext", "No docs", -1, NULL,
     };
     m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    if (m == NULL)
+        return NULL;
 
     // init datetime APIs
     PyDateTime_IMPORT;

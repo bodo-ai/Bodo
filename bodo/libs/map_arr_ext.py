@@ -48,7 +48,7 @@ from bodo.utils.cg_helpers import (
     seq_getitem,
     set_bitmap_bit,
 )
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, is_list_like_index_type
 
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
 from bodo.libs import array_ext, hdist  # isort:skip
@@ -667,6 +667,15 @@ def map_arr_getitem(arr, ind):
 
         return map_arr_getitem_impl
 
+    # bool arr indexing.
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+
+        def map_arr_getitem_bool_impl(arr, ind):  # pragma: no cover
+            # Reuse the array item array implementation to support boolean arrays
+            return init_map_arr(arr._data[ind])
+
+        return map_arr_getitem_bool_impl
+
     raise BodoError(
-        "operator.getitem with MapArrays is only supported with an integer index."
-    )
+        f"getitem for MapArray with indexing type {ind} not supported."
+    )  # pragma: no cover

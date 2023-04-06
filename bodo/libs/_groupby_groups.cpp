@@ -380,7 +380,9 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
             if (key_drop_nulls) {
                 if (does_row_has_nulls(key_cols, i)) {
                     grp_info.row_to_group[i] = -1;
-                    if (consider_missing) grp_info.list_missing.push_back(i);
+                    if (consider_missing) {
+                        grp_info.list_missing.push_back(i);
+                    }
                     continue;
                 }
             }

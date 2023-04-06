@@ -16,10 +16,11 @@
 static void hash_na_val(const uint32_t seed, uint32_t* hash_value,
                         bool use_murmurhash = false) {
     int64_t val = 1;
-    if (use_murmurhash)
+    if (use_murmurhash) {
         hash_inner_murmurhash3_x86_32<int64_t>(&val, seed, hash_value);
-    else
+    } else {
         hash_inner_32<int64_t>(&val, seed, hash_value);
+    }
 }
 /**
  * Computation of the inner hash of the functions. This covers the NUMPY case.
@@ -42,20 +43,56 @@ hash_array_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
         uint32_t na_hash;
         hash_na_val(seed, &na_hash, use_murmurhash);
         for (size_t i = 0; i < n_rows; i++) {
-            if (use_murmurhash)
+            if (use_murmurhash) {
                 hash_inner_murmurhash3_x86_32<T>(&data[i], seed,
                                                  &out_hashes[i]);
-            else
+            } else {
                 hash_inner_32<T>(&data[i], seed, &out_hashes[i]);
-            if (!GetBit(null_bitmask, i)) out_hashes[i] = na_hash;
+            }
+            if (!GetBit(null_bitmask, i)) {
+                out_hashes[i] = na_hash;
+            }
         }
     } else {
         for (size_t i = 0; i < n_rows; i++)
-            if (use_murmurhash)
+            if (use_murmurhash) {
                 hash_inner_murmurhash3_x86_32<T>(&data[i], seed,
                                                  &out_hashes[i]);
-            else
+            } else {
                 hash_inner_32<T>(&data[i], seed, &out_hashes[i]);
+            }
+    }
+}
+
+/**
+ * Computation of the inner hash of the functions. This covers the Nullable
+ * boolean case where 1 bit is stored for each boolean value.
+ *
+ * @param out_hashes: The hashes on output.
+ * @param data: the list of data in input.
+ * @param n_rows: the number of rows of the table.
+ * @param seed: the seed of the computation.
+ * @param null_bitmask: the null_bitmask of the data.
+ * @param use_murmurhash: Use the murmurhash hash algorithm
+ * (currently only used for Iceberg bucket transformation)
+ *
+ */
+static void hash_array_inner_nullable_boolean(
+    std::unique_ptr<uint32_t[]>& out_hashes, uint8_t* data, size_t n_rows,
+    const uint32_t seed, uint8_t* null_bitmask,
+    const bool use_murmurhash = false) {
+    uint32_t na_hash;
+    hash_na_val(seed, &na_hash, use_murmurhash);
+    for (size_t i = 0; i < n_rows; i++) {
+        bool bit = GetBit(data, i);
+        if (use_murmurhash) {
+            hash_inner_murmurhash3_x86_32<bool>(&bit, seed, &out_hashes[i]);
+        } else {
+            hash_inner_32<bool>(&bit, seed, &out_hashes[i]);
+        }
+        if (!GetBit(null_bitmask, i)) {
+            out_hashes[i] = na_hash;
+        }
     }
 }
 
@@ -85,11 +122,12 @@ hash_array_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
                  bool use_murmurhash = false) {
     for (size_t i = 0; i < n_rows; i++) {
         Py_hash_t py_hash = Npy_HashDouble(nullptr, data[i]);
-        if (use_murmurhash)
+        if (use_murmurhash) {
             hash_inner_murmurhash3_x86_32<Py_hash_t>(&py_hash, seed,
                                                      &out_hashes[i]);
-        else
+        } else {
             hash_inner_32<Py_hash_t>(&py_hash, seed, &out_hashes[i]);
+        }
     }
 }
 
@@ -180,11 +218,12 @@ static void hash_array_list_string(
         offset_t len1 =
             data_offsets[end_index_offset] - data_offsets[start_index_offset];
         const char* val_chars1 = &data[data_offsets[start_index_offset]];
-        if (use_murmurhash)
+        if (use_murmurhash) {
             hash_string_murmurhash3_x86_32(val_chars1, (const int)len1, seed,
                                            &hash1);
-        else
+        } else {
             hash_string_32(val_chars1, (const int)len1, seed, &hash1);
+        }
         // Second the hash from the length of strings (approx that most strings
         // have less than 256 characters)
         offset_t len2 = end_index_offset - start_index_offset;
@@ -199,17 +238,19 @@ static void hash_array_list_string(
             V[j] = (char)n_chars;
             V2[j + 1] = GetBit(sub_null_bitmask, start_index_offset + j);
         }
-        if (use_murmurhash)
+        if (use_murmurhash) {
             hash_string_murmurhash3_x86_32(V.data(), (const int)len2, hash1,
                                            &hash2);
-        else
+        } else {
             hash_string_32(V.data(), (const int)len2, hash1, &hash2);
+        }
         // Third the hash from whether it is missing or not
         V2[0] = GetBit(null_bitmask, i);
-        if (use_murmurhash)
+        if (use_murmurhash) {
             hash_string_murmurhash3_x86_32(V2.data(), len2 + 1, hash2, &hash3);
-        else
+        } else {
             hash_string_32(V2.data(), len2 + 1, hash2, &hash3);
+        }
         out_hashes[i] = hash3;
         start_index_offset = end_index_offset;
     }
@@ -225,10 +266,11 @@ static void hash_array_list_string(
 static void hash_na_string(const uint32_t seed, uint32_t* hash_value,
                            bool use_murmurhash = false) {
     char val_c = 1;
-    if (use_murmurhash)
+    if (use_murmurhash) {
         hash_string_murmurhash3_x86_32(&val_c, 1, seed, hash_value);
-    else
+    } else {
         hash_string_32(&val_c, 1, seed, hash_value);
+    }
 }
 /**
  * Computation of the hashes for the case of strings array column. Covers STRING
@@ -263,11 +305,12 @@ static void hash_array_string(std::unique_ptr<uint32_t[]>& out_hashes,
             out_hashes[i] = na_hash;
         } else {
             const char* val_chars = &data[start_offset];
-            if (use_murmurhash)
+            if (use_murmurhash) {
                 hash_string_murmurhash3_x86_32(val_chars, (const int)len, seed,
                                                &out_hashes[i]);
-            else
+            } else {
                 hash_string_32(val_chars, (const int)len, seed, &out_hashes[i]);
+            }
         }
         start_offset = end_offset;
     }
@@ -294,11 +337,12 @@ void apply_arrow_offset_hash(std::unique_ptr<uint32_t[]>& out_hashes,
         int64_t off1 = input_array->value_offset(list_offsets[i_row]);
         int64_t off2 = input_array->value_offset(list_offsets[i_row + 1]);
         char e_len = (char)(off2 - off1);
-        if (use_murmurhash)
+        if (use_murmurhash) {
             hash_string_murmurhash3_x86_32(&e_len, 1, out_hashes[i_row],
                                            &out_hashes[i_row]);
-        else
+        } else {
             hash_string_32(&e_len, 1, out_hashes[i_row], &out_hashes[i_row]);
+        }
     }
 }
 
@@ -370,23 +414,36 @@ void apply_arrow_string_hashes(
  * @param out_hashes: The hashes on input/output.
  * @param list_offsets: the offsets in the input_array to consider.
  * @param n_rows: the number of rows of the array.
- * @param values: the list of values in temmplated array.
+ * @param values: the list of values in templated array.
  * @param input_array: the array in input.
  */
 void apply_arrow_numeric_hash(
     std::unique_ptr<uint32_t[]>& out_hashes,
     std::vector<offset_t> const& list_offsets, size_t const& n_rows,
     std::shared_ptr<arrow::PrimitiveArray> const& primitive_array) {
-    Bodo_CTypes::CTypeEnum bodo_typ =
-        arrow_to_bodo_type(primitive_array->type());
-    uint64_t siztype = numpy_item_size[bodo_typ];
-    char* value_ptr = (char*)primitive_array->values()->data();
-    for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        for (offset_t idx = list_offsets[i_row]; idx < list_offsets[i_row + 1];
-             idx++) {
-            char* value_ptr_shift = value_ptr + siztype * idx;
-            hash_string_32(value_ptr_shift, siztype, out_hashes[i_row],
-                           &out_hashes[i_row]);
+    std::shared_ptr<arrow::DataType> type = primitive_array->type();
+    if (type->id() == arrow::Type::BOOL) {
+        // Boolean arrays have 1 bit per entry so they need special handling
+        uint8_t* data_ptr = (uint8_t*)primitive_array->values()->data();
+        for (size_t i_row = 0; i_row < n_rows; i_row++) {
+            for (offset_t idx = list_offsets[i_row];
+                 idx < list_offsets[i_row + 1]; idx++) {
+                bool bit = arrow::bit_util::GetBit(data_ptr, idx);
+                hash_inner_32<bool>(&bit, out_hashes[i_row],
+                                    &out_hashes[i_row]);
+            }
+        }
+    } else {
+        Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(type->id());
+        uint64_t siztype = numpy_item_size[bodo_typ];
+        char* value_ptr = (char*)primitive_array->values()->data();
+        for (size_t i_row = 0; i_row < n_rows; i_row++) {
+            for (offset_t idx = list_offsets[i_row];
+                 idx < list_offsets[i_row + 1]; idx++) {
+                char* value_ptr_shift = value_ptr + siztype * idx;
+                hash_string_32(value_ptr_shift, siztype, out_hashes[i_row],
+                               &out_hashes[i_row]);
+            }
         }
     }
 }
@@ -477,8 +534,10 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
     // XXX: assumes nullable array data for nulls is always consistent
     if (array->arr_type == bodo_array_type::ARROW) {
         std::vector<offset_t> list_offsets(n_rows + 1);
-        for (offset_t i = 0; i <= n_rows; i++) list_offsets[i] = i;
-        for (offset_t i = 0; i < n_rows; i++) out_hashes[i] = seed;
+        for (offset_t i = 0; i <= n_rows; i++)
+            list_offsets[i] = i;
+        for (offset_t i = 0; i < n_rows; i++)
+            out_hashes[i] = seed;
         if (use_murmurhash)
             throw std::runtime_error(
                 "_array_hash::hash_array: MurmurHash not supported for Arrow "
@@ -523,6 +582,13 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
             (offset_t*)array->data3(), (uint8_t*)array->null_bitmask(),
             (uint8_t*)array->sub_null_bitmask(), n_rows, seed, use_murmurhash);
     }
+    if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+        array->dtype == Bodo_CTypes::_BOOL) {
+        return hash_array_inner_nullable_boolean(
+            out_hashes, (uint8_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), use_murmurhash);
+    }
+
     if (array->dtype == Bodo_CTypes::_BOOL) {
         return hash_array_inner<bool>(out_hashes, (bool*)array->data1(), n_rows,
                                       seed, (uint8_t*)array->null_bitmask(),
@@ -632,10 +698,11 @@ hash_array_combine_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
         hash_na_val(seed, &na_hash);
         uint32_t out_hash = 0;
         for (size_t i = 0; i < n_rows; i++) {
-            if (!GetBit(null_bitmask, i))
+            if (!GetBit(null_bitmask, i)) {
                 out_hash = na_hash;
-            else
+            } else {
                 hash_inner_32<T>(&data[i], seed, &out_hash);
+            }
             hash_combine_boost(out_hashes[i], out_hash);
         }
     } else {
@@ -658,6 +725,34 @@ hash_array_combine_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
     for (size_t i = 0; i < n_rows; i++) {
         Py_hash_t py_hash = Npy_HashDouble(nullptr, data[i]);
         hash_inner_32<Py_hash_t>(&py_hash, seed, &out_hash);
+        hash_combine_boost(out_hashes[i], out_hash);
+    }
+}
+
+/**
+ * Computation of the inner hash combine function. This covers the Nullable
+ * boolean case where 1 bit is stored for each boolean value.
+ *
+ * @param out_hashes: The hashes on output.
+ * @param data: the list of data in input.
+ * @param n_rows: the number of rows of the table.
+ * @param seed: the seed of the computation.
+ * @param null_bitmask: the null_bitmask of the data.
+ *
+ */
+static void hash_array_combine_inner_nullable_boolean(
+    std::unique_ptr<uint32_t[]>& out_hashes, uint8_t* data, size_t n_rows,
+    const uint32_t seed, uint8_t* null_bitmask) {
+    uint32_t na_hash;
+    hash_na_val(seed, &na_hash);
+    uint32_t out_hash = 0;
+    for (size_t i = 0; i < n_rows; i++) {
+        if (!GetBit(null_bitmask, i)) {
+            out_hash = na_hash;
+        } else {
+            bool bit = GetBit(data, i);
+            hash_inner_32<bool>(&bit, seed, &out_hash);
+        }
         hash_combine_boost(out_hashes[i], out_hash);
     }
 }
@@ -693,7 +788,9 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
     // TODO: general dispatcher
     if (array->arr_type == bodo_array_type::ARROW) {
         std::vector<offset_t> list_offsets(n_rows + 1);
-        for (offset_t i = 0; i <= n_rows; i++) list_offsets[i] = i;
+        for (offset_t i = 0; i <= n_rows; i++) {
+            list_offsets[i] = i;
+        }
         return hash_arrow_array(out_hashes, list_offsets, n_rows, array->array);
     }
     if (array->arr_type == bodo_array_type::STRING) {
@@ -732,6 +829,13 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             (offset_t*)array->data3(), (uint8_t*)array->null_bitmask(),
             (uint8_t*)array->sub_null_bitmask(), n_rows);
     }
+    if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+        array->dtype == Bodo_CTypes::_BOOL) {
+        return hash_array_combine_inner_nullable_boolean(
+            out_hashes, (uint8_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask());
+    }
+
     if (array->dtype == Bodo_CTypes::_BOOL) {
         return hash_array_combine_inner<bool>(out_hashes, (bool*)array->data1(),
                                               n_rows, seed,
@@ -807,9 +911,11 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
 template <typename T>
 typename std::enable_if<std::is_floating_point<T>::value, double>::type
 get_value(T val) {
-    if (isnan(val))  // I wrote that because I am not sure nan have unique
-                     // binary representation
+    // I wrote that because I am not sure nan have unique
+    // binary representation
+    if (isnan(val)) {
         return std::nan("");
+    }
     return val;
 }
 
@@ -836,7 +942,9 @@ void coherent_hash_array_inner_uint64(std::unique_ptr<uint32_t[]>& out_hashes,
         for (size_t i = 0; i < n_rows; i++) {
             uint64_t val = data[i];
             hash_inner_32<uint64_t>(&val, seed, &out_hashes[i]);
-            if (!GetBit(null_bitmask, i)) out_hashes[i] = na_hash;
+            if (!GetBit(null_bitmask, i)) {
+                out_hashes[i] = na_hash;
+            }
         }
     }
 }
@@ -859,7 +967,9 @@ void coherent_hash_array_inner_int64(std::unique_ptr<uint32_t[]>& out_hashes,
         for (size_t i = 0; i < n_rows; i++) {
             int64_t val = data[i];
             hash_inner_32<int64_t>(&val, seed, &out_hashes[i]);
-            if (!GetBit(null_bitmask, i)) out_hashes[i] = na_hash;
+            if (!GetBit(null_bitmask, i)) {
+                out_hashes[i] = na_hash;
+            }
         }
     }
 }
@@ -879,10 +989,11 @@ void coherent_hash_array_inner_double(std::unique_ptr<uint32_t[]>& out_hashes,
         for (size_t i = 0; i < n_rows; i++) {
             bool bit = GetBit(null_bitmask, i);
             double val;
-            if (bit)
+            if (bit) {
                 val = get_value(data[i]);
-            else
+            } else {
                 val = std::nan("");
+            }
             hash_inner_32<double>(&val, seed, &out_hashes[i]);
         }
     }
@@ -1033,7 +1144,9 @@ void coherent_hash_array_combine_inner_uint64(
         for (size_t i = 0; i < n_rows; i++) {
             uint64_t val = data[i];
             hash_inner_32<uint64_t>(&val, seed, &out_hash);
-            if (!GetBit(null_bitmask, i)) out_hash++;
+            if (!GetBit(null_bitmask, i)) {
+                out_hash++;
+            }
             hash_combine_boost(out_hashes[i], out_hash);
         }
     }
@@ -1057,7 +1170,9 @@ void coherent_hash_array_combine_inner_int64(
         for (size_t i = 0; i < n_rows; i++) {
             int64_t val = data[i];
             hash_inner_32<int64_t>(&val, seed, &out_hash);
-            if (!GetBit(null_bitmask, i)) out_hash++;
+            if (!GetBit(null_bitmask, i)) {
+                out_hash++;
+            }
             hash_combine_boost(out_hashes[i], out_hash);
         }
     }
@@ -1081,10 +1196,11 @@ void coherent_hash_array_combine_inner_double(
         for (size_t i = 0; i < n_rows; i++) {
             bool bit = GetBit(null_bitmask, i);
             double val;
-            if (bit)
+            if (bit) {
                 val = get_value(data[i]);
-            else
+            } else {
                 val = std::nan("");
+            }
             hash_inner_32<double>(&val, seed, &out_hash);
             hash_combine_boost(out_hashes[i], out_hash);
         }
