@@ -41,7 +41,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
-from bodo.ir.filter import supported_funcs_map, supported_arrow_funcs_map
+from bodo.ir.filter import supported_arrow_funcs_map, supported_funcs_map
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (
@@ -1313,7 +1313,13 @@ class TypingTransforms:
             Tuple[str, str, ir.Var]: The filter for a column with a boolean output type.
         """
         colname = guard(
-            self._get_col_name, col_def, df_var, df_col_names, func_ir, read_node, new_ir_assigns
+            self._get_col_name,
+            col_def,
+            df_var,
+            df_col_names,
+            func_ir,
+            read_node,
+            new_ir_assigns,
         )
         require(colname)
         # Verify that the column has a boolean type.
@@ -1342,7 +1348,14 @@ class TypingTransforms:
         return cond
 
     def _get_call_filter(
-        self, call_def, func_ir, df_var, df_col_names, is_sql_op, read_node, new_ir_assigns
+        self,
+        call_def,
+        func_ir,
+        df_var,
+        df_col_names,
+        is_sql_op,
+        read_node,
+        new_ir_assigns,
     ):
         """
         Function used by _get_partition_filters to extract filters
@@ -1364,11 +1377,23 @@ class TypingTransforms:
         )
         if call_list[0] in ("notna", "isna", "notnull", "isnull"):
             return self._get_null_filter(
-                call_def, call_list, func_ir, df_var, df_col_names, read_node, new_ir_assigns
+                call_def,
+                call_list,
+                func_ir,
+                df_var,
+                df_col_names,
+                read_node,
+                new_ir_assigns,
             )
         elif call_list[0] == "isin":
             return self._get_isin_filter(
-                call_list, call_def, func_ir, df_var, df_col_names, read_node, new_ir_assigns
+                call_list,
+                call_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                read_node,
+                new_ir_assigns,
             )
         elif call_list == (
             "is_in",
@@ -1379,14 +1404,26 @@ class TypingTransforms:
             )
         elif call_list[0] in ("startswith", "endswith"):  # pragma: no cover
             return self._get_starts_ends_with_filter(
-                call_list, call_def, func_ir, df_var, df_col_names, read_node, new_ir_assigns
+                call_list,
+                call_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                read_node,
+                new_ir_assigns,
             )
         elif call_list == (
             "like_kernel",
             "bodo.libs.bodosql_array_kernels",
         ):  # pragma: no cover
             return self._get_like_filter(
-                call_def, func_ir, df_var, df_col_names, is_sql_op, read_node, new_ir_assigns
+                call_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                is_sql_op,
+                read_node,
+                new_ir_assigns,
             )
         else:
             # Trigger a GuardException because we have hit an unknown function.
@@ -1394,7 +1431,14 @@ class TypingTransforms:
             raise GuardException
 
     def _get_null_filter(
-        self, call_def, call_list, func_ir, df_var, df_col_names, read_node, new_ir_assigns
+        self,
+        call_def,
+        call_list,
+        func_ir,
+        df_var,
+        df_col_names,
+        read_node,
+        new_ir_assigns,
     ):
         """
         Function used by _get_partition_filters to extract null related
@@ -1412,7 +1456,14 @@ class TypingTransforms:
         return (colname, op, "NULL")
 
     def _get_isin_filter(
-        self, call_list, call_def, func_ir, df_var, df_col_names, read_node, new_ir_assigns
+        self,
+        call_list,
+        call_def,
+        func_ir,
+        df_var,
+        df_col_names,
+        read_node,
+        new_ir_assigns,
     ):
         """
         Function used by _get_partition_filters to extract isin related
@@ -1472,7 +1523,14 @@ class TypingTransforms:
         return (colname, op, call_def.args[1])
 
     def _get_starts_ends_with_filter(
-        self, call_list, call_def, func_ir, df_var, df_col_names, read_node, new_ir_assigns
+        self,
+        call_list,
+        call_def,
+        func_ir,
+        df_var,
+        df_col_names,
+        read_node,
+        new_ir_assigns,
     ):  # pragma: no cover
         # This path is only taken on Azure because snowflake
         # is not tested on AWS.
@@ -1489,7 +1547,7 @@ class TypingTransforms:
         df_var: ir.Var,
         df_col_names,
         is_sql_op: bool,
-        read_node, 
+        read_node,
         new_ir_assigns: List[ir.Var],
     ) -> Tuple[str, str, ir.Var]:  # pragma: no cover
         """Generate a filter for like. If the values in like are proper constants
@@ -1816,10 +1874,22 @@ class TypingTransforms:
             lhs = get_binop_arg(index_def, 0)
             rhs = get_binop_arg(index_def, 1)
             left_colname = guard(
-                self._get_col_name, lhs, df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                self._get_col_name,
+                lhs,
+                df_var,
+                df_col_names,
+                func_ir,
+                read_node,
+                new_ir_assigns,
             )
             right_colname = guard(
-                self._get_col_name, rhs, df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                self._get_col_name,
+                rhs,
+                df_var,
+                df_col_names,
+                func_ir,
+                read_node,
+                new_ir_assigns,
             )
 
             require(
@@ -1838,12 +1908,24 @@ class TypingTransforms:
             cond = (colname, op, scalar)
         elif self._is_call_op_filter_pushdown(index_def, func_ir):
             cond = self._get_call_filter(
-                index_def, func_ir, df_var, df_col_names, is_sql_op, read_node, new_ir_assigns
+                index_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                is_sql_op,
+                read_node,
+                new_ir_assigns,
             )
         else:
             # Filter pushdown is just on a boolean column.
             cond = self._get_column_filter(
-                index_def, func_ir, df_var, df_col_names, is_sql_op, read_node, new_ir_assigns
+                index_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                is_sql_op,
+                read_node,
+                new_ir_assigns,
             )
 
         # If this is parquet we need to verify this is a filter we can process.
@@ -1884,7 +1966,9 @@ class TypingTransforms:
         get_filter_predicate_compute_func(col_val)
         return self._get_filter_col_type(col_val[0], out_types, col_names)
 
-    def _get_col_name(self, var, df_var, df_col_names, func_ir, read_node, new_ir_assigns):
+    def _get_col_name(
+        self, var, df_var, df_col_names, func_ir, read_node, new_ir_assigns
+    ):
         """get column name for dataframe column access like df["A"] if possible.
         Throws GuardException if not possible.
         """
@@ -1911,7 +1995,12 @@ class TypingTransforms:
                 # https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
                 require((len(var_def.args) == 1) and not var_def.kws)
                 return self._get_col_name(
-                    var_def.args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                    var_def.args[0],
+                    df_var,
+                    df_col_names,
+                    func_ir,
+                    read_node,
+                    new_ir_assigns,
                 )
             # BodoSQL generates get_dataframe_data() calls for projections
             if (
@@ -1923,7 +2012,7 @@ class TypingTransforms:
                 )
                 return df_col_names[col_ind]
 
-            is_bodosql_array_kernel = (fdef[1] == "bodo.libs.bodosql_array_kernels")
+            is_bodosql_array_kernel = fdef[1] == "bodo.libs.bodosql_array_kernels"
 
             # coalesce can be called on the filter column, which will be pushed down
             # e.g. where coalesce(L_COMMITDATE, current_date()) >= '1998-10-30'
@@ -1936,8 +2025,10 @@ class TypingTransforms:
                 if fdef[0] == "coalesce":  # pragma: no cover
                     require((len(var_def.args) == 1) and not var_def.kws)
                 else:
-                    require(isinstance(read_node, bodo.ir.sql_ext.SqlReader) and
-                        read_node.db_type in ("snowflake", "iceberg"))
+                    require(
+                        isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+                        and read_node.db_type in ("snowflake", "iceberg")
+                    )
 
                 args = find_build_tuple(self.func_ir, var_def.args[0])
                 require(len(args) == 2)
@@ -1960,15 +2051,15 @@ class TypingTransforms:
                 return (col_name, fdef[0], args[1])
 
             # All other BodoSQL functions
-            if (
-                is_bodosql_array_kernel and not var_def.kws
-            ):  # pragma: no cover
+            if is_bodosql_array_kernel and not var_def.kws:  # pragma: no cover
                 bodosql_kernel_name = fdef[0]
                 require(bodosql_kernel_name in supported_funcs_map)
 
                 if bodosql_kernel_name not in supported_arrow_funcs_map:
-                    require(isinstance(read_node, bodo.ir.sql_ext.SqlReader) and
-                        read_node.db_type in ("snowflake", "iceberg"))
+                    require(
+                        isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+                        and read_node.db_type in ("snowflake", "iceberg")
+                    )
 
                 args = var_def.args
 
@@ -1977,7 +2068,7 @@ class TypingTransforms:
 
                 for i, arg in enumerate(args):
                     arg_type = self.typemap.get(arg.name, None)
-                        
+
                     if arg_type in (None, types.undefined, types.unknown):
                         self.needs_transform = True
                         raise GuardException
