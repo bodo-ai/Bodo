@@ -7,14 +7,10 @@ import datetime
 import bodosql
 import pandas as pd
 import pytest
+from bodo.tests.conftest import date_df, time_part_strings, day_part_strings
 from bodosql.context import BodoSQLContext
 from bodosql.tests.utils import bodosql_use_date_type, check_query
 
-from bodo.tests.conftest import (  # noqa
-    date_df,
-    day_part_strings,
-    time_part_strings,
-)
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels import (
     diff_fn,
 )
@@ -471,75 +467,3 @@ def test_min_date_group_by(date_df, spark_info, memory_leak_check):
             spark_info,
             check_names=False,
         )
-
-
-@pytest.mark.slow
-def test_str_to_date_literals(basic_df, memory_leak_check):
-    """
-    Checks that calling STR_TO_DATE on literals behaves as expected
-    """
-    query = "SELECT STR_TO_DATE('17-09-2010', '%d-%m-%Y')"
-    check_query(
-        query,
-        basic_df,
-        None,
-        check_names=False,
-        expected_output=pd.DataFrame({"output": [datetime.date(2010, 9, 17)]}),
-    )
-
-
-def test_str_to_date_columns(memory_leak_check):
-    """
-    Checks that calling STR_TO_DATE on columns behaves as expected
-    """
-    ctx = {
-        "table1": pd.DataFrame({"A": ["2003-02-01", "2013-02-11", "2011-11-01"] * 4})
-    }
-    query = "SELECT STR_TO_DATE(A, '%Y-%m-%d') from table1"
-    check_query(
-        query,
-        ctx,
-        None,
-        check_names=False,
-        expected_output=pd.DataFrame(
-            {
-                "output": [
-                    datetime.date(2003, 2, 1),
-                    datetime.date(2013, 2, 11),
-                    datetime.date(2011, 11, 1),
-                ]
-                * 4
-            }
-        ),
-    )
-
-
-@pytest.mark.slow
-def test_str_to_date_columns_format(memory_leak_check):
-    """
-    Checks that calling STR_TO_DATE on columns behaves as expected when
-    the format string needs to be replaced. Note this does not test all
-    possible conversions.
-    """
-    ctx = {
-        "table1": pd.DataFrame(
-            {"A": ["2003-02-01:11", "2013-02-11:11", "2011-11-01:02"] * 4}
-        )
-    }
-    query = "SELECT STR_TO_DATE(A, '%Y-%m-%d:%h') from table1"
-    check_query(
-        query,
-        ctx,
-        None,
-        check_names=False,
-        expected_output=pd.DataFrame(
-            {
-                "output": [
-                    datetime.date(2003, 2, 1),
-                    datetime.date(2013, 2, 11),
-                    datetime.date(2011, 11, 1),
-                ]
-                * 4
-            }
-        ),
-    )

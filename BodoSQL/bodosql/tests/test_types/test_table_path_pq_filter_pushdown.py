@@ -318,7 +318,7 @@ def test_coalesce_filter_pushdown(datapath, memory_leak_check):
 
     def impl(bc):
         return bc.sql(
-            "select * from table1 where coalesce(A, to_timestamp(current_date())) > '2015-01-01'"
+            "select * from table1 where coalesce(A, current_date()) > '2015-01-01'"
         )
 
     df = pd.read_parquet(filename)
@@ -329,6 +329,7 @@ def test_coalesce_filter_pushdown(datapath, memory_leak_check):
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
+
         check_func(impl, (bc,), py_output=py_output, reset_index=True, sort_output=True)
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"

@@ -27,14 +27,14 @@ public class ConversionCodeGen {
           .append(strExpr)
           .append(", format=")
           .append(SQLFormatToPandasToDatetimeFormat(SQLFormatStr))
-          .append(").date");
+          .append(")");
     } else {
       strBuilder
-          .append("pd.to_datetime(")
+          .append("bodosql.libs.generated_lib.sql_null_checking_pd_to_datetime_with_format(")
           .append(strExpr)
-          .append(", format=")
+          .append(", ")
           .append(SQLFormatToPandasToDatetimeFormat(SQLFormatStr))
-          .append(").date()");
+          .append(")");
     }
 
     return strBuilder.toString();

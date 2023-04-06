@@ -41,7 +41,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
-from bodo.ir.filter import supported_arrow_funcs_map, supported_funcs_map
+from bodo.ir.filter import supported_funcs_no_arg_map
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (
@@ -823,6 +823,7 @@ class TypingTransforms:
             # Filter pushdown is only supported for snowflake and iceberg
             # right now.
             require(read_node.db_type in ("snowflake", "iceberg"))
+
         # make sure all filters have the right form
         # If we don't have a binary operation, then we just pass
         # the single def as the index_def and set the lhs_def
@@ -1292,7 +1293,6 @@ class TypingTransforms:
         df_var: ir.Var,
         df_col_names,
         is_sql_op: bool,
-        read_node,
         new_ir_assigns: List[ir.Stmt],
     ) -> Tuple[str, str, ir.Var]:
         """Function used by _get_partition_filters to extract filters
@@ -1313,13 +1313,7 @@ class TypingTransforms:
             Tuple[str, str, ir.Var]: The filter for a column with a boolean output type.
         """
         colname = guard(
-            self._get_col_name,
-            col_def,
-            df_var,
-            df_col_names,
-            func_ir,
-            read_node,
-            new_ir_assigns,
+            self._get_col_name, col_def, df_var, df_col_names, func_ir, new_ir_assigns
         )
         require(colname)
         # Verify that the column has a boolean type.
@@ -1348,14 +1342,7 @@ class TypingTransforms:
         return cond
 
     def _get_call_filter(
-        self,
-        call_def,
-        func_ir,
-        df_var,
-        df_col_names,
-        is_sql_op,
-        read_node,
-        new_ir_assigns,
+        self, call_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
     ):
         """
         Function used by _get_partition_filters to extract filters
@@ -1377,53 +1364,29 @@ class TypingTransforms:
         )
         if call_list[0] in ("notna", "isna", "notnull", "isnull"):
             return self._get_null_filter(
-                call_def,
-                call_list,
-                func_ir,
-                df_var,
-                df_col_names,
-                read_node,
-                new_ir_assigns,
+                call_def, call_list, func_ir, df_var, df_col_names, new_ir_assigns
             )
         elif call_list[0] == "isin":
             return self._get_isin_filter(
-                call_list,
-                call_def,
-                func_ir,
-                df_var,
-                df_col_names,
-                read_node,
-                new_ir_assigns,
+                call_list, call_def, func_ir, df_var, df_col_names, new_ir_assigns
             )
         elif call_list == (
             "is_in",
             "bodo.libs.bodosql_array_kernels",
         ):  # pragma: no cover
             return self._get_bodosql_array_kernel_is_in_filter(
-                call_def, func_ir, df_var, df_col_names, read_node, new_ir_assigns
+                call_def, func_ir, df_var, df_col_names, new_ir_assigns
             )
         elif call_list[0] in ("startswith", "endswith"):  # pragma: no cover
             return self._get_starts_ends_with_filter(
-                call_list,
-                call_def,
-                func_ir,
-                df_var,
-                df_col_names,
-                read_node,
-                new_ir_assigns,
+                call_list, call_def, func_ir, df_var, df_col_names, new_ir_assigns
             )
         elif call_list == (
             "like_kernel",
             "bodo.libs.bodosql_array_kernels",
         ):  # pragma: no cover
             return self._get_like_filter(
-                call_def,
-                func_ir,
-                df_var,
-                df_col_names,
-                is_sql_op,
-                read_node,
-                new_ir_assigns,
+                call_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
             )
         else:
             # Trigger a GuardException because we have hit an unknown function.
@@ -1431,14 +1394,7 @@ class TypingTransforms:
             raise GuardException
 
     def _get_null_filter(
-        self,
-        call_def,
-        call_list,
-        func_ir,
-        df_var,
-        df_col_names,
-        read_node,
-        new_ir_assigns,
+        self, call_def, call_list, func_ir, df_var, df_col_names, new_ir_assigns
     ):
         """
         Function used by _get_partition_filters to extract null related
@@ -1447,7 +1403,7 @@ class TypingTransforms:
         # support both Series.isna() and pd.isna() forms
         arr_var = call_list[1] if isinstance(call_list[1], ir.Var) else call_def.args[0]
         colname = self._get_col_name(
-            arr_var, df_var, df_col_names, func_ir, read_node, new_ir_assigns
+            arr_var, df_var, df_col_names, func_ir, new_ir_assigns
         )
         if call_list[0] in ("notna", "notnull"):
             op = "is not"
@@ -1456,14 +1412,7 @@ class TypingTransforms:
         return (colname, op, "NULL")
 
     def _get_isin_filter(
-        self,
-        call_list,
-        call_def,
-        func_ir,
-        df_var,
-        df_col_names,
-        read_node,
-        new_ir_assigns,
+        self, call_list, call_def, func_ir, df_var, df_col_names, new_ir_assigns
     ):
         """
         Function used by _get_partition_filters to extract isin related
@@ -1481,13 +1430,13 @@ class TypingTransforms:
             )
         )
         colname = self._get_col_name(
-            call_list[1], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+            call_list[1], df_var, df_col_names, func_ir, new_ir_assigns
         )
         op = "in"
         return (colname, op, list_set_arg)
 
     def _get_bodosql_array_kernel_is_in_filter(
-        self, call_def, func_ir, df_var, df_col_names, read_node, new_ir_assigns
+        self, call_def, func_ir, df_var, df_col_names, new_ir_assigns
     ):  # pragma: no cover
         """
         Function used by _get_partition_filters to extract isin related
@@ -1517,25 +1466,18 @@ class TypingTransforms:
         )
 
         colname = self._get_col_name(
-            call_def.args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+            call_def.args[0], df_var, df_col_names, func_ir, new_ir_assigns
         )
         op = "in"
         return (colname, op, call_def.args[1])
 
     def _get_starts_ends_with_filter(
-        self,
-        call_list,
-        call_def,
-        func_ir,
-        df_var,
-        df_col_names,
-        read_node,
-        new_ir_assigns,
+        self, call_list, call_def, func_ir, df_var, df_col_names, new_ir_assigns
     ):  # pragma: no cover
         # This path is only taken on Azure because snowflake
         # is not tested on AWS.
         colname = self._get_col_name(
-            call_list[1], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+            call_list[1], df_var, df_col_names, func_ir, new_ir_assigns
         )
         op = call_list[0]
         return (colname, op, call_def.args[0])
@@ -1547,7 +1489,6 @@ class TypingTransforms:
         df_var: ir.Var,
         df_col_names,
         is_sql_op: bool,
-        read_node,
         new_ir_assigns: List[ir.Var],
     ) -> Tuple[str, str, ir.Var]:  # pragma: no cover
         """Generate a filter for like. If the values in like are proper constants
@@ -1577,7 +1518,7 @@ class TypingTransforms:
         args = call_def.args
         # Get the column names
         colname = self._get_col_name(
-            args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+            args[0], df_var, df_col_names, func_ir, new_ir_assigns
         )
         # Get the other args. We can only do filter pushdown if all of them are literals
         pattern_arg = args[1]
@@ -1707,6 +1648,7 @@ class TypingTransforms:
         # https://github.com/sympy/sympy/blob/da5cd290017814e6100859e5a3f289b3eda4ca6c/sympy/logic/boolalg.py#L1565
         # Or case: call recursively on arguments and concatenate
         # e.g. A or B
+
         def get_child_filter(child_def):
             """
             Function that abstracts away the recursive steps of getting the filters
@@ -1735,7 +1677,6 @@ class TypingTransforms:
                             df_var,
                             df_col_names,
                             is_sql_op,
-                            read_node,
                             new_ir_assigns,
                         )
                     ]
@@ -1749,7 +1690,6 @@ class TypingTransforms:
                             df_var,
                             df_col_names,
                             is_sql_op,
-                            read_node,
                             new_ir_assigns,
                         )
                     ]
@@ -1874,22 +1814,10 @@ class TypingTransforms:
             lhs = get_binop_arg(index_def, 0)
             rhs = get_binop_arg(index_def, 1)
             left_colname = guard(
-                self._get_col_name,
-                lhs,
-                df_var,
-                df_col_names,
-                func_ir,
-                read_node,
-                new_ir_assigns,
+                self._get_col_name, lhs, df_var, df_col_names, func_ir, new_ir_assigns
             )
             right_colname = guard(
-                self._get_col_name,
-                rhs,
-                df_var,
-                df_col_names,
-                func_ir,
-                read_node,
-                new_ir_assigns,
+                self._get_col_name, rhs, df_var, df_col_names, func_ir, new_ir_assigns
             )
 
             require(
@@ -1908,24 +1836,12 @@ class TypingTransforms:
             cond = (colname, op, scalar)
         elif self._is_call_op_filter_pushdown(index_def, func_ir):
             cond = self._get_call_filter(
-                index_def,
-                func_ir,
-                df_var,
-                df_col_names,
-                is_sql_op,
-                read_node,
-                new_ir_assigns,
+                index_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
             )
         else:
             # Filter pushdown is just on a boolean column.
             cond = self._get_column_filter(
-                index_def,
-                func_ir,
-                df_var,
-                df_col_names,
-                is_sql_op,
-                read_node,
-                new_ir_assigns,
+                index_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
             )
 
         # If this is parquet we need to verify this is a filter we can process.
@@ -1966,9 +1882,7 @@ class TypingTransforms:
         get_filter_predicate_compute_func(col_val)
         return self._get_filter_col_type(col_val[0], out_types, col_names)
 
-    def _get_col_name(
-        self, var, df_var, df_col_names, func_ir, read_node, new_ir_assigns
-    ):
+    def _get_col_name(self, var, df_var, df_col_names, func_ir, new_ir_assigns):
         """get column name for dataframe column access like df["A"] if possible.
         Throws GuardException if not possible.
         """
@@ -1995,12 +1909,7 @@ class TypingTransforms:
                 # https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
                 require((len(var_def.args) == 1) and not var_def.kws)
                 return self._get_col_name(
-                    var_def.args[0],
-                    df_var,
-                    df_col_names,
-                    func_ir,
-                    read_node,
-                    new_ir_assigns,
+                    var_def.args[0], df_var, df_col_names, func_ir, new_ir_assigns
                 )
             # BodoSQL generates get_dataframe_data() calls for projections
             if (
@@ -2012,24 +1921,12 @@ class TypingTransforms:
                 )
                 return df_col_names[col_ind]
 
-            is_bodosql_array_kernel = fdef[1] == "bodo.libs.bodosql_array_kernels"
-
             # coalesce can be called on the filter column, which will be pushed down
             # e.g. where coalesce(L_COMMITDATE, current_date()) >= '1998-10-30'
-            if is_bodosql_array_kernel and fdef[0] in (
-                "coalesce",
-                "concat_ws",
-            ):  # pragma: no cover
+            if fdef == ("coalesce", "bodo.libs.bodosql_array_kernels"):
                 # coalesce takes a tuple input
                 # We only push down 2-arg scalar case, i.e. coalesce((column, scalar))
-                if fdef[0] == "coalesce":  # pragma: no cover
-                    require((len(var_def.args) == 1) and not var_def.kws)
-                else:
-                    require(
-                        isinstance(read_node, bodo.ir.sql_ext.SqlReader)
-                        and read_node.db_type in ("snowflake", "iceberg")
-                    )
-
+                require((len(var_def.args) == 1) and not var_def.kws)
                 args = find_build_tuple(self.func_ir, var_def.args[0])
                 require(len(args) == 2)
 
@@ -2046,62 +1943,42 @@ class TypingTransforms:
                 )
 
                 col_name = self._get_col_name(
-                    args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                    args[0], df_var, df_col_names, func_ir, new_ir_assigns
                 )
-                return (col_name, fdef[0], args[1])
+                return (col_name, "coalesce", args[1])
 
-            # All other BodoSQL functions
-            if is_bodosql_array_kernel and not var_def.kws:  # pragma: no cover
-                bodosql_kernel_name = fdef[0]
-                require(bodosql_kernel_name in supported_funcs_map)
+            if fdef[1] == "bodo.libs.bodosql_array_kernels":  # pragma: no cover
+                # We currently only support functions that use only
+                # the column data (1-arg), rather than functions
+                # that also take in additional args.
+                require(fdef[0] in supported_funcs_no_arg_map)
+                require((len(var_def.args) == 1) and not var_def.kws)
 
-                if bodosql_kernel_name not in supported_arrow_funcs_map:
-                    require(
-                        isinstance(read_node, bodo.ir.sql_ext.SqlReader)
-                        and read_node.db_type in ("snowflake", "iceberg")
-                    )
-
-                args = var_def.args
-
-                arg_type = self.typemap.get(args[0].name, None)
+                arg0 = var_def.args[0]
+                # arg[0] must be an array
+                arg_type = self.typemap.get(arg0.name, None)
                 require(is_array_typ(arg_type))
-
-                for i, arg in enumerate(args):
-                    arg_type = self.typemap.get(arg.name, None)
-
-                    if arg_type in (None, types.undefined, types.unknown):
-                        self.needs_transform = True
-                        raise GuardException
-
-                    if i == 0:
-                        # We make the assumption that for every array kernel we
-                        # have the array as the 0th argument.
-                        require(is_array_typ(arg_type))
-                    else:
-                        require(is_scalar_type(arg_type))
+                if arg_type in (None, types.undefined, types.unknown):
+                    self.needs_transform = True
+                    raise GuardException
 
                 col_name = self._get_col_name(
-                    args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                    arg0, df_var, df_col_names, func_ir, new_ir_assigns
                 )
-                if len(args) == 2:
-                    return (col_name, fdef[0], args[1])
-                else:
-                    if len(args) == 1:
-                        expr_value = ir.Const(None, var_def.loc)
-                        new_name = mk_unique_var("dummy_var")
-                    else:
-                        expr_value = ir.Expr.build_tuple(args[1:], var_def.loc)
-                        new_name = mk_unique_var("tuple_var")
+                # Create a new IR Expr for the constant pattern.
+                expr_value = ir.Const(None, var_def.loc)
+                # Generate a variable from the Expr
+                new_name = mk_unique_var("dummy_var")
+                new_var = ir.Var(ir.Scope(None, var_def.loc), new_name, var_def.loc)
+                new_assign = ir.Assign(
+                    target=new_var, value=expr_value, loc=var_def.loc
+                )
+                # Append the assign so we update the IR.
+                new_ir_assigns.append(new_assign)
+                # Update the definitions. This is safe since the name is unique.
+                func_ir._definitions[new_name] = [expr_value]
 
-                    new_var = ir.Var(ir.Scope(None, var_def.loc), new_name, var_def.loc)
-                    new_assign = ir.Assign(
-                        target=new_var, value=expr_value, loc=var_def.loc
-                    )
-                    # Append the assign so we update the IR.
-                    new_ir_assigns.append(new_assign)
-                    # Update the definitions. This is safe since the name is unique.
-                    func_ir._definitions[new_name] = [expr_value]
-                    return (col_name, fdef[0], new_var)
+                return (col_name, fdef[0], new_var)
 
             if fdef[0] in ("str.lower", "str.upper"):
                 # make sure fdef[1] is a Series
@@ -2111,7 +1988,7 @@ class TypingTransforms:
                     raise GuardException
                 require(isinstance(arg_type, SeriesType))
                 col_name = self._get_col_name(
-                    fdef[1], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                    fdef[1], df_var, df_col_names, func_ir, new_ir_assigns
                 )
 
                 # Create a new IR Expr for the constant pattern.
@@ -2136,7 +2013,7 @@ class TypingTransforms:
                 and fdef[0] == "astype"
             )
             return self._get_col_name(
-                fdef[1], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                fdef[1], df_var, df_col_names, func_ir, new_ir_assigns
             )
 
         require(is_expr(var_def, "getitem"))

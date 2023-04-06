@@ -169,15 +169,26 @@ public class DatetimeFnCodeGen {
    * @return the rexNodeVisitorInfo for the result.
    */
   public static Expr generateDateFormatCode(
-      Expr arg1Info, Expr arg2Info) {
+      Expr arg1Info, BodoSQLExprType.ExprType arg1ExprType, Expr arg2Info, boolean isSingleRow) {
     assert isStringLiteral(arg2Info.emit());
     String pythonFormatString = convertMySQLFormatStringToPython(arg2Info.emit());
-    String outputExpression =
-        "bodo.libs.bodosql_array_kernels.date_format("
-            + arg1Info.emit()
-            + ", "
-            + pythonFormatString
-            + ")";
+    String outputExpression;
+
+    if (arg1ExprType == BodoSQLExprType.ExprType.SCALAR || isSingleRow) {
+      outputExpression =
+          "bodosql.libs.generated_lib.sql_null_checking_strftime("
+              + arg1Info.emit()
+              + ", "
+              + pythonFormatString
+              + ")";
+    } else {
+      outputExpression =
+          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+              + arg1Info.emit()
+              + ").dt.strftime("
+              + pythonFormatString
+              + "))";
+    }
 
     return new Expr.Raw(outputExpression);
   }
@@ -189,7 +200,7 @@ public class DatetimeFnCodeGen {
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static Expr generateCurdateCode(String opName) {
-    String fnExpression = "pd.Timestamp.now().date()";
+    String fnExpression = "pd.Timestamp.now().floor(freq=\"D\")";
     return new Expr.Raw(fnExpression);
   }
 
