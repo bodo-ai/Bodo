@@ -33,7 +33,7 @@ from numba.np.numpy_support import as_dtype
 
 import bodo
 from bodo.hiframes.time_ext import TimeArrayType
-from bodo.ir.filter import supported_funcs_map
+from bodo.ir.filter import supported_compute_funcs
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
@@ -1537,6 +1537,6 @@ def get_filter_predicate_compute_func(col_val):
 
     compute_func = col_val[1]
     assert (
-        compute_func in supported_funcs_map
+        compute_func in supported_compute_funcs
     ), f"Unsupported compute function for column in filter predicate: {compute_func}"
     return compute_func
