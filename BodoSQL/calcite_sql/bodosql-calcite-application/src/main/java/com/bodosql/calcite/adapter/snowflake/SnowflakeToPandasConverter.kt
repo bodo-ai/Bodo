@@ -5,11 +5,11 @@ import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.ir.Op
-import org.apache.calcite.plan.ConventionTraitDef
-import org.apache.calcite.plan.RelOptCluster
-import org.apache.calcite.plan.RelTraitSet
+import com.bodosql.calcite.plan.makeCost
+import org.apache.calcite.plan.*
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterImpl
+import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.rel2sql.RelToSqlConverter
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl
@@ -20,6 +20,31 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode {
         return SnowflakeToPandasConverter(cluster, traitSet, sole(inputs))
+    }
+
+    /**
+     * Even if SnowflakeToPandasConverter is a PandasRel, it is still
+     * a single process operation which the other ranks wait on and doesn't
+     * benefit from parallelism.
+     */
+    override fun splitCount(numRanks: Int): Int = 1
+
+    override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost? {
+        // Determine the average row size which determines how much data is returned.
+        // If this data isn't available, just assume something like 4 bytes for each column.
+        val averageRowSize = mq.getAverageRowSize(this)
+            ?: (4.0 * getRowType().fieldCount)
+
+        // Complete data size using the row count.
+        val rows = mq.getRowCount(this);
+        val dataSize = averageRowSize * rows
+
+        // Determine parallelism or default to no parallelism.
+        val parallelism = mq.splitCount(this) ?: 1
+
+        // IO and memory are related to the number of bytes returned.
+        val io = dataSize / parallelism
+        return planner.makeCost(rows = rows, io = io, mem = io)
     }
 
     /**

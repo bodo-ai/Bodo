@@ -27,14 +27,18 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*
 import com.bodosql.calcite.application.bodo_sql_rules.*
+import com.bodosql.calcite.plan.CostFactory
+import com.bodosql.calcite.rel.metadata.PandasRelMdParallelism
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
 import com.google.common.collect.ImmutableList
+import com.google.common.collect.Iterables
 import org.apache.calcite.avatica.util.Casing
 import org.apache.calcite.avatica.util.Quoting
 import org.apache.calcite.config.NullCollation
 import org.apache.calcite.jdbc.CalciteSchema
 import org.apache.calcite.plan.*
 import org.apache.calcite.plan.hep.HepPlanner
+import org.apache.calcite.plan.hep.HepProgram
 import org.apache.calcite.plan.hep.HepProgramBuilder
 import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.rel.RelHomogeneousShuttle
@@ -42,7 +46,10 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.core.RelFactories
 import org.apache.calcite.rel.core.TableScan
+import org.apache.calcite.rel.metadata.BuiltInMetadata
+import org.apache.calcite.rel.metadata.ChainedRelMetadataProvider
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
+import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider
 import org.apache.calcite.rel.rules.*
 import org.apache.calcite.rel.type.RelDataTypeSystem
 import org.apache.calcite.rex.RexExecutorImpl
@@ -102,6 +109,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                         .withDefaultNullCollation(NullCollation.LOW)
                         .withCallRewrite(false)
                 )
+                .costFactory(CostFactory())
                 .programs(
                     // We create a new program each time we construct a new planner.
                     // This is because calcite 1.30.0's hep program is not threadsafe
@@ -110,8 +118,9 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                     // Version 1.32.0 and beyond has fixed this and it's no longer
                     // necessary there.
                     SubQueryRemoveProgram(),
-                    OptimizerProgram(),
-                    PandasProgram(),
+                    HepStandardProgram(optimize = true),
+                    HepStandardProgram(optimize = false),
+                    StandardProgram(optimize = true),
                 )
                 .build()
         }
@@ -123,6 +132,180 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 currSchema = parentSchema
             }
         }
+
+        @JvmField
+        val RULE_SET: List<RelOptRule> = listOf(
+            /*
+            Planner rule that, given a Project node that merely returns its input, converts the node into its child.
+            */
+            ProjectUnaliasedRemoveRule.Config.DEFAULT.toRule(),
+            /*
+            Planner rule that combines two LogicalFilters.
+            */
+            FilterMergeRuleNoWindow.Config.DEFAULT.toRule(),
+            /*
+               Planner rule that merges a Project into another Project,
+               provided the projects aren't projecting identical sets of input references
+               and don't have any dependencies.
+            */
+            DependencyCheckingProjectMergeRule.Config.DEFAULT.toRule(),
+            /*
+            Planner rule that pushes a Filter past a Aggregate.
+            */
+            FilterAggregateTransposeRuleNoWindow.Config.DEFAULT.toRule(),
+            /*
+             * Planner rule that matches an {@link org.apache.calcite.rel.core.Aggregate}
+             * on a {@link org.apache.calcite.rel.core.Join} and removes the join
+             * provided that the join is a left join or right join and it computes no
+             * aggregate functions or all the aggregate calls have distinct.
+             *
+             * <p>For instance,</p>
+             *
+             * <blockquote>
+             * <pre>select distinct s.product_id from
+             * sales as s
+             * left join product as p
+             * on s.product_id = p.product_id</pre></blockquote>
+             *
+             * <p>becomes
+             *
+             * <blockquote>
+             * <pre>select distinct s.product_id from sales as s</pre></blockquote>
+             */
+            AggregateJoinRemoveRule.Config.DEFAULT.toRule(),
+            /*
+            Planner rule that pushes an Aggregate past a join
+            */
+            AggregateJoinTransposeRule.Config.EXTENDED.toRule(),
+            /*
+            Rule that tries to push filter expressions into a join condition and into the inputs of the join.
+            */
+            FilterJoinRuleNoWindow.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT.toRule(),
+            /*
+            Rule that applies moves any filters that depend on a single table before the join in
+            which they occur.
+            */
+            FilterJoinRule.JoinConditionPushRule.JoinConditionPushRuleConfig.DEFAULT.toRule(),
+            /*
+            Filters tables for unused columns before join.
+            */
+            AliasPreservingProjectJoinTransposeRule.Config.DEFAULT.toRule(),
+            /*
+            This reduces expressions inside of the conditions of filter statements.
+            Ex condition($0 = 1 and $0 = 2) ==> condition(FALSE)
+            TODO(Ritwika: figure out SEARCH handling later. SARG attributes do not have public access methods.
+            */
+            BodoSQLReduceExpressionsRule.FilterReduceExpressionsRule.FilterReduceExpressionsRuleConfig.DEFAULT.toRule(),
+            // Simplify constant expressions inside a Projection. Ex condition($0 = 1 and $0 = 2)
+            // ==> condition(FALSE)
+            BodoSQLReduceExpressionsRule.ProjectReduceExpressionsRule.ProjectReduceExpressionsRuleConfig.DEFAULT.toRule(),
+            /*
+            Pushes predicates that are used on one side of equality in a join to
+            the other side of the join as well, enabling further filter pushdown
+            and reduce the amount of data joined.
+
+            For example, consider the query:
+
+            select t1.a, t2.b from table1 t1, table2 t2 where t1.a = 1 AND t1.a = t2.b
+
+            This produces a plan like
+
+            LogicalProject(a=[$0], b=[$1])
+              LogicalJoin(condition=[=($0, $1)], joinType=[inner])
+                LogicalProject(A=[$0])
+                  LogicalFilter(condition=[=($0, 1)])
+                    LogicalTableScan(table=[[main, table1]])
+                LogicalProject(B=[$1])
+                    LogicalFilter(condition=[=($1, 1)])
+                      LogicalTableScan(table=[[main, table2]])
+
+             So both table1 and table2 filter on col = 1.
+             */
+            JoinPushTransitivePredicatesRule.Config.DEFAULT.toRule(),
+            /*
+             * Planner rule that removes
+             * a {@link org.apache.calcite.rel.core.Aggregate}
+             * if it computes no aggregate functions
+             * (that is, it is implementing {@code SELECT DISTINCT}),
+             * or all the aggregate functions are splittable,
+             * and the underlying relational expression is already distinct.
+             *
+             */
+            AggregateRemoveRule.Config.DEFAULT.toRule(),
+            /*
+             * Planner rule that matches an {@link org.apache.calcite.rel.core.Aggregate}
+             * on a {@link org.apache.calcite.rel.core.Join} and removes the left input
+             * of the join provided that the left input is also a left join if possible.
+             *
+             * <p>For instance,
+             *
+             * <blockquote>
+             * <pre>select distinct s.product_id, pc.product_id
+             * from sales as s
+             * left join product as p
+             *   on s.product_id = p.product_id
+             * left join product_class pc
+             *   on s.product_id = pc.product_id</pre></blockquote>
+             *
+             * <p>becomes
+             *
+             * <blockquote>
+             * <pre>select distinct s.product_id, pc.product_id
+             * from sales as s
+             * left join product_class pc
+             *   on s.product_id = pc.product_id</pre></blockquote>
+             *
+             * @see CoreRules#AGGREGATE_JOIN_JOIN_REMOVE
+             */
+            AggregateJoinJoinRemoveRule.Config.DEFAULT.toRule(),
+            /*
+             * Planner rule that merges an Aggregate into a projection when possible,
+             * maintaining any aliases.
+             */
+            AliasPreservingAggregateProjectMergeRule.Config.DEFAULT.toRule(),
+            /*
+             * Planner rule that merges a Projection into an Aggregate when possible,
+             * maintaining any aliases.
+             */
+            ProjectAggregateMergeRule.Config.DEFAULT.toRule(),
+            /*
+             * Planner rule that ensures filter is always pushed into join. This is needed
+             * for complex queries.
+             */
+            // Ensure filters always occur before projections. Here we set a limit
+            // so extremely complex filters aren't pushed.
+            FilterProjectTransposeNoCaseRule.Config.DEFAULT.toRule(),
+            // Prune trivial cross-joins
+            InnerJoinRemoveRule.Config.DEFAULT.toRule(),
+            // Rewrite filters in either Filter or Join to convert OR with shared subexpression
+            // into
+            // an AND and then OR. For example
+            // OR(AND(A > 1, B < 10), AND(A > 1, A < 5)) -> AND(A > 1, OR(B < 10 , A < 5))
+            // Another rule pushes filters into join and we do not know if the LogicalFilter
+            // optimization will get to run before its pushed into the join. As a result,
+            // we write a duplicate rule that operates directly on the condition of the join.
+            JoinReorderConditionRule.Config.DEFAULT.toRule(),
+            LogicalFilterReorderConditionRule.Config.DEFAULT.toRule(),
+            // Push a limit before a project (e.g. select col as alias from table limit 10)
+            LimitProjectTransposeRule.Config.DEFAULT.toRule(),
+            // If a column has been repeated or rewritten as a part of another column, possibly
+            // due to aliasing, then replace a projection with multiple projections.
+            // For example convert:
+            // LogicalProject(x=[$0], x2=[+($0, 10)], x3=[/(+($0, 10), 2)], x4=[*(/(+($0, 10), 2),
+            // 3)])
+            // to
+            // LogicalProject(x=[$0], x2=[$1], x3=[/(+($1, 10), 2)], x4=[*(/(+($1, 10), 2), 3)])
+            //  LogicalProject(x=[$0], x2=[+($0, 10)])
+            ProjectionSubcolumnEliminationRule.Config.DEFAULT.toRule(),
+            // Remove any case expressions from filters because we cannot use them in filter
+            // pushdown.
+            FilterExtractCaseRule.Config.DEFAULT.toRule(),
+            // For two projections separated by a filter, determine if any computation in
+            // the uppermost filter can be removed by referencing a column in the innermost
+            // projection. See the rule docstring for more detail.
+            ProjectFilterProjectColumnEliminationRule.Config.DEFAULT.toRule(),
+            MinRowNumberFilterRule.Config.DEFAULT.toRule(),
+        )
     }
 
     override fun createCatalogReader(): CalciteCatalogReader {
@@ -149,52 +332,31 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
      * This program removes subqueries from the query and then
      * removes the correlation nodes that it produces.
      */
-    private class SubQueryRemoveProgram : Program {
-        private val program = Programs.sequence(
-            Programs.hep(
+    private class SubQueryRemoveProgram : Program by Programs.sequence(
+        Programs.of(HepProgram.builder()
+            .addRuleCollection(
                 listOf(
                     SubQueryRemoveRule.Config.FILTER.toRule(),
                     SubQueryRemoveRule.Config.PROJECT.toRule(),
                     SubQueryRemoveRule.Config.JOIN.toRule(),
                     JoinExtractOverRule.Config.DEFAULT.toRule(),
                 ),
-                false, DefaultRelMetadataProvider.INSTANCE
-            ),
-            DecorrelateProgram(),
-        )
-
-        override fun run(
-            planner: RelOptPlanner?,
-            rel: RelNode,
-            requiredOutputTraits: RelTraitSet?,
-            materializations: List<RelOptMaterialization>?,
-            lattices: List<RelOptLattice>?
-        ): RelNode {
-            // This is needed because the hep planner will only run rules
-            // repeatedly until they don't modify the node anymore, but it
-            // will only do this per node rather than as a group.
-            //
-            // Calcite has functionality through a subprogram to do this
-            // repeatedly on a group of rules, but that functionality is broken
-            // and a fix is not present at the current moment.
-            // See https://issues.apache.org/jira/browse/CALCITE-5561 for details.
-            //
-            // Another option is to switch to using the VolcanoPlanner which
-            // does this automatically. That's probably a better idea than
-            // fixing the HepPlanner, but just leaving this as-is until we're
-            // able to test the VolcanoPlanner.
-            var lastOptimizedPlan = rel
-            for (i in 1..25) {
-                val curOptimizedPlan =
-                    program.run(planner, lastOptimizedPlan, requiredOutputTraits, materializations, lattices)
-                if (curOptimizedPlan.deepEquals(lastOptimizedPlan)) {
-                    return lastOptimizedPlan
-                }
-                lastOptimizedPlan = curOptimizedPlan
-            }
-            return lastOptimizedPlan
-        }
-    }
+            )
+            .build(),
+            true,
+            ChainedRelMetadataProvider.of(listOf(
+                // Inject information about the number of ranks
+                // for Pandas queries as the parallelism attribute.
+                ReflectiveRelMetadataProvider.reflectiveSource(
+                    // TODO(jsternberg): Just using 2 as a default until
+                    // we add a way to inject that from the caller.
+                    PandasRelMdParallelism(2),
+                    BuiltInMetadata.Parallelism.Handler::class.java,
+                ),
+                DefaultRelMetadataProvider.INSTANCE,
+            ))),
+        DecorrelateProgram(),
+    )
 
     /**
      * The decorrelate program will convert Correlate nodes to
@@ -213,8 +375,41 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
             val relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.cluster, null)
             return RelDecorrelator.decorrelateQuery(rel, relBuilder)
         }
-
     }
+
+    /**
+     * Standard program utilizing the heuristic planner for optimization and then
+     * performing conversion with the volcano planner.
+     */
+    private class HepStandardProgram(optimize: Boolean = true) : Program by Programs.sequence(
+        if (optimize) {
+            HepOptimizerProgram(RULE_SET)
+        } else {
+            // No-op program that returns itself.
+            Program { _, rel, _, _, _ -> rel }
+        },
+        SnowflakeTraitAdder(),
+        RuleSetProgram(PandasRules.rules()),
+        DecorateAttributesProgram(),
+        MergeRelProgram(),
+    )
+
+    /**
+     * Standard program utilizing the volcano planner to perform optimization and conversion.
+     */
+    private class StandardProgram(optimize: Boolean = true) : Program by Programs.sequence(
+        // When the HepStandardProgram is removed entirely, we would add the
+        // convention when the SnowflakeTableScan is created instead of here.
+        SnowflakeTraitAdder(),
+        RuleSetProgram(Iterables.concat(
+            if (optimize) RULE_SET else listOf(),
+            PandasRules.rules(),
+        )),
+        // TODO(jsternberg): This can likely be adapted and integrated directly with
+        // the VolcanoPlanner, but that hasn't been done so leave this here.
+        DecorateAttributesProgram(),
+        MergeRelProgram(),
+    )
 
     /**
      * General optimization program.
@@ -222,179 +417,12 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
      * This will run the set of planner rules that we use to optimize
      * the relational expression before we perform code generation.
      */
-    private class OptimizerProgram : Program {
-        private val program = HepProgramBuilder()
-            /*
-            Planner rule that, given a Project node that merely returns its input, converts the node into its child.
-            */
-            .addRuleInstance(ProjectUnaliasedRemoveRule.Config.DEFAULT.toRule())
-            /*
-            Planner rule that combines two LogicalFilters.
-            */
-            .addRuleInstance(FilterMergeRuleNoWindow.Config.DEFAULT.toRule())
-            /*
-               Planner rule that merges a Project into another Project,
-               provided the projects aren't projecting identical sets of input references
-               and don't have any dependencies.
-            */
-            .addRuleInstance(DependencyCheckingProjectMergeRule.Config.DEFAULT.toRule())
-            /*
-            Planner rule that pushes a Filter past a Aggregate.
-            */
-            .addRuleInstance(FilterAggregateTransposeRuleNoWindow.Config.DEFAULT.toRule())
-            /*
-             * Planner rule that matches an {@link org.apache.calcite.rel.core.Aggregate}
-             * on a {@link org.apache.calcite.rel.core.Join} and removes the join
-             * provided that the join is a left join or right join and it computes no
-             * aggregate functions or all the aggregate calls have distinct.
-             *
-             * <p>For instance,</p>
-             *
-             * <blockquote>
-             * <pre>select distinct s.product_id from
-             * sales as s
-             * left join product as p
-             * on s.product_id = p.product_id</pre></blockquote>
-             *
-             * <p>becomes
-             *
-             * <blockquote>
-             * <pre>select distinct s.product_id from sales as s</pre></blockquote>
-             */
-            .addRuleInstance(AggregateJoinRemoveRule.Config.DEFAULT.toRule())
-            /*
-            Planner rule that pushes an Aggregate past a join
-            */
-            .addRuleInstance(AggregateJoinTransposeRule.Config.EXTENDED.toRule())
-            /*
-            Rule that tries to push filter expressions into a join condition and into the inputs of the join.
-            */
-            .addRuleInstance(FilterJoinRuleNoWindow.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT.toRule())
-            /*
-            Rule that applies moves any filters that depend on a single table before the join in
-            which they occur.
-            */
-            .addRuleInstance(FilterJoinRule.JoinConditionPushRule.JoinConditionPushRuleConfig.DEFAULT.toRule())
-            /*
-            Filters tables for unused columns before join.
-            */
-            .addRuleInstance(AliasPreservingProjectJoinTransposeRule.Config.DEFAULT.toRule())
-            /*
-            This reduces expressions inside of the conditions of filter statements.
-            Ex condition($0 = 1 and $0 = 2) ==> condition(FALSE)
-            TODO(Ritwika: figure out SEARCH handling later. SARG attributes do not have public access methods.
-            */
-            .addRuleInstance(BodoSQLReduceExpressionsRule.FilterReduceExpressionsRule.FilterReduceExpressionsRuleConfig.DEFAULT.toRule())
-            // Simplify constant expressions inside a Projection. Ex condition($0 = 1 and $0 = 2)
-            // ==> condition(FALSE)
-            .addRuleInstance(BodoSQLReduceExpressionsRule.ProjectReduceExpressionsRule.ProjectReduceExpressionsRuleConfig.DEFAULT.toRule())
-            /*
-            Pushes predicates that are used on one side of equality in a join to
-            the other side of the join as well, enabling further filter pushdown
-            and reduce the amount of data joined.
-
-            For example, consider the query:
-
-            select t1.a, t2.b from table1 t1, table2 t2 where t1.a = 1 AND t1.a = t2.b
-
-            This produces a plan like
-
-            LogicalProject(a=[$0], b=[$1])
-              LogicalJoin(condition=[=($0, $1)], joinType=[inner])
-                LogicalProject(A=[$0])
-                  LogicalFilter(condition=[=($0, 1)])
-                    LogicalTableScan(table=[[main, table1]])
-                LogicalProject(B=[$1])
-                    LogicalFilter(condition=[=($1, 1)])
-                      LogicalTableScan(table=[[main, table2]])
-
-             So both table1 and table2 filter on col = 1.
-             */
-            .addRuleInstance(JoinPushTransitivePredicatesRule.Config.DEFAULT.toRule())
-            /*
-             * Planner rule that removes
-             * a {@link org.apache.calcite.rel.core.Aggregate}
-             * if it computes no aggregate functions
-             * (that is, it is implementing {@code SELECT DISTINCT}),
-             * or all the aggregate functions are splittable,
-             * and the underlying relational expression is already distinct.
-             *
-             */
-            .addRuleInstance(AggregateRemoveRule.Config.DEFAULT.toRule())
-            /*
-             * Planner rule that matches an {@link org.apache.calcite.rel.core.Aggregate}
-             * on a {@link org.apache.calcite.rel.core.Join} and removes the left input
-             * of the join provided that the left input is also a left join if possible.
-             *
-             * <p>For instance,
-             *
-             * <blockquote>
-             * <pre>select distinct s.product_id, pc.product_id
-             * from sales as s
-             * left join product as p
-             *   on s.product_id = p.product_id
-             * left join product_class pc
-             *   on s.product_id = pc.product_id</pre></blockquote>
-             *
-             * <p>becomes
-             *
-             * <blockquote>
-             * <pre>select distinct s.product_id, pc.product_id
-             * from sales as s
-             * left join product_class pc
-             *   on s.product_id = pc.product_id</pre></blockquote>
-             *
-             * @see CoreRules#AGGREGATE_JOIN_JOIN_REMOVE
-             */
-            .addRuleInstance(AggregateJoinJoinRemoveRule.Config.DEFAULT.toRule())
-            /*
-             * Planner rule that merges an Aggregate into a projection when possible,
-             * maintaining any aliases.
-             */
-            .addRuleInstance(AliasPreservingAggregateProjectMergeRule.Config.DEFAULT.toRule())
-            /*
-             * Planner rule that merges a Projection into an Aggregate when possible,
-             * maintaining any aliases.
-             */
-            .addRuleInstance(ProjectAggregateMergeRule.Config.DEFAULT.toRule())
-            /*
-             * Planner rule that ensures filter is always pushed into join. This is needed
-             * for complex queries.
-             */
-            // Ensure filters always occur before projections. Here we set a limit
-            // so extremely complex filters aren't pushed.
-            .addRuleInstance(FilterProjectTransposeNoCaseRule.Config.DEFAULT.toRule())
-            // Prune trivial cross-joins
-            .addRuleInstance(InnerJoinRemoveRule.Config.DEFAULT.toRule())
-            // Rewrite filters in either Filter or Join to convert OR with shared subexpression
-            // into
-            // an AND and then OR. For example
-            // OR(AND(A > 1, B < 10), AND(A > 1, A < 5)) -> AND(A > 1, OR(B < 10 , A < 5))
-            // Another rule pushes filters into join and we do not know if the LogicalFilter
-            // optimization will get to run before its pushed into the join. As a result,
-            // we write a duplicate rule that operates directly on the condition of the join.
-            .addRuleInstance(JoinReorderConditionRule.Config.DEFAULT.toRule())
-            .addRuleInstance(LogicalFilterReorderConditionRule.Config.DEFAULT.toRule())
-            // Push a limit before a project (e.g. select col as alias from table limit 10)
-            .addRuleInstance(LimitProjectTransposeRule.Config.DEFAULT.toRule())
-            // If a column has been repeated or rewritten as a part of another column, possibly
-            // due to aliasing, then replace a projection with multiple projections.
-            // For example convert:
-            // LogicalProject(x=[$0], x2=[+($0, 10)], x3=[/(+($0, 10), 2)], x4=[*(/(+($0, 10), 2),
-            // 3)])
-            // to
-            // LogicalProject(x=[$0], x2=[$1], x3=[/(+($1, 10), 2)], x4=[*(/(+($1, 10), 2), 3)])
-            //  LogicalProject(x=[$0], x2=[+($0, 10)])
-            .addRuleInstance(ProjectionSubcolumnEliminationRule.Config.DEFAULT.toRule())
-            // Remove any case expressions from filters because we cannot use them in filter
-            // pushdown.
-            .addRuleInstance(FilterExtractCaseRule.Config.DEFAULT.toRule())
-            // For two projections separated by a filter, determine if any computation in
-            // the uppermost filter can be removed by referencing a column in the innermost
-            // projection. See the rule docstring for more detail.
-            .addRuleInstance(ProjectFilterProjectColumnEliminationRule.Config.DEFAULT.toRule())
-            .addRuleInstance(MinRowNumberFilterRule.Config.DEFAULT.toRule())
-            .build()
+    private class HepOptimizerProgram(ruleSet: Iterable<RelOptRule>) : Program {
+        private val program = HepProgramBuilder().also { b ->
+            for (rule in ruleSet) {
+                b.addRuleInstance(rule)
+            }
+        }.build()
 
         override fun run(
             planner: RelOptPlanner?,
@@ -435,6 +463,28 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
         }
     }
 
+    private class RuleSetProgram(ruleSet: Iterable<RelOptRule>) : Program {
+        private val program = Programs.ofRules(ruleSet)
+
+        override fun run(
+            planner: RelOptPlanner,
+            rel: RelNode,
+            requiredOutputTraits: RelTraitSet,
+            materializations: List<RelOptMaterialization>,
+            lattices: List<RelOptLattice>
+        ): RelNode {
+            val metadataProvider = ChainedRelMetadataProvider.of(listOf(
+                ReflectiveRelMetadataProvider.reflectiveSource(
+                    PandasRelMdParallelism(2),
+                    BuiltInMetadata.Parallelism.Handler::class.java),
+                DefaultRelMetadataProvider.INSTANCE,
+            ))
+            rel.cluster.invalidateMetadataQuery()
+            rel.cluster.metadataProvider = metadataProvider
+            return program.run(planner, rel, requiredOutputTraits, materializations, lattices)
+        }
+    }
+
     /**
      * Decorate Attributes Program.
      *
@@ -448,13 +498,6 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
     private class DecorateAttributesProgram : Program by Programs.hep(
         listOf(PandasRules.PANDAS_JOIN_REBALANCE_OUTPUT_RULE),
         true, DefaultRelMetadataProvider.INSTANCE)
-
-    private class PandasProgram : Program by Programs.sequence(
-        SnowflakeTraitAdder(),
-        Programs.ofRules(PandasRules.rules()),
-        DecorateAttributesProgram(),
-        MergeRelProgram(),
-    )
 
     /**
      * Merges relational nodes that have identical digests.
@@ -471,8 +514,8 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
             planner: RelOptPlanner,
             rel: RelNode,
             requiredOutputTraits: RelTraitSet,
-            materializations: MutableList<RelOptMaterialization>,
-            lattices: MutableList<RelOptLattice>
+            materializations: List<RelOptMaterialization>,
+            lattices: List<RelOptLattice>
         ): RelNode {
             return rel.accept(object : RelHomogeneousShuttle() {
                 val mapDigestToRel: HashMap<String, RelNode> = hashMapOf()

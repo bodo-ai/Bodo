@@ -19,4 +19,10 @@ interface PandasRel : RelNode {
      * @return the variable that represents this relational expression.
      */
     fun emit(builder: Module.Builder, inputs: () -> List<Dataframe>): Dataframe
+
+    /**
+     * Allows a PandasRel to override the number of ranks it will utilize.
+     * If unknown, return null. Defaults to utilizing all ranks.
+     */
+    fun splitCount(numRanks: Int): Int? = numRanks
 }
