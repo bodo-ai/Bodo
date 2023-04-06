@@ -271,11 +271,8 @@ public class RelationalAlgebraGenerator {
 
   public RelNode getOptimizedRelationalAlgebra(RelNode nonOptimizedPlan)
       throws RelConversionException {
-    RelNode optimizedPlan = planner.transform(1, planner.getEmptyTraitSet(), nonOptimizedPlan);
-    // Transform the now optimized plan to use the pandas relational nodes.
-    // This is temporary while we transition to using the volcano planner.
     RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
-    optimizedPlan = planner.transform(2, requiredOutputTraits, optimizedPlan);
+    RelNode optimizedPlan = planner.transform(1, requiredOutputTraits, nonOptimizedPlan);
     planner.close();
     return optimizedPlan;
   }
