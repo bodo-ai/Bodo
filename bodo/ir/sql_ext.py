@@ -317,7 +317,7 @@ def _get_sql_column_str(
     args_str = ""
 
     if isinstance(func_args, ir.Var):
-        if isinstance(args_type_var, types.Tuple):
+        if isinstance(args_type_var, types.BaseTuple):
             scalars_to_unpack.append(args_name)
 
             # If it's a tuple object, we need to iterate through
