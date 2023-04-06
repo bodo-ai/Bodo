@@ -62,6 +62,14 @@ string_funcs_map = {
     "split": "SPLIT_PART",
     "initcap": "INITCAP",
     "concat_ws": "CONCAT",
+    "left": "LEFT",
+    "right": "RIGHT",
+    "position": "POSITION",
+    "replace": "REPLACE",
+    "substring": "SUBSTRING",
+    "charindex": "POSITION",
+    "editdistance_no_max": "EDITDISTANCE",
+    "editdistance_with_max": "EDITDISTANCE",
 }
 
 numeric_funcs_map = {
