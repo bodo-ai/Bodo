@@ -1,6 +1,7 @@
 // Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 #include "_bodo_to_arrow.h"
+#include <arrow/compute/api.h>
 #include <cassert>
 #include "_array_utils.h"
 
@@ -76,7 +77,8 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     std::shared_ptr<arrow::Buffer> null_bitmap;
     int64_t null_count_ = 0;
     if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
-        array->arr_type == bodo_array_type::STRING) {
+        array->arr_type == bodo_array_type::STRING ||
+        array->arr_type == bodo_array_type::ARRAY_ITEM) {
         MemInfo *bitmask_meminfo;
         if (array->arr_type == bodo_array_type::STRING) {
             bitmask_meminfo = array->meminfos[2];
@@ -106,6 +108,33 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         std::shared_ptr<arrow::ArrayData> typ_data = array->array->data();
         *out = array->array;
     }
+
+    if (array->arr_type == bodo_array_type::ARRAY_ITEM) {
+        // wrap offset buffer
+        NRT_MemInfo *offsets_meminfo = array->meminfos[0];
+        std::shared_ptr<BodoBuffer> offsets_buffer =
+            std::make_shared<BodoBuffer>((uint8_t *)offsets_meminfo->data,
+                                         sizeof(offset_t) * (array->length + 1),
+                                         offsets_meminfo);
+
+        // convert inner array
+        std::shared_ptr<arrow::Array> inner_array;
+        std::shared_ptr<arrow::DataType> inner_type = bodo_array_to_arrow(
+            pool, array->child_arrays[0], &inner_array,
+            convert_timedelta_to_int64, tz, time_unit, downcast_time_ns_to_us);
+
+        // We use `element` for consistency.
+        // TODO [BE-3247] We should specify nullability of the fields here.
+        std::shared_ptr<arrow::Field> field =
+            std::make_shared<arrow::Field>("element", inner_type);
+        assert(OFFSET_BITWIDTH == 64);
+
+        *out = std::make_shared<arrow::LargeListArray>(
+            arrow::large_list(field), array->length, offsets_buffer,
+            inner_array, null_bitmap);
+        return (*out)->type();
+    }
+
     // TODO: Reuse some of this code to enable to_parquet with Categorical
     // Arrays?
     if (array->arr_type == bodo_array_type::DICT) {
@@ -445,16 +474,17 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
 
         // TODO: Try to have Arrow reuse Bodo buffers instead of copying to
         // new buffers
-        ret_type = arrow::list(arrow::utf8());
+        ret_type = arrow::large_list(arrow::large_utf8());
 
         int64_t num_lists = array->length;
         char *chars = (char *)array->data1();
         int64_t *char_offsets = (int64_t *)array->data2();
         int64_t *string_offsets = (int64_t *)array->data3();
-        arrow::ListBuilder list_builder(
-            pool, std::make_shared<arrow::StringBuilder>(pool));
-        arrow::StringBuilder &string_builder = *(
-            static_cast<arrow::StringBuilder *>(list_builder.value_builder()));
+        arrow::LargeListBuilder list_builder(
+            pool, std::make_shared<arrow::LargeStringBuilder>(pool));
+        arrow::LargeStringBuilder &string_builder =
+            *(static_cast<arrow::LargeStringBuilder *>(
+                list_builder.value_builder()));
         bool failed = false;
 
         for (int64_t i = 0; i < num_lists; i++) {
@@ -631,65 +661,287 @@ void arrow_buffer_dtor(void *ptr, size_t size, void *info) {
 
 }  // extern "C"
 
-array_info *arrow_array_to_bodo(std::shared_ptr<arrow::Array> arrow_arr) {
-    // only string arrays supported currently
-    if (!arrow_arr->type()->Equals(arrow::large_utf8())) {
-        throw std::runtime_error(
-            "arrow_array_to_bodo(): only Arrow string arrays (large_utf8) "
-            "supported");
-    }
-
-    std::shared_ptr<arrow::LargeStringArray> arrow_str_arr =
-        std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr);
-
-    int64_t n = arrow_str_arr->length();
-
-    // allocate null bitmap and copy data
-    // TODO(ehsan): avoid null bitmap copy
-    int64_t n_bytes = arrow::bit_util::BytesForBits(n);
-    numpy_arr_payload null_bitmap_payload =
-        allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8);
-    uint8_t *null_bitmap = (uint8_t *)null_bitmap_payload.data;
-
-    // Arrow doesn't allocate null bitmap if there are no nulls in the array
-    if (arrow_str_arr->null_bitmap_data() != NULLPTR) {
-        memcpy(null_bitmap, arrow_str_arr->null_bitmap_data(), n_bytes);
-    } else {
-        // set all elements to non-null
-        memset(null_bitmap, 0xff, n_bytes);
-    }
-
-    // Pass Arrow characters buffer to Bodo
-    std::shared_ptr<arrow::Buffer> data_buff = arrow_str_arr->value_data();
-    void *data_ptr = (void *)arrow_str_arr->raw_data();
-
+/**
+ * @brief Helper function to pass an Arrow buffer to Bodo with zero-copy
+ * @param buf Shared pointer to the Arrow buffer
+ * @param ptr Pointer to the raw data
+ * @param length Number of elements
+ * @param typ_enum Underlying dtype of elements
+ * @return numpy_arr_payload Output Bodo payload
+ */
+numpy_arr_payload arrow_buffer_to_bodo(std::shared_ptr<arrow::Buffer> buf,
+                                       void *ptr, int64_t length,
+                                       Bodo_CTypes::CTypeEnum typ_enum) {
     // Create a pointer to the Buffer shared_ptr to pass to the meminfo
     // destructor function for manual deletion. This essentially creates a
     // reference to the shared_ptr for Bodo to hold.
     std::shared_ptr<arrow::Buffer> *dtor_data =
-        new std::shared_ptr<arrow::Buffer>(data_buff);
+        new std::shared_ptr<arrow::Buffer>(buf);
 
     // Create a meminfo holding Arrow data, which has a custom destructor that
     // deletes the Arrow buffer.
-    NRT_MemInfo *char_buff_meminfo =
-        (NRT_MemInfo *)NRT_Allocate(sizeof(NRT_MemInfo));
-    NRT_MemInfo_init(char_buff_meminfo, data_ptr, 0,
-                     (NRT_dtor_function)arrow_buffer_dtor, (void *)dtor_data,
-                     NULL);
+    int64_t itemsize = numpy_item_size[typ_enum];
+    NRT_MemInfo *buf_meminfo = (NRT_MemInfo *)NRT_Allocate(sizeof(NRT_MemInfo));
+    NRT_MemInfo_init(buf_meminfo, ptr, 0, (NRT_dtor_function)arrow_buffer_dtor,
+                     (void *)dtor_data, NULL);
+    numpy_arr_payload buf_payload = make_numpy_array_payload(
+        buf_meminfo, NULL, length, itemsize, (char *)ptr, length, itemsize);
+    return buf_payload;
+}
 
-    // Pass Arrow offsets buffer to Bodo
-    std::shared_ptr<arrow::Buffer> offset_buff = arrow_str_arr->value_offsets();
-    void *offset_ptr = (void *)arrow_str_arr->raw_value_offsets();
-    std::shared_ptr<arrow::Buffer> *dtor_offset =
-        new std::shared_ptr<arrow::Buffer>(offset_buff);
+/**
+ * @brief Helper function to pass an Arrow null bitmap to Bodo with zero-copy
+ * @param buf Shared pointer to the Arrow null bitmap buffer
+ * @param data Pointer to the raw null bitmap data
+ * @param n_bits Number of bits
+ * @return numpy_arr_payload Output Bodo payload
+ */
+numpy_arr_payload arrow_null_bitmap_to_bodo(std::shared_ptr<arrow::Buffer> buf,
+                                            const uint8_t *data,
+                                            int64_t n_bits) {
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_bits);
 
-    NRT_MemInfo *offset_meminfo =
-        (NRT_MemInfo *)NRT_Allocate(sizeof(NRT_MemInfo));
-    NRT_MemInfo_init(offset_meminfo, offset_ptr, 0,
-                     (NRT_dtor_function)arrow_buffer_dtor, (void *)dtor_offset,
-                     NULL);
+    // Arrow doesn't allocate null bitmap if there are no nulls in the array
+    if (data != NULLPTR) {
+        // Pass null bitmap buffer to Bodo with zero-copy
+        return arrow_buffer_to_bodo(buf, (void *)data, n_bytes,
+                                    Bodo_CTypes::UINT8);
+    } else {
+        // Allocate null bitmap and set all elements to non-null
+        numpy_arr_payload null_bitmap_payload =
+            allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8);
+        uint8_t *null_bitmap = (uint8_t *)null_bitmap_payload.data;
+        memset(null_bitmap, 0xff, n_bytes);
+        return null_bitmap_payload;
+    }
+}
+
+/**
+ * @brief Convert Arrow list array to Bodo array_info (ARRAY_ITEM/LIST_STRING
+ * type) with zero-copy. The output Bodo array holds references to the Arrow
+ * array's buffers and releases them when deleted.
+ *
+ * @param arrow_list_arr Input Arrow LargeListArray
+ * @return array_info* Output Bodo array (ARRAY_ITEM/LIST_STRING type)
+ */
+array_info *arrow_list_array_to_bodo(
+    std::shared_ptr<arrow::LargeListArray> arrow_list_arr) {
+    int64_t n = arrow_list_arr->length();
+    numpy_arr_payload offset_payload = arrow_buffer_to_bodo(
+        arrow_list_arr->value_offsets(),
+        (void *)arrow_list_arr->raw_value_offsets(), n + 1, Bodo_CType_offset);
+    numpy_arr_payload null_bitmap_payload = arrow_null_bitmap_to_bodo(
+        arrow_list_arr->null_bitmap(), arrow_list_arr->null_bitmap_data(), n);
+
+    array_info *inner_arr = arrow_array_to_bodo(arrow_list_arr->values());
+
+    bodo_array_type::arr_type_enum array_type = bodo_array_type::ARRAY_ITEM;
+    Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::LIST;
+    if (inner_arr->arr_type == bodo_array_type::STRING &&
+        inner_arr->dtype == Bodo_CTypes::STRING) {
+        array_type = bodo_array_type::LIST_STRING;
+        dtype = Bodo_CTypes::LIST_STRING;
+    }
+
+    return new array_info(array_type, dtype, n,
+                          {offset_payload.meminfo, null_bitmap_payload.meminfo},
+                          {inner_arr});
+}
+
+/**
+ * @brief Convert Arrow decimal128 array to Bodo array_info (DECIMAL type) with
+ * zero-copy. The output Bodo array holds references to the Arrow array's
+ * buffers and releases them when deleted.
+ *
+ * @param arrow_decimal_arr Input Arrow Decimal128Array
+ * @return array_info* Output Bodo array (NULLABLE_INT_BOOL/DECIMAL type)
+ */
+array_info *arrow_decimal_array_to_bodo(
+    std::shared_ptr<arrow::Decimal128Array> arrow_decimal_arr) {
+    int64_t n = arrow_decimal_arr->length();
+
+    // Pass Arrow null bitmap and data buffer to Bodo
+    numpy_arr_payload null_bitmap_payload =
+        arrow_null_bitmap_to_bodo(arrow_decimal_arr->null_bitmap(),
+                                  arrow_decimal_arr->null_bitmap_data(), n);
+    numpy_arr_payload data_buf_payload = arrow_buffer_to_bodo(
+        arrow_decimal_arr->values(), (void *)arrow_decimal_arr->raw_values(), n,
+        Bodo_CTypes::DECIMAL);
+
+    // get precision/scale info
+    std::shared_ptr<arrow::Decimal128Type> dtype =
+        std::static_pointer_cast<arrow::Decimal128Type>(
+            arrow_decimal_arr->type());
+
+    int32_t precision = dtype->precision();
+    int32_t scale = dtype->scale();
 
     return new array_info(
-        bodo_array_type::STRING, Bodo_CTypes::STRING, n,
-        {char_buff_meminfo, offset_meminfo, null_bitmap_payload.meminfo});
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::DECIMAL, n,
+        {data_buf_payload.meminfo, null_bitmap_payload.meminfo}, {}, NULL,
+        precision, scale, 0, false, false, false);
+}
+
+/**
+ * @brief Convert Arrow nullable numeric array to Bodo array_info with zero-copy
+ * The output Bodo array holds references to the Arrow array's buffers and
+ * releases them when deleted.
+ *
+ * @param arrow_num_arr Input Arrow NumericArray
+ * @param typ_enum Underlying dtype of elements
+ * @return array_info* Output Bodo array
+ */
+template <typename T>
+array_info *arrow_numeric_array_to_bodo(std::shared_ptr<T> arrow_num_arr,
+                                        Bodo_CTypes::CTypeEnum typ_enum) {
+    int64_t n = arrow_num_arr->length();
+
+    // Pass Arrow null bitmap and data buffer to Bodo
+    numpy_arr_payload null_bitmap_payload = arrow_null_bitmap_to_bodo(
+        arrow_num_arr->null_bitmap(), arrow_num_arr->null_bitmap_data(), n);
+    numpy_arr_payload data_buf_payload =
+        arrow_buffer_to_bodo(arrow_num_arr->values(),
+                             (void *)arrow_num_arr->raw_values(), n, typ_enum);
+
+    return new array_info(
+        bodo_array_type::NULLABLE_INT_BOOL, typ_enum, n,
+        {data_buf_payload.meminfo, null_bitmap_payload.meminfo});
+}
+
+/**
+ * @brief Convert Arrow string array to Bodo array_info with zero-copy.
+ * The output Bodo array holds references to the Arrow array's buffers and
+ * releases them when deleted.
+ *
+ * @param arrow_str_arr Input Arrow LargeStringArray
+ * @return array_info* Output Bodo array
+ */
+array_info *arrow_string_array_to_bodo(
+    std::shared_ptr<arrow::LargeStringArray> arrow_str_arr) {
+    int64_t n = arrow_str_arr->length();
+
+    numpy_arr_payload char_buf_payload = arrow_buffer_to_bodo(
+        arrow_str_arr->value_data(), (void *)arrow_str_arr->raw_data(),
+        arrow_str_arr->total_values_length(), Bodo_CTypes::UINT8);
+    numpy_arr_payload offset_payload = arrow_buffer_to_bodo(
+        arrow_str_arr->value_offsets(),
+        (void *)arrow_str_arr->raw_value_offsets(), n + 1, Bodo_CType_offset);
+    numpy_arr_payload null_bitmap_payload = arrow_null_bitmap_to_bodo(
+        arrow_str_arr->null_bitmap(), arrow_str_arr->null_bitmap_data(), n);
+
+    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, n,
+                          {char_buf_payload.meminfo, offset_payload.meminfo,
+                           null_bitmap_payload.meminfo});
+}
+
+/**
+ * @brief Convert Arrow dict-encoded array to Bodo array_info with zero-copy.
+ * The output Bodo array holds references to the Arrow array's buffers and
+ * releases thm when deleted.
+ *
+ * @param arrow_dict_arr Input Arrow DictionaryArray
+ * @return array_info* Output Bodo array
+ */
+array_info *arrow_dictionary_array_to_bodo(
+    std::shared_ptr<arrow::DictionaryArray> arrow_dict_arr) {
+    int64_t n = arrow_dict_arr->length();
+
+    // Recurse on the dictionary and index arrays
+    array_info *dict_array = arrow_array_to_bodo(arrow_dict_arr->dictionary());
+    array_info *idx_array = arrow_array_to_bodo(arrow_dict_arr->indices());
+
+    if (dict_array->dtype != Bodo_CTypes::STRING) {
+        throw std::runtime_error(
+            "arrow_dictionary_array_to_bodo(): Dict array dtype is not string");
+    }
+
+    return new array_info(bodo_array_type::DICT, dict_array->dtype, n, {},
+                          {dict_array, idx_array}, NULL, 0, 0, 0, false, false,
+                          false);
+}
+
+array_info *arrow_array_to_bodo(std::shared_ptr<arrow::Array> arrow_arr) {
+    switch (arrow_arr->type_id()) {
+        case arrow::Type::LARGE_STRING:
+            return arrow_string_array_to_bodo(
+                std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr));
+        // convert 32-bit offset array to 64-bit offset array to match Bodo data
+        // layout
+        case arrow::Type::STRING: {
+            assert(OFFSET_BITWIDTH == 64);
+            auto res = arrow::compute::Cast(*arrow_arr, arrow::large_utf8());
+            std::shared_ptr<arrow::Array> casted_arr;
+            CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+            return arrow_string_array_to_bodo(
+                std::static_pointer_cast<arrow::LargeStringArray>(casted_arr));
+        }
+        case arrow::Type::LARGE_LIST:
+            return arrow_list_array_to_bodo(
+                std::static_pointer_cast<arrow::LargeListArray>(arrow_arr));
+        // convert 32-bit offset array to 64-bit offset array to match Bodo data
+        // layout
+        case arrow::Type::LIST: {
+            assert(OFFSET_BITWIDTH == 64);
+            auto res = arrow::compute::Cast(
+                *arrow_arr, arrow::large_list(arrow_arr->type()->field(0)));
+            std::shared_ptr<arrow::Array> casted_arr;
+            CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+            return arrow_list_array_to_bodo(
+                std::static_pointer_cast<arrow::LargeListArray>(casted_arr));
+        }
+        case arrow::Type::STRUCT:
+            return new array_info(
+                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
+                arrow_arr->length(), {nullptr}, {}, arrow_arr);
+        case arrow::Type::DECIMAL128:
+            return arrow_decimal_array_to_bodo(
+                std::static_pointer_cast<arrow::Decimal128Array>(arrow_arr));
+        case arrow::Type::DOUBLE:
+            return arrow_numeric_array_to_bodo<arrow::DoubleArray>(
+                std::static_pointer_cast<arrow::DoubleArray>(arrow_arr),
+                Bodo_CTypes::FLOAT64);
+        case arrow::Type::FLOAT:
+            return arrow_numeric_array_to_bodo<arrow::FloatArray>(
+                std::static_pointer_cast<arrow::FloatArray>(arrow_arr),
+                Bodo_CTypes::FLOAT32);
+        case arrow::Type::UINT64:
+            return arrow_numeric_array_to_bodo<arrow::UInt64Array>(
+                std::static_pointer_cast<arrow::UInt64Array>(arrow_arr),
+                Bodo_CTypes::UINT64);
+        case arrow::Type::INT64:
+            return arrow_numeric_array_to_bodo<arrow::Int64Array>(
+                std::static_pointer_cast<arrow::Int64Array>(arrow_arr),
+                Bodo_CTypes::INT64);
+        case arrow::Type::UINT32:
+            return arrow_numeric_array_to_bodo<arrow::UInt32Array>(
+                std::static_pointer_cast<arrow::UInt32Array>(arrow_arr),
+                Bodo_CTypes::UINT32);
+        case arrow::Type::INT32:
+            return arrow_numeric_array_to_bodo<arrow::Int32Array>(
+                std::static_pointer_cast<arrow::Int32Array>(arrow_arr),
+                Bodo_CTypes::INT32);
+        case arrow::Type::UINT16:
+            return arrow_numeric_array_to_bodo<arrow::UInt16Array>(
+                std::static_pointer_cast<arrow::UInt16Array>(arrow_arr),
+                Bodo_CTypes::UINT16);
+        case arrow::Type::INT16:
+            return arrow_numeric_array_to_bodo<arrow::Int16Array>(
+                std::static_pointer_cast<arrow::Int16Array>(arrow_arr),
+                Bodo_CTypes::INT16);
+        case arrow::Type::UINT8:
+            return arrow_numeric_array_to_bodo<arrow::UInt8Array>(
+                std::static_pointer_cast<arrow::UInt8Array>(arrow_arr),
+                Bodo_CTypes::UINT8);
+        case arrow::Type::INT8:
+            return arrow_numeric_array_to_bodo<arrow::Int8Array>(
+                std::static_pointer_cast<arrow::Int8Array>(arrow_arr),
+                Bodo_CTypes::INT8);
+        case arrow::Type::DICTIONARY:
+            return arrow_dictionary_array_to_bodo(
+                std::static_pointer_cast<arrow::DictionaryArray>(arrow_arr));
+        default:
+            throw std::runtime_error("arrow_array_to_bodo(): Array type " +
+                                     arrow_arr->type()->ToString() +
+                                     " not supported");
+    }
 }
