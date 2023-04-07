@@ -337,6 +337,7 @@ ext_arr = Extension(
         "bodo/libs/_datetime_utils.cpp",
         "bodo/libs/_decimal_ext.cpp",
         "bodo/libs/_groupby.cpp",
+        "bodo/libs/_groupby_agg_funcs.cpp",
         "bodo/libs/_groupby_col_set.cpp",
         "bodo/libs/_groupby_common.cpp",
         "bodo/libs/_groupby_do_apply_to_column.cpp",
