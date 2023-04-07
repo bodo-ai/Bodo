@@ -135,7 +135,7 @@ def get_compute_type(env_var_dict, image_path, buildspec):
 # Function to generate the batch portion for the CI build
 def generate_CI_buildspec(num_groups):
     images = {
-        "linux": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:3.2"
+        "linux": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:3.4"
     }
     pytest_starting_marker = "not slow"
     pytest_options = [
