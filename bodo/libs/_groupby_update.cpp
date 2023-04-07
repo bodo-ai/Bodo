@@ -959,68 +959,84 @@ void window_computation(std::vector<array_info*>& orderby_arrs,
         }
         case Bodo_FTypes::min_row_number_filter: {
             // To compute min_row_number_filter we want to find the
-            // idxmin/idxmax based on the orderby column. Then in the output
+            // idxmin/idxmax based on the orderby columns. Then in the output
             // array those locations will have the value true. We have already
             // initialized all other locations to false.
-            int64_t ftype;
-            bodo_array_type::arr_type_enum idx_arr_type;
-            // We currently only support 1 input column.
-            array_info* orderby_arr = orderby_arrs[0];
-            bool asc = asc_vect[0];
-            bool na_pos = na_pos_vect[0];
-            if (asc) {
-                // The first value of an array in ascending order is the min.
-                if (na_pos) {
-                    ftype = Bodo_FTypes::idxmin;
-                    // We don't need null values for indices
-                    idx_arr_type = bodo_array_type::NUMPY;
-                } else {
-                    ftype = Bodo_FTypes::idxmin_na_first;
-                    // We need null values to signal we found an NA
-                    // value.
-                    idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-                }
-            } else {
-                // The first value of an array in descending order is the max.
-                if (na_pos) {
-                    ftype = Bodo_FTypes::idxmax;
-                    // We don't need null values for indices
-                    idx_arr_type = bodo_array_type::NUMPY;
-                } else {
-                    ftype = Bodo_FTypes::idxmax_na_first;
-                    // We need null values to signal we found an NA
-                    // value.
-                    idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-                }
-            }
-            // Allocate intermediate buffer to find the true element for each
-            // group. Indices
             size_t num_groups = grp_info.num_groups;
-            array_info* idx_col = alloc_array(num_groups, 1, 1, idx_arr_type,
-                                              Bodo_CTypes::UINT64, 0, 0);
-            // create array to store min/max value
-            array_info* data_col =
-                alloc_array(num_groups, 1, 1, orderby_arr->arr_type,
-                            orderby_arr->dtype, 0, 0);
-            // Initialize the index column. This is 0 initialized and will
-            // not initial the null values.
-            aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
-                                      use_sql_rules);
-            std::vector<array_info*> aux_cols = {idx_col};
-            // Initialize the max column
-            if (ftype == Bodo_FTypes::idxmax ||
-                ftype == Bodo_FTypes::idxmax_na_first) {
-                aggfunc_output_initialize(data_col, Bodo_FTypes::max,
+            int64_t ftype;
+            array_info* idx_col;
+            if (orderby_arrs.size() == 1) {
+                // We generate an optimized and templated path for 1 column.
+                array_info* orderby_arr = orderby_arrs[0];
+                bool asc = asc_vect[0];
+                bool na_pos = na_pos_vect[0];
+                bodo_array_type::arr_type_enum idx_arr_type;
+                if (asc) {
+                    // The first value of an array in ascending order is the
+                    // min.
+                    if (na_pos) {
+                        ftype = Bodo_FTypes::idxmin;
+                        // We don't need null values for indices
+                        idx_arr_type = bodo_array_type::NUMPY;
+                    } else {
+                        ftype = Bodo_FTypes::idxmin_na_first;
+                        // We need null values to signal we found an NA
+                        // value.
+                        idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+                    }
+                } else {
+                    // The first value of an array in descending order is the
+                    // max.
+                    if (na_pos) {
+                        ftype = Bodo_FTypes::idxmax;
+                        // We don't need null values for indices
+                        idx_arr_type = bodo_array_type::NUMPY;
+                    } else {
+                        ftype = Bodo_FTypes::idxmax_na_first;
+                        // We need null values to signal we found an NA
+                        // value.
+                        idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+                    }
+                }
+                // Allocate intermediate buffer to find the true element for
+                // each group. Indices
+                idx_col = alloc_array(num_groups, 1, 1, idx_arr_type,
+                                      Bodo_CTypes::UINT64, 0, 0);
+                // create array to store min/max value
+                array_info* data_col =
+                    alloc_array(num_groups, 1, 1, orderby_arr->arr_type,
+                                orderby_arr->dtype, 0, 0);
+                // Initialize the index column. This is 0 initialized and will
+                // not initial the null values.
+                aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
                                           use_sql_rules);
+                std::vector<array_info*> aux_cols = {idx_col};
+                // Initialize the max column
+                if (ftype == Bodo_FTypes::idxmax ||
+                    ftype == Bodo_FTypes::idxmax_na_first) {
+                    aggfunc_output_initialize(data_col, Bodo_FTypes::max,
+                                              use_sql_rules);
+                } else {
+                    aggfunc_output_initialize(data_col, Bodo_FTypes::min,
+                                              use_sql_rules);
+                }
+                // Compute the idxmin/idxmax
+                do_apply_to_column(orderby_arr, data_col, aux_cols, grp_info,
+                                   ftype);
+                // Delete the max/min result
+                delete_info_decref_array(data_col);
             } else {
-                aggfunc_output_initialize(data_col, Bodo_FTypes::min,
+                ftype = Bodo_FTypes::idx_n_columns;
+                // We don't need null for indices
+                // We only allocate an index column.
+                idx_col = alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
+                                      Bodo_CTypes::UINT64, 0, 0);
+                aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
                                           use_sql_rules);
+                // Call the idx_n_columns function path.
+                idx_n_columns_apply(idx_col, orderby_arrs, asc_vect,
+                                    na_pos_vect, grp_info, ftype);
             }
-            // Compute the idxmin/idxmax
-            do_apply_to_column(orderby_arr, data_col, aux_cols, grp_info,
-                               ftype);
-            // Delete the max/min result
-            delete_info_decref_array(data_col);
             // Now we have the idxmin/idxmax in the idx_col. We need to set the
             // indices to true.
             for (size_t i = 0; i < idx_col->length; i++) {

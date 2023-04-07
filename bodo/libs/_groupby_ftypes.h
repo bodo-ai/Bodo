@@ -61,7 +61,13 @@ struct Bodo_FTypes {
         // These are internal operators used by groupby.window
         // when the orderby clause has na values first.
         idxmin_na_first = 35,
-        idxmax_na_first = 36
+        idxmax_na_first = 36,
+        // This is the operator for when we are generating one
+        // of the 4 idx functions to operate over N columns. Each
+        // column may have a different function so we cannot define
+        // more explicit ftypes. This is used only in the min_row_number_filter
+        // window function path.
+        idx_n_columns = 37
     };
 };
 

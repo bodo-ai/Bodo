@@ -125,8 +125,8 @@ public class MinRowNumberFilterRule extends RelRule<MinRowNumberFilterRule.Confi
     }
     RexWindow window = overFunction.getWindow();
     // Verify the Window can be processed. We currently require
-    // a partition by and exactly 1 order by column
-    if (window.partitionKeys.size() == 0 || window.orderKeys.size() != 1) {
+    // at one partition by column.
+    if (window.partitionKeys.size() == 0) {
       // We cannot handle this structure.
       return false;
     }

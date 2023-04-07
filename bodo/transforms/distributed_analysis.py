@@ -1277,7 +1277,7 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD)
             old_lhs_dists = array_dists[lhs]
-            old_rhs_var_dists = array_dists[func_mod.name]
+            old_rhs_var_dists = array_dists.get(func_mod.name, ())
             lhs_dists = []
             rhs_var_dists = []
             skip_table_name = get_overload_const_str(self.typemap[rhs.args[0].name])
