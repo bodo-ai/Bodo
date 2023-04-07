@@ -273,6 +273,7 @@ ext_hdist = Extension(
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_bodo_to_arrow.cpp",
         "bodo/libs/_distributed.h",
     ],
     libraries=MPI_LIBS + dist_libs,
@@ -311,10 +312,16 @@ ext_str = Extension(
 # TODO: make Arrow optional in decimal extension similar to parquet extension?
 ext_decimal = Extension(
     name="bodo.libs.decimal_ext",
-    sources=["bodo/libs/_decimal_ext.cpp", "bodo/libs/_bodo_common.cpp"],
+    sources=[
+        "bodo/libs/_decimal_ext.cpp",
+        "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_bodo_to_arrow.cpp",
+        "bodo/libs/_datetime_utils.cpp",
+    ],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_bodo_to_arrow.cpp",
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
@@ -397,6 +404,7 @@ ext_dt = Extension(
         "bodo/libs/_datetime_ext.cpp",
         "bodo/libs/_datetime_utils.cpp",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_bodo_to_arrow.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",

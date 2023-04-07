@@ -269,12 +269,18 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
     }
 }
 
-array_info* list_string_array_to_info(uint64_t n_items, array_info* str_data,
-                                      NRT_MemInfo* offsets,
-                                      NRT_MemInfo* null_bitmap) {
-    return new array_info(bodo_array_type::LIST_STRING,
-                          Bodo_CTypes::LIST_STRING, n_items,
-                          {offsets, null_bitmap}, {str_data});
+array_info* array_item_array_to_info(uint64_t n_items, array_info* inner_array,
+                                     NRT_MemInfo* offsets,
+                                     NRT_MemInfo* null_bitmap) {
+    bodo_array_type::arr_type_enum array_type = bodo_array_type::ARRAY_ITEM;
+    Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::LIST;
+    if (inner_array->arr_type == bodo_array_type::STRING &&
+        inner_array->dtype == Bodo_CTypes::STRING) {
+        array_type = bodo_array_type::LIST_STRING;
+        dtype = Bodo_CTypes::LIST_STRING;
+    }
+    return new array_info(array_type, dtype, n_items, {offsets, null_bitmap},
+                          {inner_array});
 }
 
 array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
@@ -370,7 +376,6 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   char* null_bitmap, NRT_MemInfo* meminfo,
                                   NRT_MemInfo* meminfo_bitmask,
                                   int32_t precision, int32_t scale) {
-    // TODO: better memory management of struct, meminfo refcount?
     return new array_info(
         bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
         n_items, {meminfo, meminfo_bitmask}, {}, NULL, precision, scale, 0,
@@ -387,14 +392,15 @@ array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
         false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
-array_info* info_to_list_string_array(array_info* info, int64_t* length,
-                                      numpy_arr_payload* offsets_arr,
-                                      numpy_arr_payload* null_bitmap_arr) {
-    if (info->arr_type != bodo_array_type::LIST_STRING) {
+array_info* info_to_array_item_array(array_info* info, int64_t* length,
+                                     numpy_arr_payload* offsets_arr,
+                                     numpy_arr_payload* null_bitmap_arr) {
+    if (info->arr_type != bodo_array_type::LIST_STRING &&
+        info->arr_type != bodo_array_type::ARRAY_ITEM) {
         PyErr_SetString(
             PyExc_RuntimeError,
-            "_array.cpp::info_to_list_string_array: info_to_list_string_array "
-            "requires list string input.");
+            "_array.cpp::info_to_array_item_array: info_to_array_item_array "
+            "requires array(array(item)) input.");
         return nullptr;
     }
     *length = info->length;
@@ -421,7 +427,7 @@ void info_to_nested_array(array_info* info, int64_t* lengths,
     try {
         int64_t lengths_pos = 0;
         int64_t infos_pos = 0;
-        nested_array_to_c(info->array, lengths, out_infos, lengths_pos,
+        nested_array_to_c(info->to_arrow(), lengths, out_infos, lengths_pos,
                           infos_pos);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -1552,8 +1558,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
 
     // DEC_MOD_METHOD(string_array_to_info);
     PyObject_SetAttrString(
-        m, "list_string_array_to_info",
-        PyLong_FromVoidPtr((void*)(&list_string_array_to_info)));
+        m, "array_item_array_to_info",
+        PyLong_FromVoidPtr((void*)(&array_item_array_to_info)));
     PyObject_SetAttrString(m, "nested_array_to_info",
                            PyLong_FromVoidPtr((void*)(&nested_array_to_info)));
     // Not covered by error handler
@@ -1593,8 +1599,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(m, "info_to_string_array",
                            PyLong_FromVoidPtr((void*)(&info_to_string_array)));
     PyObject_SetAttrString(
-        m, "info_to_list_string_array",
-        PyLong_FromVoidPtr((void*)(&info_to_list_string_array)));
+        m, "info_to_array_item_array",
+        PyLong_FromVoidPtr((void*)(&info_to_array_item_array)));
     PyObject_SetAttrString(m, "info_to_nested_array",
                            PyLong_FromVoidPtr((void*)(&info_to_nested_array)));
     PyObject_SetAttrString(m, "info_to_numpy_array",

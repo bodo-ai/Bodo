@@ -613,11 +613,12 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
                 in_arr, in_arr_idxs, nRowOut, use_nullable_arr);
             break;
         }
+        case bodo_array_type::ARRAY_ITEM:
         case bodo_array_type::ARROW: {
             // Arrow builder for output array. builds it dynamically (buffer
             // sizes are not known in advance)
             std::unique_ptr<arrow::ArrayBuilder> builder;
-            std::shared_ptr<arrow::Array> in_arrow_array = in_arr->array;
+            std::shared_ptr<arrow::Array> in_arrow_array = in_arr->to_arrow();
             (void)arrow::MakeBuilder(arrow::default_memory_pool(),
                                      in_arrow_array->type(), &builder);
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -638,9 +639,15 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
             std::shared_ptr<arrow::Array> out_arrow_array;
             // TODO: assert builder is not null (at least one row added)
             (void)builder->Finish(&out_arrow_array);
-            out_arr = new array_info(bodo_array_type::ARROW,
-                                     Bodo_CTypes::INT8 /*dummy*/, nRowOut,
-                                     /*meminfo TODO*/ {}, {}, out_arrow_array);
+
+            if (arr_type == bodo_array_type::ARRAY_ITEM) {
+                out_arr = arrow_array_to_bodo(out_arrow_array);
+            } else {
+                out_arr =
+                    new array_info(bodo_array_type::ARROW,
+                                   Bodo_CTypes::INT8 /*dummy*/, nRowOut,
+                                   /*meminfo TODO*/ {}, {}, out_arrow_array);
+            }
             break;
         }
         default:
@@ -937,18 +944,19 @@ array_info* RetrieveArray_TwoColumns(
             memcpy(out_ptr, in_ptr, siztype);
         }
     }
-    if (arr_type == bodo_array_type::ARROW) {
+    if (arr_type == bodo_array_type::ARROW ||
+        arr_type == bodo_array_type::ARRAY_ITEM) {
         // Arrow builder for output array. builds it dynamically (buffer
         // sizes are not known in advance)
         std::unique_ptr<arrow::ArrayBuilder> builder;
-        std::shared_ptr<arrow::Array> in_arr_typ = arr1->array;
+        std::shared_ptr<arrow::Array> in_arr_typ = arr1->to_arrow();
         (void)arrow::MakeBuilder(arrow::default_memory_pool(),
                                  in_arr_typ->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
             if (ArrRow.second >= 0) {
                 // non-null value for output
-                std::shared_ptr<arrow::Array> in_arr = ArrRow.first->array;
+                std::shared_ptr<arrow::Array> in_arr = ArrRow.first->to_arrow();
                 size_t row = ArrRow.second;
                 // append value in position 'row' of input array to
                 // builder's array (this is a recursive algorithm, can
@@ -964,9 +972,14 @@ array_info* RetrieveArray_TwoColumns(
         std::shared_ptr<arrow::Array> out_arrow_array;
         // TODO: assert builder is not null (at least one row added)
         (void)builder->Finish(&out_arrow_array);
-        out_arr = new array_info(bodo_array_type::ARROW,
-                                 Bodo_CTypes::INT8 /*dummy*/, nRowOut,
-                                 /*meminfo TODO*/ {}, {}, out_arrow_array);
+
+        if (arr_type == bodo_array_type::ARRAY_ITEM) {
+            out_arr = arrow_array_to_bodo(out_arrow_array);
+        } else {
+            out_arr = new array_info(bodo_array_type::ARROW,
+                                     Bodo_CTypes::INT8 /*dummy*/, nRowOut,
+                                     /*meminfo TODO*/ {}, {}, out_arrow_array);
+        }
     }
     return out_arr;
 }
@@ -1218,16 +1231,17 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
 
 bool TestEqualColumn(const array_info* arr1, int64_t pos1,
                      const array_info* arr2, int64_t pos2, bool is_na_equal) {
-    if (arr1->arr_type == bodo_array_type::ARROW) {
+    if (arr1->arr_type == bodo_array_type::ARROW ||
+        arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
         // TODO: Handle is_na_equal in Arrow arrays
         int64_t pos1_s = pos1;
         int64_t pos1_e = pos1 + 1;
         int64_t pos2_s = pos2;
         int64_t pos2_e = pos2 + 1;
         bool na_position_bis = true;  // This value has no importance
-        int val =
-            ComparisonArrowColumn(arr1->array, pos1_s, pos1_e, arr2->array,
-                                  pos2_s, pos2_e, na_position_bis);
+        int val = ComparisonArrowColumn(arr1->to_arrow(), pos1_s, pos1_e,
+                                        arr2->to_arrow(), pos2_s, pos2_e,
+                                        na_position_bis);
         return val == 0;
     }
     if (arr1->arr_type == bodo_array_type::NUMPY ||
@@ -1386,13 +1400,15 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
 int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                                  size_t const& iRow1, array_info* arr2,
                                  size_t const& iRow2) {
-    if (arr1->arr_type == bodo_array_type::ARROW) {
+    if (arr1->arr_type == bodo_array_type::ARROW ||
+        arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
         int64_t pos1_s = iRow1;
         int64_t pos1_e = iRow1 + 1;
         int64_t pos2_s = iRow2;
         int64_t pos2_e = iRow2 + 1;
-        return ComparisonArrowColumn(arr1->array, pos1_s, pos1_e, arr2->array,
-                                     pos2_s, pos2_e, na_position_bis);
+        return ComparisonArrowColumn(arr1->to_arrow(), pos1_s, pos1_e,
+                                     arr2->to_arrow(), pos2_s, pos2_e,
+                                     na_position_bis);
     }
     if (arr1->arr_type == bodo_array_type::NUMPY) {
         // In the case of NUMPY, we compare the values for concluding.
@@ -1712,22 +1728,24 @@ uint8_t* create_temp_null_bitmask_for_array(const array_info* arr) {
             }
             break;
         }
+        case bodo_array_type::ARRAY_ITEM:
         case bodo_array_type::ARROW: {
             // For robustness, we do a for loop and use the IsNull function
             // to determine if an element is null. IsNull correctly handles
             // all cases including no nulls, all nulls (Null array type),
             // etc.
             for (size_t i = 0; i < arr->length; i++) {
-                SetBitTo(bitmask, i, !arr->array->IsNull(i));
+                SetBitTo(bitmask, i, !arr->to_arrow()->IsNull(i));
             }
 
             // XXX If we want, we can do something smarter like:
             // const uint8_t* arrow_null_bitmask =
-            //     arr->array->null_bitmap_data();
+            //     arr->to_arrow()->null_bitmap_data();
             // if (arrow_null_bitmask != nullptr)
             //     memcpy(bitmask, arrow_null_bitmask, n_bytes);
             // else {
-            //     if (arr->array->null_count() == arr->array->length())
+            //     if (arr->to_arrow()->null_count() ==
+            //     arr->to_arrow()->length())
             //         // all null case
             //         memset(bitmask, 0, n_bytes);
             //     else
@@ -2161,8 +2179,9 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
             ListStr[iRow] = strOut;
         }
     }
-    if (arr->arr_type == bodo_array_type::ARROW) {
-        std::shared_ptr<arrow::Array> in_arr = arr->array;
+    if (arr->arr_type == bodo_array_type::ARROW ||
+        arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        std::shared_ptr<arrow::Array> in_arr = arr->to_arrow();
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             strOut = "";
             DEBUG_append_to_out_array(in_arr, iRow, iRow + 1, strOut);
@@ -2299,6 +2318,8 @@ std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
         return "TIMEDELTA";
     if (dtype == Bodo_CTypes::TIME)
         return "TIME";
+    if (dtype == Bodo_CTypes::LIST)
+        return "LIST";
     return "unmatching dtype";
 }
 
@@ -2311,7 +2332,8 @@ std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type) {
         return "NULLABLE";
     if (arr_type == bodo_array_type::LIST_STRING)
         return "LIST_STRING";
-    if (arr_type == bodo_array_type::ARROW)
+    if (arr_type == bodo_array_type::ARROW ||
+        arr_type == bodo_array_type::ARRAY_ITEM)
         return "ARROW";
     if (arr_type == bodo_array_type::CATEGORICAL)
         return "CATEGORICAL";

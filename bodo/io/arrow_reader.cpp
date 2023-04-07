@@ -6,6 +6,7 @@
 #include <arrow/compute/api.h>
 
 #include "../libs/_array_utils.h"
+#include "../libs/_bodo_to_arrow.h"
 #include "../libs/_datetime_ext.h"
 #include "../libs/_datetime_utils.h"
 #include "../libs/_distributed.h"
@@ -896,11 +897,8 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
  */
 class ArrowBuilder : public TableBuilder::BuilderColumn {
    public:
-    /**
-     * @param type : Arrow type of input array
-     */
-    ArrowBuilder(std::shared_ptr<arrow::DataType> type) {}
-    ArrowBuilder() {}
+    ArrowBuilder(bodo_array_type::arr_type_enum _arr_type)
+        : arr_type(_arr_type) {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // XXX hopefully keeping the arrays around doesn't prevent other
@@ -923,15 +921,21 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
             arrow::Concatenate(arrays, arrow::default_memory_pool())
                 .ValueOrDie();
         arrays.clear();  // memory of each array will be freed now
-        out_array =
-            new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                           out_arrow_array->length(),
-                           /*meminfo TODO*/ {}, {}, out_arrow_array);
+        if (arr_type == bodo_array_type::ARRAY_ITEM) {
+            out_array = arrow_array_to_bodo(out_arrow_array);
+        } else {
+            out_array = new array_info(
+                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
+                out_arrow_array->length(),
+                /*meminfo TODO*/ {}, {}, out_arrow_array);
+        }
         return out_array;
     }
 
    private:
     arrow::ArrayVector arrays;
+    // output Bodo array type to create
+    bodo_array_type::arr_type_enum arr_type;
 };
 
 /// Column builder for Arrow arrays with all null values
@@ -996,7 +1000,11 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
         } else if (type == arrow::Type::NA) {
             columns.push_back(new AllNullsBuilder(num_rows));
         } else {
-            columns.push_back(new ArrowBuilder(field->type()));
+            bodo_array_type::arr_type_enum arr_type = bodo_array_type::ARROW;
+            if (type == Type::LIST || type == Type::LARGE_LIST) {
+                arr_type = bodo_array_type::ARRAY_ITEM;
+            }
+            columns.push_back(new ArrowBuilder(arr_type));
         }
     }
 }
@@ -1018,8 +1026,9 @@ TableBuilder::TableBuilder(table_info* table, const int64_t num_rows) {
             columns.push_back(new StringBuilder(arr->dtype));
         } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
             columns.push_back(new ListStringBuilder(arr->dtype));
-        } else if (arr->arr_type == bodo_array_type::ARROW) {
-            columns.push_back(new ArrowBuilder());
+        } else if (arr->arr_type == bodo_array_type::ARROW ||
+                   arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+            columns.push_back(new ArrowBuilder(arr->arr_type));
         } else {
             throw std::runtime_error("TableBuilder: array type (" +
                                      GetArrType_as_string(arr->arr_type) +

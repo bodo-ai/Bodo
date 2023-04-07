@@ -92,15 +92,16 @@ struct multi_col_key {
             array_info* c2 = other.table->columns[i];
             size_t size_type;
             switch (c1->arr_type) {
+                case bodo_array_type::ARRAY_ITEM:
                 case bodo_array_type::ARROW: {
                     int64_t pos1_s = row;
                     int64_t pos1_e = row + 1;
                     int64_t pos2_s = other.row;
                     int64_t pos2_e = other.row + 1;
                     bool na_position_bis = true;
-                    int test = ComparisonArrowColumn(c1->array, pos1_s, pos1_e,
-                                                     c2->array, pos2_s, pos2_e,
-                                                     na_position_bis);
+                    int test = ComparisonArrowColumn(
+                        c1->to_arrow(), pos1_s, pos1_e, c2->to_arrow(), pos2_s,
+                        pos2_e, na_position_bis);
                     if (test != 0) {
                         return false;
                     }
@@ -886,6 +887,7 @@ inline constexpr decltype(auto) type_dispatcher(
                         "invalid dtype for list string arrays " +
                         std::to_string(dtype));
             }
+        case bodo_array_type::ARRAY_ITEM:
         case bodo_array_type::ARROW:
             switch (dtype) {
                 // Arrow array stores a dummy int8 dtype
