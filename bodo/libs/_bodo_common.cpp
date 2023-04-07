@@ -1,4 +1,5 @@
 #include "_bodo_common.h"
+#include "_bodo_to_arrow.h"
 #include "_distributed.h"
 
 std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
@@ -133,6 +134,15 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         other.array = nullptr;
     }
     return *this;
+}
+
+std::shared_ptr<arrow::Array> array_info::to_arrow() const {
+    std::shared_ptr<arrow::Array> arrow_arr;
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    bodo_array_to_arrow(::arrow::default_memory_pool(), this, &arrow_arr,
+                        false /*convert_timedelta_to_int64*/, "", time_unit,
+                        false /*downcast_time_ns_to_us*/);
+    return arrow_arr;
 }
 
 array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
@@ -503,47 +513,6 @@ NRT_MemInfo* alloc_array_item_arr_meminfo() {
 }
 
 /**
- * @brief allocate an array(item) array and wrap in an array_info*
- * TODO: generalize beyond Numpy arrays
- *
- * @param n_arrays number of array elements
- * @param n_total_items total number of data elements
- * @param dtype dtype of data elements
- * @return array_info*
- */
-array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
-                             Bodo_CTypes::CTypeEnum dtype,
-                             int64_t extra_null_bytes) {
-    // allocate payload
-    NRT_MemInfo* meminfo_array_item =
-        NRT_MemInfo_alloc_dtor_safe(sizeof(array_item_arr_numpy_payload),
-                                    (NRT_dtor_function)dtor_array_item_array);
-    array_item_arr_numpy_payload* payload =
-        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
-
-    payload->n_arrays = n_arrays;
-
-    // allocate data array
-    // TODO: support non-numpy data
-    payload->data = allocate_numpy_payload(n_total_items, dtype);
-    // TODO: support 64-bit offsets case
-    payload->offsets = allocate_numpy_payload(n_arrays + 1, Bodo_CType_offset);
-    int64_t n_bytes = (int64_t)((n_arrays + 7) / 8) + extra_null_bytes;
-    payload->null_bitmap =
-        allocate_numpy_payload(n_bytes, Bodo_CTypes::CTypeEnum::UINT8);
-    // setting all to non-null to avoid unexpected issues
-    memset(payload->null_bitmap.data, 0xff, n_bytes);
-
-    // set offsets for boundaries
-    offset_t* offsets_ptr = (offset_t*)payload->offsets.data;
-    offsets_ptr[0] = 0;
-    offsets_ptr[n_arrays] = n_total_items;
-
-    return new array_info(bodo_array_type::ARRAY_ITEM, dtype, n_arrays,
-                          {meminfo_array_item});
-}
-
-/**
  * The allocations array function for the function.
  *
  * In the case of NUMPY/CATEGORICAL or NULLABLE_INT_BOOL,
@@ -586,10 +555,6 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
 
         case bodo_array_type::CATEGORICAL:
             return alloc_categorical(length, dtype, num_categories);
-
-        case bodo_array_type::ARRAY_ITEM:
-            return alloc_array_item(length, n_sub_elems, dtype,
-                                    extra_null_bytes);
 
         case bodo_array_type::DICT:
             return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
@@ -695,8 +660,9 @@ int64_t array_memory_size(array_info* earr) {
                sizeof(offset_t) * (earr->n_sub_elems() + 1) +
                sizeof(offset_t) * (earr->length + 1) + n_bytes + n_sub_bytes;
     }
-    if (earr->arr_type == bodo_array_type::ARROW) {
-        return arrow_array_memory_size(earr->array);
+    if (earr->arr_type == bodo_array_type::ARROW ||
+        earr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        return arrow_array_memory_size(earr->to_arrow());
     }
     Bodo_PyErr_SetString(PyExc_RuntimeError,
                          "Type not covered in array_memory_size");

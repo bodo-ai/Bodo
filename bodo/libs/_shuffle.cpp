@@ -5,6 +5,7 @@
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
+#include "_bodo_to_arrow.h"
 #include "_distributed.h"
 
 mpi_comm_info::mpi_comm_info(std::vector<array_info*>& _arrays)
@@ -1508,7 +1509,8 @@ table_info* shuffle_table_kernel(table_info* in_table,
             in_arr = in_arr->child_arrays[1];
         }
         array_info* out_arr;
-        if (in_arr->arr_type != bodo_array_type::ARROW) {
+        if (in_arr->arr_type != bodo_array_type::ARROW &&
+            in_arr->arr_type != bodo_array_type::ARRAY_ITEM) {
             const std::vector<int64_t>& send_count_sub =
                 comm_info.send_count_sub[i];
             const std::vector<int64_t>& send_count_sub_sub =
@@ -1550,14 +1552,18 @@ table_info* shuffle_table_kernel(table_info* in_table,
             }
             delete_info_decref_array(send_arr);
         } else {
-            std::shared_ptr<arrow::Array> out_array =
-                shuffle_arrow_array(in_arr->array, n_pes, comm_info.row_dest);
+            std::shared_ptr<arrow::Array> out_array = shuffle_arrow_array(
+                in_arr->to_arrow(), n_pes, comm_info.row_dest);
             // Should get the value from the output array
-            int64_t n_items = out_array->length();
-            NRT_MemInfo* meminfo = NULL;
-            out_arr = new array_info(bodo_array_type::ARROW,
-                                     Bodo_CTypes::INT8 /*dummy*/, n_items,
-                                     {meminfo}, {}, out_array);
+            if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+                out_arr = arrow_array_to_bodo(out_array);
+            } else {
+                int64_t n_items = out_array->length();
+                NRT_MemInfo* meminfo = NULL;
+                out_arr = new array_info(bodo_array_type::ARROW,
+                                         Bodo_CTypes::INT8 /*dummy*/, n_items,
+                                         {meminfo}, {}, out_array);
+            }
         }
         // release reference of input array
         // This is a steal reference case. The idea is to release memory as
@@ -1973,7 +1979,8 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table,
         array_info* in_arr = in_table->columns[i];
         bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
         array_info* out_arr = nullptr;
-        if (in_arr->arr_type == bodo_array_type::ARROW) {
+        if (in_arr->arr_type == bodo_array_type::ARROW ||
+            in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
             Bodo_PyErr_SetString(
                 PyExc_RuntimeError,
                 "Reverse shuffle for arrow data not yet supported");
@@ -2490,21 +2497,26 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
         int32_t precision = (int32_t)arr_bcast[6];
         //
         array_info* out_arr = nullptr;
-        if (arr_type == bodo_array_type::ARROW) {
+        if (arr_type == bodo_array_type::ARROW ||
+            arr_type == bodo_array_type::ARRAY_ITEM) {
             std::shared_ptr<arrow::Array> ref_array =
-                ref_table->columns[i_col]->array;
+                ref_table->columns[i_col]->to_arrow();
             std::shared_ptr<arrow::Array> in_array = nullptr;
             if (myrank == mpi_root) {
-                in_array = in_arr->array;
+                in_array = in_arr->to_arrow();
             }
             std::shared_ptr<arrow::Array> array =
                 broadcast_arrow_array(ref_array, in_array);
-            uint64_t n_rows = array->length();
-            NRT_MemInfo* meminfo = NULL;
-            out_arr = new array_info(bodo_array_type::ARROW,
-                                     Bodo_CTypes::INT8 /*dummy*/, n_rows,
-                                     {meminfo}, {}, array,
-                                     /*precision=*/precision);
+            if (arr_type == bodo_array_type::ARRAY_ITEM) {
+                out_arr = arrow_array_to_bodo(array);
+            } else {
+                uint64_t n_rows = array->length();
+                NRT_MemInfo* meminfo = NULL;
+                out_arr = new array_info(bodo_array_type::ARROW,
+                                         Bodo_CTypes::INT8 /*dummy*/, n_rows,
+                                         {meminfo}, {}, array,
+                                         /*precision=*/precision);
+            }
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||
@@ -3023,17 +3035,22 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
         }
         //
         array_info* out_arr = NULL;
-        if (arr_type == bodo_array_type::ARROW) {
-            std::shared_ptr<arrow::Array> array = in_arr->array;
+        if (arr_type == bodo_array_type::ARROW ||
+            arr_type == bodo_array_type::ARRAY_ITEM) {
+            std::shared_ptr<arrow::Array> array = in_arr->to_arrow();
             std::shared_ptr<arrow::Array> out_array =
                 gather_arrow_array(array, all_gather);
-            uint64_t n_rows_tot = 0;
-            NRT_MemInfo* meminfo = NULL;
-            if (myrank == mpi_root || all_gather)
-                n_rows_tot = out_array->length();
-            out_arr = new array_info(bodo_array_type::ARROW,
-                                     Bodo_CTypes::INT8 /*dummy*/, n_rows_tot,
-                                     {meminfo}, {}, out_array);
+            if (arr_type == bodo_array_type::ARRAY_ITEM) {
+                out_arr = arrow_array_to_bodo(out_array);
+            } else {
+                uint64_t n_rows_tot = 0;
+                NRT_MemInfo* meminfo = NULL;
+                if (myrank == mpi_root || all_gather)
+                    n_rows_tot = out_array->length();
+                out_arr = new array_info(bodo_array_type::ARROW,
+                                         Bodo_CTypes::INT8 /*dummy*/,
+                                         n_rows_tot, {meminfo}, {}, out_array);
+            }
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||

@@ -318,9 +318,9 @@ struct array_info {
             case bodo_array_type::INTERVAL:
                 return (char*)this->meminfos[0]->data + this->offset;
             case bodo_array_type::LIST_STRING:
-            case bodo_array_type::ARRAY_ITEM:
                 return this->child_arrays[0]->data1();
             case bodo_array_type::DICT:
+            case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::ARROW:
             default:
                 return nullptr;
@@ -338,9 +338,9 @@ struct array_info {
             case bodo_array_type::INTERVAL:
                 return (char*)this->meminfos[1]->data;
             case bodo_array_type::LIST_STRING:
-            case bodo_array_type::ARRAY_ITEM:
                 return this->child_arrays[0]->data2();
             case bodo_array_type::DICT:
+            case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::ARROW:
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::NUMPY:
@@ -358,11 +358,11 @@ struct array_info {
     char* data3() const {
         switch (arr_type) {
             case bodo_array_type::LIST_STRING:
-            case bodo_array_type::ARRAY_ITEM:
                 return (char*)this->meminfos[0]->data;
             case bodo_array_type::STRING:
             case bodo_array_type::INTERVAL:
             case bodo_array_type::DICT:
+            case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::ARROW:
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::NUMPY:
@@ -405,12 +405,12 @@ struct array_info {
     char* sub_null_bitmask() const {
         switch (arr_type) {
             case bodo_array_type::LIST_STRING:
-            case bodo_array_type::ARRAY_ITEM:
                 return this->child_arrays[0]->null_bitmask();
             case bodo_array_type::STRING:
             case bodo_array_type::DICT:
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::INTERVAL:
+            case bodo_array_type::ARRAY_ITEM:
             case bodo_array_type::ARROW:
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
@@ -429,8 +429,7 @@ struct array_info {
      * @return int64_t number of sub-elements
      */
     int64_t n_sub_elems() {
-        if (arr_type == bodo_array_type::STRING ||
-            arr_type == bodo_array_type::ARRAY_ITEM) {
+        if (arr_type == bodo_array_type::STRING) {
             offset_t* offsets = (offset_t*)data2();
             return offsets[length];
         }
@@ -470,6 +469,13 @@ struct array_info {
     bool get_null_bit(size_t idx) const {
         return GetBit((uint8_t*)null_bitmask(), idx);
     }
+
+    /**
+     * @brief Convert array_info to equivalent Arrow array.
+     *
+     * @return std::shared_ptr<arrow::Array> equivalent Array array
+     */
+    std::shared_ptr<arrow::Array> to_arrow() const;
 
     /**
      * Return code in position `idx` of categorical array as int64

@@ -532,7 +532,8 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
     // dispatch to proper function
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
-    if (array->arr_type == bodo_array_type::ARROW) {
+    if (array->arr_type == bodo_array_type::ARROW ||
+        array->arr_type == bodo_array_type::ARRAY_ITEM) {
         std::vector<offset_t> list_offsets(n_rows + 1);
         for (offset_t i = 0; i <= n_rows; i++)
             list_offsets[i] = i;
@@ -542,7 +543,8 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
             throw std::runtime_error(
                 "_array_hash::hash_array: MurmurHash not supported for Arrow "
                 "arrays.");
-        return hash_arrow_array(out_hashes, list_offsets, n_rows, array->array);
+        return hash_arrow_array(out_hashes, list_offsets, n_rows,
+                                array->to_arrow());
     }
     if (array->arr_type == bodo_array_type::STRING) {
         return hash_array_string(out_hashes, (char*)array->data1(),
@@ -786,12 +788,14 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
                         bool global_dict_needed, bool is_parallel) {
     // dispatch to proper function
     // TODO: general dispatcher
-    if (array->arr_type == bodo_array_type::ARROW) {
+    if (array->arr_type == bodo_array_type::ARROW ||
+        array->arr_type == bodo_array_type::ARRAY_ITEM) {
         std::vector<offset_t> list_offsets(n_rows + 1);
         for (offset_t i = 0; i <= n_rows; i++) {
             list_offsets[i] = i;
         }
-        return hash_arrow_array(out_hashes, list_offsets, n_rows, array->array);
+        return hash_arrow_array(out_hashes, list_offsets, n_rows,
+                                array->to_arrow());
     }
     if (array->arr_type == bodo_array_type::STRING) {
         return hash_array_combine_string(
@@ -1031,6 +1035,7 @@ void coherent_hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
 
     // For those types, no type conversion is ever needed.
     if (array->arr_type == bodo_array_type::ARROW ||
+        array->arr_type == bodo_array_type::ARRAY_ITEM ||
         array->arr_type == bodo_array_type::STRING ||
         array->arr_type == bodo_array_type::LIST_STRING) {
         return hash_array(out_hashes, array, n_rows, seed, is_parallel, true);
@@ -1213,6 +1218,7 @@ void coherent_hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
                                  bool is_parallel) {
     // For those types, no type conversion is ever needed.
     if (array->arr_type == bodo_array_type::ARROW ||
+        array->arr_type == bodo_array_type::ARRAY_ITEM ||
         array->arr_type == bodo_array_type::STRING ||
         array->arr_type == bodo_array_type::LIST_STRING) {
         return hash_array_combine(out_hashes, array, n_rows, seed, true,
