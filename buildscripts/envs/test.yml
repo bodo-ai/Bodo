@@ -17,7 +17,7 @@ dependencies:
   - boto3
   - botocore
   - s3fs
-  - gcsfs>=2022.1 #[linux64]
+  - gcsfs>=2022.1
 
   # Databases
   - pymysql
@@ -45,16 +45,18 @@ dependencies:
   - libaio #[linux64]
 
   # Testing and CI
-  # TODO: Try to use Pip to install
   - pytest
-  - pytest-azurepipelines
-  - credstash
-  - awscli
-  - flake8
-  - pytest-cov
-  - pytest-mock
-  - pytest-timeout
-  - coveralls
+  - pip:
+    - pytest-cov
+    - pytest-mock
+    - pytest-timeout
+    - pytest-xdist
+    - flaky
+
+  # CI
+  - pip:
+    - credstash
+    - flake8
 
   # Future ML Libraries
   # Used to be installed on AWS CIs
