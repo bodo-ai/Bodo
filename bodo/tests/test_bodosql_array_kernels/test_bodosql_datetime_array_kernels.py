@@ -2463,7 +2463,6 @@ def test_calendar_optional(memory_leak_check):
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             for flag2 in [True, False]:
-                a0 = pd.Timestamp("2018-04-30") if flag0 else None
                 a1 = "Sunday" if flag0 else None
                 a2 = "April" if flag0 else None
                 a3 = 6 if flag0 else None
@@ -2475,7 +2474,7 @@ def test_calendar_optional(memory_leak_check):
                 check_func(
                     impl,
                     (A, B, C, flag0, flag1, flag2),
-                    py_output=(a0, a1, a2, a3, a4, a5, a6, a7, a8),
+                    py_output=(a1, a2, a3, a4, a5, a6, a7, a8),
                 )
 
 
