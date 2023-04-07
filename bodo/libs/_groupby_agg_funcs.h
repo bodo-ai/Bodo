@@ -634,4 +634,33 @@ struct var_agg {
     }
 };
 
+// Non inlined operations over multiple columns
+
+/**
+ * @brief Perform an idx*** column comparison for a column. This is used when we
+ * need to find the "first" value produced by a min_row_number_filter() call
+ * that contains several orderby columns, each of which may have separate types
+ * and different NA first/last or ascending/descending order. This returns true
+ * if the comparison is not a tie and false if the comparison is a tie. This is
+ * used to signal if we should continue searching that later columns.
+ *
+ * @param[in, out] out_arr The output index array. This is used to load the
+ * current member index of the "leading" value and store the new index if the
+ * new value is a valid replacement.
+ * @param grp_num The current group number used to load from out_arr.
+ * @param[in] in_arr The input array used to compare value.
+ * @param in_idx The index of the new row to compare.
+ * @param asc Is this in ascending order? Here asc=True means we want to do a
+ * min and asc=False means we want to do a max.
+ * @param na_pos Are NAs placed last. If true this means NA values will be
+ * replaced with any non-NA value. If false this means non-NA values will be
+ * replaced with any NA value. Not NaN is the largest float and not NA.
+ * @return true The comparison is not a tie.
+ * @return false The comparison is a tie. If there are more columns we should
+ * continue iterating.
+ */
+bool idx_compare_column(array_info* out_arr, int64_t grp_num,
+                        array_info* in_arr, int64_t in_idx, bool asc,
+                        bool na_pos);
+
 #endif  // _GROUPBY_AGG_FUNCS_H_INCLUDED

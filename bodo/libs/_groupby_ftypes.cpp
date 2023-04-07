@@ -42,7 +42,8 @@ const char* Bodo_FTypes_names[] = {"no_op",
                                    "var_eval",
                                    "std_eval",
                                    "idxmin_na_first",
-                                   "idxmax_na_first"};
+                                   "idxmax_na_first",
+                                   "idx_n_columns"};
 
 const char* get_name_for_Bodo_FTypes(int enumVal) {
     return Bodo_FTypes_names[enumVal];

@@ -26,4 +26,32 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         std::vector<array_info*>& aux_cols,
                         const grouping_info& grp_info, int ftype);
 
+/**
+ * @brief Apply various idx*** operations to a set of N orderby
+ * columns. Depending on the values of asc_vect and na_pos_vect
+ * each column is performing one of the following operations:
+ * - idxmin
+ * - idxmax
+ * - idxmin_na_first
+ * - idxmax_na_first
+ *
+ * Note: This implementation requires update_before_shuffle=False.
+ *
+ * @param[out] out_arr The output index array. This is a UINT64 numpy array.
+ * @param[in] orderby_arrs Vector of the N orderby columns. Smaller indices
+ * have higher precedence and later columns are only used in the case of
+ * ties.
+ * @param[in] asc_vect Vector of booleans indicating whether the corresponding
+ * orderby column is sorted in ascending order.
+ * @param[in] na_pos_vect Vector of booleans indicating whether the
+ * corresponding orderby column has NA values at the end in sort order.
+ * @param[in] grp_info The grouping information.
+ * @param ftype The function type. This is used for validating input.
+ */
+void idx_n_columns_apply(array_info* out_arr,
+                         std::vector<array_info*>& orderby_arrs,
+                         std::vector<bool>& asc_vect,
+                         std::vector<bool>& na_pos_vect,
+                         grouping_info const& grp_info, int ftype);
+
 #endif  // _GROUPBY_DO_APPLY_TO_COLUMN_H_INCLUDED

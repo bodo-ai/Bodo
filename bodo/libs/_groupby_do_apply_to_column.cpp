@@ -1670,3 +1670,39 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
         std::string("do_apply_to_column: unsupported array dtype: ") +
         std::string(GetDtype_as_string(in_col->dtype)));
 }
+
+void idx_n_columns_apply(array_info* out_arr,
+                         std::vector<array_info*>& orderby_arrs,
+                         std::vector<bool>& asc_vect,
+                         std::vector<bool>& na_pos_vect,
+                         grouping_info const& grp_info, int ftype) {
+    // Add a sanity check to confirm we never call this in the wrong place.
+    if (ftype != Bodo_FTypes::idx_n_columns) {
+        throw std::runtime_error(
+            "Invalid function type for idx_n_columns_computation");
+    }
+    // Select the first column to allow iterating over the groups.
+    array_info* iter_column = orderby_arrs[0];
+    for (size_t i = 0; i < iter_column->length; i++) {
+        int64_t i_grp = get_group_for_row(grp_info, i);
+        if (i_grp != -1) {
+            // Verify the existing value is a valid group member.
+            // This is basically a "not null check".
+            int64_t curr_grp =
+                get_group_for_row(grp_info, getv<int64_t>(out_arr, i_grp));
+            if (curr_grp == i_grp) {
+                for (size_t j = 0; j < orderby_arrs.size(); j++) {
+                    bool found =
+                        idx_compare_column(out_arr, i_grp, orderby_arrs[j], i,
+                                           asc_vect[j], na_pos_vect[j]);
+                    if (found) {
+                        break;
+                    }
+                }
+            } else {
+                // Initialize the indices
+                getv<uint64_t>(out_arr, i_grp) = i;
+            }
+        }
+    }
+}
