@@ -90,7 +90,7 @@ class TableBuilder {
     class BuilderColumn {
        public:
         virtual ~BuilderColumn() {}
-        /// Append data from Arrow array to ouput Bodo array
+        /// Append data from Arrow array to output Bodo array
         virtual void append(std::shared_ptr<arrow::ChunkedArray> array) = 0;
         /// Get output Bodo array
         virtual array_info* get_output() { return out_array; }
