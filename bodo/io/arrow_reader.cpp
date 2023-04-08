@@ -78,11 +78,10 @@ inline void copy_data_dt32(uint64_t* out_data, const int32_t* buff,
     for (int64_t i = 0; i < rows_to_read; i++) {
         int32_t val = buff[rows_to_skip + i];
         // convert date32 into packed datetime.date value
-        int64_t
-            year = -1,
-            month = -1,
-            day =
-                -1;  // assigned to non-realized value to make any error crash.
+        // assigned to non-realized value to make any error crash.
+        int64_t year = -1;
+        int64_t month = -1;
+        int64_t day = -1;
         get_date_from_days(val, &year, &month, &day);
         out_data[i] = (year << 32) + (month << 16) + day;
     }
@@ -90,43 +89,44 @@ inline void copy_data_dt32(uint64_t* out_data, const int32_t* buff,
 
 bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
                          Bodo_CTypes::CTypeEnum pq_type) {
-    if (arrow_type->id() == Type::BOOL && pq_type == Bodo_CTypes::_BOOL)
-        return true;
-    if (arrow_type->id() == Type::UINT8 && pq_type == Bodo_CTypes::UINT8)
-        return true;
-    if (arrow_type->id() == Type::INT8 && pq_type == Bodo_CTypes::INT8)
-        return true;
-    if (arrow_type->id() == Type::UINT16 && pq_type == Bodo_CTypes::UINT16)
-        return true;
-    if (arrow_type->id() == Type::INT16 && pq_type == Bodo_CTypes::INT16)
-        return true;
-    if (arrow_type->id() == Type::UINT32 && pq_type == Bodo_CTypes::UINT32)
-        return true;
-    if (arrow_type->id() == Type::INT32 && pq_type == Bodo_CTypes::INT32)
-        return true;
-    if (arrow_type->id() == Type::UINT64 && pq_type == Bodo_CTypes::UINT64)
-        return true;
-    if (arrow_type->id() == Type::INT64 && pq_type == Bodo_CTypes::INT64)
-        return true;
-    if (arrow_type->id() == Type::FLOAT && pq_type == Bodo_CTypes::FLOAT32)
-        return true;
-    if (arrow_type->id() == Type::DOUBLE && pq_type == Bodo_CTypes::FLOAT64)
-        return true;
-    if (arrow_type->id() == Type::DECIMAL && pq_type == Bodo_CTypes::DECIMAL)
-        return true;
-    if (arrow_type->id() == Type::STRING && pq_type == Bodo_CTypes::STRING)
-        return true;
-    if (arrow_type->id() == Type::LARGE_STRING &&
-        pq_type == Bodo_CTypes::STRING)
-        return true;
-    if (arrow_type->id() == Type::BINARY && pq_type == Bodo_CTypes::BINARY)
-        return true;
-    // TODO: add timestamp[ns]
-
-    // Dictionary array's codes are always read into proper integer array type,
-    // so buffer data types are the same
-    if (arrow_type->id() == Type::DICTIONARY)
-        return true;
+    switch (arrow_type->id()) {
+        case Type::BOOL:
+            return pq_type == Bodo_CTypes::_BOOL;
+        case Type::UINT8:
+            return pq_type == Bodo_CTypes::UINT8;
+        case Type::INT8:
+            return pq_type == Bodo_CTypes::INT8;
+        case Type::UINT16:
+            return pq_type == Bodo_CTypes::UINT16;
+        case Type::INT16:
+            return pq_type == Bodo_CTypes::INT16;
+        case Type::UINT32:
+            return pq_type == Bodo_CTypes::UINT32;
+        case Type::INT32:
+            return pq_type == Bodo_CTypes::INT32;
+        case Type::UINT64:
+            return pq_type == Bodo_CTypes::UINT64;
+        case Type::INT64:
+            return pq_type == Bodo_CTypes::INT64;
+        case Type::FLOAT:
+            return pq_type == Bodo_CTypes::FLOAT32;
+        case Type::DOUBLE:
+            return pq_type == Bodo_CTypes::FLOAT64;
+        case Type::DECIMAL:
+            return pq_type == Bodo_CTypes::DECIMAL;
+        case Type::STRING:
+        case Type::LARGE_STRING:
+            return pq_type == Bodo_CTypes::STRING;
+        case Type::BINARY:
+            return pq_type == Bodo_CTypes::BINARY;
+        case Type::DICTIONARY:
+            // Dictionary array's codes are always read into proper integer
+            // array type, so buffer data types are the same
+            return true;
+        default:
+            // TODO: add timestamp[ns]
+            return false;
+    }
     return false;
 }
 
@@ -356,41 +356,58 @@ inline void copy_nulls_categorical(uint8_t* out_data,
 class PrimitiveBuilder : public TableBuilder::BuilderColumn {
    public:
     /**
-     * @param type : Arrow type of input array
+     * @param dtype : Bodo type of input array
      * @param length : final output length on this process
      * @param is_nullable : true if array is nullable
      * @param is_categorical : true if column is categorical
      */
-    PrimitiveBuilder(std::shared_ptr<arrow::DataType> type, int64_t length,
-                     bool is_nullable, bool is_categorical)
-        : is_nullable(is_nullable), is_categorical(is_categorical) {
-        Bodo_CTypes::CTypeEnum dtype = arrow_to_bodo_type(type->id());
-        if (is_nullable) {
-            out_array =
-                alloc_array(length, -1, -1, bodo_array_type::NULLABLE_INT_BOOL,
-                            dtype, 0, -1);
-        } else {
-            out_array = alloc_array(length, -1, -1, bodo_array_type::NUMPY,
-                                    dtype, 0, -1);
-        }
-        dtype_size = numpy_item_size[out_array->dtype];
-    }
-
     PrimitiveBuilder(Bodo_CTypes::CTypeEnum dtype, int64_t length,
                      bool is_nullable, bool is_categorical)
-        : is_nullable(is_nullable), is_categorical(is_categorical) {
-        if (is_nullable) {
-            out_array =
-                alloc_array(length, -1, -1, bodo_array_type::NULLABLE_INT_BOOL,
-                            dtype, 0, -1);
-        } else {
-            out_array = alloc_array(length, -1, -1, bodo_array_type::NUMPY,
-                                    dtype, 0, -1);
+        : is_nullable(is_nullable),
+          is_categorical(is_categorical),
+          dtype(dtype) {
+        if (is_nullable && !is_categorical) {
+            switch (dtype) {
+                case Bodo_CTypes::FLOAT64:
+                case Bodo_CTypes::FLOAT32:
+                case Bodo_CTypes::UINT64:
+                case Bodo_CTypes::INT64:
+                case Bodo_CTypes::UINT32:
+                case Bodo_CTypes::INT32:
+                case Bodo_CTypes::UINT16:
+                case Bodo_CTypes::INT16:
+                case Bodo_CTypes::UINT8:
+                case Bodo_CTypes::INT8:
+                    return;
+                default:
+                    // Fallthrough for unsupported zero-copy cases
+                    // TODO support date, datetime, timestamp types
+                    ;
+            }
         }
-        dtype_size = numpy_item_size[out_array->dtype];
+        // Only used in fallback if zero-copy is not supported
+        temp_zero_copy_fallback = true;
+        bodo_array_type::arr_type_enum out_array_type =
+            is_nullable ? bodo_array_type::NULLABLE_INT_BOOL
+                        : bodo_array_type::NUMPY;
+        out_array = alloc_array(length, -1, -1, out_array_type, dtype, 0, -1);
     }
 
-    virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
+    PrimitiveBuilder(std::shared_ptr<arrow::DataType> type, int64_t length,
+                     bool is_nullable, bool is_categorical)
+        : PrimitiveBuilder(arrow_to_bodo_type(type->id()), length, is_nullable,
+                           is_categorical) {}
+
+    virtual void append(std::shared_ptr<arrow::ChunkedArray> chunked_arr) {
+        if (!temp_zero_copy_fallback) {
+            // Accumulate chunked_arr's in an ArrayVector. Concatenate in Arrow
+            // and convert to Bodo with zero-copy in get_output
+            arrays.insert(arrays.end(), chunked_arr->chunks().begin(),
+                          chunked_arr->chunks().end());
+            return;
+        }
+
+        // Fallback if zero-copy is not supported
         std::shared_ptr<arrow::DataType> arrow_type = chunked_arr->type();
 
         for (int64_t i = 0; i < chunked_arr->num_chunks(); i++) {
@@ -416,6 +433,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
             const uint8_t* null_bitmap_buff =
                 arr->null_count() == 0 ? nullptr : arr->null_bitmap_data();
 
+            int dtype_size = numpy_item_size[dtype];
             uint8_t* data_ptr = reinterpret_cast<uint8_t*>(out_array->data1());
             copy_data(data_ptr, buff, in_offset, in_length, arrow_type,
                       null_bitmap_buff, out_array->arr_type, out_array->dtype,
@@ -439,11 +457,31 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         }
     }
 
+    virtual array_info* get_output() {
+        if (out_array == nullptr && !temp_zero_copy_fallback) {
+            if (arrays.empty()) {
+                // Avoid empty call to concatenate
+                out_array = is_nullable ? alloc_nullable_array(0, dtype)
+                                        : alloc_numpy(0, dtype);
+                return out_array;
+            }
+            arrow::Result<std::shared_ptr<arrow::Array>> res =
+                arrow::Concatenate(arrays, arrow::default_memory_pool());
+            std::shared_ptr<arrow::Array> concat_res;
+            CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
+            out_array = arrow_array_to_bodo(concat_res);
+        }
+        return out_array;
+    }
+
    private:
     const bool is_nullable;
     const bool is_categorical;
-    int dtype_size;  // sizeof dtype
+    Bodo_CTypes::CTypeEnum dtype;
     size_t cur_offset = 0;
+    // TODO remove fallback once zero-copy is supported everywhere
+    bool temp_zero_copy_fallback = false;
+    arrow::ArrayVector arrays;
 };
 
 /// Column builder for string arrays
