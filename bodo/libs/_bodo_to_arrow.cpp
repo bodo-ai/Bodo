@@ -744,8 +744,7 @@ array_info *arrow_list_array_to_bodo(
     }
 
     return new array_info(array_type, dtype, n,
-                          {offset_meminfo, null_bitmap_meminfo},
-                          {inner_arr});
+                          {offset_meminfo, null_bitmap_meminfo}, {inner_arr});
 }
 
 /**
@@ -776,10 +775,10 @@ array_info *arrow_decimal_array_to_bodo(
     int32_t precision = dtype->precision();
     int32_t scale = dtype->scale();
 
-    return new array_info(
-        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::DECIMAL, n,
-        {data_buf_meminfo, null_bitmap_meminfo}, {}, NULL,
-        precision, scale, 0, false, false, false);
+    return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
+                          Bodo_CTypes::DECIMAL, n,
+                          {data_buf_meminfo, null_bitmap_meminfo}, {}, NULL,
+                          precision, scale, 0, false, false, false);
 }
 
 /**
@@ -804,6 +803,49 @@ array_info *arrow_numeric_array_to_bodo(std::shared_ptr<T> arrow_num_arr,
                              (void *)arrow_num_arr->raw_values(), n, typ_enum);
 
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL, typ_enum, n,
+                          {data_buf_meminfo, null_bitmap_meminfo});
+}
+
+/**
+ * @brief Convert Arrow boolean array to Bodo array_info with zero-copy
+ * The output Bodo array holds references to the Arrow array's buffers and
+ * releases them when deleted.
+ *
+ * @param arrow_num_arr Input Arrow BooleanArray
+ * @return array_info* Output Bodo array
+ */
+array_info *arrow_boolean_array_to_bodo(
+    std::shared_ptr<arrow::BooleanArray> arrow_bool_arr) {
+    int64_t n_bits = arrow_bool_arr->length();
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_bits);
+
+    NRT_MemInfo *null_bitmap_meminfo =
+        arrow_null_bitmap_to_bodo(arrow_bool_arr->null_bitmap(),
+                                  arrow_bool_arr->null_bitmap_data(), n_bits);
+
+    // As BooleanArray does not expose the raw_values ptr, we cannot easily
+    // copy the underlying boolean array starting from the offset. If offset
+    // is zero, we cast to UInt8Array as a hack to access the buffer, otherwise
+    // we avoid zero-copy.
+    int64_t offset_bits = arrow_bool_arr->offset();
+    NRT_MemInfo *data_buf_meminfo;
+    if (offset_bits == 0) {
+        arrow::UInt8Array *arrow_uint8_arr =
+            reinterpret_cast<arrow::UInt8Array *>(arrow_bool_arr.get());
+        data_buf_meminfo = arrow_buffer_to_bodo(
+            arrow_bool_arr->values(), (void *)arrow_uint8_arr->raw_values(),
+            n_bytes, Bodo_CTypes::UINT8);
+    } else {
+        int64_t itemsize = numpy_item_size[Bodo_CTypes::UINT8];
+        int64_t size = n_bytes * itemsize;
+        data_buf_meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
+        uint8_t *data_buf = (uint8_t *)data_buf_meminfo->data;
+        for (int64_t i_bit = 0; i_bit < n_bits; i_bit++) {
+            SetBitTo(data_buf, i_bit, arrow_bool_arr->Value(i_bit));
+        }
+    }
+    return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
+                          Bodo_CTypes::_BOOL, n_bits,
                           {data_buf_meminfo, null_bitmap_meminfo});
 }
 
@@ -905,6 +947,9 @@ array_info *arrow_array_to_bodo(std::shared_ptr<arrow::Array> arrow_arr) {
             return arrow_numeric_array_to_bodo<arrow::FloatArray>(
                 std::static_pointer_cast<arrow::FloatArray>(arrow_arr),
                 Bodo_CTypes::FLOAT32);
+        case arrow::Type::BOOL:
+            return arrow_boolean_array_to_bodo(
+                std::static_pointer_cast<arrow::BooleanArray>(arrow_arr));
         case arrow::Type::UINT64:
             return arrow_numeric_array_to_bodo<arrow::UInt64Array>(
                 std::static_pointer_cast<arrow::UInt64Array>(arrow_arr),
