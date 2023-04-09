@@ -370,6 +370,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
             switch (dtype) {
                 case Bodo_CTypes::FLOAT64:
                 case Bodo_CTypes::FLOAT32:
+                case Bodo_CTypes::_BOOL:
                 case Bodo_CTypes::UINT64:
                 case Bodo_CTypes::INT64:
                 case Bodo_CTypes::UINT32:
