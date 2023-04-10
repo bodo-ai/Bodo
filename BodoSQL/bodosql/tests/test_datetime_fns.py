@@ -813,10 +813,12 @@ def python_mysql_dt_format_strings(request):
     return request.param
 
 
-def test_date_format(
-    spark_info, dt_fn_dataframe, python_mysql_dt_format_strings, memory_leak_check
+def test_date_format_timestamp(
+    dt_fn_dataframe, python_mysql_dt_format_strings, memory_leak_check
 ):
-    """tests the date format function"""
+    """
+    tests the date format function with timestamp inputs
+    """
 
     mysql_format_str = python_mysql_dt_format_strings[0]
     python_format_str = python_mysql_dt_format_strings[1]
@@ -824,7 +826,7 @@ def test_date_format(
     query = f"SELECT DATE_FORMAT(timestamps, '{mysql_format_str}') from table1"
     expected_output = pd.DataFrame(
         {
-            "unkown_name": dt_fn_dataframe["table1"]["timestamps"].dt.strftime(
+            "output": dt_fn_dataframe["table1"]["timestamps"].dt.strftime(
                 python_format_str
             )
         }
@@ -832,7 +834,36 @@ def test_date_format(
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
+
+
+def test_date_format_date(date_df, python_mysql_dt_format_strings, memory_leak_check):
+    """
+    tests the date format function with date inputs
+    """
+
+    mysql_format_str = python_mysql_dt_format_strings[0]
+    python_format_str = python_mysql_dt_format_strings[1]
+
+    query = f"SELECT DATE_FORMAT(A, '{mysql_format_str}') from table1"
+    expected_output = pd.DataFrame(
+        {
+            "output": pd.Series(
+                [
+                    None if date is None else date.strftime(python_format_str)
+                    for date in date_df["table1"]["A"]
+                ]
+            )
+        }
+    )
+    check_query(
+        query,
+        date_df,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=expected_output,
