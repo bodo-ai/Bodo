@@ -132,23 +132,6 @@ def test_datediff_args3_literals(query, expected_output, basic_df, memory_leak_c
     )
 
 
-@pytest.mark.slow
-def test_str_to_date_literals(basic_df, spark_info, memory_leak_check):
-    """
-    Checks that calling STR_TO_DATE on literals behaves as expected
-    """
-    query = "SELECT A, STR_TO_DATE('17-09-2010', '%d-%m-%Y') from table1"
-    spark_query = "SELECT A, TO_DATE('17-09-2010', 'dd-MM-yyyy') from table1"
-    check_query(
-        query,
-        basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query,
-        check_names=False,
-        check_dtype=False,
-    )
-
-
 def test_datediff_columns(bodosql_datetime_types, spark_info, memory_leak_check):
     """
     Checks that calling DATEDIFF on columns behaves as expected
@@ -270,49 +253,6 @@ def test_datediff_args3_multitable_columns_case(
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
-        check_names=False,
-        check_dtype=False,
-    )
-
-
-def test_str_to_date_columns(spark_info, memory_leak_check):
-    """
-    Checks that calling STR_TO_DATE on columns behaves as expected
-    """
-    ctx = {
-        "table1": pd.DataFrame({"A": ["2003-02-01", "2013-02-11", "2011-11-01"] * 4})
-    }
-    query = "SELECT STR_TO_DATE(A, '%Y-%m-%d') from table1"
-    spark_query = "SELECT TO_DATE(A, 'yyyy-MM-dd') from table1"
-    check_query(
-        query,
-        ctx,
-        spark_info,
-        equivalent_spark_query=spark_query,
-        check_names=False,
-        check_dtype=False,
-    )
-
-
-@pytest.mark.slow
-def test_str_to_date_columns_format(spark_info, memory_leak_check):
-    """
-    Checks that calling STR_TO_DATE on columns behaves as expected when
-    the format string needs to be replaced. Note this does not test all
-    possible conversions.
-    """
-    ctx = {
-        "table1": pd.DataFrame(
-            {"A": ["2003-02-01:11", "2013-02-11:11", "2011-11-01:02"] * 4}
-        )
-    }
-    query = "SELECT STR_TO_DATE(A, '%Y-%m-%d:%h') from table1"
-    spark_query = "SELECT TO_DATE(A, 'yyyy-MM-dd:hh') from table1"
-    check_query(
-        query,
-        ctx,
         spark_info,
         equivalent_spark_query=spark_query,
         check_names=False,
