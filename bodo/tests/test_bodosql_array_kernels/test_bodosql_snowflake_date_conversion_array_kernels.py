@@ -8,7 +8,7 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
-from bodo.tests.utils import check_func
+from bodo.tests.utils import bodosql_use_date_type, check_func
 
 
 @pytest.fixture(
@@ -93,13 +93,84 @@ def valid_to_date_integers_for_strings(request):
     ]
 )
 def invalid_to_date_args(request):
-    """set of arguments which cause NA in try_to_date, and throw an error for to_date"""
+    """set of arguments which cause NA in try_to_date, and throw an error for date/to_date"""
     return request.param
 
 
-# TODO: support format string, https://bodo.atlassian.net/browse/BE-3614
-@pytest.fixture(params=[("2022___02____18___", "yyyy___mm____dd___")])
+@pytest.fixture(
+    params=[
+        ("2022-02-18", "yyyy-mm-dd"),
+        ("03/23/2023", "mm/dd/yyyy"),
+        ("//23/03/2023//", "//dd/mm/yyyy//"),
+        (
+            pd.Series(
+                [
+                    "Mon-15-May-2000",
+                    "Tue-06-Mar-1990",
+                    None,
+                    "Wed-04-Jun-2019",
+                    "Thu-30-Oct-2021",
+                ]
+                * 4
+            ),
+            "dy-dd-mon-yyyy",
+        ),
+        (
+            pd.Series(
+                [
+                    "00*15*May",
+                    "90*06*March",
+                    None,
+                    "19*04*June",
+                    "21*30*October",
+                ]
+                * 4
+            ),
+            "yy*dd*mmmm",
+        ),
+    ]
+)
 def valid_to_date_strings_with_format_str(request):
+    """
+    See https://docs.snowflake.com/en/sql-reference/functions-conversion.html#label-date-time-format-conversion
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        ("02-18-2022", "yyyy-mm-dd"),
+        ("03/23/2023", "mmmm/dd/yyyy"),
+        ("//23/03/2023//", "yy*dd*mon"),
+        (
+            pd.Series(
+                [
+                    "2000-May-2000",
+                    "1990-Mar-1990",
+                    None,
+                    "2019-Jun-2019",
+                    "2021-Oct-2021",
+                ]
+                * 4
+            ),
+            "dd-mon-yyyy",
+        ),
+        (
+            pd.Series(
+                [
+                    "00*15*May",
+                    "90*06*Mar",
+                    None,
+                    "19*04*Jun",
+                    "21*30*Oct",
+                ]
+                * 4
+            ),
+            "//dd/mm/yyyy//",
+        ),
+    ]
+)
+def invalid_to_date_strings_with_format_str(request):
     """
     See https://docs.snowflake.com/en/sql-reference/functions-conversion.html#label-date-time-format-conversion
     """
@@ -142,9 +213,13 @@ def to_date_td_vals(request):
 
 
 @pytest.fixture(
-    params=[pytest.param(True, id="try_to_date"), pytest.param(False, id="to_date")]
+    params=[
+        pytest.param("DATE", id="date"),
+        pytest.param("TRY_TO_DATE", id="try_to_date"),
+        pytest.param("TO_DATE", id="to_date"),
+    ]
 )
-def test_try(request):
+def test_fn(request):
     return request.param
 
 
@@ -153,7 +228,7 @@ def scalar_to_date_equiv_fn(val, formatstr=None, tz=None, scale=0):
     result = scalar_to_date_equiv_fn_inner(val, formatstr, scale)
     if result is None:
         return None
-    return result.tz_localize(None).tz_localize(tz)
+    return result.tz_localize(None).tz_localize(tz).date()
 
 
 def scalar_to_date_equiv_fn_inner(val, formatstr=None, scale=0):
@@ -163,7 +238,7 @@ def scalar_to_date_equiv_fn_inner(val, formatstr=None, scale=0):
     elif not pd.isna(formatstr):
         tmp_val = pd.to_datetime(
             val,
-            format=convert_sql_date_format_str_to_py_format(formatstr),
+            format=convert_snowflake_date_format_str_to_py_format(formatstr),
             errors="coerce",
         ).floor(freq="D")
         if not pd.isna(tmp_val):
@@ -197,11 +272,14 @@ def scalar_to_date_equiv_fn_inner(val, formatstr=None, scale=0):
     ],
 )
 def test_to_date_valid_strings(
-    valid_to_date_strings, test_try, use_dict_enc, memory_leak_check
+    valid_to_date_strings, test_fn, use_dict_enc, memory_leak_check
 ):
 
     if not use_dict_enc:
         return
+
+    def date_impl(val):
+        return bodo.libs.bodosql_array_kernels.date(val, None)
 
     def to_date_impl(val):
         return bodo.libs.bodosql_array_kernels.to_date(val, None)
@@ -214,28 +292,35 @@ def test_to_date_valid_strings(
     if isinstance(to_date_sol, pd.Series):
         to_date_sol = to_date_sol.to_numpy()
 
-    if test_try:
-        check_func(
-            try_to_date_impl,
-            valid_to_date_strings,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-            use_dict_encoded_strings=use_dict_enc,
-        )
-    else:
-        check_func(
-            to_date_impl,
-            valid_to_date_strings,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-            use_dict_encoded_strings=use_dict_enc,
-        )
+    with bodosql_use_date_type():
+        if test_fn == "TRY_TO_DATE":
+            check_func(
+                try_to_date_impl,
+                valid_to_date_strings,
+                py_output=to_date_sol,
+                sort_output=False,
+                use_dict_encoded_strings=use_dict_enc,
+            )
+        elif test_fn == "TO_DATE":
+            check_func(
+                to_date_impl,
+                valid_to_date_strings,
+                py_output=to_date_sol,
+                sort_output=False,
+                use_dict_encoded_strings=use_dict_enc,
+            )
+        else:
+            check_func(
+                date_impl,
+                valid_to_date_strings,
+                py_output=to_date_sol,
+                sort_output=False,
+                use_dict_encoded_strings=use_dict_enc,
+            )
 
 
 def test_to_date_valid_digit_strings(
-    valid_to_date_integers_for_strings, test_try, memory_leak_check
+    valid_to_date_integers_for_strings, test_fn, memory_leak_check
 ):
 
     if isinstance(valid_to_date_integers_for_strings[0], int):
@@ -245,6 +330,9 @@ def test_to_date_valid_digit_strings(
         # Cast to str doesn't preserve null values, so need to re-add them
         tmp_val[pd.isna(valid_to_date_integers_for_strings[0])] = None
         valid_digit_strs = (tmp_val,)
+
+    def date_impl(val):
+        return bodo.libs.bodosql_array_kernels.date(val, None)
 
     def to_date_impl(val):
         return bodo.libs.bodosql_array_kernels.to_date(val, None)
@@ -257,25 +345,34 @@ def test_to_date_valid_digit_strings(
     if isinstance(to_date_sol, pd.Series):
         to_date_sol = to_date_sol.to_numpy()
 
-    if test_try:
-        check_func(
-            try_to_date_impl,
-            valid_digit_strs,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-        )
-    else:
-        check_func(
-            to_date_impl,
-            valid_digit_strs,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-        )
+    with bodosql_use_date_type():
+        if test_fn == "TRY_TO_DATE":
+            check_func(
+                try_to_date_impl,
+                valid_digit_strs,
+                py_output=to_date_sol,
+                sort_output=False,
+            )
+        elif test_fn == "TO_DATE":
+            check_func(
+                to_date_impl,
+                valid_digit_strs,
+                py_output=to_date_sol,
+                sort_output=False,
+            )
+        else:
+            check_func(
+                date_impl,
+                valid_digit_strs,
+                py_output=to_date_sol,
+                sort_output=False,
+            )
 
 
-def test_to_date_valid_datetime_types(to_date_td_vals, test_try, memory_leak_check):
+def test_to_date_valid_datetime_types(to_date_td_vals, test_fn, memory_leak_check):
+    def date_impl(val):
+        return bodo.libs.bodosql_array_kernels.date(val, None)
+
     def to_date_impl(val):
         return pd.Series(bodo.libs.bodosql_array_kernels.to_date(val, None))
 
@@ -284,30 +381,43 @@ def test_to_date_valid_datetime_types(to_date_td_vals, test_try, memory_leak_che
 
     to_date_sol = vectorized_sol(to_date_td_vals, scalar_to_date_equiv_fn, None)
 
-    if test_try:
-        check_func(
-            try_to_date_impl,
-            to_date_td_vals,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-        )
-    else:
-        check_func(
-            to_date_impl,
-            to_date_td_vals,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-        )
+    if isinstance(to_date_sol, pd.Series):
+        to_date_sol = to_date_sol.to_numpy()
+
+    with bodosql_use_date_type():
+        if test_fn == "TRY_TO_DATE":
+            check_func(
+                try_to_date_impl,
+                to_date_td_vals,
+                py_output=to_date_sol,
+                sort_output=False,
+            )
+        elif test_fn == "TO_DATE":
+            check_func(
+                to_date_impl,
+                to_date_td_vals,
+                py_output=to_date_sol,
+                sort_output=False,
+            )
+        else:
+            check_func(
+                date_impl,
+                to_date_td_vals,
+                py_output=to_date_sol,
+                sort_output=False,
+            )
 
 
-@pytest.mark.skip(
-    "TODO: support format string, https://bodo.atlassian.net/browse/BE-3614"
-)
 def test_to_date_valid_strings_with_format(
-    valid_to_date_strings_with_format_str, test_try, memory_leak_check
+    valid_to_date_strings_with_format_str, test_fn, memory_leak_check
 ):
+    """
+    Tests date/to_date/try_to_date kernels with valid format strings
+    """
+
+    def date_impl(val, format):
+        return bodo.libs.bodosql_array_kernels.date(val, format)
+
     def to_date_impl(val, format):
         return bodo.libs.bodosql_array_kernels.to_date(val, format)
 
@@ -321,28 +431,87 @@ def test_to_date_valid_strings_with_format(
     if isinstance(to_date_sol, pd.Series):
         to_date_sol = to_date_sol.to_numpy()
 
-    if test_try:
-        check_func(
-            try_to_date_impl,
-            valid_to_date_strings_with_format_str,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-        )
-    else:
-        check_func(
-            to_date_impl,
-            valid_to_date_strings_with_format_str,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-        )
+    with bodosql_use_date_type():
+        if test_fn == "TRY_TO_DATE":
+            check_func(
+                try_to_date_impl,
+                valid_to_date_strings_with_format_str,
+                py_output=to_date_sol,
+                check_dtype=False,
+                sort_output=False,
+            )
+        elif test_fn == "TO_DATE":
+            check_func(
+                to_date_impl,
+                valid_to_date_strings_with_format_str,
+                py_output=to_date_sol,
+                check_dtype=False,
+                sort_output=False,
+            )
+        else:
+            check_func(
+                date_impl,
+                valid_to_date_strings_with_format_str,
+                py_output=to_date_sol,
+                check_dtype=False,
+                sort_output=False,
+            )
 
 
-def test_invalid_to_date_args(invalid_to_date_args, test_try):
-    """set of arguments which cause NA in try_to_date, and throw an error for to_date"""
+def test_to_date_invalid_strings_with_format(
+    invalid_to_date_strings_with_format_str, test_fn
+):
+    """
+    Tests date/to_date/try_to_date kernels with invalid format strings
+    """
 
-    @bodo.jit
+    def date_impl(val, format):
+        return bodo.libs.bodosql_array_kernels.date(val, format)
+
+    def to_date_impl(val, format):
+        return bodo.libs.bodosql_array_kernels.to_date(val, format)
+
+    def try_to_date_impl(val, format):
+        return bodo.libs.bodosql_array_kernels.try_to_date(val, format)
+
+    to_date_sol = vectorized_sol(
+        invalid_to_date_strings_with_format_str, scalar_to_date_equiv_fn, None
+    )
+
+    if isinstance(to_date_sol, pd.Series):
+        to_date_sol = to_date_sol.to_numpy()
+
+    with bodosql_use_date_type():
+        if test_fn == "TRY_TO_DATE":
+            check_func(
+                try_to_date_impl,
+                invalid_to_date_strings_with_format_str,
+                py_output=to_date_sol,
+            )
+        elif test_fn == "TO_DATE":
+            msg = "Invalid input while converting to date value"
+            with pytest.raises(ValueError, match=msg):
+                check_func(
+                    to_date_impl,
+                    invalid_to_date_strings_with_format_str,
+                    py_output=to_date_sol,
+                )
+        else:
+            msg = "Invalid input while converting to date value"
+            with pytest.raises(ValueError, match=msg):
+                check_func(
+                    date_impl,
+                    invalid_to_date_strings_with_format_str,
+                    py_output=to_date_sol,
+                )
+
+
+def test_invalid_to_date_args(invalid_to_date_args, test_fn):
+    """set of arguments which cause NA in try_to_date, and throw an error for date/to_date"""
+
+    def date_impl(val):
+        return bodo.libs.bodosql_array_kernels.date(val, None)
+
     def to_date_impl(val):
         return bodo.libs.bodosql_array_kernels.to_date(val, None)
 
@@ -354,18 +523,29 @@ def test_invalid_to_date_args(invalid_to_date_args, test_try):
     if isinstance(to_date_sol, pd.Series):
         to_date_sol = to_date_sol.to_numpy()
 
-    if test_try:
-        check_func(
-            try_to_date_impl,
-            invalid_to_date_args,
-            py_output=to_date_sol,
-            check_dtype=False,
-            sort_output=False,
-        )
-    else:
-        msg = "Invalid input while converting to date value"
-        with pytest.raises(ValueError, match=msg):
-            to_date_impl(invalid_to_date_args[0])
+    with bodosql_use_date_type():
+        if test_fn == "TRY_TO_DATE":
+            check_func(
+                try_to_date_impl,
+                invalid_to_date_args,
+                py_output=to_date_sol,
+            )
+        elif test_fn == "TO_DATE":
+            msg = "Invalid input while converting to date value"
+            with pytest.raises(ValueError, match=msg):
+                check_func(
+                    to_date_impl,
+                    invalid_to_date_args,
+                    py_output=to_date_sol,
+                )
+        else:
+            msg = "Invalid input while converting to date value"
+            with pytest.raises(ValueError, match=msg):
+                check_func(
+                    date_impl,
+                    invalid_to_date_args,
+                    py_output=to_date_sol,
+                )
 
 
 @pytest.mark.slow

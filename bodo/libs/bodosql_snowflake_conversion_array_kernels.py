@@ -116,6 +116,10 @@ def to_boolean_util(arr, _try=False):
     )
 
 
+def date(conversionVal, format_str):  # pragma: no cover
+    return
+
+
 def to_date(conversionVal, format_str):  # pragma: no cover
     return
 
@@ -128,6 +132,10 @@ def to_timestamp(conversionVal, format_str, time_zone, scale):  # pragma: no cov
     return
 
 
+def date_util(conversionVal, format_str):  # pragma: no cover
+    return
+
+
 def to_date_util(conversionVal, format_str):  # pragma: no cover
     return
 
@@ -137,7 +145,7 @@ def try_to_date_util(conversionVal, format_str):  # pragma: no cover
 
 
 def create_date_cast_util(func, error_on_fail):
-    """Creates an overload for a dedicated kernel for TO_DATE/TRY_TO_DATE
+    """Creates an overload for a dedicated kernel for DATE/TO_DATE/TRY_TO_DATE
     Takes in 2 arguments: the name of the kernel being created and whether it should
     have an error when it has a failure (as opposed to outputting null),
 
@@ -171,9 +179,8 @@ def create_date_cast_util(func, error_on_fail):
         if not is_overload_none(format_str):
             verify_string_arg(conversionVal, func, "conversionVal")
             scalar_text = (
-                "py_format_str = convert_sql_date_format_str_to_py_format(arg1)\n"
+                "was_successful, tmp_val = to_date_error_checked(arg0, arg1)\n"
             )
-            scalar_text += "was_successful, tmp_val = pd_to_datetime_error_checked(arg0, format=py_format_str)\n"
             scalar_text += "if not was_successful:\n"
             scalar_text += f"  {error_str}\n"
             scalar_text += "else:\n"
@@ -237,9 +244,8 @@ def create_date_cast_util(func, error_on_fail):
         )
 
         extra_globals = {
+            "to_date_error_checked": to_date_error_checked,
             "pd_to_datetime_error_checked": pd_to_datetime_error_checked,
-            "number_to_datetime": number_to_datetime,
-            "convert_sql_date_format_str_to_py_format": convert_sql_date_format_str_to_py_format,
             "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
         }
         return gen_vectorized(
@@ -255,7 +261,7 @@ def create_date_cast_util(func, error_on_fail):
 
 
 def create_date_cast_func(func_name):
-    """Takes in a function name (either TO_DATE or TRY_TO_DATE) and generates
+    """Takes in a function name (either DATE, TO_DATE or TRY_TO_DATE) and generates
     the wrapper function for the corresponding kernel.
     """
 
@@ -283,6 +289,7 @@ def create_date_cast_func(func_name):
 
 def _install_date_cast_overloads():
     date_cast_fns = [
+        ("DATE", date, date_util, True),
         ("TO_DATE", to_date, to_date_util, True),
         ("TRY_TO_DATE", try_to_date, try_to_date_util, False),
     ]
@@ -393,7 +400,7 @@ def create_timestamp_cast_util(func, error_on_fail):
         if not is_overload_none(format_str):
             verify_string_arg(conversionVal, func, "conversionVal")
             scalar_text = (
-                "py_format_str = convert_sql_date_format_str_to_py_format(arg1)\n"
+                "py_format_str = convert_snowflake_date_format_str_to_py_format(arg1)\n"
             )
             scalar_text += "was_successful, tmp_val = pd_to_datetime_error_checked(arg0, format=py_format_str)\n"
             scalar_text += "if not was_successful:\n"
@@ -456,7 +463,7 @@ def create_timestamp_cast_util(func, error_on_fail):
         extra_globals = {
             "pd_to_datetime_error_checked": pd_to_datetime_error_checked,
             "number_to_datetime": number_to_datetime,
-            "convert_sql_date_format_str_to_py_format": convert_sql_date_format_str_to_py_format,
+            "convert_snowflake_date_format_str_to_py_format": convert_snowflake_date_format_str_to_py_format,
             "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
         }
         return gen_vectorized(
@@ -852,17 +859,78 @@ def to_double_util(val, optional_format_string, _try=False):
 
 
 @register_jitable
-def convert_sql_date_format_str_to_py_format(val):  # pragma: no cover
+def convert_snowflake_date_format_str_to_py_format(val):  # pragma: no cover
     """Helper fn for the TO_DATE/TO_TIMESTAMP fns. This fn takes a format string
     in SQL syntax, and converts it to the python syntax.
-    SQL syntax reference: https://docs.snowflake.com/en/sql-reference/functions-conversion.html#label-date-time-format-conversion
+    Snowflake syntax reference: https://docs.snowflake.com/en/user-guide/date-time-input-output
     Python syntax reference: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior
+    Snowflake allows for arbitrary format strings with patterns YYYY, YY, MMMM, MM, MON, DD, DY
     """
 
-    # TODO: https://bodo.atlassian.net/browse/BE-3614
-    raise RuntimeError(
-        "Converting to date/timestamp values with format strings not currently supported"
-    )
+    format_str = val.upper()
+    year = False
+    month = False
+    day = False
+    day_of_week = False
+    py_format = ""
+    i = 0
+    n = len(format_str)
+    while i < n:
+        if i + 4 <= n and format_str[i : i + 4] == "YYYY":
+            if year:
+                return ""
+            else:
+                year = True
+                py_format += "%Y"
+                i += 4
+        elif i + 2 <= n and format_str[i : i + 2] == "YY":
+            if year:
+                return ""
+            else:
+                year = True
+                py_format += "%y"
+                i += 2
+        elif i + 4 <= n and format_str[i : i + 4] == "MMMM":
+            if month:
+                return ""
+            else:
+                month = True
+                py_format += "%B"
+                i += 4
+        elif i + 2 <= n and format_str[i : i + 2] == "MM":
+            if month:
+                return ""
+            else:
+                month = True
+                py_format += "%m"
+                i += 2
+        elif i + 3 <= n and format_str[i : i + 3] == "MON":
+            if month:
+                return ""
+            else:
+                month = True
+                py_format += "%b"
+                i += 3
+        elif i + 2 <= n and format_str[i : i + 2] == "DD":
+            if day:
+                return ""
+            else:
+                day = True
+                py_format += "%d"
+                i += 2
+        elif i + 2 <= n and format_str[i : i + 2] == "DY":
+            if day_of_week:
+                return ""
+            else:
+                day_of_week = True
+                py_format += "%a"
+                i += 2
+        else:
+            py_format += format_str[i]
+            i += 1
+    if not (year and month and day):
+        return ""
+    return py_format
 
 
 @numba.generated_jit(nopython=True)
@@ -960,6 +1028,32 @@ def pd_to_datetime_error_checked(
             infer_datetime_format=infer_datetime_format,
             origin=origin,
             cache=cache,
+        )
+        if pd.isna(tmp):
+            success_flag = False
+        else:
+            ret_val = tmp
+
+    return (success_flag, ret_val)
+
+
+@register_jitable
+def to_date_error_checked(val, format):  # pragma: no cover
+    """
+    Helper function to convert a date string with format string to a datetime.date object
+    """
+
+    py_format = convert_snowflake_date_format_str_to_py_format(format)
+    if py_format == "":
+        return (False, None)
+    with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
+        success_flag = True
+        ret_val = pd.Timestamp(0)
+
+        tmp = pd.to_datetime(
+            val,
+            errors="coerce",
+            format=py_format,
         )
         if pd.isna(tmp):
             success_flag = False

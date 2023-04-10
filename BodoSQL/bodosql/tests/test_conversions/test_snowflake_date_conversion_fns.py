@@ -38,90 +38,79 @@ def invalid_to_date_args(request):
 
 @pytest.fixture(
     params=[
+        pytest.param("DATE", id="date"),
         pytest.param("TRY_TO_DATE", id="try_to_date"),
         pytest.param("TO_DATE", id="to_date"),
     ]
 )
 def test_fn(request):
+    """
+    Three different date casting function names
+    """
     return request.param
 
 
-def test_to_date_valid_strings(spark_info, dt_fn_dataframe, test_fn, memory_leak_check):
-    """tests to_date on valid string values"""
-    query = f"SELECT {test_fn}(datetime_strings) from table1"
-    spark_query = f"SELECT TO_DATE(datetime_strings) from table1"
-
-    dt_fn_dataframe_nullable = make_tables_nullable(dt_fn_dataframe)
-
-    check_query(
-        query,
-        dt_fn_dataframe_nullable,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        equivalent_spark_query=spark_query,
-    )
+@pytest.fixture(
+    params=[
+        pytest.param("datetime_strings", id="valid_datetime_strings"),
+        pytest.param("digit_strings", id="valid_digit_strings"),
+        pytest.param("timestamps", id="valid_timestamps"),
+    ]
+)
+def date_casting_input_type(request):
+    """
+    Different input types in dt_fn_dataframe
+    """
+    return request.param
 
 
-def test_to_date_valid_strings_case(
-    spark_info, dt_fn_dataframe, test_fn, memory_leak_check
+def test_date_casting_functions(
+    dt_fn_dataframe, test_fn, date_casting_input_type, memory_leak_check
 ):
-    """tests to_date on valid string values in a case statment"""
-    query = f"SELECT CASE WHEN {test_fn}(datetime_strings) < DATE '2013-01-03' THEN {test_fn}(datetime_strings) END from table1"
-    spark_query = f"SELECT CASE WHEN TO_DATE(datetime_strings) < DATE '2013-01-03' THEN TO_DATE(datetime_strings) END from table1"
-    dt_fn_dataframe_nullable = make_tables_nullable(dt_fn_dataframe)
+    """tests DATE/TO_DATE/TRY_TO_DATE on valid datetime string/digit string/timestamp values"""
+    query = f"SELECT {test_fn}({date_casting_input_type}) from table1"
 
-    check_query(
-        query,
-        dt_fn_dataframe_nullable,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        equivalent_spark_query=spark_query,
-    )
-
-
-def test_to_date_valid_digit_strings(
-    spark_info, dt_fn_dataframe, test_fn, memory_leak_check
-):
-    """tests to_date on valid digit string values in a case statment"""
-    query = f"SELECT {test_fn}(digit_strings) from table1"
-
-    dt_fn_dataframe_nullable = make_tables_nullable(dt_fn_dataframe)
     expected_output = pd.DataFrame(
         {
-            "foo": dt_fn_dataframe_nullable["table1"]["digit_strings"].apply(
-                lambda val: scalar_to_date_equiv_fn(val)
+            "foo": dt_fn_dataframe["table1"][date_casting_input_type].apply(
+                lambda val: None
+                if scalar_to_date_equiv_fn(val) is None
+                else scalar_to_date_equiv_fn(val)
             )
         }
     )
 
-    check_query(
-        query,
-        dt_fn_dataframe_nullable,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        expected_output=expected_output,
-    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            dt_fn_dataframe,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=expected_output,
+        )
 
 
-def test_to_date_valid_digit_strings_case(
-    spark_info, dt_fn_dataframe, test_fn, memory_leak_check
+# TODO: [BE-4671]Support date type with CASE statement
+# Now CASE statement sets the array type to timestamp when parsing the query
+def test_date_casting_functions_case(
+    dt_fn_dataframe, test_fn, date_casting_input_type, memory_leak_check
 ):
-    """tests to_date on valid digit string values in a case statment"""
-    query = f"SELECT CASE WHEN {test_fn}(digit_strings) < DATE '2013-01-03' THEN {test_fn}(digit_strings) END from table1"
+    """
+    tests DATE/TO_DATE/TRY_TO_DATE on valid datetime string/digit string/timestamp values in a case statment
+    """
+    query = (
+        f"SELECT CASE WHEN {test_fn}({date_casting_input_type}) < DATE '2013-01-03' "
+        f"THEN {test_fn}({date_casting_input_type}) END from table1"
+    )
 
     dt_fn_dataframe_nullable = make_tables_nullable(dt_fn_dataframe)
     expected_output = pd.DataFrame(
         {
-            "foo": dt_fn_dataframe_nullable["table1"]["digit_strings"].apply(
+            "foo": dt_fn_dataframe_nullable["table1"][date_casting_input_type].apply(
                 lambda val: scalar_to_date_equiv_fn(val)
                 if not (scalar_to_date_equiv_fn(val) is None)
-                and (
-                    scalar_to_date_equiv_fn(val)
-                    < pd.Timestamp("2013-01-03").to_datetime64()
-                )
+                and (scalar_to_date_equiv_fn(val) < pd.Timestamp("2013-01-03").date())
                 else None
             )
         }
@@ -129,51 +118,15 @@ def test_to_date_valid_digit_strings_case(
     check_query(
         query,
         dt_fn_dataframe_nullable,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=expected_output,
     )
 
 
-def test_to_date_valid_datetime_types(
-    spark_info, dt_fn_dataframe, test_fn, memory_leak_check
-):
-    """tests to_date on valid datetime values"""
-    query = f"SELECT {test_fn}(timestamps) from table1"
-    spark_query = f"SELECT TO_DATE(timestamps) from table1"
-    dt_fn_dataframe_nullable = make_tables_nullable(dt_fn_dataframe)
-
-    check_query(
-        query,
-        dt_fn_dataframe_nullable,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        equivalent_spark_query=spark_query,
-    )
-
-
-def test_to_date_valid_datetime_types_case(
-    spark_info, dt_fn_dataframe, test_fn, memory_leak_check
-):
-    """tests to_date on valid datetime values in a case statment"""
-    query = f"SELECT CASE WHEN {test_fn}(timestamps) < DATE '2013-01-03' THEN {test_fn}(timestamps) END from table1"
-    spark_query = f"SELECT CASE WHEN TO_DATE(timestamps) < DATE '2013-01-03' THEN TO_DATE(timestamps) END from table1"
-    dt_fn_dataframe_nullable = make_tables_nullable(dt_fn_dataframe)
-
-    check_query(
-        query,
-        dt_fn_dataframe_nullable,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-        equivalent_spark_query=spark_query,
-    )
-
-
-def test_to_date_tz_aware(memory_leak_check):
-    """tests to_date on valid datetime values in a case statment"""
+def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
+    """tests DATE/TO_DATE/TRY_TO_DATE on valid timestamp with timezone values"""
     df = pd.DataFrame(
         {
             "timestamps": pd.date_range(
@@ -182,25 +135,22 @@ def test_to_date_tz_aware(memory_leak_check):
         }
     )
     ctx = {"table1": df}
-    query = f"SELECT TO_DATE(timestamps) as timestamps from table1"
-    expected_output = pd.DataFrame(
-        {
-            "timestamps": df["timestamps"]
-            .dt.normalize()
-            .apply(lambda t: t.tz_localize(None))
-        }
-    )
+    query = f"SELECT {test_fn}(timestamps) as dates from table1"
+    expected_output = pd.DataFrame({"dates": df["timestamps"].dt.date})
 
-    check_query(
-        query,
-        ctx,
-        None,
-        expected_output=expected_output,
-    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=expected_output,
+        )
 
 
-def test_to_date_tz_aware_case(memory_leak_check):
-    """tests to_date on valid datetime values in a case statment"""
+# TODO: [BE-4671]Support date type with CASE statement
+# Now CASE statement sets the array type to timestamp when parsing the query
+def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
+    """tests DATE/TO_DATE/TRY_TO_DATE on valid datetime values in a case statment"""
     df = pd.DataFrame(
         {
             "timestamps": pd.date_range(
@@ -210,7 +160,9 @@ def test_to_date_tz_aware_case(memory_leak_check):
         }
     )
     ctx = {"table1": df}
-    query = f"SELECT CASE WHEN B THEN TO_DATE(timestamps) END as timestamps from table1"
+    query = (
+        f"SELECT CASE WHEN B THEN {test_fn}(timestamps) END as timestamps from table1"
+    )
     to_date_series = (
         df["timestamps"].dt.normalize().apply(lambda t: t.tz_localize(None))
     )
@@ -225,7 +177,7 @@ def test_to_date_tz_aware_case(memory_leak_check):
     )
 
 
-def test_try_to_date_tz_strings(tz_aware_df, memory_leak_check):
+def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
     """tests try_to_date on valid and invalid datetime values"""
 
     # Construct input dataframe of both valid and invalid datetime strings
@@ -258,27 +210,26 @@ def test_try_to_date_tz_strings(tz_aware_df, memory_leak_check):
     valid_answers = valid_datetimes.dt.date
     invalid_answers = pd.Series([None] * len(invalid_str_datetimes))
     expected_output = pd.DataFrame(
-        {
-            "timestamps": pd.concat([valid_answers, invalid_answers])
-            .reset_index(drop=True)
-            .astype("datetime64[ns]")
-        }
+        {"dates": pd.concat([valid_answers, invalid_answers]).reset_index(drop=True)}
     )
 
     ctx = {"table1": df}
-    query = f"SELECT TRY_TO_DATE(timestamps) as timestamps from table1"
+    query = f"SELECT TRY_TO_DATE(timestamps) as dates from table1"
 
-    check_query(
-        query,
-        ctx,
-        None,
-        expected_output=expected_output,
-    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=expected_output,
+        )
 
 
 # [BE-3774] Leaks Memory
-def test_invalid_to_date_args(spark_info, dt_fn_dataframe, test_fn):
-    """tests arguments which cause NA in try_to_date, and throw an error for to_date"""
+def test_date_casting_functions_invalid_args(dt_fn_dataframe, test_fn):
+    """
+    tests arguments which cause NA in try_to_date, and throw an error for DATE/TO_DATE/TRY_TO_DATE
+    """
 
     query = f"SELECT {test_fn}(invalid_dt_strings) from table1"
 
@@ -290,7 +241,7 @@ def test_invalid_to_date_args(spark_info, dt_fn_dataframe, test_fn):
         check_query(
             query,
             dt_fn_dataframe_nullable,
-            spark_info,
+            None,
             check_dtype=False,
             check_names=False,
             expected_output=expected_output,
@@ -302,37 +253,167 @@ def test_invalid_to_date_args(spark_info, dt_fn_dataframe, test_fn):
             bc.sql(query)
 
 
-def test_to_date_format_string_err(dt_fn_dataframe, test_fn, memory_leak_check):
+@pytest.fixture
+def format_input_string_df():
     """
-    Tests that using a format string with TO_DATE or TRY_TO_DATE fails with a reasonable error
-    see https://bodo.atlassian.net/browse/BE-3614
+    Fixture containing a representative set of datetime.date object
+    for use in testing, including None object.
     """
-
-    query = f"SELECT {test_fn}(datetime_strings, 'foo') from table1"
-    msg = f"Error, {test_fn} with two arguments not yet supported"
-    with pytest.raises(Exception, match=msg):
-        bc = bodosql.BodoSQLContext(dt_fn_dataframe)
-        bc.sql(query)
+    return {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        "2017-03-26",
+                        "2000-12-31",
+                        "2003-09-06",
+                        "2023-03-06",
+                        "1980-10-14",
+                        None,
+                    ]
+                    * 4
+                ),
+                "B": pd.Series(
+                    [
+                        "26-Mar-2017",
+                        "31-Dec-2000",
+                        "06-Sep-2003",
+                        "06-Mar-2023",
+                        "14-Oct-1980",
+                        None,
+                    ]
+                    * 4
+                ),
+                "C": pd.Series(
+                    [
+                        "03/26/2017",
+                        "12/31/2000",
+                        "09/06/2003",
+                        "03/06/2023",
+                        "10/14/1980",
+                        None,
+                    ]
+                    * 4
+                ),
+                "D": pd.Series(
+                    [
+                        "___March__26____17__",
+                        "___December__31____00__",
+                        "___September__06____03__",
+                        "___March__06____23__",
+                        "___October__14____80__",
+                        None,
+                    ]
+                    * 4
+                ),
+                "E": pd.Series(
+                    [
+                        "Mon@#$26@#$2017@#$Mar",
+                        "Tue@#$31@#$2000@#$Dec",
+                        "Wed@#$06@#$2003@#$Sep",
+                        "Thu@#$06@#$2023@#$Mar",
+                        "Fri@#$14@#$1980@#$Oct",
+                        None,
+                    ]
+                    * 4
+                ),
+            }
+        )
+    }
 
 
 @pytest.mark.parametrize(
-    "input_type",
+    "input_col, format_str",
     [
-        pytest.param("datetime_strings", id="valid_datetime_strings"),
-        pytest.param("digit_strings", id="valid_digit_strings"),
-        pytest.param("timestamps", id="valid_timestamps"),
-    ]
+        pytest.param("A", "YYYY-MM-DD", id="YYYY-MM-DD"),
+        pytest.param("B", "DD-MON-YYYY", id="DD-MON-YYYY"),
+        pytest.param("C", "MM/DD/YYYY", id="MM/DD/YYYY"),
+        pytest.param("D", "___MMMM__DD____YY__", id="___MMMM__DD____YY__"),
+        pytest.param("E", "DY@#$DD@#$YYYY@#$MON", id="DY@#$DD@#$YYYY@#$MON"),
+    ],
 )
-def test_date_casting_with_colon(dt_fn_dataframe, input_type, memory_leak_check):
+def test_date_casting_functions_with_valid_format(
+    format_input_string_df, test_fn, input_col, format_str, memory_leak_check
+):
+    """
+    Tests DATE/TO_DATE/TRY_TO_DATE with valid format strings
+    """
+    query = f"SELECT {test_fn}({input_col}, '{format_str}') from table1"
+    expected_output = pd.DataFrame(
+        {
+            "foo": pd.Series(
+                [
+                    datetime.date(2017, 3, 26),
+                    datetime.date(2000, 12, 31),
+                    datetime.date(2003, 9, 6),
+                    datetime.date(2023, 3, 6),
+                    datetime.date(1980, 10, 14),
+                    None,
+                ]
+                * 4
+            )
+        }
+    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            format_input_string_df,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=expected_output,
+        )
+
+
+# [BE-3774] Leaks Memory
+@pytest.mark.parametrize(
+    "input_col, format_str",
+    [
+        pytest.param("A", "MM/DD/YYYY", id="MM/DD/YYYY"),
+        pytest.param("B", "YYYY-MM-DD", id="YYYY-MM-DD"),
+        pytest.param("C", "DD-MON-YYYY", id="DD-MON-YYYY"),
+        pytest.param("D", "DY@#$DD@#$YYYY@#$MON", id="DY@#$DD@#$YYYY@#$MON"),
+        pytest.param("E", "___MMMM__DD____YY__", id="___MMMM__DD____YY__"),
+    ],
+)
+def test_date_casting_functions_with_invalid_format(
+    format_input_string_df, test_fn, input_col, format_str
+):
+    """
+    Tests DATE/TO_DATE/TRY_TO_DATE can throw correct error when input strings don't match with format strings
+    """
+    query = f"SELECT {test_fn}({input_col}, '{format_str}') from table1"
+
+    if test_fn == "TRY_TO_DATE":
+        expected_output = pd.DataFrame({"foo": pd.Series([None] * 24)})
+        with bodosql_use_date_type():
+            check_query(
+                query,
+                format_input_string_df,
+                None,
+                check_names=False,
+                check_dtype=False,
+                expected_output=expected_output,
+            )
+    else:
+        msg = "Invalid input while converting to date value"
+        with pytest.raises(Exception, match=msg):
+            bc = bodosql.BodoSQLContext(format_input_string_df)
+            bc.sql(query)
+
+
+def test_date_casting_with_colon(
+    dt_fn_dataframe, date_casting_input_type, memory_leak_check
+):
     """tests ::DATE on valid datetime string/digit string/timestamp values"""
-    query = f"SELECT {input_type}::DATE from table1"
+    query = f"SELECT {date_casting_input_type}::DATE from table1"
 
     expected_output = pd.DataFrame(
         {
-            "foo": dt_fn_dataframe["table1"][input_type].apply(
+            "foo": dt_fn_dataframe["table1"][date_casting_input_type].apply(
                 lambda val: None
                 if scalar_to_date_equiv_fn(val) is None
-                else scalar_to_date_equiv_fn(val).date()
+                else scalar_to_date_equiv_fn(val)
             )
         }
     )

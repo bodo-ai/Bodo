@@ -2600,34 +2600,6 @@ def test_yearweek_scalars(spark_info, dt_fn_dataframe, memory_leak_check):
     )
 
 
-def test_to_date_cols(
-    spark_info, timestamp_date_string_cols, dt_fn_dataframe, memory_leak_check
-):
-    query = f"SELECT TO_DATE({timestamp_date_string_cols}) from table1"
-
-    check_query(
-        query,
-        dt_fn_dataframe,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-    )
-
-
-def test_to_date_scalar(
-    spark_info, timestamp_date_string_cols, dt_fn_dataframe, memory_leak_check
-):
-    query = f"SELECT CASE WHEN TO_DATE({timestamp_date_string_cols}) = TIMESTAMP '2021-05-31' THEN TIMESTAMP '2021-05-30' ELSE TO_DATE({timestamp_date_string_cols}) END from table1"
-
-    check_query(
-        query,
-        dt_fn_dataframe,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-    )
-
-
 def test_date_trunc_time_part(time_df, time_part_strings, memory_leak_check):
     query = f"SELECT DATE_TRUNC('{time_part_strings}', A) as output from table1"
     scalar_func = generate_date_trunc_time_func(time_part_strings)

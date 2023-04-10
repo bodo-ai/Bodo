@@ -23,9 +23,7 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels i
 @pytest.mark.parametrize(
     "fn_name",
     [
-        pytest.param(
-            "DATE", marks=pytest.mark.skip(reason="Waiting on Calcite support")
-        ),
+        "DATE",
         "TO_DATE",
     ],
 )
@@ -57,9 +55,7 @@ def test_date_to_date_scalar(fn_name, scalar, expected, memory_leak_check):
 @pytest.mark.parametrize(
     "fn_name",
     [
-        pytest.param(
-            "DATE", marks=pytest.mark.skip(reason="Waiting on Calcite support")
-        ),
+        "DATE",
         "TO_DATE",
     ],
 )

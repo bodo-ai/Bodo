@@ -36,6 +36,7 @@ public class ExprTypeVisitor {
           "COS",
           "COSH",
           "COT",
+          "DATE",
           "DATE_FORMAT",
           "DAY",
           "DAYNAME",

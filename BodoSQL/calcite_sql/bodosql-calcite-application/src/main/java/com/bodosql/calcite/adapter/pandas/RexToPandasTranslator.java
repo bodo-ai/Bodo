@@ -726,7 +726,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TIMESTAMP":
             return generateTimestampFnCode(operands.get(0).emit());
           case "DATE":
-            return generateDateFnCode(operands.get(0).emit());
           case "TO_DATE":
           case "TRY_TO_DATE":
             return generateToDateFnCode(operands, fnName);

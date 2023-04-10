@@ -76,17 +76,20 @@ public class ConversionCodeGen {
    * @return RexVisitorInfo for the TO_DATE/TRY_TO_DATE function
    */
   public static Expr generateToDateFnCode(List<Expr> operandsInfo, String fnName) {
-    if (operandsInfo.size() == 2) {
-      throw new BodoSQLCodegenException(
-          "Error, " + fnName + " with two arguments not yet supported");
-    }
     StringBuilder exprCode = new StringBuilder();
     exprCode
         .append("bodo.libs.bodosql_array_kernels.")
         .append(fnName.toLowerCase())
         .append("(")
         .append(operandsInfo.get(0).emit())
-        .append(", None)");
+        .append(", ");
+    if (operandsInfo.size() == 2) {
+      exprCode.append(operandsInfo.get(1).emit());
+    }
+    else {
+      exprCode.append("None");
+    }
+    exprCode.append(")");
     return new Expr.Raw(exprCode.toString());
   }
 
