@@ -17,12 +17,11 @@ from numba.core.ir_utils import (
 import bodo
 from bodo.libs.array import (
     arr_info_list_to_table,
+    array_from_cpp_table,
     array_to_info,
     cpp_table_to_py_data,
     delete_table,
     delete_table_decref_arrays,
-    info_from_table,
-    info_to_array,
     py_data_to_cpp_table,
     sort_table_for_interval_join,
     sort_values_table,
@@ -532,8 +531,7 @@ def sort_distributed_run(
             "np": np,
             "delete_table": delete_table,
             "delete_table_decref_arrays": delete_table_decref_arrays,
-            "info_to_array": info_to_array,
-            "info_from_table": info_from_table,
+            "array_from_cpp_table": array_from_cpp_table,
             "sort_values_table": sort_values_table,
             "sort_table_for_interval_join": sort_table_for_interval_join,
             "arr_info_list_to_table": arr_info_list_to_table,
@@ -721,7 +719,7 @@ def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
                     if not type_has_unknown_cats(out_types[i])
                     else f"arg{i}"
                 )
-                func_text += f"  out{i} = info_to_array(info_from_table(out_cpp_table, {out_ind}), {out_type})\n"
+                func_text += f"  out{i} = array_from_cpp_table(out_cpp_table, {out_ind}, {out_type})\n"
                 arr_vars.append(f"out{i}")
 
         comma = "," if len(arr_vars) == 1 else ""

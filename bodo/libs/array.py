@@ -1439,6 +1439,42 @@ def info_from_table(typingctx, table_t, ind_t):
     return array_info_type(table_t, ind_t), codegen
 
 
+def array_from_cpp_table_codegen(context, builder, sig, args):
+    """codegen for array_from_cpp_table() below"""
+    fnty = lir.FunctionType(
+        lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64)]
+    )
+    fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="info_from_table")
+    info_ptr = builder.call(fn_tp, args[:2])
+    return info_to_array_codegen(
+        context,
+        builder,
+        sig.return_type(array_info_type, sig.args[2]),
+        (info_ptr, args[2]),
+    )
+
+
+@intrinsic
+def array_from_cpp_table(typingctx, table_t, ind_t, array_type_t):
+    """Return a Python array from a column of a C++ table pointer
+
+    Args:
+        typingctx (TypingContext): part of intrinsic interface but unused
+        table_t (table_type): input C++ table
+        ind_t (int): column index
+        array_type_t (array|TypeRef): data type of output array
+
+    Returns:
+        array: Python array extracted from C++ table
+    """
+    arr_type = (
+        array_type_t.instance_type
+        if isinstance(array_type_t, types.TypeRef)
+        else array_type_t
+    )
+    return arr_type(table_t, ind_t, array_type_t), array_from_cpp_table_codegen
+
+
 @intrinsic
 def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type_t):
     """Extract columns of a C++ table and create a Python table.
@@ -1454,14 +1490,6 @@ def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type
 
     def codegen(context, builder, sig, args):
         cpp_table, table_idx_arr, _ = args
-
-        # info_from_table() call info
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64)]
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="info_from_table"
-        )
 
         # create python table
         table = cgutils.create_struct_proxy(py_table_type)(context, builder)
@@ -1517,13 +1545,17 @@ def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type
                 with builder.if_else(is_loaded) as (then, orelse):
                     with then:
                         # extract info and convert to array
-                        arr_info = builder.call(fn_tp, [cpp_table, cpp_table_ind])
-                        arr = context.compile_internal(
+                        arr = array_from_cpp_table_codegen(
+                            context,
                             builder,
-                            lambda info: info_to_array(info, t),
-                            t(array_info_type),
-                            [arr_info],
-                        )  # pragma: no cover
+                            t(table_type, types.int64, types.TypeRef(t)),
+                            [
+                                cpp_table,
+                                cpp_table_ind,
+                                context.get_constant_null(types.TypeRef(t)),
+                            ],
+                        )
+
                         out_arr_list.inititem(i, arr, incref=False)
                         length = context.compile_internal(
                             builder,
@@ -1647,7 +1679,7 @@ def cpp_table_to_py_data(
             func_text += f"    cpp_ind_{blk} = out_inds_{blk}[i]\n"
             func_text += f"    if cpp_ind_{blk} == -1:\n"
             func_text += f"      continue\n"
-            func_text += f"    arr_{blk} = info_to_array(info_from_table(cpp_table, cpp_ind_{blk}), {out_type})\n"
+            func_text += f"    arr_{blk} = array_from_cpp_table(cpp_table, cpp_ind_{blk}, {out_type})\n"
             func_text += f"    arr_list_{blk}[i] = arr_{blk}\n"
             func_text += (
                 f"  py_table = set_table_block(py_table, arr_list_{blk}, {blk})\n"
@@ -1664,7 +1696,9 @@ def cpp_table_to_py_data(
                     out_type = f"out_types_t[0]"
                 else:
                     out_type = f"unknown_cat_arrs_t[{cat_arr_inds[0]}]"
-            func_text += f"  out_arg0 = info_to_array(info_from_table(cpp_table, {out_ind}), {out_type})\n"
+            func_text += (
+                f"  out_arg0 = array_from_cpp_table(cpp_table, {out_ind}, {out_type})\n"
+            )
             out_vars.append("out_arg0")
 
     for i, t in enumerate(extra_arr_types):
@@ -1679,7 +1713,9 @@ def cpp_table_to_py_data(
                     out_type = (
                         f"unknown_cat_arrs_t[{cat_arr_inds[n_py_table_arrs + i]}]"
                     )
-            func_text += f"  out_{i} = info_to_array(info_from_table(cpp_table, {out_ind}), {out_type})\n"
+            func_text += (
+                f"  out_{i} = array_from_cpp_table(cpp_table, {out_ind}, {out_type})\n"
+            )
             out_vars.append(f"out_{i}")
 
     comma = "," if len(out_vars) == 1 else ""
@@ -1692,8 +1728,7 @@ def cpp_table_to_py_data(
             "set_table_block": bodo.hiframes.table.set_table_block,
             "set_table_len": bodo.hiframes.table.set_table_len,
             "get_table_block": bodo.hiframes.table.get_table_block,
-            "info_to_array": info_to_array,
-            "info_from_table": info_from_table,
+            "array_from_cpp_table": array_from_cpp_table,
             "out_col_inds": list(out_col_inds),
             "py_table_type": py_table_type,
         }

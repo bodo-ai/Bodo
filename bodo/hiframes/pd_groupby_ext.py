@@ -37,14 +37,13 @@ from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.libs.array import (
     arr_info_list_to_table,
+    array_from_cpp_table,
     array_to_info,
     delete_table,
     delete_table_decref_arrays,
     get_groupby_labels,
     get_null_shuffle_info,
     get_shuffle_info,
-    info_from_table,
-    info_to_array,
     reverse_shuffle_table,
     shuffle_table,
 )
@@ -2054,12 +2053,14 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
 
     # extract arrays from C++ table
     for i in range(n_keys):
-        func_text += f"  out_key{i} = info_to_array(info_from_table(out_table, {i}), keys{i}_typ)\n"
+        func_text += (
+            f"  out_key{i} = array_from_cpp_table(out_table, {i}, keys{i}_typ)\n"
+        )
 
     for i in range(n_cols):
-        func_text += f"  out_arr{i} = info_to_array(info_from_table(out_table, {i+n_keys}), in_arr{i}_typ)\n"
+        func_text += f"  out_arr{i} = array_from_cpp_table(out_table, {i+n_keys}, in_arr{i}_typ)\n"
 
-    func_text += f"  out_arr_index = info_to_array(info_from_table(out_table, {n_keys + n_cols}), ind_arr_typ)\n"
+    func_text += f"  out_arr_index = array_from_cpp_table(out_table, {n_keys + n_cols}, ind_arr_typ)\n"
 
     func_text += "  shuffle_info = get_shuffle_info(out_table)\n"
     func_text += "  delete_table(out_table)\n"
@@ -2078,8 +2079,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         "array_to_info": array_to_info,
         "arr_info_list_to_table": arr_info_list_to_table,
         "shuffle_table": shuffle_table,
-        "info_from_table": info_from_table,
-        "info_to_array": info_to_array,
+        "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
         "get_shuffle_info": get_shuffle_info,
         "__col_name_meta_value_df_shuffle": ColNamesMetaType(df.columns),
@@ -2118,7 +2118,7 @@ def overload_reverse_shuffle(data, shuffle_info):
         func_text += "  table = arr_info_list_to_table(info_list)\n"
         func_text += "  out_table = reverse_shuffle_table(table, shuffle_info)\n"
         for i in range(n_fields):
-            func_text += f"  out_arr{i} = info_to_array(info_from_table(out_table, {i}), data._data[{i}])\n"
+            func_text += f"  out_arr{i} = array_from_cpp_table(out_table, {i}, data._data[{i}])\n"
         func_text += "  delete_table(out_table)\n"
         func_text += "  delete_table(table)\n"
         func_text += (
@@ -2134,8 +2134,7 @@ def overload_reverse_shuffle(data, shuffle_info):
                 "array_to_info": array_to_info,
                 "arr_info_list_to_table": arr_info_list_to_table,
                 "reverse_shuffle_table": reverse_shuffle_table,
-                "info_from_table": info_from_table,
-                "info_to_array": info_to_array,
+                "array_from_cpp_table": array_from_cpp_table,
                 "delete_table": delete_table,
                 "init_multi_index": bodo.hiframes.pd_multi_index_ext.init_multi_index,
             },
@@ -2159,7 +2158,7 @@ def overload_reverse_shuffle(data, shuffle_info):
         info_list = [array_to_info(data)]
         table = arr_info_list_to_table(info_list)
         out_table = reverse_shuffle_table(table, shuffle_info)
-        out_arr = info_to_array(info_from_table(out_table, 0), data)
+        out_arr = array_from_cpp_table(out_table, 0, data)
         delete_table(out_table)
         delete_table(table)
         return out_arr
