@@ -17,6 +17,7 @@ from bodo.tests.conftest import (  # pragma: no cover
 from bodo.utils.typing import BodoError
 
 
+@pytest.mark.slow
 def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):
     """
     Test that TablePath raises an error when passing the wrong arguments
@@ -112,6 +113,7 @@ def test_iceberg_tablepath_errors_jit(iceberg_database, iceberg_table_conn):
         impl()
 
 
+@pytest.mark.slow
 def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
     """
     Tests that TablePath raises a reasonable error when the table

@@ -25,6 +25,7 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import check_func, sync_dtypes
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "table_name",
     [
@@ -102,6 +103,7 @@ def test_simple_table_read(
     )
 
 
+@pytest.mark.slow
 def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn):
     """
     Test simple read operation on test table simple_string_table
@@ -145,6 +147,7 @@ def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn)
     check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
 
 
+@pytest.mark.slow
 def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table_conn):
     """
     Test loading just a length from iceberg tables.
@@ -179,6 +182,7 @@ def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table
     )
 
 
+@pytest.mark.slow
 def test_tablepath_dict_encoding(
     memory_leak_check, iceberg_database, iceberg_table_conn
 ):
@@ -223,6 +227,7 @@ def test_tablepath_dict_encoding(
     check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
 
 
+@pytest.mark.slow
 def test_merge_into_simple(iceberg_database, iceberg_table_conn):
     table_name = "test_merge_into_simple_tbl"
     db_schema, warehouse_loc = iceberg_database
@@ -278,6 +283,7 @@ def test_merge_into_simple(iceberg_database, iceberg_table_conn):
     )
 
 
+@pytest.mark.slow
 def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
     table_name = "test_merge_into_simple_tbl"
     db_schema, warehouse_loc = iceberg_database
@@ -333,6 +339,7 @@ def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
     )
 
 
+@pytest.mark.slow
 def test_iceberg_in_pushdown(memory_leak_check, iceberg_database, iceberg_table_conn):
     """
     Test in pushdown with loading from a iceberg table.

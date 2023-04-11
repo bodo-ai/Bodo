@@ -61,6 +61,7 @@ bodo_datatype_expected_sql_types = {
 }
 
 
+@pytest.mark.slow
 def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_conn):
     """
     Test MERGE INTO with all Bodo datatypes as values.
@@ -132,6 +133,7 @@ def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_con
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("col_name", bodo_datatype_cols.keys())
 def test_merge_into_bodo_datatypes_as_expr(
     col_name: str, iceberg_database, iceberg_table_conn

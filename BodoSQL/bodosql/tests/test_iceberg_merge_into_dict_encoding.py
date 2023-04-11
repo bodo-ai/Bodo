@@ -107,6 +107,7 @@ def bodosql_dict_context(iceberg_database, iceberg_table_conn, source_table, req
     return bc, request.param
 
 
+@pytest.mark.slow
 def test_merge_into_dict_encoding_inserts(
     bodosql_dict_context,
 ):
@@ -154,6 +155,7 @@ def test_merge_into_dict_encoding_inserts(
     )
 
 
+@pytest.mark.slow
 def test_merge_into_dict_encoding_updates(
     bodosql_dict_context,
 ):
@@ -200,6 +202,7 @@ def test_merge_into_dict_encoding_updates(
     )
 
 
+@pytest.mark.slow
 def test_merge_into_dict_encoding_deletes(bodosql_dict_context):
     """
     Test that MERGE INTO dict encoding works when delta and dest table
@@ -243,6 +246,7 @@ def test_merge_into_dict_encoding_deletes(bodosql_dict_context):
     )
 
 
+@pytest.mark.slow
 def test_merge_into_dict_encoding_all(bodosql_dict_context):
     """
     Test that MERGE INTO dict encoding works when delta and dest table
@@ -291,6 +295,7 @@ def test_merge_into_dict_encoding_all(bodosql_dict_context):
     )
 
 
+@pytest.mark.slow
 def test_merge_into_dict_encoding_no_merge(iceberg_database, iceberg_table_conn):
     """
     Test that merge into dict encoding works when the contents of the dest
