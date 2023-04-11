@@ -1935,7 +1935,7 @@ def test_read_parquet_partitioned_read_as_dict(memory_leak_check):
         ["B"],
     ],
 )
-def test_read_parquet_all_null_col_subsets(col_subset, datapath, memory_leak_check):
+def test_read_parquet_all_null_col_subsets(col_subset, memory_leak_check, datapath):
     """test that columns with all nulls can be read successfully"""
     fname = datapath("all_null_col_eg2.pq")
 

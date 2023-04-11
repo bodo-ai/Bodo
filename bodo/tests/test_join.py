@@ -4139,8 +4139,7 @@ def test_merge_common_col_ordering(memory_leak_check):
     check_func(impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-# TODO: add memory_leak_check
-def test_merge_nested_arrays_non_keys(nested_arrays_value):
+def test_merge_nested_arrays_non_keys(nested_arrays_value, memory_leak_check):
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on="A")
         return df3

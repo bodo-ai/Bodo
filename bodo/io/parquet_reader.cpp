@@ -136,7 +136,8 @@ PyObject* ParquetReader::get_dataset() {
     Py_DECREF(path);
     Py_DECREF(dnf_filters);
     Py_DECREF(pq_mod);
-    if (PyErr_Occurred()) throw std::runtime_error("python");
+    if (PyErr_Occurred())
+        throw std::runtime_error("python");
 
     this->ds_partitioning = PyObject_GetAttrString(ds, "partitioning");
     this->set_arrow_schema(PyObject_GetAttrString(ds, "schema"));
@@ -298,7 +299,7 @@ void ParquetReader::read_all(TableBuilder& builder) {
                            Bodo_CTypes::CTypeEnum::STRING, this->count, {},
                            {this->input_file_name_col_dict_arr,
                             this->input_file_name_col_indices_arr},
-                           NULL, 0, 0, 0, false, false, false);
+                           0, 0, 0, false, false, false);
     }
 }
 

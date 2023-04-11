@@ -191,7 +191,7 @@ struct bodo_array_type {
         STRING = 1,
         NULLABLE_INT_BOOL = 2,  // nullable int or bool
         LIST_STRING = 3,        // list_string_array_type
-        ARROW = 4,              // Arrow Array
+        STRUCT = 4,
         CATEGORICAL = 5,
         ARRAY_ITEM = 6,
         INTERVAL = 7,
@@ -262,8 +262,9 @@ struct array_info {
 
     // Child arrays for nested array cases (dict-encoded arrays only currently)
     std::vector<array_info*> child_arrays;
+    // name of each field in struct array (empty for other arrays)
+    std::vector<std::string> field_names;
 
-    std::shared_ptr<arrow::Array> array;
     int32_t precision;                  // for array of decimals and times
     int32_t scale;                      // for array of decimals
     uint64_t num_categories;            // for categorical arrays
@@ -282,17 +283,16 @@ struct array_info {
                         Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
                         std::vector<NRT_MemInfo*> _meminfos,
                         std::vector<array_info*> _child_arrays = {},
-                        std::shared_ptr<arrow::Array> _array = nullptr,
                         int32_t _precision = 0, int32_t _scale = 0,
                         int64_t _num_categories = 0,
                         bool _has_global_dictionary = false,
                         bool _has_deduped_local_dictionary = false,
                         bool _has_sorted_dictionary = false,
-                        int64_t _offset = 0)
+                        int64_t _offset = 0,
+                        std::vector<std::string> _field_names = {})
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
-          array(_array),
           precision(_precision),
           scale(_scale),
           num_categories(_num_categories),
@@ -302,6 +302,7 @@ struct array_info {
           offset(_offset) {
         this->meminfos = std::move(_meminfos);
         this->child_arrays = std::move(_child_arrays);
+        this->field_names = std::move(_field_names);
     }
 
     /**
@@ -321,7 +322,7 @@ struct array_info {
                 return this->child_arrays[0]->data1();
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::ARROW:
+            case bodo_array_type::STRUCT:
             default:
                 return nullptr;
         }
@@ -341,7 +342,7 @@ struct array_info {
                 return this->child_arrays[0]->data2();
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::ARROW:
+            case bodo_array_type::STRUCT:
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
@@ -363,7 +364,7 @@ struct array_info {
             case bodo_array_type::INTERVAL:
             case bodo_array_type::DICT:
             case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::ARROW:
+            case bodo_array_type::STRUCT:
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
@@ -387,8 +388,9 @@ struct array_info {
                 return (char*)this->meminfos[2]->data;
             case bodo_array_type::DICT:
                 return (char*)this->child_arrays[1]->null_bitmask();
+            case bodo_array_type::STRUCT:
+                return (char*)this->meminfos[0]->data;
             case bodo_array_type::INTERVAL:
-            case bodo_array_type::ARROW:
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
             default:
@@ -411,7 +413,7 @@ struct array_info {
             case bodo_array_type::NULLABLE_INT_BOOL:
             case bodo_array_type::INTERVAL:
             case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::ARROW:
+            case bodo_array_type::STRUCT:
             case bodo_array_type::NUMPY:
             case bodo_array_type::CATEGORICAL:
             default:
@@ -894,10 +896,6 @@ void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
 NRT_MemInfo* alloc_array_item_arr_meminfo();
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
-
-void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
-                       array_info** infos, int64_t& lengths_pos,
-                       int64_t& infos_pos);
 
 inline void InitializeBitMask(uint8_t* bits, size_t length, bool val) {
     size_t n_bytes = (length + 7) >> 3;

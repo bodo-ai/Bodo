@@ -78,10 +78,13 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     int64_t null_count_ = 0;
     if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         array->arr_type == bodo_array_type::STRING ||
-        array->arr_type == bodo_array_type::ARRAY_ITEM) {
+        array->arr_type == bodo_array_type::ARRAY_ITEM ||
+        array->arr_type == bodo_array_type::STRUCT) {
         MemInfo *bitmask_meminfo;
         if (array->arr_type == bodo_array_type::STRING) {
             bitmask_meminfo = array->meminfos[2];
+        } else if (array->arr_type == bodo_array_type::STRUCT) {
+            bitmask_meminfo = array->meminfos[0];
         } else {
             bitmask_meminfo = array->meminfos[1];
         }
@@ -103,10 +106,30 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         memset(null_bitmap->mutable_data(), 0xFF,
                static_cast<size_t>(null_bytes));
     }
-    if (array->arr_type == bodo_array_type::ARROW) {
-        ret_type = array->array->type();
-        std::shared_ptr<arrow::ArrayData> typ_data = array->array->data();
-        *out = array->array;
+    if (array->arr_type == bodo_array_type::STRUCT) {
+        std::vector<std::shared_ptr<arrow::Array>> child_arrays;
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        for (size_t i = 0; i < array->child_arrays.size(); i++) {
+            array_info *child_arr = array->child_arrays[i];
+            std::string field_name = array->field_names[i];
+            std::shared_ptr<arrow::Array> inner_array;
+            std::shared_ptr<arrow::DataType> inner_type = bodo_array_to_arrow(
+                pool, child_arr, &inner_array, convert_timedelta_to_int64, tz,
+                time_unit, downcast_time_ns_to_us);
+            child_arrays.push_back(inner_array);
+            // TODO [BE-3247] We should specify nullability of the fields here.
+            fields.push_back(
+                std::make_shared<arrow::Field>(field_name, inner_type));
+        }
+
+        std::shared_ptr<arrow::StructType> struct_type =
+            std::make_shared<arrow::StructType>(fields);
+
+        std::shared_ptr<arrow::Array> arrow_array =
+            std::make_shared<arrow::StructArray>(struct_type, array->length,
+                                                 child_arrays, null_bitmap);
+        ret_type = arrow_array->type();
+        *out = arrow_array;
     }
 
     if (array->arr_type == bodo_array_type::ARRAY_ITEM) {
@@ -716,6 +739,40 @@ NRT_MemInfo *arrow_null_bitmap_to_bodo(std::shared_ptr<arrow::Buffer> buf,
 }
 
 /**
+ * @brief Convert Arrow struct array to Bodo array_info (STRUCT
+ * type) with zero-copy. The output Bodo array holds references to the Arrow
+ * array's buffers and releases them when deleted.
+ *
+ * @param arrow_struct_arr Input Arrow StructArray
+ * @return array_info* Output Bodo array (STRUCT type)
+ */
+array_info *arrow_struct_array_to_bodo(
+    std::shared_ptr<arrow::StructArray> arrow_struct_arr) {
+    int64_t n = arrow_struct_arr->length();
+
+    NRT_MemInfo *null_bitmap_meminfo =
+        arrow_null_bitmap_to_bodo(arrow_struct_arr->null_bitmap(),
+                                  arrow_struct_arr->null_bitmap_data(), n);
+
+    size_t n_fields = arrow_struct_arr->fields().size();
+    std::vector<array_info *> inner_arrs_vec;
+    std::vector<std::string> field_names_vec;
+
+    std::shared_ptr<arrow::DataType> struct_type = arrow_struct_arr->type();
+
+    for (size_t i = 0; i < n_fields; i++) {
+        array_info *inner_arr = arrow_array_to_bodo(arrow_struct_arr->field(i));
+        std::string field_name = struct_type->field(i)->name();
+        inner_arrs_vec.push_back(inner_arr);
+        field_names_vec.push_back(field_name);
+    }
+
+    return new array_info(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT, n,
+                          {null_bitmap_meminfo}, inner_arrs_vec, 0, 0, 0, false,
+                          false, false, 0, field_names_vec);
+}
+
+/**
  * @brief Convert Arrow list array to Bodo array_info (ARRAY_ITEM/LIST_STRING
  * type) with zero-copy. The output Bodo array holds references to the Arrow
  * array's buffers and releases them when deleted.
@@ -777,7 +834,7 @@ array_info *arrow_decimal_array_to_bodo(
 
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
                           Bodo_CTypes::DECIMAL, n,
-                          {data_buf_meminfo, null_bitmap_meminfo}, {}, NULL,
+                          {data_buf_meminfo, null_bitmap_meminfo}, {},
                           precision, scale, 0, false, false, false);
 }
 
@@ -899,7 +956,7 @@ array_info *arrow_dictionary_array_to_bodo(
     }
 
     return new array_info(bodo_array_type::DICT, dict_array->dtype, n, {},
-                          {dict_array, idx_array}, NULL, 0, 0, 0, false, false,
+                          {dict_array, idx_array}, 0, 0, 0, false, false,
                           false);
 }
 
@@ -933,9 +990,8 @@ array_info *arrow_array_to_bodo(std::shared_ptr<arrow::Array> arrow_arr) {
                 std::static_pointer_cast<arrow::LargeListArray>(casted_arr));
         }
         case arrow::Type::STRUCT:
-            return new array_info(
-                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                arrow_arr->length(), {nullptr}, {}, arrow_arr);
+            return arrow_struct_array_to_bodo(
+                std::static_pointer_cast<arrow::StructArray>(arrow_arr));
         case arrow::Type::DECIMAL128:
             return arrow_decimal_array_to_bodo(
                 std::static_pointer_cast<arrow::Decimal128Array>(arrow_arr));

@@ -532,7 +532,7 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
     // dispatch to proper function
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
-    if (array->arr_type == bodo_array_type::ARROW ||
+    if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM) {
         std::vector<offset_t> list_offsets(n_rows + 1);
         for (offset_t i = 0; i <= n_rows; i++)
@@ -788,7 +788,7 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
                         bool global_dict_needed, bool is_parallel) {
     // dispatch to proper function
     // TODO: general dispatcher
-    if (array->arr_type == bodo_array_type::ARROW ||
+    if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM) {
         std::vector<offset_t> list_offsets(n_rows + 1);
         for (offset_t i = 0; i <= n_rows; i++) {
@@ -1034,7 +1034,7 @@ void coherent_hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
     }
 
     // For those types, no type conversion is ever needed.
-    if (array->arr_type == bodo_array_type::ARROW ||
+    if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM ||
         array->arr_type == bodo_array_type::STRING ||
         array->arr_type == bodo_array_type::LIST_STRING) {
@@ -1217,7 +1217,7 @@ void coherent_hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
                                  size_t n_rows, const uint32_t seed,
                                  bool is_parallel) {
     // For those types, no type conversion is ever needed.
-    if (array->arr_type == bodo_array_type::ARROW ||
+    if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM ||
         array->arr_type == bodo_array_type::STRING ||
         array->arr_type == bodo_array_type::LIST_STRING) {
