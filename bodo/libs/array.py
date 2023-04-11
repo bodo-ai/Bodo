@@ -28,7 +28,6 @@ from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     _get_array_item_arr_payload,
     define_array_item_dtor,
-    offset_type,
 )
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array_type
@@ -36,11 +35,7 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
-from bodo.libs.map_arr_ext import (
-    MapArrayType,
-    _get_map_arr_data_type,
-    init_map_arr_codegen,
-)
+from bodo.libs.map_arr_ext import MapArrayType, _get_map_arr_data_type
 from bodo.libs.str_arr_ext import (
     _get_str_binary_arr_payload,
     char_arr_type,
@@ -51,7 +46,6 @@ from bodo.libs.str_arr_ext import (
 from bodo.libs.struct_arr_ext import (
     StructArrayPayloadType,
     StructArrayType,
-    StructType,
     _get_struct_arr_payload,
     define_struct_arr_dtor,
 )
@@ -67,14 +61,10 @@ from bodo.utils.typing import (
     type_has_unknown_cats,
     unwrap_typeref,
 )
-from bodo.utils.utils import (
-    CTypeEnum,
-    check_and_propagate_cpp_exception,
-    numba_to_c_type,
-)
+from bodo.utils.utils import check_and_propagate_cpp_exception, numba_to_c_type
 
 ll.add_symbol("array_item_array_to_info", array_ext.array_item_array_to_info)
-ll.add_symbol("nested_array_to_info", array_ext.nested_array_to_info)
+ll.add_symbol("struct_array_to_info", array_ext.struct_array_to_info)
 ll.add_symbol("string_array_to_info", array_ext.string_array_to_info)
 ll.add_symbol("dict_str_array_to_info", array_ext.dict_str_array_to_info)
 ll.add_symbol("get_nested_info", array_ext.get_nested_info)
@@ -88,8 +78,8 @@ ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
 ll.add_symbol("interval_array_to_info", array_ext.interval_array_to_info)
 ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
 ll.add_symbol("time_array_to_info", array_ext.time_array_to_info)
-ll.add_symbol("info_to_nested_array", array_ext.info_to_nested_array)
 ll.add_symbol("info_to_array_item_array", array_ext.info_to_array_item_array)
+ll.add_symbol("info_to_struct_array", array_ext.info_to_struct_array)
 ll.add_symbol("info_to_string_array", array_ext.info_to_string_array)
 ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
 ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
@@ -224,6 +214,14 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         in_arr = tuple_array.data
         arr_type = StructArrayType(arr_type.data, ("dummy",) * len(arr_type.data))
 
+    if isinstance(arr_type, MapArrayType):
+        # Note: The C++ code doesn't contain any special handling for MapArrayType.
+        # We just use the underlying ArrayItemArray without telling C++ the array is
+        # actually a MapArray.
+        map_array = context.make_helper(builder, arr_type, in_arr)
+        in_arr = map_array.data
+        arr_type = _get_map_arr_data_type(arr_type)
+
     if isinstance(arr_type, ArrayItemArrayType):
 
         payload = _get_array_item_arr_payload(context, builder, arr_type, in_arr)
@@ -263,280 +261,58 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
             ],
         )
 
-    if isinstance(arr_type, (MapArrayType, StructArrayType)):
-        # Note: The C++ code doesn't contain any special handling for MapArrayType.
-        # We just use the underlying ArrayItemArray without telling C++ the array is actually
-        # a MapArray.
+    if isinstance(arr_type, StructArrayType):
+        payload = _get_struct_arr_payload(context, builder, arr_type, in_arr)
 
-        def get_types(arr_typ):
-            """Get list of all types (in Bodo_CTypes enum format) in the
-            nested structure rooted at arr_typ"""
-            if isinstance(arr_typ, MapArrayType):
-                # A Map array is an array item array of two struct arrays
-                return get_types(_get_map_arr_data_type(arr_typ))
-            elif isinstance(arr_typ, ArrayItemArrayType):
-                return [CTypeEnum.LIST.value] + get_types(arr_typ.dtype)
-            # TODO: add Categorical, String
-            elif isinstance(arr_typ, (StructType, StructArrayType)):
-                # for struct include the type ID and number of fields
-                types_list = [CTypeEnum.STRUCT.value, len(arr_typ.names)]
-                for field_typ in arr_typ.data:
-                    types_list += get_types(field_typ)
-                return types_list
-            elif (
-                isinstance(arr_typ, (types.Array, IntegerArrayType, FloatingArrayType))
-                or arr_typ == boolean_array_type
-            ):
-                return get_types(arr_typ.dtype)
-            elif arr_typ == string_array_type:
-                return [CTypeEnum.STRING.value]
-            elif arr_typ == binary_array_type:
-                return [CTypeEnum.BINARY.value]
-            elif isinstance(arr_typ, DecimalArrayType):
-                return [CTypeEnum.Decimal.value, arr_typ.precision, arr_typ.scale]
-            else:
-                return [numba_to_c_type(arr_typ)]
-
-        def get_lengths(arr_typ, arr):
-            """Get array of lengths of all arrays in nested structure"""
-            length = context.compile_internal(
-                builder, lambda a: len(a), types.intp(arr_typ), [arr]
+        # get array_infos of child arrays
+        inner_arr_infos = []
+        for i, field_type in enumerate(arr_type.data):
+            inner_arr = builder.extract_value(payload.data, i)
+            inner_arr_infos.append(
+                array_to_info_codegen(
+                    context, builder, array_info_type(field_type), (inner_arr,), False
+                )
             )
-            if isinstance(arr_typ, MapArrayType):
-                arr_struct = context.make_helper(builder, arr_typ, value=arr)
-                lengths = get_lengths(_get_map_arr_data_type(arr_typ), arr_struct.data)
-            elif isinstance(arr_typ, ArrayItemArrayType):
-                payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
-                lengths = get_lengths(arr_typ.dtype, payload.data)
-                lengths = cgutils.pack_array(
-                    builder,
-                    [payload.n_arrays]
-                    + [
-                        builder.extract_value(lengths, i)
-                        for i in range(lengths.type.count)
-                    ],
-                )
-            elif isinstance(arr_typ, StructArrayType):
-                payload = _get_struct_arr_payload(context, builder, arr_typ, arr)
-                lengths = []
-                for i, field_typ in enumerate(arr_typ.data):
-                    sub_lens = get_lengths(
-                        field_typ, builder.extract_value(payload.data, i)
-                    )
-                    lengths += [
-                        builder.extract_value(sub_lens, j)
-                        for j in range(sub_lens.type.count)
-                    ]
-                lengths = cgutils.pack_array(
-                    builder,
-                    # lengths array needs to have same number of items as types array.
-                    # for struct, second item is num fields, so we set -1 as dummy value
-                    [length, context.get_constant(types.int64, -1)] + lengths,
-                )
-            # TODO: add Struct, Categorical, String
-            elif isinstance(
-                arr_typ,
-                (IntegerArrayType, FloatingArrayType, DecimalArrayType, types.Array),
-            ) or arr_typ in (
-                boolean_array_type,
-                datetime_date_array_type,
-                string_array_type,
-                binary_array_type,
-            ):
-                lengths = cgutils.pack_array(builder, [length])
-            else:
-                raise BodoError(
-                    f"array_to_info: unsupported type for subarray {arr_typ}"
-                )
-            return lengths
-
-        def get_buffers(arr_typ, arr):
-            """Get array of buffers (offsets, nulls, data) of all arrays in nested structure"""
-            if isinstance(arr_typ, MapArrayType):
-                arr_struct = context.make_helper(builder, arr_typ, value=arr)
-                buffers = get_buffers(_get_map_arr_data_type(arr_typ), arr_struct.data)
-            elif isinstance(arr_typ, ArrayItemArrayType):
-                payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
-                buffs_data = get_buffers(arr_typ.dtype, payload.data)
-                offsets_arr = context.make_array(types.Array(offset_type, 1, "C"))(
-                    context, builder, payload.offsets
-                )
-                offsets_ptr = builder.bitcast(
-                    offsets_arr.data, lir.IntType(8).as_pointer()
-                )
-                null_bitmap_arr = context.make_array(types.Array(types.uint8, 1, "C"))(
-                    context, builder, payload.null_bitmap
-                )
-                null_bitmap_ptr = builder.bitcast(
-                    null_bitmap_arr.data, lir.IntType(8).as_pointer()
-                )
-                buffers = cgutils.pack_array(
-                    builder,
-                    [offsets_ptr, null_bitmap_ptr]
-                    + [
-                        builder.extract_value(buffs_data, i)
-                        for i in range(buffs_data.type.count)
-                    ],
-                )
-            elif isinstance(arr_typ, StructArrayType):
-                payload = _get_struct_arr_payload(context, builder, arr_typ, arr)
-                buffs_data = []
-                for i, field_typ in enumerate(arr_typ.data):
-                    field_bufs = get_buffers(
-                        field_typ, builder.extract_value(payload.data, i)
-                    )
-                    buffs_data += [
-                        builder.extract_value(field_bufs, j)
-                        for j in range(field_bufs.type.count)
-                    ]
-                null_bitmap_arr = context.make_array(types.Array(types.uint8, 1, "C"))(
-                    context, builder, payload.null_bitmap
-                )
-                null_bitmap_ptr = builder.bitcast(
-                    null_bitmap_arr.data, lir.IntType(8).as_pointer()
-                )
-                buffers = cgutils.pack_array(
-                    builder,
-                    [null_bitmap_ptr] + buffs_data,
-                )
-            elif isinstance(
-                arr_typ, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
-            ) or arr_typ in (
-                boolean_array_type,
-                datetime_date_array_type,
-            ):
-                np_dtype = arr_typ.dtype
-                if isinstance(arr_typ, DecimalArrayType):
-                    np_dtype = int128_type
-                elif arr_typ == datetime_date_array_type:
-                    np_dtype = types.int64
-                elif arr_type == boolean_array_type:
-                    # BooleanArray is stored as uint8 because
-                    # we store 1 bit per boolean.
-                    np_dtype = types.uint8
-                arr = cgutils.create_struct_proxy(arr_typ)(context, builder, arr)
-                data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
-                    context, builder, arr.data
-                )
-                null_bitmap_arr = context.make_array(types.Array(types.uint8, 1, "C"))(
-                    context, builder, arr.null_bitmap
-                )
-                data_ptr = builder.bitcast(data_arr.data, lir.IntType(8).as_pointer())
-                null_bitmap_ptr = builder.bitcast(
-                    null_bitmap_arr.data, lir.IntType(8).as_pointer()
-                )
-                buffers = cgutils.pack_array(builder, [null_bitmap_ptr, data_ptr])
-            elif arr_typ in (string_array_type, binary_array_type):
-                payload = _get_str_binary_arr_payload(context, builder, arr, arr_typ)
-                offsets = context.make_helper(
-                    builder, offset_arr_type, payload.offsets
-                ).data
-                data = context.make_helper(builder, char_arr_type, payload.data).data
-                null_bitmap = context.make_helper(
-                    builder, null_bitmap_arr_type, payload.null_bitmap
-                ).data
-                buffers = cgutils.pack_array(
-                    builder,
-                    [
-                        builder.bitcast(offsets, lir.IntType(8).as_pointer()),
-                        builder.bitcast(null_bitmap, lir.IntType(8).as_pointer()),
-                        builder.bitcast(data, lir.IntType(8).as_pointer()),
-                    ],
-                )
-            elif isinstance(arr_typ, types.Array):
-                arr = context.make_array(arr_typ)(context, builder, arr)
-                data_ptr = builder.bitcast(arr.data, lir.IntType(8).as_pointer())
-                nullptr = lir.Constant(lir.IntType(8).as_pointer(), None)
-                # Numpy arrays don't have null_bitmap. pass nullptr to indicate
-                # no nulls
-                buffers = cgutils.pack_array(builder, [nullptr, data_ptr])
-            else:
-                raise RuntimeError(
-                    "array_to_info: unsupported type for subarray " + str(arr_typ)
-                )
-            return buffers
-
-        def get_field_names(arr_typ):
-            l_field_names = []
-            if isinstance(arr_typ, StructArrayType):
-                for e_name, e_arr in zip(arr_typ.dtype.names, arr_typ.data):
-                    l_field_names.append(e_name)
-                    l_field_names += get_field_names(e_arr)
-            elif isinstance(arr_typ, ArrayItemArrayType):
-                l_field_names += get_field_names(arr_typ.dtype)
-            elif isinstance(arr_typ, MapArrayType):
-                l_field_names += get_field_names(_get_map_arr_data_type(arr_typ))
-            return l_field_names
-
-        # get list of all types in the nested data structure (to pass to C++)
-        types_list = get_types(arr_type)
-        types_array = cgutils.pack_array(
-            builder, [context.get_constant(types.int32, t) for t in types_list]
+        inner_arr_infos_ptr = cgutils.alloca_once_value(
+            builder, cgutils.pack_array(builder, inner_arr_infos)
         )
-        types_array_ptr = cgutils.alloca_once_value(builder, types_array)
 
-        # get lengths of all arrays in the nested datastructure (to pass to C++)
-        lengths = get_lengths(arr_type, in_arr)
-        lengths_ptr = cgutils.alloca_once_value(builder, lengths)
-
-        # get pointers to every individual buffer in the nested datastructure
-        # (to pass to C++): offsets, nulls, data
-        buffers = get_buffers(arr_type, in_arr)
-        buffers_ptr = cgutils.alloca_once_value(builder, buffers)
-
-        l_field_names = get_field_names(arr_type)
-        # Field names is used for struct arrays. For nested data structures that do not
-        # contain structs we may have an empty l_field_names which causes typing problems.
-        # Thus in that case we assign to some non-empty array that will not be used.
-        if len(l_field_names) == 0:
-            l_field_names = ["irrelevant"]
+        # get field names
         field_names = cgutils.pack_array(
             builder,
-            [context.insert_const_string(builder.module, a) for a in l_field_names],
+            [context.insert_const_string(builder.module, a) for a in arr_type.names],
         )
         field_names_ptr = cgutils.alloca_once_value(builder, field_names)
 
-        if isinstance(arr_type, MapArrayType):
-            # Extract the underlying data for a MapArray
-            nested_arr_typ = _get_map_arr_data_type(arr_type)
-            map_arr_struct = context.make_helper(builder, arr_type, value=in_arr)
-            in_arr_val = map_arr_struct.data
-        else:
-            nested_arr_typ = arr_type
-            in_arr_val = in_arr
-        nested_array = context.make_helper(builder, nested_arr_typ, in_arr_val)
+        null_bitmap = context.make_helper(
+            builder, null_bitmap_arr_type, payload.null_bitmap
+        )
+        # Update refcounts to match references held in array_info in C++ (see string
+        # array case below).
+        if incref:
+            _decref_payload_meminfos(context, builder, arr_type, in_arr)
 
-        # pass all the data to C++ so that an array_info using nested Arrow
-        # Array is constructed
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
-                lir.IntType(32).as_pointer(),
-                lir.IntType(8).as_pointer().as_pointer(),
-                lir.IntType(64).as_pointer(),
+                lir.IntType(64),
                 lir.IntType(8).as_pointer(),
-                lir.IntType(
-                    8
-                ).as_pointer(),  # Maybe it should be lit.IntType(8).as_pointer().as_pointer()
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="nested_array_to_info"
+            builder.module, fnty, name="struct_array_to_info"
         )
-        ret = builder.call(
+        return builder.call(
             fn_tp,
             [
-                builder.bitcast(types_array_ptr, lir.IntType(32).as_pointer()),
-                builder.bitcast(buffers_ptr, lir.IntType(8).as_pointer().as_pointer()),
-                builder.bitcast(lengths_ptr, lir.IntType(64).as_pointer()),
+                context.get_constant(types.int64, len(arr_type.data)),
+                builder.bitcast(inner_arr_infos_ptr, lir.IntType(8).as_pointer()),
                 builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
-                nested_array.meminfo,
+                null_bitmap.meminfo,
             ],
         )
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
-        return ret
 
     # StringArray
     if arr_type in (string_array_type, binary_array_type):
@@ -896,6 +672,17 @@ def _decref_payload_meminfos(context, builder, arr_type, arr):
         context.nrt.decref(builder, arr_type, arr)
         _decref_payload_meminfos(context, builder, arr_type.dtype, inner_arr)
 
+    if isinstance(arr_type, StructArrayType):
+        payload = _get_struct_arr_payload(context, builder, arr_type, arr)
+
+        for i, field_type in enumerate(arr_type.data):
+            inner_arr = builder.extract_value(payload.data, i)
+            context.nrt.incref(builder, field_type, inner_arr)
+            _decref_payload_meminfos(context, builder, field_type, inner_arr)
+
+        context.nrt.incref(builder, null_bitmap_arr_type, payload.null_bitmap)
+        context.nrt.decref(builder, arr_type, arr)
+
     if arr_type in (string_array_type, binary_array_type):
         payload = _get_str_binary_arr_payload(context, builder, arr, arr_type)
         context.nrt.incref(builder, char_arr_type, payload.data)
@@ -1023,217 +810,77 @@ def _lower_info_to_array_item_array(context, builder, arr_type, in_info):
     return array_item_array._getvalue()
 
 
-def nested_to_array(
-    context, builder, arr_typ, lengths_ptr, array_infos_ptr, lengths_pos, infos_pos
-):
-    """LLVM codegen for info_to_array for nested types. Is called recursively"""
+def _lower_info_to_struct_array(context, builder, arr_type, in_info):
+    """Convert C++ array_info* to struct array.
+    Allocates a struct array payload and uses C++ to fill null_bitmap field.
+    Calls info_to_array_codegen() recursively to convert child arrays.
+    """
 
-    ll_array_info_type = context.get_data_type(array_info_type)
+    # create payload type
+    payload_type = StructArrayPayloadType(arr_type.data)
+    alloc_type = context.get_value_type(payload_type)
+    alloc_size = context.get_abi_sizeof(alloc_type)
 
-    if isinstance(arr_typ, ArrayItemArrayType):
-        # construct ArrayItemArray given the array of lengths and array_infos received from C++
+    # define dtor
+    dtor_fn = define_struct_arr_dtor(context, builder, arr_type, payload_type)
 
-        lengths_offset = lengths_pos
-        infos_offset = infos_pos
+    # create meminfo
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+    )
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
 
-        # call codegen for child array
-        sub_arr, lengths_pos, infos_pos = nested_to_array(
-            context,
-            builder,
-            arr_typ.dtype,
-            lengths_ptr,
-            array_infos_ptr,
-            lengths_pos + 1,
-            infos_pos + 2,
+    # alloc values in payload
+    payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+
+    # get nested infos and null bitmap from C++
+    fnty = lir.FunctionType(
+        lir.IntType(8).as_pointer().as_pointer(),
+        [
+            lir.IntType(8).as_pointer(),  # info
+            context.get_value_type(null_bitmap_arr_type).as_pointer(),
+        ],
+    )
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, fnty, name="info_to_struct_array"
+    )
+    child_arr_infos = builder.call(
+        fn_tp,
+        [
+            in_info,
+            payload._get_ptr_by_name("null_bitmap"),
+        ],
+    )
+    context.compile_internal(
+        builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+    )  # pragma: no cover
+
+    # convert inner array infos
+    data_arrs = []
+    for i, inner_arr_type in enumerate(arr_type.data):
+        inner_info = builder.load(
+            builder.gep(child_arr_infos, [context.get_constant(types.int64, i)])
         )
-
-        payload_type = ArrayItemArrayPayloadType(arr_typ)
-        payload_alloc_type = context.get_data_type(payload_type)
-        payload_alloc_size = context.get_abi_sizeof(payload_alloc_type)
-
-        # define dtor
-        dtor_fn = define_array_item_dtor(context, builder, arr_typ, payload_type)
-
-        # create meminfo
-        meminfo = context.nrt.meminfo_alloc_dtor(
-            builder, context.get_constant(types.uintp, payload_alloc_size), dtor_fn
-        )
-        meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
-        meminfo_data_ptr = builder.bitcast(
-            meminfo_void_ptr, payload_alloc_type.as_pointer()
-        )
-
-        # convert my array_infos to numpy arrays and set payload attributes
-        payload = cgutils.create_struct_proxy(payload_type)(context, builder)
-        payload.n_arrays = builder.extract_value(
-            builder.load(lengths_ptr), lengths_offset
-        )
-        payload.data = (
-            sub_arr  # data is the child array which was constructed before this
-        )
-
-        infos = builder.load(array_infos_ptr)
-
-        # offsets array from array_info
-        offsets_info_ptr = builder.bitcast(
-            builder.extract_value(infos, infos_offset), ll_array_info_type
-        )
-        payload.offsets = _lower_info_to_array_numpy(
-            types.Array(offset_type, 1, "C"),
-            context,
-            builder,
-            offsets_info_ptr,
-        )
-
-        # nulls array from array_info
-        nulls_info_ptr = builder.bitcast(
-            builder.extract_value(infos, infos_offset + 1), ll_array_info_type
-        )
-        payload.null_bitmap = _lower_info_to_array_numpy(
-            types.Array(types.uint8, 1, "C"), context, builder, nulls_info_ptr
-        )
-
-        builder.store(payload._getvalue(), meminfo_data_ptr)
-        array_item_array = context.make_helper(builder, arr_typ)
-        array_item_array.meminfo = meminfo
-        return array_item_array._getvalue(), lengths_pos, infos_pos
-
-    elif isinstance(arr_typ, StructArrayType):
-        # construct StructArrayType given the array of lengths and array_infos received from C++
-
-        # call codegen for children arrays
-        sub_arrs = []
-        infos_offset = infos_pos
-        lengths_pos += 1
-        infos_pos += 1
-        for d in arr_typ.data:
-            sub_arr, lengths_pos, infos_pos = nested_to_array(
+        data_arrs.append(
+            info_to_array_codegen(
                 context,
                 builder,
-                d,
-                lengths_ptr,
-                array_infos_ptr,
-                lengths_pos,
-                infos_pos,
+                inner_arr_type(array_info_type, inner_arr_type),
+                (inner_info, context.get_constant_null(arr_type)),
             )
-            sub_arrs.append(sub_arr)
-
-        # create payload type
-        payload_type = StructArrayPayloadType(arr_typ.data)
-        payload_alloc_type = context.get_value_type(payload_type)
-        payload_alloc_size = context.get_abi_sizeof(payload_alloc_type)
-
-        # define dtor
-        dtor_fn = define_struct_arr_dtor(context, builder, arr_typ, payload_type)
-
-        # create meminfo
-        meminfo = context.nrt.meminfo_alloc_dtor(
-            builder, context.get_constant(types.uintp, payload_alloc_size), dtor_fn
-        )
-        meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
-        meminfo_data_ptr = builder.bitcast(
-            meminfo_void_ptr, payload_alloc_type.as_pointer()
         )
 
-        # convert my array_infos to numpy arrays and set payload attributes
-        payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+    payload.data = (
+        cgutils.pack_array(builder, data_arrs)
+        if types.is_homogeneous(*arr_type.data)
+        else cgutils.pack_struct(builder, data_arrs)
+    )
+    builder.store(payload._getvalue(), meminfo_data_ptr)
 
-        payload.data = (
-            cgutils.pack_array(builder, sub_arrs)
-            if types.is_homogeneous(*arr_typ.data)
-            else cgutils.pack_struct(builder, sub_arrs)
-        )
-
-        infos = builder.load(array_infos_ptr)
-
-        # nulls array from array_info
-        nulls_info_ptr = builder.bitcast(
-            builder.extract_value(infos, infos_offset), ll_array_info_type
-        )
-        payload.null_bitmap = _lower_info_to_array_numpy(
-            types.Array(types.uint8, 1, "C"), context, builder, nulls_info_ptr
-        )
-
-        builder.store(payload._getvalue(), meminfo_data_ptr)
-        struct_array = context.make_helper(builder, arr_typ)
-        struct_array.meminfo = meminfo
-        return struct_array._getvalue(), lengths_pos, infos_pos
-
-    # TODO Categorical
-
-    # StringArray
-    elif arr_typ in (string_array_type, binary_array_type):
-        infos = builder.load(array_infos_ptr)
-        info_ptr = builder.bitcast(
-            builder.extract_value(infos, infos_pos), ll_array_info_type
-        )
-
-        string_array = _gen_info_to_string_array(context, builder, arr_typ, info_ptr)
-
-        return string_array, lengths_pos + 1, infos_pos + 1
-
-    # Numpy
-    elif isinstance(arr_typ, types.Array):
-        # since the array comes from Arrow, it has a null buffer which should
-        # be all 1s. we ignore it because this type is not nullable
-
-        # data array from array_info
-        infos = builder.load(array_infos_ptr)
-        data_info_ptr = builder.bitcast(
-            builder.extract_value(infos, infos_pos + 1), ll_array_info_type
-        )
-        return (
-            _lower_info_to_array_numpy(
-                arr_typ,
-                context,
-                builder,
-                data_info_ptr,
-            ),
-            lengths_pos + 1,
-            infos_pos + 2,
-        )
-
-    elif isinstance(
-        arr_typ, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
-    ) or arr_typ in (
-        boolean_array_type,
-        datetime_date_array_type,
-    ):
-        # construct "primitive" array given the array_infos received from C++
-        arr = cgutils.create_struct_proxy(arr_typ)(context, builder)
-        np_dtype = arr_typ.dtype
-        if isinstance(arr_typ, DecimalArrayType):
-            np_dtype = int128_type
-        elif arr_typ == datetime_date_array_type:
-            np_dtype = types.int64
-        elif arr_typ == boolean_array_type:
-            np_dtype = types.uint8
-
-        infos = builder.load(array_infos_ptr)
-
-        # nulls array from array_info
-        nulls_info_ptr = builder.bitcast(
-            builder.extract_value(infos, infos_pos), ll_array_info_type
-        )
-        arr.null_bitmap = _lower_info_to_array_numpy(
-            types.Array(types.uint8, 1, "C"), context, builder, nulls_info_ptr
-        )
-        if arr_typ == boolean_array_type:
-            length_val = builder.extract_value(builder.load(lengths_ptr), lengths_pos)
-            arr.length = length_val
-
-        # data array from array_info
-        data_info_ptr = builder.bitcast(
-            builder.extract_value(infos, infos_pos + 1), ll_array_info_type
-        )
-        arr.data = _lower_info_to_array_numpy(
-            types.Array(np_dtype, 1, "C"),
-            context,
-            builder,
-            data_info_ptr,
-        )
-
-        return arr._getvalue(), lengths_pos + 1, infos_pos + 2
+    struct_array = context.make_helper(builder, arr_type)
+    struct_array.meminfo = meminfo
+    return struct_array._getvalue()
 
 
 def info_to_array_codegen(context, builder, sig, args):
@@ -1246,120 +893,29 @@ def info_to_array_codegen(context, builder, sig, args):
     in_info, _ = args
     # TODO: update meminfo?
 
+    if isinstance(arr_type, TupleArrayType):
+        # TupleArray is just a StructArray in C++
+        tuple_array = context.make_helper(builder, arr_type)
+        struct_arr_type = StructArrayType(arr_type.data)
+        inner_sig = struct_arr_type(array_info_type, struct_arr_type)
+        tuple_array.data = info_to_array_codegen(context, builder, inner_sig, args)
+        return tuple_array._getvalue()
+
+    if isinstance(arr_type, MapArrayType):
+        # Note: The C++ code doesn't contain any special handling for MapArrayType.
+        # We just use the underlying ArrayItemArray without telling C++ the array is
+        # actually a MapArray.
+        map_array = context.make_helper(builder, arr_type)
+        map_arr_type = _get_map_arr_data_type(arr_type)
+        inner_sig = map_arr_type(array_info_type, map_arr_type)
+        map_array.data = info_to_array_codegen(context, builder, inner_sig, args)
+        return map_array._getvalue()
+
     if isinstance(arr_type, ArrayItemArrayType):
         return _lower_info_to_array_item_array(context, builder, arr_type, in_info)
 
-    if isinstance(
-        arr_type,
-        (MapArrayType, StructArrayType, TupleArrayType),
-    ):
-        # Note: The C++ code doesn't contain any special handling for MapArrayType.
-        # We just use the underlying ArrayItemArray without telling C++ the array is actually
-        # a MapArray.
-
-        def get_num_arrays(arr_typ):
-            """get total number of arrays in nested array"""
-            if isinstance(arr_typ, ArrayItemArrayType):
-                return 1 + get_num_arrays(arr_typ.dtype)
-            elif isinstance(arr_typ, StructArrayType):
-                return 1 + sum([get_num_arrays(d) for d in arr_typ.data])
-            else:
-                return 1
-
-        def get_num_infos(arr_typ):
-            """get number of array_infos that need to be returned from
-            C++ to reconstruct this array"""
-            if isinstance(arr_typ, ArrayItemArrayType):
-                # 1 buffer for offsets, 1 buffer for nulls + children buffer count
-                return 2 + get_num_infos(arr_typ.dtype)
-            elif isinstance(arr_typ, StructArrayType):
-                # 1 for nulls + children buffer count
-                return 1 + sum([get_num_infos(d) for d in arr_typ.data])
-            elif arr_typ in (string_array_type, binary_array_type):
-                # C++ will just use one array_info
-                return 1
-            else:
-                # for primitive types: nulls and data
-                # NOTE for non-nullable arrays C++ will still return two
-                # buffers since it doesn't know that the Arrow array of
-                # primitive values is going to be converted to a Numpy array
-                # (all Arrow arrays are nullable)
-                return 2
-
-        if isinstance(arr_type, TupleArrayType):
-            # TupleArray uses same model as StructArray so we just use a
-            # StructArrayType to generate LLVM
-            cpp_arr_type = StructArrayType(
-                arr_type.data, ("dummy",) * len(arr_type.data)
-            )
-        elif isinstance(arr_type, MapArrayType):
-            # MapArrayType just sends its internal ArrayItemArray to C++,
-            # we generate all code for the ArrayItemArray
-            cpp_arr_type = _get_map_arr_data_type(arr_type)
-        else:
-            cpp_arr_type = arr_type
-
-        n = get_num_arrays(cpp_arr_type)
-        # allocate zero-initialized array of lengths for each array in
-        # nested datastructure (to be filled out by C++)
-        lengths = cgutils.pack_array(
-            builder, [lir.Constant(lir.IntType(64), 0) for _ in range(n)]
-        )
-        lengths_ptr = cgutils.alloca_once_value(builder, lengths)
-        # allocate array of null pointers for each buffer in the
-        # nested datastructure (to be filled out by C++ as pointers to array_info)
-        nullptr = lir.Constant(lir.IntType(8).as_pointer(), None)
-        array_infos = cgutils.pack_array(
-            builder, [nullptr for _ in range(get_num_infos(cpp_arr_type))]
-        )
-        array_infos_ptr = cgutils.alloca_once_value(builder, array_infos)
-
-        # call C++ info_to_nested_array to fill lengths and array_info arrays
-        # each array_info corresponds to one individual buffer (can be
-        # offsets, null or data buffer)
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(8).as_pointer(),  # info
-                lir.IntType(64).as_pointer(),  # lengths array
-                lir.IntType(8).as_pointer().as_pointer(),  # array of array_info*
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="info_to_nested_array"
-        )
-        builder.call(
-            fn_tp,
-            [
-                in_info,
-                builder.bitcast(lengths_ptr, lir.IntType(64).as_pointer()),
-                builder.bitcast(
-                    array_infos_ptr, lir.IntType(8).as_pointer().as_pointer()
-                ),
-            ],
-        )
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
-
-        # generate code recursively to construct nested arrays from buffers
-        # returned from C++
-        arr, _, _ = nested_to_array(
-            context, builder, cpp_arr_type, lengths_ptr, array_infos_ptr, 0, 0
-        )
-        if isinstance(arr_type, TupleArrayType):
-            # nested_to_array returns StructArray, not TupleArray so we
-            # have to return one here
-            tuple_array = context.make_helper(builder, arr_type)
-            tuple_array.data = arr
-            context.nrt.incref(builder, cpp_arr_type, arr)
-            arr = tuple_array._getvalue()
-        elif isinstance(arr_type, MapArrayType):
-            # nested_to_array returns the ArrayItemArray, so we package it
-            # back inside a MapArray
-            sig = signature(arr_type, cpp_arr_type)
-            arr = init_map_arr_codegen(context, builder, sig, (arr,))
-        return arr
+    if isinstance(arr_type, StructArrayType):
+        return _lower_info_to_struct_array(context, builder, arr_type, in_info)
 
     # StringArray
     if arr_type in (string_array_type, binary_array_type):

@@ -121,7 +121,6 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         this->arr_type = other.arr_type;
         this->dtype = other.dtype;
         this->meminfos = std::move(other.meminfos);
-        this->array = other.array;
         this->precision = other.precision;
         this->scale = other.scale;
         this->num_categories = other.num_categories;
@@ -129,9 +128,7 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         this->has_deduped_local_dictionary = other.has_deduped_local_dictionary;
         this->has_sorted_dictionary = other.has_sorted_dictionary;
         this->child_arrays = std::move(other.child_arrays);
-
-        // reset the other array_info's pointers
-        other.array = nullptr;
+        this->field_names = std::move(other.field_names);
     }
     return *this;
 }
@@ -166,7 +163,7 @@ array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     return new array_info(bodo_array_type::CATEGORICAL, typ_enum, length,
-                          {meminfo}, {}, NULL, 0, 0, num_categories);
+                          {meminfo}, {}, 0, 0, num_categories);
 }
 
 array_info* alloc_nullable_array(int64_t length,
@@ -248,8 +245,8 @@ array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
         alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
 
     return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-                          length, {}, {dict_data_arr, indices_data_arr}, NULL,
-                          0, 0, 0, has_global_dictionary,
+                          length, {}, {dict_data_arr, indices_data_arr}, 0, 0,
+                          0, has_global_dictionary,
                           has_deduped_local_dictionary, false);
 }
 
@@ -359,9 +356,9 @@ array_info* create_dict_string_array(array_info* dict_arr,
                                      bool has_sorted_dictionary) {
     array_info* out_col =
         new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-                       indices_arr->length, {}, {dict_arr, indices_arr}, NULL,
-                       0, 0, 0, has_global_dictionary,
-                       has_deduped_local_dictionary, has_sorted_dictionary);
+                       indices_arr->length, {}, {dict_arr, indices_arr}, 0, 0,
+                       0, has_global_dictionary, has_deduped_local_dictionary,
+                       has_sorted_dictionary);
     return out_col;
 }
 
@@ -660,7 +657,7 @@ int64_t array_memory_size(array_info* earr) {
                sizeof(offset_t) * (earr->n_sub_elems() + 1) +
                sizeof(offset_t) * (earr->length + 1) + n_bytes + n_sub_bytes;
     }
-    if (earr->arr_type == bodo_array_type::ARROW ||
+    if (earr->arr_type == bodo_array_type::STRUCT ||
         earr->arr_type == bodo_array_type::ARRAY_ITEM) {
         return arrow_array_memory_size(earr->to_arrow());
     }
@@ -693,7 +690,7 @@ array_info* copy_array(array_info* earr) {
         array_info* indices = copy_array(earr->child_arrays[1]);
         farr = new array_info(
             bodo_array_type::DICT, earr->dtype, indices->length, {},
-            {dictionary, indices}, NULL, 0, 0, 0, earr->has_global_dictionary,
+            {dictionary, indices}, 0, 0, 0, earr->has_global_dictionary,
             earr->has_deduped_local_dictionary, earr->has_sorted_dictionary);
     } else {
         farr = alloc_array(earr->length, earr->n_sub_elems(),
@@ -873,185 +870,3 @@ size_t get_stats_alloc() { return NRT_MemSys_get_stats_alloc(); }
 size_t get_stats_free() { return NRT_MemSys_get_stats_free(); }
 size_t get_stats_mi_alloc() { return NRT_MemSys_get_stats_mi_alloc(); }
 size_t get_stats_mi_free() { return NRT_MemSys_get_stats_mi_free(); }
-
-/**
- * Given an Arrow array, populate array of lengths and array of array_info*
- * with the data from the array and all of its descendant arrays.
- * This is called recursively, and will create one array_info for each
- * individual buffer (offsets, null_bitmaps, data).
- * @param array: The input Arrow array
- * @param lengths: The lengths array to fill
- * @param infos: The array_info* array to fill
- * @param lengths_pos: current position in lengths (this is passed by reference
- *        because we are traversing an arbitrary tree of arrays. Some arrays
- *        (like StructArray) have multiple children and upon returning from
- *        one of the child subtrees we need to know the current position in
- *        lengths.
- * @param infos_pos: same as lengths_pos but tracks the position in infos array
- */
-void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
-                       array_info** infos, int64_t& lengths_pos,
-                       int64_t& infos_pos) {
-    if (array->type_id() == arrow::Type::LARGE_LIST) {
-        // TODO should print error or warning if OFFSET_BITWIDTH==32
-        std::shared_ptr<arrow::LargeListArray> list_array =
-            std::dynamic_pointer_cast<arrow::LargeListArray>(array);
-        lengths[lengths_pos++] = list_array->length();
-
-        // allocate output arrays and copy data
-        array_info* offsets = alloc_array(list_array->length() + 1, -1, -1,
-                                          bodo_array_type::arr_type_enum::NUMPY,
-                                          Bodo_CType_offset, 0, 0);
-        int64_t n_null_bytes = (list_array->length() + 7) >> 3;
-        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
-                                        bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0, 0);
-
-        // NOTE: this should just do a memcpy if the bidwidths of input and
-        // output match
-        std::copy_n((int64_t*)(list_array->value_offsets()->data()),
-                    list_array->length() + 1, (offset_t*)offsets->data1());
-        memset(nulls->data1(), 0, n_null_bytes);
-        for (int64_t i = 0; i < list_array->length(); i++) {
-            if (!list_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1(), i, true);
-        }
-
-        infos[infos_pos++] = offsets;
-        infos[infos_pos++] = nulls;
-        nested_array_to_c(list_array->values(), lengths, infos, lengths_pos,
-                          infos_pos);
-    } else if (array->type_id() == arrow::Type::LIST) {
-        std::shared_ptr<arrow::ListArray> list_array =
-            std::dynamic_pointer_cast<arrow::ListArray>(array);
-        lengths[lengths_pos++] = list_array->length();
-
-        // allocate output arrays and copy data
-        array_info* offsets = alloc_array(list_array->length() + 1, -1, -1,
-                                          bodo_array_type::arr_type_enum::NUMPY,
-                                          Bodo_CType_offset, 0, 0);
-        int64_t n_null_bytes = (list_array->length() + 7) >> 3;
-        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
-                                        bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0, 0);
-
-        std::copy_n((int32_t*)(list_array->value_offsets()->data()),
-                    list_array->length() + 1, (offset_t*)offsets->data1());
-        memset(nulls->data1(), 0, n_null_bytes);
-        for (int64_t i = 0; i < list_array->length(); i++) {
-            if (!list_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1(), i, true);
-        }
-
-        infos[infos_pos++] = offsets;
-        infos[infos_pos++] = nulls;
-        nested_array_to_c(list_array->values(), lengths, infos, lengths_pos,
-                          infos_pos);
-    } else if (array->type_id() == arrow::Type::STRUCT) {
-        auto struct_array =
-            std::dynamic_pointer_cast<arrow::StructArray>(array);
-        auto struct_type =
-            std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
-        lengths[lengths_pos++] = struct_array->length();
-
-        // allocate output arrays and copy data
-        int64_t n_null_bytes = (struct_array->length() + 7) >> 3;
-        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
-                                        bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0, 0);
-        memset(nulls->data1(), 0, n_null_bytes);
-        for (int64_t i = 0; i < struct_array->length(); i++) {
-            if (!struct_array->IsNull(i))
-                SetBitTo((uint8_t*)nulls->data1(), i, true);
-        }
-        infos[infos_pos++] = nulls;
-        // Now outputting the fields.
-        for (int i = 0; i < struct_type->num_fields();
-             i++) {  // each field is an array
-            nested_array_to_c(struct_array->field(i), lengths, infos,
-                              lengths_pos, infos_pos);
-        }
-    } else if (array->type_id() == arrow::Type::LARGE_STRING) {
-        // TODO should print error or warning if OFFSET_BITWIDTH==32
-        auto str_array =
-            std::dynamic_pointer_cast<arrow::LargeStringArray>(array);
-        lengths[lengths_pos++] = str_array->length();
-        int64_t n_strings = str_array->length();
-        int64_t n_chars =
-            ((int64_t*)str_array->value_offsets()->data())[n_strings];
-        array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
-        memcpy(str_arr_info->data1(), str_array->value_data()->data(),
-               sizeof(char) * n_chars);  // data
-        // NOTE: this should just do a memcpy if the bidwidths of input and
-        // output match
-        std::copy_n((int64_t*)(str_array->value_offsets()->data()),
-                    n_strings + 1, (offset_t*)str_arr_info->data2());
-        int64_t n_null_bytes = (n_strings + 7) >> 3;
-        memset(str_arr_info->null_bitmask(), 0, n_null_bytes);
-        for (int64_t i = 0; i < n_strings; i++) {
-            if (!str_array->IsNull(i))
-                SetBitTo((uint8_t*)str_arr_info->null_bitmask(), i, true);
-        }
-        infos[infos_pos++] = str_arr_info;
-    } else if (array->type_id() == arrow::Type::STRING) {
-        auto str_array = std::dynamic_pointer_cast<arrow::StringArray>(array);
-        lengths[lengths_pos++] = str_array->length();
-        int64_t n_strings = str_array->length();
-        int64_t n_chars =
-            ((uint32_t*)str_array->value_offsets()->data())[n_strings];
-        array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
-        memcpy(str_arr_info->data1(), str_array->value_data()->data(),
-               sizeof(char) * n_chars);  // data
-        std::copy_n((int32_t*)(str_array->value_offsets()->data()),
-                    n_strings + 1, (offset_t*)str_arr_info->data2());
-        int64_t n_null_bytes = (n_strings + 7) >> 3;
-        memset(str_arr_info->null_bitmask(), 0, n_null_bytes);
-        for (int64_t i = 0; i < n_strings; i++) {
-            if (!str_array->IsNull(i))
-                SetBitTo((uint8_t*)str_arr_info->null_bitmask(), i, true);
-        }
-        infos[infos_pos++] = str_arr_info;
-    } else {
-        auto primitive_array =
-            std::dynamic_pointer_cast<arrow::PrimitiveArray>(array);
-        lengths[lengths_pos++] = primitive_array->length();
-
-        Bodo_CTypes::CTypeEnum dtype =
-            arrow_to_bodo_type(primitive_array->type()->id());
-        uint64_t siztype = numpy_item_size[dtype];
-
-        // allocate output arrays and copy data
-        size_t buffer_size;
-        size_t arr_len;
-        if (primitive_array->type()->id() == arrow::Type::BOOL) {
-            dtype = Bodo_CTypes::UINT8;
-            buffer_size = (primitive_array->length() + 7) >> 3;
-            arr_len = buffer_size;
-        } else {
-            buffer_size = primitive_array->length() * siztype;
-            arr_len = primitive_array->length();
-        }
-        array_info* data =
-            alloc_array(arr_len, -1, -1, bodo_array_type::arr_type_enum::NUMPY,
-                        dtype, 0, 0);
-        int64_t n_null_bytes = (primitive_array->length() + 7) >> 3;
-        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
-                                        bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0, 0);
-        memcpy(data->data1(), primitive_array->values()->data(), buffer_size);
-        memset(nulls->data1(), 0, n_null_bytes);
-        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-        for (int64_t i = 0; i < primitive_array->length(); i++) {
-            if (!primitive_array->IsNull(i)) {
-                SetBitTo((uint8_t*)nulls->data1(), i, true);
-            } else {
-                if (primitive_array->type()->id() != arrow::Type::BOOL) {
-                    memcpy(data->data1() + siztype * i, vectNaN.data(),
-                           siztype);
-                }
-            }
-        }
-        infos[infos_pos++] = nulls;
-        infos[infos_pos++] = data;
-    }
-}

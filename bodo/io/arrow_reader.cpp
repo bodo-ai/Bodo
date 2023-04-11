@@ -695,10 +695,9 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
             std::make_shared<arrow::ChunkedArray>(indices_chunks));
         array_info* bodo_indices = indices_builder.get_output();
 
-        out_array = new array_info(bodo_array_type::DICT,
-                                   Bodo_CTypes::CTypeEnum::STRING, length, {},
-                                   {bodo_dictionary, bodo_indices}, NULL, 0, 0,
-                                   0, false, false, false);
+        out_array = new array_info(
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, {},
+            {bodo_dictionary, bodo_indices}, 0, 0, 0, false, false, false);
 
         all_chunks.clear();
         return out_array;
@@ -789,7 +788,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         // dictionary.
         out_array = new array_info(
             bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, {},
-            {dict_arr, indices_arr}, NULL, 0, 0, 0, false,
+            {dict_arr, indices_arr}, 0, 0, 0, false,
             /*_has_deduped_local_dictionary=*/true, false);
         return out_array;
     }
@@ -936,8 +935,7 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
  */
 class ArrowBuilder : public TableBuilder::BuilderColumn {
    public:
-    ArrowBuilder(bodo_array_type::arr_type_enum _arr_type)
-        : arr_type(_arr_type) {}
+    ArrowBuilder() {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // XXX hopefully keeping the arrays around doesn't prevent other
@@ -954,27 +952,19 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
         std::shared_ptr<::arrow::Array> out_arrow_array;
         // TODO make this more efficient:
         // This copies to new buffers managed by Arrow, and then we copy
-        // again to our own buffers in nested_array_to_c called by
+        // again to our own buffers in
         // info_to_array https://bodo.atlassian.net/browse/BE-1426
         out_arrow_array =
             arrow::Concatenate(arrays, arrow::default_memory_pool())
                 .ValueOrDie();
         arrays.clear();  // memory of each array will be freed now
-        if (arr_type == bodo_array_type::ARRAY_ITEM) {
-            out_array = arrow_array_to_bodo(out_arrow_array);
-        } else {
-            out_array = new array_info(
-                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                out_arrow_array->length(),
-                /*meminfo TODO*/ {}, {}, out_arrow_array);
-        }
+
+        out_array = arrow_array_to_bodo(out_arrow_array);
         return out_array;
     }
 
    private:
     arrow::ArrayVector arrays;
-    // output Bodo array type to create
-    bodo_array_type::arr_type_enum arr_type;
 };
 
 /// Column builder for Arrow arrays with all null values
@@ -1039,11 +1029,7 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
         } else if (type == arrow::Type::NA) {
             columns.push_back(new AllNullsBuilder(num_rows));
         } else {
-            bodo_array_type::arr_type_enum arr_type = bodo_array_type::ARROW;
-            if (type == Type::LIST || type == Type::LARGE_LIST) {
-                arr_type = bodo_array_type::ARRAY_ITEM;
-            }
-            columns.push_back(new ArrowBuilder(arr_type));
+            columns.push_back(new ArrowBuilder());
         }
     }
 }
@@ -1065,9 +1051,9 @@ TableBuilder::TableBuilder(table_info* table, const int64_t num_rows) {
             columns.push_back(new StringBuilder(arr->dtype));
         } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
             columns.push_back(new ListStringBuilder(arr->dtype));
-        } else if (arr->arr_type == bodo_array_type::ARROW ||
+        } else if (arr->arr_type == bodo_array_type::STRUCT ||
                    arr->arr_type == bodo_array_type::ARRAY_ITEM) {
-            columns.push_back(new ArrowBuilder(arr->arr_type));
+            columns.push_back(new ArrowBuilder());
         } else {
             throw std::runtime_error("TableBuilder: array type (" +
                                      GetArrType_as_string(arr->arr_type) +

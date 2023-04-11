@@ -542,12 +542,12 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
             array_info* out_indices = RetrieveArray_SingleColumn_F_nullable(
                 in_indices, in_arr_idxs, nRowOut);
 
-            out_arr = new array_info(
-                bodo_array_type::DICT, in_arr->dtype, out_indices->length, {},
-                {in_arr->child_arrays[0], out_indices}, NULL, 0, 0, 0,
-                in_arr->has_global_dictionary,
-                in_arr->has_deduped_local_dictionary,
-                in_arr->has_sorted_dictionary);
+            out_arr = new array_info(bodo_array_type::DICT, in_arr->dtype,
+                                     out_indices->length, {},
+                                     {in_arr->child_arrays[0], out_indices}, 0,
+                                     0, 0, in_arr->has_global_dictionary,
+                                     in_arr->has_deduped_local_dictionary,
+                                     in_arr->has_sorted_dictionary);
             // input and output share the same dictionary array
             incref_array(in_arr->child_arrays[0]);
             break;
@@ -614,7 +614,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
             break;
         }
         case bodo_array_type::ARRAY_ITEM:
-        case bodo_array_type::ARROW: {
+        case bodo_array_type::STRUCT: {
             // Arrow builder for output array. builds it dynamically (buffer
             // sizes are not known in advance)
             std::unique_ptr<arrow::ArrayBuilder> builder;
@@ -640,14 +640,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
             // TODO: assert builder is not null (at least one row added)
             (void)builder->Finish(&out_arrow_array);
 
-            if (arr_type == bodo_array_type::ARRAY_ITEM) {
-                out_arr = arrow_array_to_bodo(out_arrow_array);
-            } else {
-                out_arr =
-                    new array_info(bodo_array_type::ARROW,
-                                   Bodo_CTypes::INT8 /*dummy*/, nRowOut,
-                                   /*meminfo TODO*/ {}, {}, out_arrow_array);
-            }
+            out_arr = arrow_array_to_bodo(out_arrow_array);
             break;
         }
         default:
@@ -856,7 +849,7 @@ array_info* RetrieveArray_TwoColumns(
         }
         out_arr = new array_info(
             bodo_array_type::DICT, arr1->dtype, out_indices->length, {},
-            {arr1->child_arrays[0], out_indices}, NULL, 0, 0, 0,
+            {arr1->child_arrays[0], out_indices}, 0, 0, 0,
             arr1->has_global_dictionary, arr1->has_deduped_local_dictionary,
             arr1->has_sorted_dictionary);
         incref_array(arr1->child_arrays[0]);
@@ -944,7 +937,7 @@ array_info* RetrieveArray_TwoColumns(
             memcpy(out_ptr, in_ptr, siztype);
         }
     }
-    if (arr_type == bodo_array_type::ARROW ||
+    if (arr_type == bodo_array_type::STRUCT ||
         arr_type == bodo_array_type::ARRAY_ITEM) {
         // Arrow builder for output array. builds it dynamically (buffer
         // sizes are not known in advance)
@@ -973,13 +966,7 @@ array_info* RetrieveArray_TwoColumns(
         // TODO: assert builder is not null (at least one row added)
         (void)builder->Finish(&out_arrow_array);
 
-        if (arr_type == bodo_array_type::ARRAY_ITEM) {
-            out_arr = arrow_array_to_bodo(out_arrow_array);
-        } else {
-            out_arr = new array_info(bodo_array_type::ARROW,
-                                     Bodo_CTypes::INT8 /*dummy*/, nRowOut,
-                                     /*meminfo TODO*/ {}, {}, out_arrow_array);
-        }
+        out_arr = arrow_array_to_bodo(out_arrow_array);
     }
     return out_arr;
 }
@@ -1231,7 +1218,7 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
 
 bool TestEqualColumn(const array_info* arr1, int64_t pos1,
                      const array_info* arr2, int64_t pos2, bool is_na_equal) {
-    if (arr1->arr_type == bodo_array_type::ARROW ||
+    if (arr1->arr_type == bodo_array_type::STRUCT ||
         arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
         // TODO: Handle is_na_equal in Arrow arrays
         int64_t pos1_s = pos1;
@@ -1400,7 +1387,7 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
 int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                                  size_t const& iRow1, array_info* arr2,
                                  size_t const& iRow2) {
-    if (arr1->arr_type == bodo_array_type::ARROW ||
+    if (arr1->arr_type == bodo_array_type::STRUCT ||
         arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
         int64_t pos1_s = iRow1;
         int64_t pos1_e = iRow1 + 1;
@@ -1729,7 +1716,7 @@ uint8_t* create_temp_null_bitmask_for_array(const array_info* arr) {
             break;
         }
         case bodo_array_type::ARRAY_ITEM:
-        case bodo_array_type::ARROW: {
+        case bodo_array_type::STRUCT: {
             // For robustness, we do a for loop and use the IsNull function
             // to determine if an element is null. IsNull correctly handles
             // all cases including no nulls, all nulls (Null array type),
@@ -2179,7 +2166,7 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
             ListStr[iRow] = strOut;
         }
     }
-    if (arr->arr_type == bodo_array_type::ARROW ||
+    if (arr->arr_type == bodo_array_type::STRUCT ||
         arr->arr_type == bodo_array_type::ARRAY_ITEM) {
         std::shared_ptr<arrow::Array> in_arr = arr->to_arrow();
         for (size_t iRow = 0; iRow < nRow; iRow++) {
@@ -2320,6 +2307,8 @@ std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
         return "TIME";
     if (dtype == Bodo_CTypes::LIST)
         return "LIST";
+    if (dtype == Bodo_CTypes::STRUCT)
+        return "STRUCT";
     return "unmatching dtype";
 }
 
@@ -2332,9 +2321,10 @@ std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type) {
         return "NULLABLE";
     if (arr_type == bodo_array_type::LIST_STRING)
         return "LIST_STRING";
-    if (arr_type == bodo_array_type::ARROW ||
-        arr_type == bodo_array_type::ARRAY_ITEM)
-        return "ARROW";
+    if (arr_type == bodo_array_type::ARRAY_ITEM)
+        return "ARRAY_ITEM";
+    if (arr_type == bodo_array_type::STRUCT)
+        return "STRUCT";
     if (arr_type == bodo_array_type::CATEGORICAL)
         return "CATEGORICAL";
     if (arr_type == bodo_array_type::DICT)
@@ -2377,6 +2367,12 @@ void DEBUG_PrintColumn(std::ostream& os, const array_info* arr) {
     os << "ARRAY_INFO: Column n=" << n_rows
        << " arr=" << GetArrType_as_string(arr->arr_type)
        << " dtype=" << GetDtype_as_string(arr->dtype) << "\n";
+    if (arr->arr_type == bodo_array_type::STRUCT) {
+        os << "Fields: ";
+        for (auto f : arr->field_names)
+            os << f << " ";
+        os << "\n";
+    }
     std::vector<std::string> LStr = GetColumn_as_ListString(arr);
     for (int i_row = 0; i_row < n_rows; i_row++)
         os << "i_row=" << i_row << " S=" << LStr[i_row] << "\n";
