@@ -29,6 +29,7 @@ from bodo.tests.utils import check_func
 pytestmark = pytest.mark.iceberg
 
 
+@pytest.mark.slow
 def test_filter_pushdown_target(iceberg_database, iceberg_table_conn):
     """
     Test that merge into with only the target table loaded from Iceberg
@@ -114,6 +115,7 @@ def test_filter_pushdown_target(iceberg_database, iceberg_table_conn):
     assert expr_filters == "None", "Expr filters were pushed unexpectedly"
 
 
+@pytest.mark.slow
 def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn):
     """
     Test that merge into with the target table loaded from Iceberg
@@ -227,6 +229,7 @@ def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn)
     assert expr_filters_source != "None", "No Expr filters were pushed"
 
 
+@pytest.mark.slow
 def test_filter_pushdown_self_merge(iceberg_database, iceberg_table_conn):
     """
     Test that merge into with the target table and source table

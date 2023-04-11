@@ -115,6 +115,7 @@ def simple_dataframe(request):
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "table_name",
     [
@@ -157,6 +158,7 @@ def test_simple_table_read(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "table_name",
     [
@@ -197,6 +199,7 @@ def test_read_zero_cols(iceberg_database, iceberg_table_conn, table_name):
         check_logger_msg(stream, "Columns loaded []")
 
 
+@pytest.mark.slow
 def test_simple_tz_aware_table_read(
     iceberg_database,
     iceberg_table_conn,
@@ -236,6 +239,7 @@ def test_simple_tz_aware_table_read(
     )
 
 
+@pytest.mark.slow
 def test_simple_numeric_table_read(
     iceberg_database,
     iceberg_table_conn,
@@ -301,6 +305,7 @@ def test_simple_list_table_read(
     )
 
 
+@pytest.mark.slow
 def test_simple_bool_binary_table_read(
     iceberg_database,
     iceberg_table_conn,
@@ -339,6 +344,7 @@ def test_simple_bool_binary_table_read(
     )
 
 
+@pytest.mark.slow
 def test_simple_struct_table_read(
     iceberg_database,
     iceberg_table_conn,
@@ -371,6 +377,7 @@ def test_simple_struct_table_read(
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+@pytest.mark.slow
 def test_column_pruning(iceberg_database, iceberg_table_conn):
     """
     Test simple read operation on test table simple_numeric_table
@@ -405,6 +412,7 @@ def test_column_pruning(iceberg_database, iceberg_table_conn):
     )
 
 
+@pytest.mark.slow
 def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
     """
     Test reading string arrays as dictionary-encoded when specified by the user or
@@ -579,6 +587,7 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
     check_func(impl7, (table_name, conn, db_schema), py_output=df)
 
 
+@pytest.mark.slow
 def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
     """
     Test that columns with dictionary encoding are determined
@@ -646,6 +655,7 @@ def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
     assert passed == bodo.get_size(), "Datatype validation failed on one or more ranks."
 
 
+@pytest.mark.slow
 def test_disable_dict_detection(iceberg_database, iceberg_table_conn):
     """
     Test reading string arrays as dictionary-encoded when specified by the user or
@@ -703,6 +713,7 @@ def test_disable_dict_detection(iceberg_database, iceberg_table_conn):
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+@pytest.mark.slow
 def test_no_files_after_filter_pushdown(iceberg_database, iceberg_table_conn):
     """
     Test the use case where Iceberg filters out all files
@@ -734,6 +745,7 @@ def test_no_files_after_filter_pushdown(iceberg_database, iceberg_table_conn):
     check_func(impl, (table_name, conn, db_schema), py_output=py_out)
 
 
+@pytest.mark.slow
 def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
     """
     Test that the bodo_iceberg_connector correctly loads the latest snapshot id.
@@ -765,6 +777,7 @@ def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+@pytest.mark.slow
 def test_read_merge_into_cow_row_id_col(iceberg_database, iceberg_table_conn):
     """
     Test that reading from an Iceberg table in MERGE INTO COW mode
@@ -811,6 +824,7 @@ def test_read_merge_into_cow_row_id_col(iceberg_database, iceberg_table_conn):
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+@pytest.mark.slow
 def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
     """
     Test that simple date based partitions can be read as expected.
@@ -843,6 +857,7 @@ def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
     )
 
 
+@pytest.mark.slow
 def test_filter_pushdown_file_filters(iceberg_database, iceberg_table_conn):
     """
     Test that simple filter pushdown works inside the parquet file.
@@ -881,6 +896,7 @@ def test_filter_pushdown_file_filters(iceberg_database, iceberg_table_conn):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
+@pytest.mark.slow
 def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
     """
     Test that passing _bodo_merge_into still has filter pushdown succeed
@@ -1013,6 +1029,7 @@ def _check_for_sql_read_head_only(bodo_func, head_size):
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+@pytest.mark.slow
 def test_limit_pushdown(iceberg_database, iceberg_table_conn):
     """Test that Limit Pushdown is successfully enabled"""
     table_name = "simple_string_table"
@@ -1040,6 +1057,7 @@ def test_limit_pushdown(iceberg_database, iceberg_table_conn):
     _check_for_sql_read_head_only(bodo_func, 5)
 
 
+@pytest.mark.slow
 def test_schema_evolution_detection(iceberg_database, iceberg_table_conn):
     """
     Test that we throw the right error when dataset has schema evolution,
@@ -1063,6 +1081,7 @@ def test_schema_evolution_detection(iceberg_database, iceberg_table_conn):
         bodo.jit(impl)(table_name, conn, db_schema)
 
 
+@pytest.mark.slow
 @pytest.mark.skip("[BE-3212] Fix Java failures on CI")
 def test_iceberg_invalid_table(iceberg_database, iceberg_table_conn):
     """Tests error raised when a nonexistent Iceberg table is provided."""
@@ -1079,6 +1098,7 @@ def test_iceberg_invalid_table(iceberg_database, iceberg_table_conn):
         bodo.jit(impl)(table_name, conn, db_schema)
 
 
+@pytest.mark.slow
 def test_iceberg_invalid_path(iceberg_database, iceberg_table_conn):
     """Tests error raised when invalid path is provided."""
 
@@ -1095,6 +1115,7 @@ def test_iceberg_invalid_path(iceberg_database, iceberg_table_conn):
         bodo.jit(impl)(table_name, conn, db_schema)
 
 
+@pytest.mark.slow
 def test_write_existing_fail(
     iceberg_database,
     iceberg_table_conn,
@@ -1133,6 +1154,7 @@ def test_write_existing_fail(
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("read_behavior", ["spark", "bodo"])
 def test_basic_write_replace(
     iceberg_database,
@@ -1230,6 +1252,7 @@ def test_basic_write_replace(
     # assert n_passed == n_pes)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("behavior", ["create", "append"])
 @pytest.mark.parametrize("initial_write", ["bodo", "spark"])
 def test_basic_write_new_append(
@@ -1383,6 +1406,7 @@ def test_basic_write_new_append(
     assert spark_n == n_pes
 
 
+@pytest.mark.slow
 def test_basic_write_runtime_cols_fail(
     iceberg_database,
     iceberg_table_conn,
@@ -1413,6 +1437,7 @@ def test_basic_write_runtime_cols_fail(
         impl(table_name, conn, db_schema)
 
 
+@pytest.mark.slow
 def test_basic_write_append_not_null_arrays(
     iceberg_database,
     iceberg_table_conn,
@@ -1478,6 +1503,7 @@ def test_basic_write_append_not_null_arrays(
     impl(_get_dist_arg(bodo_in_df), table_name, conn, db_schema)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "name,sql_schema,df,df_write",
     [
@@ -1644,6 +1670,7 @@ def downcasting_table_info(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_basic_write_downcasting_fail(
     iceberg_database,
     iceberg_table_conn,
@@ -1678,6 +1705,7 @@ def test_basic_write_downcasting_fail(
         impl(_get_dist_arg(df_write), table_name, conn, db_schema)
 
 
+@pytest.mark.slow
 def test_basic_write_downcasting(
     iceberg_database,
     iceberg_table_conn,
@@ -1761,6 +1789,7 @@ def test_basic_write_downcasting(
     assert any(err_msg.startswith(msg) for msg in err_msgs)
 
 
+@pytest.mark.slow
 def test_basic_write_downcasting_copy(
     iceberg_database,
     iceberg_table_conn,
@@ -1801,6 +1830,7 @@ def test_basic_write_downcasting_copy(
     assert reduce_sum(passed) == comm.Get_size()
 
 
+@pytest.mark.slow
 def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
     """
     Tests for known errors thrown when writing an Iceberg table.
@@ -1840,6 +1870,7 @@ def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+@pytest.mark.slow
 def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn):
     """
     Some compilation errors can only be observed when running multiple steps.
@@ -1878,6 +1909,7 @@ def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn):
         bodo.jit(impl)(fname, table_name, conn, db_schema)
 
 
+@pytest.mark.slow
 def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
     """
     Test support for adding a dataframe to an iceberg table where the dataframe
@@ -1919,6 +1951,7 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
     ), "Missing column not filled with nulls"
 
 
+@pytest.mark.slow
 def test_iceberg_missing_optional_column_missing_error(
     iceberg_database, iceberg_table_conn
 ):
@@ -1947,6 +1980,7 @@ def test_iceberg_missing_optional_column_missing_error(
         bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
 
 
+@pytest.mark.slow
 def test_iceberg_missing_optional_column_extra_error(
     iceberg_database, iceberg_table_conn
 ):
@@ -1978,6 +2012,7 @@ def test_iceberg_missing_optional_column_extra_error(
         bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
 
 
+@pytest.mark.slow
 def test_iceberg_missing_optional_column_incorrect_field_order(
     iceberg_database, iceberg_table_conn
 ):
@@ -2145,6 +2180,7 @@ ARRAY_TRANSFORM_FUNC = {
 }
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("base_name,part_spec", PARTITION_MAP)
 def test_write_partitioned(
     iceberg_database,
@@ -2274,6 +2310,7 @@ def sort_cases(request):
     return (base_name, sort_order, sort_table_name(base_name, sort_order))
 
 
+@pytest.mark.slow
 def test_write_sorted(
     iceberg_database,
     iceberg_table_conn,
@@ -2396,6 +2433,7 @@ def test_write_sorted(
     assert passed == 1, "Spark read output doesn't match expected output"
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("use_dict_encoding_boxing", [False, True])
 def test_write_part_sort(
     iceberg_database,
@@ -2565,6 +2603,7 @@ def _test_file_sorted(file_name: str, sort_order: List[SortField]):
     _test_equal(df_vals, sorted_vals, check_dtype=False)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("use_dict_encoding_boxing", [False, True])
 def test_write_part_sort_return_orig(
     iceberg_database,
@@ -2635,6 +2674,7 @@ def test_write_part_sort_return_orig(
     assert passed == 1, "Bodo function output doesn't match expected output"
 
 
+@pytest.mark.slow
 def test_merge_into_cow_write_api(
     iceberg_database,
     iceberg_table_conn,
@@ -2711,6 +2751,7 @@ def test_merge_into_cow_write_api(
         passed = comm.bcast(passed)
 
 
+@pytest.mark.slow
 def test_merge_into_cow_write_api_partitioned(
     iceberg_database,
     iceberg_table_conn,
@@ -2808,6 +2849,7 @@ def test_merge_into_cow_write_api_partitioned(
         passed = comm.bcast(passed)
 
 
+@pytest.mark.slow
 def test_merge_into_cow_write_api_snapshot_check(
     iceberg_database,
     iceberg_table_conn,
@@ -2880,6 +2922,7 @@ def test_merge_into_cow_write_api_snapshot_check(
         passed = comm.bcast(passed)
 
 
+@pytest.mark.slow
 def test_merge_into_cow_simple_e2e(iceberg_database, iceberg_table_conn):
     """
     Tests a simple end to end example of reading with _bodo_merge_into, performing some modifications,
@@ -2959,6 +3002,7 @@ def test_merge_into_cow_simple_e2e(iceberg_database, iceberg_table_conn):
     assert passed == 1, "Bodo function output doesn't match expected output"
 
 
+@pytest.mark.slow
 def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_conn):
     """
     Tests a simple end to end example of reading with _bodo_merge_into, performing some modifications,
@@ -3096,6 +3140,7 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
     assert passed, "Bodo read output doesn't match expected output"
 
 
+@pytest.mark.slow
 def test_iceberg_write_nulls_in_dict(iceberg_database, iceberg_table_conn):
     """
     Test that Iceberg write works even when there are nulls in

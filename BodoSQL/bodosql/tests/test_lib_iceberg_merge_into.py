@@ -203,6 +203,7 @@ def do_delta_merge_with_target_py_wrapper(target_df, delta_df):
     return do_delta_merge_with_target(target_df, delta_df)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "args",
     [
@@ -295,6 +296,7 @@ def test_do_delta_merge_with_target_dist(args, use_table_format, memory_leak_che
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "args",
     [
@@ -377,6 +379,7 @@ def test_do_delta_merge_with_target_seq(args, use_table_format):
     )
 
 
+@pytest.mark.slow
 def test_do_delta_merge_failure():
     """
     Tests our helper functions used in MERGE INTO throw a reasonable error
@@ -403,6 +406,7 @@ def test_do_delta_merge_failure():
         out_val = do_delta_merge_with_target(target_df, delta_df)
 
 
+@pytest.mark.slow
 def test_do_delta_merge_disallow_multiple_delete():
     """
     Tests our helper functions in MERGE INTO does not allow multiple delete actions for the same row.
@@ -429,6 +433,7 @@ def test_do_delta_merge_disallow_multiple_delete():
         do_delta_merge_with_target(target_df, delta_df)
 
 
+@pytest.mark.slow
 def test_do_delta_merge_with_target_filter_pushdown_simple(
     iceberg_database, iceberg_table_conn
 ):

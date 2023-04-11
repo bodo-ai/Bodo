@@ -50,6 +50,7 @@ def _create_and_init_table(table_name, types, df, source=None):
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("INSERT * Syntax is Not Supported Yet")
 def test_merge_into_empty_target_insert_all_non_matching_rows(
     iceberg_database, iceberg_table_conn, table_name
@@ -89,6 +90,7 @@ def test_merge_into_empty_target_insert_all_non_matching_rows(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for insert *")
 def test_merge_into_empty_target_insert_only_matching_rows(
     iceberg_database,
@@ -128,6 +130,7 @@ def test_merge_into_empty_target_insert_only_matching_rows(
     )
 
 
+@pytest.mark.slow
 def test_merge_into_non_existing_table(
     iceberg_database, iceberg_table_conn, table_name
 ):
@@ -156,6 +159,7 @@ def test_merge_into_non_existing_table(
         impl(bc)
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for set *")
 def test_merge_with_only_update_clause(
     iceberg_database, iceberg_table_conn, table_name
@@ -197,6 +201,7 @@ def test_merge_with_only_update_clause(
     )
 
 
+@pytest.mark.slow
 def test_merge_with_only_delete_clause(
     iceberg_database, iceberg_table_conn, table_name
 ):
@@ -240,6 +245,7 @@ def test_merge_with_only_delete_clause(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for set * and insert *")
 def test_merge_with_all_clauses(iceberg_database, iceberg_table_conn, table_name):
     """
@@ -283,6 +289,7 @@ def test_merge_with_all_clauses(iceberg_database, iceberg_table_conn, table_name
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for table alias in the LHS of the update assignment")
 def test_merge_with_all_causes_with_explicit_column_specification(
     iceberg_database, iceberg_table_conn, table_name
@@ -328,6 +335,7 @@ def test_merge_with_all_causes_with_explicit_column_specification(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for set * and insert *")
 def test_merge_with_source_cte(iceberg_database, iceberg_table_conn, table_name):
     """
@@ -372,6 +380,7 @@ def test_merge_with_source_cte(iceberg_database, iceberg_table_conn, table_name)
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for set * and insert *")
 def test_merge_with_source_from_set_ops(
     iceberg_database,
@@ -419,6 +428,7 @@ def test_merge_with_source_from_set_ops(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for set * and insert *")
 def test_merge_with_multiple_updates_for_target_row(
     iceberg_database,
@@ -472,6 +482,7 @@ def test_merge_with_multiple_updates_for_target_row(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for set * and insert *")
 def test_merge_with_unconditional_delete(
     iceberg_database,
@@ -520,6 +531,7 @@ def test_merge_with_unconditional_delete(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for set * and insert *")
 def test_merge_with_single_conditional_delete(
     iceberg_database,
@@ -568,6 +580,7 @@ def test_merge_with_single_conditional_delete(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for set * and insert *")
 def test_self_merge(
     iceberg_database,
@@ -610,6 +623,7 @@ def test_self_merge(
     )
 
 
+@pytest.mark.slow
 def test_merge_with_source_as_self_subquery(
     iceberg_database,
     iceberg_table_conn,
@@ -654,6 +668,7 @@ def test_merge_with_source_as_self_subquery(
     )
 
 
+@pytest.mark.slow
 def test_merge_with_extra_columns_in_source(
     iceberg_database,
     iceberg_table_conn,
@@ -707,6 +722,7 @@ def test_merge_with_extra_columns_in_source(
     )
 
 
+@pytest.mark.slow
 def test_merge_with_nulls_in_target_and_source(
     iceberg_database,
     iceberg_table_conn,
@@ -756,6 +772,7 @@ def test_merge_with_nulls_in_target_and_source(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Support <=> with Join")
 def test_merge_with_null_safe_equals(
     iceberg_database,
@@ -801,6 +818,7 @@ def test_merge_with_null_safe_equals(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Support non-equijoin. This gets mapped to a Left-Join cond=True")
 def test_merge_with_null_condition(
     iceberg_database,
@@ -848,6 +866,7 @@ def test_merge_with_null_condition(
     )
 
 
+@pytest.mark.slow
 def test_merge_with_null_action_conditions(
     iceberg_database,
     iceberg_table_conn,
@@ -922,6 +941,7 @@ def test_merge_with_null_action_conditions(
     )
 
 
+@pytest.mark.slow
 def test_merge_with_multiple_matching_actions(
     iceberg_database,
     iceberg_table_conn,
@@ -972,6 +992,7 @@ def test_merge_with_multiple_matching_actions(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for insert *")
 def test_merge_insert_only(
     iceberg_database,
@@ -1020,6 +1041,7 @@ def test_merge_insert_only(
     )
 
 
+@pytest.mark.slow
 def test_merge_insert_only_with_condition(
     iceberg_database,
     iceberg_table_conn,
@@ -1067,6 +1089,7 @@ def test_merge_insert_only_with_condition(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip(
     "id column is ambiguous because calcite can't figure out insert must come from source table."
 )
@@ -1116,6 +1139,7 @@ def test_merge_aligns_update_and_insert_actions(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip(
     "id column is ambiguous because calcite can't figure out insert must come from source table."
 )
@@ -1189,6 +1213,7 @@ def test_merge_mixed_case_aligns_update_and_insert_actions(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for table alias in the LHS of the update assignment")
 def test_merge_multiple_match_ordering(
     iceberg_database,
@@ -1279,6 +1304,7 @@ def test_merge_multiple_match_ordering(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for table alias in the LHS of the update assignment")
 def test_merge_with_inferred_casts(
     iceberg_database,
@@ -1317,6 +1343,7 @@ def test_merge_with_inferred_casts(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("INSERT * Syntax is Not Supported Yet")
 def test_merge_with_multiple_not_matched_actions(
     iceberg_database,
@@ -1360,6 +1387,7 @@ def test_merge_with_multiple_not_matched_actions(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for insert *")
 def test_merge_with_multiple_conditional_not_matched_actions(
     iceberg_database,
@@ -1403,6 +1431,7 @@ def test_merge_with_multiple_conditional_not_matched_actions(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for insert * and set *")
 def test_merge_resolves_columns_by_name(
     iceberg_database,
@@ -1458,6 +1487,7 @@ def test_merge_resolves_columns_by_name(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for insert * and set *")
 def test_merge_should_resolve_when_there_are_no_unresolved_expressions_or_columns(
     iceberg_database,
@@ -1501,6 +1531,7 @@ def test_merge_should_resolve_when_there_are_no_unresolved_expressions_or_column
     )
 
 
+@pytest.mark.slow
 def test_merge_with_non_existing_columns(
     iceberg_database,
     iceberg_table_conn,
@@ -1533,6 +1564,7 @@ def test_merge_with_non_existing_columns(
         out1 = impl(bc)
 
 
+@pytest.mark.slow
 def test_merge_with_invalid_columns_in_insert(
     iceberg_database,
     iceberg_table_conn,
@@ -1580,6 +1612,7 @@ def test_merge_with_invalid_columns_in_insert(
         test_must_provide_all_dest_cols(bc)
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for table alias in the LHS of the update assignment")
 def test_merge_with_conflicting_updates(
     iceberg_database,
@@ -1617,6 +1650,7 @@ def test_merge_with_conflicting_updates(
         impl(bc)
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Need support for table alias in the LHS of the update assignment")
 def test_merge_with_invalid_assignments(
     iceberg_database,
@@ -1678,6 +1712,7 @@ def gen_agg_subquery_bc():
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
 def test_merge_with_aggregate_expressions_in_join(
     iceberg_database,
@@ -1714,6 +1749,7 @@ def test_merge_with_aggregate_expressions_in_join(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
 def test_merge_matched_with_aggregate_expressions_in_update_cond(
     iceberg_database,
@@ -1750,6 +1786,7 @@ def test_merge_matched_with_aggregate_expressions_in_update_cond(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
 def test_merge_with_aggregate_expressions_in_delete_cond(
     iceberg_database,
@@ -1784,6 +1821,7 @@ def test_merge_with_aggregate_expressions_in_delete_cond(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
 def test_merge_not_matched_with_aggregate_expressions_in_update_cond(
     iceberg_database,
@@ -1819,6 +1857,7 @@ def test_merge_not_matched_with_aggregate_expressions_in_update_cond(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
 def test_merge_with_subqueries_in_join_condition(
     iceberg_database,
@@ -1854,6 +1893,7 @@ def test_merge_with_subqueries_in_join_condition(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
 def test_merge_with_subqueries_in_update_condition(
     table_name,
@@ -1886,6 +1926,7 @@ def test_merge_with_subqueries_in_update_condition(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
 def test_merge_with_subqueries_in_delete_condition(
     iceberg_database,
@@ -1920,6 +1961,7 @@ def test_merge_with_subqueries_in_delete_condition(
     )
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
 def test_merge_with_subqueries_in_insert_condition(
     iceberg_database,
@@ -1954,6 +1996,7 @@ def test_merge_with_subqueries_in_insert_condition(
     )
 
 
+@pytest.mark.slow
 def test_merge_with_target_columns_in_insert_conditions(
     iceberg_database, iceberg_table_conn, table_name
 ):
@@ -1983,6 +2026,7 @@ def test_merge_with_target_columns_in_insert_conditions(
         impl(bc)
 
 
+@pytest.mark.slow
 @pytest.mark.skip("Support insert * and set *")
 def test_merge_empty_table(
     iceberg_database,
