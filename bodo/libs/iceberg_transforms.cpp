@@ -459,7 +459,7 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
         // unique elements though.
         out_arr = new array_info(
             bodo_array_type::DICT, in_arr->dtype, in_arr->length, {},
-            {trunc_dict_data_arr, indices_copy}, NULL, 0, 0, 0,
+            {trunc_dict_data_arr, indices_copy}, 0, 0, 0,
             in_arr->has_global_dictionary, in_arr->has_deduped_local_dictionary,
             in_arr->has_sorted_dictionary);
         return out_arr;

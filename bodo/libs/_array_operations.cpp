@@ -2334,8 +2334,8 @@ array_info* get_replace_regex(array_info* in_arr, char const* const pat,
         }
         array_info* new_indices = copy_array(indices_arr);
         out_arr = new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
-                                 in_arr->length, {}, {new_dict, new_indices},
-                                 NULL, 0, 0, 0, in_arr->has_global_dictionary,
+                                 in_arr->length, {}, {new_dict, new_indices}, 0,
+                                 0, 0, in_arr->has_global_dictionary,
                                  false,  // Note replace can create collisions.
                                  false);
     } else {

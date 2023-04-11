@@ -93,7 +93,7 @@ struct multi_col_key {
             size_t size_type;
             switch (c1->arr_type) {
                 case bodo_array_type::ARRAY_ITEM:
-                case bodo_array_type::ARROW: {
+                case bodo_array_type::STRUCT: {
                     int64_t pos1_s = row;
                     int64_t pos1_e = row + 1;
                     int64_t pos2_s = other.row;
@@ -888,14 +888,20 @@ inline constexpr decltype(auto) type_dispatcher(
                         std::to_string(dtype));
             }
         case bodo_array_type::ARRAY_ITEM:
-        case bodo_array_type::ARROW:
             switch (dtype) {
-                // Arrow array stores a dummy int8 dtype
-                // https://github.com/Bodo-inc/Bodo/blob/7578641188b6630a5762ea150c03894736f77a8d/bodo/libs/_array.cpp#L254
-                DISPATCH_CASE(bodo_array_type::ARROW, Bodo_CTypes::INT8);
+                DISPATCH_CASE(bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST);
                 default:
-                    throw std::runtime_error("invalid dtype for Arrow arrays " +
-                                             std::to_string(dtype));
+                    throw std::runtime_error(
+                        "invalid dtype for array(item) arrays " +
+                        std::to_string(dtype));
+            }
+        case bodo_array_type::STRUCT:
+            switch (dtype) {
+                DISPATCH_CASE(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT);
+                default:
+                    throw std::runtime_error(
+                        "invalid dtype for struct arrays " +
+                        std::to_string(dtype));
             }
         default:
             throw std::runtime_error("invalid array type " +

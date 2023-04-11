@@ -24,249 +24,20 @@
 
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
-#undef USE_ARROW_FOR_LIST_STRING
-
-struct ArrayBuildInfo {
-    ArrayBuildInfo(std::shared_ptr<arrow::Array> a, int p1, int p2, int p3,
-                   int p4)
-        : array(a), type_pos(p1), buf_pos(p2), length_pos(p3), name_pos(p4) {}
-    std::shared_ptr<arrow::Array> array;
-    int type_pos;
-    int buf_pos;
-    int length_pos;
-    int name_pos;
-};
-
-/**
- * This is called recursively
- * @param types: array of type IDs for each array in nested structure
- * @param buffers: array of buffers for each array in nested structure
-                   (includes offset, null_bitmap and data buffers)
-                   NOTE that not all arrays have all three
- * @param lengths: length of each array in nested structure
- * @param type_pos: track current position in types array
- * @param buf_pos: track current position in buffers array
- * @param length_pos: track current position in lengths array
- * @param name_pos: track current position in field names
- */
-ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
-                                   const int64_t* lengths, char** field_names,
-                                   int type_pos, int buf_pos, int length_pos,
-                                   int name_pos) {
-    Bodo_CTypes::CTypeEnum type = (Bodo_CTypes::CTypeEnum)types[type_pos];
-    int64_t length = lengths[length_pos];
-    if (type == Bodo_CTypes::LIST) {
-        const uint8_t* _offsets = buffers[buf_pos++];
-        const uint8_t* _null_bitmap = buffers[buf_pos++];
-
-        ArrayBuildInfo ai = nested_array_from_c(
-            types, buffers, lengths, field_names, type_pos + 1, buf_pos,
-            length_pos + 1, name_pos);
-        type_pos = ai.type_pos;
-        buf_pos = ai.buf_pos;
-        length_pos = ai.length_pos;
-        name_pos = ai.name_pos;
-
-        std::shared_ptr<arrow::Buffer> list_offsets =
-            std::make_shared<arrow::Buffer>(_offsets,
-                                            sizeof(offset_t) * (length + 1));
-        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        if (_null_bitmap)
-            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
-                                                          (length + 7) >> 3);
-        // We use `element` for consistency.
-        // TODO [BE-3247] We should specify nullability of the fields here.
-        std::shared_ptr<arrow::Field> field =
-            std::make_shared<arrow::Field>("element", ai.array->type());
-        std::shared_ptr<arrow::Array> array =
-#if OFFSET_BITWIDTH == 32
-            std::make_shared<arrow::ListArray>(arrow::list(field), length,
-#else
-            std::make_shared<arrow::LargeListArray>(arrow::large_list(field),
-                                                    length,
-#endif
-                                               list_offsets, ai.array,
-                                               null_bitmap);
-
-        return ArrayBuildInfo(array, type_pos, buf_pos, length_pos, name_pos);
-    } else if (type == Bodo_CTypes::STRUCT) {
-        int num_fields = types[type_pos + 1];
-        type_pos += 2;
-        length_pos += 2;
-
-        const uint8_t* _null_bitmap = buffers[buf_pos++];
-
-        std::vector<std::shared_ptr<arrow::Array>> child_arrays;
-        std::vector<std::shared_ptr<arrow::Field>> fields;
-        for (int i = 0; i < num_fields; i++) {
-            std::string e_name(field_names[name_pos]);
-            ArrayBuildInfo ai = nested_array_from_c(
-                types, buffers, lengths, field_names, type_pos, buf_pos,
-                length_pos, name_pos + 1);
-            child_arrays.push_back(ai.array);
-            // TODO [BE-3247] We should specify nullability of the fields here.
-            fields.push_back(
-                std::make_shared<arrow::Field>(e_name, ai.array->type()));
-            type_pos = ai.type_pos;
-            buf_pos = ai.buf_pos;
-            length_pos = ai.length_pos;
-            name_pos = ai.name_pos;
-        }
-
-        std::shared_ptr<arrow::StructType> struct_type =
-            std::make_shared<arrow::StructType>(fields);
-        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        if (_null_bitmap)
-            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
-                                                          (length + 7) >> 3);
-        std::shared_ptr<arrow::Array> array =
-            std::make_shared<arrow::StructArray>(struct_type, length,
-                                                 child_arrays, null_bitmap);
-        return ArrayBuildInfo(array, type_pos, buf_pos, length_pos, name_pos);
-    } else if (type == Bodo_CTypes::STRING) {
-        const uint8_t* _offsets = buffers[buf_pos++];
-        const uint8_t* _null_bitmap = buffers[buf_pos++];
-
-        std::shared_ptr<arrow::Buffer> str_offsets =
-            std::make_shared<arrow::Buffer>(_offsets,
-                                            sizeof(offset_t) * (length + 1));
-
-        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        if (_null_bitmap)
-            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
-                                                          (length + 7) >> 3);
-
-        int64_t num_chars = ((offset_t*)_offsets)[length];
-        std::shared_ptr<arrow::Buffer> data = std::make_shared<arrow::Buffer>(
-            buffers[buf_pos++], num_chars * sizeof(char));
-
-        std::shared_ptr<arrow::Array> array =
-#if OFFSET_BITWIDTH == 32
-            std::make_shared<arrow::StringArray>(length, str_offsets, data,
-#else
-            std::make_shared<arrow::LargeStringArray>(length, str_offsets, data,
-#endif
-                                                 null_bitmap);
-        return ArrayBuildInfo(array, type_pos + 1, buf_pos, length_pos + 1,
-                              name_pos);
-    } else if (type == Bodo_CTypes::DECIMAL) {
-        // The null bitmap
-        const uint8_t* _null_bitmap = buffers[buf_pos++];
-        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        int64_t null_count_ = 0;
-        if (_null_bitmap) {
-            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
-                                                          (length + 7) >> 3);
-            for (int64_t i_row = 0; i_row < length; i_row++) {
-                bool bit = GetBit(_null_bitmap, i_row);
-                if (!bit)
-                    null_count_++;
-            }
-        }
-        // The other buffers
-        const uint8_t* data = buffers[buf_pos++];
-        std::shared_ptr<arrow::Buffer> data_buf =
-            std::make_shared<arrow::Buffer>(data, length);
-        std::vector<std::shared_ptr<arrow::Buffer>> l_buf = {null_bitmap,
-                                                             data_buf};
-        // The returning array.
-        int32_t precision = types[type_pos + 1];
-        int32_t scale = types[type_pos + 2];
-        arrow::Result<std::shared_ptr<arrow::DataType>> type_res;
-        type_res = arrow::Decimal128Type::Make(precision, scale);
-        std::shared_ptr<arrow::DataType> type =
-            std::move(type_res).ValueOrDie();
-        std::shared_ptr<arrow::ArrayData> arr =
-            arrow::ArrayData::Make(type, length, l_buf, null_count_, 0);
-        std::shared_ptr<arrow::Array> array =
-            std::make_shared<arrow::Decimal128Array>(arr);
-        return ArrayBuildInfo(array, type_pos + 3, buf_pos, length_pos + 1,
-                              name_pos);
-    } else {  // Case of numeric/decimal array
-        // First the null bitmap of the array
-        const uint8_t* _null_bitmap = buffers[buf_pos++];
-        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
-        if (_null_bitmap) {
-            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
-                                                          (length + 7) >> 3);
-        }
-        // Second the array itself
-        std::shared_ptr<arrow::Array> array;
-        int64_t siz_typ = numpy_item_size[type];
-        int64_t buffer_size;
-        if (type == Bodo_CTypes::_BOOL) {
-            // Boolean array uses 1 bit for each bool
-            buffer_size = (length + 7) >> 3;
-        } else {
-            buffer_size = length * siz_typ;
-        }
-        std::shared_ptr<arrow::Buffer> data =
-            std::make_shared<arrow::Buffer>(buffers[buf_pos++], buffer_size);
-        // We cannot change code below to something more generic since the
-        // arrow::UInt8Type are really types and not enum values.
-        if (type == Bodo_CTypes::_BOOL) {
-            // Note: Arrow's boolean array uses 1 bit for each bool
-            array = std::make_shared<arrow::BooleanArray>(length, data,
-                                                          null_bitmap);
-        } else if (type == Bodo_CTypes::INT8) {
-            array = std::make_shared<arrow::NumericArray<arrow::Int8Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::UINT8) {
-            array = std::make_shared<arrow::NumericArray<arrow::UInt8Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::INT16) {
-            array = std::make_shared<arrow::NumericArray<arrow::Int16Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::UINT16) {
-            array = std::make_shared<arrow::NumericArray<arrow::UInt16Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::INT32) {
-            array = std::make_shared<arrow::NumericArray<arrow::Int32Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::UINT32) {
-            array = std::make_shared<arrow::NumericArray<arrow::UInt32Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::INT64) {
-            array = std::make_shared<arrow::NumericArray<arrow::Int64Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::UINT64) {
-            array = std::make_shared<arrow::NumericArray<arrow::UInt64Type>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::FLOAT32) {
-            array = std::make_shared<arrow::NumericArray<arrow::FloatType>>(
-                length, data, null_bitmap);
-        } else if (type == Bodo_CTypes::FLOAT64) {
-            array = std::make_shared<arrow::NumericArray<arrow::DoubleType>>(
-                length, data, null_bitmap);
-        } else {
-            Bodo_PyErr_SetString(PyExc_RuntimeError,
-                                 "nested_array_from_c unsupported type");
-            return {nullptr, 0, 0, 0, 0};
-        }
-        return ArrayBuildInfo(array, type_pos + 1, buf_pos, length_pos + 1,
-                              name_pos);
+array_info* struct_array_to_info(int64_t n_fields, array_info** inner_arrays,
+                                 char** field_names, NRT_MemInfo* null_bitmap) {
+    std::vector<array_info*> inner_arrs_vec(inner_arrays,
+                                            inner_arrays + n_fields);
+    std::vector<std::string> field_names_vec(field_names,
+                                             field_names + n_fields);
+    // get length from an inner array
+    int64_t n_items = 0;
+    if (inner_arrs_vec.size() > 0) {
+        n_items = inner_arrs_vec[0]->length;
     }
-}
-
-array_info* nested_array_to_info(int* types, const uint8_t** buffers,
-                                 int64_t* lengths, char** field_names,
-                                 NRT_MemInfo* meminfo) {
-    try {
-        int type_pos = 0;
-        int buf_pos = 0;
-        int length_pos = 0;
-        int name_pos = 0;
-        ArrayBuildInfo ai =
-            nested_array_from_c(types, buffers, lengths, field_names, type_pos,
-                                buf_pos, length_pos, name_pos);
-        // TODO: better memory management of struct, meminfo refcount?
-        return new array_info(bodo_array_type::ARROW,
-                              Bodo_CTypes::INT8 /*dummy*/, lengths[0],
-                              {meminfo}, {}, ai.array);
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
-    }
+    return new array_info(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT, n_items,
+                          {null_bitmap}, inner_arrs_vec, 0, 0, 0, false, false,
+                          false, 0, field_names_vec);
 }
 
 array_info* array_item_array_to_info(uint64_t n_items, array_info* inner_array,
@@ -301,8 +72,8 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
     // For now has_sorted_dictionary is only available and exposed in the C++
     // struct, so we set it to false
     return new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
-                          indices_arr->length, {}, {str_arr, indices_arr}, NULL,
-                          0, 0, 0, bool(has_global_dictionary),
+                          indices_arr->length, {}, {str_arr, indices_arr}, 0, 0,
+                          0, bool(has_global_dictionary),
                           bool(has_deduped_local_dictionary), false);
 }
 
@@ -335,7 +106,7 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // in Numpy struct.
     return new array_info(bodo_array_type::NUMPY,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, {meminfo},
-                          {}, nullptr, 0, 0, 0, false, false, false,
+                          {}, 0, 0, 0, false, false, false,
                           /*offset*/ data - (char*)meminfo->data);
 }
 
@@ -344,18 +115,18 @@ array_info* categorical_array_to_info(uint64_t n_items, char* data,
                                       NRT_MemInfo* meminfo) {
     return new array_info(bodo_array_type::CATEGORICAL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, {meminfo},
-                          {}, nullptr, 0, 0, num_categories, false, false,
-                          false, /*offset*/ data - (char*)meminfo->data);
+                          {}, 0, 0, num_categories, false, false, false,
+                          /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                    char* null_bitmap, NRT_MemInfo* meminfo,
                                    NRT_MemInfo* meminfo_bitmask) {
     // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(
-        bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
-        n_items, {meminfo, meminfo_bitmask}, {}, nullptr, 0, 0, 0, false, false,
-        false, /*offset*/ data - (char*)meminfo->data);
+    return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
+                          {meminfo, meminfo_bitmask}, {}, 0, 0, 0, false, false,
+                          false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* interval_array_to_info(uint64_t n_items, char* left_data,
@@ -378,8 +149,8 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   int32_t precision, int32_t scale) {
     return new array_info(
         bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
-        n_items, {meminfo, meminfo_bitmask}, {}, NULL, precision, scale, 0,
-        false, false, false, /*offset*/ data - (char*)meminfo->data);
+        n_items, {meminfo, meminfo_bitmask}, {}, precision, scale, 0, false,
+        false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -388,8 +159,8 @@ array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                int32_t precision) {
     return new array_info(
         bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
-        n_items, {meminfo, meminfo_bitmask}, {}, NULL, precision, 0, 0, false,
-        false, false, /*offset*/ data - (char*)meminfo->data);
+        n_items, {meminfo, meminfo_bitmask}, {}, precision, 0, 0, false, false,
+        false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* info_to_array_item_array(array_info* info, int64_t* length,
@@ -422,17 +193,25 @@ array_info* info_to_array_item_array(array_info* info, int64_t* length,
     return info->child_arrays[0];
 }
 
-void info_to_nested_array(array_info* info, int64_t* lengths,
-                          array_info** out_infos) {
-    try {
-        int64_t lengths_pos = 0;
-        int64_t infos_pos = 0;
-        nested_array_to_c(info->to_arrow(), lengths, out_infos, lengths_pos,
-                          infos_pos);
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-        return;
+array_info** info_to_struct_array(array_info* info,
+                                  numpy_arr_payload* null_bitmap_arr) {
+    if (info->arr_type != bodo_array_type::STRUCT) {
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            "_array.cpp::info_to_struct_array: info_to_struct_array "
+            "requires struct array input.");
+        return nullptr;
     }
+
+    // create Numpy array for null_bitmap buffer as expected by
+    // Python data model
+    int64_t n_null_bytes = (info->length + 7) >> 3;
+    int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
+    *null_bitmap_arr = make_numpy_array_payload(
+        info->meminfos[0], NULL, n_null_bytes, null_itemsize,
+        (char*)info->meminfos[0]->data, n_null_bytes, null_itemsize);
+
+    return info->child_arrays.data();
 }
 
 void info_to_string_array(array_info* info, int64_t* length,
@@ -471,13 +250,22 @@ void info_to_string_array(array_info* info, int64_t* length,
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
                          NRT_MemInfo** meminfo) {
     if ((info->arr_type != bodo_array_type::NUMPY) &&
-        (info->arr_type != bodo_array_type::CATEGORICAL)) {
+        (info->arr_type != bodo_array_type::CATEGORICAL) &&
+        (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL)) {
         // TODO: print array type in the error
         PyErr_SetString(PyExc_RuntimeError,
                         "_array.cpp::info_to_numpy_array: info_to_numpy_array "
                         "requires numpy input.");
         return;
     }
+
+    // arrow_array_to_bodo() always produces a nullable array so we need to
+    // delete the null bitmap if returning Numpy. See
+    // bodo/tests/test_join.py::test_merge_nested_arrays_non_keys"[nested_arrays_value2]"
+    if (info->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        decref_meminfo(info->meminfos[1]);
+    }
+
     *n_items = info->length;
     *data = info->data1();
     *meminfo = info->meminfos[0];
@@ -1560,8 +1348,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "array_item_array_to_info",
         PyLong_FromVoidPtr((void*)(&array_item_array_to_info)));
-    PyObject_SetAttrString(m, "nested_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&nested_array_to_info)));
+    PyObject_SetAttrString(m, "struct_array_to_info",
+                           PyLong_FromVoidPtr((void*)(&struct_array_to_info)));
     // Not covered by error handler
     PyObject_SetAttrString(m, "string_array_to_info",
                            PyLong_FromVoidPtr((void*)(&string_array_to_info)));
@@ -1601,8 +1389,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "info_to_array_item_array",
         PyLong_FromVoidPtr((void*)(&info_to_array_item_array)));
-    PyObject_SetAttrString(m, "info_to_nested_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_nested_array)));
+    PyObject_SetAttrString(m, "info_to_struct_array",
+                           PyLong_FromVoidPtr((void*)(&info_to_struct_array)));
     PyObject_SetAttrString(m, "info_to_numpy_array",
                            PyLong_FromVoidPtr((void*)(&info_to_numpy_array)));
     PyObject_SetAttrString(
