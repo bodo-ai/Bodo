@@ -29,10 +29,9 @@ from bodo.io.helpers import PyArrowTableSchemaType, is_nullable
 from bodo.io.parquet_pio import ParquetPredicateType
 from bodo.ir.filter import Filter, supported_funcs_map
 from bodo.libs.array import (
+    array_from_cpp_table,
     cpp_table_to_py_table,
     delete_table,
-    info_from_table,
-    info_to_array,
     table_type,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
@@ -1318,7 +1317,9 @@ def _gen_sql_reader_py(
         if index_column_name is not None:  # pragma: no cover
             # The index column is defined by the SQLReader to always be placed at the end of the query.
             index_arr_ind = (len(out_used_cols) + 1) if not is_dead_table else 0
-            index_var = f"info_to_array(info_from_table(out_table, {index_arr_ind}), index_col_typ)"
+            index_var = (
+                f"array_from_cpp_table(out_table, {index_arr_ind}, index_col_typ)"
+            )
 
         func_text += f"  index_var = {index_var}\n"
 
@@ -1396,7 +1397,7 @@ def _gen_sql_reader_py(
             func_text += f"  local_rows = total_rows\n"
         if index_column_name:
             # The index is always placed in the last slot of the query if it exists.
-            func_text += f"  index_var = info_to_array(info_from_table(out_table, {len(out_used_cols)}), index_col_typ)\n"
+            func_text += f"  index_var = array_from_cpp_table(out_table, {len(out_used_cols)}, index_col_typ)\n"
         else:
             # There is no index to load
             func_text += "  index_var = None\n"
@@ -1511,8 +1512,7 @@ def _gen_sql_reader_py(
                 f"pyarrow_schema_{call_id}": pyarrow_schema,
                 "unicode_to_utf8": unicode_to_utf8,
                 "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
-                "info_to_array": info_to_array,
-                "info_from_table": info_from_table,
+                "array_from_cpp_table": array_from_cpp_table,
                 "delete_table": delete_table,
                 "cpp_table_to_py_table": cpp_table_to_py_table,
                 "set_table_len": bodo.hiframes.table.set_table_len,

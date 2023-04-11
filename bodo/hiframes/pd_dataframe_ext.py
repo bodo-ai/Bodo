@@ -60,12 +60,11 @@ from bodo.hiframes.time_ext import TimeArrayType
 from bodo.io import json_cpp
 from bodo.libs.array import (
     arr_info_list_to_table,
+    array_from_cpp_table,
     array_to_info,
     delete_info_decref_array,
     delete_table,
     delete_table_decref_arrays,
-    info_from_table,
-    info_to_array,
     py_table_to_cpp_table,
     shuffle_table,
 )
@@ -3341,19 +3340,19 @@ def pivot_impl(
         func_text += f"        out_cpp_table = shuffle_table(cpp_table, {len(index_tup)}, parallel, 0)\n"
         index_info_to_arrays = ", ".join(
             [
-                f"info_to_array(info_from_table(out_cpp_table, {i}), index_tup[{i}])"
+                f"array_from_cpp_table(out_cpp_table, {i}, index_tup[{i}])"
                 for i in range(len(index_tup))
             ]
         )
         columns_info_to_arrays = ", ".join(
             [
-                f"info_to_array(info_from_table(out_cpp_table, {i + len(index_tup)}), columns_tup[{i}])"
+                f"array_from_cpp_table(out_cpp_table, {i + len(index_tup)}, columns_tup[{i}])"
                 for i in range(len(columns_tup))
             ]
         )
         values_info_to_arrays = ", ".join(
             [
-                f"info_to_array(info_from_table(out_cpp_table, {i + len(index_tup) + len(columns_tup)}), values_tup[{i}])"
+                f"array_from_cpp_table(out_cpp_table, {i + len(index_tup) + len(columns_tup)}, values_tup[{i}])"
                 for i in range(len(values_tup))
             ]
         )
@@ -3605,9 +3604,8 @@ def pivot_impl(
         "array_to_info": array_to_info,
         "arr_info_list_to_table": arr_info_list_to_table,
         "shuffle_table": shuffle_table,
-        "info_to_array": info_to_array,
+        "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
-        "info_from_table": info_from_table,
         "table_type": table_type,
         "columns_typ": columns_typ,
         "index_names_lit": index_names_lit,

@@ -37,14 +37,13 @@ from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs import quantile_alg
 from bodo.libs.array import (
     arr_info_list_to_table,
+    array_from_cpp_table,
     array_to_info,
     delete_info_decref_array,
     delete_table,
     delete_table_decref_arrays,
     drop_duplicates_local_dictionary,
     drop_duplicates_table,
-    info_from_table,
-    info_to_array,
     sample_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType, offset_type
@@ -1156,8 +1155,7 @@ def duplicated(data, parallel=False):
     func_text += f"    cpp_table = arr_info_list_to_table([{array_info_str}])\n"
     func_text += f"    out_cpp_table = bodo.libs.array.shuffle_table(cpp_table, {n}, parallel, 1)\n"
     info_to_arr_str = ", ".join(
-        f"info_to_array(info_from_table(out_cpp_table, {i}), data[{i}])"
-        for i in range(n)
+        f"array_from_cpp_table(out_cpp_table, {i}, data[{i}])" for i in range(n)
     )
     func_text += f"    data = ({info_to_arr_str},)\n"
     func_text += "    shuffle_info = bodo.libs.array.get_shuffle_info(out_cpp_table)\n"
@@ -1205,8 +1203,7 @@ def duplicated(data, parallel=False):
             "np": np,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "info_to_array": info_to_array,
-            "info_from_table": info_from_table,
+            "array_from_cpp_table": array_from_cpp_table,
         },
         loc_vars,
     )
@@ -1243,11 +1240,13 @@ def overload_sample_table_operation(
         count
     )
     for i_col in range(count):
-        func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(
-            i_col, i_col, i_col
+        func_text += (
+            "  out_arr_{} = array_from_cpp_table(out_table, {}, data[{}])\n".format(
+                i_col, i_col, i_col
+            )
         )
-    func_text += "  out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
-        count
+    func_text += (
+        "  out_arr_index = array_from_cpp_table(out_table, {}, ind_arr)\n".format(count)
     )
     func_text += "  delete_table(out_table)\n"
     func_text += "  delete_table(table_total)\n"
@@ -1263,8 +1262,7 @@ def overload_sample_table_operation(
             "array_to_info": array_to_info,
             "sample_table": sample_table,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "info_from_table": info_from_table,
-            "info_to_array": info_to_array,
+            "array_from_cpp_table": array_from_cpp_table,
             "delete_table": delete_table,
             "delete_table_decref_arrays": delete_table_decref_arrays,
         },
@@ -1300,11 +1298,13 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
     func_text += "  out_table = drop_duplicates_table(table_total, parallel, ncols, keep_i, False, True)\n"
     for i_col in range(count):
-        func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(
-            i_col, i_col, i_col
+        func_text += (
+            "  out_arr_{} = array_from_cpp_table(out_table, {}, data[{}])\n".format(
+                i_col, i_col, i_col
+            )
         )
-    func_text += "  out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
-        count
+    func_text += (
+        "  out_arr_index = array_from_cpp_table(out_table, {}, ind_arr)\n".format(count)
     )
     func_text += "  delete_table(out_table)\n"
     func_text += "  delete_table(table_total)\n"
@@ -1320,8 +1320,7 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
             "array_to_info": array_to_info,
             "drop_duplicates_table": drop_duplicates_table,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "info_from_table": info_from_table,
-            "info_to_array": info_to_array,
+            "array_from_cpp_table": array_from_cpp_table,
             "delete_table": delete_table,
             "delete_table_decref_arrays": delete_table_decref_arrays,
         },
@@ -1346,7 +1345,7 @@ def overload_drop_duplicates_array(data_arr, parallel=False):
         table_total = arr_info_list_to_table(info_list_total)
         keep_i = 0
         out_table = drop_duplicates_table(table_total, parallel, 1, keep_i, False, True)
-        out_arr = info_to_array(info_from_table(out_table, 0), data_arr)
+        out_arr = array_from_cpp_table(out_table, 0, data_arr)
         delete_table(out_table)
         delete_table(table_total)
         return out_arr
@@ -2227,7 +2226,7 @@ def unique_overload(A, dropna=False, parallel=False):
         out_table = drop_duplicates_table(
             input_table, parallel, n_key, keep_i, dropna, True
         )
-        out_arr = info_to_array(info_from_table(out_table, 0), A)
+        out_arr = array_from_cpp_table(out_table, 0, A)
         delete_table(input_table)
         delete_table(out_table)
         return out_arr
