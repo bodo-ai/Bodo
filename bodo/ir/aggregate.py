@@ -44,6 +44,7 @@ from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.array import (
     arr_info_list_to_table,
+    array_from_cpp_table,
     array_to_info,
     cpp_table_to_py_data,
     decref_table_array,
@@ -1248,6 +1249,7 @@ def agg_distributed_run(
             "groupby_and_aggregate": groupby_and_aggregate,
             "info_from_table": info_from_table,
             "info_to_array": info_to_array,
+            "array_from_cpp_table": array_from_cpp_table,
             "delete_info_decref_array": delete_info_decref_array,
             "delete_table": delete_table,
             "add_agg_cfunc_sym": add_agg_cfunc_sym,
@@ -1540,7 +1542,7 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
     func_text += "\n    # initialize redvar cols\n"
     func_text += "    init_vals = __init_func()\n"
     for i in range(n_red_vars):
-        func_text += "    redvar_arr_{} = info_to_array(info_from_table(out_table, {}), data_redvar_dummy[{}])\n".format(
+        func_text += "    redvar_arr_{} = array_from_cpp_table(out_table, {}, data_redvar_dummy[{}])\n".format(
             i, redvar_offsets_out[i], i
         )
         # incref needed so that arrays aren't deleted after this function exits
@@ -1553,7 +1555,7 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
 
     func_text += "\n"
     for i in range(n_red_vars):
-        func_text += "    recv_redvar_arr_{} = info_to_array(info_from_table(in_table, {}), data_redvar_dummy[{}])\n".format(
+        func_text += "    recv_redvar_arr_{} = array_from_cpp_table(in_table, {}, data_redvar_dummy[{}])\n".format(
             i, redvar_offsets_in[i], i
         )
         # incref needed so that arrays aren't deleted after this function exits
@@ -1574,8 +1576,7 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
         func_text,
         {
             "np": np,
-            "info_to_array": info_to_array,
-            "info_from_table": info_from_table,
+            "array_from_cpp_table": array_from_cpp_table,
             "incref": incref,
             "__init_func": udf_func_struct.init_func,
             "__combine_redvars": udf_func_struct.combine_all_func,
@@ -1635,7 +1636,7 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix)
     )
 
     for i in range(n_red_vars):
-        func_text += "    redvar_arr_{} = info_to_array(info_from_table(table, {}), data_redvar_dummy[{}])\n".format(
+        func_text += "    redvar_arr_{} = array_from_cpp_table(table, {}, data_redvar_dummy[{}])\n".format(
             i, redvar_offsets[i], i
         )
         # incref needed so that arrays aren't deleted after this function exits
@@ -1647,7 +1648,7 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix)
 
     func_text += "\n"
     for i in range(n_data_cols):
-        func_text += "    data_out_{} = info_to_array(info_from_table(table, {}), out_data_dummy[{}])\n".format(
+        func_text += "    data_out_{} = array_from_cpp_table(table, {}, out_data_dummy[{}])\n".format(
             i, data_out_offsets[i], i
         )
         # incref needed so that arrays aren't deleted after this function exits
@@ -1666,8 +1667,7 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix)
         func_text,
         {
             "np": np,
-            "info_to_array": info_to_array,
-            "info_from_table": info_from_table,
+            "array_from_cpp_table": array_from_cpp_table,
             "incref": incref,
             "__eval_res": udf_func_struct.eval_all_func,
             "is_null_pointer": is_null_pointer,
@@ -1716,13 +1716,13 @@ def gen_general_udf_cb(
     func_text += "        return\n"
     for i, func in enumerate(udf_func_struct.general_udf_funcs):
         func_text += "    # col {}\n".format(i)
-        func_text += "    out_col = info_to_array(info_from_table(out_table, {}), out_col_{}_typ)\n".format(
+        func_text += "    out_col = array_from_cpp_table(out_table, {}, out_col_{}_typ)\n".format(
             out_col_offsets[i], i
         )
         # incref needed so that array isn't deleted after this function exits
         func_text += "    incref(out_col)\n"
         func_text += "    for j in range(num_groups):\n"
-        func_text += "        in_col = info_to_array(info_from_table(in_table, {}*num_groups + j), in_col_{}_typ)\n".format(
+        func_text += "        in_col = array_from_cpp_table(in_table, {}*num_groups + j, in_col_{}_typ)\n".format(
             i, i
         )
         # incref needed so that array isn't deleted after this function exits
@@ -1733,8 +1733,7 @@ def gen_general_udf_cb(
 
     glbs = {
         "pd": pd,
-        "info_to_array": info_to_array,
-        "info_from_table": info_from_table,
+        "array_from_cpp_table": array_from_cpp_table,
         "incref": incref,
     }
     gen_udf_offset = 0

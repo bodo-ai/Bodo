@@ -38,10 +38,9 @@ from bodo.io.parquet_pio import (
     parquet_predicate_type,
 )
 from bodo.libs.array import (
+    array_from_cpp_table,
     cpp_table_to_py_table,
     delete_table,
-    info_from_table,
-    info_to_array,
     table_type,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
@@ -795,7 +794,7 @@ def _gen_pq_reader_py(
         func_text += "    index_arr = None\n"
     else:
         index_arr_ind = selected_cols_map[index_column_index]
-        func_text += f"    index_arr = info_to_array(info_from_table(out_table, {index_arr_ind}), index_arr_type)\n"
+        func_text += f"    index_arr = array_from_cpp_table(out_table, {index_arr_ind}, index_arr_type)\n"
     func_text += f"    delete_table(out_table)\n"
     func_text += f"    ev.finalize()\n"
     func_text += f"    return (total_rows, T, index_arr)\n"
@@ -808,8 +807,7 @@ def _gen_pq_reader_py(
         f"pyarrow_schema_{call_id}": pyarrow_schema.remove_metadata(),
         "index_arr_type": index_arr_type,
         "cpp_table_to_py_table": cpp_table_to_py_table,
-        "info_to_array": info_to_array,
-        "info_from_table": info_from_table,
+        "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
         "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
         "pq_read": _pq_read,

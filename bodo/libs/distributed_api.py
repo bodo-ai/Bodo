@@ -1479,11 +1479,13 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         func_text += "    else:\n"
         func_text += "        out_table = shuffle_renormalization_group(table_total, random, random_seed, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
         for i_col in range(n_cols):
-            func_text += "    out_arr_{0} = info_to_array(info_from_table(out_table, {0}), data_{0})\n".format(
+            func_text += "    out_arr_{0} = array_from_cpp_table(out_table, {0}, data_{0})\n".format(
                 i_col
             )
-        func_text += "    out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
-            n_cols
+        func_text += (
+            "    out_arr_index = array_from_cpp_table(out_table, {}, ind_arr)\n".format(
+                n_cols
+            )
         )
         func_text += "    delete_table(out_table)\n"
         func_text += "    if parallel:\n"
@@ -1503,10 +1505,8 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         func_text += "        out_table = shuffle_renormalization(table_total, random, random_seed, parallel)\n"
         func_text += "    else:\n"
         func_text += "        out_table = shuffle_renormalization_group(table_total, random, random_seed, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
-        func_text += (
-            "    out_arr_0 = info_to_array(info_from_table(out_table, 0), data_0)\n"
-        )
-        func_text += "    out_arr_index = info_to_array(info_from_table(out_table, 1), ind_arr)\n"
+        func_text += "    out_arr_0 = array_from_cpp_table(out_table, 0, data_0)\n"
+        func_text += "    out_arr_index = array_from_cpp_table(out_table, 1, ind_arr)\n"
         func_text += "    delete_table(out_table)\n"
         func_text += "    if parallel:\n"
         func_text += "        delete_table(table_total)\n"
@@ -1534,9 +1534,7 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         func_text += "        out_table = shuffle_renormalization(table_total, random, random_seed, parallel)\n"
         func_text += "    else:\n"
         func_text += "        out_table = shuffle_renormalization_group(table_total, random, random_seed, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
-        func_text += (
-            "    out_arr = info_to_array(info_from_table(out_table, 0), data)\n"
-        )
+        func_text += "    out_arr = array_from_cpp_table(out_table, 0, data)\n"
         func_text += "    delete_table(out_table)\n"
         func_text += "    if parallel:\n"
         func_text += "        delete_table(table_total)\n"
@@ -1551,8 +1549,7 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         "shuffle_renormalization": bodo.libs.array.shuffle_renormalization,
         "shuffle_renormalization_group": bodo.libs.array.shuffle_renormalization_group,
         "arr_info_list_to_table": bodo.libs.array.arr_info_list_to_table,
-        "info_from_table": bodo.libs.array.info_from_table,
-        "info_to_array": bodo.libs.array.info_to_array,
+        "array_from_cpp_table": bodo.libs.array.array_from_cpp_table,
         "delete_table": bodo.libs.array.delete_table,
     }
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
