@@ -110,6 +110,17 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                         .withCallRewrite(false)
                 )
                 .costFactory(CostFactory())
+                // Override the list of standard trait definitions we are interested in.
+                // This determines what traits are physically possible for us to process.
+                // We override this to include only the convention trait because we
+                // haven't yet ensured the collation trait is properly supported
+                // and will always yield possible plans.
+                // We'll probably want to re-enable the collation trait at that time,
+                // but there's no point in potentially failing a plan for a trait we
+                // don't care about.
+                .traitDefs(
+                    ConventionTraitDef.INSTANCE
+                )
                 .programs(
                     // We create a new program each time we construct a new planner.
                     // This is because calcite 1.30.0's hep program is not threadsafe

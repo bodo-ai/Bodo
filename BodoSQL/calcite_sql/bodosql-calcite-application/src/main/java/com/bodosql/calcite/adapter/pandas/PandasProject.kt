@@ -37,9 +37,9 @@ class PandasProject(
             val cluster = input.cluster
             val mq = cluster.metadataQuery
             val traitSet = cluster.traitSet().replace(PandasRel.CONVENTION)
-                .replaceIfs(
-                    RelCollationTraitDef.INSTANCE,
-                    {RelMdCollation.project(mq, input, projects)})
+                .replaceIfs(RelCollationTraitDef.INSTANCE) {
+                    RelMdCollation.project(mq, input, projects)
+                }
             return PandasProject(cluster, traitSet, input, projects, rowType)
         }
     }
