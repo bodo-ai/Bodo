@@ -495,3 +495,25 @@ def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
         check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray2,
     )
+
+def test_unreserved_kw(spark_info, memory_leak_check):
+    """ Test that language/lead/user/method/rank 
+    """
+    query = 'SELECT t.LANGUAGE, t.LEAD, t.USER, t.METHOD, t.RANK AS A FROM table1 t'
+    check_query(
+        query,
+        {"table1": pd.DataFrame({"LANGUAGE": ["A", "B", "C", "D", "E"],
+        "LEAD": ["A", "B", "C", "D", "E"],
+        "USER": ["A", "B", "C", "D", "E"],
+        "METHOD": ["A", "B", "C", "D", "E"],
+        "RANK": ["A", "B", "C", "D", "E"]
+                                 })},
+        spark_info,
+        expected_output = pd.DataFrame({"A": ["A", "B", "C", "D", "E"],
+        "LEAD": ["A", "B", "C", "D", "E"],
+        "USER": ["A", "B", "C", "D", "E"],
+        "METHOD": ["A", "B", "C", "D", "E"],
+        "RANK": ["A", "B", "C", "D", "E"]
+        }),
+        check_names=False,
+    )

@@ -46,6 +46,11 @@ data: {
         "VALUES",
         "VALUE",
         "CORR",
+        "RANK",
+        "LANGUAGE",
+        "METHOD",
+        "LEAD",
+        "USER",
     ]
 
     # List of additional join types. Each is a method with no arguments.
