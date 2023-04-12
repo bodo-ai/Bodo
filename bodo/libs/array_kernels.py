@@ -1159,7 +1159,7 @@ def duplicated(data, parallel=False):
     )
     func_text += f"    data = ({info_to_arr_str},)\n"
     func_text += "    shuffle_info = bodo.libs.array.get_shuffle_info(out_cpp_table)\n"
-    func_text += "    bodo.libs.array.delete_table(out_cpp_table)\n"
+    func_text += "    bodo.libs.array.delete_table_decref_arrays(out_cpp_table)\n"
     func_text += "    bodo.libs.array.delete_table(cpp_table)\n"
     func_text += "  n = len(data[0])\n"
     func_text += "  out = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
@@ -1248,7 +1248,7 @@ def overload_sample_table_operation(
     func_text += (
         "  out_arr_index = array_from_cpp_table(out_table, {}, ind_arr)\n".format(count)
     )
-    func_text += "  delete_table(out_table)\n"
+    func_text += "  delete_table_decref_arrays(out_table)\n"
     func_text += "  delete_table(table_total)\n"
     func_text += "  return ({},), out_arr_index\n".format(
         ", ".join("out_arr_{}".format(i) for i in range(count))
@@ -1306,7 +1306,7 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
     func_text += (
         "  out_arr_index = array_from_cpp_table(out_table, {}, ind_arr)\n".format(count)
     )
-    func_text += "  delete_table(out_table)\n"
+    func_text += "  delete_table_decref_arrays(out_table)\n"
     func_text += "  delete_table(table_total)\n"
     func_text += "  return ({},), out_arr_index\n".format(
         ", ".join("out_arr_{}".format(i) for i in range(count))
@@ -1346,7 +1346,7 @@ def overload_drop_duplicates_array(data_arr, parallel=False):
         keep_i = 0
         out_table = drop_duplicates_table(table_total, parallel, 1, keep_i, False, True)
         out_arr = array_from_cpp_table(out_table, 0, data_arr)
-        delete_table(out_table)
+        delete_table_decref_arrays(out_table)
         delete_table(table_total)
         return out_arr
 
@@ -2228,7 +2228,7 @@ def unique_overload(A, dropna=False, parallel=False):
         )
         out_arr = array_from_cpp_table(out_table, 0, A)
         delete_table(input_table)
-        delete_table(out_table)
+        delete_table_decref_arrays(out_table)
         return out_arr
 
     return unique_impl

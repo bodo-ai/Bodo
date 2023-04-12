@@ -1487,7 +1487,7 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
                 n_cols
             )
         )
-        func_text += "    delete_table(out_table)\n"
+        func_text += "    delete_table_decref_arrays(out_table)\n"
         func_text += "    if parallel:\n"
         func_text += "        delete_table(table_total)\n"
         data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
@@ -1507,7 +1507,7 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         func_text += "        out_table = shuffle_renormalization_group(table_total, random, random_seed, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
         func_text += "    out_arr_0 = array_from_cpp_table(out_table, 0, data_0)\n"
         func_text += "    out_arr_index = array_from_cpp_table(out_table, 1, ind_arr)\n"
-        func_text += "    delete_table(out_table)\n"
+        func_text += "    delete_table_decref_arrays(out_table)\n"
         func_text += "    if parallel:\n"
         func_text += "        delete_table(table_total)\n"
         index = "bodo.utils.conversion.index_from_array(out_arr_index)"
@@ -1535,7 +1535,7 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         func_text += "    else:\n"
         func_text += "        out_table = shuffle_renormalization_group(table_total, random, random_seed, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
         func_text += "    out_arr = array_from_cpp_table(out_table, 0, data)\n"
-        func_text += "    delete_table(out_table)\n"
+        func_text += "    delete_table_decref_arrays(out_table)\n"
         func_text += "    if parallel:\n"
         func_text += "        delete_table(table_total)\n"
         func_text += "    return out_arr\n"
@@ -1551,6 +1551,7 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         "arr_info_list_to_table": bodo.libs.array.arr_info_list_to_table,
         "array_from_cpp_table": bodo.libs.array.array_from_cpp_table,
         "delete_table": bodo.libs.array.delete_table,
+        "delete_table_decref_arrays": bodo.libs.array.delete_table_decref_arrays,
     }
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         glbls.update({"__col_name_meta_value_rebalance": ColNamesMetaType(df.columns)})

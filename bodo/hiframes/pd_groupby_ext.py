@@ -2063,7 +2063,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
     func_text += f"  out_arr_index = array_from_cpp_table(out_table, {n_keys + n_cols}, ind_arr_typ)\n"
 
     func_text += "  shuffle_info = get_shuffle_info(out_table)\n"
-    func_text += "  delete_table(out_table)\n"
+    func_text += "  delete_table_decref_arrays(out_table)\n"
     func_text += "  delete_table(table)\n"
 
     out_data = ", ".join(f"out_arr{i}" for i in range(n_cols))
@@ -2081,6 +2081,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         "shuffle_table": shuffle_table,
         "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
+        "delete_table_decref_arrays": delete_table_decref_arrays,
         "get_shuffle_info": get_shuffle_info,
         "__col_name_meta_value_df_shuffle": ColNamesMetaType(df.columns),
         "ind_arr_typ": types.Array(types.int64, 1, "C")
@@ -2119,7 +2120,7 @@ def overload_reverse_shuffle(data, shuffle_info):
         func_text += "  out_table = reverse_shuffle_table(table, shuffle_info)\n"
         for i in range(n_fields):
             func_text += f"  out_arr{i} = array_from_cpp_table(out_table, {i}, data._data[{i}])\n"
-        func_text += "  delete_table(out_table)\n"
+        func_text += "  delete_table_decref_arrays(out_table)\n"
         func_text += "  delete_table(table)\n"
         func_text += (
             "  return init_multi_index(({},), data._names, data._name)\n".format(
@@ -2136,6 +2137,7 @@ def overload_reverse_shuffle(data, shuffle_info):
                 "reverse_shuffle_table": reverse_shuffle_table,
                 "array_from_cpp_table": array_from_cpp_table,
                 "delete_table": delete_table,
+                "delete_table_decref_arrays": delete_table_decref_arrays,
                 "init_multi_index": bodo.hiframes.pd_multi_index_ext.init_multi_index,
             },
             loc_vars,
@@ -2159,7 +2161,7 @@ def overload_reverse_shuffle(data, shuffle_info):
         table = arr_info_list_to_table(info_list)
         out_table = reverse_shuffle_table(table, shuffle_info)
         out_arr = array_from_cpp_table(out_table, 0, data)
-        delete_table(out_table)
+        delete_table_decref_arrays(out_table)
         delete_table(table)
         return out_arr
 

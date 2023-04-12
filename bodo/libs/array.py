@@ -891,7 +891,6 @@ def info_to_array_codegen(context, builder, sig, args):
         else array_type
     )
     in_info, _ = args
-    # TODO: update meminfo?
 
     if isinstance(arr_type, TupleArrayType):
         # TupleArray is just a StructArray in C++
@@ -2071,7 +2070,7 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
     # Step 3 convert the C++ table to a Python table.
     func_text += f"  out_py_table = bodo.libs.array.cpp_table_to_py_table(out_cpp_table, out_col_inds, out_table_typ)\n"
     # Step 4 free the output C++ table without modifying the refcounts.
-    func_text += f"  bodo.libs.array.delete_table(out_cpp_table)\n"
+    func_text += f"  bodo.libs.array.delete_table_decref_arrays(out_cpp_table)\n"
     func_text += f"  return out_py_table\n"
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
@@ -2843,6 +2842,7 @@ def drop_duplicates_local_dictionary(dict_arr, sort_dictionary):  # pragma: no c
     _drop_duplicates_local_dictionary(dict_arr_info, sort_dictionary)
     check_and_propagate_cpp_exception()
     out_arr = info_to_array(dict_arr_info, bodo.dict_str_arr_type)
+    delete_info_decref_array(dict_arr_info)
     return out_arr
 
 
@@ -2864,6 +2864,7 @@ def convert_local_dictionary_to_global(
     _convert_local_dictionary_to_global(dict_arr_info, is_parallel, sort_dictionary)
     check_and_propagate_cpp_exception()
     out_arr = info_to_array(dict_arr_info, bodo.dict_str_arr_type)
+    delete_info_decref_array(dict_arr_info)
     return out_arr
 
 
@@ -2940,7 +2941,9 @@ def get_replace_regex(
         in_arr_info, pattern_typ, replace_typ, is_parallel_typ
     )
     check_and_propagate_cpp_exception()
-    return info_to_array(out_arr_info, in_arr)
+    out = info_to_array(out_arr_info, in_arr)
+    delete_info_decref_array(out_arr_info)
+    return out
 
 
 def _gen_row_access_intrinsic(col_array_typ, c_ind):

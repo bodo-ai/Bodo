@@ -3361,7 +3361,7 @@ def pivot_impl(
         func_text += f"        values_tup = ({values_info_to_arrays},)\n"
         # Delete the tables
         func_text += "        delete_table(cpp_table)\n"
-        func_text += "        delete_table(out_cpp_table)\n"
+        func_text += "        delete_table_decref_arrays(out_cpp_table)\n"
         func_text += "        ev_shuffle.finalize()\n"
     # Load the index and column arrays. Move value arrays to a
     # list since access won't be known at compile time.
@@ -3606,6 +3606,7 @@ def pivot_impl(
         "shuffle_table": shuffle_table,
         "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
+        "delete_table_decref_arrays": delete_table_decref_arrays,
         "table_type": table_type,
         "columns_typ": columns_typ,
         "index_names_lit": index_names_lit,

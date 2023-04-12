@@ -178,12 +178,14 @@ array_info* info_to_array_item_array(array_info* info, int64_t* length,
 
     // create Numpy arrays for char/offset/null_bitmap buffers as expected by
     // Python data model
+    incref_meminfo(info->meminfos[0]);
     int64_t n_offsets = info->length + 1;
     int64_t offset_itemsize = numpy_item_size[Bodo_CType_offset];
     *offsets_arr = make_numpy_array_payload(
         info->meminfos[0], NULL, n_offsets, offset_itemsize,
         (char*)info->meminfos[0]->data, n_offsets, offset_itemsize);
 
+    incref_meminfo(info->meminfos[1]);
     int64_t n_null_bytes = (info->length + 7) >> 3;
     int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
     *null_bitmap_arr = make_numpy_array_payload(
@@ -205,6 +207,7 @@ array_info** info_to_struct_array(array_info* info,
 
     // create Numpy array for null_bitmap buffer as expected by
     // Python data model
+    incref_meminfo(info->meminfos[0]);
     int64_t n_null_bytes = (info->length + 7) >> 3;
     int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
     *null_bitmap_arr = make_numpy_array_payload(
@@ -228,18 +231,21 @@ void info_to_string_array(array_info* info, int64_t* length,
 
     // create Numpy arrays for char/offset/null_bitmap buffers as expected by
     // Python data model
+    incref_meminfo(info->meminfos[0]);
     int64_t n_chars = info->n_sub_elems();
     int64_t char_itemsize = numpy_item_size[Bodo_CTypes::INT8];
     *data_arr = make_numpy_array_payload(
         info->meminfos[0], NULL, n_chars, char_itemsize,
         (char*)info->meminfos[0]->data, n_chars, char_itemsize);
 
+    incref_meminfo(info->meminfos[1]);
     int64_t n_offsets = info->length + 1;
     int64_t offset_itemsize = numpy_item_size[Bodo_CType_offset];
     *offsets_arr = make_numpy_array_payload(
         info->meminfos[1], NULL, n_offsets, offset_itemsize,
         (char*)info->meminfos[1]->data, n_offsets, offset_itemsize);
 
+    incref_meminfo(info->meminfos[2]);
     int64_t n_null_bytes = (info->length + 7) >> 3;
     int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
     *null_bitmap_arr = make_numpy_array_payload(
@@ -249,6 +255,8 @@ void info_to_string_array(array_info* info, int64_t* length,
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
                          NRT_MemInfo** meminfo) {
+    // arrow_array_to_bodo() always produces a nullable array but
+    // Python may expect a Numpy array
     if ((info->arr_type != bodo_array_type::NUMPY) &&
         (info->arr_type != bodo_array_type::CATEGORICAL) &&
         (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL)) {
@@ -259,15 +267,9 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
         return;
     }
 
-    // arrow_array_to_bodo() always produces a nullable array so we need to
-    // delete the null bitmap if returning Numpy. See
-    // bodo/tests/test_join.py::test_merge_nested_arrays_non_keys"[nested_arrays_value2]"
-    if (info->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        decref_meminfo(info->meminfos[1]);
-    }
-
     *n_items = info->length;
     *data = info->data1();
+    incref_meminfo(info->meminfos[0]);
     *meminfo = info->meminfos[0];
 }
 
@@ -285,7 +287,10 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
     *n_bytes = (info->length + 7) >> 3;
     *data = info->data1();
     *null_bitmap = info->null_bitmask();
+    // give Python a reference
+    incref_meminfo(info->meminfos[0]);
     *meminfo = info->meminfos[0];
+    incref_meminfo(info->meminfos[1]);
     *meminfo_bitmask = info->meminfos[1];
 }
 
@@ -302,7 +307,9 @@ void info_to_interval_array(array_info* info, uint64_t* n_items,
     *n_items = info->length;
     *left_data = info->data1();
     *right_data = info->data2();
+    incref_meminfo(info->meminfos[0]);
     *left_meminfo = info->meminfos[0];
+    incref_meminfo(info->meminfos[1]);
     *right_meminfo = info->meminfos[1];
 }
 
@@ -388,7 +395,7 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
                                           Bodo_CTypes::STRING, 0, 0);
         info_to_string_array(out_arr, length, data_arr, offsets_arr,
                              null_bitmap_arr);
-        delete out_arr;
+        delete_info_decref_array(out_arr);
         return;
     }
 
@@ -429,7 +436,7 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
         array_info* arr = string_array_from_pyarrow(pyarrow_arr_large_str);
         info_to_string_array(arr, length, data_arr, offsets_arr,
                              null_bitmap_arr);
-        delete arr;
+        delete_info_decref_array(arr);
         Py_DECREF(pyarrow_chunked_arr);
         Py_DECREF(pyarrow_arr);
         Py_DECREF(pyarrow_arr_large_str);

@@ -52,9 +52,6 @@ from bodo.libs.array import (
     delete_table,
     delete_table_decref_arrays,
     groupby_and_aggregate,
-    incref_array_info,
-    info_from_table,
-    info_to_array,
     py_data_to_cpp_table,
 )
 from bodo.libs.array_item_arr_ext import (
@@ -102,7 +99,6 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     gen_getitem,
-    incref,
     is_assign,
     is_call_assign,
     is_expr,
@@ -1247,8 +1243,6 @@ def agg_distributed_run(
             "arr_info_list_to_table": arr_info_list_to_table,
             "coerce_to_array": bodo.utils.conversion.coerce_to_array,
             "groupby_and_aggregate": groupby_and_aggregate,
-            "info_from_table": info_from_table,
-            "info_to_array": info_to_array,
             "array_from_cpp_table": array_from_cpp_table,
             "delete_info_decref_array": delete_info_decref_array,
             "delete_table": delete_table,
@@ -1435,11 +1429,7 @@ def gen_update_cb(
     func_text += "\n    # initialize redvar cols\n"
     func_text += "    init_vals = __init_func()\n"
     for i in range(n_red_vars):
-        func_text += f"    redvar_arr_info{i} = info_from_table(out_table, {redvar_offsets[i]})\n"
-        # info_to_array() doesn't incref so needs to be done manually currently to give
-        # Python a reference (which it will delete after use).
-        func_text += f"    incref_array_info(redvar_arr_info{i})\n"
-        func_text += f"    redvar_arr_{i} = info_to_array(redvar_arr_info{i}, data_redvar_dummy[{i}])\n"
+        func_text += f"    redvar_arr_{i} = array_from_cpp_table(out_table, {redvar_offsets[i]}, data_redvar_dummy[{i}])\n"
         func_text += "    redvar_arr_{}.fill(init_vals[{}])\n".format(i, i)
     func_text += "    redvars = ({}{})\n".format(
         ",".join(["redvar_arr_{}".format(i) for i in range(n_red_vars)]),
@@ -1448,15 +1438,7 @@ def gen_update_cb(
 
     func_text += "\n"
     for i in range(n_data_cols):
-        func_text += (
-            f"    data_in_info{i} = info_from_table(in_table, {in_col_offsets[i]})\n"
-        )
-        # info_to_array() doesn't incref so needs to be done manually currently to give
-        # Python a reference (which it will delete after use).
-        func_text += f"    incref_array_info(data_in_info{i})\n"
-        func_text += (
-            f"    data_in_{i} = info_to_array(data_in_info{i}, data_in_dummy[{i}])\n"
-        )
+        func_text += f"    data_in_{i} = array_from_cpp_table(in_table, {in_col_offsets[i]}, data_in_dummy[{i}])\n"
     func_text += "    data_in = ({}{})\n".format(
         ",".join(["data_in_{}".format(i) for i in range(n_data_cols)]),
         "," if n_data_cols == 1 else "",
@@ -1475,16 +1457,13 @@ def gen_update_cb(
             "bodo": bodo,
             "np": np,
             "pd": pd,
-            "info_to_array": info_to_array,
-            "info_from_table": info_from_table,
-            "incref": incref,
+            "array_from_cpp_table": array_from_cpp_table,
             "pre_alloc_string_array": pre_alloc_string_array,
             "__init_func": udf_func_struct.init_func,
             "__update_redvars": udf_func_struct.update_all_func,
             "is_null_pointer": is_null_pointer,
             "dt64_dtype": np.dtype("datetime64[ns]"),
             "td64_dtype": np.dtype("timedelta64[ns]"),
-            "incref_array_info": incref_array_info,
         },
         loc_vars,
     )
@@ -1545,8 +1524,6 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
         func_text += "    redvar_arr_{} = array_from_cpp_table(out_table, {}, data_redvar_dummy[{}])\n".format(
             i, redvar_offsets_out[i], i
         )
-        # incref needed so that arrays aren't deleted after this function exits
-        func_text += "    incref(redvar_arr_{})\n".format(i)
         func_text += "    redvar_arr_{}.fill(init_vals[{}])\n".format(i, i)
     func_text += "    redvars = ({}{})\n".format(
         ",".join(["redvar_arr_{}".format(i) for i in range(n_red_vars)]),
@@ -1558,8 +1535,6 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
         func_text += "    recv_redvar_arr_{} = array_from_cpp_table(in_table, {}, data_redvar_dummy[{}])\n".format(
             i, redvar_offsets_in[i], i
         )
-        # incref needed so that arrays aren't deleted after this function exits
-        func_text += "    incref(recv_redvar_arr_{})\n".format(i)
     func_text += "    recv_redvars = ({}{})\n".format(
         ",".join(["recv_redvar_arr_{}".format(i) for i in range(n_red_vars)]),
         "," if n_red_vars == 1 else "",
@@ -1577,7 +1552,6 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
         {
             "np": np,
             "array_from_cpp_table": array_from_cpp_table,
-            "incref": incref,
             "__init_func": udf_func_struct.init_func,
             "__combine_redvars": udf_func_struct.combine_all_func,
             "is_null_pointer": is_null_pointer,
@@ -1639,8 +1613,6 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix)
         func_text += "    redvar_arr_{} = array_from_cpp_table(table, {}, data_redvar_dummy[{}])\n".format(
             i, redvar_offsets[i], i
         )
-        # incref needed so that arrays aren't deleted after this function exits
-        func_text += "    incref(redvar_arr_{})\n".format(i)
     func_text += "    redvars = ({}{})\n".format(
         ",".join(["redvar_arr_{}".format(i) for i in range(n_red_vars)]),
         "," if n_red_vars == 1 else "",
@@ -1651,8 +1623,6 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix)
         func_text += "    data_out_{} = array_from_cpp_table(table, {}, out_data_dummy[{}])\n".format(
             i, data_out_offsets[i], i
         )
-        # incref needed so that arrays aren't deleted after this function exits
-        func_text += "    incref(data_out_{})\n".format(i)
     func_text += "    data_out = ({}{})\n".format(
         ",".join(["data_out_{}".format(i) for i in range(n_data_cols)]),
         "," if n_data_cols == 1 else "",
@@ -1668,7 +1638,6 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix)
         {
             "np": np,
             "array_from_cpp_table": array_from_cpp_table,
-            "incref": incref,
             "__eval_res": udf_func_struct.eval_all_func,
             "is_null_pointer": is_null_pointer,
             "dt64_dtype": np.dtype("datetime64[ns]"),
@@ -1719,14 +1688,10 @@ def gen_general_udf_cb(
         func_text += "    out_col = array_from_cpp_table(out_table, {}, out_col_{}_typ)\n".format(
             out_col_offsets[i], i
         )
-        # incref needed so that array isn't deleted after this function exits
-        func_text += "    incref(out_col)\n"
         func_text += "    for j in range(num_groups):\n"
         func_text += "        in_col = array_from_cpp_table(in_table, {}*num_groups + j, in_col_{}_typ)\n".format(
             i, i
         )
-        # incref needed so that array isn't deleted after this function exits
-        func_text += "        incref(in_col)\n"
         func_text += "        out_col[j] = func_{}(pd.Series(in_col))  # func returns scalar\n".format(
             i
         )
@@ -1734,7 +1699,6 @@ def gen_general_udf_cb(
     glbs = {
         "pd": pd,
         "array_from_cpp_table": array_from_cpp_table,
-        "incref": incref,
     }
     gen_udf_offset = 0
     for i, func in enumerate(allfuncs):
@@ -2142,22 +2106,7 @@ def gen_top_level_agg_func(
     func_text += "    delete_table_decref_arrays(table)\n"
     func_text += "    delete_table_decref_arrays(udf_table_dummy)\n"
 
-    # TODO[BE-3182]: support removing dead keys from cpp output
-    # decref dead output keys since cpp code doesn't remove dead output keys yet
-    if agg_node.return_key:
-        for i in range(n_keys):
-            if out_cpp_col_inds[i] == -1:
-                func_text += f"    decref_table_array(out_table, {i})\n"
-
-    # TODO[BE-3200]: support removing dead output Index from cpp output
-    if dead_out_index:
-        # Index is always last in cpp output table (after keys and data)
-        out_index_ind = len(agg_node.gb_info_out) + (
-            n_keys if agg_node.return_key else 0
-        )
-        func_text += f"    decref_table_array(out_table, {out_index_ind})\n"
-
-    func_text += "    delete_table(out_table)\n"
+    func_text += "    delete_table_decref_arrays(out_table)\n"
     func_text += "    ev_clean.finalize()\n"
 
     func_text += "    return out_data\n"

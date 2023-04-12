@@ -2415,6 +2415,18 @@ def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
             (dict_array_info, context.get_constant_null(sig.return_type)),
         )
 
+        # delete output array_info
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="delete_info_decref_array"
+        )
+        builder.call(fn_tp, [dict_array_info])
+
         return dict_arr
 
     assert (
