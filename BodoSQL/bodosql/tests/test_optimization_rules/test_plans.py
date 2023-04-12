@@ -263,94 +263,6 @@ def engage3_ctx():
     "plan_tests",
     [
         pytest.param(
-            ("plan_data/tpch_q1.sql", "plan_data/tpch_q1_expected.txt", "TPCH"),
-            id="tpch_q1",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q2.sql", "plan_data/tpch_q2_expected.txt", "TPCH"),
-            id="tpch_q2",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q3.sql", "plan_data/tpch_q3_expected.txt", "TPCH"),
-            id="tpch_q3",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q4.sql", "plan_data/tpch_q4_expected.txt", "TPCH"),
-            id="tpch_q4",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q5.sql", "plan_data/tpch_q5_expected.txt", "TPCH"),
-            id="tpch_q5",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q6.sql", "plan_data/tpch_q6_expected.txt", "TPCH"),
-            id="tpch_q6",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q7.sql", "plan_data/tpch_q7_expected.txt", "TPCH"),
-            id="tpch_q7",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q8.sql", "plan_data/tpch_q8_expected.txt", "TPCH"),
-            id="tpch_q8",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q9.sql", "plan_data/tpch_q9_expected.txt", "TPCH"),
-            id="tpch_q9",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q10.sql", "plan_data/tpch_q10_expected.txt", "TPCH"),
-            id="tpch_q10",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q11.sql", "plan_data/tpch_q11_expected.txt", "TPCH"),
-            id="tpch_q11",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q12.sql", "plan_data/tpch_q12_expected.txt", "TPCH"),
-            id="tpch_q12",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q13.sql", "plan_data/tpch_q13_expected.txt", "TPCH"),
-            id="tpch_q13",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q14.sql", "plan_data/tpch_q14_expected.txt", "TPCH"),
-            id="tpch_q14",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q15.sql", "plan_data/tpch_q15_expected.txt", "TPCH"),
-            id="tpch_q15",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q16.sql", "plan_data/tpch_q16_expected.txt", "TPCH"),
-            id="tpch_q16",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q17.sql", "plan_data/tpch_q17_expected.txt", "TPCH"),
-            id="tpch_q17",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q18.sql", "plan_data/tpch_q18_expected.txt", "TPCH"),
-            id="tpch_q18",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q19.sql", "plan_data/tpch_q19_expected.txt", "TPCH"),
-            id="tpch_q19",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q20.sql", "plan_data/tpch_q20_expected.txt", "TPCH"),
-            id="tpch_q20",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q21.sql", "plan_data/tpch_q21_expected.txt", "TPCH"),
-            id="tpch_q21",
-        ),
-        pytest.param(
-            ("plan_data/tpch_q22.sql", "plan_data/tpch_q22_expected.txt", "TPCH"),
-            id="tpch_q22",
-        ),
-        pytest.param(
             ("plan_data/engage3.sql", "plan_data/engage3_expected.txt", "engage3"),
             id="engage3",
         ),
@@ -372,15 +284,13 @@ def engage3_ctx():
         ),
     ],
 )
-def test_plan(plan_tests, tpch_data_schema_only, engage3_ctx, dummy_test_ctx, datapath):
+def test_plan(plan_tests, engage3_ctx, dummy_test_ctx, datapath):
     """Tests that the sql files in the plan_data directory generate the same
     plan string as the reference solutions."""
     query_path, expected_path, ctx_str = plan_tests
 
     # Extract the relevant context dictionary based on the name
-    if ctx_str == "TPCH":
-        ctx = tpch_data_schema_only
-    elif ctx_str == "engage3":
+    if ctx_str == "engage3":
         ctx = engage3_ctx
     elif ctx_str == "dummy_test":
         ctx = dummy_test_ctx

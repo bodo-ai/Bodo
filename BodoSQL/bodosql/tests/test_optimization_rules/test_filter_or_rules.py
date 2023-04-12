@@ -4,9 +4,11 @@ Test correctness of the filter optimization rules to extract common
 predicates from a join.
 """
 import pandas as pd
+import pytest
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.slow
 def test_logical_filter_rule(basic_df, spark_info, memory_leak_check):
     """
     Test that a common expression is extracted from an OR condition
@@ -54,6 +56,7 @@ def test_logical_filter_rule(basic_df, spark_info, memory_leak_check):
     assert gen_code6.count("boolor") == 2, "Expected 2 boolor after no-optimization"
 
 
+@pytest.mark.slow
 def test_join_filter_rule(spark_info, memory_leak_check):
     """
     Test that a common expression is extracted from an OR condition

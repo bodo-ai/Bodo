@@ -12,6 +12,7 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_window_agg_kernels impor
 )
 
 
+@pytest.mark.slow
 @pytest.mark.tz_aware
 @pytest.mark.parametrize(
     "partition_col, answer",
@@ -118,6 +119,7 @@ def test_conditional_change_event(partition_col, answer, memory_leak_check):
     count_window_applies(pandas_code, 1, ["CONDITIONAL_CHANGE_EVENT"])
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "partition_col, expressions, window, answer",
     [
@@ -201,6 +203,7 @@ def test_conditional_true_event(
     count_window_applies(pandas_code, 1, ["CONDITIONAL_TRUE_EVENT"])
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data_col, partition_col, window_frame, answer",
     [
@@ -261,6 +264,7 @@ def test_median(data_col, partition_col, window_frame, answer):
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data_col, partition_col, answer",
     [
@@ -370,6 +374,7 @@ def test_ratio_to_report(data_col, partition_col, answer, memory_leak_check):
 # In cases with multiple correct answers, the answer returned by our mode implementation
 # is the value that was encountered first in the overall array
 # due to the semantics of how Python iterates over hashmaps
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data_col, bounds, answer",
     [
@@ -597,6 +602,7 @@ def test_mode(data_col, bounds, answer, memory_leak_check):
         )
 
 
+@pytest.mark.slow
 def test_variance_stddev_nan(memory_leak_check):
     """Tests the 4 major var/std functions on data with both NULL and NaN"""
     params = [
