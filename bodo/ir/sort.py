@@ -726,7 +726,7 @@ def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
         out_rets_tup = f"({', '.join(arr_vars)}{comma})"
         func_text += f"  out_data = {out_rets_tup}\n"
 
-    func_text += "  delete_table(out_cpp_table)\n"
+    func_text += "  delete_table_decref_arrays(out_cpp_table)\n"
     func_text += "  delete_table(in_cpp_table)\n"
     func_text += f"  return out_data\n"
 

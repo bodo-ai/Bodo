@@ -32,6 +32,7 @@ from bodo.libs.array import (
     array_from_cpp_table,
     cpp_table_to_py_table,
     delete_table,
+    delete_table_decref_arrays,
     table_type,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
@@ -1323,7 +1324,7 @@ def _gen_sql_reader_py(
 
         func_text += f"  index_var = {index_var}\n"
 
-        func_text += f"  delete_table(out_table)\n"
+        func_text += f"  delete_table_decref_arrays(out_table)\n"
         func_text += f"  ev.finalize()\n"
         func_text += (
             "  return (total_rows, table_var, index_var, file_list, snapshot_id)\n"
@@ -1427,7 +1428,7 @@ def _gen_sql_reader_py(
         else:
             # We only load the index as the table is dead.
             func_text += "  table_var = None\n"
-        func_text += "  delete_table(out_table)\n"
+        func_text += "  delete_table_decref_arrays(out_table)\n"
         func_text += "  ev.finalize()\n"
         func_text += "  return (total_rows, table_var, index_var, None, None)\n"
 
@@ -1514,6 +1515,7 @@ def _gen_sql_reader_py(
                 "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
                 "array_from_cpp_table": array_from_cpp_table,
                 "delete_table": delete_table,
+                "delete_table_decref_arrays": delete_table_decref_arrays,
                 "cpp_table_to_py_table": cpp_table_to_py_table,
                 "set_table_len": bodo.hiframes.table.set_table_len,
                 "get_node_portion": bodo.libs.distributed_api.get_node_portion,
