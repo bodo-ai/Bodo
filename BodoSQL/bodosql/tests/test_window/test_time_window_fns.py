@@ -51,6 +51,7 @@ def time_df():
     return pd.DataFrame({"A": A, "B": B, "C": C, "D": D, "E": E})
 
 
+@pytest.mark.slow
 def test_time_partition(time_df, memory_leak_check):
     """Tests window functions where the PARTITION BY term is a time column"""
     query = "SELECT A, B, SUM(D) OVER (PARTITION BY A ORDER BY D ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM table1"
@@ -68,6 +69,7 @@ def test_time_partition(time_df, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_time_order(time_df, memory_leak_check):
     """Tests window functions where the ORDER BY term is a time column"""
     query = "SELECT C, B, SUM(D) OVER (PARTITION BY C ORDER BY B ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM table1"
@@ -86,6 +88,7 @@ def test_time_order(time_df, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_time_min_max_count_lead_lag(time_df, memory_leak_check):
     """Tests the window functions MIN, MAX, COUNT, LEAD and LAG with time inputs"""
     query = "SELECT C, D, \

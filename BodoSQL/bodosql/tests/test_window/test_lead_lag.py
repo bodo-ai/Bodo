@@ -45,6 +45,7 @@ def gen_lead_lag_queries(
     return lead_lag_queries, lead_lag_names
 
 
+@pytest.mark.slow
 @pytest.mark.timeout(750)
 @pytest.mark.parametrize(
     "cols_to_use, window_frame, nulls_handling",
@@ -118,6 +119,7 @@ def test_lead_lag_handle_nulls(
     count_window_applies(pandas_code, 1, ["LEAD", "LAG"])
 
 
+@pytest.mark.slow
 @pytest.mark.timeout(600)
 @pytest.mark.parametrize(
     "windows",

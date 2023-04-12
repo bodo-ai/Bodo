@@ -12,6 +12,7 @@ from bodosql.tests.utils import bodosql_use_date_type, check_query
 import bodo
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "orderby_multiple_columns",
     [
@@ -61,6 +62,7 @@ def test_row_number_orderby(datapath, memory_leak_check, orderby_multiple_column
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "order_clause",
     [
@@ -111,6 +113,7 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
     count_window_applies(pandas_code, 1, ["RANK"])
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "input_df",
     [
@@ -195,6 +198,7 @@ def test_row_number_filter(memory_leak_check, input_df, ascending, nulls_last):
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "input_arrs",
     [

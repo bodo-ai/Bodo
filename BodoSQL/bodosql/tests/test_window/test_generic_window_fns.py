@@ -14,6 +14,8 @@ from bodosql.tests.utils import (
     get_equivalent_spark_agg_query,
 )
 
+
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "funcs",
     [
@@ -62,6 +64,7 @@ def test_numeric_window_functions(
     count_window_applies(pandas_code, window_frames[1], funcs)
 
 
+@pytest.mark.slow
 def test_two_arg_numeric_window_functions(
     all_numeric_window_df,
     window_frames,
@@ -100,6 +103,7 @@ def test_two_arg_numeric_window_functions(
     count_window_applies(pandas_code, window_frames[1], ["COVAR_SAMP", "COVAR_POP"])
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "funcs",
     [
@@ -162,6 +166,7 @@ def test_non_numeric_window_functions(
     count_window_applies(pandas_code, window_frames[1], funcs)
 
 
+@pytest.mark.slow
 def test_first_last_any_nth(
     all_window_df, all_window_col_names, window_frames, spark_info
 ):
@@ -214,6 +219,7 @@ def test_first_last_any_nth(
     )
 
 
+@pytest.mark.slow
 def test_first_value_last_value_optimized(
     all_window_df, all_window_col_names, spark_info
 ):
@@ -251,6 +257,7 @@ def test_first_value_last_value_optimized(
     assert pandas_code.count("sort_values") == 1
 
 
+@pytest.mark.slow
 def test_blended_fusion(memory_leak_check):
     """Tests fusion between RANK, AVG, MEDIAN, MODE and CONDITIONAL_CHANGE_EVENT.
     This allows window functions that are not tested together to have one

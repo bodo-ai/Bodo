@@ -1088,19 +1088,10 @@ def tpch_data(datapath):
     """
     Fixture with TPCH data for BodoSQL Contexts.
     """
-    return tpch_data_helper(datapath, None)
+    return tpch_data_helper(datapath)
 
 
-@pytest.fixture(scope="module")
-def tpch_data_schema_only(datapath):
-    """
-    Fixture with TPCH data for BodoSQL Contexts, but only fetches 1 row
-    per DataFrame
-    """
-    return tpch_data_helper(datapath, 1)
-
-
-def tpch_data_helper(datapath, rows):
+def tpch_data_helper(datapath):
     (
         customer_df,
         orders_df,
@@ -1110,7 +1101,7 @@ def tpch_data_helper(datapath, rows):
         supplier_df,
         part_df,
         partsupp_df,
-    ) = load_tpch_data(datapath("tpch-test-data/parquet"), rows)
+    ) = load_tpch_data(datapath("tpch-test-data/parquet"))
     dataframe_dict = {
         "customer": customer_df,
         "orders": orders_df,
@@ -1125,7 +1116,7 @@ def tpch_data_helper(datapath, rows):
 
 
 @bodo.jit(returns_maybe_distributed=False, cache=True)
-def load_tpch_data(dir_name, rows=None):
+def load_tpch_data(dir_name):
     """Load the necessary TPCH dataframes given a root directory.
     We use bodo.jit so we can read easily from a directory.
 
@@ -1138,15 +1129,6 @@ def load_tpch_data(dir_name, rows=None):
     supplier_df = pd.read_parquet(dir_name + "/supplier.parquet/")
     part_df = pd.read_parquet(dir_name + "/part.parquet/")
     partsupp_df = pd.read_parquet(dir_name + "/partsupp.parquet/")
-    if rows is not None:
-        customer_df = customer_df.head(rows)
-        orders_df = orders_df.head(rows)
-        lineitem_df = lineitem_df.head(rows)
-        nation_df = nation_df.head(rows)
-        region_df = region_df.head(rows)
-        supplier_df = supplier_df.head(rows)
-        part_df = part_df.head(rows)
-        partsupp_df = partsupp_df.head(rows)
     return (
         customer_df,
         orders_df,
