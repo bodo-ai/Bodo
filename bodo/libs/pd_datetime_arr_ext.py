@@ -434,14 +434,25 @@ def overload_getitem(A, ind, val):
     if not isinstance(A, DatetimeArrayType):
         return
     tz = A.tz
+
+    # Check the possible values
+    if not (
+        isinstance(val, DatetimeArrayType) or isinstance(val, bodo.PandasTimestampType)
+    ):  # pragma: no cover
+        raise BodoError(
+            "operator.setitem with DatetimeArrayType requires a Timestamp value or DatetimeArrayType"
+        )
+
+    # Ensure the timezones match
+    if val.tz != tz:  # pragma: no cover
+        raise BodoError(
+            "operator.setitem with DatetimeArrayType requires the Array and values to set to share a timezone"
+        )
+
     if isinstance(ind, types.Integer):
         if not isinstance(val, bodo.PandasTimestampType):  # pragma: no cover
             raise BodoError(
                 "operator.setitem with DatetimeArrayType requires a Timestamp value"
-            )
-        if val.tz != tz:
-            raise BodoError(
-                "operator.setitem with DatetimeArrayType requires the Timestamp value to share the same timezone"
             )
 
         def impl(A, ind, val):  # pragma: no cover
@@ -449,9 +460,81 @@ def overload_getitem(A, ind, val):
 
         return impl
 
+    # array of int indices
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+
+        if isinstance(val, DatetimeArrayType):
+            # Array case
+            def impl_arr(A, ind, val):  # pragma: no cover
+                n = len(ind)
+                for i in range(n):
+                    A._data[ind[i]] = val._data[i]
+
+            return impl_arr
+
+        else:
+            # Scalar case
+            def impl_scalar(A, ind, val):  # pragma: no cover
+                value = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+                n = len(ind)
+                for i in range(n):
+                    A._data[ind[i]] = value
+
+            return impl_scalar
+
+    # bool array
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+
+        if isinstance(val, DatetimeArrayType):
+            # Array case
+            def impl_arr(A, ind, val):  # pragma: no cover
+                ind = bodo.utils.conversion.coerce_to_array(ind)
+                val_ind = 0
+                n = len(ind)
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
+                        A._data[i] = val._data[val_ind]
+                        val_ind += 1
+
+            return impl_arr
+
+        else:
+            # Scalar case
+            def impl_scalar(A, ind, val):  # pragma: no cover
+                value = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+                ind = bodo.utils.conversion.coerce_to_array(ind)
+                n = len(ind)
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
+                        A._data[i] = value
+
+            return impl_scalar
+
+    # slice case
+    if isinstance(ind, types.SliceType):
+
+        if isinstance(val, DatetimeArrayType):
+            # Array case
+            def impl_arr(A, ind, val):  # pragma: no cover
+                # using setitem directly instead of copying in loop since
+                # Array setitem checks for memory overlap and copies source
+                A._data[ind] = val._data
+
+            return impl_arr
+
+        else:
+            # Scalar case
+            def impl_scalar(A, ind, val):  # pragma: no cover
+                value = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+                slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    A._data[i] = value
+
+            return impl_scalar
+
     raise BodoError(
-        "operator.setitem with DatetimeArrayType is only supported with an integer index"
-    )
+        f"setitem for DatetimeArrayType with indexing type {ind} not supported"
+    )  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)

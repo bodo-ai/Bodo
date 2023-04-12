@@ -2973,8 +2973,6 @@ def repeat_kernel(A, repeats):  # pragma: no cover
 @overload(repeat_kernel, no_unliteral=True)
 def repeat_kernel_overload(A, repeats):
     """kernel for repeating array values (for Series.repeat)"""
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "Series.repeat()")
-
     _dtype = to_str_arr_if_dict_array(A)
 
     # int case

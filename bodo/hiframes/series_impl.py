@@ -5536,7 +5536,6 @@ def overload_series_repeat(S, repeats, axis=None):
         package_name="pandas",
         module_name="Series",
     )
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.repeat()")
 
     # repeats can be int or array of int
     if not (
