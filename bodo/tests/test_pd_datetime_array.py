@@ -508,3 +508,38 @@ def test_tz_convert_none(memory_leak_check):
     # Python will have a different output type until we handle no timezone in Datetime array
     py_output = arr.tz_convert(None)._data
     check_func(impl, (arr,), py_output=py_output)
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [
+        pytest.param([0, 4, 15, 2, 11, 16], id="int_list"),
+        pytest.param([False, False, True, False, False] * 6, id="bool_list"),
+        pytest.param(slice(11, 17, 1), id="slice"),
+    ],
+)
+@pytest.mark.parametrize(
+    "val",
+    [
+        pytest.param(
+            pd.Timestamp(year=2024, month=1, day=11, tz="Poland"), id="scalar"
+        ),
+        pytest.param(
+            pd.date_range(start="1/1/2025", freq="4H", periods=6, tz="Poland").array,
+            id="arr",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_setitem(idx, val, memory_leak_check):
+    """
+    Tests all of the supported setitem cases.
+    """
+
+    def impl(arr, idx, val):
+        arr[idx] = val
+        return arr
+
+    arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    # We only test sequence inputs for now
+    check_func(impl, (arr, idx, val), copy_input=True, only_seq=True)
