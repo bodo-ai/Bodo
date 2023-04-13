@@ -801,6 +801,17 @@ def _generate_column_filter(
             # components are.
             scalars_to_unpack.append(p2.name)
             return single_filter
+        elif p1 == "REGEXP_LIKE":
+            assert isinstance(p2, ir.Var)
+
+            pattern_arg = f"{{{filter_map[p2.name]}[0]}}"
+            flags_arg = f"{{{filter_map[p2.name]}[1]}}"
+
+            single_filter = ["(", p1, "(", p0, ",", pattern_arg, ",", flags_arg, "))"]
+            # Indicate the tuple variable is not directly passed to Snowflake, instead its
+            # components are.
+            scalars_to_unpack.append(p2.name)
+            return single_filter
         else:
             return ["(", p0, p1, scalar_filter, ")"]
 
