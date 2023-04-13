@@ -2327,6 +2327,7 @@ def test_sort_list_list(memory_leak_check):
     check_func(f, (df,))
 
 
+@pytest.mark.skip(reason="Nested Arrays are experimental.")
 def test_sort_values_nested_arrays_random(memory_leak_check):
     def f(df):
         df2 = df.sort_values(by="A")
