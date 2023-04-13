@@ -1110,63 +1110,78 @@ def test_monthname_date_scalars(fn_name, basic_df, memory_leak_check):
     )
 
 
-def test_make_date_cols(spark_info, dt_fn_dataframe, memory_leak_check):
-    """tests makedate on column values"""
+def test_makedate_scalars(basic_df, dt_fn_dataframe, memory_leak_check):
+    """tests makedate on scalar values"""
 
-    # TODO: fix null issues with make_date: https://bodo.atlassian.net/browse/BE-3640
-    ctx_dict = {"table1": dt_fn_dataframe["table1"].fillna(method="bfill")}
-
-    # Spark's make_date, takes three arguments: Y, M, D, where MYSQL's makedate is Y, D
-    query = "SELECT makedate(valid_year_integers, positive_integers) from table1"
-    spark_query = "SELECT DATE_ADD(MAKE_DATE(valid_year_integers, 1, 1), positive_integers-1) from table1"
-
-    # spark requires certain the second argument of make_date to not be of type bigint,
-    # but all pandas integer types are currently interpreted bigint when creating
-    # a spark dataframe from a pandas dataframe. Therefore, we need to cast the spark table
-    # to a valid type
-    cols_to_cast = {"table1": [("positive_integers", "int")]}
+    query = "SELECT makedate(2000, 200), makedate(2010, 300), makedate(2020, 400)"
+    output = pd.DataFrame(
+        {
+            "A": [datetime.date(2000, 7, 18)],
+            "B": [datetime.date(2010, 10, 27)],
+            "C": [datetime.date(2021, 2, 3)],
+        }
+    )
 
     check_query(
         query,
-        ctx_dict,
-        spark_info,
+        basic_df,
+        None,
         check_names=False,
-        check_dtype=False,
-        equivalent_spark_query=spark_query,
-        spark_input_cols_to_cast=cols_to_cast,
+        expected_output=output,
     )
 
 
-def test_make_date_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
-    """tests makedate on scalar values"""
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(
+            True,
+            id="with_case",
+            marks=pytest.mark.skip(
+                reason="TODO: [BE-4671]support date with CASE statement"
+            ),
+        ),
+    ],
+)
+def test_makedate_cols(dt_fn_dataframe, use_case, memory_leak_check):
+    """tests makedate with case statement"""
+    if use_case:
+        query = "SELECT CASE WHEN makedate(valid_year_integers, positive_integers) > DATE '2211-01-01' THEN DATE '2000-01-01' ELSE makedate(valid_year_integers, positive_integers) END from table1"
+    else:
+        query = "SELECT makedate(valid_year_integers, positive_integers) from table1"
 
-    query = "SELECT CASE WHEN makedate(valid_year_integers, positive_integers) > TIMESTAMP '2211-01-01' THEN TIMESTAMP '2000-01-01' ELSE makedate(valid_year_integers, positive_integers) END from table1"
-    spark_query = "SELECT CASE WHEN DATE_ADD(make_date(valid_year_integers, 1, 1), positive_integers-1) > TIMESTAMP '2211-01-01' THEN TIMESTAMP '2000-01-01' ELSE DATE_ADD(make_date(valid_year_integers, 1, 1), positive_integers-1) END from table1"
+    def makedate_fn(dt_fn_dataframe):
+        n = len(dt_fn_dataframe["table1"]["valid_year_integers"])
+        res = pd.Series([None] * n)
+        for i in range(n):
+            year = dt_fn_dataframe["table1"]["valid_year_integers"][i]
+            day = dt_fn_dataframe["table1"]["positive_integers"][i]
+            if pd.isna(year) or pd.isna(day):
+                res[i] = None
+            else:
+                date = datetime.date(year=year, month=1, day=1) + pd.Timedelta(
+                    day - 1, unit="D"
+                )
+                res[i] = date
+        return res
 
-    # spark requires certain the second argument of make_date to not be of type bigint,
-    # but all pandas integer types are currently interpreted bigint when creating
-    # a spark dataframe from a pandas dataframe. Therefore, we need to cast the spark table
-    # to a valid type
-    cols_to_cast = {"table1": [("positive_integers", "int")]}
-
+    output = pd.DataFrame({"output": makedate_fn(dt_fn_dataframe)})
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         check_names=False,
-        check_dtype=False,
-        equivalent_spark_query=spark_query,
-        spark_input_cols_to_cast=cols_to_cast,
+        expected_output=output,
     )
 
 
 @pytest.mark.slow
-@pytest.mark.skip("Currently, not checking for invalid year/day values")
-def test_make_date_edgecases(spark_info, dt_fn_dataframe, memory_leak_check):
+def test_makedate_edgecases(spark_info, dt_fn_dataframe, memory_leak_check):
     """tests makedate on edgecases"""
 
     query = "SELECT makedate(valid_year_integers, mixed_integers), makedate(positive_integers, positive_integers) from table1"
-    spark_query = "SELECT DATE_ADD(make_date(valid_year_integers, 1, 1), mixed_integers), DATE_ADD(make_date(positive_integers, 1, 1), positive_integers) from table1"
+    spark_query = "SELECT DATE_ADD(make_date(valid_year_integers, 1, 1), mixed_integers-1), DATE_ADD(make_date(positive_integers, 1, 1), positive_integers-1) from table1"
 
     # spark requires certain arguments of make_date to not
     # be of type bigint, but all pandas integer types are currently inerpreted as bigint.
@@ -1177,7 +1192,6 @@ def test_make_date_edgecases(spark_info, dt_fn_dataframe, memory_leak_check):
         dt_fn_dataframe,
         spark_info,
         check_names=False,
-        check_dtype=False,
         equivalent_spark_query=spark_query,
         spark_input_cols_to_cast=cols_to_cast,
     )

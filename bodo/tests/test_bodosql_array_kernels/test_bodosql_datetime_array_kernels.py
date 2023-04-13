@@ -1275,7 +1275,7 @@ def test_makedate(args, memory_leak_check):
         if pd.isna(year) or pd.isna(day):
             return None
         else:
-            return pd.Timestamp(year=year, month=1, day=1) + pd.Timedelta(
+            return datetime.date(year=year, month=1, day=1) + pd.Timedelta(
                 day - 1, unit="D"
             )
 
@@ -1284,7 +1284,6 @@ def test_makedate(args, memory_leak_check):
         impl,
         args,
         py_output=makedate_answer,
-        check_dtype=False,
         reset_index=True,
     )
 

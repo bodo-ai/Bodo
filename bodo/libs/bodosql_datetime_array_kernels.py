@@ -1897,20 +1897,17 @@ def makedate_util(year, day):
     """
     verify_int_arg(year, "MAKEDATE", "year")
     verify_int_arg(day, "MAKEDATE", "day")
-    # When returning a scalar we return a pd.Timestamp type.
-    unbox_str = (
-        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-        if bodo.utils.utils.is_array_typ(year, True)
-        or bodo.utils.utils.is_array_typ(day, True)
-        else ""
-    )
 
     arg_names = ["year", "day"]
     arg_types = [year, day]
     propagate_null = [True] * 2
-    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(year=arg0, month=1, day=1) + pd.Timedelta(days=arg1-1))"
+    scalar_text = (
+        "ord = bodo.hiframes.datetime_date_ext._days_before_year(arg0) + arg1\n"
+    )
+    scalar_text += "y, m, d = bodo.hiframes.datetime_date_ext._ord2ymd(ord)\n"
+    scalar_text += "res[i] = datetime.date(y, m, d)"
 
-    out_dtype = np.dtype("datetime64[ns]")
+    out_dtype = DatetimeDateArrayType()
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
