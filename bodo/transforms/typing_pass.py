@@ -1425,6 +1425,20 @@ class TypingTransforms:
                 read_node,
                 new_ir_assigns,
             )
+        elif call_list == (
+            "regexp_like",
+            "bodo.libs.bodosql_array_kernels",
+        ):  # pragma: no cover
+            return self._get_regexp_like_filter(
+                call_def,
+                func_ir,
+                df_var,
+                df_col_names,
+                is_sql_op,
+                read_node,
+                new_ir_assigns,
+            )
+
         else:
             # Trigger a GuardException because we have hit an unknown function.
             # This should be caught by a surrounding function.
@@ -1539,6 +1553,58 @@ class TypingTransforms:
         )
         op = call_list[0]
         return (colname, op, call_def.args[0])
+
+    def _get_regexp_like_filter(
+        self,
+        call_def: ir.Expr,
+        func_ir: ir.FunctionIR,
+        df_var: ir.Var,
+        df_col_names,
+        is_sql_op: bool,
+        read_node,
+        new_ir_assigns: List[ir.Var],
+    ) -> Tuple[str, str, ir.Var]:  # pragma: no cover
+        args = call_def.args
+        # Get the column names
+        col_name = self._get_col_name(
+            args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+        )
+
+        # Get the other args. We can only do filter pushdown if all of them are literals
+        pattern_arg = args[1]
+        regex_param_arg = args[2]
+
+        pattern_type = self.typemap.get(pattern_arg.name, None)
+        regex_param_type = self.typemap.get(regex_param_arg.name, None)
+
+        invalid_types = (None, types.undefined, types.unknown)
+        if (pattern_type in invalid_types) or (regex_param_type in invalid_types):
+            self.needs_transform = True
+            raise GuardException
+
+        require(
+            is_overload_constant_str(pattern_type)
+            and is_overload_constant_str(regex_param_type)
+        )
+
+        pattern_type = types.unliteral(pattern_type)
+        regex_param_type = types.unliteral(regex_param_type)
+
+        require(
+            pattern_type in (types.unicode_type, types.none)
+            and regex_param_type in (types.unicode_type, types.none)
+        )
+
+        expr_value = ir.Expr.build_tuple(args[1:], call_def.loc)
+        # Generate a variable from the Expr
+        new_name = mk_unique_var("bodosql_kernel_var")
+        new_var = ir.Var(ir.Scope(None, call_def.loc), new_name, call_def.loc)
+        new_assign = ir.Assign(target=new_var, value=expr_value, loc=call_def.loc)
+        # Append the assign so we update the IR.
+        new_ir_assigns.append(new_assign)
+        # Update the definitions. This is safe since the name is unique.
+        func_ir._definitions[new_name] = [expr_value]
+        return (col_name, "REGEXP_LIKE", new_var)
 
     def _get_like_filter(
         self,
@@ -5049,6 +5115,7 @@ class TypingTransforms:
                 ) or call_list in (
                     ("is_in", "bodo.libs.bodosql_array_kernels"),
                     ("like_kernel", "bodo.libs.bodosql_array_kernels"),
+                    ("regexp_like", "bodo.libs.bodosql_array_kernels"),
                 )
         return False
 
