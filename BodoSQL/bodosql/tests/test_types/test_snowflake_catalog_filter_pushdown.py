@@ -2111,3 +2111,61 @@ def test_nonregex_string_match_functions(
         # Each function may have different number of args,
         # so we will just check that the SQL function got logged.
         check_logger_msg(stream, sql_func)
+
+
+def test_snowflake_coalesce_constant_date_string_filter_pushdown(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that queries of the form COALESCE(date, constanst_string) <COMPARISON OP> constant_string
+    can be pushed down to Snowflake.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+
+    df = pd.DataFrame(
+        {
+            "L_COMMITDATE": pd.Series(
+                ["2023-01-20", "2023-01-21", "2023-01-19", None, "2023-06-20"] * 10,
+                dtype="datetime64[ns]",
+            ),
+            "L_QUANTITY": pd.arrays.IntegerArray(
+                np.array([1, -3, 2, 3, 10] * 10, np.int8),
+                np.array([False, True, True, False, False] * 10),
+            ),
+        }
+    )
+
+    with create_snowflake_table(df, "simple_date_table", db, schema) as table_name:
+        expected_output = pd.DataFrame(
+            {
+                "L_QUANTITY": pd.arrays.IntegerArray(
+                    np.array([1, -3, 3, 10] * 10, np.int8),
+                    np.array([False, True, False, False] * 10),
+                ),
+            }
+        )
+        expected_output.columns = [x.lower() for x in expected_output.columns]
+
+        query = f"select l_quantity from {table_name} where coalesce(L_COMMITDATE, '2023-06-20') >= '2023-01-20'"
+
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=expected_output,
+                is_out_distributed=False,
+                reset_index=True,
+                sort_output=True,
+                # Pandas output is non-nullable
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "Filter pushdown successfully performed.")
+            check_logger_msg(stream, r"coalesce(\"L_COMMITDATE\", {f0}) >= {f1} )")
