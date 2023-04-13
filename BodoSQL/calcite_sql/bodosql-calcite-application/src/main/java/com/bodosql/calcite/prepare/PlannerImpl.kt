@@ -316,6 +316,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
             // projection. See the rule docstring for more detail.
             ProjectFilterProjectColumnEliminationRule.Config.DEFAULT.toRule(),
             MinRowNumberFilterRule.Config.DEFAULT.toRule(),
+            RexSimplificationRule.Config.DEFAULT.toRule(),
         )
     }
 
