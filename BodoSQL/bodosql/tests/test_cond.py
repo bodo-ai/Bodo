@@ -3,13 +3,14 @@
 Test correctness of SQL conditional functions on BodoSQL
 """
 import copy
+import datetime
 from decimal import Decimal
 
 import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.string_ops_common import bodosql_string_fn_testing_df  # noqa
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import bodosql_use_date_type, check_query
 
 import bodo
 
@@ -366,23 +367,24 @@ def test_if_dt(spark_info, memory_leak_check):
             {
                 "A": pd.Series(
                     [
-                        pd.Timestamp("2017-12-25"),
-                        pd.Timestamp("2005-06-13"),
-                        pd.Timestamp("1998-02-20"),
-                        pd.Timestamp("2010-03-14"),
-                        pd.Timestamp("2020-05-05"),
+                        datetime.date(2017, 12, 25),
+                        datetime.date(2005, 6, 13),
+                        datetime.date(1998, 2, 20),
+                        datetime.date(2010, 3, 14),
+                        datetime.date(2020, 5, 5),
                     ]
                 )
             }
         )
     }
-    check_query(
-        query,
-        ctx,
-        spark_info,
-        check_names=False,
-        equivalent_spark_query=equivalent_spark_query,
-    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
+            spark_info,
+            check_names=False,
+            equivalent_spark_query=equivalent_spark_query,
+        )
 
 
 @pytest.mark.slow
