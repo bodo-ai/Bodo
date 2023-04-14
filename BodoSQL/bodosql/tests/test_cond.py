@@ -64,6 +64,43 @@ def test_coalesce_128(spark_info, scalar, memory_leak_check):
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
 
 
+def test_coalesce_timestamp_date(memory_leak_check):
+    """Tests the coalesce function on a timestamp column and the current date"""
+    query = f"select COALESCE(A, current_date()) from table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        pd.Timestamp("2018-7-4"),
+                        None,
+                        pd.Timestamp("2022-12-31"),
+                        None,
+                        pd.Timestamp("2000-1-1"),
+                    ]
+                )
+            }
+        )
+    }
+    current_date = datetime.date.today()
+    answer = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [
+                    pd.Timestamp("2018-7-4"),
+                    pd.Timestamp(current_date),
+                    pd.Timestamp("2022-12-31"),
+                    pd.Timestamp(current_date),
+                    pd.Timestamp("2000-1-1"),
+                ]
+            )
+        }
+    )
+
+    with bodosql_use_date_type():
+        check_query(query, ctx, None, expected_output=answer, check_names=False)
+
+
 @pytest.mark.parametrize(
     "query",
     [
