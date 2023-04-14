@@ -2,6 +2,8 @@
 """Test Bodo's array kernel utilities for BodoSQL variadic functions
 """
 
+import datetime
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -10,6 +12,7 @@ import bodo
 from bodo.libs.bodosql_array_kernels import *
 from bodo.tests.utils import (
     SeriesOptTestPipeline,
+    bodosql_use_date_type,
     check_func,
     dist_IR_count,
     find_nested_dispatcher_and_args,
@@ -912,3 +915,120 @@ def test_concat_ws_fusion(memory_leak_check):
     f_ir = bodo_func2.overloads[bodo_func2.signatures[0]].metadata["preserved_ir"]
     concat_ws_calls = dist_IR_count(f_ir, "concat_ws")
     assert concat_ws_calls == 3, f"Expected 3 concat_ws call, got {concat_ws_calls}"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "args, answer",
+    [
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        datetime.date(2020, 1, 1),
+                        None,
+                        datetime.date(2022, 12, 31),
+                        None,
+                        datetime.date(2024, 7, 4),
+                        None,
+                    ]
+                ),
+                pd.Series(
+                    [
+                        pd.Timestamp("2018-3-14"),
+                        pd.Timestamp("2019-4-1"),
+                        None,
+                        None,
+                        None,
+                        pd.Timestamp("2020-10-31"),
+                    ]
+                ),
+            ),
+            pd.Series(
+                [
+                    pd.Timestamp("2020-1-1"),
+                    pd.Timestamp("2019-4-1"),
+                    pd.Timestamp("2022-12-31"),
+                    None,
+                    pd.Timestamp("2024-7-4"),
+                    pd.Timestamp("2020-10-31"),
+                ]
+            ),
+            id="date_col-naive_col",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        datetime.date(2022, 1, 1),
+                        None,
+                        datetime.date(2024, 12, 31),
+                        None,
+                        datetime.date(2020, 7, 4),
+                        None,
+                    ]
+                ),
+                pd.Series(
+                    [
+                        pd.Timestamp("2018-4-14", tz="US/Pacific"),
+                        pd.Timestamp("2019-10-1", tz="US/Pacific"),
+                        None,
+                        None,
+                        None,
+                        pd.Timestamp("2020-3-31", tz="US/Pacific"),
+                    ]
+                ),
+            ),
+            pd.Series(
+                [
+                    pd.Timestamp("2022-1-1", tz="US/Pacific"),
+                    pd.Timestamp("2019-10-1", tz="US/Pacific"),
+                    pd.Timestamp("2024-12-31", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2020-7-4", tz="US/Pacific"),
+                    pd.Timestamp("2020-3-31", tz="US/Pacific"),
+                ]
+            ),
+            id="date_col-tz_col",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        pd.Timestamp("2015-5-5"),
+                        None,
+                        pd.Timestamp("2023-11-24"),
+                        None,
+                        pd.Timestamp("2020-6-30"),
+                        None,
+                    ]
+                ),
+                datetime.date(1999, 12, 31),
+            ),
+            pd.Series(
+                [
+                    pd.Timestamp("2015-5-5"),
+                    pd.Timestamp("1999-12-31"),
+                    pd.Timestamp("2023-11-24"),
+                    pd.Timestamp("1999-12-31"),
+                    pd.Timestamp("2020-6-30"),
+                    pd.Timestamp("1999-12-31"),
+                ]
+            ),
+            id="naive_col-date_scalar",
+        ),
+    ],
+)
+def test_coalesce_date_timestamp(args, answer, memory_leak_check):
+    """Test BodoSQL COALESCE kernel on combinations of date and timestamp values"""
+    n_args = len(args)
+    args_str = ", ".join(f"A{i}" for i in range(n_args))
+    test_impl = f"def impl({args_str}):\n"
+    test_impl += (
+        f"  return pd.Series(bodo.libs.bodosql_array_kernels.coalesce(({args_str},)))"
+    )
+    impl_vars = {}
+    exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
+    impl = impl_vars["impl"]
+    with bodosql_use_date_type():
+        check_func(impl, args, py_output=answer, reset_index=True)
