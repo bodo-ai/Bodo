@@ -55,6 +55,7 @@ broadcasted_fixed_arg_functions = {
     "cast_boolean",
     "cast_char",
     "cast_date",
+    "cast_date_to_tz_aware",
     "cast_float32",
     "cast_float64",
     "cast_int8",
