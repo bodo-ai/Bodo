@@ -44,11 +44,16 @@ public class CastCodeGen {
         // TZ-Aware data needs special handling
         switch (inputTypeName) {
           case TIMESTAMP:
-          case DATE:
-            // Both date and timestamp use the same kernel because the input
-            // data is a tz-naive timestamp
             codeBuilder
                 .append("bodo.libs.bodosql_array_kernels.cast_tz_naive_to_tz_aware(")
+                .append(arg)
+                .append(", ")
+                .append(tzStr)
+                .append(")");
+            break;
+          case DATE:
+            codeBuilder
+                .append("bodo.libs.bodosql_array_kernels.cast_date_to_tz_aware(")
                 .append(arg)
                 .append(", ")
                 .append(tzStr)

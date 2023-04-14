@@ -1115,6 +1115,52 @@ def overload_cast_tz_naive_to_tz_aware_util(arr, tz):
     )
 
 
+def cast_date_to_tz_aware(arr, tz):  # pragma: no cover
+    pass
+
+
+@overload(cast_date_to_tz_aware, no_unliteral=True)
+def overload_cast_date_to_tz_aware(arr, tz):
+    if not is_literal_type(tz):
+        raise_bodo_error("cast_date_to_tz_aware(): 'tz' must be a literal value")
+    if isinstance(arr, types.optional):
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.cast_date_to_tz_aware",
+            ["arr", "tz"],
+            0,
+        )
+
+    def impl(arr, tz):  # pragma: no cover
+        return cast_date_to_tz_aware_util(arr, tz)
+
+    return impl
+
+
+def cast_date_to_tz_aware_util(arr, tz):  # pragma: no cover
+    pass
+
+
+@overload(cast_date_to_tz_aware_util, no_unliteral=True)
+def overload_cast_date_to_tz_aware_util(arr, tz):
+    if not is_literal_type(tz):
+        raise_bodo_error("cast_date_to_tz_aware(): 'tz' must be a literal value")
+    verify_datetime_arg(arr, "cast_date_to_tz_aware", "arr")
+    arg_names = ["arr", "tz"]
+    arg_types = [arr, tz]
+    # tz can never be null
+    propagate_null = [True, False]
+    scalar_text = "res[i] = pd.Timestamp(arg0).tz_localize(arg1)"
+    tz = get_literal_value(tz)
+    out_dtype = bodo.DatetimeArrayType(tz)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
 def cast_tz_aware_to_tz_naive(arr, normalize):  # pragma: no cover
     pass
 

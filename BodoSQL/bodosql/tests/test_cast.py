@@ -4,7 +4,7 @@ Test correctness of SQL cast queries on BodoSQL
 """
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import bodosql_use_date_type, check_query
 
 
 @pytest.fixture(
@@ -599,7 +599,7 @@ def test_tz_aware_datetime_to_timestamp_cast(
     )
 
 
-def test_implicit_cast_tz_aware(tz_aware_df, memory_leak_check):
+def test_implicit_cast_date_to_tz_aware(tz_aware_df, memory_leak_check):
 
     query = "SELECT * FROM table1 WHERE table1.A BETWEEN DATE '2020-1-1' AND DATE '2021-12-31'"
     expected_filter = (
@@ -607,11 +607,12 @@ def test_implicit_cast_tz_aware(tz_aware_df, memory_leak_check):
     ) & (tz_aware_df["table1"]["A"] <= pd.Timestamp("2021-12-31", tz="US/Pacific"))
     expected_output = tz_aware_df["table1"][expected_filter]
 
-    check_query(
-        query,
-        tz_aware_df,
-        None,
-        check_dtype=False,
-        check_names=False,
-        expected_output=expected_output,
-    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            tz_aware_df,
+            None,
+            check_dtype=False,
+            check_names=False,
+            expected_output=expected_output,
+        )
