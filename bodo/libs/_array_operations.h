@@ -7,14 +7,15 @@
  * Compute the boolean array on output corresponds to the "isin" function in
  * matlab. each group, writes the result to a new output table containing one
  * row per group.
+ * Using raw pointers since called from Python.
  *
  * @param out_arr the boolean array on output.
  * @param in_arr the list of values on input
  * @param in_values the list of values that we need to check with
  * @param is_parallel, whether the computation is parallel or not.
  */
-void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
-                bool is_parallel);
+void array_isin_py_entry(array_info* out_arr, array_info* in_arr,
+                         array_info* in_values, bool is_parallel);
 
 /**
  * Implementation of the sort_values functionality in C++
@@ -38,15 +39,40 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
  Iceberg MERGE INTO.
  * @param parallel, true in case of parallel computation, false otherwise.
  */
-table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
-                              int64_t* vect_ascending, int64_t* na_position,
-                              int64_t* dead_keys, int64_t* out_n_rows,
-                              table_info* bounds, bool parallel);
+std::shared_ptr<table_info> sort_values_table(
+    std::shared_ptr<table_info> in_table, int64_t n_key_t,
+    int64_t* vect_ascending, int64_t* na_position, int64_t* dead_keys,
+    int64_t* out_n_rows, std::shared_ptr<table_info> bounds, bool parallel);
 
-table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
-                                    int64_t* vect_ascending,
-                                    int64_t* na_position, int64_t* dead_keys,
-                                    bool is_parallel);
+/**
+ * Python entry point and wrapper for sort_values_table()
+ * Converts table/array raw pointers to smart pointers, and
+ * sets Python error in case of C++ exception.
+ *
+ * @param in_table input table
+ * @param number of key columns in the table used for the comparison
+ * @param ascending, whether to sort ascending or not
+ * @param na_position, true corresponds to last, false to first. 1 value per
+ column
+ * @param dead_keys, array with 0/1 for each key indicating dead keys (1 is
+ dead)
+ * @param out_n_rows, single-element array to store the number of output rows,
+ can be nullptr if not needed.
+ * @param bounds, single-array table that provides parallel chunk boundaries for
+ data redistribution during parallel sort (optional). Currently only used for
+ Iceberg MERGE INTO.
+ * @param parallel, true in case of parallel computation, false otherwise.
+ */
+table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_key_t,
+                                       int64_t* vect_ascending,
+                                       int64_t* na_position, int64_t* dead_keys,
+                                       int64_t* out_n_rows, table_info* bounds,
+                                       bool parallel);
+
+std::shared_ptr<table_info> sort_values_table_local(
+    std::shared_ptr<table_info> in_table, int64_t n_key_t,
+    int64_t* vect_ascending, int64_t* na_position, int64_t* dead_keys,
+    bool is_parallel);
 
 /**
  * Helper function to sort contents of array_info.
@@ -59,10 +85,11 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
  * tracing should be parallel or not)
  * @param ascending, whether to sort ascending or not
  * @param na_position, true corresponds to last, false to first.
- * @return array_info* sorted array_info
+ * @return std::shared_ptr<array_info> sorted array_info
  */
-array_info* sort_values_array_local(array_info* in_arr, bool is_parallel,
-                                    int64_t ascending, int64_t na_position);
+std::shared_ptr<array_info> sort_values_array_local(
+    std::shared_ptr<array_info> in_arr, bool is_parallel, int64_t ascending,
+    int64_t na_position);
 
 /**
  * @brief Python entrypoint for sort_table_for_interval_join.
@@ -100,12 +127,14 @@ table_info* sort_table_for_interval_join_py_entrypoint(table_info* table,
  * @param table_interval_parallel Is the interval side table distributed
  * @param strict Only filter strict bad intervals (where A > B instead of A >=
  * B)
- * @return std::tuple<table_info*, table_info*>
+ * @return std::tuple<std::shared_ptr<table_info>, std::shared_ptr<table_info>>
  * sorted point table, sorted interval table.
  */
-std::pair<table_info*, table_info*> sort_tables_for_point_in_interval_join(
-    table_info* table_point, table_info* table_interval,
-    bool table_point_parallel, bool table_interval_parallel, bool strict);
+std::pair<std::shared_ptr<table_info>, std::shared_ptr<table_info>>
+sort_tables_for_point_in_interval_join(
+    std::shared_ptr<table_info> table_point,
+    std::shared_ptr<table_info> table_interval, bool table_point_parallel,
+    bool table_interval_parallel, bool strict);
 
 /**
  * @brief Sort the tables involved in an interval overlap join.
@@ -120,11 +149,14 @@ std::pair<table_info*, table_info*> sort_tables_for_point_in_interval_join(
  * @param table_2 Second interval table.
  * @param table_1_parallel True when the first interval table is distributed.
  * @param table_2_parallel True when the second interval table is distributed.
- * @return std::tuple<table_info*, table_info*, array_info*>
- * Sorted first table, sorted second table and bounds array.
+ * @return std::tuple<std::shared_ptr<table_info>, std::shared_ptr<table_info>,
+ * std::shared_ptr<array_info>> Sorted first table, sorted second table and
+ * bounds array.
  */
-std::tuple<table_info*, table_info*, array_info*>
-sort_tables_for_interval_overlap_join(table_info* table_1, table_info* table_2,
+std::tuple<std::shared_ptr<table_info>, std::shared_ptr<table_info>,
+           std::shared_ptr<array_info>>
+sort_tables_for_interval_overlap_join(std::shared_ptr<table_info> table_1,
+                                      std::shared_ptr<table_info> table_2,
                                       bool table_1_parallel,
                                       bool table_2_parallel);
 
@@ -150,20 +182,25 @@ sort_tables_for_interval_overlap_join(table_info* table_1, table_info* table_2,
  * shuffling
  * @return the unicized table
  */
-table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
-                                  int64_t num_keys, int64_t keep,
-                                  bool dropna = false,
-                                  bool drop_local_first = true);
+std::shared_ptr<table_info> drop_duplicates_table(
+    std::shared_ptr<table_info> in_table, bool is_parallel, int64_t num_keys,
+    int64_t keep, bool dropna = false, bool drop_local_first = true);
 
-table_info* drop_duplicates_table_inner(
-    table_info* in_table, int64_t num_keys, int64_t keep, int step,
-    bool is_parallel, bool dropna, bool drop_duplicates_dict,
+std::shared_ptr<table_info> drop_duplicates_table_inner(
+    std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t keep,
+    int step, bool is_parallel, bool dropna, bool drop_duplicates_dict,
     std::shared_ptr<uint32_t[]> hashes = std::shared_ptr<uint32_t[]>(nullptr));
+
+table_info* drop_duplicates_table_py_entry(table_info* in_table,
+                                           bool is_parallel, int64_t num_keys,
+                                           int64_t keep, bool dropna = false,
+                                           bool drop_local_first = true);
 
 /**
  * @brief Performs a SQL UNION operation on the input tables.
  * This operations concatenates all of the input tables and optionally removes
  * any duplicate rows.
+ * Uses raw pointers since called from Python.
  *
  * @param in_table Array of input tables each with the same schema.
  * @param num_tables The number of tables in the input array.
@@ -187,8 +224,9 @@ table_info* union_tables(table_info** in_table, int64_t num_tables,
  * or not.
  * @return the table in output
  */
-table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
-                                 bool is_parallel, bool dropna = true);
+std::shared_ptr<table_info> drop_duplicates_keys(
+    std::shared_ptr<table_info> in_table, int64_t num_keys, bool is_parallel,
+    bool dropna = true);
 
 /**
  * @brief C++ implementation of df.sample. This is implemented using rejection
@@ -202,12 +240,19 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
  * @param parallel: if true the array is distributed, if false it is replicated
  * @return the sampled entries in the table (same distribution as input table)
  */
-table_info* sample_table(table_info* in_table, int64_t n, double frac,
-                         bool replace, int64_t random_state, bool parallel);
+table_info* sample_table_py_entry(table_info* in_table, int64_t n, double frac,
+                                  bool replace, int64_t random_state,
+                                  bool parallel);
 
-void get_search_regex(array_info* in_arr, const bool case_sensitive,
-                      const bool match_beginning, char const* const pat,
-                      array_info* out_arr);
+void get_search_regex(std::shared_ptr<array_info> in_arr,
+                      const bool case_sensitive, const bool match_beginning,
+                      char const* const pat,
+                      std::shared_ptr<array_info> out_arr);
+
+// Python wrapper for get_search_regex
+void get_search_regex_py_entry(array_info* in_arr, const bool case_sensitive,
+                               const bool match_beginning,
+                               char const* const pat, array_info* out_arr);
 
 /**
  * @brief C++ implementation of re.sub to replace each element in in_arr with
@@ -221,9 +266,12 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
  * pattern.
  * @param is_parallel Whether this operation is called in parallel. When true
  * we can potentially do optimizations that would otherwise be unsafe.
- * @return array_info* A output array with the replaced values. This is either
- * dictionary encoded or regular string array depending on the input array.
+ * @return array_info* A output array with the replaced values.
+ * This is either dictionary encoded or regular string array depending on the
+ * input array.
  */
-array_info* get_replace_regex(array_info* in_arr, char const* const pat,
-                              char const* replacement, const bool is_parallel);
+array_info* get_replace_regex_py_entry(array_info* in_arr,
+                                       char const* const pat,
+                                       char const* replacement,
+                                       const bool is_parallel);
 #endif  // _ARRAY_OPERATIONS_H_INCLUDED

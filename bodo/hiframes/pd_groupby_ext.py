@@ -40,7 +40,6 @@ from bodo.libs.array import (
     array_from_cpp_table,
     array_to_info,
     delete_table,
-    delete_table_decref_arrays,
     get_groupby_labels,
     get_null_shuffle_info,
     get_shuffle_info,
@@ -1953,7 +1952,6 @@ def get_group_indices_overload(keys, dropna, _is_parallel):
     func_text += "    group_labels = np.empty(len(keys[0]), np.int64)\n"
     func_text += "    sort_idx = np.empty(len(keys[0]), np.int64)\n"
     func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes, sort_idx.ctypes, dropna, _is_parallel)\n"
-    func_text += "    delete_table_decref_arrays(table)\n"
     func_text += "    ev.finalize()\n"
     func_text += "    return sort_idx, group_labels, ngroups\n"
     loc_vars = {}
@@ -1965,7 +1963,6 @@ def get_group_indices_overload(keys, dropna, _is_parallel):
             "get_groupby_labels": get_groupby_labels,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
         },
         loc_vars,
     )
@@ -2049,6 +2046,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         "array_to_info(in_index_arr)",
     )
     func_text += "  table = arr_info_list_to_table(info_list)\n"
+    # NOTE: C++ will delete table pointer
     func_text += f"  out_table = shuffle_table(table, {n_keys}, _is_parallel, 1)\n"
 
     # extract arrays from C++ table
@@ -2063,8 +2061,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
     func_text += f"  out_arr_index = array_from_cpp_table(out_table, {n_keys + n_cols}, ind_arr_typ)\n"
 
     func_text += "  shuffle_info = get_shuffle_info(out_table)\n"
-    func_text += "  delete_table_decref_arrays(out_table)\n"
-    func_text += "  delete_table(table)\n"
+    func_text += "  delete_table(out_table)\n"
 
     out_data = ", ".join(f"out_arr{i}" for i in range(n_cols))
     func_text += "  out_index = bodo.utils.conversion.index_from_array(out_arr_index)\n"
@@ -2081,7 +2078,6 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         "shuffle_table": shuffle_table,
         "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
-        "delete_table_decref_arrays": delete_table_decref_arrays,
         "get_shuffle_info": get_shuffle_info,
         "__col_name_meta_value_df_shuffle": ColNamesMetaType(df.columns),
         "ind_arr_typ": types.Array(types.int64, 1, "C")
@@ -2117,11 +2113,11 @@ def overload_reverse_shuffle(data, shuffle_info):
             ", ".join(f"array_to_info(data._data[{i}])" for i in range(n_fields)),
         )
         func_text += "  table = arr_info_list_to_table(info_list)\n"
+        # NOTE: C++ will delete table pointer
         func_text += "  out_table = reverse_shuffle_table(table, shuffle_info)\n"
         for i in range(n_fields):
             func_text += f"  out_arr{i} = array_from_cpp_table(out_table, {i}, data._data[{i}])\n"
-        func_text += "  delete_table_decref_arrays(out_table)\n"
-        func_text += "  delete_table(table)\n"
+        func_text += "  delete_table(out_table)\n"
         func_text += (
             "  return init_multi_index(({},), data._names, data._name)\n".format(
                 ", ".join(f"out_arr{i}" for i in range(n_fields))
@@ -2137,7 +2133,6 @@ def overload_reverse_shuffle(data, shuffle_info):
                 "reverse_shuffle_table": reverse_shuffle_table,
                 "array_from_cpp_table": array_from_cpp_table,
                 "delete_table": delete_table,
-                "delete_table_decref_arrays": delete_table_decref_arrays,
                 "init_multi_index": bodo.hiframes.pd_multi_index_ext.init_multi_index,
             },
             loc_vars,
@@ -2159,10 +2154,10 @@ def overload_reverse_shuffle(data, shuffle_info):
     def impl_arr(data, shuffle_info):  # pragma: no cover
         info_list = [array_to_info(data)]
         table = arr_info_list_to_table(info_list)
+        # NOTE: C++ will delete table pointer
         out_table = reverse_shuffle_table(table, shuffle_info)
         out_arr = array_from_cpp_table(out_table, 0, data)
-        delete_table_decref_arrays(out_table)
-        delete_table(table)
+        delete_table(out_table)
         return out_arr
 
     return impl_arr

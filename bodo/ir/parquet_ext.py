@@ -41,7 +41,6 @@ from bodo.libs.array import (
     array_from_cpp_table,
     cpp_table_to_py_table,
     delete_table,
-    delete_table_decref_arrays,
     table_type,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
@@ -691,11 +690,11 @@ def _gen_pq_reader_py(
         )
         partition_col_cat_dtypes.append(numba_to_c_type(cat_int_dtype))
 
-    # Call pq_read() in C++
+    # Call pq_read_py_entry() in C++
     # single-element numpy array to return number of global rows from C++
     func_text += (
         f"    total_rows_np = np.array([0], dtype=np.int64)\n"
-        f"    out_table = pq_read(\n"
+        f"    out_table = pq_read_py_entry(\n"
         f"        fname_py,\n"
         f"        {is_parallel},\n"
         f"        dnf_filters,\n"
@@ -796,7 +795,7 @@ def _gen_pq_reader_py(
     else:
         index_arr_ind = selected_cols_map[index_column_index]
         func_text += f"    index_arr = array_from_cpp_table(out_table, {index_arr_ind}, index_arr_type)\n"
-    func_text += f"    delete_table_decref_arrays(out_table)\n"
+    func_text += f"    delete_table(out_table)\n"
     func_text += f"    ev.finalize()\n"
     func_text += f"    return (total_rows, T, index_arr)\n"
     loc_vars = {}
@@ -810,9 +809,8 @@ def _gen_pq_reader_py(
         "cpp_table_to_py_table": cpp_table_to_py_table,
         "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
-        "delete_table_decref_arrays": delete_table_decref_arrays,
         "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
-        "pq_read": _pq_read,
+        "pq_read_py_entry": pq_read_py_entry,
         "unicode_to_utf8": unicode_to_utf8,
         "get_filters_pyobject": get_filters_pyobject,
         "get_storage_options_pyobject": get_storage_options_pyobject,
@@ -871,10 +869,10 @@ distributed_pass.distributed_run_extensions[ParquetReader] = pq_distributed_run
 if bodo.utils.utils.has_pyarrow():
     from bodo.io import arrow_cpp
 
-    ll.add_symbol("pq_read", arrow_cpp.pq_read)
+    ll.add_symbol("pq_read_py_entry", arrow_cpp.pq_read_py_entry)
 
-_pq_read = types.ExternalFunction(
-    "pq_read",
+pq_read_py_entry = types.ExternalFunction(
+    "pq_read_py_entry",
     table_type(
         read_parquet_fpath_type,  # path
         types.boolean,  # parallel

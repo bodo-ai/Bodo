@@ -32,7 +32,6 @@ from bodo.libs.array import (
     array_from_cpp_table,
     cpp_table_to_py_table,
     delete_table,
-    delete_table_decref_arrays,
     table_type,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
@@ -55,8 +54,8 @@ if bodo.utils.utils.has_pyarrow():
 
     from bodo.io import arrow_cpp
 
-    ll.add_symbol("snowflake_read", arrow_cpp.snowflake_read)
-    ll.add_symbol("iceberg_pq_read", arrow_cpp.iceberg_pq_read)
+    ll.add_symbol("snowflake_read_py_entry", arrow_cpp.snowflake_read_py_entry)
+    ll.add_symbol("iceberg_pq_read_py_entry", arrow_cpp.iceberg_pq_read_py_entry)
 
 MPI_ROOT = 0
 
@@ -1254,7 +1253,7 @@ def _gen_sql_reader_py(
             f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
             f'  dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
             # Iceberg C++ Parquet Reader
-            f"  out_table, total_rows, file_list, snapshot_id = iceberg_read(\n"
+            f"  out_table, total_rows, file_list, snapshot_id = iceberg_pq_read_py_entry(\n"
             f"    unicode_to_utf8(conn),\n"
             f"    unicode_to_utf8(database_schema),\n"
             f"    unicode_to_utf8(sql_request),\n"
@@ -1335,7 +1334,7 @@ def _gen_sql_reader_py(
 
         func_text += f"  index_var = {index_var}\n"
 
-        func_text += f"  delete_table_decref_arrays(out_table)\n"
+        func_text += f"  delete_table(out_table)\n"
         func_text += f"  ev.finalize()\n"
         func_text += (
             "  return (total_rows, table_var, index_var, file_list, snapshot_id)\n"
@@ -1383,7 +1382,7 @@ def _gen_sql_reader_py(
         func_text += (
             f"  ev = bodo.utils.tracing.Event('read_snowflake', {parallel})\n"
             f"  total_rows_np = np.array([0], dtype=np.int64)\n"
-            f"  out_table = snowflake_read(\n"
+            f"  out_table = snowflake_read_py_entry(\n"
             f"    unicode_to_utf8(sql_request),\n"
             f"    unicode_to_utf8(conn),\n"
             f"    {parallel},\n"
@@ -1439,7 +1438,7 @@ def _gen_sql_reader_py(
         else:
             # We only load the index as the table is dead.
             func_text += "  table_var = None\n"
-        func_text += "  delete_table_decref_arrays(out_table)\n"
+        func_text += "  delete_table(out_table)\n"
         func_text += "  ev.finalize()\n"
         func_text += "  return (total_rows, table_var, index_var, None, None)\n"
 
@@ -1526,7 +1525,6 @@ def _gen_sql_reader_py(
                 "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
                 "array_from_cpp_table": array_from_cpp_table,
                 "delete_table": delete_table,
-                "delete_table_decref_arrays": delete_table_decref_arrays,
                 "cpp_table_to_py_table": cpp_table_to_py_table,
                 "set_table_len": bodo.hiframes.table.set_table_len,
                 "get_node_portion": bodo.libs.distributed_api.get_node_portion,
@@ -1543,14 +1541,14 @@ def _gen_sql_reader_py(
                 f"dict_str_cols_arr_{call_id}": np.array(str_as_dict_cols, np.int32),  # type: ignore
                 f"py_table_type_{call_id}": py_table_type,
                 "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
-                "iceberg_read": _iceberg_pq_read,
+                "iceberg_pq_read_py_entry": iceberg_pq_read_py_entry,
             }
         )
     elif db_type == "snowflake":
         glbls.update(
             {
                 "np": np,
-                "snowflake_read": _snowflake_read,
+                "snowflake_read_py_entry": _snowflake_read,
                 "nullable_cols_array": nullable_cols_array,
                 "snowflake_dict_cols_array": snowflake_dict_cols_array,
                 "dt_to_ts_cols_array": dt_to_ts_cols_array,
@@ -1591,7 +1589,7 @@ pyarrow_schema_type = PyArrowTableSchemaType()
 
 
 @intrinsic
-def _iceberg_pq_read(
+def iceberg_pq_read_py_entry(
     typingctx,
     conn_str,
     db_schema,
@@ -1609,7 +1607,7 @@ def _iceberg_pq_read(
     is_merge_into_cow,
 ):
     """Perform a read from an Iceberg Table using a the C++
-    iceberg_pq_read function. That function returns a C++ Table
+    iceberg_pq_read_py_entry function. That function returns a C++ Table
     and updates 3 pointers:
         - The number of rows read
         - A PyObject which is a list of relative paths to file names (used in merge).
@@ -1664,7 +1662,7 @@ def _iceberg_pq_read(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="iceberg_pq_read"
+            builder.module, fnty, name="iceberg_pq_read_py_entry"
         )
         # Allocate the pointers to update
         num_rows_ptr = cgutils.alloca_once(builder, lir.IntType(64))
@@ -1722,7 +1720,7 @@ def _iceberg_pq_read(
 
 
 _snowflake_read = types.ExternalFunction(
-    "snowflake_read",
+    "snowflake_read_py_entry",
     table_type(
         types.voidptr,  # query
         types.voidptr,  # conn_str

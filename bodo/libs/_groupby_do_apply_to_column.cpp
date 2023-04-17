@@ -35,7 +35,8 @@ inline int64_t get_group_for_row(const grouping_info& grp_info,
  * @param[in] grp_info The grouping information.
  */
 template <int ftype>
-void apply_to_column_list_string(array_info* in_col, array_info* out_col,
+void apply_to_column_list_string(std::shared_ptr<array_info> in_col,
+                                 std::shared_ptr<array_info> out_col,
                                  const grouping_info& grp_info) {
     // for list strings, we are supporting count, sum, max, min, first, last
     // Optimized implementation for count.
@@ -88,11 +89,10 @@ void apply_to_column_list_string(array_info* in_col, array_info* out_col,
     }
     // Allocate the new column. Since these column are immutable
     // we don't modify the column directly.
-    array_info* new_out_col = create_list_string_array(Vmask, ListListPair);
+    std::shared_ptr<array_info> new_out_col =
+        create_list_string_array(Vmask, ListListPair);
     // Copy the contents into out column.
     *out_col = std::move(*new_out_col);
-    // Delete the column but steal a reference.
-    delete new_out_col;
 }
 
 /**
@@ -110,7 +110,8 @@ void apply_to_column_list_string(array_info* in_col, array_info* out_col,
  */
 template <int ftype>
 inline bool idx_func_valid_group(int64_t i_grp, size_t row_num,
-                                 array_info* in_col, array_info* index_pos) {
+                                 std::shared_ptr<array_info> in_col,
+                                 std::shared_ptr<array_info> index_pos) {
     switch (ftype) {
         case Bodo_FTypes::idxmax_na_first:
         case Bodo_FTypes::idxmin_na_first:
@@ -138,7 +139,8 @@ inline bool idx_func_valid_group(int64_t i_grp, size_t row_num,
  * @return false Should the NA input path be taken?
  */
 template <int ftype>
-inline bool idx_func_take_non_na_path(size_t row_num, array_info* in_col) {
+inline bool idx_func_take_non_na_path(size_t row_num,
+                                      std::shared_ptr<array_info> in_col) {
     switch (ftype) {
         case Bodo_FTypes::idxmax_na_first:
         case Bodo_FTypes::idxmin_na_first:
@@ -212,13 +214,15 @@ inline void idx_dict_func_apply_to_row(int32_t& org_ind, int32_t& dict_ind,
  * @param[in, out] out_col The output column.
  * @param[in] grp_info The grouping information.
  */
-void apply_sum_to_column_string(array_info* in_col, array_info* out_col,
+void apply_sum_to_column_string(std::shared_ptr<array_info> in_col,
+                                std::shared_ptr<array_info> out_col,
                                 const grouping_info& grp_info) {
     // allocate output array (length is number of groups, number of chars same
     // as input)
     size_t num_groups = grp_info.num_groups;
     int64_t n_chars = in_col->n_sub_elems();
-    array_info* out_arr = alloc_string_array(num_groups, n_chars, 0);
+    std::shared_ptr<array_info> out_arr =
+        alloc_string_array(num_groups, n_chars, 0);
     size_t n_bytes = (num_groups + 7) >> 3;
     memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
 
@@ -252,8 +256,6 @@ void apply_sum_to_column_string(array_info* in_col, array_info* out_col,
     // Create an intermediate array since the output array is immutable
     // and copy the data over.
     *out_col = std::move(*out_arr);
-    // Delete the column but steal a reference.
-    delete out_arr;
 }
 
 /**
@@ -269,8 +271,9 @@ void apply_sum_to_column_string(array_info* in_col, array_info* out_col,
  * @param[in] grp_info The grouping information.
  */
 template <int ftype>
-void apply_to_column_string(array_info* in_col, array_info* out_col,
-                            std::vector<array_info*>& aux_cols,
+void apply_to_column_string(std::shared_ptr<array_info> in_col,
+                            std::shared_ptr<array_info> out_col,
+                            std::vector<std::shared_ptr<array_info>>& aux_cols,
                             const grouping_info& grp_info) {
     size_t num_groups = grp_info.num_groups;
     size_t n_bytes = (num_groups + 7) >> 3;
@@ -301,7 +304,7 @@ void apply_to_column_string(array_info* in_col, array_info* out_col,
             // General framework for the idxmin/idxmax functions. We use
             // inlined functions to handle the differences between these
             // cases and avoid function call overhead
-            array_info* index_pos = aux_cols[0];
+            std::shared_ptr<array_info> index_pos = aux_cols[0];
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 // Code path taken by all code when we might want to look
@@ -366,10 +369,9 @@ void apply_to_column_string(array_info* in_col, array_info* out_col,
     // Determining the number of characters in output.
     // Create an intermediate array since the output array is immutable
     // and copy the data over.
-    array_info* new_out_col = create_string_array(V, ListString);
+    std::shared_ptr<array_info> new_out_col =
+        create_string_array(V, ListString);
     *out_col = std::move(*new_out_col);
-    // Delete the column but steal a reference.
-    delete new_out_col;
 }
 
 /**
@@ -382,7 +384,8 @@ void apply_to_column_string(array_info* in_col, array_info* out_col,
  * @param[in, out] out_col: the output string array
  * @param[in] grp_info: groupby information
  */
-void apply_sum_to_column_dict(array_info* in_col, array_info* out_col,
+void apply_sum_to_column_dict(std::shared_ptr<array_info> in_col,
+                              std::shared_ptr<array_info> out_col,
                               const grouping_info& grp_info) {
     size_t num_groups = grp_info.num_groups;
     int64_t n_chars = 0;
@@ -405,7 +408,8 @@ void apply_sum_to_column_dict(array_info* in_col, array_info* out_col,
         }
     }
 
-    array_info* out_arr = alloc_string_array(num_groups, n_chars, 0);
+    std::shared_ptr<array_info> out_arr =
+        alloc_string_array(num_groups, n_chars, 0);
     memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
     char* data_o = out_arr->data1();
     offset_t* offsets_o = (offset_t*)out_arr->data2();
@@ -428,8 +432,6 @@ void apply_sum_to_column_dict(array_info* in_col, array_info* out_col,
     // Create an intermediate array since the output array is immutable
     // and copy the data over.
     *out_col = std::move(*out_arr);
-    // Delete the column but steal a reference.
-    delete out_arr;
 }
 
 /**
@@ -442,12 +444,13 @@ void apply_sum_to_column_dict(array_info* in_col, array_info* out_col,
  * @param[in] grp_info: groupby information
  */
 template <int ftype>
-void apply_to_column_dict(array_info* in_col, array_info* out_col,
-                          std::vector<array_info*>& aux_cols,
+void apply_to_column_dict(std::shared_ptr<array_info> in_col,
+                          std::shared_ptr<array_info> out_col,
+                          std::vector<std::shared_ptr<array_info>>& aux_cols,
                           const grouping_info& grp_info) {
     size_t num_groups = grp_info.num_groups;
     size_t n_bytes = (num_groups + 7) >> 3;
-    array_info* indices_arr = nullptr;
+    std::shared_ptr<array_info> indices_arr = nullptr;
     if (ftype != Bodo_FTypes::count && ftype != Bodo_FTypes::sum) {
         // Allocate the indices. Count and sum don't use this array.
         indices_arr = alloc_nullable_array(num_groups, Bodo_CTypes::INT32, 0);
@@ -476,7 +479,7 @@ void apply_to_column_dict(array_info* in_col, array_info* out_col,
         case Bodo_FTypes::idxmin:
         case Bodo_FTypes::idxmax_na_first:
         case Bodo_FTypes::idxmin_na_first: {
-            array_info* index_pos = aux_cols[0];
+            std::shared_ptr<array_info> index_pos = aux_cols[0];
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 // Code path taken by all code when we might want to look
@@ -617,13 +620,13 @@ void apply_to_column_dict(array_info* in_col, array_info* out_col,
         ListString[it.second - 1] = val;  // -1 to account for the 1 offset
         SetBitTo(bitmask_vec.data(), it.second - 1, true);
     }
-    array_info* dict_arr = create_string_array(bitmask_vec, ListString);
-    array_info* new_out_col = create_dict_string_array(dict_arr, indices_arr);
+    std::shared_ptr<array_info> dict_arr =
+        create_string_array(bitmask_vec, ListString);
+    std::shared_ptr<array_info> new_out_col =
+        create_dict_string_array(dict_arr, indices_arr);
     // Create an intermediate array since the output array is immutable
     // and copy the data over.
     *out_col = std::move(*new_out_col);
-    // Delete the column but steal a reference.
-    delete new_out_col;
 }
 
 /**
@@ -638,7 +641,8 @@ void apply_to_column_dict(array_info* in_col, array_info* out_col,
  * @param[in] grp_info The grouping information.
  */
 template <typename T, int ftype, int dtype>
-void apply_to_column_categorical(array_info* in_col, array_info* out_col,
+void apply_to_column_categorical(std::shared_ptr<array_info> in_col,
+                                 std::shared_ptr<array_info> out_col,
                                  const grouping_info& grp_info) {
     switch (ftype) {
         case Bodo_FTypes::count: {
@@ -727,12 +731,13 @@ void apply_to_column_categorical(array_info* in_col, array_info* out_col,
  * @param[in] grp_info The grouping information.
  */
 template <typename T, int ftype, int dtype>
-void apply_to_column_numpy(array_info* in_col, array_info* out_col,
-                           std::vector<array_info*>& aux_cols,
+void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
+                           std::shared_ptr<array_info> out_col,
+                           std::vector<std::shared_ptr<array_info>>& aux_cols,
                            const grouping_info& grp_info) {
     switch (ftype) {
         case Bodo_FTypes::mean: {
-            array_info* count_col = aux_cols[0];
+            std::shared_ptr<array_info> count_col = aux_cols[0];
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
@@ -755,9 +760,9 @@ void apply_to_column_numpy(array_info* in_col, array_info* out_col,
         }
         case Bodo_FTypes::var:
         case Bodo_FTypes::std: {
-            array_info* count_col = aux_cols[0];
-            array_info* mean_col = aux_cols[1];
-            array_info* m2_col = aux_cols[2];
+            std::shared_ptr<array_info> count_col = aux_cols[0];
+            std::shared_ptr<array_info> mean_col = aux_cols[1];
+            std::shared_ptr<array_info> m2_col = aux_cols[2];
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
@@ -776,8 +781,8 @@ void apply_to_column_numpy(array_info* in_col, array_info* out_col,
             break;
         }
         case Bodo_FTypes::var_eval: {
-            array_info* count_col = aux_cols[0];
-            array_info* m2_col = aux_cols[2];
+            std::shared_ptr<array_info> count_col = aux_cols[0];
+            std::shared_ptr<array_info> m2_col = aux_cols[2];
             for (size_t i = 0; i < in_col->length; i++) {
                 var_eval(getv<double>(out_col, i), getv<uint64_t>(count_col, i),
                          getv<double>(m2_col, i));
@@ -785,8 +790,8 @@ void apply_to_column_numpy(array_info* in_col, array_info* out_col,
             break;
         }
         case Bodo_FTypes::std_eval: {
-            array_info* count_col = aux_cols[0];
-            array_info* m2_col = aux_cols[2];
+            std::shared_ptr<array_info> count_col = aux_cols[0];
+            std::shared_ptr<array_info> m2_col = aux_cols[2];
             for (size_t i = 0; i < in_col->length; i++) {
                 std_eval(getv<double>(out_col, i), getv<uint64_t>(count_col, i),
                          getv<double>(m2_col, i));
@@ -818,7 +823,7 @@ void apply_to_column_numpy(array_info* in_col, array_info* out_col,
             break;
         }
         case Bodo_FTypes::idxmax: {
-            array_info* index_pos = aux_cols[0];
+            std::shared_ptr<array_info> index_pos = aux_cols[0];
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
@@ -830,7 +835,7 @@ void apply_to_column_numpy(array_info* in_col, array_info* out_col,
             break;
         }
         case Bodo_FTypes::idxmin: {
-            array_info* index_pos = aux_cols[0];
+            std::shared_ptr<array_info> index_pos = aux_cols[0];
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
@@ -847,7 +852,7 @@ void apply_to_column_numpy(array_info* in_col, array_info* out_col,
             // all other NA like values (e.g. floats) the relative value of
             // NaN should be based upon wherever they would be sorted. This
             // may need to be handled to match SQL, but is a separate issue.
-            array_info* index_pos = aux_cols[0];
+            std::shared_ptr<array_info> index_pos = aux_cols[0];
             if (dtype == Bodo_CTypes::DATETIME ||
                 dtype == Bodo_CTypes::TIMEDELTA) {
                 for (size_t i = 0; i < in_col->length; i++) {
@@ -892,7 +897,7 @@ void apply_to_column_numpy(array_info* in_col, array_info* out_col,
             // all other NA like values (e.g. floats) the relative value of
             // NaN should be based upon wherever they would be sorted. This
             // may need to be handled to match SQL, but is a separate issue.
-            array_info* index_pos = aux_cols[0];
+            std::shared_ptr<array_info> index_pos = aux_cols[0];
             if (dtype == Bodo_CTypes::DATETIME ||
                 dtype == Bodo_CTypes::TIMEDELTA) {
                 for (size_t i = 0; i < in_col->length; i++) {
@@ -982,9 +987,10 @@ void apply_to_column_numpy(array_info* in_col, array_info* out_col,
  * @param[in] grp_info The grouping information.
  */
 template <typename T, int ftype, int dtype>
-void apply_to_column_nullable(array_info* in_col, array_info* out_col,
-                              std::vector<array_info*>& aux_cols,
-                              const grouping_info& grp_info) {
+void apply_to_column_nullable(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
+    std::vector<std::shared_ptr<array_info>>& aux_cols,
+    const grouping_info& grp_info) {
 // macros to reduce code duplication
 
 // Find the group number. Eval doesn't care about group number.
@@ -1224,8 +1230,9 @@ void apply_to_column_nullable(array_info* in_col, array_info* out_col,
  * mapping.
  */
 template <typename T, int ftype, int dtype>
-void apply_to_column(array_info* in_col, array_info* out_col,
-                     std::vector<array_info*>& aux_cols,
+void apply_to_column(std::shared_ptr<array_info> in_col,
+                     std::shared_ptr<array_info> out_col,
+                     std::vector<std::shared_ptr<array_info>>& aux_cols,
                      const grouping_info& grp_info) {
     switch (in_col->arr_type) {
         case bodo_array_type::CATEGORICAL:
@@ -1254,8 +1261,9 @@ void apply_to_column(array_info* in_col, array_info* out_col,
     }
 }
 
-void do_apply_to_column(array_info* in_col, array_info* out_col,
-                        std::vector<array_info*>& aux_cols,
+void do_apply_to_column(std::shared_ptr<array_info> in_col,
+                        std::shared_ptr<array_info> out_col,
+                        std::vector<std::shared_ptr<array_info>>& aux_cols,
                         const grouping_info& grp_info, int ftype) {
     // macro to reduce code duplication
 #ifndef APPLY_TO_COLUMN_CALL
@@ -1671,8 +1679,8 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
         std::string(GetDtype_as_string(in_col->dtype)));
 }
 
-void idx_n_columns_apply(array_info* out_arr,
-                         std::vector<array_info*>& orderby_arrs,
+void idx_n_columns_apply(std::shared_ptr<array_info> out_arr,
+                         std::vector<std::shared_ptr<array_info>>& orderby_arrs,
                          std::vector<bool>& asc_vect,
                          std::vector<bool>& na_pos_vect,
                          grouping_info const& grp_info, int ftype) {
@@ -1682,7 +1690,7 @@ void idx_n_columns_apply(array_info* out_arr,
             "Invalid function type for idx_n_columns_computation");
     }
     // Select the first column to allow iterating over the groups.
-    array_info* iter_column = orderby_arrs[0];
+    std::shared_ptr<array_info> iter_column = orderby_arrs[0];
     for (size_t i = 0; i < iter_column->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
         if (i_grp != -1) {

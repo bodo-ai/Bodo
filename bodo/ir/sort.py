@@ -21,10 +21,9 @@ from bodo.libs.array import (
     array_to_info,
     cpp_table_to_py_data,
     delete_table,
-    delete_table_decref_arrays,
     py_data_to_cpp_table,
     sort_table_for_interval_join,
-    sort_values_table,
+    sort_values_table_py_entry,
 )
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
@@ -530,9 +529,8 @@ def sort_distributed_run(
             "bodo": bodo,
             "np": np,
             "delete_table": delete_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
             "array_from_cpp_table": array_from_cpp_table,
-            "sort_values_table": sort_values_table,
+            "sort_values_table_py_entry": sort_values_table_py_entry,
             "sort_table_for_interval_join": sort_table_for_interval_join,
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_to_info": array_to_info,
@@ -693,12 +691,14 @@ def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
         else "arr_info_list_to_table([array_to_info(bounds_in)])"
     )
 
+    # NOTE: C++ will delete in_cpp_table pointer
+
     if sort_node._bodo_interval_sort:
         # bounds_in must exist if _bodo_interval_sort
         bounds_arr = "array_to_info(bounds_in)"
         func_text += f"  out_cpp_table = sort_table_for_interval_join(in_cpp_table, {bounds_arr}, {bool(key_count == 1)}, {parallel})\n"
     else:
-        func_text += f"  out_cpp_table = sort_values_table(in_cpp_table, {key_count}, vect_ascending.ctypes, na_position.ctypes, dead_keys.ctypes, total_rows_np.ctypes, {bounds_table}, {parallel})\n"
+        func_text += f"  out_cpp_table = sort_values_table_py_entry(in_cpp_table, {key_count}, vect_ascending.ctypes, na_position.ctypes, dead_keys.ctypes, total_rows_np.ctypes, {bounds_table}, {parallel})\n"
 
     if sort_node.is_table_format:
         comma = "," if n_out_vars == 1 else ""
@@ -726,8 +726,7 @@ def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
         out_rets_tup = f"({', '.join(arr_vars)}{comma})"
         func_text += f"  out_data = {out_rets_tup}\n"
 
-    func_text += "  delete_table_decref_arrays(out_cpp_table)\n"
-    func_text += "  delete_table(in_cpp_table)\n"
+    func_text += "  delete_table(out_cpp_table)\n"
     func_text += f"  return out_data\n"
 
     return func_text, {

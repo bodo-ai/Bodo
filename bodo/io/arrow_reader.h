@@ -62,10 +62,11 @@ class TableBuilder {
      *
      * @param table Bodo table to use for typing
      */
-    TableBuilder(table_info* table, const int64_t num_rows);
+    TableBuilder(std::shared_ptr<table_info> table, const int64_t num_rows);
 
     ~TableBuilder() {
-        for (auto col : columns) delete col;
+        for (auto col : columns)
+            delete col;
     }
 
     /**
@@ -75,8 +76,10 @@ class TableBuilder {
     void append(std::shared_ptr<arrow::Table> table);
 
     /// Get output Bodo table
+    /// needs to be raw pointer since will be returned to Python
+    /// in ArrowDataframeReader code path
     table_info* get_table() {
-        std::vector<array_info*> arrays;
+        std::vector<std::shared_ptr<array_info>> arrays;
         for (auto col : columns) {
             arrays.push_back(col->get_output());
         }
@@ -93,10 +96,10 @@ class TableBuilder {
         /// Append data from Arrow array to output Bodo array
         virtual void append(std::shared_ptr<arrow::ChunkedArray> array) = 0;
         /// Get output Bodo array
-        virtual array_info* get_output() { return out_array; }
+        virtual std::shared_ptr<array_info> get_output() { return out_array; }
 
        protected:
-        array_info* out_array = nullptr;  // output array
+        std::shared_ptr<array_info> out_array = nullptr;  // output array
     };
 
    private:
@@ -159,6 +162,8 @@ class ArrowDataframeReader {
     int64_t get_local_rows() const { return count; }
 
     /// read data and return a Bodo table
+    /// Output table_info* is returned to Python where it will be deleted after
+    /// use.
     table_info* read() {
         tracing::Event ev("reader::read", parallel);
         if (!initialized) {

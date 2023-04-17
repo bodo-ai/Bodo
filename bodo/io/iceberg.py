@@ -823,7 +823,7 @@ PyObjectOfList = install_py_obj_class(
 )
 
 
-@numba.njit()
+@numba.njit
 def iceberg_pq_write(
     table_loc,
     bodo_table,
@@ -884,7 +884,7 @@ def iceberg_pq_write(
     return iceberg_files_info
 
 
-@numba.njit()
+@numba.njit
 def iceberg_write(
     table_name,
     conn,
@@ -1177,7 +1177,7 @@ from numba.core import cgutils, types
 if bodo.utils.utils.has_pyarrow():
     from bodo.io import arrow_cpp
 
-    ll.add_symbol("iceberg_pq_write", arrow_cpp.iceberg_pq_write)
+    ll.add_symbol("iceberg_pq_write_py_entry", arrow_cpp.iceberg_pq_write_py_entry)
 
 
 @intrinsic
@@ -1220,7 +1220,7 @@ def iceberg_pq_write_table_cpp(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="iceberg_pq_write"
+            builder.module, fnty, name="iceberg_pq_write_py_entry"
         )
         ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)

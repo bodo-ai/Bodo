@@ -31,7 +31,7 @@ struct KeyEqualLookupIn32bitTable {
         return TestEqualJoin(table, table, iRowA, iRowB, n_keys, true);
     }
     int64_t n_keys;
-    table_info* table;
+    std::shared_ptr<table_info> table;
 };
 
 /**
@@ -113,7 +113,7 @@ struct HashEqualComputeCategoricalIndex {
     }
     int64_t num_keys;
     size_t n_rows_full;
-    std::vector<array_info*>* concat_column;
+    std::vector<std::shared_ptr<array_info>>* concat_column;
 };
 
 // HASHING FOR NUNIQUE
@@ -137,7 +137,7 @@ struct HashNuniqueComputationNumpyOrNullableIntBool {
         }
         return retval;
     }
-    array_info* arr;
+    std::shared_ptr<array_info> arr;
     size_t siztype;
     uint32_t seed;
 };
@@ -162,7 +162,7 @@ struct KeyEqualNuniqueComputationNumpyOrNullableIntBool {
         }
     }
 
-    array_info* arr;
+    std::shared_ptr<array_info> arr;
     size_t siztype;
 };
 
@@ -182,7 +182,7 @@ struct HashNuniqueComputationListString {
         hash_string_32(val_chars, len, seed, &val);
         return static_cast<size_t>(val);
     }
-    array_info* arr;
+    std::shared_ptr<array_info> arr;
     offset_t* in_index_offsets;
     offset_t* in_data_offsets;
     uint32_t seed;
@@ -233,7 +233,7 @@ struct KeyEqualNuniqueComputationListString {
         return memcmp(ptr1, ptr2, len1) == 0;
     }
 
-    array_info* arr;
+    std::shared_ptr<array_info> arr;
     offset_t* in_index_offsets;
     offset_t* in_data_offsets;
     uint8_t* sub_null_bitmask;
@@ -253,7 +253,7 @@ struct HashNuniqueComputationString {
         hash_string_32(val_chars, len, seed, &val);
         return size_t(val);
     }
-    array_info* arr;
+    std::shared_ptr<array_info> arr;
     offset_t* in_offsets;
     uint32_t seed;
 };
@@ -275,7 +275,7 @@ struct KeyEqualNuniqueComputationString {
         return memcmp(ptr1, ptr2, len1) == 0;
     }
 
-    array_info* arr;
+    std::shared_ptr<array_info> arr;
     offset_t* in_offsets;
 };
 
