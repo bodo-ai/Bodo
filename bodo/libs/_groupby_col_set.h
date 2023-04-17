@@ -35,8 +35,8 @@ class BasicColSet {
      * @param use_sql_rules tells the column set whether to use SQL or Pandas
      * rules
      */
-    BasicColSet(array_info* in_col, int ftype, bool combine_step,
-                bool use_sql_rules);
+    BasicColSet(std::shared_ptr<array_info> in_col, int ftype,
+                bool combine_step, bool use_sql_rules);
 
     virtual ~BasicColSet();
 
@@ -46,8 +46,8 @@ class BasicColSet {
      * @param[in,out] vector of columns of update table. This method adds
      *                columns to this vector.
      */
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     /**
      * Perform update step for this column set. This will fill my columns with
@@ -64,8 +64,9 @@ class BasicColSet {
      * iterator pointing to the next set of columns.
      * @param iterator pointing to the first column in this column set
      */
-    virtual typename std::vector<array_info*>::iterator update_after_shuffle(
-        typename std::vector<array_info*>::iterator& it);
+    virtual typename std::vector<std::shared_ptr<array_info>>::iterator
+    update_after_shuffle(
+        typename std::vector<std::shared_ptr<array_info>>::iterator& it);
 
     /**
      * Allocate my columns for combine step.
@@ -74,8 +75,8 @@ class BasicColSet {
      * @param[in,out] vector of columns of combine table. This method adds
      *                columns to this vector.
      */
-    virtual void alloc_combine_columns(size_t num_groups,
-                                       std::vector<array_info*>& out_cols);
+    virtual void alloc_combine_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     /**
      * Perform combine step for this column set. This will fill my columns with
@@ -97,17 +98,20 @@ class BasicColSet {
      * this column set. This will free all other intermediate or auxiliary
      * columns (if any) used by the column set (like reduction variables).
      */
-    virtual array_info* getOutputColumn();
+    virtual std::shared_ptr<array_info> getOutputColumn();
 
    protected:
-    array_info* in_col;  // the input column (from groupby input table) to which
-                         // this column set corresponds to
+    std::shared_ptr<array_info>
+        in_col;  // the input column (from groupby input table) to which
+                 // this column set corresponds to
     int ftype;
     bool combine_step;   // GroupbyPipeline is going to perform a combine
                          // operation or not
     bool use_sql_rules;  // Use SQL rules for aggregation or Pandas?
-    std::vector<array_info*> update_cols;   // columns for update step
-    std::vector<array_info*> combine_cols;  // columns for combine step
+    std::vector<std::shared_ptr<array_info>>
+        update_cols;  // columns for update step
+    std::vector<std::shared_ptr<array_info>>
+        combine_cols;  // columns for combine step
 };
 
 /**
@@ -116,10 +120,11 @@ class BasicColSet {
  */
 class MeanColSet : public BasicColSet {
    public:
-    MeanColSet(array_info* in_col, bool combine_step, bool use_sql_rules);
+    MeanColSet(std::shared_ptr<array_info> in_col, bool combine_step,
+               bool use_sql_rules);
     virtual ~MeanColSet();
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
     virtual void update(const std::vector<grouping_info>& grp_infos);
     virtual void combine(const grouping_info& grp_info);
     virtual void eval(const grouping_info& grp_info);
@@ -142,9 +147,10 @@ class WindowColSet : public BasicColSet {
      * @param use_sql_rules: Do we use SQL or Pandas null handling rules.
      *
      */
-    WindowColSet(std::vector<array_info*>& in_cols, int64_t _window_func,
-                 std::vector<bool>& _asc, std::vector<bool>& _na_pos,
-                 bool _is_parallel, bool use_sql_rules);
+    WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
+                 int64_t _window_func, std::vector<bool>& _asc,
+                 std::vector<bool>& _na_pos, bool _is_parallel,
+                 bool use_sql_rules);
     virtual ~WindowColSet();
 
     /**
@@ -156,8 +162,8 @@ class WindowColSet : public BasicColSet {
      * input column regardless of input column types (i.e num_groups is not used
      * in this case)
      */
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
     /**
      * Perform update step for this column set. This first shuffles
      * the data based on the orderby condition + group columns and
@@ -170,7 +176,7 @@ class WindowColSet : public BasicColSet {
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
    private:
-    std::vector<array_info*> input_cols;
+    std::vector<std::shared_ptr<array_info>> input_cols;
     int64_t window_func;
     std::vector<bool> asc;
     std::vector<bool> na_pos;
@@ -184,23 +190,24 @@ class WindowColSet : public BasicColSet {
  */
 class IdxMinMaxColSet : public BasicColSet {
    public:
-    IdxMinMaxColSet(array_info* in_col, array_info* _index_col, int ftype,
+    IdxMinMaxColSet(std::shared_ptr<array_info> in_col,
+                    std::shared_ptr<array_info> _index_col, int ftype,
                     bool combine_step, bool use_sql_rules);
 
     virtual ~IdxMinMaxColSet();
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
-    virtual void alloc_combine_columns(size_t num_groups,
-                                       std::vector<array_info*>& out_cols);
+    virtual void alloc_combine_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     virtual void combine(const grouping_info& grp_info);
 
    private:
-    array_info* index_col;
+    std::shared_ptr<array_info> index_col;
 };
 
 /**
@@ -209,18 +216,18 @@ class IdxMinMaxColSet : public BasicColSet {
  */
 class VarStdColSet : public BasicColSet {
    public:
-    VarStdColSet(array_info* in_col, int ftype, bool combine_step,
-                 bool use_sql_rules);
+    VarStdColSet(std::shared_ptr<array_info> in_col, int ftype,
+                 bool combine_step, bool use_sql_rules);
 
     virtual ~VarStdColSet();
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
-    virtual void alloc_combine_columns(size_t num_groups,
-                                       std::vector<array_info*>& out_cols);
+    virtual void alloc_combine_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     virtual void combine(const grouping_info& grp_info);
 
@@ -233,30 +240,33 @@ class VarStdColSet : public BasicColSet {
  */
 class UdfColSet : public BasicColSet {
    public:
-    UdfColSet(array_info* in_col, bool combine_step, table_info* udf_table,
-              int udf_table_idx, int n_redvars, bool use_sql_rules);
+    UdfColSet(std::shared_ptr<array_info> in_col, bool combine_step,
+              std::shared_ptr<table_info> udf_table, int udf_table_idx,
+              int n_redvars, bool use_sql_rules);
 
     virtual ~UdfColSet();
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
-    virtual typename std::vector<array_info*>::iterator update_after_shuffle(
-        typename std::vector<array_info*>::iterator& it);
+    virtual typename std::vector<std::shared_ptr<array_info>>::iterator
+    update_after_shuffle(
+        typename std::vector<std::shared_ptr<array_info>>::iterator& it);
 
-    virtual void alloc_combine_columns(size_t num_groups,
-                                       std::vector<array_info*>& out_cols);
+    virtual void alloc_combine_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     virtual void combine(const grouping_info& grp_info);
 
     virtual void eval(const grouping_info& grp_info);
 
    private:
-    table_info* udf_table;  // the table containing type info for UDF columns
-    int udf_table_idx;      // index to my information in the udf table
-    int n_redvars;          // number of redvar columns this UDF uses
+    std::shared_ptr<table_info>
+        udf_table;      // the table containing type info for UDF columns
+    int udf_table_idx;  // index to my information in the udf table
+    int n_redvars;      // number of redvar columns this UDF uses
 };
 
 /**
@@ -265,8 +275,9 @@ class UdfColSet : public BasicColSet {
  */
 class GeneralUdfColSet : public UdfColSet {
    public:
-    GeneralUdfColSet(array_info* in_col, table_info* udf_table,
-                     int udf_table_idx, bool use_sql_rules);
+    GeneralUdfColSet(std::shared_ptr<array_info> in_col,
+                     std::shared_ptr<table_info> udf_table, int udf_table_idx,
+                     bool use_sql_rules);
 
     virtual ~GeneralUdfColSet();
 
@@ -274,7 +285,7 @@ class GeneralUdfColSet : public UdfColSet {
      * Fill in the input table for general UDF cfunc. See udf_general_fn
      * and aggregate.py::gen_general_udf_cb for more information.
      */
-    void fill_in_columns(table_info* general_in_table,
+    void fill_in_columns(std::shared_ptr<table_info> general_in_table,
                          const grouping_info& grp_info) const;
 };
 
@@ -284,7 +295,8 @@ class GeneralUdfColSet : public UdfColSet {
  */
 class MedianColSet : public BasicColSet {
    public:
-    MedianColSet(array_info* in_col, bool _skipna, bool use_sql_rules);
+    MedianColSet(std::shared_ptr<array_info> in_col, bool _skipna,
+                 bool use_sql_rules);
 
     virtual ~MedianColSet();
 
@@ -300,8 +312,9 @@ class MedianColSet : public BasicColSet {
  */
 class NUniqueColSet : public BasicColSet {
    public:
-    NUniqueColSet(array_info* in_col, bool _dropna, table_info* nunique_table,
-                  bool do_combine, bool _is_parallel, bool use_sql_rules);
+    NUniqueColSet(std::shared_ptr<array_info> in_col, bool _dropna,
+                  std::shared_ptr<table_info> nunique_table, bool do_combine,
+                  bool _is_parallel, bool use_sql_rules);
 
     virtual ~NUniqueColSet();
 
@@ -309,7 +322,7 @@ class NUniqueColSet : public BasicColSet {
 
    private:
     bool dropna;
-    table_info* my_nunique_table = nullptr;
+    std::shared_ptr<table_info> my_nunique_table = nullptr;
     bool is_parallel;
 };
 
@@ -319,13 +332,13 @@ class NUniqueColSet : public BasicColSet {
  */
 class CumOpColSet : public BasicColSet {
    public:
-    CumOpColSet(array_info* in_col, int ftype, bool _skipna,
+    CumOpColSet(std::shared_ptr<array_info> in_col, int ftype, bool _skipna,
                 bool use_sql_rules);
 
     virtual ~CumOpColSet();
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
@@ -339,13 +352,13 @@ class CumOpColSet : public BasicColSet {
  */
 class ShiftColSet : public BasicColSet {
    public:
-    ShiftColSet(array_info* in_col, int ftype, int64_t _periods,
+    ShiftColSet(std::shared_ptr<array_info> in_col, int ftype, int64_t _periods,
                 bool use_sql_rules);
 
     virtual ~ShiftColSet();
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
@@ -359,13 +372,14 @@ class ShiftColSet : public BasicColSet {
  */
 class TransformColSet : public BasicColSet {
    public:
-    TransformColSet(array_info* in_col, int ftype, int _func_num,
-                    bool do_combine, bool is_parallel, bool use_sql_rules);
+    TransformColSet(std::shared_ptr<array_info> in_col, int ftype,
+                    int _func_num, bool do_combine, bool is_parallel,
+                    bool use_sql_rules);
 
     virtual ~TransformColSet();
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     // Call corresponding groupby function operation to compute
     // transform_op_col column.
@@ -386,12 +400,14 @@ class TransformColSet : public BasicColSet {
  */
 class HeadColSet : public BasicColSet {
    public:
-    HeadColSet(array_info* in_col, int ftype, bool use_sql_rules);
+    HeadColSet(std::shared_ptr<array_info> in_col, int ftype,
+               bool use_sql_rules);
 
     virtual ~HeadColSet();
 
-    virtual void alloc_update_columns(size_t update_col_len,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t update_col_len,
+        std::vector<std::shared_ptr<array_info>>& out_cols);
 
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
@@ -412,7 +428,8 @@ class NgroupColSet : public BasicColSet {
      * @param _is_parallel: flag to identify whether data is distributed or
      * replicated across ranks
      */
-    NgroupColSet(array_info* in_col, bool _is_parallel, bool use_sql_rules);
+    NgroupColSet(std::shared_ptr<array_info> in_col, bool _is_parallel,
+                 bool use_sql_rules);
 
     virtual ~NgroupColSet();
 
@@ -425,8 +442,8 @@ class NgroupColSet : public BasicColSet {
      * input column regardless of input column types (i.e num_groups is not used
      * in this case)
      */
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols);
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
     /**
      * Perform update step for this column set. compute and fill my columns with
@@ -472,11 +489,13 @@ class NgroupColSet : public BasicColSet {
  * @return A pointer to the created col set.
  */
 std::unique_ptr<BasicColSet> makeColSet(
-    std::vector<array_info*> in_cols, array_info* index_col, int ftype,
-    bool do_combine, bool skipna, int64_t periods, int64_t transform_func,
-    int n_udf, bool is_parallel, std::vector<bool> window_ascending,
+    std::vector<std::shared_ptr<array_info>> in_cols,
+    std::shared_ptr<array_info> index_col, int ftype, bool do_combine,
+    bool skipna, int64_t periods, int64_t transform_func, int n_udf,
+    bool is_parallel, std::vector<bool> window_ascending,
     std::vector<bool> window_na_position, int* udf_n_redvars = nullptr,
-    table_info* udf_table = nullptr, int udf_table_idx = 0,
-    table_info* nunique_table = nullptr, bool use_sql_rules = false);
+    std::shared_ptr<table_info> udf_table = nullptr, int udf_table_idx = 0,
+    std::shared_ptr<table_info> nunique_table = nullptr,
+    bool use_sql_rules = false);
 
 #endif  // _GROUPBY_COL_SET_H_INCLUDED

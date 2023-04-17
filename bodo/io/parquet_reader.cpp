@@ -294,12 +294,13 @@ void ParquetReader::read_all(TableBuilder& builder) {
 
         // create the final dictionary-encoded input_file_name
         // column from the indices array and dictionary
-        this->input_file_name_col_arr =
-            new array_info(bodo_array_type::DICT,
-                           Bodo_CTypes::CTypeEnum::STRING, this->count, {},
-                           {this->input_file_name_col_dict_arr,
-                            this->input_file_name_col_indices_arr},
-                           0, 0, 0, false, false, false);
+        this->input_file_name_col_arr = std::make_shared<array_info>(
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, this->count,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>(
+                {this->input_file_name_col_dict_arr,
+                 this->input_file_name_col_indices_arr}),
+            0, 0, 0, false, false, false);
     }
 }
 
@@ -357,15 +358,15 @@ void ParquetReader::get_partition_info(PyObject* piece) {
  * followed by selected partition columns, in same order as specified to this
  * function).
  */
-table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
-                    PyObject* expr_filters, PyObject* storage_options,
-                    PyObject* pyarrow_schema, int64_t tot_rows_to_read,
-                    int32_t* _selected_fields, int32_t num_selected_fields,
-                    int32_t* _is_nullable, int32_t* selected_part_cols,
-                    int32_t* part_cols_cat_dtype, int32_t num_partition_cols,
-                    int32_t* str_as_dict_cols, int32_t num_str_as_dict_cols,
-                    int64_t* total_rows_out, bool input_file_name_col,
-                    bool use_hive) {
+table_info* pq_read_py_entry(
+    PyObject* path, bool parallel, PyObject* dnf_filters,
+    PyObject* expr_filters, PyObject* storage_options, PyObject* pyarrow_schema,
+    int64_t tot_rows_to_read, int32_t* _selected_fields,
+    int32_t num_selected_fields, int32_t* _is_nullable,
+    int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
+    int32_t num_partition_cols, int32_t* str_as_dict_cols,
+    int32_t num_str_as_dict_cols, int64_t* total_rows_out,
+    bool input_file_name_col, bool use_hive) {
     try {
         std::set<int> selected_fields(
             {_selected_fields, _selected_fields + num_selected_fields});
@@ -383,12 +384,13 @@ table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
         *total_rows_out = reader.get_total_rows();
         table_info* out = reader.read();
         // append the partition columns to the final output table
-        std::vector<array_info*>& part_cols = reader.get_partition_cols();
+        std::vector<std::shared_ptr<array_info>>& part_cols =
+            reader.get_partition_cols();
         out->columns.insert(out->columns.end(), part_cols.begin(),
                             part_cols.end());
         // append the input_file_column to the output table
         if (input_file_name_col) {
-            array_info* input_file_name_col_arr =
+            std::shared_ptr<array_info> input_file_name_col_arr =
                 reader.get_input_file_name_col();
             out->columns.push_back(input_file_name_col_arr);
         }

@@ -458,7 +458,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         }
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array == nullptr && !temp_zero_copy_fallback) {
             if (arrays.empty()) {
                 // Avoid empty call to concatenate
@@ -504,7 +504,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                       chunked_arr->chunks().end());
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array != nullptr) {
             return out_array;
         }
@@ -573,8 +573,9 @@ class StringBuilder : public TableBuilder::BuilderColumn {
 
     template <typename ARROW_ARRAY_TYPE, typename OFFSET_TYPE>
     void fill_from_array(const std::shared_ptr<arrow::Array>& arr,
-                         array_info* out_array, offset_t* out_offsets,
-                         int64_t& n_strings_copied, int64_t& n_chars_copied) {
+                         std::shared_ptr<array_info> out_array,
+                         offset_t* out_offsets, int64_t& n_strings_copied,
+                         int64_t& n_chars_copied) {
         auto str_arr = std::dynamic_pointer_cast<ARROW_ARRAY_TYPE>(arr);
         const int64_t n_strings = str_arr->length();
         const int64_t str_start_offset = str_arr->data()->offset;
@@ -634,7 +635,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
                                 chunked_arr->chunks().end());
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array != nullptr) {
             return out_array;
         }
@@ -678,7 +679,8 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         arrow::ArrayVector dict_v{dictionary};
         dictionary_builder.append(
             std::make_shared<arrow::ChunkedArray>(dict_v));
-        array_info* bodo_dictionary = dictionary_builder.get_output();
+        std::shared_ptr<array_info> bodo_dictionary =
+            dictionary_builder.get_output();
 
         // copy indices
         PrimitiveBuilder indices_builder(arrow::int32(), this->length,
@@ -693,11 +695,14 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         }
         indices_builder.append(
             std::make_shared<arrow::ChunkedArray>(indices_chunks));
-        array_info* bodo_indices = indices_builder.get_output();
+        std::shared_ptr<array_info> bodo_indices = indices_builder.get_output();
 
-        out_array = new array_info(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, {},
-            {bodo_dictionary, bodo_indices}, 0, 0, 0, false, false, false);
+        out_array = std::make_shared<array_info>(
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>(
+                {bodo_dictionary, bodo_indices}),
+            0, 0, 0, false, false, false);
 
         all_chunks.clear();
         return out_array;
@@ -756,7 +761,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         // needed anymore
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array != nullptr) {
             return out_array;
         }
@@ -767,7 +772,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
                 /*has_deduped_local_dictionary=*/false);
             return this->out_array;
         }
-        array_info* dict_arr =
+        std::shared_ptr<array_info> dict_arr =
             alloc_array(total_distinct_strings, total_distinct_chars, -1,
                         bodo_array_type::STRING, dtype, 0, -1);
         int64_t n_null_bytes = (total_distinct_strings + 7) >> 3;
@@ -786,9 +791,11 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         // We set _has_deduped_local_dictionary=true since we constructed the
         // dictionary ourselves and made sure not to put nulls in the
         // dictionary.
-        out_array = new array_info(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, {},
-            {dict_arr, indices_arr}, 0, 0, 0, false,
+        out_array = std::make_shared<array_info>(
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>({dict_arr, indices_arr}),
+            0, 0, 0, false,
             /*_has_deduped_local_dictionary=*/true, false);
         return out_array;
     }
@@ -830,7 +837,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
 
     const Bodo_CTypes::CTypeEnum dtype;  // STRING or BINARY
     const int64_t length;                // number of indices of output array
-    array_info* indices_arr;
+    std::shared_ptr<array_info> indices_arr;
     // str_to_ind maps string to its new index, new offset in the new
     // dictionary array. the 0th offset maps to 0.
     // Supports access with string_view. See comments for string_hash.
@@ -878,13 +885,14 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
                       chunked_arr->chunks().end());
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array != nullptr) {
             return out_array;
         }
 
         // get output Bodo string array
-        array_info* out_str_array = string_builder->get_output();
+        std::shared_ptr<array_info> out_str_array =
+            string_builder->get_output();
         int64_t total_n_strings = out_str_array->length;
         delete string_builder;
         int64_t total_n_lists = 0;
@@ -893,7 +901,7 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
 
         // allocate Bodo list of string array with preexisting string array
         // alloc_list_string_array deletes the string array_info struct
-        array_info* out_array =
+        std::shared_ptr<array_info> out_array =
             alloc_list_string_array(total_n_lists, out_str_array, 0);
 
         // copy list offsets and null bitmap
@@ -945,7 +953,7 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
                       chunked_arr->chunks().end());
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array != nullptr) {
             return out_array;
         }
@@ -1034,8 +1042,9 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
     }
 }
 
-TableBuilder::TableBuilder(table_info* table, const int64_t num_rows) {
-    for (array_info* arr : table->columns) {
+TableBuilder::TableBuilder(std::shared_ptr<table_info> table,
+                           const int64_t num_rows) {
+    for (std::shared_ptr<array_info> arr : table->columns) {
         if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             columns.push_back(
                 new PrimitiveBuilder(arr->dtype, num_rows, true, false));

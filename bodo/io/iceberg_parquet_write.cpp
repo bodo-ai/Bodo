@@ -72,11 +72,11 @@ std::string generate_iceberg_file_name() {
  * @param[out] file_size_in_bytes Size of the file in bytes
  */
 void iceberg_pq_write_helper(
-    const char *fpath, const table_info *table, const array_info *col_names_arr,
-    const char *compression, bool is_parallel, const char *bucket_region,
-    int64_t row_group_size, char *iceberg_metadata,
-    std::shared_ptr<arrow::Schema> iceberg_arrow_schema, int64_t *record_count,
-    int64_t *file_size_in_bytes) {
+    const char *fpath, const std::shared_ptr<table_info> table,
+    const std::shared_ptr<array_info> col_names_arr, const char *compression,
+    bool is_parallel, const char *bucket_region, int64_t row_group_size,
+    char *iceberg_metadata, std::shared_ptr<arrow::Schema> iceberg_arrow_schema,
+    int64_t *record_count, int64_t *file_size_in_bytes) {
     std::unordered_map<std::string, std::string> md = {
         {"iceberg.schema", std::string(iceberg_metadata)}};
 
@@ -125,12 +125,13 @@ void iceberg_pq_write_helper(
  * @param iceberg_schema Expected Arrow schema of files written to Iceberg
  table, if given.
  */
-void iceberg_pq_write(const char *table_data_loc, table_info *table,
-                      const array_info *col_names_arr, PyObject *partition_spec,
-                      PyObject *sort_order, const char *compression,
-                      bool is_parallel, const char *bucket_region,
-                      int64_t row_group_size, char *iceberg_metadata,
-                      PyObject *iceberg_files_info_py,
+void iceberg_pq_write(const char *table_data_loc,
+                      std::shared_ptr<table_info> table,
+                      const std::shared_ptr<array_info> col_names_arr,
+                      PyObject *partition_spec, PyObject *sort_order,
+                      const char *compression, bool is_parallel,
+                      const char *bucket_region, int64_t row_group_size,
+                      char *iceberg_metadata, PyObject *iceberg_files_info_py,
                       std::shared_ptr<arrow::Schema> iceberg_schema) {
     tracing::Event ev("iceberg_pq_write", is_parallel);
     ev.add_attribute("table_data_loc", table_data_loc);
@@ -146,7 +147,7 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
             "IcebergParquetWrite: partition_spec is not a list");
     }
 
-    table_info *working_table = table;
+    std::shared_ptr<table_info> working_table = table;
 
     // If sort order, then iterate over and create the transforms.
     // Sort Order should be a list of tuples.
@@ -165,7 +166,7 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         tracing::Event ev_sort("iceberg_pq_write_sort", is_parallel);
         ev_sort.add_attribute("sort_order_len", sort_order_len);
         // Vector to collect the transformed columns
-        std::vector<array_info *> transform_cols;
+        std::vector<std::shared_ptr<array_info> > transform_cols;
         transform_cols.reserve(sort_order_len);
         // Vector of ints (booleans essentially) to be
         // eventually passed to sort_values_table
@@ -173,14 +174,6 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         vect_ascending.reserve(sort_order_len);
         std::vector<int64_t> na_position;
         na_position.reserve(sort_order_len);
-        // Vector to record whether the transformed columns
-        // should be free-ed after the sort. We will free in
-        // case of non-identity transform, and in some cases
-        // of identity transform (in particular in case
-        // of DATETIME and DATE, see iceberg_identity_transform
-        // for more details).
-        std::vector<bool> free_transform_col;
-        free_transform_col.reserve(sort_order_len);
 
         // Iterate over the python list describing the sort order
         // and create the transform columns.
@@ -218,18 +211,14 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
             int64_t null_last = PyLong_AsLongLong(null_last_py);
             na_position.push_back(null_last);
 
-            array_info *transform_col;
+            std::shared_ptr<array_info> transform_col;
             if (transform_name == "identity") {
-                bool to_free;
                 transform_col = iceberg_identity_transform(
-                    working_table->columns[col_idx], &to_free, is_parallel);
-                free_transform_col.push_back(to_free);
+                    working_table->columns[col_idx], is_parallel);
             } else {
                 transform_col =
                     iceberg_transform(working_table->columns[col_idx],
                                       transform_name, arg, is_parallel);
-                // Always free in case of non identity transform
-                free_transform_col.push_back(true);
             }
             transform_cols.push_back(transform_col);
 
@@ -240,13 +229,14 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
 
         // Create a new table (a copy) with the transforms and then sort it.
         // The transformed columns go in front since they are the keys.
-        std::vector<array_info *> new_cols;
+        std::vector<std::shared_ptr<array_info> > new_cols;
         new_cols.reserve(transform_cols.size() + working_table->columns.size());
         new_cols.insert(new_cols.end(), transform_cols.begin(),
                         transform_cols.end());
         new_cols.insert(new_cols.end(), working_table->columns.begin(),
                         working_table->columns.end());
-        table_info *new_table = new table_info(new_cols);
+        std::shared_ptr<table_info> new_table =
+            std::make_shared<table_info>(new_cols);
 
         // Convert all local dictionaries to global (and with sorted indices)
         // for all dict columns (not just transformed columns).
@@ -263,19 +253,7 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
             }
         }
 
-        // sort_values_table decrefs all the arrays in the table,
-        // but the original columns might still be in use, so
-        // we need them to stick around.
-        // We also incref the transform columns since some of them
-        // might be identity columns. Note that we will incref
-        // these identity columns twice (once as transformed col and again
-        // as regular column), but that's ok since we also decref them twice
-        // in sort_values_table.
-        for (size_t i = 0; i < new_table->columns.size(); i++) {
-            incref_array(new_table->columns[i]);
-        }
-
-        table_info *sorted_new_table = sort_values_table(
+        std::shared_ptr<table_info> sorted_new_table = sort_values_table(
             new_table, transform_cols.size(), vect_ascending.data(),
             na_position.data(), /*dead_keys=*/nullptr, /*out_n_rows=*/nullptr,
             /*bounds=*/nullptr, is_parallel);
@@ -286,19 +264,9 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
             sorted_new_table->columns.begin(),
             sorted_new_table->columns.begin() + transform_cols.size());
 
-        // Decref and delete the transform columns (except the ones marked as
-        // not to be free-ed, e.g. identity transform)
-        for (size_t i = 0; i < transform_cols.size(); i++) {
-            if (free_transform_col[i]) {
-                decref_array(transform_cols[i]);
-                delete transform_cols[i];
-            }
-        }
         transform_cols.clear();
         // Set working table for the subsequent steps
         working_table = sorted_new_table;
-        // Delete unsorted table.
-        delete new_table;
         ev_sort.finalize();
     }
 
@@ -325,10 +293,8 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         // Similar to the ones in sort-order handling
         std::vector<std::string> transform_names;
         transform_names.reserve(partition_spec_len);
-        std::vector<array_info *> transform_cols;
+        std::vector<std::shared_ptr<array_info> > transform_cols;
         transform_cols.reserve(partition_spec_len);
-        std::vector<bool> free_transform_col;
-        free_transform_col.reserve(partition_spec_len);
 
         // Iterate over the partition fields and create the transform
         // columns
@@ -372,18 +338,15 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
             Py_DECREF(partition_name_str);
             partition_names.push_back(partition_name);
 
-            array_info *transform_col;
+            std::shared_ptr<array_info> transform_col;
             if (transform_name == "identity") {
-                bool to_free;
                 transform_col = iceberg_identity_transform(
-                    working_table->columns[col_idx], &to_free, is_parallel);
-                free_transform_col.push_back(to_free);
+                    working_table->columns[col_idx], is_parallel);
             } else {
                 transform_col =
                     iceberg_transform(working_table->columns[col_idx],
                                       transform_name, arg, is_parallel);
                 // Always free in case of non identity transform
-                free_transform_col.push_back(true);
             }
             transform_cols.push_back(transform_col);
             part_col_indices.push_back(col_idx);
@@ -410,16 +373,17 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         // and the rest after (to use multi_col_key for hashing which assumes
         // that keys are at the beginning), and we will then drop the
         // transformed columns from it for writing
-        std::vector<array_info *> new_cols;
+        std::vector<std::shared_ptr<array_info> > new_cols;
         new_cols.reserve(transform_cols.size() + working_table->columns.size());
         new_cols.insert(new_cols.end(), transform_cols.begin(),
                         transform_cols.end());
         new_cols.insert(new_cols.end(), working_table->columns.begin(),
                         working_table->columns.end());
-        table_info *new_table = new table_info(new_cols);
+        std::shared_ptr<table_info> new_table =
+            std::make_shared<table_info>(new_cols);
 
         // XXX Some of the code below is similar to that in
-        // pq_write_partitioned, and should be refactored.
+        // pq_write_partitioned_py_entry, and should be refactored.
 
         // Create partition keys and "parts", populate partition_write_info
         // structs
@@ -490,12 +454,6 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
             new_table->columns.begin(),
             new_table->columns.begin() + transform_cols.size());
 
-        // Free the transform cols
-        for (size_t i = 0; i < transform_cols.size(); i++) {
-            if (free_transform_col[i]) {
-                delete transform_cols[i];
-            }
-        }
         transform_cols.clear();
 
         tracing::Event ev_part_write(
@@ -504,10 +462,7 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         for (auto it = key_to_partition.begin(); it != key_to_partition.end();
              it++) {
             const partition_write_info &p = it->second;
-            // RetrieveTable steals the reference but we still need them
-            for (auto a : new_table->columns)
-                incref_array(a);
-            table_info *part_table =
+            std::shared_ptr<table_info> part_table =
                 RetrieveTable(new_table, p.rows, new_table->ncols());
             // NOTE: we pass is_parallel=False because we already took care of
             // is_parallel here
@@ -537,10 +492,8 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
             // record_count_py and file_size_in_bytes_py
             PyList_Append(iceberg_files_info_py, p.iceberg_file_info_py);
             Py_DECREF(p.iceberg_file_info_py);
-            delete_table_decref_arrays(part_table);
         }
         ev_part_write.finalize();
-        delete new_table;
         ev_part.finalize();
     } else {
         tracing::Event ev_general("iceberg_pq_write_general", is_parallel);
@@ -594,8 +547,8 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
  * captured and propagated to ensure all ranks raise.
  */
 PyObject *iceberg_pq_write_py_entry(
-    const char *table_data_loc, table_info *table,
-    const array_info *col_names_arr, PyObject *partition_spec,
+    const char *table_data_loc, table_info *in_table,
+    array_info *in_col_names_arr, PyObject *partition_spec,
     PyObject *sort_order, const char *compression, bool is_parallel,
     const char *bucket_region, int64_t row_group_size, char *iceberg_metadata,
     PyObject *iceberg_arrow_schema_py) {
@@ -605,6 +558,11 @@ PyObject *iceberg_pq_write_py_entry(
     std::optional<const char *> err_str;
 
     try {
+        std::shared_ptr<table_info> table =
+            std::shared_ptr<table_info>(in_table);
+        std::shared_ptr<array_info> col_names_arr =
+            std::shared_ptr<array_info>(in_col_names_arr);
+
         // Python list of tuples describing the data files written.
         // iceberg_pq_write will append to the list and then this will be
         // returned to the Python.

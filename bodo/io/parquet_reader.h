@@ -11,7 +11,7 @@ class ParquetReader : public ArrowDataframeReader {
    public:
     /**
      * Initialize ParquetReader.
-     * See pq_read function below for description of arguments.
+     * See pq_read_py_entry function below for description of arguments.
      */
     ParquetReader(PyObject* _path, bool _parallel, PyObject* _dnf_filters,
                   PyObject* _expr_filters, PyObject* _storage_options,
@@ -32,7 +32,7 @@ class ParquetReader : public ArrowDataframeReader {
 
     /**
      * Initialize the reader
-     * See pq_read function below for description of arguments.
+     * See pq_read_py_entry function below for description of arguments.
      */
     void init_pq_reader(int32_t* _str_as_dict_cols,
                         int32_t num_str_as_dict_cols,
@@ -73,9 +73,13 @@ class ParquetReader : public ArrowDataframeReader {
     virtual size_t get_num_pieces() const override { return file_paths.size(); }
 
     /// returns output partition columns
-    std::vector<array_info*>& get_partition_cols() { return part_cols; }
+    std::vector<std::shared_ptr<array_info>>& get_partition_cols() {
+        return part_cols;
+    }
 
-    array_info* get_input_file_name_col() { return input_file_name_col_arr; }
+    std::shared_ptr<array_info> get_input_file_name_col() {
+        return input_file_name_col_arr;
+    }
 
    protected:
     virtual void add_piece(PyObject* piece, int64_t num_rows,
@@ -114,20 +118,20 @@ class ParquetReader : public ArrowDataframeReader {
     // piece/file has the same partition value for all of its rows
     std::vector<std::vector<int64_t>> part_vals;
     // output partition columns
-    std::vector<array_info*> part_cols;
+    std::vector<std::shared_ptr<array_info>> part_cols;
     // current fill offset of each partition column
     std::vector<int64_t> part_cols_offset;
 
     // output input_file_name column
     // indices for the dictionary-encoding
-    array_info* input_file_name_col_indices_arr = nullptr;
+    std::shared_ptr<array_info> input_file_name_col_indices_arr = nullptr;
     int64_t input_file_name_col_indices_offset = 0;
     // dictionary for the dictionary encoding
-    array_info* input_file_name_col_dict_arr = nullptr;
+    std::shared_ptr<array_info> input_file_name_col_dict_arr = nullptr;
     int64_t input_file_name_col_dict_arr_total_chars = 0;
     // output array_info for the dictionary-encoded
     // string array
-    array_info* input_file_name_col_arr = nullptr;
+    std::shared_ptr<array_info> input_file_name_col_arr = nullptr;
 
     /**
      * Get values for all partition columns of a piece of
