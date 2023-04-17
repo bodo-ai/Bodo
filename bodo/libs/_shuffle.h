@@ -33,9 +33,9 @@ static inline int hash_to_rank(uint32_t hash, int n_pes) {
  *
  */
 struct shuffle_info {
-    mpi_comm_info* comm_info;
+    std::shared_ptr<mpi_comm_info> comm_info;
     std::shared_ptr<uint32_t[]> hashes;
-    explicit shuffle_info(mpi_comm_info* _comm_info,
+    explicit shuffle_info(std::shared_ptr<mpi_comm_info> _comm_info,
                           std::shared_ptr<uint32_t[]> _hashes)
         : comm_info(_comm_info), hashes(_hashes) {}
 };
@@ -52,9 +52,9 @@ struct shuffle_info {
  * @param hashes : provide precalculated hashes
  * @return the new table after shuffling
  */
-table_info* shuffle_table(
-    table_info* in_table, int64_t n_keys, bool is_parallel = true,
-    int32_t keep_comm_info = 0,
+std::shared_ptr<table_info> shuffle_table(
+    std::shared_ptr<table_info> in_table, int64_t n_keys,
+    bool is_parallel = true, int32_t keep_comm_info = 0,
     std::shared_ptr<uint32_t[]> hashes = std::shared_ptr<uint32_t[]>(nullptr));
 
 table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
@@ -63,6 +63,7 @@ table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
 
 /**
  * @brief get shuffle info from table struct
+ * Using raw pointers since called from Python.
  *
  * @param table input table
  * @return shuffle_info* shuffle info of input table
@@ -71,6 +72,7 @@ shuffle_info* get_shuffle_info(table_info* table);
 
 /**
  * @brief free allocated data of shuffle info
+ * Called from Python.
  *
  * @param sh_info input shuffle info
  */
@@ -79,6 +81,7 @@ void delete_shuffle_info(shuffle_info* sh_info);
 // Note: Steals a reference from the input table.
 /**
  * @brief reverse a previous shuffle of input table
+ * Using raw pointers since called from Python.
  *
  * @param in_table input table
  * @param sh_info shuffle info
@@ -109,8 +112,9 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info);
  *
  * @return the new table after the shuffling-
  */
-table_info* coherent_shuffle_table(
-    table_info* in_table, table_info* ref_table, int64_t n_keys,
+std::shared_ptr<table_info> coherent_shuffle_table(
+    std::shared_ptr<table_info> in_table, std::shared_ptr<table_info> ref_table,
+    int64_t n_keys,
     std::shared_ptr<uint32_t[]> hashes = std::shared_ptr<uint32_t[]>(nullptr),
     SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
     const uint8_t* null_bitmask = nullptr,
@@ -127,10 +131,9 @@ table_info* coherent_shuffle_table(
  * not
  * @return the new table after the shuffling.
  */
-table_info* shuffle_table_kernel(table_info* in_table,
-                                 std::shared_ptr<uint32_t[]>& hashes,
-                                 mpi_comm_info const& comm_info,
-                                 bool is_parallel = true);
+std::shared_ptr<table_info> shuffle_table_kernel(
+    std::shared_ptr<table_info> in_table, std::shared_ptr<uint32_t[]>& hashes,
+    mpi_comm_info const& comm_info, bool is_parallel = true);
 
 /** Reverse shuffling a table from all nodes to all the other nodes.
  *
@@ -139,9 +142,9 @@ table_info* shuffle_table_kernel(table_info* in_table,
  * @param comm_info : the array for the communication.
  * @return the new table after the shuffling-
  */
-table_info* reverse_shuffle_table_kernel(table_info* in_table,
-                                         std::shared_ptr<uint32_t[]>& hashes,
-                                         mpi_comm_info const& comm_info);
+std::shared_ptr<table_info> reverse_shuffle_table_kernel(
+    std::shared_ptr<table_info> in_table, std::shared_ptr<uint32_t[]>& hashes,
+    mpi_comm_info const& comm_info);
 
 /** Broadcasting a table.
  * The table in the nodes of rank 0 is broadcast to all nodes.
@@ -156,8 +159,9 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table,
  * @param mpi_root: root rank for broadcast (where data is broadcast from)
  * @return the table equal to in_table but available on all the nodes.
  */
-table_info* broadcast_table(table_info* ref_table, table_info* in_table,
-                            size_t n_cols, bool is_parallel, int mpi_root);
+std::shared_ptr<table_info> broadcast_table(
+    std::shared_ptr<table_info> ref_table, std::shared_ptr<table_info> in_table,
+    size_t n_cols, bool is_parallel, int mpi_root);
 
 /** Gather a table.
  *
@@ -171,8 +175,9 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
  * @return the table obtained by concatenating the tables
  *         on the node 0.
  */
-table_info* gather_table(table_info* in_table, int64_t n_cols_i,
-                         bool all_gather, bool is_parallel);
+std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
+                                         int64_t n_cols_i, bool all_gather,
+                                         bool is_parallel);
 
 /** Compute whether we need to do a reshuffling or not for performance reasons.
     The dilemna is following:
@@ -193,7 +198,8 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
     @param crit_fraction : the critical fraction
     @return the boolean saying whether or not we need to do reshuffling.
 */
-bool need_reshuffling(table_info* in_table, double crit_fraction);
+bool need_reshuffling(std::shared_ptr<table_info> in_table,
+                      double crit_fraction);
 
 /* Apply a renormalization shuffling
    After the operation, all nodes will have a standard size.
@@ -205,8 +211,9 @@ bool need_reshuffling(table_info* in_table, double crit_fraction);
    parallel=false
    @return the reshuffled table
  */
-table_info* shuffle_renormalization(table_info* in_table, int random,
-                                    int64_t random_seed, bool parallel);
+std::shared_ptr<table_info> shuffle_renormalization(
+    std::shared_ptr<table_info> in_table, int random, int64_t random_seed,
+    bool parallel);
 
 table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,
                                                int64_t random_seed,
@@ -226,10 +233,9 @@ table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,
    @param dest_ranks: array of destination ranks
    @return the reshuffled table
  */
-table_info* shuffle_renormalization_group(table_info* in_table, int random,
-                                          int64_t random_seed, bool parallel,
-                                          int64_t n_dest_ranks,
-                                          int* dest_ranks);
+std::shared_ptr<table_info> shuffle_renormalization_group(
+    std::shared_ptr<table_info> in_table, int random, int64_t random_seed,
+    bool parallel, int64_t n_dest_ranks, int* dest_ranks);
 
 table_info* shuffle_renormalization_group_py_entrypt(
     table_info* in_table, int random, int64_t random_seed, bool parallel,
@@ -264,8 +270,21 @@ inline void fill_recv_data_inner(T* recv_buff, T* data,
  * need to gather the data? Note: The output should not assume the data is
  * sorted.
  */
-void drop_duplicates_local_dictionary(array_info* dict_array,
+void drop_duplicates_local_dictionary(std::shared_ptr<array_info> dict_array,
                                       bool sort_dictionary_if_modified = false);
+
+/**
+ * @brief Python wrapper for drop_duplicates_local_dictionary
+ *
+ * @param dict_array The dictionary array whose dictionary needs updating.
+ * @param sort_dictionary_if_modified Should the dictionary be sorted if we
+ * need to gather the data? Note: The output should not assume the data is
+ * sorted.
+ * @return updated dictionary array (same as input since updated inplace, just a
+ * new reference for Python)
+ */
+array_info* drop_duplicates_local_dictionary_py_entry(
+    array_info* dict_array, bool sort_dictionary_if_modified = false);
 
 /**
  * @brief Update a dictionary encoded array to gather all dictionary values onto
@@ -279,7 +298,7 @@ void drop_duplicates_local_dictionary(array_info* dict_array,
  * modify the dictionary? Note: The output should not assume the data is sorted.
  */
 void convert_local_dictionary_to_global(
-    array_info* dict_array, bool is_parallel,
+    std::shared_ptr<array_info> dict_array, bool is_parallel,
     bool sort_dictionary_if_modified = false);
 
 /**
@@ -292,7 +311,7 @@ void convert_local_dictionary_to_global(
  * @param sort_dictionary_if_modified
  */
 void make_dictionary_global_and_unique(
-    array_info* dict_array, bool is_parallel,
+    std::shared_ptr<array_info> dict_array, bool is_parallel,
     bool sort_dictionary_if_modified = false);
 
 /**
@@ -305,7 +324,7 @@ void make_dictionary_global_and_unique(
  * @param[in] comm_info The communication information from the original shuffle.
  */
 void reverse_shuffle_preallocated_data_array(
-    array_info* in_arr, array_info* out_arr,
+    std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> out_arr,
     std::shared_ptr<uint32_t[]>& hashes, mpi_comm_info const& comm_info);
 
 #endif  // _SHUFFLE_H_INCLUDED

@@ -18,9 +18,10 @@
  * only cumulative operations to avoid shuffling the data.
  */
 
-int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
-                               int8_t* ncols_per_func, int64_t num_funcs,
-                               int* ftypes, bool input_has_index) {
+int determine_groupby_strategy(std::shared_ptr<table_info> in_table,
+                               int64_t num_keys, int8_t* ncols_per_func,
+                               int64_t num_funcs, int* ftypes,
+                               bool input_has_index) {
     // First decision: If it is cumulative, then we can use the MPI_Exscan.
     // Otherwise no
     bool has_non_cumulative_op = false;
@@ -57,7 +58,7 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
     // than just MPI_Exscan.
     bool has_non_arithmetic_type = false;
     for (uint64_t i = num_keys; i < in_table->ncols() - index_i; i++) {
-        array_info* oper_col = in_table->columns[i];
+        std::shared_ptr<array_info> oper_col = in_table->columns[i];
         if (oper_col->arr_type != bodo_array_type::NUMPY &&
             oper_col->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
             has_non_arithmetic_type = true;
@@ -86,19 +87,17 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
 
 // Categorical index info
 
-array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
-                                      bool is_parallel, bool key_dropna) {
+std::shared_ptr<array_info> compute_categorical_index(
+    std::shared_ptr<table_info> in_table, int64_t num_keys, bool is_parallel,
+    bool key_dropna) {
     tracing::Event ev("compute_categorical_index", is_parallel);
-    // A rare case of incref since we are going to need the in_table after the
-    // computation of red_table.
     for (int64_t i_key = 0; i_key < num_keys; i_key++) {
-        array_info* a = in_table->columns[i_key];
+        std::shared_ptr<array_info> a = in_table->columns[i_key];
         if (a->arr_type == bodo_array_type::DICT) {
             make_dictionary_global_and_unique(a, is_parallel);
         }
-        incref_array(a);
     }
-    table_info* red_table =
+    std::shared_ptr<table_info> red_table =
         drop_duplicates_keys(in_table, num_keys, is_parallel, key_dropna);
     size_t n_rows_full, n_rows = red_table->nrows();
     if (is_parallel) {
@@ -111,15 +110,13 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     // use exscan. Preferable to do shuffle when we have too many unique values.
     // This is a heuristic to decide approach.
     if (n_rows_full > max_global_number_groups_exscan) {
-        delete_table_decref_arrays(red_table);
         return nullptr;
     }
     // We are below threshold. Now doing an allgather for determining the keys.
     bool all_gather = true;
-    table_info* full_table;
+    std::shared_ptr<table_info> full_table;
     if (is_parallel) {
         full_table = gather_table(red_table, num_keys, all_gather, is_parallel);
-        delete_table(red_table);
     } else {
         full_table = red_table;
     }
@@ -128,7 +125,7 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
         hash_keys_table(full_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);
     std::shared_ptr<uint32_t[]> hashes_in_table =
         hash_keys_table(in_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);
-    std::vector<array_info*> concat_column(
+    std::vector<std::shared_ptr<array_info>> concat_column(
         full_table->columns.begin(), full_table->columns.begin() + num_keys);
     concat_column.insert(concat_column.end(), in_table->columns.begin(),
                          in_table->columns.begin() + num_keys);
@@ -144,10 +141,10 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
         entSet[iRow] = iRow;
     }
     size_t n_rows_in = in_table->nrows();
-    array_info* out_arr =
+    std::shared_ptr<array_info> out_arr =
         alloc_categorical(n_rows_in, Bodo_CTypes::INT32, n_rows_full);
-    std::vector<array_info*> key_cols(in_table->columns.begin(),
-                                      in_table->columns.begin() + num_keys);
+    std::vector<std::shared_ptr<array_info>> key_cols(
+        in_table->columns.begin(), in_table->columns.begin() + num_keys);
     bool has_nulls = does_keys_have_nulls(key_cols);
     for (size_t iRow = 0; iRow < n_rows_in; iRow++) {
         int32_t pos;
@@ -162,7 +159,6 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
         }
         out_arr->at<int32_t>(iRow) = pos;
     }
-    delete_table_decref_arrays(full_table);
     return out_arr;
 }
 
@@ -189,11 +185,11 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
  * @param skipdropna Whether to skip dropna
  */
 template <typename Tkey, typename T, int dtype>
-void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
-                                    array_info* cat_column,
-                                    table_info* in_table, int64_t num_keys,
-                                    int64_t k, int* ftypes, int* func_offsets,
-                                    bool is_parallel, bool skipdropna) {
+void mpi_exscan_computation_numpy_T(
+    std::vector<std::shared_ptr<array_info>>& out_arrs,
+    std::shared_ptr<array_info> cat_column,
+    std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t k,
+    int* ftypes, int* func_offsets, bool is_parallel, bool skipdropna) {
     int64_t n_rows = in_table->nrows();
     int start = func_offsets[k];
     int end = func_offsets[k + 1];
@@ -217,12 +213,12 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
         }
     }
     std::vector<T> cumulative_recv = cumulative;
-    array_info* in_col = in_table->columns[k + num_keys];
+    std::shared_ptr<array_info> in_col = in_table->columns[k + num_keys];
     T nan_value =
         GetTentry<T>(RetrieveNaNentry((Bodo_CTypes::CTypeEnum)dtype).data());
     Tkey miss_idx = -1;
     for (int j = start; j != end; j++) {
-        array_info* work_col = out_arrs[j];
+        std::shared_ptr<array_info> work_col = out_arrs[j];
         int ftype = ftypes[j];
         auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
@@ -277,7 +273,7 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
         }
     }
     for (int j = start; j != end; j++) {
-        array_info* work_col = out_arrs[j];
+        std::shared_ptr<array_info> work_col = out_arrs[j];
         int ftype = ftypes[j];
         // For skipdropna:
         //   The cumulative is never a NaN. The sum therefore works
@@ -326,12 +322,11 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
  * @param skipdropna Whether to skip dropna
  */
 template <typename Tkey, typename T, int dtype>
-void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
-                                       array_info* cat_column,
-                                       table_info* in_table, int64_t num_keys,
-                                       int64_t k, int* ftypes,
-                                       int* func_offsets, bool is_parallel,
-                                       bool skipdropna) {
+void mpi_exscan_computation_nullable_T(
+    std::vector<std::shared_ptr<array_info>>& out_arrs,
+    std::shared_ptr<array_info> cat_column,
+    std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t k,
+    int* ftypes, int* func_offsets, bool is_parallel, bool skipdropna) {
     int64_t n_rows = in_table->nrows();
     int start = func_offsets[k];
     int end = func_offsets[k + 1];
@@ -362,10 +357,10 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
         cumulative_mask = std::vector<uint8_t>(max_row_idx * n_oper, 0);
         cumulative_mask_recv = std::vector<uint8_t>(max_row_idx * n_oper, 0);
     }
-    array_info* in_col = in_table->columns[k + num_keys];
+    std::shared_ptr<array_info> in_col = in_table->columns[k + num_keys];
     Tkey miss_idx = -1;
     for (int j = start; j != end; j++) {
-        array_info* work_col = out_arrs[j];
+        std::shared_ptr<array_info> work_col = out_arrs[j];
         int ftype = ftypes[j];
         auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
@@ -380,7 +375,8 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
                     bool bit_o = bit_i;
                     work_col->at<T>(i_row) = new_val;
                     if (skipdropna) {
-                        if (bit_i) cumulative[pos] = new_val;
+                        if (bit_i)
+                            cumulative[pos] = new_val;
                     } else {
                         if (bit_i) {
                             if (cumulative_mask[pos] == 1) {
@@ -436,7 +432,7 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
                    max_row_idx * n_oper, mpi_typ, MPI_MAX, MPI_COMM_WORLD);
     }
     for (int j = start; j != end; j++) {
-        array_info* work_col = out_arrs[j];
+        std::shared_ptr<array_info> work_col = out_arrs[j];
         int ftype = ftypes[j];
         auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
@@ -478,12 +474,12 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
  * @param skipdropna Whether to skip dropna
  */
 template <typename Tkey, typename T, int dtype>
-void mpi_exscan_computation_T(std::vector<array_info*>& out_arrs,
-                              array_info* cat_column, table_info* in_table,
-                              int64_t num_keys, int64_t k, int* ftypes,
-                              int* func_offsets, bool is_parallel,
-                              bool skipdropna) {
-    array_info* in_col = in_table->columns[k + num_keys];
+void mpi_exscan_computation_T(
+    std::vector<std::shared_ptr<array_info>>& out_arrs,
+    std::shared_ptr<array_info> cat_column,
+    std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t k,
+    int* ftypes, int* func_offsets, bool is_parallel, bool skipdropna) {
+    std::shared_ptr<array_info> in_col = in_table->columns[k + num_keys];
     if (in_col->arr_type == bodo_array_type::NUMPY) {
         return mpi_exscan_computation_numpy_T<Tkey, T, dtype>(
             out_arrs, cat_column, in_table, num_keys, k, ftypes, func_offsets,
@@ -509,27 +505,26 @@ void mpi_exscan_computation_T(std::vector<array_info*>& out_arrs,
  * @param return_key Whether to return the key column
  * @param return_index Whether to return the index column
  * @param use_sql_rules Whether to use SQL rules in allocation
- * @return table_info* The output table
+ * @return std::shared_ptr<table_info> The output table
  */
 template <typename Tkey>
-table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
-                                        table_info* in_table, int64_t num_keys,
-                                        int* ftypes, int* func_offsets,
-                                        bool is_parallel, bool skipdropna,
-                                        bool return_key, bool return_index,
-                                        bool use_sql_rules) {
-    std::vector<array_info*> out_arrs;
+std::shared_ptr<table_info> mpi_exscan_computation_Tkey(
+    std::shared_ptr<array_info> cat_column,
+    std::shared_ptr<table_info> in_table, int64_t num_keys, int* ftypes,
+    int* func_offsets, bool is_parallel, bool skipdropna, bool return_key,
+    bool return_index, bool use_sql_rules) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
     // We do not return the keys in output in the case of cumulative operations.
     int64_t n_rows = in_table->nrows();
     int return_index_i = return_index;
     int k = 0;
     for (uint64_t i = num_keys; i < in_table->ncols() - return_index_i;
          i++, k++) {
-        array_info* col = in_table->columns[i];
+        std::shared_ptr<array_info> col = in_table->columns[i];
         int start = func_offsets[k];
         int end = func_offsets[k + 1];
         for (int j = start; j != end; j++) {
-            array_info* out_col =
+            std::shared_ptr<array_info> out_col =
                 alloc_array(n_rows, 1, 1, col->arr_type, col->dtype, 0,
                             col->num_categories);
             int ftype = ftypes[j];
@@ -554,7 +549,7 @@ table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
 #endif
     for (uint64_t i = num_keys; i < in_table->ncols() - return_index_i;
          i++, k++) {
-        array_info* col = in_table->columns[i];
+        std::shared_ptr<array_info> col = in_table->columns[i];
         const Bodo_CTypes::CTypeEnum dtype = col->dtype;
         MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::INT8)
         MPI_EXSCAN_COMPUTATION_T_CALL(Bodo_CTypes::UINT8)
@@ -572,14 +567,14 @@ table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
     }
 #undef MPI_EXSCAN_COMPUTATION_T_CALL
 
-    return new table_info(out_arrs);
+    return std::make_shared<table_info>(out_arrs);
 }
 
-table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
-                                   int64_t num_keys, int* ftypes,
-                                   int* func_offsets, bool is_parallel,
-                                   bool skipdropna, bool return_key,
-                                   bool return_index, bool use_sql_rules) {
+std::shared_ptr<table_info> mpi_exscan_computation(
+    std::shared_ptr<array_info> cat_column,
+    std::shared_ptr<table_info> in_table, int64_t num_keys, int* ftypes,
+    int* func_offsets, bool is_parallel, bool skipdropna, bool return_key,
+    bool return_index, bool use_sql_rules) {
     tracing::Event ev("mpi_exscan_computation", is_parallel);
     const Bodo_CTypes::CTypeEnum dtype = cat_column->dtype;
     // macro to reduce code duplication

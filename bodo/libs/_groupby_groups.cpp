@@ -28,11 +28,10 @@
  * @param is_parallel: true if data is distributed
  */
 template <typename T>
-static void get_group_info_loop(T& key_to_group,
-                                std::vector<array_info*>& key_cols,
-                                grouping_info& grp_info,
-                                const bool key_drop_nulls, const int64_t nrows,
-                                bool is_parallel) {
+static void get_group_info_loop(
+    T& key_to_group, std::vector<std::shared_ptr<array_info>>& key_cols,
+    grouping_info& grp_info, const bool key_drop_nulls, const int64_t nrows,
+    bool is_parallel) {
     tracing::Event ev("get_group_info_loop", is_parallel);
     std::vector<int64_t>& group_to_first_row = grp_info.group_to_first_row;
     std::vector<int64_t>& row_to_group = grp_info.row_to_group;
@@ -94,8 +93,9 @@ static void get_group_info_loop(T& key_to_group,
  */
 template <typename Map>
 void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
-                         grouping_info& grp_info, table_info* const table,
-                         std::vector<array_info*>& key_cols,
+                         grouping_info& grp_info,
+                         std::shared_ptr<table_info> const table,
+                         std::vector<std::shared_ptr<array_info>>& key_cols,
                          std::shared_ptr<uint32_t[]>& hashes,
                          const size_t nunique_hashes,
                          const bool check_for_null_keys, const bool key_dropna,
@@ -130,7 +130,7 @@ void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
     do_map_dealloc<true>(hashes, key_to_group, is_parallel);
 }
 
-void get_group_info(std::vector<table_info*>& tables,
+void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
                     std::shared_ptr<uint32_t[]>& hashes, size_t nunique_hashes,
                     std::vector<grouping_info>& grp_infos,
                     bool check_for_null_keys, bool key_dropna,
@@ -139,10 +139,11 @@ void get_group_info(std::vector<table_info*>& tables,
     if (tables.size() != 1) {
         throw std::runtime_error("get_group_info: expected 1 table input");
     }
-    table_info* table = tables[0];
+    std::shared_ptr<table_info> table = tables[0];
     ev.add_attribute("input_table_nrows", static_cast<size_t>(table->nrows()));
-    std::vector<array_info*> key_cols = std::vector<array_info*>(
-        table->columns.begin(), table->columns.begin() + table->num_keys);
+    std::vector<std::shared_ptr<array_info>> key_cols =
+        std::vector<std::shared_ptr<array_info>>(
+            table->columns.begin(), table->columns.begin() + table->num_keys);
     if (!hashes) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
         nunique_hashes =
@@ -157,7 +158,7 @@ void get_group_info(std::vector<table_info*>& tables,
 
     // use faster specialized implementation for common 1 key cases
     if (n_keys == 1) {
-        array_info* arr = table->columns[0];
+        std::shared_ptr<array_info> arr = table->columns[0];
         bodo_array_type::arr_type_enum arr_type = arr->arr_type;
         Bodo_CTypes::CTypeEnum dtype = arr->dtype;
 
@@ -190,8 +191,8 @@ void get_group_info(std::vector<table_info*>& tables,
 
     // use faster specialized implementation for common 2 key cases
     if (n_keys == 2) {
-        array_info* arr1 = table->columns[0];
-        array_info* arr2 = table->columns[1];
+        std::shared_ptr<array_info> arr1 = table->columns[0];
+        std::shared_ptr<array_info> arr2 = table->columns[1];
         bodo_array_type::arr_type_enum arr_type1 = arr1->arr_type;
         Bodo_CTypes::CTypeEnum dtype1 = arr1->dtype;
         bodo_array_type::arr_type_enum arr_type2 = arr2->arr_type;
@@ -281,7 +282,7 @@ void get_group_info(std::vector<table_info*>& tables,
                         UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);
 }
 
-void get_group_info_iterate(std::vector<table_info*>& tables,
+void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
                             std::shared_ptr<uint32_t[]>& hashes,
                             size_t nunique_hashes,
                             std::vector<grouping_info>& grp_infos,
@@ -291,9 +292,10 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
     if (tables.size() == 0) {
         throw std::runtime_error("get_group_info: tables is empty");
     }
-    table_info* table = tables[0];
-    std::vector<array_info*> key_cols = std::vector<array_info*>(
-        table->columns.begin(), table->columns.begin() + table->num_keys);
+    std::shared_ptr<table_info> table = tables[0];
+    std::vector<std::shared_ptr<array_info>> key_cols =
+        std::vector<std::shared_ptr<array_info>>(
+            table->columns.begin(), table->columns.begin() + table->num_keys);
     // TODO: if |tables| > 1 then we probably need to use hashes from all the
     // tables to get an accurate nunique_hashes estimate. We can do it, but
     // it would mean calculating all hashes in advance
@@ -310,7 +312,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
     grouping_info& grp_info = grp_infos.back();
 
     uint64_t max_rows = 0;
-    for (table_info* table : tables) {
+    for (std::shared_ptr<table_info> table : tables) {
         max_rows = std::max(max_rows, table->nrows());
     }
     grp_info.row_to_group.reserve(max_rows);
@@ -366,7 +368,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
         // IMPORTANT: Assuming all the tables have the same number and type of
         // key columns (but not the same values in key columns)
         table = tables[j];
-        key_cols = std::vector<array_info*>(
+        key_cols = std::vector<std::shared_ptr<array_info>>(
             table->columns.begin(), table->columns.begin() + table->num_keys);
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
         grp_infos.emplace_back();
@@ -444,11 +446,10 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
  * @return int64_t The actual number of groups.
  */
 template <typename T>
-static int64_t get_groupby_labels_loop(T& key_to_group,
-                                       std::vector<array_info*>& key_cols,
-                                       int64_t* row_to_group, int64_t* sort_idx,
-                                       const bool key_drop_nulls,
-                                       const int64_t nrows, bool is_parallel) {
+static int64_t get_groupby_labels_loop(
+    T& key_to_group, std::vector<std::shared_ptr<array_info>>& key_cols,
+    int64_t* row_to_group, int64_t* sort_idx, const bool key_drop_nulls,
+    const int64_t nrows, bool is_parallel) {
     tracing::Event ev("get_groupby_labels_loop", is_parallel);
     // Start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values recorded in grp_info go from
@@ -530,10 +531,11 @@ static int64_t get_groupby_labels_loop(T& key_to_group,
 template <typename Map>
 int64_t get_groupby_labels_impl(
     Map& key_to_group, tracing::Event& ev, int64_t* out_labels,
-    int64_t* sort_idx, table_info* const table,
-    std::vector<array_info*>& key_cols, std::shared_ptr<uint32_t[]>& hashes,
-    const size_t nunique_hashes, const bool check_for_null_keys,
-    const bool key_dropna, const double load_factor, bool is_parallel) {
+    int64_t* sort_idx, std::shared_ptr<table_info> const table,
+    std::vector<std::shared_ptr<array_info>>& key_cols,
+    std::shared_ptr<uint32_t[]>& hashes, const size_t nunique_hashes,
+    const bool check_for_null_keys, const bool key_dropna,
+    const double load_factor, bool is_parallel) {
     tracing::Event ev_alloc("get_groupby_labels_alloc", is_parallel);
     key_to_group.max_load_factor(load_factor);
     key_to_group.reserve(nunique_hashes);
@@ -557,16 +559,16 @@ int64_t get_groupby_labels_impl(
     return num_groups;
 }
 
-int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
-                           int64_t* sort_idx, bool key_dropna,
-                           bool is_parallel) {
+int64_t get_groupby_labels(std::shared_ptr<table_info> table,
+                           int64_t* out_labels, int64_t* sort_idx,
+                           bool key_dropna, bool is_parallel) {
     tracing::Event ev("get_groupby_labels", is_parallel);
     ev.add_attribute("input_table_nrows", static_cast<size_t>(table->nrows()));
     // TODO(ehsan): refactor to avoid code duplication with get_group_info
     // This function is similar to get_group_info. See that function for
     // more comments
     table->num_keys = table->columns.size();
-    std::vector<array_info*> key_cols = table->columns;
+    std::vector<std::shared_ptr<array_info>> key_cols = table->columns;
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     for (auto a : key_cols) {
         if (a->arr_type == bodo_array_type::DICT) {
@@ -593,4 +595,17 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
         key_to_group_rh_flat, ev, out_labels, sort_idx, table, key_cols, hashes,
         nunique_hashes, check_for_null_keys, key_dropna,
         UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);
+}
+
+int64_t get_groupby_labels_py_entry(table_info* table, int64_t* out_labels,
+                                    int64_t* sort_idx, bool key_dropna,
+                                    bool is_parallel) {
+    try {
+        return get_groupby_labels(std::shared_ptr<table_info>(table),
+                                  out_labels, sort_idx, key_dropna,
+                                  is_parallel);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return 0;
+    }
 }

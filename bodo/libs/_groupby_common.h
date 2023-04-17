@@ -18,7 +18,7 @@
  * @param[in] ftype The function type
  * @param[in] use_sql_rules Are we using SQL rules?
  */
-void aggfunc_output_initialize(array_info* out_col, int ftype,
+void aggfunc_output_initialize(std::shared_ptr<array_info> out_col, int ftype,
                                bool use_sql_rules);
 
 /**

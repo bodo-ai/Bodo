@@ -84,19 +84,20 @@
 */
 class GroupbyPipeline {
    public:
-    GroupbyPipeline(table_info* _in_table, int64_t _num_keys,
+    GroupbyPipeline(std::shared_ptr<table_info> _in_table, int64_t _num_keys,
                     int8_t* _ncols_per_func, int64_t num_funcs,
-                    table_info* _dispatch_table, table_info* _dispatch_info,
+                    std::shared_ptr<table_info> _dispatch_table,
+                    std::shared_ptr<table_info> _dispatch_info,
                     bool input_has_index, bool _is_parallel, int* ftypes,
                     int* func_offsets, int* _udf_nredvars,
-                    table_info* _udf_table, udf_table_op_fn update_cb,
-                    udf_table_op_fn combine_cb, udf_eval_fn eval_cb,
-                    udf_general_fn general_udfs_cb, bool skipna,
-                    int64_t periods, int64_t transform_func, int64_t _head_n,
-                    bool _return_key, bool _return_index, bool _key_dropna,
-                    bool* window_ascending, bool* window_na_position,
-                    bool _maintain_input_size, int64_t _n_shuffle_keys,
-                    bool _use_sql_rules)
+                    std::shared_ptr<table_info> _udf_table,
+                    udf_table_op_fn update_cb, udf_table_op_fn combine_cb,
+                    udf_eval_fn eval_cb, udf_general_fn general_udfs_cb,
+                    bool skipna, int64_t periods, int64_t transform_func,
+                    int64_t _head_n, bool _return_key, bool _return_index,
+                    bool _key_dropna, bool* window_ascending,
+                    bool* window_na_position, bool _maintain_input_size,
+                    int64_t _n_shuffle_keys, bool _use_sql_rules)
         : orig_in_table(_in_table),
           in_table(_in_table),
           num_keys(_num_keys),
@@ -208,7 +209,7 @@ class GroupbyPipeline {
         }
         size_t num_input_cols = in_table->ncols() - index_i - head_i;
         for (size_t icol = 0; icol < num_input_cols; icol++) {
-            array_info* a = in_table->columns[icol];
+            std::shared_ptr<array_info> a = in_table->columns[icol];
             if (a->arr_type == bodo_array_type::DICT) {
                 // Convert the local dictionary to global for hashing purposes
                 make_dictionary_global_and_unique(a, is_parallel);
@@ -299,23 +300,17 @@ class GroupbyPipeline {
             }
 
             // Code below is equivalent to:
-            // table_info* in_table = shuffle_table(in_table, num_keys)
-            // We do this more complicated construction because we may
+            // std::shared_ptr<table_info> in_table = shuffle_table(in_table,
+            // num_keys) We do this more complicated construction because we may
             // need the hashes and comm_info later.
-            comm_info_ptr = new mpi_comm_info(in_table->columns);
+            comm_info_ptr = std::make_shared<mpi_comm_info>(in_table->columns);
             comm_info_ptr->set_counts(hashes, is_parallel);
-            // shuffle_table_kernel steals the reference but we still
-            // need it for the code after C++ groupby
-            for (auto a : in_table->columns) {
-                incref_array(a);
-            }
             in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr,
                                             is_parallel);
             has_reverse_shuffle = cumulative_op || shift_op || transform_op ||
                                   ngroup_op || window_op;
             if (!has_reverse_shuffle) {
                 hashes.reset();
-                delete comm_info_ptr;
             } else {
                 // preserve input table hashes for reverse shuffle at the end
                 in_hashes = hashes;
@@ -331,7 +326,7 @@ class GroupbyPipeline {
         // a shuffle has not been done at the start of the groupby pipeline
         do_combine = is_parallel && !shuffle_before_update;
 
-        array_info* index_col = nullptr;
+        std::shared_ptr<array_info> index_col = nullptr;
         if (input_has_index) {
             // if gb.head() exclude head_op column as well (if data is
             // distributed).
@@ -355,7 +350,7 @@ class GroupbyPipeline {
                  j++) {  // for each function applied to this column
                 // Copy the columns because we pass the input vector by
                 // reference.
-                std::vector<array_info*> input_cols;
+                std::vector<std::shared_ptr<array_info>> input_cols;
                 std::vector<bool> window_ascending_vect;
                 std::vector<bool> window_na_position_vect;
                 for (int m = 0; m < num_used_cols; m++) {
@@ -417,7 +412,7 @@ class GroupbyPipeline {
         // Add key-sort column and index to col_sets
         // to apply head_computation on them as well.
         if (head_op && return_index) {
-            std::vector<array_info*> input_cols;
+            std::vector<std::shared_ptr<array_info>> input_cols;
             input_cols.push_back(index_col);
             // index-column
             col_sets.push_back(
@@ -455,7 +450,7 @@ class GroupbyPipeline {
      * @return ** void
      */
     void add_head_key_sort_column() {
-        array_info* head_sort_col =
+        std::shared_ptr<array_info> head_sort_col =
             alloc_array(in_table->nrows(), 1, 1, bodo_array_type::NUMPY,
                         Bodo_CTypes::UINT64, 0, 0);
         int64_t num_ranks = dist_get_size();
@@ -482,7 +477,7 @@ class GroupbyPipeline {
     /**
      * This is the main control flow of the Groupby pipeline.
      */
-    table_info* run(int64_t* n_out_rows) {
+    std::shared_ptr<table_info> run(int64_t* n_out_rows) {
         // If data is already shuffled (shuffle_before_update = True),
         // update() is a reduction on all of the data in the group.
         // Otherwise, update is performed on current chunk of data
@@ -491,7 +486,7 @@ class GroupbyPipeline {
         if (shuffle_before_update) {
             if (in_table != orig_in_table) {
                 // in_table is temporary table created in C++
-                delete_table_decref_arrays(in_table);
+                in_table.reset();
             }
         }
         if (is_parallel && !shuffle_before_update) {
@@ -514,7 +509,8 @@ class GroupbyPipeline {
      */
     void sort_gb_head_output() {
         // Move sort column to the front.
-        std::vector<array_info*>::iterator pos = cur_table->columns.end() - 1;
+        std::vector<std::shared_ptr<array_info>>::iterator pos =
+            cur_table->columns.end() - 1;
         std::rotate(cur_table->columns.begin(), pos, pos + 1);
         // whether to put NaN first or last.
         // Does not matter in this case (no NaN, values are range(nrows))
@@ -523,7 +519,6 @@ class GroupbyPipeline {
         cur_table = sort_values_table(cur_table, 1, &asc_pos, &asc_pos, &zero,
                                       nullptr, nullptr, is_parallel);
         // Remove key-sort column
-        delete_info_decref_array(cur_table->columns[0]);
         cur_table->columns.erase(cur_table->columns.begin());
     }
 
@@ -552,7 +547,7 @@ class GroupbyPipeline {
     void update() {
         tracing::Event ev("update", is_parallel);
         in_table->num_keys = num_keys;
-        std::vector<table_info*> tables;
+        std::vector<std::shared_ptr<table_info>> tables;
         // If nunique_only and nunique_tables.size() > 0 then all of the input
         // data is in nunique_tables
         if (!(nunique_only && nunique_tables.size() > 0)) {
@@ -588,7 +583,7 @@ class GroupbyPipeline {
         // a single update table. There could be multiple tables if different
         // operations shuffle at different times. For example nunique + sum
         // in test_711.py e2e tests.
-        update_table = cur_table = new table_info();
+        update_table = cur_table = std::make_shared<table_info>();
         if (cumulative_op || shift_op || transform_op || head_op || ngroup_op ||
             window_op) {
             num_keys = 0;  // there are no key columns in output of cumulative
@@ -598,7 +593,7 @@ class GroupbyPipeline {
         }
 
         for (auto col_set : col_sets) {
-            std::vector<array_info*> list_arr;
+            std::vector<std::shared_ptr<array_info>> list_arr;
             col_set->alloc_update_columns(update_col_len, list_arr);
             for (auto& e_arr : list_arr) {
                 update_table->columns.push_back(e_arr);
@@ -620,16 +615,17 @@ class GroupbyPipeline {
             int n_gen_udf = gen_udf_col_sets.size();
             if (n_udf > n_gen_udf) {
                 // regular UDFs
-                udf_info.update(in_table, update_table,
+                udf_info.update(in_table.get(), update_table.get(),
                                 grp_info.row_to_group.data());
             }
             if (n_gen_udf > 0) {
-                table_info* general_in_table = new table_info();
+                std::shared_ptr<table_info> general_in_table =
+                    std::make_shared<table_info>();
                 for (auto udf_col_set : gen_udf_col_sets)
                     udf_col_set->fill_in_columns(general_in_table, grp_info);
-                udf_info.general_udf(grp_info.num_groups, general_in_table,
-                                     update_table);
-                delete_table_decref_arrays(general_in_table);
+                udf_info.general_udf(grp_info.num_groups,
+                                     general_in_table.get(),
+                                     update_table.get());
             }
         }
     }
@@ -649,11 +645,9 @@ class GroupbyPipeline {
         }
         ev.add_attribute("passed_n_shuffle_keys", n_shuffle_keys);
         ev.add_attribute("num_shuffle_keys", num_shuffle_keys);
-        table_info* shuf_table =
+        std::shared_ptr<table_info> shuf_table =
             shuffle_table(update_table, num_shuffle_keys, is_parallel);
 
-        // NOTE: shuffle_table_kernel decrefs input arrays
-        delete_table(update_table);
         update_table = cur_table = shuf_table;
 
         // update column sets with columns from shuffled table
@@ -673,7 +667,7 @@ class GroupbyPipeline {
         tracing::Event ev("combine", is_parallel);
         update_table->num_keys = num_keys;
         grp_infos.clear();
-        std::vector<table_info*> tables = {update_table};
+        std::vector<std::shared_ptr<table_info>> tables = {update_table};
         get_group_info(tables, hashes, nunique_hashes, grp_infos, false,
                        key_dropna, is_parallel);
         grouping_info& grp_info = grp_infos[0];
@@ -682,11 +676,11 @@ class GroupbyPipeline {
         grp_info.dispatch_info = dispatch_info;
         grp_info.mode = 2;
 
-        combine_table = cur_table = new table_info();
+        combine_table = cur_table = std::make_shared<table_info>();
         alloc_init_keys({update_table}, combine_table);
-        std::vector<array_info*> list_arr;
+        std::vector<std::shared_ptr<array_info>> list_arr;
         for (auto col_set : col_sets) {
-            std::vector<array_info*> list_arr;
+            std::vector<std::shared_ptr<array_info>> list_arr;
             col_set->alloc_combine_columns(num_groups, list_arr);
             for (auto& e_arr : list_arr) {
                 combine_table->columns.push_back(e_arr);
@@ -694,10 +688,10 @@ class GroupbyPipeline {
             col_set->combine(grp_info);
         }
         if (n_udf > 0) {
-            udf_info.combine(update_table, combine_table,
+            udf_info.combine(update_table.get(), combine_table.get(),
                              grp_info.row_to_group.data());
         }
-        delete_table_decref_arrays(update_table);
+        update_table.reset();
     }
 
     /**
@@ -710,14 +704,14 @@ class GroupbyPipeline {
             col_set->eval(grp_infos[0]);
         // only regular UDFs need eval step
         if (n_udf - gen_udf_col_sets.size() > 0) {
-            udf_info.eval(cur_table);
+            udf_info.eval(cur_table.get());
         }
     }
 
     /**
      * Returns the final output table which is the result of the groupby.
      */
-    table_info* getOutputTable(int64_t* n_out_rows) {
+    std::shared_ptr<table_info> getOutputTable(int64_t* n_out_rows) {
         if (maintain_input_size) {
             // These operations are all defined to maintain the same
             // length as the input.
@@ -725,7 +719,7 @@ class GroupbyPipeline {
         } else {
             *n_out_rows = cur_table->nrows();
         }
-        table_info* out_table = new table_info();
+        std::shared_ptr<table_info> out_table = std::make_shared<table_info>();
         if (return_key) {
             out_table->columns.assign(cur_table->columns.begin(),
                                       cur_table->columns.begin() + num_keys);
@@ -750,14 +744,12 @@ class GroupbyPipeline {
         if ((cumulative_op || shift_op || transform_op || ngroup_op ||
              window_op) &&
             is_parallel) {
-            table_info* revshuf_table = reverse_shuffle_table_kernel(
-                out_table, in_hashes, *comm_info_ptr);
+            std::shared_ptr<table_info> revshuf_table =
+                reverse_shuffle_table_kernel(out_table, in_hashes,
+                                             *comm_info_ptr);
             in_hashes.reset();
-            delete comm_info_ptr;
-            delete_table(out_table);
             out_table = revshuf_table;
         }
-        delete cur_table;
         return out_table;
     }
 
@@ -837,7 +829,7 @@ class GroupbyPipeline {
                 continue;
             }
 
-            table_info* tmp = new table_info();
+            std::shared_ptr<table_info> tmp = std::make_shared<table_info>();
             tmp->columns.assign(in_table->columns.begin(),
                                 in_table->columns.begin() + num_keys);
             tmp->num_keys = num_keys;
@@ -894,13 +886,7 @@ class GroupbyPipeline {
                 "g_nunique_" + std::to_string(i) + "_drop_duplicates",
                 drop_duplicates);
 
-            // Regardless of whether we drop duplicates or not, the references
-            // to the original input arrays are going to be decremented (by
-            // either drop_duplicates_table_inner or shuffle_table), but we
-            // still need the references for the code after C++ groupby
-            for (auto a : tmp->columns)
-                incref_array(a);
-            table_info* tmp2 = nullptr;
+            std::shared_ptr<table_info> tmp2 = nullptr;
             if (drop_duplicates) {
                 // Set dropna to false because skipna is handled at
                 // a later step. Setting dropna=True here removes NA
@@ -908,7 +894,6 @@ class GroupbyPipeline {
                 tmp2 = drop_duplicates_table_inner(
                     tmp, tmp->ncols(), 0, 1, is_parallel, false,
                     /*drop_duplicates_dict=*/true, shared_key_value_hashes);
-                delete tmp;
                 tmp = tmp2;
             }
 
@@ -932,7 +917,7 @@ class GroupbyPipeline {
                 }
             }
             shared_key_value_hashes.reset();
-            delete tmp;
+            tmp.reset();
             tmp2->num_keys = num_keys;
             tmp2->id = table_id_counter++;
             nunique_tables[col_idx] = tmp2;
@@ -959,16 +944,18 @@ class GroupbyPipeline {
      * @param group[in]: group number
      * @param from_tables[in] list of tables
      * @param key_col_idx[in]
-     * @return std::tuple<array_info*, int64_t> Tuple of the column and the row
-     * containing the group.
+     * @return std::tuple<std::shared_ptr<array_info>, int64_t> Tuple of the
+     * column and the row containing the group.
      */
-    std::tuple<array_info*, int64_t> find_key_for_group(
-        int64_t group, const std::vector<table_info*>& from_tables,
+    std::tuple<std::shared_ptr<array_info>, int64_t> find_key_for_group(
+        int64_t group,
+        const std::vector<std::shared_ptr<table_info>>& from_tables,
         int64_t key_col_idx) {
         for (size_t k = 0; k < grp_infos.size(); k++) {
             int64_t key_row = grp_infos[k].group_to_first_row[group];
             if (key_row >= 0) {
-                array_info* key_col = (*from_tables[k])[key_col_idx];
+                std::shared_ptr<array_info> key_col =
+                    (*from_tables[k])[key_col_idx];
                 return {key_col, key_row};
             }
         }
@@ -980,12 +967,12 @@ class GroupbyPipeline {
      * Allocate and fill key columns, based on grouping info. It uses the
      * values of key columns from from_table to populate out_table.
      */
-    void alloc_init_keys(std::vector<table_info*> from_tables,
-                         table_info* out_table) {
+    void alloc_init_keys(std::vector<std::shared_ptr<table_info>> from_tables,
+                         std::shared_ptr<table_info> out_table) {
         int64_t key_row = 0;
         for (int64_t i = 0; i < num_keys; i++) {
-            array_info* key_col = (*from_tables[0])[i];
-            array_info* new_key_col = nullptr;
+            std::shared_ptr<array_info> key_col = (*from_tables[0])[i];
+            std::shared_ptr<array_info> new_key_col = nullptr;
             if (key_col->arr_type == bodo_array_type::NUMPY ||
                 key_col->arr_type == bodo_array_type::CATEGORICAL ||
                 key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -1021,8 +1008,9 @@ class GroupbyPipeline {
                 }
             }
             if (key_col->arr_type == bodo_array_type::DICT) {
-                array_info* key_indices = key_col->child_arrays[1];
-                array_info* new_key_indices =
+                std::shared_ptr<array_info> key_indices =
+                    key_col->child_arrays[1];
+                std::shared_ptr<array_info> new_key_indices =
                     alloc_array(num_groups, -1, -1, key_indices->arr_type,
                                 key_indices->dtype, 0, 0);
                 for (size_t j = 0; j < num_groups; j++) {
@@ -1040,8 +1028,6 @@ class GroupbyPipeline {
                     key_col->has_global_dictionary,
                     key_col->has_deduped_local_dictionary,
                     key_col->has_sorted_dictionary);
-                // incref because they share the same dictionary array
-                incref_array(key_col->child_arrays[0]);
             }
             if (key_col->arr_type == bodo_array_type::STRING) {
                 // new key col will have num_groups rows containing the
@@ -1145,20 +1131,22 @@ class GroupbyPipeline {
         }
     }
 
-    table_info*
+    std::shared_ptr<table_info>
         orig_in_table;  // original input table of groupby received from Python
-    table_info* in_table;  // input table of groupby
+    std::shared_ptr<table_info> in_table;  // input table of groupby
     int64_t num_keys;
-    int8_t* ncols_per_func;      // number of input columns per function
-    table_info* dispatch_table;  // input dispatching table of pivot_table
-    table_info* dispatch_info;   // input dispatching info of pivot_table
+    int8_t* ncols_per_func;  // number of input columns per function
+    std::shared_ptr<table_info>
+        dispatch_table;  // input dispatching table of pivot_table
+    std::shared_ptr<table_info>
+        dispatch_info;  // input dispatching info of pivot_table
     bool is_parallel;
     bool return_key;
     bool return_index;
     bool key_dropna;
     std::vector<std::shared_ptr<BasicColSet>> col_sets;
     std::vector<std::shared_ptr<GeneralUdfColSet>> gen_udf_col_sets;
-    table_info* udf_table;
+    std::shared_ptr<table_info> udf_table;
     int* udf_n_redvars;
     // total number of UDFs applied to input columns (includes regular and
     // general UDFs)
@@ -1185,35 +1173,40 @@ class GroupbyPipeline {
 
     // column position in in_table -> table that contains key columns + one
     // nunique column after [dropping local duplicates] + shuffling
-    std::map<int, table_info*> nunique_tables;
+    std::map<int, std::shared_ptr<table_info>> nunique_tables;
     bool nunique_only = false;  // there are only groupby nunique operations
 
     udfinfo_t udf_info;
 
-    table_info* update_table = nullptr;
-    table_info* combine_table = nullptr;
-    table_info* cur_table = nullptr;
+    std::shared_ptr<table_info> update_table = nullptr;
+    std::shared_ptr<table_info> combine_table = nullptr;
+    std::shared_ptr<table_info> cur_table = nullptr;
 
     std::vector<grouping_info> grp_infos;
     size_t num_groups;
     // shuffling stuff
     std::shared_ptr<uint32_t[]> in_hashes =
         std::shared_ptr<uint32_t[]>(nullptr);
-    mpi_comm_info* comm_info_ptr = nullptr;
+    std::shared_ptr<mpi_comm_info> comm_info_ptr = nullptr;
     std::shared_ptr<uint32_t[]> hashes = std::shared_ptr<uint32_t[]>(nullptr);
     size_t nunique_hashes = 0;
 };
 
 table_info* groupby_and_aggregate(
-    table_info* in_table, int64_t num_keys, int8_t* ncols_per_func,
+    table_info* input_table, int64_t num_keys, int8_t* ncols_per_func,
     int64_t num_funcs, bool input_has_index, int* ftypes, int* func_offsets,
     int* udf_nredvars, bool is_parallel, bool skipdropna, int64_t periods,
     int64_t transform_func, int64_t head_n, bool return_key, bool return_index,
     bool key_dropna, void* update_cb, void* combine_cb, void* eval_cb,
-    void* general_udfs_cb, table_info* udf_dummy_table, int64_t* n_out_rows,
+    void* general_udfs_cb, table_info* in_udf_dummy_table, int64_t* n_out_rows,
     bool* window_ascending, bool* window_na_position, bool maintain_input_size,
     int64_t n_shuffle_keys, bool use_sql_rules) {
     try {
+        std::shared_ptr<table_info> in_table =
+            std::shared_ptr<table_info>(input_table);
+        std::shared_ptr<table_info> udf_dummy_table =
+            std::shared_ptr<table_info>(in_udf_dummy_table);
+
         tracing::Event ev("groupby_and_aggregate", is_parallel);
         int strategy =
             determine_groupby_strategy(in_table, num_keys, ncols_per_func,
@@ -1221,8 +1214,8 @@ table_info* groupby_and_aggregate(
         ev.add_attribute("g_strategy", strategy);
 
         auto implement_strategy0 = [&]() -> table_info* {
-            table_info* dispatch_info = nullptr;
-            table_info* dispatch_table = nullptr;
+            std::shared_ptr<table_info> dispatch_info = nullptr;
+            std::shared_ptr<table_info> dispatch_table = nullptr;
             GroupbyPipeline groupby(
                 in_table, num_keys, ncols_per_func, num_funcs, dispatch_table,
                 dispatch_info, input_has_index, is_parallel, ftypes,
@@ -1233,37 +1226,34 @@ table_info* groupby_and_aggregate(
                 return_index, key_dropna, window_ascending, window_na_position,
                 maintain_input_size, n_shuffle_keys, use_sql_rules);
 
-            table_info* ret_table = groupby.run(n_out_rows);
-            return ret_table;
+            std::shared_ptr<table_info> ret_table = groupby.run(n_out_rows);
+            return new table_info(*ret_table);
         };
         auto implement_categorical_exscan =
-            [&](array_info* cat_column) -> table_info* {
-            table_info* ret_table =
+            [&](std::shared_ptr<array_info> cat_column) -> table_info* {
+            std::shared_ptr<table_info> ret_table =
                 mpi_exscan_computation(cat_column, in_table, num_keys, ftypes,
                                        func_offsets, is_parallel, skipdropna,
                                        return_key, return_index, use_sql_rules);
             *n_out_rows = in_table->nrows();
-            return ret_table;
+            return new table_info(*ret_table);
         };
         if (strategy == 0) {
             return implement_strategy0();
         }
         if (strategy == 1) {
-            array_info* cat_column = in_table->columns[0];
+            std::shared_ptr<array_info> cat_column = in_table->columns[0];
             return implement_categorical_exscan(cat_column);
         }
         if (strategy == 2) {
-            array_info* cat_column = compute_categorical_index(
+            std::shared_ptr<array_info> cat_column = compute_categorical_index(
                 in_table, num_keys, is_parallel, key_dropna);
             if (cat_column ==
                 nullptr) {  // It turns out that there are too many
                             // different keys for exscan to be ok.
                 return implement_strategy0();
             } else {
-                table_info* ret_table =
-                    implement_categorical_exscan(cat_column);
-                delete_info_decref_array(cat_column);
-                return ret_table;
+                return implement_categorical_exscan(cat_column);
             }
         }
         return nullptr;

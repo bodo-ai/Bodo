@@ -47,7 +47,8 @@ int get_combine_func(int update_ftype) { return combine_funcs[update_ftype]; }
  * @param[in] skipna: Whether to skip NA values.
  */
 template <typename T, int dtype>
-void cumulative_computation_T(array_info* arr, array_info* out_arr,
+void cumulative_computation_T(std::shared_ptr<array_info> arr,
+                              std::shared_ptr<array_info> out_arr,
                               grouping_info const& grp_info,
                               int32_t const& ftype, bool const& skipna) {
     size_t num_group = grp_info.group_to_first_row.size();
@@ -161,7 +162,8 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
  * @param[in] ftype: for list of strings only cumsum is supported
  * @param[in] skipna: Whether to skip NA values.
  */
-void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
+void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
+                                        std::shared_ptr<array_info> out_arr,
                                         grouping_info const& grp_info,
                                         int32_t const& ftype,
                                         bool const& skipna) {
@@ -228,9 +230,9 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
         SetBitTo(Vmask.data(), i, !null_bit_val_vec[i].first);
         ListListPair[i] = null_bit_val_vec[i].second;
     }
-    array_info* new_out_col = create_list_string_array(Vmask, ListListPair);
+    std::shared_ptr<array_info> new_out_col =
+        create_list_string_array(Vmask, ListListPair);
     *out_arr = std::move(*new_out_col);
-    delete new_out_col;
 }
 
 /**
@@ -246,7 +248,8 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
  * @param[in] ftype: for string only cumsum is supported
  * @param[in] skipna: Whether to skip NA values.
  */
-void cumulative_computation_string(array_info* arr, array_info* out_arr,
+void cumulative_computation_string(std::shared_ptr<array_info> arr,
+                                   std::shared_ptr<array_info> out_arr,
                                    grouping_info const& grp_info,
                                    int32_t const& ftype, bool const& skipna) {
     if (ftype != Bodo_FTypes::cumsum) {
@@ -302,9 +305,9 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
         SetBitTo(Vmask.data(), i, !null_bit_val_vec[i].first);
         ListString[i] = null_bit_val_vec[i].second;
     }
-    array_info* new_out_col = create_string_array(Vmask, ListString);
+    std::shared_ptr<array_info> new_out_col =
+        create_string_array(Vmask, ListString);
     *out_arr = std::move(*new_out_col);
-    delete new_out_col;
 }
 
 /**
@@ -324,11 +327,9 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
  * @param[in] ftype: for dictionary encoded strings, only cumsum is supported
  * @param[in] skipna: Whether to skip NA values.
  */
-void cumulative_computation_dict_encoded_string(array_info* arr,
-                                                array_info* out_arr,
-                                                grouping_info const& grp_info,
-                                                int32_t const& ftype,
-                                                bool const& skipna) {
+void cumulative_computation_dict_encoded_string(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    grouping_info const& grp_info, int32_t const& ftype, bool const& skipna) {
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(
             PyExc_RuntimeError,
@@ -388,12 +389,13 @@ void cumulative_computation_dict_encoded_string(array_info* arr,
         SetBitTo(Vmask.data(), i, !null_bit_val_vec[i].first);
         ListString[i] = null_bit_val_vec[i].second;
     }
-    array_info* new_out_col = create_string_array(Vmask, ListString);
+    std::shared_ptr<array_info> new_out_col =
+        create_string_array(Vmask, ListString);
     *out_arr = std::move(*new_out_col);
-    delete new_out_col;
 }
 
-void cumulative_computation(array_info* arr, array_info* out_arr,
+void cumulative_computation(std::shared_ptr<array_info> arr,
+                            std::shared_ptr<array_info> out_arr,
                             grouping_info const& grp_info, int32_t const& ftype,
                             bool const& skipna) {
     Bodo_CTypes::CTypeEnum dtype = arr->dtype;
@@ -461,16 +463,18 @@ void cumulative_computation(array_info* arr, array_info* out_arr,
 
 // HEAD
 
-void head_computation(array_info* arr, array_info* out_arr,
+void head_computation(std::shared_ptr<array_info> arr,
+                      std::shared_ptr<array_info> out_arr,
                       const std::vector<int64_t>& row_list) {
-    array_info* updated_col = RetrieveArray_SingleColumn(arr, row_list);
+    std::shared_ptr<array_info> updated_col =
+        RetrieveArray_SingleColumn(arr, row_list);
     *out_arr = std::move(*updated_col);
-    delete updated_col;
 }
 
 // NGROUP
 
-void ngroup_computation(array_info* arr, array_info* out_arr,
+void ngroup_computation(std::shared_ptr<array_info> arr,
+                        std::shared_ptr<array_info> out_arr,
                         grouping_info const& grp_info, bool is_parallel) {
     //
     size_t num_group = grp_info.group_to_first_row.size();
@@ -491,7 +495,8 @@ void ngroup_computation(array_info* arr, array_info* out_arr,
 
 // MEDIAN
 
-void median_computation(array_info* arr, array_info* out_arr,
+void median_computation(std::shared_ptr<array_info> arr,
+                        std::shared_ptr<array_info> out_arr,
                         grouping_info const& grp_info, bool const& skipna,
                         bool const use_sql_rules) {
     size_t num_group = grp_info.group_to_first_row.size();
@@ -578,7 +583,8 @@ void median_computation(array_info* arr, array_info* out_arr,
 
 // SHIFT
 
-void shift_computation(array_info* arr, array_info* out_arr,
+void shift_computation(std::shared_ptr<array_info> arr,
+                       std::shared_ptr<array_info> out_arr,
                        grouping_info const& grp_info, int64_t const& periods) {
     size_t num_rows = grp_info.row_to_group.size();
     size_t num_groups = grp_info.num_groups;
@@ -635,15 +641,18 @@ void shift_computation(array_info* arr, array_info* out_arr,
         }  // end-row_loop
     }
     // 2. Retrieve column and put it in update_cols
-    array_info* updated_col = RetrieveArray_SingleColumn(arr, row_list);
+    std::shared_ptr<array_info> updated_col =
+        RetrieveArray_SingleColumn(arr, row_list);
     *out_arr = std::move(*updated_col);
-    delete updated_col;
 }
 
 // Variance
-void var_combine(array_info* count_col_in, array_info* mean_col_in,
-                 array_info* m2_col_in, array_info* count_col_out,
-                 array_info* mean_col_out, array_info* m2_col_out,
+void var_combine(std::shared_ptr<array_info> count_col_in,
+                 std::shared_ptr<array_info> mean_col_in,
+                 std::shared_ptr<array_info> m2_col_in,
+                 std::shared_ptr<array_info> count_col_out,
+                 std::shared_ptr<array_info> mean_col_out,
+                 std::shared_ptr<array_info> m2_col_out,
                  grouping_info const& grp_info) {
     for (size_t i = 0; i < count_col_in->length; i++) {
         // Var always has null compute columns even
@@ -681,7 +690,8 @@ void var_combine(array_info* count_col_in, array_info* mean_col_in,
 }
 
 // NUNIQUE
-void nunique_computation(array_info* arr, array_info* out_arr,
+void nunique_computation(std::shared_ptr<array_info> arr,
+                         std::shared_ptr<array_info> out_arr,
                          grouping_info const& grp_info, bool const& dropna,
                          bool const& is_parallel) {
     tracing::Event ev("nunique_computation", is_parallel);
@@ -880,8 +890,9 @@ void nunique_computation(array_info* arr, array_info* out_arr,
 
 // WINDOW
 
-void window_computation(std::vector<array_info*>& orderby_arrs,
-                        int64_t window_func, array_info* out_arr,
+void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
+                        int64_t window_func,
+                        std::shared_ptr<array_info> out_arr,
                         grouping_info const& grp_info,
                         std::vector<bool>& asc_vect,
                         std::vector<bool>& na_pos_vect, bool is_parallel,
@@ -891,23 +902,24 @@ void window_computation(std::vector<array_info*>& orderby_arrs,
             const std::vector<int64_t>& row_to_group = grp_info.row_to_group;
             int64_t num_rows = row_to_group.size();
             // Wrap the row_to_group in an array info so we can use it to sort.
-            array_info* group_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
+            std::shared_ptr<array_info> group_arr =
+                alloc_numpy(num_rows, Bodo_CTypes::INT64);
             // TODO: Reuse the row_to_group buffer
             for (int64_t i = 0; i < num_rows; i++) {
                 getv<int64_t>(group_arr, i) = row_to_group[i];
             }
             // Create a new table. We want to sort the table first by
             // the groups and second by the orderby_arr.
-            table_info* sort_table = new table_info();
+            std::shared_ptr<table_info> sort_table =
+                std::make_shared<table_info>();
             sort_table->columns.push_back(group_arr);
-            for (array_info* orderby_arr : orderby_arrs) {
-                // sort_values_table_local steals a reference
-                incref_array(orderby_arr);
+            for (std::shared_ptr<array_info> orderby_arr : orderby_arrs) {
                 sort_table->columns.push_back(orderby_arr);
             }
             // Append an index column so we can find the original
             // index in the out array.
-            array_info* idx_arr = alloc_numpy(num_rows, Bodo_CTypes::INT64);
+            std::shared_ptr<array_info> idx_arr =
+                alloc_numpy(num_rows, Bodo_CTypes::INT64);
             for (int64_t i = 0; i < num_rows; i++) {
                 getv<int64_t>(idx_arr, i) = i;
             }
@@ -929,14 +941,13 @@ void window_computation(std::vector<array_info*>& orderby_arrs,
             // the overhead of sorting the data and in the future
             // we may be want to explore if we can use hashing
             // instead to avoid sort overhead.
-            table_info* iter_table = sort_values_table_local(
+            std::shared_ptr<table_info> iter_table = sort_values_table_local(
                 sort_table, n_keys, vect_ascending, na_position, nullptr,
                 is_parallel /* This is just used for tracing */);
-            array_info* sorted_groups = iter_table->columns[0];
-            array_info* sorted_idx = iter_table->columns[n_keys];
-            // sort_values_table_local steals a reference so
-            // we don't need to decref
-            delete sort_table;
+            std::shared_ptr<array_info> sorted_groups = iter_table->columns[0];
+            std::shared_ptr<array_info> sorted_idx =
+                iter_table->columns[n_keys];
+            sort_table.reset();
 
             int64_t prev_group = -1;
             int64_t row_num = 1;
@@ -953,8 +964,6 @@ void window_computation(std::vector<array_info*>& orderby_arrs,
                 // Set the prev group
                 prev_group = curr_group;
             }
-            // Delete the sorted table.
-            delete_table_decref_arrays(iter_table);
             break;
         }
         case Bodo_FTypes::min_row_number_filter: {
@@ -964,10 +973,10 @@ void window_computation(std::vector<array_info*>& orderby_arrs,
             // initialized all other locations to false.
             size_t num_groups = grp_info.num_groups;
             int64_t ftype;
-            array_info* idx_col;
+            std::shared_ptr<array_info> idx_col;
             if (orderby_arrs.size() == 1) {
                 // We generate an optimized and templated path for 1 column.
-                array_info* orderby_arr = orderby_arrs[0];
+                std::shared_ptr<array_info> orderby_arr = orderby_arrs[0];
                 bool asc = asc_vect[0];
                 bool na_pos = na_pos_vect[0];
                 bodo_array_type::arr_type_enum idx_arr_type;
@@ -1003,14 +1012,14 @@ void window_computation(std::vector<array_info*>& orderby_arrs,
                 idx_col = alloc_array(num_groups, 1, 1, idx_arr_type,
                                       Bodo_CTypes::UINT64, 0, 0);
                 // create array to store min/max value
-                array_info* data_col =
+                std::shared_ptr<array_info> data_col =
                     alloc_array(num_groups, 1, 1, orderby_arr->arr_type,
                                 orderby_arr->dtype, 0, 0);
                 // Initialize the index column. This is 0 initialized and will
                 // not initial the null values.
                 aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
                                           use_sql_rules);
-                std::vector<array_info*> aux_cols = {idx_col};
+                std::vector<std::shared_ptr<array_info>> aux_cols = {idx_col};
                 // Initialize the max column
                 if (ftype == Bodo_FTypes::idxmax ||
                     ftype == Bodo_FTypes::idxmax_na_first) {
@@ -1023,8 +1032,6 @@ void window_computation(std::vector<array_info*>& orderby_arrs,
                 // Compute the idxmin/idxmax
                 do_apply_to_column(orderby_arr, data_col, aux_cols, grp_info,
                                    ftype);
-                // Delete the max/min result
-                delete_info_decref_array(data_col);
             } else {
                 ftype = Bodo_FTypes::idx_n_columns;
                 // We don't need null for indices
@@ -1043,8 +1050,6 @@ void window_computation(std::vector<array_info*>& orderby_arrs,
                 int64_t idx = getv<int64_t>(idx_col, i);
                 SetBitTo((uint8_t*)out_arr->data1(), idx, true);
             }
-            // Delete the idx_col
-            delete_info_decref_array(idx_col);
             break;
         }
         default:

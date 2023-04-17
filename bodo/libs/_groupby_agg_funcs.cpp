@@ -8,9 +8,9 @@
  * variable type and therefore cannot be templated.
  */
 
-bool idx_compare_column(array_info* out_arr, int64_t grp_num,
-                        array_info* in_arr, int64_t in_idx, bool asc,
-                        bool na_pos) {
+bool idx_compare_column(std::shared_ptr<array_info> out_arr, int64_t grp_num,
+                        std::shared_ptr<array_info> in_arr, int64_t in_idx,
+                        bool asc, bool na_pos) {
     if (in_arr->arr_type != bodo_array_type::STRING &&
         in_arr->arr_type != bodo_array_type::DICT &&
         in_arr->arr_type != bodo_array_type::NULLABLE_INT_BOOL &&

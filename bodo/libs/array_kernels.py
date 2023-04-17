@@ -39,9 +39,7 @@ from bodo.libs.array import (
     arr_info_list_to_table,
     array_from_cpp_table,
     array_to_info,
-    delete_info_decref_array,
     delete_table,
-    delete_table_decref_arrays,
     drop_duplicates_local_dictionary,
     drop_duplicates_table,
     sample_table,
@@ -537,11 +535,14 @@ def first_last_valid_index(arr, index_arr, is_first=True, parallel=False):
 ################################ median ####################################
 
 
-ll.add_symbol("median_series_computation", quantile_alg.median_series_computation)
+ll.add_symbol(
+    "median_series_computation_py_entry",
+    quantile_alg.median_series_computation_py_entry,
+)
 
 
 _median_series_computation = types.ExternalFunction(
-    "median_series_computation",
+    "median_series_computation_py_entry",
     types.void(
         types.voidptr, bodo.libs.array.array_info_type, types.bool_, types.bool_
     ),
@@ -553,16 +554,18 @@ def median_series_computation(res, arr, is_parallel, skipna):  # pragma: no cove
     arr_info = array_to_info(arr)
     _median_series_computation(res, arr_info, is_parallel, skipna)
     check_and_propagate_cpp_exception()
-    delete_info_decref_array(arr_info)
 
 
 ################################ autocorr ####################################
 
-ll.add_symbol("autocorr_series_computation", quantile_alg.autocorr_series_computation)
+ll.add_symbol(
+    "autocorr_series_computation_py_entry",
+    quantile_alg.autocorr_series_computation_py_entry,
+)
 
 
 _autocorr_series_computation = types.ExternalFunction(
-    "autocorr_series_computation",
+    "autocorr_series_computation_py_entry",
     types.void(
         types.voidptr, bodo.libs.array.array_info_type, types.int64, types.bool_
     ),
@@ -574,7 +577,6 @@ def autocorr_series_computation(res, arr, lag, is_parallel):  # pragma: no cover
     arr_info = array_to_info(arr)
     _autocorr_series_computation(res, arr_info, lag, is_parallel)
     check_and_propagate_cpp_exception()
-    delete_info_decref_array(arr_info)
 
 
 @numba.njit
@@ -587,11 +589,14 @@ def autocorr(arr, lag=1, parallel=False):  # pragma: no cover
 
 ####################### series monotonicity ####################################
 
-ll.add_symbol("compute_series_monotonicity", quantile_alg.compute_series_monotonicity)
+ll.add_symbol(
+    "compute_series_monotonicity_py_entry",
+    quantile_alg.compute_series_monotonicity_py_entry,
+)
 
 
 _compute_series_monotonicity = types.ExternalFunction(
-    "compute_series_monotonicity",
+    "compute_series_monotonicity_py_entry",
     types.void(
         types.voidptr, bodo.libs.array.array_info_type, types.int64, types.bool_
     ),
@@ -603,7 +608,6 @@ def series_monotonicity_call(res, arr, inc_dec, is_parallel):  # pragma: no cove
     arr_info = array_to_info(arr)
     _compute_series_monotonicity(res, arr_info, inc_dec, is_parallel)
     check_and_propagate_cpp_exception()
-    delete_info_decref_array(arr_info)
 
 
 @numba.njit
@@ -1153,14 +1157,14 @@ def duplicated(data, parallel=False):
     func_text += "  if parallel:\n"
     array_info_str = ", ".join(f"array_to_info(data[{i}])" for i in range(n))
     func_text += f"    cpp_table = arr_info_list_to_table([{array_info_str}])\n"
+    # NOTE: C++ will delete cpp_table pointer
     func_text += f"    out_cpp_table = bodo.libs.array.shuffle_table(cpp_table, {n}, parallel, 1)\n"
     info_to_arr_str = ", ".join(
         f"array_from_cpp_table(out_cpp_table, {i}, data[{i}])" for i in range(n)
     )
     func_text += f"    data = ({info_to_arr_str},)\n"
     func_text += "    shuffle_info = bodo.libs.array.get_shuffle_info(out_cpp_table)\n"
-    func_text += "    bodo.libs.array.delete_table_decref_arrays(out_cpp_table)\n"
-    func_text += "    bodo.libs.array.delete_table(cpp_table)\n"
+    func_text += "    bodo.libs.array.delete_table(out_cpp_table)\n"
     func_text += "  n = len(data[0])\n"
     func_text += "  out = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
     func_text += "  uniqs = dict()\n"
@@ -1194,6 +1198,7 @@ def duplicated(data, parallel=False):
     func_text += (
         "    out = bodo.hiframes.pd_groupby_ext.reverse_shuffle(out, shuffle_info)\n"
     )
+    func_text += f"  delete_shuffle_info(shuffle_info)\n"
     func_text += "  return out\n"
     loc_vars = {}
     exec(
@@ -1204,6 +1209,7 @@ def duplicated(data, parallel=False):
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_from_cpp_table": array_from_cpp_table,
+            "delete_shuffle_info": bodo.libs.array.delete_shuffle_info,
         },
         loc_vars,
     )
@@ -1236,6 +1242,7 @@ def overload_sample_table_operation(
         ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+    # NOTE: C++ will delete table_total pointer
     func_text += "  out_table = sample_table(table_total, n, frac, replace, random_state, parallel)\n".format(
         count
     )
@@ -1248,8 +1255,7 @@ def overload_sample_table_operation(
     func_text += (
         "  out_arr_index = array_from_cpp_table(out_table, {}, ind_arr)\n".format(count)
     )
-    func_text += "  delete_table_decref_arrays(out_table)\n"
-    func_text += "  delete_table(table_total)\n"
+    func_text += "  delete_table(out_table)\n"
     func_text += "  return ({},), out_arr_index\n".format(
         ", ".join("out_arr_{}".format(i) for i in range(count))
     )
@@ -1264,7 +1270,6 @@ def overload_sample_table_operation(
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_from_cpp_table": array_from_cpp_table,
             "delete_table": delete_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
         },
         loc_vars,
     )
@@ -1296,6 +1301,7 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
         ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+    # NOTE: C++ will delete table pointer
     func_text += "  out_table = drop_duplicates_table(table_total, parallel, ncols, keep_i, False, True)\n"
     for i_col in range(count):
         func_text += (
@@ -1306,8 +1312,7 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
     func_text += (
         "  out_arr_index = array_from_cpp_table(out_table, {}, ind_arr)\n".format(count)
     )
-    func_text += "  delete_table_decref_arrays(out_table)\n"
-    func_text += "  delete_table(table_total)\n"
+    func_text += "  delete_table(out_table)\n"
     func_text += "  return ({},), out_arr_index\n".format(
         ", ".join("out_arr_{}".format(i) for i in range(count))
     )
@@ -1322,7 +1327,6 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_from_cpp_table": array_from_cpp_table,
             "delete_table": delete_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
         },
         loc_vars,
     )
@@ -1344,10 +1348,10 @@ def overload_drop_duplicates_array(data_arr, parallel=False):
         info_list_total = [array_to_info(data_arr)]
         table_total = arr_info_list_to_table(info_list_total)
         keep_i = 0
+        # NOTE: C++ will delete table pointer
         out_table = drop_duplicates_table(table_total, parallel, 1, keep_i, False, True)
         out_arr = array_from_cpp_table(out_table, 0, data_arr)
-        delete_table_decref_arrays(out_table)
-        delete_table(table_total)
+        delete_table(out_table)
         return out_arr
 
     return impl
@@ -2223,12 +2227,12 @@ def unique_overload(A, dropna=False, parallel=False):
         input_table = arr_info_list_to_table([array_to_info(A)])
         n_key = 1
         keep_i = 0
+        # NOTE: C++ will delete table pointer
         out_table = drop_duplicates_table(
             input_table, parallel, n_key, keep_i, dropna, True
         )
         out_arr = array_from_cpp_table(out_table, 0, A)
-        delete_table(input_table)
-        delete_table_decref_arrays(out_table)
+        delete_table(out_table)
         return out_arr
 
     return unique_impl

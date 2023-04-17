@@ -47,10 +47,8 @@ from bodo.libs.array import (
     array_from_cpp_table,
     array_to_info,
     cpp_table_to_py_data,
-    decref_table_array,
-    delete_info_decref_array,
+    delete_info,
     delete_table,
-    delete_table_decref_arrays,
     groupby_and_aggregate,
     py_data_to_cpp_table,
 )
@@ -1244,12 +1242,10 @@ def agg_distributed_run(
             "coerce_to_array": bodo.utils.conversion.coerce_to_array,
             "groupby_and_aggregate": groupby_and_aggregate,
             "array_from_cpp_table": array_from_cpp_table,
-            "delete_info_decref_array": delete_info_decref_array,
-            "delete_table": delete_table,
+            "delete_info": delete_info,
             "add_agg_cfunc_sym": add_agg_cfunc_sym,
             "get_agg_udf_addr": get_agg_udf_addr,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
-            "decref_table_array": decref_table_array,
+            "delete_table": delete_table,
             "decode_if_dict_array": decode_if_dict_array,
             "set_table_data": bodo.hiframes.table.set_table_data,
             "get_table_data": bodo.hiframes.table.get_table_data,
@@ -2103,10 +2099,7 @@ def gen_top_level_agg_func(
     func_text += (
         f"    ev_clean = bodo.utils.tracing.Event('tables_clean_up', {parallel})\n"
     )
-    func_text += "    delete_table_decref_arrays(table)\n"
-    func_text += "    delete_table_decref_arrays(udf_table_dummy)\n"
-
-    func_text += "    delete_table_decref_arrays(out_table)\n"
+    func_text += "    delete_table(out_table)\n"
     func_text += "    ev_clean.finalize()\n"
 
     func_text += "    return out_data\n"

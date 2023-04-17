@@ -8,13 +8,13 @@
 #include "_bodo_to_arrow.h"
 #include "_distributed.h"
 
-mpi_comm_info::mpi_comm_info(std::vector<array_info*>& _arrays)
+mpi_comm_info::mpi_comm_info(std::vector<std::shared_ptr<array_info>>& _arrays)
     : arrays(_arrays) {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     n_rows = arrays[0]->length;
     has_nulls = false;
-    for (array_info* arr_info : arrays) {
+    for (std::shared_ptr<array_info> arr_info : arrays) {
         if (arr_info->arr_type == bodo_array_type::STRING ||
             arr_info->arr_type == bodo_array_type::DICT ||
             arr_info->arr_type == bodo_array_type::LIST_STRING ||
@@ -30,7 +30,7 @@ mpi_comm_info::mpi_comm_info(std::vector<array_info*>& _arrays)
     send_disp = std::vector<int64_t>(n_pes);
     recv_disp = std::vector<int64_t>(n_pes);
     // init counts for string arrays
-    for (array_info* arr_info : arrays) {
+    for (std::shared_ptr<array_info> arr_info : arrays) {
         // Note that for dictionary arrays the dictionary is handled separately
         // and so we only shuffle the indices, which is a nullable int array
         if (arr_info->arr_type == bodo_array_type::STRING ||
@@ -227,7 +227,7 @@ void mpi_comm_info::set_counts(
 
     // counts for string arrays
     for (size_t i = 0; i < arrays.size(); i++) {
-        array_info* arr_info = arrays[i];
+        std::shared_ptr<array_info> arr_info = arrays[i];
         if (arr_info->arr_type == bodo_array_type::STRING) {
             // send counts
             std::vector<int64_t>& sub_counts = send_count_sub[i];
@@ -463,7 +463,8 @@ static void fill_send_array_null_inner(
  * @param is_parallel: Used to indicate whether tracing should be parallel
  * or not
  */
-static void fill_send_array(array_info* send_arr, array_info* in_arr,
+static void fill_send_array(std::shared_ptr<array_info> send_arr,
+                            std::shared_ptr<array_info> in_arr,
                             std::vector<int64_t> const& send_disp,
                             std::vector<int64_t> const& send_disp_sub,
                             std::vector<int64_t> const& send_disp_sub_sub,
@@ -632,11 +633,11 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
  * ranks?
  * @param sort_dictionary Should we sort the dictionary?
  */
-void update_local_dictionary_remove_duplicates(array_info* dict_array,
-                                               bool gather_global_dict,
-                                               bool sort_dictionary) {
-    array_info* local_dictionary = dict_array->child_arrays[0];
-    array_info* global_dictionary;
+void update_local_dictionary_remove_duplicates(
+    std::shared_ptr<array_info> dict_array, bool gather_global_dict,
+    bool sort_dictionary) {
+    std::shared_ptr<array_info> local_dictionary = dict_array->child_arrays[0];
+    std::shared_ptr<array_info> global_dictionary;
     // If we don't have the global dictionary with unique values
     // then we need to drop duplicates on the local data and then
     // gather. If we already the global dictionary but there are duplicates
@@ -645,44 +646,38 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
 
     // table containing a single column with the dictionary values (not
     // indices/codes)
-    table_info* in_dictionary_table = new table_info();
+    std::shared_ptr<table_info> in_dictionary_table =
+        std::make_shared<table_info>();
     in_dictionary_table->columns.push_back(local_dictionary);
     // get distributed global dictionary
-    // drop_duplicates_table steals the reference to local_dictionary, but I
-    // need to keep it around until the end of the conversion (decref later
-    // in this function)
-    incref_array(local_dictionary);
 
     // We always want to drop the NAs from the dictionary itself. We will
     // handle the indices pointing to the null during the re-assignment.
-    table_info* dist_dictionary_table =
+    std::shared_ptr<table_info> dist_dictionary_table =
         drop_duplicates_table(in_dictionary_table, gather_global_dict, 1, 0,
                               /*dropna=*/true, false);
-    delete in_dictionary_table;  // no array decref because
-                                 // drop_duplicates_table stole the
-                                 // reference
+    in_dictionary_table.reset();
+
     // replicate the global dictionary on all ranks
     // allgather
-    table_info* global_dictionary_table;
+    std::shared_ptr<table_info> global_dictionary_table;
     if (gather_global_dict) {
         global_dictionary_table =
             gather_table(dist_dictionary_table, 1, true, gather_global_dict);
-        delete dist_dictionary_table;  // no array decref because
-                                       // gather_table stole the reference
+        dist_dictionary_table.reset();
     } else {
         global_dictionary_table = dist_dictionary_table;
     }
     global_dictionary = global_dictionary_table->columns[0];
-    delete global_dictionary_table;
+    global_dictionary_table.reset();
 
     // Sort dictionary locally
     // XXX Should we always sort?
     if (sort_dictionary) {
         // sort_values_array_local decrefs the input array_info (but doesn't
         // delete it). It returns a new array_info.
-        array_info* new_global_dictionary =
+        std::shared_ptr<array_info> new_global_dictionary =
             sort_values_array_local(global_dictionary, false, 1, 1);
-        delete global_dictionary;
 
         global_dictionary = new_global_dictionary;
         dict_array->has_sorted_dictionary = true;
@@ -751,7 +746,7 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     dict_value_to_global_index.reserve(0);  // try to force dealloc of hashmap
     hashes_local_dict.reset();
     hashes_global_dict.reset();
-    decref_array(local_dictionary);
+    local_dictionary.reset();
 
     // --------------
     // remap old (local) indices to global ones
@@ -759,10 +754,11 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     // TODO? if there is only one reference to dict_array remaining, I can
     // modify indices in place, otherwise I have to allocate a new array if
     // I am not changing the dictionary of the input array in Python side
-    bool inplace = (dict_array->child_arrays[1]->meminfos[0]->refct == 1);
+    bool inplace =
+        (dict_array->child_arrays[1]->buffers[0]->getMeminfo()->refct == 1);
     if (!inplace) {
-        array_info* dict_indices = copy_array(dict_array->child_arrays[1]);
-        delete_info_decref_array(dict_array->child_arrays[1]);
+        std::shared_ptr<array_info> dict_indices =
+            copy_array(dict_array->child_arrays[1]);
         dict_array->child_arrays[1] = dict_indices;
     }
 
@@ -785,7 +781,7 @@ void update_local_dictionary_remove_duplicates(array_info* dict_array,
     }
 }
 
-void drop_duplicates_local_dictionary(array_info* dict_array,
+void drop_duplicates_local_dictionary(std::shared_ptr<array_info> dict_array,
                                       bool sort_dictionary_if_modified) {
     if (dict_array->has_deduped_local_dictionary) {
         return;
@@ -794,7 +790,21 @@ void drop_duplicates_local_dictionary(array_info* dict_array,
                                               sort_dictionary_if_modified);
 }
 
-void convert_local_dictionary_to_global(array_info* dict_array,
+array_info* drop_duplicates_local_dictionary_py_entry(
+    array_info* dict_array, bool sort_dictionary_if_modified) {
+    try {
+        std::shared_ptr<array_info> dict_arr =
+            std::shared_ptr<array_info>(dict_array);
+        drop_duplicates_local_dictionary(dict_arr, sort_dictionary_if_modified);
+        // return a new array_info* to Python to own
+        return new array_info(*dict_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
+}
+
+void convert_local_dictionary_to_global(std::shared_ptr<array_info> dict_array,
                                         bool is_parallel,
                                         bool sort_dictionary_if_modified) {
     if (!is_parallel || dict_array->has_global_dictionary) {
@@ -808,7 +818,8 @@ void convert_local_dictionary_to_global(array_info* dict_array,
                                               sort_dictionary_if_modified);
 }
 
-void make_dictionary_global_and_unique(array_info* dict_array, bool is_parallel,
+void make_dictionary_global_and_unique(std::shared_ptr<array_info> dict_array,
+                                       bool is_parallel,
                                        bool sort_dictionary_if_modified) {
     convert_local_dictionary_to_global(dict_array, is_parallel,
                                        sort_dictionary_if_modified);
@@ -816,7 +827,8 @@ void make_dictionary_global_and_unique(array_info* dict_array, bool is_parallel,
 }
 
 // shuffle_array
-void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
+void shuffle_list_string_null_bitmask(std::shared_ptr<array_info> in_arr,
+                                      std::shared_ptr<array_info> out_arr,
                                       mpi_comm_info const& comm_info,
                                       const std::vector<int>& row_dest) {
     int64_t n_rows = in_arr->length;
@@ -876,7 +888,8 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
  * @param is_parallel: Used to indicate whether tracing should be parallel
  * or not
  */
-static void shuffle_array(array_info* send_arr, array_info* out_arr,
+static void shuffle_array(std::shared_ptr<array_info> send_arr,
+                          std::shared_ptr<array_info> out_arr,
                           std::vector<int64_t> const& send_count,
                           std::vector<int64_t> const& recv_count,
                           std::vector<int64_t> const& send_disp,
@@ -1464,10 +1477,9 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
   2a) First set up the send_arr by aligning the data from the input columns
   accordingly. 2b) Second do the shuffling of data between all processors.
  */
-table_info* shuffle_table_kernel(table_info* in_table,
-                                 std::shared_ptr<uint32_t[]>& hashes,
-                                 mpi_comm_info const& comm_info,
-                                 bool is_parallel) {
+std::shared_ptr<table_info> shuffle_table_kernel(
+    std::shared_ptr<table_info> in_table, std::shared_ptr<uint32_t[]>& hashes,
+    mpi_comm_info const& comm_info, bool is_parallel) {
     tracing::Event ev("shuffle_table_kernel", is_parallel);
     if (ev.is_tracing()) {
         ev.add_attribute("table_nrows_before",
@@ -1494,12 +1506,12 @@ table_info* shuffle_table_kernel(table_info* in_table,
     }
 
     // fill send buffer and send
-    std::vector<array_info*> out_arrs;
+    std::vector<std::shared_ptr<array_info>> out_arrs;
     std::vector<uint8_t> tmp_null_bytes(comm_info.n_null_bytes);
     const int64_t n_rows_send = std::accumulate(
         comm_info.send_count.begin(), comm_info.send_count.end(), int64_t(0));
     for (size_t i = 0; i < n_cols; i++) {
-        array_info* in_arr = in_table->columns[i];
+        std::shared_ptr<array_info> in_arr = in_table->columns[i];
         if (in_arr->arr_type == bodo_array_type::DICT) {
             if (!in_arr->has_global_dictionary)
                 throw std::runtime_error(
@@ -1508,7 +1520,7 @@ table_info* shuffle_table_kernel(table_info* in_table,
             // in_arr <- indices array, to simplify code below
             in_arr = in_arr->child_arrays[1];
         }
-        array_info* out_arr;
+        std::shared_ptr<array_info> out_arr;
         if (in_arr->arr_type != bodo_array_type::STRUCT &&
             in_arr->arr_type != bodo_array_type::ARRAY_ITEM) {
             const std::vector<int64_t>& send_count_sub =
@@ -1524,7 +1536,7 @@ table_info* shuffle_table_kernel(table_info* in_table,
                 n_sub_sub_elems =
                     std::accumulate(send_count_sub_sub.begin(),
                                     send_count_sub_sub.end(), int64_t(0));
-            array_info* send_arr = alloc_array(
+            std::shared_ptr<array_info> send_arr = alloc_array(
                 n_rows_send, n_sub_elems, n_sub_sub_elems, in_arr->arr_type,
                 in_arr->dtype, 2 * n_pes, in_arr->num_categories);
             out_arr = alloc_array(total_recv, n_sub_recvs[i],
@@ -1550,10 +1562,9 @@ table_info* shuffle_table_kernel(table_info* in_table,
                 shuffle_list_string_null_bitmask(in_arr, out_arr, comm_info,
                                                  comm_info.row_dest);
             }
-            delete_info_decref_array(send_arr);
         } else {
             std::shared_ptr<arrow::Array> out_array = shuffle_arrow_array(
-                in_arr->to_arrow(), n_pes, comm_info.row_dest);
+                to_arrow(in_arr), n_pes, comm_info.row_dest);
             out_arr = arrow_array_to_bodo(out_array);
         }
         // release reference of input array
@@ -1565,22 +1576,21 @@ table_info* shuffle_table_kernel(table_info* in_table,
         // from Python.
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
-            array_info* out_dict_arr = new array_info(
-                bodo_array_type::DICT, in_arr->dtype, out_arr->length, {},
-                {in_arr->child_arrays[0], out_arr}, 0, 0, 0, true, true,
-                in_arr->has_sorted_dictionary);
-            // info1 is dictionary. incref so it doesn't get deleted since
-            // it is given to the output array
-            incref_array(in_arr->child_arrays[0]);
+            std::shared_ptr<array_info> out_dict_arr =
+                std::make_shared<array_info>(
+                    bodo_array_type::DICT, in_arr->dtype, out_arr->length,
+                    std::vector<std::shared_ptr<BodoBuffer>>({}),
+                    std::vector<std::shared_ptr<array_info>>(
+                        {in_arr->child_arrays[0], out_arr}),
+                    0, 0, 0, true, true, in_arr->has_sorted_dictionary);
             out_arr = out_dict_arr;
         }
-        decref_array(in_arr);
         out_arrs.push_back(out_arr);
     }
 
     ev.add_attribute("table_nrows_after",
                      static_cast<size_t>(out_arrs[0]->length));
-    return new table_info(out_arrs);
+    return std::make_shared<table_info>(out_arrs);
 }
 
 // Shuffle is basically to send data to other processes for operations like
@@ -1590,7 +1600,7 @@ table_info* shuffle_table_kernel(table_info* in_table,
 // for things like cumulative operations, array_isin, etc.
 
 void reverse_shuffle_preallocated_data_array(
-    array_info* in_arr, array_info* out_arr,
+    std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> out_arr,
     std::shared_ptr<uint32_t[]>& hashes, mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_preallocated_data_array");
     if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
@@ -1659,21 +1669,22 @@ void reverse_shuffle_preallocated_data_array(
     }
 }
 
-array_info* reverse_shuffle_data_array(array_info* in_arr,
-                                       std::shared_ptr<uint32_t[]>& hashes,
-                                       mpi_comm_info const& comm_info) {
+std::shared_ptr<array_info> reverse_shuffle_data_array(
+    std::shared_ptr<array_info> in_arr, std::shared_ptr<uint32_t[]>& hashes,
+    mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_data_array");
     size_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
                                         comm_info.send_count.end(), size_t(0));
-    array_info* out_arr = alloc_array(n_rows_ret, 0, 0, in_arr->arr_type,
-                                      in_arr->dtype, 0, in_arr->num_categories);
+    std::shared_ptr<array_info> out_arr =
+        alloc_array(n_rows_ret, 0, 0, in_arr->arr_type, in_arr->dtype, 0,
+                    in_arr->num_categories);
     reverse_shuffle_preallocated_data_array(in_arr, out_arr, hashes, comm_info);
     return out_arr;
 }
 
-array_info* reverse_shuffle_string_array(array_info* in_arr,
-                                         std::shared_ptr<uint32_t[]>& hashes,
-                                         mpi_comm_info const& comm_info) {
+std::shared_ptr<array_info> reverse_shuffle_string_array(
+    std::shared_ptr<array_info> in_arr, std::shared_ptr<uint32_t[]>& hashes,
+    mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_string_array");
     // 1: computing the recv_count_sub and related
     offset_t* in_offset = (offset_t*)in_arr->data2();
@@ -1695,7 +1706,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr,
     int64_t n_count_sub = send_disp_sub[n_pes - 1] + send_count_sub[n_pes - 1];
     int64_t n_rows_ret = std::accumulate(
         comm_info.send_count.begin(), comm_info.send_count.end(), int64_t(0));
-    array_info* out_arr =
+    std::shared_ptr<array_info> out_arr =
         alloc_array(n_rows_ret, n_count_sub, 0, in_arr->arr_type, in_arr->dtype,
                     0, in_arr->num_categories);
     int64_t in_len = in_arr->length;
@@ -1742,7 +1753,8 @@ array_info* reverse_shuffle_string_array(array_info* in_arr,
     return out_arr;
 }
 
-void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
+void reverse_shuffle_null_bitmap_array(std::shared_ptr<array_info> in_arr,
+                                       std::shared_ptr<array_info> out_arr,
                                        std::shared_ptr<uint32_t[]>& hashes,
                                        mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_null_bitmap_array");
@@ -1785,8 +1797,8 @@ void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
     }
 }
 
-array_info* reverse_shuffle_list_string_array(
-    array_info* in_arr, std::shared_ptr<uint32_t[]>& hashes,
+std::shared_ptr<array_info> reverse_shuffle_list_string_array(
+    std::shared_ptr<array_info> in_arr, std::shared_ptr<uint32_t[]>& hashes,
     mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_list_string_array");
     // 1: computing the recv_count_sub and related
@@ -1822,7 +1834,7 @@ array_info* reverse_shuffle_list_string_array(
     int64_t n_count_sub = send_disp_sub[n_pes - 1] + send_count_sub[n_pes - 1];
     int64_t n_count_sub_sub =
         send_disp_sub_sub[n_pes - 1] + send_count_sub_sub[n_pes - 1];
-    array_info* out_arr =
+    std::shared_ptr<array_info> out_arr =
         alloc_array(n_rows_ret, n_count_sub, n_count_sub_sub, in_arr->arr_type,
                     in_arr->dtype, 0, in_arr->num_categories);
     int64_t in_len = in_arr->length;
@@ -1960,16 +1972,16 @@ array_info* reverse_shuffle_list_string_array(
     @param comm_info : The comm_info (computed from the original table)
     @return the reshuffled table
  */
-table_info* reverse_shuffle_table_kernel(table_info* in_table,
-                                         std::shared_ptr<uint32_t[]>& hashes,
-                                         mpi_comm_info const& comm_info) {
+std::shared_ptr<table_info> reverse_shuffle_table_kernel(
+    std::shared_ptr<table_info> in_table, std::shared_ptr<uint32_t[]>& hashes,
+    mpi_comm_info const& comm_info) {
     tracing::Event ev("reverse_shuffle_table_kernel");
     uint64_t n_cols = in_table->ncols();
-    std::vector<array_info*> out_arrs;
+    std::vector<std::shared_ptr<array_info>> out_arrs;
     for (uint64_t i = 0; i < n_cols; i++) {
-        array_info* in_arr = in_table->columns[i];
+        std::shared_ptr<array_info> in_arr = in_table->columns[i];
         bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
-        array_info* out_arr = nullptr;
+        std::shared_ptr<array_info> out_arr = nullptr;
         if (in_arr->arr_type == bodo_array_type::STRUCT ||
             in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
             Bodo_PyErr_SetString(
@@ -2011,26 +2023,25 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table,
         }
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
-            array_info* out_dict_arr = new array_info(
-                bodo_array_type::DICT, in_arr->dtype, out_arr->length, {},
-                {in_arr->child_arrays[0], out_arr}, 0, 0, 0, true, true,
-                in_arr->has_sorted_dictionary);
-            // info1 is dictionary. incref so it doesn't get deleted since
-            // it is given to the output array
-            incref_array(in_arr->child_arrays[0]);
+            std::shared_ptr<array_info> out_dict_arr =
+                std::make_shared<array_info>(
+                    bodo_array_type::DICT, in_arr->dtype, out_arr->length,
+                    std::vector<std::shared_ptr<BodoBuffer>>({}),
+                    std::vector<std::shared_ptr<array_info>>(
+                        {in_arr->child_arrays[0], out_arr}),
+                    0, 0, 0, true, true, in_arr->has_sorted_dictionary);
             out_arr = out_dict_arr;
         }
-        // Reference stealing see shuffle_table_kernel for discussion
-        decref_array(in_arr);
         out_arrs.push_back(out_arr);
     }
-    return new table_info(out_arrs);
+    return std::make_shared<table_info>(out_arrs);
 }
 
 // NOTE: Steals a reference from the input table.
-table_info* shuffle_table(table_info* in_table, int64_t n_keys,
-                          bool is_parallel, int32_t keep_comm_info,
-                          std::shared_ptr<uint32_t[]> hashes) {
+std::shared_ptr<table_info> shuffle_table(std::shared_ptr<table_info> in_table,
+                                          int64_t n_keys, bool is_parallel,
+                                          int32_t keep_comm_info,
+                                          std::shared_ptr<uint32_t[]> hashes) {
     tracing::Event ev("shuffle_table", is_parallel);
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
@@ -2039,7 +2050,8 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
     }
 
     const bool delete_hashes = bool(hashes);
-    mpi_comm_info* comm_info = new mpi_comm_info(in_table->columns);
+    std::shared_ptr<mpi_comm_info> comm_info =
+        std::make_shared<mpi_comm_info>(in_table->columns);
 
     // For any dictionary arrays that have local dictionaries, convert their
     // dictionaries to global now (since it's needed for the shuffle) and if
@@ -2047,7 +2059,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
     // indices
     // TODO maybe it's better to do this in hash_keys_table to avoid
     // repeating this code in other operations?
-    for (array_info* a : in_table->columns) {
+    for (std::shared_ptr<array_info> a : in_table->columns) {
         if (a->arr_type == bodo_array_type::DICT) {
             // XXX is the dictionary replaced in Python input array and
             // correctly replaced? Can it be done easily? (this includes
@@ -2064,7 +2076,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
     }
     comm_info->set_counts(hashes, is_parallel);
 
-    table_info* table =
+    std::shared_ptr<table_info> table =
         shuffle_table_kernel(in_table, hashes, *comm_info, is_parallel);
     if (keep_comm_info) {
         table->comm_info = comm_info;
@@ -2073,7 +2085,6 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
         if (delete_hashes) {
             hashes.reset();
         }
-        delete comm_info;
     }
 
     return table;
@@ -2082,7 +2093,10 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
 table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
                                      bool is_parallel, int32_t keep_comm_info) {
     try {
-        return shuffle_table(in_table, n_keys, is_parallel, keep_comm_info);
+        std::shared_ptr<table_info> out =
+            shuffle_table(std::shared_ptr<table_info>(in_table), n_keys,
+                          is_parallel, keep_comm_info);
+        return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -2091,6 +2105,7 @@ table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
 
 /**
  * @brief get shuffle info from table struct
+ * Using raw pointers since called from Python.
  *
  * @param table input table
  * @return shuffle_info* shuffle info of input table
@@ -2101,17 +2116,16 @@ shuffle_info* get_shuffle_info(table_info* table) {
 
 /**
  * @brief free allocated data of shuffle info
+ * Called from Python.
  *
  * @param sh_info input shuffle info
  */
-void delete_shuffle_info(shuffle_info* sh_info) {
-    delete sh_info->comm_info;
-    delete sh_info;
-}
+void delete_shuffle_info(shuffle_info* sh_info) { delete sh_info; }
 
 // Note: Steals a reference from the input table.
 /**
  * @brief reverse a previous shuffle of input table
+ * Using raw pointers since called from Python.
  *
  * @param in_table input table
  * @param sh_info shuffle info
@@ -2121,22 +2135,23 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info) {
     // TODO: move outside shuffle function.
     // Ideally the convert should happen at the function that
     // calls the reverse.
-    for (array_info* a : in_table->columns) {
+    for (std::shared_ptr<array_info> a : in_table->columns) {
         if (a->arr_type == bodo_array_type::DICT) {
             // NOTE: This can never be called on replicated data?
             // We need dictionaries to be global and unique for hashing.
             make_dictionary_global_and_unique(a, true);
         }
     }
-    table_info* revshuf_table = reverse_shuffle_table_kernel(
-        in_table, sh_info->hashes, *sh_info->comm_info);
+    std::shared_ptr<table_info> revshuf_table =
+        reverse_shuffle_table_kernel(std::shared_ptr<table_info>(in_table),
+                                     sh_info->hashes, *sh_info->comm_info);
 
-    return revshuf_table;
+    return new table_info(*revshuf_table);
 }
 
-table_info* coherent_shuffle_table(
-    table_info* in_table, table_info* ref_table, int64_t n_keys,
-    std::shared_ptr<uint32_t[]> hashes,
+std::shared_ptr<table_info> coherent_shuffle_table(
+    std::shared_ptr<table_info> in_table, std::shared_ptr<table_info> ref_table,
+    int64_t n_keys, std::shared_ptr<uint32_t[]> hashes,
     SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
     const uint8_t* null_bitmask, const bool keep_nulls_and_filter_misses) {
     tracing::Event ev("coherent_shuffle_table", true);
@@ -2152,7 +2167,7 @@ table_info* coherent_shuffle_table(
     // dictionaries to global now (since it's needed for the shuffle) and if
     // any of them are key columns, this will allow to simply hash the
     // indices
-    for (array_info* a : in_table->columns) {
+    for (std::shared_ptr<array_info> a : in_table->columns) {
         if (a->arr_type == bodo_array_type::DICT) {
             // coherent_shuffle_table only called in join with parallel
             // options. is_parallel = true We need dictionaries to be global
@@ -2174,7 +2189,8 @@ table_info* coherent_shuffle_table(
     } else {
         comm_info.set_counts<false>(hashes, true, filter, null_bitmask);
     }
-    table_info* table = shuffle_table_kernel(in_table, hashes, comm_info, true);
+    std::shared_ptr<table_info> table =
+        shuffle_table_kernel(in_table, hashes, comm_info, true);
     if (delete_hashes) {
         hashes.reset();
     }
@@ -2443,17 +2459,18 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
    or not
    @return the table put in all the nodes
 */
-table_info* broadcast_table(table_info* ref_table, table_info* in_table,
-                            size_t n_cols, bool is_parallel, int mpi_root) {
+std::shared_ptr<table_info> broadcast_table(
+    std::shared_ptr<table_info> ref_table, std::shared_ptr<table_info> in_table,
+    size_t n_cols, bool is_parallel, int mpi_root) {
     tracing::Event ev("broadcast_table", is_parallel);
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-    std::vector<array_info*> out_arrs;
+    std::vector<std::shared_ptr<array_info>> out_arrs;
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         int64_t arr_bcast[7];
-        array_info* in_arr = nullptr;
+        std::shared_ptr<array_info> in_arr = nullptr;
         if (myrank == mpi_root) {
             in_arr = in_table->columns[i_col];
             if (in_arr->arr_type == bodo_array_type::DICT) {
@@ -2487,14 +2504,14 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
         int64_t num_categories = arr_bcast[5];
         int32_t precision = (int32_t)arr_bcast[6];
         //
-        array_info* out_arr = nullptr;
+        std::shared_ptr<array_info> out_arr = nullptr;
         if (arr_type == bodo_array_type::STRUCT ||
             arr_type == bodo_array_type::ARRAY_ITEM) {
             std::shared_ptr<arrow::Array> ref_array =
-                ref_table->columns[i_col]->to_arrow();
+                to_arrow(ref_table->columns[i_col]);
             std::shared_ptr<arrow::Array> in_array = nullptr;
             if (myrank == mpi_root) {
-                in_array = in_arr->to_arrow();
+                in_array = to_arrow(in_arr);
             }
             std::shared_ptr<arrow::Array> array =
                 broadcast_arrow_array(ref_array, in_array);
@@ -2583,33 +2600,22 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
         // dictionary that can be used for the final dictionary output
         // array.
         if (ref_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
-            if (myrank == mpi_root) {
-                // Restore in_arr to the DICT array
-                // This is important since we do a decref_array on in_arr
-                // at the end.
-                in_arr = in_table->columns[i_col];
-            }
-            array_info* dict_arr = ref_table->columns[i_col]->child_arrays[0];
+            std::shared_ptr<array_info> dict_arr =
+                ref_table->columns[i_col]->child_arrays[0];
             // Create a DICT out_arr
-            out_arr = new array_info(
-                bodo_array_type::DICT, dict_arr->dtype, out_arr->length, {},
-                {dict_arr, out_arr}, 0, 0, 0,
+            out_arr = std::make_shared<array_info>(
+                bodo_array_type::DICT, dict_arr->dtype, out_arr->length,
+                std::vector<std::shared_ptr<BodoBuffer>>({}),
+                std::vector<std::shared_ptr<array_info>>({dict_arr, out_arr}),
+                0, 0, 0,
                 /*has_global_dictionary=*/true,
                 /*has_deduped_local_dictionary=*/true,
                 ref_table->columns[i_col]->has_sorted_dictionary);
-            // incref the dictionary so it doesn't get deleted since
-            // it is given to the output array
-            incref_array(dict_arr);
         }
         out_arrs.push_back(out_arr);
-        // Standard stealing of reference. See shuffle_table_kernel for
-        // discussion. The table is not-null only on mpi_root.
-        if (myrank == mpi_root) {
-            decref_array(in_arr);
-        }
     }
 
-    return new table_info(out_arrs);
+    return std::make_shared<table_info>(out_arrs);
 }
 
 int MPI_Gengather(void* sendbuf, int sendcount, MPI_Datatype sendtype,
@@ -2971,14 +2977,15 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
  * @param is_parallel: Used to indicate whether tracing should be parallel
  * or not
  */
-table_info* gather_table(table_info* in_table, int64_t n_cols_i,
-                         bool all_gather, bool is_parallel = true) {
+std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
+                                         int64_t n_cols_i, bool all_gather,
+                                         bool is_parallel = true) {
     tracing::Event ev("gather_table", is_parallel);
     int n_pes, myrank;
     int mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    std::vector<array_info*> out_arrs;
+    std::vector<std::shared_ptr<array_info>> out_arrs;
     size_t n_cols;
     if (n_cols_i == -1) {
         n_cols = in_table->ncols();
@@ -2987,7 +2994,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
     }
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         int64_t arr_gath_s[3];
-        array_info* in_arr = in_table->columns[i_col];
+        std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
         if (in_arr->arr_type == bodo_array_type::DICT) {
             // Note: We need to revisit if gather_table should be
             // a no-op if is_parallel=False
@@ -3016,10 +3023,10 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             rows_pos += siz;
         }
         //
-        array_info* out_arr = NULL;
+        std::shared_ptr<array_info> out_arr = NULL;
         if (arr_type == bodo_array_type::STRUCT ||
             arr_type == bodo_array_type::ARRAY_ITEM) {
-            std::shared_ptr<arrow::Array> array = in_arr->to_arrow();
+            std::shared_ptr<arrow::Array> array = to_arrow(in_arr);
             std::shared_ptr<arrow::Array> out_array =
                 gather_arrow_array(array, all_gather);
             out_arr = arrow_array_to_bodo(out_array);
@@ -3291,21 +3298,21 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
         if (in_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i_col];
             if (all_gather || myrank == mpi_root) {
-                out_arr = new array_info(
-                    bodo_array_type::DICT, in_arr->dtype, out_arr->length, {},
-                    {in_arr->child_arrays[0], out_arr}, 0, 0, 0,
+                out_arr = std::make_shared<array_info>(
+                    bodo_array_type::DICT, in_arr->dtype, out_arr->length,
+                    std::vector<std::shared_ptr<BodoBuffer>>({}),
+                    std::vector<std::shared_ptr<array_info>>(
+                        {in_arr->child_arrays[0], out_arr}),
+                    0, 0, 0,
                     /*has_global_dictionary=*/true,
                     /*has_deduped_local_dictionary=*/true,
                     in_arr->has_sorted_dictionary);
-                incref_array(in_arr->child_arrays[0]);
             }  // else out_arr is already NULL, so doesn't need to be
                // handled
         }
         out_arrs.push_back(out_arr);
-        // Reference stealing. See shuffle_table_kernel for discussion.
-        decref_array(in_arr);
     }
-    return new table_info(out_arrs);
+    return std::make_shared<table_info>(out_arrs);
 }
 
 /* Whether or not a reshuffling is needed.
@@ -3318,7 +3325,8 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
           (max nb_row) / (avg nb_row)
    ---If the value is larger than 2 then reshuffling is interesting
  */
-bool need_reshuffling(table_info* in_table, double crit_fraction) {
+bool need_reshuffling(std::shared_ptr<table_info> in_table,
+                      double crit_fraction) {
     int64_t n_rows = in_table->nrows(), sum_n_rows, max_n_rows;
     int n_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -3334,10 +3342,9 @@ bool need_reshuffling(table_info* in_table, double crit_fraction) {
     return result;
 }
 
-table_info* shuffle_renormalization_group(table_info* in_table,
-                                          const int random, int64_t random_seed,
-                                          bool parallel, int64_t n_dest_ranks,
-                                          int* dest_ranks) {
+std::shared_ptr<table_info> shuffle_renormalization_group(
+    std::shared_ptr<table_info> in_table, const int random, int64_t random_seed,
+    bool parallel, int64_t n_dest_ranks, int* dest_ranks) {
     tracing::Event ev("shuffle_renormalization_group", parallel);
     if (!parallel && !random) {
         return in_table;
@@ -3416,7 +3423,7 @@ table_info* shuffle_renormalization_group(table_info* in_table,
     //
     mpi_comm_info comm_info(in_table->columns);
     comm_info.set_counts(hashes, parallel);
-    table_info* ret_table =
+    std::shared_ptr<table_info> ret_table =
         shuffle_table_kernel(in_table, hashes, comm_info, parallel);
     if (random) {
         // data arrives ordered by source and for each source in its
@@ -3428,8 +3435,8 @@ table_info* shuffle_renormalization_group(table_info* in_table,
             random_order[i] = i;
         }
         std::shuffle(random_order.begin(), random_order.end(), g);
-        table_info* shuffled_table = RetrieveTable(ret_table, random_order, -1);
-        delete_table(ret_table);
+        std::shared_ptr<table_info> shuffled_table =
+            RetrieveTable(ret_table, random_order, -1);
         ret_table = shuffled_table;
     }
     ev.add_attribute("ret_table_nrows", ret_table->nrows());
@@ -3440,8 +3447,10 @@ table_info* shuffle_renormalization_group_py_entrypt(
     table_info* in_table, int random, int64_t random_seed, bool parallel,
     int64_t n_dest_ranks, int* dest_ranks) {
     try {
-        return shuffle_renormalization_group(
-            in_table, random, random_seed, parallel, n_dest_ranks, dest_ranks);
+        std::shared_ptr<table_info> out_table = shuffle_renormalization_group(
+            std::shared_ptr<table_info>(in_table), random, random_seed,
+            parallel, n_dest_ranks, dest_ranks);
+        return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -3451,8 +3460,9 @@ table_info* shuffle_renormalization_group_py_entrypt(
 /* Apply a renormalization shuffling
    After the operation, all nodes will have a standard size
  */
-table_info* shuffle_renormalization(table_info* in_table, int random,
-                                    int64_t random_seed, bool parallel) {
+std::shared_ptr<table_info> shuffle_renormalization(
+    std::shared_ptr<table_info> in_table, int random, int64_t random_seed,
+    bool parallel) {
     return shuffle_renormalization_group(in_table, random, random_seed,
                                          parallel, 0, nullptr);
 }
@@ -3461,7 +3471,10 @@ table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,
                                                int64_t random_seed,
                                                bool parallel) {
     try {
-        return shuffle_renormalization(in_table, random, random_seed, parallel);
+        std::shared_ptr<table_info> out_table =
+            shuffle_renormalization(std::shared_ptr<table_info>(in_table),
+                                    random, random_seed, parallel);
+        return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;

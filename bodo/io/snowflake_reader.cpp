@@ -12,7 +12,7 @@ class SnowflakeReader : public ArrowDataframeReader {
    public:
     /**
      * Initialize SnowflakeReader.
-     * See snowflake_read function below for description of arguments.
+     * See snowflake_read_py_entry function below for description of arguments.
      */
     SnowflakeReader(const char* _query, const char* _conn, bool _parallel,
                     bool _is_independent, PyObject* pyarrow_schema,
@@ -50,7 +50,8 @@ class SnowflakeReader : public ArrowDataframeReader {
     virtual PyObject* get_dataset() {
         // import bodo.io.snowflake
         PyObject* sf_mod = PyImport_ImportModule("bodo.io.snowflake");
-        if (PyErr_Occurred()) throw std::runtime_error("python");
+        if (PyErr_Occurred())
+            throw std::runtime_error("python");
 
         // ds = bodo.io.snowflake.get_dataset(query, conn, pyarrow_schema,
         //   only_length, is_select_query, is_parallel, is_independent)
@@ -187,18 +188,17 @@ class SnowflakeReader : public ArrowDataframeReader {
  performing this unsafe cast from date to datetime64[ns].
  * @return table containing all the arrays read
  */
-table_info* snowflake_read(const char* query, const char* conn, bool parallel,
-                           bool is_independent, PyObject* arrow_schema,
-                           int64_t n_fields, int32_t* _is_nullable,
-                           int32_t* _str_as_dict_cols,
-                           int32_t num_str_as_dict_cols,
-                           int32_t* _allow_unsafe_dt_to_ts_cast_cols,
-                           int32_t num_allow_unsafe_dt_to_ts_cast_cols,
-                           int64_t* total_nrows, bool _only_length_query,
-                           bool _is_select_query) {
+table_info* snowflake_read_py_entry(
+    const char* query, const char* conn, bool parallel, bool is_independent,
+    PyObject* arrow_schema, int64_t n_fields, int32_t* _is_nullable,
+    int32_t* _str_as_dict_cols, int32_t num_str_as_dict_cols,
+    int32_t* _allow_unsafe_dt_to_ts_cast_cols,
+    int32_t num_allow_unsafe_dt_to_ts_cast_cols, int64_t* total_nrows,
+    bool _only_length_query, bool _is_select_query) {
     try {
         std::set<int> selected_fields;
-        for (auto i = 0; i < n_fields; i++) selected_fields.insert(i);
+        for (auto i = 0; i < n_fields; i++)
+            selected_fields.insert(i);
         std::vector<bool> is_nullable(_is_nullable, _is_nullable + n_fields);
         std::vector<int> str_as_dict_cols(
             {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols});

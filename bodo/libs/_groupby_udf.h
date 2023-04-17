@@ -52,7 +52,7 @@ struct udfinfo_t {
      * This empty table is used to tell the C++ library the types to use
      * to allocate the columns (output and redvar) for udfs
      */
-    table_info* udf_table_dummy;
+    std::shared_ptr<table_info> udf_table_dummy;
     /*
      * Function pointer to "update" code which performs the initial
      * local groupby and aggregation.

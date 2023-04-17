@@ -62,9 +62,7 @@ from bodo.libs.array import (
     arr_info_list_to_table,
     array_from_cpp_table,
     array_to_info,
-    delete_info_decref_array,
     delete_table,
-    delete_table_decref_arrays,
     py_table_to_cpp_table,
     shuffle_table,
 )
@@ -3337,6 +3335,7 @@ def pivot_impl(
         )
         func_text += f"        info_list = [{array_to_infos}]\n"
         func_text += "        cpp_table = arr_info_list_to_table(info_list)\n"
+        # NOTE: C++ will delete cpp_table pointer
         func_text += f"        out_cpp_table = shuffle_table(cpp_table, {len(index_tup)}, parallel, 0)\n"
         index_info_to_arrays = ", ".join(
             [
@@ -3360,8 +3359,7 @@ def pivot_impl(
         func_text += f"        columns_tup = ({columns_info_to_arrays},)\n"
         func_text += f"        values_tup = ({values_info_to_arrays},)\n"
         # Delete the tables
-        func_text += "        delete_table(cpp_table)\n"
-        func_text += "        delete_table_decref_arrays(out_cpp_table)\n"
+        func_text += "        delete_table(out_cpp_table)\n"
         func_text += "        ev_shuffle.finalize()\n"
     # Load the index and column arrays. Move value arrays to a
     # list since access won't be known at compile time.
@@ -3606,7 +3604,6 @@ def pivot_impl(
         "shuffle_table": shuffle_table,
         "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
-        "delete_table_decref_arrays": delete_table_decref_arrays,
         "table_type": table_type,
         "columns_typ": columns_typ,
         "index_names_lit": index_names_lit,
@@ -3972,12 +3969,15 @@ def to_parquet_overload(
         func_text += "    col_names = array_to_info(names_arr)\n"
     else:
         func_text += "    col_names = array_to_info(col_names_arr)\n"
-    if is_overload_true(index) or (is_overload_none(index) and write_non_rangeindex):
-        func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
-        write_index = True
-    else:
-        func_text += "    index_col = array_to_info(np.empty(0, dtype=np.int64))\n"
-        write_index = False
+    if not partition_cols:
+        if is_overload_true(index) or (
+            is_overload_none(index) and write_non_rangeindex
+        ):
+            func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
+            write_index = True
+        else:
+            func_text += "    index_col = array_to_info(np.empty(0, dtype=np.int64))\n"
+            write_index = False
     if df.has_runtime_cols:
         # Compute the metadata string at runtime.
         func_text += "    columns_lst = []\n"
@@ -4031,7 +4031,7 @@ def to_parquet_overload(
             func_text += "    cat_info_list = [{}]\n".format(categories_args)
             func_text += "    cat_table = arr_info_list_to_table(cat_info_list)\n"
         else:
-            func_text += "    cat_table = table\n"  # hack to avoid typing issue
+            func_text += "    cat_table = 0\n"
         func_text += (
             "    col_names_no_partitions = array_to_info(col_names_no_parts_arr)\n"
         )
@@ -4049,12 +4049,6 @@ def to_parquet_overload(
         func_text += (
             "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
         )
-        func_text += "    delete_table_decref_arrays(table)\n"
-        func_text += "    delete_info_decref_array(index_col)\n"
-        func_text += "    delete_info_decref_array(col_names_no_partitions)\n"
-        func_text += "    delete_info_decref_array(col_names)\n"
-        if categories_args:
-            func_text += "    delete_table_decref_arrays(cat_table)\n"
     elif write_rangeindex_to_metadata:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(path),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -4074,9 +4068,6 @@ def to_parquet_overload(
             "                            unicode_to_utf8(_bodo_timestamp_tz),\n"
         )
         func_text += "                              False)\n"  # downcast_time_ns_to_us
-        func_text += "    delete_table_decref_arrays(table)\n"
-        func_text += "    delete_info_decref_array(index_col)\n"
-        func_text += "    delete_info_decref_array(col_names)\n"
     else:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(path),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -4095,9 +4086,6 @@ def to_parquet_overload(
             "                            unicode_to_utf8(_bodo_timestamp_tz),\n"
         )
         func_text += "                              False)\n"  # downcast_time_ns_to_us
-        func_text += "    delete_table_decref_arrays(table)\n"
-        func_text += "    delete_info_decref_array(index_col)\n"
-        func_text += "    delete_info_decref_array(col_names)\n"
 
     loc_vars = {}
     if df.has_runtime_cols:
@@ -4124,8 +4112,6 @@ def to_parquet_overload(
         "parquet_write_table_cpp": parquet_write_table_cpp,
         "parquet_write_table_partitioned_cpp": parquet_write_table_partitioned_cpp,
         "index_to_array": index_to_array,
-        "delete_info_decref_array": delete_info_decref_array,
-        "delete_table_decref_arrays": delete_table_decref_arrays,
         "col_names_arr": col_names_arr,
         "py_table_to_cpp_table": py_table_to_cpp_table,
         "py_table_typ": df.table_type,
@@ -4412,8 +4398,6 @@ def to_sql_overload(
         "            if_exists, _is_parallel, pyarrow_table_schema,\n"
         "            _bodo_allow_downcasting,\n"
         "        )\n"
-        "        delete_table_decref_arrays(table)\n"
-        "        delete_info_decref_array(col_names)\n"
     )
 
     # ----------------------------- Snowflake Write ----------------------------
@@ -4525,15 +4509,9 @@ def to_sql_overload(
         data_args = ", ".join([f"arr{i}" for i in range(len(df.data))])
         func_text += f"        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), df.index, __col_name_meta_value_df_to_sql)\n"
 
-    # In C++: Upload dataframe chunks on each rank to internal stage.
-    # Compute column names and other required info for parquet_write_table_cpp
     if df.has_runtime_cols:
         func_text += "        columns_index = get_dataframe_column_names(df)\n"
         func_text += "        names_arr = index_to_array(columns_index)\n"
-        func_text += "        col_names = array_to_info(names_arr)\n"
-    else:
-        func_text += "        col_names = array_to_info(col_names_arr)\n"
-    func_text += "        index_col = array_to_info(np.empty(0, dtype=np.int64))\n"
 
     func_text += "        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(parquet_path, parallel=_is_parallel)\n"
 
@@ -4575,6 +4553,13 @@ def to_sql_overload(
         func_text += f"            table_chunk = arr_info_list_to_table([{data_args_chunk}])     \n"
     func_text += "            ev_to_df_table.finalize()\n"
 
+    # In C++: Upload dataframe chunks on each rank to internal stage.
+    # Compute column names and other required info for parquet_write_table_cpp
+    if df.has_runtime_cols:
+        func_text += "            col_names = array_to_info(names_arr)\n"
+    else:
+        func_text += "            col_names = array_to_info(col_names_arr)\n"
+
     # Dump chunks to parquet file
     # Below, we always pass `is_parallel=False`. Passing `is_parallel=True` would cause
     # `pq_write` to write a directory of partitioned files, rather than a single file,
@@ -4588,7 +4573,7 @@ def to_sql_overload(
         "            ev_pq_write_cpp.add_attribute('chunk_path', chunk_path)\n"
         "            parquet_write_table_cpp(\n"
         "                unicode_to_utf8(chunk_path),\n"
-        "                table_chunk, col_names, index_col,\n"
+        "                table_chunk, col_names, 0,\n"
         "                False,\n"  # write_index
         "                unicode_to_utf8('null'),\n"  # metadata
         "                unicode_to_utf8(bodo.io.snowflake.SF_WRITE_PARQUET_COMPRESSION),\n"
@@ -4607,7 +4592,6 @@ def to_sql_overload(
         "                True,\n"  # Explicitly downcast nanoseconds to microseconds (See gen_snowflake_schema comment)
         "            )\n"
         "            ev_pq_write_cpp.finalize()\n"
-        "            delete_table_decref_arrays(table_chunk)\n"
         # If needed, upload local parquet to internal stage using objmode PUT
         "            if upload_using_snowflake_put:\n"
         "                with bodo.objmode(upload_thread='types.optional(exception_propagating_thread_type)'):\n"
@@ -4616,8 +4600,6 @@ def to_sql_overload(
         "                    )\n"
         "                if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:\n"
         "                    upload_threads_in_progress.append(upload_thread)\n"
-        "        delete_info_decref_array(index_col)\n"
-        "        delete_info_decref_array(col_names)\n"
         # Wait for all upload threads to finish
         "        if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:\n"
         "            with bodo.objmode():\n"
@@ -4708,8 +4690,6 @@ def to_sql_overload(
             "array_to_info": array_to_info,
             "bodo": bodo,
             "col_names_arr": col_names_arr,
-            "delete_info_decref_array": delete_info_decref_array,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
             "get_dataframe_column_names": get_dataframe_column_names,
             "get_dataframe_data": get_dataframe_data,
             "get_dataframe_table": get_dataframe_table,
