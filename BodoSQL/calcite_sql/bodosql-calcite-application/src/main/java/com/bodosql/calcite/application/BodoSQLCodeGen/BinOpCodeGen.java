@@ -4,6 +4,8 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.gene
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.google.common.collect.Sets;
+
 import java.util.*;
 import org.apache.calcite.avatica.*;
 import org.apache.calcite.rel.type.*;
@@ -49,6 +51,12 @@ public class BinOpCodeGen {
           arg1TypeName.equals(SqlTypeName.TIMESTAMP)
               || arg1TypeName.equals(SqlTypeName.DATE)
               || arg1TypeName.equals(SqlTypeName.TIME);
+      Set<SqlTypeName> DATE_INTERVAL_TYPES =
+          Sets.immutableEnumSet(SqlTypeName.INTERVAL_YEAR_MONTH,
+              SqlTypeName.INTERVAL_YEAR,
+              SqlTypeName.INTERVAL_MONTH,
+              SqlTypeName.INTERVAL_WEEK,
+              SqlTypeName.INTERVAL_DAY);
 
       boolean isArg0Interval = argDataTypes.get(0) instanceof IntervalSqlType;
       boolean isArg1Interval = argDataTypes.get(1) instanceof IntervalSqlType;
@@ -61,10 +69,27 @@ public class BinOpCodeGen {
       } else if (isArg0Datetime && isArg1Datetime) {
         assert binOpKind.equals(SqlKind.MINUS);
         return genDateSubCode(args);
-      } else if (isArg0Datetime || isArg1Datetime) {
+      } else if (isArg0Datetime) {  // timestamp/date +- interval
         assert binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS);
+        if (arg0TypeName.equals(SqlTypeName.DATE) && DATE_INTERVAL_TYPES.contains(arg1TypeName)) {
+          // add/minus a date interval to a date object should return a date object
+          Expr arg1 = args.get(1);
+          if (binOpKind.equals(SqlKind.MINUS))
+            arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", args.get(1));
+          return new Expr.Call(
+              "bodo.libs.bodosql_array_kernels.add_date_interval_to_date", args.get(0), arg1);
+        }
         return genDatetimeArithCode(
-            args, binOpKind, isArg0Datetime, isArg0Interval || isArg1Interval);
+            args, binOpKind, isArg0Datetime, isArg1Interval);
+      } else if(isArg1Datetime) {  // inverval + timestamp/date
+        assert binOpKind.equals(SqlKind.PLUS);  // interval - timestamp/date is an invalid syntax
+        if (arg1TypeName.equals(SqlTypeName.DATE) && DATE_INTERVAL_TYPES.contains(arg0TypeName)) {
+          // add/minus a date interval to a date object should return a date object
+          return new Expr.Call(
+              "bodo.libs.bodosql_array_kernels.add_date_interval_to_date", args.get(1), args.get(0));
+        }
+        return genDatetimeArithCode(
+            args, binOpKind, isArg0Datetime, isArg0Interval);
       } else if ((isArg0Interval || isArg1Interval) && binOpKind.equals(SqlKind.TIMES)) {
         return genIntervalMultiplyCode(args, isArg0Interval);
       }

@@ -2348,6 +2348,209 @@ def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
     )
 
 
+@pytest.fixture
+def date_add_sub_date_df():
+    return {
+        "table1": pd.DataFrame(
+            {
+                "start_dt": [
+                    datetime.date(2020, 6, 26),
+                    datetime.date(2025, 5, 3),
+                    datetime.date(1987, 3, 15),
+                    datetime.date(2117, 8, 29),
+                    datetime.date(1822, 12, 7),
+                    datetime.date(1906, 4, 14),
+                    None,
+                    datetime.date(1700, 2, 4),
+                ],
+                # TODO: support pd.DateOffset array
+                # "date_interval": [
+                #     pd.DateOffset(days=10),
+                #     pd.DateOffset(months=4),
+                #     pd.DateOffset(years=6),
+                #     None,
+                #     None,
+                #     pd.DateOffset(months=20),
+                #     pd.DateOffset(days=100),
+                #     pd.DateOffset(years=5),
+                # ],
+                "time_interval": [
+                    pd.Timedelta(hours=10),
+                    pd.Timedelta(minutes=4),
+                    None,
+                    pd.Timedelta(seconds=6),
+                    pd.Timedelta(hours=1),
+                    None,
+                    pd.Timedelta(minutes=100),
+                    pd.Timedelta(seconds=5),
+                ],
+            }
+        )
+    }
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                "SELECT DATE_ADD(start_dt, date_interval) FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            datetime.date(2020, 7, 6),
+                            datetime.date(2025, 9, 3),
+                            datetime.date(1987, 3, 15),
+                            None,
+                            None,
+                            datetime.date(1906, 4, 21),
+                            None,
+                            datetime.date(1705, 2, 4),
+                        ]
+                    }
+                ),
+            ),
+            id="DATE_ADD-vector_date_interval",
+            marks=pytest.mark.skip(reason="TODO: support pd.DateOffset array"),
+        ),
+        pytest.param(
+            (
+                "SELECT DATE_ADD(TO_DATE('2020-10-13'), INTERVAL 40 HOURS)",
+                pd.DataFrame({"outputs": [pd.Timestamp("2020-10-14 16:00:00")]}),
+            ),
+            id="DATE_ADD-scalar_time_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT ADDDATE(start_dt, time_interval) FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            pd.Timestamp("2020-06-26 10:00:00"),
+                            pd.Timestamp("2025-05-03 00:04:00"),
+                            None,
+                            pd.Timestamp("2117-08-29 00:00:06"),
+                            pd.Timestamp("1822-12-07 01:00:00"),
+                            None,
+                            None,
+                            pd.Timestamp("1700-02-04 00:00:05"),
+                        ]
+                    }
+                ),
+            ),
+            id="ADDDATE-vector_time_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT ADDDATE(TO_DATE('2022-3-5'), INTERVAL 8 MONTH)",
+                pd.DataFrame({"outputs": [datetime.date(2022, 11, 5)]}),
+            ),
+            id="ADDDATE-scalar_date_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT DATE_SUB(start_dt, date_interval) FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            datetime.date(2020, 7, 6),
+                            datetime.date(2025, 9, 3),
+                            datetime.date(1987, 3, 15),
+                            None,
+                            None,
+                            datetime.date(1906, 4, 21),
+                            None,
+                            datetime.date(1705, 2, 4),
+                        ]
+                    }
+                ),
+            ),
+            id="DATE_SUB-vector_date_interval",
+            marks=pytest.mark.skip(reason="TODO: support pd.DateOffset array"),
+        ),
+        pytest.param(
+            (
+                "SELECT DATE_SUB(TO_DATE('2011-1-18'), INTERVAL 80 MINUTES)",
+                pd.DataFrame({"outputs": [pd.Timestamp("2011-1-17 22:40:00")]}),
+            ),
+            id="DATE_SUB-scalar_time_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT SUBDATE(start_dt, time_interval) FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            pd.Timestamp("2020-06-25 14:00:00"),
+                            pd.Timestamp("2025-05-02 23:56:00"),
+                            None,
+                            pd.Timestamp("2117-08-28 23:59:54"),
+                            pd.Timestamp("1822-12-06 23:00:00"),
+                            None,
+                            None,
+                            pd.Timestamp("1700-02-03 23:59:55"),
+                        ]
+                    }
+                ),
+            ),
+            id="SUBDATE-vector_time_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT SUBDATE(TO_DATE('2000-1-5'), INTERVAL 2 WEEK)",
+                pd.DataFrame({"outputs": [datetime.date(1999, 12, 22)]}),
+            ),
+            id="SUBDATE-scalar_date_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT TO_DATE('2023-4-5') + INTERVAL 20 WEEK",
+                pd.DataFrame({"outputs": [datetime.date(2023, 8, 23)]}),
+            ),
+            id="date_add_date_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT TO_DATE('1990-11-3') - INTERVAL 10 DAY",
+                pd.DataFrame({"outputs": [datetime.date(1990, 10, 24)]}),
+            ),
+            id="date_minus_date_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT INTERVAL 10 YEAR + TO_DATE('2004-5-23')",
+                pd.DataFrame({"outputs": [datetime.date(2014, 5, 23)]}),
+            ),
+            id="date_interval_add_date",
+        ),
+    ],
+)
+def date_add_sub_date_query(request):
+    return request.param
+
+
+def test_date_add_sub_interval_with_date_input(
+    date_add_sub_date_df,
+    date_add_sub_date_query,
+    memory_leak_check,
+):
+    """Tests the MySQL version of DATE_ADD and all of its equivalent functions
+    with datetime.date input
+    types. Meanings of the parametrized arguments:
+    date_add_date_df: The fixture containing the datetime-equivialent data
+    date_add_date_query: which function name is being used.
+    """
+    query, outputs = date_add_sub_date_query
+
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            date_add_sub_date_df,
+            None,
+            check_names=False,
+            expected_output=outputs,
+        )
+
+
 def test_subdate_cols_int_arg1(
     subdate_equiv_fns,
     dt_fn_dataframe,
