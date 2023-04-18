@@ -1043,7 +1043,7 @@ def create_internal_stage(cursor: "SnowflakeCursor", is_temporary: bool = False)
 
             create_stage_sql = (
                 f'{create_stage_cmd} "{stage_name}" '
-                f"/* Python:bodo.io.snowflake.create_internal_stage() */ "
+                f"/* io.snowflake.create_internal_stage() */ "
             )
             cursor.execute(create_stage_sql, _is_internal=True).fetchall()  # type: ignore
             break
@@ -1071,8 +1071,7 @@ def drop_internal_stage(cursor: "SnowflakeCursor", stage_name: str):
     ev = tracing.Event("drop_internal_stage", is_parallel=False)
 
     drop_stage_sql = (
-        f'DROP STAGE "{stage_name}" '
-        f"/* Python:bodo.io.snowflake.drop_internal_stage() */ "
+        f'DROP STAGE "{stage_name}" ' f"/* io.snowflake.drop_internal_stage() */ "
     )
     cursor.execute(drop_stage_sql, _is_internal=True)
 
@@ -1111,7 +1110,7 @@ def do_upload_and_cleanup(
         )
         upload_sql = (
             f"PUT 'file://{chunk_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
-            f"/* Python:bodo.io.snowflake.do_upload_and_cleanup() */"
+            f"/* io.snowflake.do_upload_and_cleanup() */"
         )
         cursor.execute(upload_sql, _is_internal=True).fetchall()  # type: ignore
         ev_upload_parquet.finalize()
@@ -1194,7 +1193,7 @@ def create_table_handle_exists(
     create_table_columns = ", ".join(create_table_col_lst)
     create_table_sql = (
         f"{create_table_cmd} {location} ({create_table_columns}) "
-        f"/* Python:bodo.io.snowflake.create_table_if_not_exists() */"
+        f"/* io.snowflake.create_table_if_not_exists() */"
     )
     cursor.execute(create_table_sql, _is_internal=True)
     ev_create_table.finalize()
@@ -1267,7 +1266,7 @@ def execute_copy_into(
         f'FROM (SELECT {parquet_columns} FROM @"{stage_name}") '
         f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION=AUTO BINARY_AS_TEXT=False) "
         f"PURGE=TRUE ON_ERROR={SF_WRITE_COPY_INTO_ON_ERROR} "
-        f"/* Python:bodo.io.snowflake.execute_copy_into() */"
+        f"/* io.snowflake.execute_copy_into() */"
     )
     copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()  # type: ignore
 
@@ -1369,7 +1368,7 @@ def get_snowflake_stage_info(
     # Run `_execute_helper` to get stage info dict from Snowflake
     upload_sql = (
         f"PUT 'file://{query_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
-        f"/* Python:bodo.io.snowflake.get_snowflake_stage_info() */"
+        f"/* io.snowflake.get_snowflake_stage_info() */"
     )
     stage_info = cursor._execute_helper(upload_sql, is_internal=True)
 
@@ -1694,9 +1693,7 @@ def create_table_copy_into(
     err = None  # Forward declaration
     if my_rank == 0:
         try:
-            begin_transaction_sql = (
-                "BEGIN /* Python:bodo.io.snowflake.create_table_copy_into() */"
-            )
+            begin_transaction_sql = "BEGIN /* io.snowflake.create_table_copy_into() */"
             cursor.execute(begin_transaction_sql)
 
             # Table should be created even if the dataframe is empty.
@@ -1727,7 +1724,7 @@ def create_table_copy_into(
                     )
 
             commit_transaction_sql = (
-                "COMMIT /* Python:bodo.io.snowflake.create_table_copy_into() */"
+                "COMMIT /* io.snowflake.create_table_copy_into() */"
             )
             cursor.execute(commit_transaction_sql)
 
