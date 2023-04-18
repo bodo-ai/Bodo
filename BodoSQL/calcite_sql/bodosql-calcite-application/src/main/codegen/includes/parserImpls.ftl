@@ -103,6 +103,60 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
     }
 }
 
+boolean IfExistsOpt() :
+{
+}
+{
+    <IF> <EXISTS> { return true; }
+    |
+    { return false; }
+}
+
+boolean CascadeOpt() :
+{
+    final boolean cascade;
+}
+{
+    (
+        <CASCADE> { cascade = true; }
+    |
+        <RESTRICT> { cascade = false; }
+    |
+        { cascade = true; }
+    )
+    { return cascade; }
+}
+
+SqlDrop SqlDropTable(Span s, boolean replace) :
+{
+    final boolean ifExists;
+    final boolean cascade;
+    final SqlIdentifier id;
+}
+{
+    <TABLE>
+    ifExists = IfExistsOpt()
+    id = CompoundIdentifier()
+    cascade = CascadeOpt()
+    {
+        return new SqlDropTable(s.end(this), ifExists, id, cascade);
+    }
+}
+
+SqlDrop SqlDropView(Span s, boolean replace) :
+{
+    final boolean ifExists;
+    final SqlIdentifier id;
+}
+{
+    <VIEW>
+    ifExists = IfExistsOpt()
+    id = CompoundIdentifier()
+    {
+        return SqlDdlNodes.dropView(s.end(this), ifExists, id);
+    }
+}
+
 
 
 
