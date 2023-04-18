@@ -143,7 +143,7 @@
 	</dependencies>
 
 	<build>
-		<testSourceDirectory>${project.basedir}/src/test</testSourceDirectory>
+		<testSourceDirectory>${project.basedir}/src/test/java</testSourceDirectory>
 
 		<plugins>
 			<plugin>
@@ -176,7 +176,6 @@
 
 						<configuration>
 							<sourceDirs>
-								<source>src/test/kotlin</source>
 								<source>src/test/java</source>
 							</sourceDirs>
 						</configuration>
