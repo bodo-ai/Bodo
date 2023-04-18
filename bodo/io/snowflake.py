@@ -395,8 +395,7 @@ def snowflake_connect(
                 import json
 
                 params[key] = json.loads(val)
-    # pass Bodo identifier to Snowflake
-    params["application"] = "bodo"
+
     # Set a short login timeout so people don't have to wait the default
     # 60 seconds to find out they added the wrong credentials.
     params["login_timeout"] = 5
