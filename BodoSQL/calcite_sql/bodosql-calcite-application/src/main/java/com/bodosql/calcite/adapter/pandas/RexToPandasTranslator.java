@@ -35,10 +35,14 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.*;
@@ -655,6 +659,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                       .equals(DateTimeType.TIME)) {
                 throw new BodoSQLCodegenException("Cannot add/subtract days from TIME");
               }
+              Set<SqlTypeName> DATE_INTERVAL_TYPES =
+                  Sets.immutableEnumSet(SqlTypeName.INTERVAL_YEAR_MONTH,
+                      SqlTypeName.INTERVAL_YEAR,
+                      SqlTypeName.INTERVAL_MONTH,
+                      SqlTypeName.INTERVAL_WEEK,
+                      SqlTypeName.INTERVAL_DAY);
+              boolean is_date_interval = DATE_INTERVAL_TYPES.contains(
+                  fnOperation.getOperands().get(1).getType().getSqlTypeName());
               Expr arg0 = operands.get(0);
               Expr arg1 = operands.get(1);
               // Cast arg0 to from string to timestamp, if needed
@@ -671,6 +683,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                         exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow,
                         builder.getUseDateRuntime());
                 arg0 = new Expr.Raw(casted_expr);
+              }
+              // add/minus a date interval to a date object should return a date object
+              if (is_date_interval &&
+                  getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.DATE) {
+                if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
+                  arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
+                }
+                return new Expr.Call(
+                    "bodo.libs.bodosql_array_kernels.add_date_interval_to_date", arg0, arg1);
               }
               return generateMySQLDateAddCode(arg0, arg1, manual_addition, fnName);
             }

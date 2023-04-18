@@ -413,6 +413,272 @@ def test_interval_add_interval_to_time(interval_input, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "date_input, interval_input",
+    [
+        pytest.param(
+            datetime.date(2005, 11, 3),
+            pd.Timedelta(hours=100),
+            id="timedelta-all-scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.date(2017, 3, 26),
+                    datetime.date(2000, 12, 31),
+                    None,
+                    datetime.date(2023, 3, 6),
+                    datetime.date(2020, 6, 26),
+                ]
+                * 4
+            ),
+            pd.Timedelta(seconds=90),
+            id="timedelta-vector-scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.date(2017, 6, 15),
+                    datetime.date(1971, 2, 2),
+                    None,
+                    datetime.date(2022, 11, 25),
+                    datetime.date(2001, 9, 30),
+                ]
+                * 4
+            ),
+            pd.Series(
+                [
+                    pd.Timedelta(hours=1),
+                    None,
+                    pd.Timedelta(seconds=-42),
+                    pd.Timedelta(microseconds=15),
+                    pd.Timedelta(minutes=15),
+                ]
+                * 4
+            ),
+            id="timedelta-all-vector",
+        ),
+    ],
+)
+def test_interval_add_time_interval_to_date(
+    date_input, interval_input, memory_leak_check
+):
+    """
+    Tests support for add_interval with date input.
+    """
+
+    def impl(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.add_interval(arr0, arr1))
+
+    if isinstance(date_input, datetime.date):
+        impl = lambda arr0, arr1: bodo.libs.bodosql_array_kernels.add_interval(
+            arr0, arr1
+        )
+
+    def add_time_interval_date_scalar_fn(date, interval):
+        if pd.isna(date) or pd.isna(interval):
+            return None
+        else:
+            return pd.Timestamp(date) + interval
+
+    answer = vectorized_sol(
+        (
+            date_input,
+            interval_input,
+        ),
+        add_time_interval_date_scalar_fn,
+        None,
+    )
+
+    with bodosql_use_date_type():
+        check_func(
+            impl,
+            (date_input, interval_input),
+            py_output=answer,
+            reset_index=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "date_input, interval_input",
+    [
+        pytest.param(
+            datetime.date(2005, 11, 3),
+            pd.DateOffset(days=90),
+            id="dateoffset-all-scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.date(2017, 3, 26),
+                    datetime.date(2000, 12, 31),
+                    None,
+                    datetime.date(2023, 3, 6),
+                    datetime.date(2020, 6, 26),
+                ]
+                * 4
+            ),
+            pd.DateOffset(months=70),
+            id="dateoffset-vector-scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.date(2017, 6, 15),
+                    datetime.date(1971, 2, 2),
+                    None,
+                    datetime.date(2022, 11, 25),
+                    datetime.date(2001, 9, 30),
+                ]
+                * 4
+            ),
+            pd.Series(
+                [
+                    pd.DateOffset(months=1),
+                    None,
+                    pd.DateOffset(months=-42),
+                    pd.DateOffset(years=15),
+                    pd.DateOffset(days=15),
+                ]
+                * 4
+            ),
+            id="dateoffset-all-vector",
+            marks=pytest.mark.skip(reason="TODO: support pd.DateOffset array"),
+        ),
+    ],
+)
+def test_interval_add_date_interval_to_date(
+    date_input, interval_input, memory_leak_check
+):
+    """
+    Tests support for add_date_interval_to_date.
+    """
+
+    def impl(arr0, arr1):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.add_date_interval_to_date(arr0, arr1)
+        )
+
+    if isinstance(date_input, datetime.date):
+        impl = lambda arr0, arr1: bodo.libs.bodosql_array_kernels.add_date_interval_to_date(
+            arr0, arr1
+        )
+
+    def add_date_interval_date_scalar_fn(date, interval):
+        if pd.isna(date) or pd.isna(interval):
+            return None
+        else:
+            return (date + interval).date()
+
+    answer = vectorized_sol(
+        (
+            date_input,
+            interval_input,
+        ),
+        add_date_interval_date_scalar_fn,
+        None,
+    )
+
+    check_func(
+        impl,
+        (date_input, interval_input),
+        py_output=answer,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "ts_input, interval_input",
+    [
+        pytest.param(
+            pd.Timestamp("2017-12-31 23:59:00"),
+            pd.DateOffset(days=90),
+            id="dateoffset-all-scalar",
+        ),
+        pytest.param(
+            pd.Series(pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 20)),
+            pd.DateOffset(months=70),
+            id="dateoffset-vector-scalar",
+        ),
+        pytest.param(
+            pd.Series(pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 20)),
+            pd.Series(
+                [
+                    pd.DateOffset(months=1),
+                    None,
+                    pd.DateOffset(months=-42),
+                    pd.DateOffset(years=15),
+                    pd.DateOffset(days=15),
+                ]
+                * 4
+            ),
+            id="dateoffset-all-vector",
+            marks=pytest.mark.skip(reason="TODO: support pd.DateOffset array"),
+        ),
+        pytest.param(
+            pd.Timestamp("2017-12-31 23:59:00"),
+            pd.Timedelta(seconds=90),
+            id="timedelta-all-scalar",
+        ),
+        pytest.param(
+            pd.Series(pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 20)),
+            pd.Timedelta(minutes=70),
+            id="timedelta-vector-scalar",
+        ),
+        pytest.param(
+            pd.Series(pd.date_range("1999-12-20 00:01:40", "1999-12-30 00:01:40", 20)),
+            pd.Series(
+                [
+                    pd.Timedelta(hours=1),
+                    None,
+                    pd.Timedelta(microseconds=-42),
+                    pd.Timedelta(milliseconds=15),
+                    pd.Timedelta(nanoseconds=15),
+                ]
+                * 4
+            ),
+            id="timedelta-all-vector",
+        ),
+    ],
+)
+def test_interval_add_interval_to_timestamp(
+    ts_input, interval_input, memory_leak_check
+):
+    """
+    Tests add_interval kernel with timestamp input.
+    """
+
+    def impl(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.add_interval(arr0, arr1))
+
+    if isinstance(ts_input, pd.Timestamp):
+        impl = lambda arr0, arr1: bodo.libs.bodosql_array_kernels.add_interval(
+            arr0, arr1
+        )
+
+    def add_date_interval_timetstamp_scalar_fn(ts, interval):
+        if pd.isna(ts) or pd.isna(interval):
+            return None
+        else:
+            return ts + interval
+
+    answer = vectorized_sol(
+        (
+            ts_input,
+            interval_input,
+        ),
+        add_date_interval_timetstamp_scalar_fn,
+        None,
+    )
+
+    check_func(
+        impl,
+        (ts_input, interval_input),
+        py_output=answer,
+        reset_index=True,
+    )
+
+
 def make_add_interval_tz_test(amount, start, target, is_vector):
     """
     Takes in a start/end timestamp string and converts them to tz-aware timestamps
