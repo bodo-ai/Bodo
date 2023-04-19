@@ -616,3 +616,23 @@ def test_implicit_cast_date_to_tz_aware(tz_aware_df, memory_leak_check):
             check_names=False,
             expected_output=expected_output,
         )
+
+
+def test_cast_date_scalar_to_timestamp(
+    basic_df, use_sf_cast_syntax, memory_leak_check
+):
+    """tests casting date scalar to timestamp"""
+
+    if use_sf_cast_syntax:
+        query = "SELECT DATE('2013-05-06')::TIMESTAMP"
+    else:
+        query = "SELECT CAST(DATE('2013-05-06') as TIMESTAMP)"
+
+    expected_output = pd.DataFrame({"A": [pd.Timestamp(2013, 5, 6)]})
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_names=False,
+        expected_output=expected_output,
+    )
