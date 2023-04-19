@@ -1888,6 +1888,9 @@ def test_pd_to_datetime(memory_leak_check):
     )
     check_func(test_input, (date_arr,))
 
+    date_scalar = datetime.date(2023, 4, 18)
+    check_func(test_input, (date_scalar,))
+
     # input is already Series(dt64)
     S = pd.to_datetime(date_arr)
     check_func(test_input, (S,))
