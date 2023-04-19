@@ -142,7 +142,7 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         // TODO [BE-3247] We should specify nullability of the fields here.
         std::shared_ptr<arrow::Field> field =
             std::make_shared<arrow::Field>("element", inner_type);
-        assert(OFFSET_BITWIDTH == 64);
+        static_assert(OFFSET_BITWIDTH == 64);
 
         *out = std::make_shared<arrow::LargeListArray>(
             arrow::large_list(field), array->length, offsets_buffer,
@@ -902,28 +902,31 @@ std::shared_ptr<array_info> arrow_boolean_array_to_bodo(
 }
 
 /**
- * @brief Convert Arrow string array to Bodo array_info with zero-copy.
+ * @brief Convert Arrow string or binary array to Bodo array_info with zero-copy
  * The output Bodo array holds references to the Arrow array's buffers and
- * releases them when deleted.
+ * releases them when deleted. A LargeStringArray is a LargeBinaryArray, so
+ * this method works for both types.
  *
- * @param arrow_str_arr Input Arrow LargeStringArray
- * @return std::shared_ptr<array_info> Output Bodo array
+ * @param arrow_bin_arr Input Arrow string or binary array
+ * @param typ_enum Underlying dtype of elements (string or binary)
+ * @return array_info* Output Bodo array
  */
-std::shared_ptr<array_info> arrow_string_array_to_bodo(
-    std::shared_ptr<arrow::LargeStringArray> arrow_str_arr) {
-    int64_t n = arrow_str_arr->length();
+std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
+    std::shared_ptr<arrow::LargeBinaryArray> arrow_bin_arr,
+    Bodo_CTypes::CTypeEnum typ_enum) {
+    int64_t n = arrow_bin_arr->length();
 
     std::shared_ptr<BodoBuffer> char_buf_buffer = arrow_buffer_to_bodo(
-        arrow_str_arr->value_data(), (void *)arrow_str_arr->raw_data(),
-        arrow_str_arr->total_values_length(), Bodo_CTypes::UINT8);
+        arrow_bin_arr->value_data(), (void *)arrow_bin_arr->raw_data(),
+        arrow_bin_arr->total_values_length(), Bodo_CTypes::UINT8);
     std::shared_ptr<BodoBuffer> offset_buffer = arrow_buffer_to_bodo(
-        arrow_str_arr->value_offsets(),
-        (void *)arrow_str_arr->raw_value_offsets(), n + 1, Bodo_CType_offset);
+        arrow_bin_arr->value_offsets(),
+        (void *)arrow_bin_arr->raw_value_offsets(), n + 1, Bodo_CType_offset);
     std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
-        arrow_str_arr->null_bitmap(), arrow_str_arr->null_bitmap_data(), n);
+        arrow_bin_arr->null_bitmap(), arrow_bin_arr->null_bitmap_data(), n);
 
     return std::make_shared<array_info>(
-        bodo_array_type::STRING, Bodo_CTypes::STRING, n,
+        bodo_array_type::STRING, typ_enum, n,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {char_buf_buffer, offset_buffer, null_bitmap_buffer}));
 }
@@ -964,17 +967,34 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
     std::shared_ptr<arrow::Array> arrow_arr) {
     switch (arrow_arr->type_id()) {
         case arrow::Type::LARGE_STRING:
-            return arrow_string_array_to_bodo(
-                std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr));
+            return arrow_string_binary_array_to_bodo(
+                std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr),
+                Bodo_CTypes::STRING);
         // convert 32-bit offset array to 64-bit offset array to match Bodo data
         // layout
         case arrow::Type::STRING: {
-            assert(OFFSET_BITWIDTH == 64);
+            static_assert(OFFSET_BITWIDTH == 64);
             auto res = arrow::compute::Cast(*arrow_arr, arrow::large_utf8());
             std::shared_ptr<arrow::Array> casted_arr;
             CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
-            return arrow_string_array_to_bodo(
-                std::static_pointer_cast<arrow::LargeStringArray>(casted_arr));
+            return arrow_string_binary_array_to_bodo(
+                std::static_pointer_cast<arrow::LargeStringArray>(casted_arr),
+                Bodo_CTypes::STRING);
+        }
+        case arrow::Type::LARGE_BINARY:
+            return arrow_string_binary_array_to_bodo(
+                std::static_pointer_cast<arrow::LargeBinaryArray>(arrow_arr),
+                Bodo_CTypes::BINARY);
+        // convert 32-bit offset array to 64-bit offset array to match Bodo data
+        // layout
+        case arrow::Type::BINARY: {
+            static_assert(OFFSET_BITWIDTH == 64);
+            auto res = arrow::compute::Cast(*arrow_arr, arrow::large_binary());
+            std::shared_ptr<arrow::Array> casted_arr;
+            CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+            return arrow_string_binary_array_to_bodo(
+                std::static_pointer_cast<arrow::LargeBinaryArray>(casted_arr),
+                Bodo_CTypes::BINARY);
         }
         case arrow::Type::LARGE_LIST:
             return arrow_list_array_to_bodo(
@@ -982,7 +1002,7 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
         // convert 32-bit offset array to 64-bit offset array to match Bodo data
         // layout
         case arrow::Type::LIST: {
-            assert(OFFSET_BITWIDTH == 64);
+            static_assert(OFFSET_BITWIDTH == 64);
             auto res = arrow::compute::Cast(
                 *arrow_arr, arrow::large_list(arrow_arr->type()->field(0)));
             std::shared_ptr<arrow::Array> casted_arr;
