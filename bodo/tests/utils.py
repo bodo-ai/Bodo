@@ -2461,3 +2461,36 @@ def bodosql_use_date_type() -> None:
         yield None
     finally:
         bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE = old_bodosql_use_date_type
+
+
+@contextmanager
+def temp_env_override(env_vars):
+    """Update the current environment variables with key-value pairs provided
+    in a dictionary and then restore it after.
+
+    Args
+        env_vars (Dict(str, str or None)): A dictionary of environment variables to set.
+            A value of None indicates a variable should be removed.
+    """
+
+    def update_env_vars(env_vars):
+        old_env_vars = {}
+        for k, v in env_vars.items():
+            if k in os.environ:
+                old_env_vars[k] = os.environ[k]
+            else:
+                old_env_vars[k] = None
+
+            if v is None:
+                if k in os.environ:
+                    del os.environ[k]
+            else:
+                os.environ[k] = v
+        return old_env_vars
+
+    old_env = {}
+    try:
+        old_env = update_env_vars(env_vars)
+        yield
+    finally:
+        update_env_vars(old_env)

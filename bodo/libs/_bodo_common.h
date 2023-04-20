@@ -870,31 +870,4 @@ inline struct numpy_arr_payload make_numpy_array_payload(
 }
 #endif
 
-#ifdef MS_WINDOWS
-
-#define NOMINMAX
-#include <windows.h>
-
-inline size_t getTotalSystemMemory() {
-    MEMORYSTATUSEX status;
-    status.dwLength = sizeof(status);
-    GlobalMemoryStatusEx(&status);
-    auto memory_size = static_cast<size_t>(status.ullTotalPhys);
-    return memory_size;
-}
-
-#else
-
-#include <unistd.h>
-
-#define getTotalSystemMemory()                   \
-    ({                                           \
-        unsigned long long memory_size;          \
-        long pages = sysconf(_SC_PHYS_PAGES);    \
-        long page_size = sysconf(_SC_PAGE_SIZE); \
-        memory_size = pages * page_size;         \
-        static_cast<size_t>(memory_size);        \
-    })
-#endif
-
 #endif /* BODO_COMMON_H_INCLUDED_ */
