@@ -6372,6 +6372,14 @@ def _parse_query_expr(
             " {0} ".format(self.op).join(parened)
         )
 
+    def Div__init__(self, lhs, rhs):
+        """
+        Replace Div.__init__ wit BinOp.__init__ to avoid checking for return type
+        since at this stage Bodo is just parsing and no evaluation information is available yet.
+        """
+        pandas.core.computation.ops.BinOp.__init__(self, "/", lhs, rhs)
+
+    saved_Div__init__ = pandas.core.computation.ops.Div.__init__  # type: ignore
     saved_rewrite_membership_op = (
         pandas.core.computation.expr.BaseExprVisitor._rewrite_membership_op  # type: ignore
     )
@@ -6389,6 +6397,7 @@ def _parse_query_expr(
         pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops  # type: ignore
     )
     try:
+        pandas.core.computation.ops.Div.__init__ = Div__init__  # type: ignore
         pandas.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (  # type: ignore
             _rewrite_membership_op
         )
@@ -6428,6 +6437,7 @@ def _parse_query_expr(
             #                undefined local variable using @
             raise BodoError(f"df.query(): undefined variable, {e}")
     finally:
+        pandas.core.computation.ops.Div.__init__ = saved_Div__init__  # type: ignore
         pandas.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (  # type: ignore
             saved_rewrite_membership_op
         )
