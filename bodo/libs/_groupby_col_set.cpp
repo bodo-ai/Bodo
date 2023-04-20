@@ -344,6 +344,238 @@ void VarStdColSet::eval(const grouping_info& grp_info) {
     }
 }
 
+SkewColSet::SkewColSet(std::shared_ptr<array_info> in_col, int ftype,
+                       bool combine_step, bool use_sql_rules)
+    : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
+
+SkewColSet::~SkewColSet() {}
+
+void SkewColSet::alloc_update_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    if (!this->combine_step) {
+        // need to create output column now
+        std::shared_ptr<array_info> col =
+            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                        Bodo_CTypes::FLOAT64, 0, 0);  // for result
+        // Initialize as ftype to match nullable behavior
+        aggfunc_output_initialize(col, this->ftype,
+                                  use_sql_rules);  // zero initialize
+        out_cols.push_back(col);
+        this->update_cols.push_back(col);
+    }
+    std::shared_ptr<array_info> count_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::UINT64, 0, 0);
+    std::shared_ptr<array_info> m1_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::FLOAT64, 0, 0);
+    std::shared_ptr<array_info> m2_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::FLOAT64, 0, 0);
+    std::shared_ptr<array_info> m3_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::FLOAT64, 0, 0);
+    aggfunc_output_initialize(count_col, Bodo_FTypes::count,
+                              use_sql_rules);  // zero initialize
+    aggfunc_output_initialize(m1_col, Bodo_FTypes::count,
+                              use_sql_rules);  // zero initialize
+    aggfunc_output_initialize(m2_col, Bodo_FTypes::count,
+                              use_sql_rules);  // zero initialize
+    aggfunc_output_initialize(m3_col, Bodo_FTypes::count,
+                              use_sql_rules);  // zero initialize
+    out_cols.push_back(count_col);
+    out_cols.push_back(m1_col);
+    out_cols.push_back(m2_col);
+    out_cols.push_back(m3_col);
+    this->update_cols.push_back(count_col);
+    this->update_cols.push_back(m1_col);
+    this->update_cols.push_back(m2_col);
+    this->update_cols.push_back(m3_col);
+}
+
+void SkewColSet::update(const std::vector<grouping_info>& grp_infos) {
+    if (!this->combine_step) {
+        std::vector<std::shared_ptr<array_info>> aux_cols = {
+            this->update_cols[1], this->update_cols[2], this->update_cols[3],
+            this->update_cols[4]};
+        do_apply_to_column(this->in_col, this->update_cols[1], aux_cols,
+                           grp_infos[0], this->ftype);
+    } else {
+        std::vector<std::shared_ptr<array_info>> aux_cols = {
+            this->update_cols[0], this->update_cols[1], this->update_cols[2],
+            this->update_cols[3]};
+        do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
+                           grp_infos[0], this->ftype);
+    }
+}
+
+void SkewColSet::alloc_combine_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    std::shared_ptr<array_info> col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::FLOAT64, 0,
+                    0);  // for result
+    // Initialize as ftype to match nullable behavior
+    aggfunc_output_initialize(col, this->ftype,
+                              use_sql_rules);  // zero initialize
+    out_cols.push_back(col);
+    this->combine_cols.push_back(col);
+    BasicColSet::alloc_combine_columns(num_groups, out_cols);
+}
+
+void SkewColSet::combine(const grouping_info& grp_info) {
+    std::shared_ptr<array_info> count_col_in = this->update_cols[0];
+    std::shared_ptr<array_info> m1_col_in = this->update_cols[1];
+    std::shared_ptr<array_info> m2_col_in = this->update_cols[2];
+    std::shared_ptr<array_info> m3_col_in = this->update_cols[3];
+    std::shared_ptr<array_info> count_col_out = this->combine_cols[1];
+    std::shared_ptr<array_info> m1_col_out = this->combine_cols[2];
+    std::shared_ptr<array_info> m2_col_out = this->combine_cols[3];
+    std::shared_ptr<array_info> m3_col_out = this->combine_cols[4];
+    aggfunc_output_initialize(count_col_out, Bodo_FTypes::count, use_sql_rules);
+    aggfunc_output_initialize(m1_col_out, Bodo_FTypes::count, use_sql_rules);
+    aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count, use_sql_rules);
+    aggfunc_output_initialize(m3_col_out, Bodo_FTypes::count, use_sql_rules);
+    skew_combine(count_col_in, m1_col_in, m2_col_in, m3_col_in, count_col_out,
+                 m1_col_out, m2_col_out, m3_col_out, grp_info);
+}
+
+void SkewColSet::eval(const grouping_info& grp_info) {
+    std::vector<std::shared_ptr<array_info>>* mycols;
+    if (this->combine_step) {
+        mycols = &this->combine_cols;
+    } else {
+        mycols = &this->update_cols;
+    }
+
+    std::vector<std::shared_ptr<array_info>> aux_cols = {
+        mycols->at(1), mycols->at(2), mycols->at(3), mycols->at(4)};
+    do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+                       Bodo_FTypes::skew_eval);
+}
+
+KurtColSet::KurtColSet(std::shared_ptr<array_info> in_col, int ftype,
+                       bool combine_step, bool use_sql_rules)
+    : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
+
+KurtColSet::~KurtColSet() {}
+
+void KurtColSet::alloc_update_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    if (!this->combine_step) {
+        // need to create output column now
+        std::shared_ptr<array_info> col =
+            alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                        Bodo_CTypes::FLOAT64, 0, 0);  // for result
+        // Initialize as ftype to match nullable behavior
+        aggfunc_output_initialize(col, this->ftype,
+                                  use_sql_rules);  // zero initialize
+        out_cols.push_back(col);
+        this->update_cols.push_back(col);
+    }
+    std::shared_ptr<array_info> count_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::UINT64, 0, 0);
+    std::shared_ptr<array_info> m1_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::FLOAT64, 0, 0);
+    std::shared_ptr<array_info> m2_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::FLOAT64, 0, 0);
+    std::shared_ptr<array_info> m3_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::FLOAT64, 0, 0);
+    std::shared_ptr<array_info> m4_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::FLOAT64, 0, 0);
+    aggfunc_output_initialize(count_col, Bodo_FTypes::count,
+                              use_sql_rules);  // zero initialize
+    aggfunc_output_initialize(m1_col, Bodo_FTypes::count,
+                              use_sql_rules);  // zero initialize
+    aggfunc_output_initialize(m2_col, Bodo_FTypes::count,
+                              use_sql_rules);  // zero initialize
+    aggfunc_output_initialize(m3_col, Bodo_FTypes::count,
+                              use_sql_rules);  // zero initialize
+    aggfunc_output_initialize(m4_col, Bodo_FTypes::count,
+                              use_sql_rules);  // zero initialize
+    out_cols.push_back(count_col);
+    out_cols.push_back(m1_col);
+    out_cols.push_back(m2_col);
+    out_cols.push_back(m3_col);
+    out_cols.push_back(m4_col);
+    this->update_cols.push_back(count_col);
+    this->update_cols.push_back(m1_col);
+    this->update_cols.push_back(m2_col);
+    this->update_cols.push_back(m3_col);
+    this->update_cols.push_back(m4_col);
+}
+
+void KurtColSet::update(const std::vector<grouping_info>& grp_infos) {
+    if (!this->combine_step) {
+        std::vector<std::shared_ptr<array_info>> aux_cols = {
+            this->update_cols[1], this->update_cols[2], this->update_cols[3],
+            this->update_cols[4], this->update_cols[5]};
+        do_apply_to_column(this->in_col, this->update_cols[1], aux_cols,
+                           grp_infos[0], this->ftype);
+    } else {
+        std::vector<std::shared_ptr<array_info>> aux_cols = {
+            this->update_cols[0], this->update_cols[1], this->update_cols[2],
+            this->update_cols[3], this->update_cols[4]};
+        do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
+                           grp_infos[0], this->ftype);
+    }
+}
+
+void KurtColSet::eval(const grouping_info& grp_info) {
+    std::vector<std::shared_ptr<array_info>>* mycols;
+    if (this->combine_step) {
+        mycols = &this->combine_cols;
+    } else {
+        mycols = &this->update_cols;
+    }
+
+    std::vector<std::shared_ptr<array_info>> aux_cols = {
+        mycols->at(1), mycols->at(2), mycols->at(3), mycols->at(4),
+        mycols->at(5)};
+    do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+                       Bodo_FTypes::kurt_eval);
+}
+
+void KurtColSet::alloc_combine_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    std::shared_ptr<array_info> col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::FLOAT64, 0,
+                    0);  // for result
+    // Initialize as ftype to match nullable behavior
+    aggfunc_output_initialize(col, this->ftype,
+                              use_sql_rules);  // zero initialize
+    out_cols.push_back(col);
+    this->combine_cols.push_back(col);
+    BasicColSet::alloc_combine_columns(num_groups, out_cols);
+}
+
+void KurtColSet::combine(const grouping_info& grp_info) {
+    std::shared_ptr<array_info> count_col_in = this->update_cols[0];
+    std::shared_ptr<array_info> m1_col_in = this->update_cols[1];
+    std::shared_ptr<array_info> m2_col_in = this->update_cols[2];
+    std::shared_ptr<array_info> m3_col_in = this->update_cols[3];
+    std::shared_ptr<array_info> m4_col_in = this->update_cols[4];
+    std::shared_ptr<array_info> count_col_out = this->combine_cols[1];
+    std::shared_ptr<array_info> m1_col_out = this->combine_cols[2];
+    std::shared_ptr<array_info> m2_col_out = this->combine_cols[3];
+    std::shared_ptr<array_info> m3_col_out = this->combine_cols[4];
+    std::shared_ptr<array_info> m4_col_out = this->combine_cols[5];
+    aggfunc_output_initialize(count_col_out, Bodo_FTypes::count, use_sql_rules);
+    aggfunc_output_initialize(m1_col_out, Bodo_FTypes::count, use_sql_rules);
+    aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count, use_sql_rules);
+    aggfunc_output_initialize(m3_col_out, Bodo_FTypes::count, use_sql_rules);
+    aggfunc_output_initialize(m4_col_out, Bodo_FTypes::count, use_sql_rules);
+    kurt_combine(count_col_in, m1_col_in, m2_col_in, m3_col_in, m4_col_in,
+                 count_col_out, m1_col_out, m2_col_out, m3_col_out, m4_col_out,
+                 grp_info);
+}
+
 UdfColSet::UdfColSet(std::shared_ptr<array_info> in_col, bool combine_step,
                      std::shared_ptr<table_info> udf_table, int udf_table_idx,
                      int n_redvars, bool use_sql_rules)
@@ -715,6 +947,14 @@ std::unique_ptr<BasicColSet> makeColSet(
         case Bodo_FTypes::std:
             colset =
                 new VarStdColSet(in_cols[0], ftype, do_combine, use_sql_rules);
+            break;
+        case Bodo_FTypes::skew:
+            colset =
+                new SkewColSet(in_cols[0], ftype, do_combine, use_sql_rules);
+            break;
+        case Bodo_FTypes::kurtosis:
+            colset =
+                new KurtColSet(in_cols[0], ftype, do_combine, use_sql_rules);
             break;
         case Bodo_FTypes::idxmin:
         case Bodo_FTypes::idxmax:
