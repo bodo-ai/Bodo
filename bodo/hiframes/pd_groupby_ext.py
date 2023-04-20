@@ -361,9 +361,9 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             f"column type of list/tuple of {in_dtype} is not supported in groupby built-in function {func_name}",
         )
 
-    elif (func_name in {"median", "mean", "var", "std"}) and isinstance(
-        in_dtype, (Decimal128Type, types.Integer, types.Float)
-    ):
+    elif (
+        func_name in {"median", "mean", "var", "std", "kurtosis", "skew"}
+    ) and isinstance(in_dtype, (Decimal128Type, types.Integer, types.Float)):
         # TODO: Only make the output nullable if the input is nullable?
         return to_nullable_type(dtype_to_array_type(types.float64)), "ok"
     elif func_name == "boolor_agg":
@@ -1480,6 +1480,28 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             numba.core.registry.cpu_target.target_context,
         )[0]
 
+    @bound_function("groupby.kurtosis", no_unliteral=True)
+    def resolve_kurtosis(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "kurtosis",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
+    @bound_function("groupby.skew", no_unliteral=True)
+    def resolve_skew(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "skew",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
     @bound_function("groupby.first", no_unliteral=True)
     def resolve_first(self, grp, args, kws):
         return resolve_gb(
@@ -2246,7 +2268,6 @@ groupby_unsupported = {
     "quantile",
     "resample",
     "sample",
-    "skew",
     "take",
     "tshift",
 }

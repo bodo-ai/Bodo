@@ -46,11 +46,12 @@ void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
                 ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last ||
                 ftype == Bodo_FTypes::boolor_agg ||
                 ftype == Bodo_FTypes::mean || ftype == Bodo_FTypes::var ||
+                ftype == Bodo_FTypes::kurtosis || ftype == Bodo_FTypes::skew ||
                 ftype == Bodo_FTypes::std || ftype == Bodo_FTypes::median) {
-                // if input is all nulls, max, min, first, last, and boolor_agg
-                // output will be null. We null initialize median, mean, var,
-                // and std as well since we always output a nullable float at
-                // this time.
+                // if input is all nulls, max, min, first, last, kurtosis, skew,
+                // or boolor_agg, the output will be null. We null initialize
+                // median, mean, var, and std as well since we always output
+                // a nullable float at this time.
                 init_val = false;
             } else {
                 init_val = true;
@@ -423,6 +424,8 @@ void get_groupby_output_dtype(int ftype,
         case Bodo_FTypes::mean:
         case Bodo_FTypes::var:
         case Bodo_FTypes::std:
+        case Bodo_FTypes::kurtosis:
+        case Bodo_FTypes::skew:
             array_type = bodo_array_type::NULLABLE_INT_BOOL;
             dtype = Bodo_CTypes::FLOAT64;
             return;

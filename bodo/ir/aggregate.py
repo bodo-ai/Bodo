@@ -268,6 +268,8 @@ supported_agg_funcs = [
     "idxmax",
     "var",
     "std",
+    "kurtosis",
+    "skew",
     "boolor_agg",
     "count_if",
     "udf",
@@ -332,6 +334,20 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.fname = func_name
         func.ncols_pre_shuffle = 3
         func.ncols_post_shuffle = 4
+        return func
+    elif func_name == "skew":
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        func.ncols_pre_shuffle = 4
+        func.ncols_post_shuffle = 5
+        return func
+    elif func_name == "kurtosis":
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        func.ncols_pre_shuffle = 5
+        func.ncols_post_shuffle = 6
         return func
     if func_name in {"first", "last", "boolor_agg", "count_if"}:
         # We don't have a function definition for first/last/boolor_agg/count_if, and it is not needed
