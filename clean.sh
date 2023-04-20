@@ -11,3 +11,5 @@ find . -name "pyfs.h" | xargs rm -f
 find . -name "_hdfs.cpp" | xargs rm -f
 echo "Removing bodo/utils/tracing.c"
 find . -name "tracing.c" | xargs rm -f
+echo "Removing bodo/libs/memory.cpp"
+find . -name "memory.cpp" | xargs rm -f

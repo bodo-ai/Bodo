@@ -689,7 +689,7 @@ std::shared_ptr<BodoBuffer> arrow_buffer_to_bodo(
 
     // Create a meminfo holding Arrow data, which has a custom destructor that
     // deletes the Arrow buffer.
-    NRT_MemInfo *buf_meminfo = (NRT_MemInfo *)NRT_Allocate(sizeof(NRT_MemInfo));
+    NRT_MemInfo *buf_meminfo = NRT_MemInfo_allocate();
     NRT_MemInfo_init(buf_meminfo, ptr, 0, (NRT_dtor_function)arrow_buffer_dtor,
                      (void *)dtor_data, NULL);
 

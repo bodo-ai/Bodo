@@ -64,6 +64,7 @@ bodo/io/pyfs.h
 bodo/io/pyfs.cpp
 bodo/io/_hdfs.cpp
 bodo/utils/tracing.c
+bodo/libs/memory.cpp
 
 # Iceberg Connector
 iceberg_db
