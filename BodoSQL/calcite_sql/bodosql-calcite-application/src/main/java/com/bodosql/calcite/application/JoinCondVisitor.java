@@ -151,6 +151,9 @@ public class JoinCondVisitor {
         case TIMES:
           operator = "*";
           break;
+        case DIVIDE:
+          operator = "/";
+          break;
         default:
           throw new BodoSQLCodegenException(
               String.format(
