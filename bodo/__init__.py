@@ -339,3 +339,10 @@ except:
 
 # threshold for not inlining complex case statements to reduce compilation time (unit: number of lines in generated body code)
 COMPLEX_CASE_THRESHOLD = 100
+
+
+# Set our Buffer Pool as the default memory pool for PyArrow.
+# Note that this will initialize the Buffer Pool.
+from bodo.libs.memory import set_default_buffer_pool_as_arrow_memory_pool
+
+set_default_buffer_pool_as_arrow_memory_pool()

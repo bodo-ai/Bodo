@@ -292,6 +292,7 @@ ext_str = Extension(
         "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_bodo_to_arrow.cpp",
         "bodo/libs/_datetime_utils.cpp",
+        "bodo/libs/_memory.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
@@ -299,6 +300,8 @@ ext_str = Extension(
         "bodo/libs/_bodo_to_arrow.h",
         "bodo/libs/_meminfo.h",
         "bodo/libs/_datetime_utils.h",
+        "bodo/libs/_memory.h",
+        "bodo/libs/_memory.cpp",
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow", "arrow_python"],
     define_macros=np_compile_args["define_macros"],
@@ -315,12 +318,15 @@ ext_decimal = Extension(
     sources=[
         "bodo/libs/_decimal_ext.cpp",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_memory.cpp",
         "bodo/libs/_bodo_to_arrow.cpp",
         "bodo/libs/_datetime_utils.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_memory.h",
+        "bodo/libs/_memory.cpp",
         "bodo/libs/_bodo_to_arrow.cpp",
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
@@ -358,6 +364,7 @@ ext_arr = Extension(
         "bodo/libs/_murmurhash3.cpp",
         "bodo/libs/_shuffle.cpp",
         "bodo/io/arrow_reader.cpp",
+        "bodo/libs/_memory.cpp",
     ],
     depends=[
         "bodo/libs/_array_hash.h",
@@ -386,6 +393,8 @@ ext_arr = Extension(
         "bodo/libs/_murmurhash3.h",
         "bodo/libs/hyperloglog.hpp",
         "bodo/libs/simd-block-fixed.h",
+        "bodo/libs/_memory.cpp",
+        "bodo/libs/_memory.h",
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow", "arrow_python"],
     # -fno-strict-aliasing required by bloom filter implementation (see comment
@@ -404,10 +413,12 @@ ext_dt = Extension(
         "bodo/libs/_datetime_ext.cpp",
         "bodo/libs/_datetime_utils.cpp",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_memory.cpp",
         "bodo/libs/_bodo_to_arrow.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
+        "bodo/libs/_memory.h",
         "bodo/libs/_datetime_utils.h",
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
@@ -430,12 +441,15 @@ ext_quantile = Extension(
         "bodo/libs/_bodo_to_arrow.cpp",
         "bodo/io/arrow_reader.cpp",
         "bodo/libs/_datetime_utils.cpp",
+        "bodo/libs/_memory.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_decimal_ext.cpp",
         "bodo/libs/_decimal_ext.h",
+        "bodo/libs/_memory.h",
+        "bodo/libs/_memory.cpp",
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
     extra_compile_args=eca,
@@ -524,6 +538,7 @@ ext_parquet = Extension(
         "bodo/libs/_array_operations.cpp",
         "bodo/libs/_datetime_utils.cpp",
         "bodo/libs/_shuffle.cpp",
+        "bodo/libs/_memory.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
@@ -541,6 +556,8 @@ ext_parquet = Extension(
         "bodo/libs/_array_operations.h",
         "bodo/libs/_datetime_utils.h",
         "bodo/libs/_shuffle.h",
+        "bodo/libs/_memory.h",
+        "bodo/libs/_memory.cpp",
     ],
     libraries=pq_libs + np_compile_args["libraries"] + ["arrow", "arrow_python"],
     include_dirs=["."] + np_compile_args["include_dirs"] + ind + extra_hash_ind,
@@ -605,6 +622,23 @@ ext_tracing = Extension(
     library_dirs=lid,
 )
 pyx_builtins += [os.path.join("bodo", "utils", "tracing.pyx")]
+
+
+ext_memory = Extension(
+    name="bodo.libs.memory",
+    sources=[
+        "bodo/libs/memory.pyx",
+        "bodo/libs/_memory.cpp",
+    ],
+    include_dirs=np_compile_args["include_dirs"] + ind,
+    libraries=["arrow", "arrow_python"] + MPI_LIBS,
+    extra_compile_args=eca_c,
+    extra_link_args=ela,
+    library_dirs=lid,
+    language="c++",
+)
+
+pyx_builtins += [os.path.join("bodo", "libs", "memory.pyx")]
 
 
 _ext_mods = [
@@ -701,7 +735,13 @@ setup(
     cmdclass=versioneer.get_cmdclass(),
     ext_modules=_ext_mods
     + cythonize(
-        _cython_ext_mods + [ext_pyfs, ext_hdfs_pyarrow, ext_tracing],
+        _cython_ext_mods
+        + [
+            ext_pyfs,
+            ext_hdfs_pyarrow,
+            ext_tracing,
+            ext_memory,
+        ],
         compiler_directives={"language_level": "3"},
         compile_time_env=dict(BODO_DEV_BUILD=development_mode),
     ),
