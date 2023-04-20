@@ -780,6 +780,53 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             }
             break;
         }
+        case Bodo_FTypes::skew: {
+            std::shared_ptr<array_info> count_col = aux_cols[0];
+            std::shared_ptr<array_info> m1_col = aux_cols[1];
+            std::shared_ptr<array_info> m2_col = aux_cols[2];
+            std::shared_ptr<array_info> m3_col = aux_cols[3];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = get_group_for_row(grp_info, i);
+                if (i_grp != -1) {
+                    skew_agg<T, dtype>::apply(getv<T>(in_col, i),
+                                              getv<uint64_t>(count_col, i_grp),
+                                              getv<double>(m1_col, i_grp),
+                                              getv<double>(m2_col, i_grp),
+                                              getv<double>(m3_col, i_grp));
+                    out_col->set_null_bit(i_grp, true);
+                    count_col->set_null_bit(i_grp, true);
+                    m1_col->set_null_bit(i_grp, true);
+                    m2_col->set_null_bit(i_grp, true);
+                    m3_col->set_null_bit(i_grp, true);
+                }
+            }
+            break;
+        }
+        case Bodo_FTypes::kurtosis: {
+            std::shared_ptr<array_info> count_col = aux_cols[0];
+            std::shared_ptr<array_info> m1_col = aux_cols[1];
+            std::shared_ptr<array_info> m2_col = aux_cols[2];
+            std::shared_ptr<array_info> m3_col = aux_cols[3];
+            std::shared_ptr<array_info> m4_col = aux_cols[4];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = get_group_for_row(grp_info, i);
+                if (i_grp != -1) {
+                    kurt_agg<T, dtype>::apply(getv<T>(in_col, i),
+                                              getv<uint64_t>(count_col, i_grp),
+                                              getv<double>(m1_col, i_grp),
+                                              getv<double>(m2_col, i_grp),
+                                              getv<double>(m3_col, i_grp),
+                                              getv<double>(m4_col, i_grp));
+                    out_col->set_null_bit(i_grp, true);
+                    count_col->set_null_bit(i_grp, true);
+                    m1_col->set_null_bit(i_grp, true);
+                    m2_col->set_null_bit(i_grp, true);
+                    m3_col->set_null_bit(i_grp, true);
+                    m4_col->set_null_bit(i_grp, true);
+                }
+            }
+            break;
+        }
         case Bodo_FTypes::var_eval: {
             std::shared_ptr<array_info> count_col = aux_cols[0];
             std::shared_ptr<array_info> m2_col = aux_cols[2];
@@ -1000,6 +1047,8 @@ void apply_to_column_nullable(
         case Bodo_FTypes::mean_eval:                \
         case Bodo_FTypes::var_eval:                 \
         case Bodo_FTypes::std_eval:                 \
+        case Bodo_FTypes::skew_eval:                \
+        case Bodo_FTypes::kurt_eval:                \
             break;                                  \
         default:                                    \
             i_grp = get_group_for_row(grp_info, i); \
@@ -1020,6 +1069,14 @@ void apply_to_column_nullable(
         case Bodo_FTypes::std_eval:                                         \
             valid_group = aux_cols[0]->get_null_bit(i) &&                   \
                           getv<uint64_t>(aux_cols[0], i) > 1;               \
+            break;                                                          \
+        case Bodo_FTypes::skew_eval:                                        \
+            valid_group = aux_cols[0]->get_null_bit(i) &&                   \
+                          getv<uint64_t>(aux_cols[0], i) > 2;               \
+            break;                                                          \
+        case Bodo_FTypes::kurt_eval:                                        \
+            valid_group = aux_cols[0]->get_null_bit(i) &&                   \
+                          getv<uint64_t>(aux_cols[0], i) > 3;               \
             break;                                                          \
         case Bodo_FTypes::first:                                            \
             valid_group = (i_grp != -1) && !out_col->get_null_bit(i_grp) && \
@@ -1097,6 +1154,32 @@ void apply_to_column_nullable(
             aux_cols[1]->set_null_bit(i_grp, true);                            \
             aux_cols[2]->set_null_bit(i_grp, true);                            \
             break;                                                             \
+        case Bodo_FTypes::skew:                                                \
+            skew_agg<T, dtype>::apply(getv<T>(in_col, i),                      \
+                                      getv<uint64_t>(aux_cols[0], i_grp),      \
+                                      getv<double>(aux_cols[1], i_grp),        \
+                                      getv<double>(aux_cols[2], i_grp),        \
+                                      getv<double>(aux_cols[3], i_grp));       \
+            out_col->set_null_bit(i_grp, true);                                \
+            aux_cols[0]->set_null_bit(i_grp, true);                            \
+            aux_cols[1]->set_null_bit(i_grp, true);                            \
+            aux_cols[2]->set_null_bit(i_grp, true);                            \
+            aux_cols[3]->set_null_bit(i_grp, true);                            \
+            break;                                                             \
+        case Bodo_FTypes::kurtosis:                                            \
+            kurt_agg<T, dtype>::apply(getv<T>(in_col, i),                      \
+                                      getv<uint64_t>(aux_cols[0], i_grp),      \
+                                      getv<double>(aux_cols[1], i_grp),        \
+                                      getv<double>(aux_cols[2], i_grp),        \
+                                      getv<double>(aux_cols[3], i_grp),        \
+                                      getv<double>(aux_cols[4], i_grp));       \
+            out_col->set_null_bit(i_grp, true);                                \
+            aux_cols[0]->set_null_bit(i_grp, true);                            \
+            aux_cols[1]->set_null_bit(i_grp, true);                            \
+            aux_cols[2]->set_null_bit(i_grp, true);                            \
+            aux_cols[3]->set_null_bit(i_grp, true);                            \
+            aux_cols[4]->set_null_bit(i_grp, true);                            \
+            break;                                                             \
         case Bodo_FTypes::mean_eval:                                           \
             mean_eval(getv<double>(out_col, i), getv<uint64_t>(in_col, i));    \
             out_col->set_null_bit(i, true);                                    \
@@ -1109,6 +1192,20 @@ void apply_to_column_nullable(
         case Bodo_FTypes::std_eval:                                            \
             std_eval(getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i), \
                      getv<double>(aux_cols[2], i));                            \
+            out_col->set_null_bit(i, true);                                    \
+            break;                                                             \
+        case Bodo_FTypes::skew_eval:                                           \
+            skew_eval(                                                         \
+                getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i),      \
+                getv<double>(aux_cols[1], i), getv<double>(aux_cols[2], i),    \
+                getv<double>(aux_cols[3], i));                                 \
+            out_col->set_null_bit(i, true);                                    \
+            break;                                                             \
+        case Bodo_FTypes::kurt_eval:                                           \
+            kurt_eval(                                                         \
+                getv<double>(out_col, i), getv<uint64_t>(aux_cols[0], i),      \
+                getv<double>(aux_cols[1], i), getv<double>(aux_cols[2], i),    \
+                getv<double>(aux_cols[3], i), getv<double>(aux_cols[4], i));   \
             out_col->set_null_bit(i, true);                                    \
             break;                                                             \
         case Bodo_FTypes::first:                                               \
@@ -1515,6 +1612,34 @@ void do_apply_to_column(std::shared_ptr<array_info> in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::std, Bodo_CTypes::FLOAT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::std, Bodo_CTypes::DECIMAL)
             break;
+        case Bodo_FTypes::skew:
+            // SKEW
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::INT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::UINT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::INT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::UINT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::INT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::UINT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::INT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::UINT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::FLOAT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::FLOAT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::skew, Bodo_CTypes::DECIMAL)
+            break;
+        case Bodo_FTypes::kurtosis:
+            // KURTOSIS
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::INT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::UINT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::INT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::UINT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::INT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::UINT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::INT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::UINT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::FLOAT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::FLOAT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::kurtosis, Bodo_CTypes::DECIMAL)
+            break;
         case Bodo_FTypes::idxmin:
             // IDXMIN
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::idxmin, Bodo_CTypes::_BOOL)
@@ -1670,6 +1795,26 @@ void do_apply_to_column(std::shared_ptr<array_info> in_col,
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
             return apply_to_column<double, Bodo_FTypes::std_eval,
+                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
+                                                         aux_cols, grp_info);
+        case Bodo_FTypes::skew_eval:
+            // EVAL step for SKEW. This transforms each group from several
+            // arrays to the final single array output. Note we don't care about
+            // the input types here as the supported types are always
+            // hard coded.
+            // TODO: Move elsewhere? Every row is processed instead of reduce
+            // to groups.
+            return apply_to_column<double, Bodo_FTypes::skew_eval,
+                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
+                                                         aux_cols, grp_info);
+        case Bodo_FTypes::kurt_eval:
+            // EVAL step for KURTOSIS. This transforms each group from several
+            // arrays to the final single array output. Note we don't care about
+            // the input types here as the supported types are always
+            // hard coded.
+            // TODO: Move elsewhere? Every row is processed instead of reduce
+            // to groups.
+            return apply_to_column<double, Bodo_FTypes::kurt_eval,
                                    Bodo_CTypes::FLOAT64>(in_col, out_col,
                                                          aux_cols, grp_info);
     }

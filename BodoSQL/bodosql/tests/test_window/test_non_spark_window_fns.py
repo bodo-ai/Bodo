@@ -654,3 +654,104 @@ def test_variance_stddev_nan(memory_leak_check):
         check_names=False,
         only_jit_1DVar=True,
     )
+
+
+def test_kurtosis_skew(memory_leak_check):
+    """Tests the kurtosis and skew functions"""
+    window_calls = [
+        ("SKEW", "UNBOUNDED PRECEDING", "CURRENT ROW"),
+        ("SKEW", "3 PRECEDING", "3 FOLLOWING"),
+        ("SKEW", "UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
+        ("KURTOSIS", "UNBOUNDED PRECEDING", "CURRENT ROW"),
+        ("KURTOSIS", "1 FOLLOWING", "UNBOUNDED FOLLOWING"),
+        ("KURTOSIS", "UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
+    ]
+    selects = []
+    for func, lower, upper in window_calls:
+        selects.append(
+            f"{func}(A) OVER (PARTITION BY P ORDER BY O ROWS BETWEEN {lower} AND {upper})"
+        )
+    query = f"SELECT {', '.join(selects)} FROM table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [1, None, 2, None, 10, 12, 13, 12, 10], dtype=pd.Int32Dtype()
+                ),
+                "P": [2.718281828] * 9,
+                "O": list(range(9)),
+            }
+        )
+    }
+    answer = pd.DataFrame(
+        {
+            0: pd.Series(
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    1.6523167403329906,
+                    0.0828945291391867,
+                    -0.46902864581267356,
+                    -0.8491343946602741,
+                    -1.0401409926744276,
+                ],
+            ),
+            1: pd.Series(
+                [
+                    None,
+                    1.6523167403329906,
+                    0.0828945291391867,
+                    -0.46902864581267356,
+                    -1.9297766520456776,
+                    -1.9778696134152314,
+                    -0.16563466499998566,
+                    -0.16563466499998566,
+                    -1.1293381149712478,
+                ]
+            ),
+            2: pd.Series([-1.0401409926744276] * 9),
+            3: pd.Series(
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    -5.211208869450237,
+                    -3.0406694207746643,
+                    -1.8219741604242063,
+                    -0.9184912211127294,
+                ],
+            ),
+            4: pd.Series(
+                [
+                    4.221617600170051,
+                    4.221617600170051,
+                    -2.4074074074074057,
+                    -2.4074074074074057,
+                    2.2271468144044313,
+                    None,
+                    None,
+                    None,
+                    None,
+                ],
+            ),
+            5: pd.Series([-0.9184912211127294] * 9),
+        }
+    )
+
+    pandas_code = check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        sort_output=False,
+        expected_output=answer,
+        return_codegen=True,
+    )["pandas_code"]
+
+    # Verify that fusion is working correctly.
+    count_window_applies(pandas_code, 1, ["KURTOSIS", "SKEW"])

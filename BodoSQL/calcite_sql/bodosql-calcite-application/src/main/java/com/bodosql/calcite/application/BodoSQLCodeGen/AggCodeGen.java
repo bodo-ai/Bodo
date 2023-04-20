@@ -51,6 +51,8 @@ public class AggCodeGen {
     equivalentPandasNameMethodMap.put("COUNT_IF", "count_if");
     equivalentPandasNameMethodMap.put("VARIANCE_POP", "var_pop");
     equivalentPandasNameMethodMap.put("VARIANCE_SAMP", "var");
+    equivalentPandasNameMethodMap.put("KURTOSIS", "kurtosis");
+    equivalentPandasNameMethodMap.put("SKEW", "skew");
     equivalentHelperFnMap.put("BOOLOR_AGG", "boolor_agg");
     // Calcite's SINGLE_VALUE returns input if it has only one value, otherwise raises an error
     // https://github.com/apache/calcite/blob/f14cf4c32b9079984a988bbad40230aa6a59b127/core/src/main/java/org/apache/calcite/sql/fun/SqlSingleValueAggFunction.java#L36
