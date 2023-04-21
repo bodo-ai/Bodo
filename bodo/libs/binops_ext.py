@@ -562,8 +562,8 @@ def create_overload_cmp_operator(op):
         if operand_is_index(lhs) or operand_is_index(rhs):
             return bodo.hiframes.pd_index_ext.create_binary_op_overload(op)(lhs, rhs)
 
-        # datetime.date to datetime.date comparison
-        if lhs == datetime_date_type and rhs == datetime_date_type:
+        # datetime.date and datetime64
+        if cmp_date_or_datetime64(lhs, rhs):
             return bodo.hiframes.datetime_date_ext.create_cmp_op_overload(op)(lhs, rhs)
 
         # time to time comparison
@@ -796,6 +796,25 @@ def cmp_timestamp_or_date(lhs, rhs):
     dt64_and_ts = rhs == pd_timestamp_tz_naive_type and lhs == bodo.datetime64ns
 
     return ts_and_date or date_and_ts or ts_and_ts or ts_and_dt64 or dt64_and_ts
+
+
+def cmp_date_or_datetime64(lhs, rhs):
+    """Helper function to check comparison between datetime.date/datetime64 by cmp op overload."""
+
+    date_and_date = (
+        lhs == bodo.hiframes.datetime_date_ext.datetime_date_type
+        and rhs == bodo.hiframes.datetime_date_ext.datetime_date_type
+    )
+    date_and_dt64 = (
+        lhs == bodo.hiframes.datetime_date_ext.datetime_date_type
+        and rhs == bodo.datetime64ns
+    )
+    dt64_and_date = (
+        rhs == bodo.hiframes.datetime_date_ext.datetime_date_type
+        and lhs == bodo.datetime64ns
+    )
+
+    return date_and_date or date_and_dt64 or dt64_and_date
 
 
 def get_series_tz(val):
