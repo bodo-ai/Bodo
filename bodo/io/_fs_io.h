@@ -60,7 +60,7 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          std::string *orig_path, std::string *path_name);
 
 /*
- * Import file system python module: bodo.io.s3_reader, bodo.io.hdfs_reader or
+ * Import file system python module: bodo.io.s3_reader, bodo.io.hdfs_reader,
  * bodo.io.gcs_reader
  * @param fs_option: file system to write to
  * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others

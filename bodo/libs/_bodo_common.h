@@ -17,6 +17,29 @@
 
 #define ALIGNMENT 64  // preferred alignment for AVX512
 
+// Convenience macros from
+// https://github.com/numba/numba/blob/main/numba/_pymodule.h
+#define MOD_DEF(ob, name, doc, methods)                                     \
+    {                                                                       \
+        static struct PyModuleDef moduledef = {PyModuleDef_HEAD_INIT, name, \
+                                               doc, -1, methods};           \
+        ob = PyModule_Create(&moduledef);                                   \
+    }
+
+#define SetAttrStringFromVoidPtr(m, name)                 \
+    do {                                                  \
+        PyObject* tmp = PyLong_FromVoidPtr((void*)&name); \
+        PyObject_SetAttrString(m, #name, tmp);            \
+        Py_DECREF(tmp);                                   \
+    } while (0)
+
+#define SetAttrStringFromPyInit(m, name)       \
+    do {                                       \
+        PyObject* mod = PyInit_##name();       \
+        PyObject_SetAttrString(m, #name, mod); \
+        Py_DECREF(mod);                        \
+    } while (0)
+
 inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
     std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
               << "\n";
@@ -869,5 +892,22 @@ inline struct numpy_arr_payload make_numpy_array_payload(
     return p;
 }
 #endif
+
+extern "C" {
+PyMODINIT_FUNC PyInit_hdist(void);
+PyMODINIT_FUNC PyInit_hstr_ext(void);
+PyMODINIT_FUNC PyInit_decimal_ext(void);
+PyMODINIT_FUNC PyInit_quantile_alg(void);
+PyMODINIT_FUNC PyInit_hdatetime_ext(void);
+PyMODINIT_FUNC PyInit_hio(void);
+PyMODINIT_FUNC PyInit_array_ext(void);
+PyMODINIT_FUNC PyInit_s3_reader(void);
+PyMODINIT_FUNC PyInit_fsspec_reader(void);
+PyMODINIT_FUNC PyInit_hdfs_reader(void);
+PyMODINIT_FUNC PyInit__hdf5(void);
+PyMODINIT_FUNC PyInit_arrow_cpp(void);
+PyMODINIT_FUNC PyInit_csv_cpp(void);
+PyMODINIT_FUNC PyInit_json_cpp(void);
+}  // extern "C"
 
 #endif /* BODO_COMMON_H_INCLUDED_ */

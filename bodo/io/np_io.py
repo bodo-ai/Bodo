@@ -17,8 +17,8 @@ from bodo.utils.utils import check_java_installation
 ll.add_symbol("get_file_size", hio.get_file_size)
 ll.add_symbol("file_read", hio.file_read)
 ll.add_symbol("file_read_parallel", hio.file_read_parallel)
-ll.add_symbol("file_write", hio.file_write)
-ll.add_symbol("file_write_parallel", hio.file_write_parallel)
+ll.add_symbol("file_write", hio.file_write_py_entrypt)
+ll.add_symbol("file_write_parallel", hio.file_write_parallel_py_entrypt)
 
 
 _get_file_size = types.ExternalFunction("get_file_size", types.int64(types.voidptr))

@@ -798,43 +798,43 @@ static PyMethodDef stream_reader_methods[] = {
 
 // the actual Python type class
 static PyTypeObject stream_reader_type = {
-    PyVarObject_HEAD_INIT(NULL, 0) "bodo.libs.hio.StreamReader", /*tp_name*/
-    sizeof(stream_reader),                    /*tp_basicsize*/
-    0,                                        /*tp_itemsize*/
-    (destructor)stream_reader_dealloc,        /*tp_dealloc*/
-    0,                                        /*tp_print*/
-    0,                                        /*tp_getattr*/
-    0,                                        /*tp_setattr*/
-    0,                                        /*tp_compare*/
-    0,                                        /*tp_repr*/
-    0,                                        /*tp_as_number*/
-    0,                                        /*tp_as_sequence*/
-    0,                                        /*tp_as_mapping*/
-    0,                                        /*tp_hash */
-    0,                                        /*tp_call*/
-    0,                                        /*tp_str*/
-    0,                                        /*tp_getattro*/
-    0,                                        /*tp_setattro*/
-    0,                                        /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
-    "stream_reader objects",                  /* tp_doc */
-    0,                                        /* tp_traverse */
-    0,                                        /* tp_clear */
-    0,                                        /* tp_richcompare */
-    0,                                        /* tp_weaklistoffset */
-    stream_reader_iternext,                   /* tp_iter */
-    stream_reader_iternext,                   /* tp_iternext */
-    stream_reader_methods,                    /* tp_methods */
-    0,                                        /* tp_members */
-    0,                                        /* tp_getset */
-    0,                                        /* tp_base */
-    0,                                        /* tp_dict */
-    0,                                        /* tp_descr_get */
-    0,                                        /* tp_descr_set */
-    0,                                        /* tp_dictoffset */
-    stream_reader_pyinit,                     /* tp_init */
-    0,                                        /* tp_alloc */
-    stream_reader_new,                        /* tp_new */
+    PyVarObject_HEAD_INIT(NULL, 0) "bodo.libs.StreamReader", /*tp_name*/
+    sizeof(stream_reader),                                   /*tp_basicsize*/
+    0,                                                       /*tp_itemsize*/
+    (destructor)stream_reader_dealloc,                       /*tp_dealloc*/
+    0,                                                       /*tp_print*/
+    0,                                                       /*tp_getattr*/
+    0,                                                       /*tp_setattr*/
+    0,                                                       /*tp_compare*/
+    0,                                                       /*tp_repr*/
+    0,                                                       /*tp_as_number*/
+    0,                                                       /*tp_as_sequence*/
+    0,                                                       /*tp_as_mapping*/
+    0,                                                       /*tp_hash */
+    0,                                                       /*tp_call*/
+    0,                                                       /*tp_str*/
+    0,                                                       /*tp_getattro*/
+    0,                                                       /*tp_setattro*/
+    0,                                                       /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,                /*tp_flags*/
+    "stream_reader objects",                                 /* tp_doc */
+    0,                                                       /* tp_traverse */
+    0,                                                       /* tp_clear */
+    0,                      /* tp_richcompare */
+    0,                      /* tp_weaklistoffset */
+    stream_reader_iternext, /* tp_iter */
+    stream_reader_iternext, /* tp_iternext */
+    stream_reader_methods,  /* tp_methods */
+    0,                      /* tp_members */
+    0,                      /* tp_getset */
+    0,                      /* tp_base */
+    0,                      /* tp_dict */
+    0,                      /* tp_descr_get */
+    0,                      /* tp_descr_set */
+    0,                      /* tp_dictoffset */
+    stream_reader_pyinit,   /* tp_init */
+    0,                      /* tp_alloc */
+    stream_reader_new,      /* tp_new */
 };
 
 // at module load time we need to make our type known ot Python
@@ -843,19 +843,13 @@ extern "C" void PyInit_csv(PyObject *m) {
         return;
     Py_INCREF(&stream_reader_type);
     PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    PyObject_SetAttrString(
-        m, "csv_file_chunk_reader",
-        PyLong_FromVoidPtr((void *)(&csv_file_chunk_reader)));
-    PyObject_SetAttrString(m, "update_csv_reader",
-                           PyLong_FromVoidPtr((void *)(&update_csv_reader)));
-    PyObject_SetAttrString(
-        m, "initialize_csv_reader",
-        PyLong_FromVoidPtr((void *)(&initialize_csv_reader)));
+    SetAttrStringFromVoidPtr(m, csv_file_chunk_reader);
+    SetAttrStringFromVoidPtr(m, update_csv_reader);
+    SetAttrStringFromVoidPtr(m, initialize_csv_reader);
     // NOTE: old testing code that is commented out due to
     // introduction of FileReader interface.
     // TODO: update testing code
-    // PyObject_SetAttrString(m, "csv_string_chunk_reader",
-    //                        PyLong_FromVoidPtr((void*)(&csv_string_chunk_reader)));
+    // SetAttrStringFromVoidPtr(m, csv_string_chunk_reader);
 }
 
 extern "C" void PyInit_json(PyObject *m) {
@@ -863,9 +857,7 @@ extern "C" void PyInit_json(PyObject *m) {
         return;
     Py_INCREF(&stream_reader_type);
     PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    PyObject_SetAttrString(
-        m, "json_file_chunk_reader",
-        PyLong_FromVoidPtr((void *)(&json_file_chunk_reader)));
+    SetAttrStringFromVoidPtr(m, json_file_chunk_reader);
 }
 
 /**

@@ -840,11 +840,9 @@ bool unbox_date_offset(PyObject* obj, int64_t fields_arr[18]) {
 
 PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "hdatetime_ext", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "hdatetime_ext", "No docs", NULL);
+    if (m == NULL)
+        return NULL;
 
     // init numpy
     import_array();
@@ -854,46 +852,18 @@ PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
 
     // These are all C functions, so they don't throw any exceptions.
     // We might still need to add better error handling in the future.
-
-    PyObject_SetAttrString(m, "get_isocalendar",
-                           PyLong_FromVoidPtr((void*)(&get_isocalendar)));
-    PyObject_SetAttrString(m, "extract_year_days",
-                           PyLong_FromVoidPtr((void*)(&extract_year_days)));
-
-    PyObject_SetAttrString(m, "get_month_day",
-                           PyLong_FromVoidPtr((void*)(&get_month_day)));
-
-    PyObject_SetAttrString(
-        m, "npy_datetimestruct_to_datetime",
-        PyLong_FromVoidPtr((void*)(&npy_datetimestruct_to_datetime)));
-
-    PyObject_SetAttrString(
-        m, "box_datetime_date_array",
-        PyLong_FromVoidPtr((void*)(&box_datetime_date_array)));
-
-    PyObject_SetAttrString(
-        m, "unbox_datetime_date_array",
-        PyLong_FromVoidPtr((void*)(&unbox_datetime_date_array)));
-
-    PyObject_SetAttrString(m, "box_time_array",
-                           PyLong_FromVoidPtr((void*)(&box_time_array)));
-
-    PyObject_SetAttrString(m, "unbox_time_array",
-                           PyLong_FromVoidPtr((void*)(&unbox_time_array)));
-
-    PyObject_SetAttrString(
-        m, "box_datetime_timedelta_array",
-        PyLong_FromVoidPtr((void*)(&box_datetime_timedelta_array)));
-
-    PyObject_SetAttrString(
-        m, "unbox_datetime_timedelta_array",
-        PyLong_FromVoidPtr((void*)(&unbox_datetime_timedelta_array)));
-
-    PyObject_SetAttrString(m, "unbox_date_offset",
-                           PyLong_FromVoidPtr((void*)(&unbox_date_offset)));
-
-    PyObject_SetAttrString(m, "box_date_offset",
-                           PyLong_FromVoidPtr((void*)(&box_date_offset)));
+    SetAttrStringFromVoidPtr(m, get_isocalendar);
+    SetAttrStringFromVoidPtr(m, extract_year_days);
+    SetAttrStringFromVoidPtr(m, get_month_day);
+    SetAttrStringFromVoidPtr(m, npy_datetimestruct_to_datetime);
+    SetAttrStringFromVoidPtr(m, box_datetime_date_array);
+    SetAttrStringFromVoidPtr(m, unbox_datetime_date_array);
+    SetAttrStringFromVoidPtr(m, box_time_array);
+    SetAttrStringFromVoidPtr(m, unbox_time_array);
+    SetAttrStringFromVoidPtr(m, box_datetime_timedelta_array);
+    SetAttrStringFromVoidPtr(m, unbox_datetime_timedelta_array);
+    SetAttrStringFromVoidPtr(m, unbox_date_offset);
+    SetAttrStringFromVoidPtr(m, box_date_offset);
 
     return m;
 }

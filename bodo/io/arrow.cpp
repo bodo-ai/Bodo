@@ -65,39 +65,18 @@ PyObject* iceberg_pq_write_py_entry(
 
 PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "arrow_cpp", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
+    MOD_DEF(m, "arrow_cpp", "No docs", NULL);
     if (m == NULL)
         return NULL;
 
     bodo_common_init();
 
-    PyObject_SetAttrString(m, "pq_read_py_entry",
-                           PyLong_FromVoidPtr((void*)(&pq_read_py_entry)));
-    PyObject_SetAttrString(
-        m, "iceberg_pq_read_py_entry",
-        PyLong_FromVoidPtr((void*)(&iceberg_pq_read_py_entry)));
-    PyObject_SetAttrString(m, "pq_write_py_entry",
-                           PyLong_FromVoidPtr((void*)(&pq_write_py_entry)));
-    PyObject_SetAttrString(
-        m, "iceberg_pq_write_py_entry",
-        PyLong_FromVoidPtr((void*)(&iceberg_pq_write_py_entry)));
-    PyObject_SetAttrString(
-        m, "pq_write_partitioned_py_entry",
-        PyLong_FromVoidPtr((void*)(&pq_write_partitioned_py_entry)));
-    PyObject_SetAttrString(
-        m, "snowflake_read_py_entry",
-        PyLong_FromVoidPtr((void*)(&snowflake_read_py_entry)));
-    PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
-    PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
-    PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
-    PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
+    SetAttrStringFromVoidPtr(m, pq_read_py_entry);
+    SetAttrStringFromVoidPtr(m, iceberg_pq_read_py_entry);
+    SetAttrStringFromVoidPtr(m, pq_write_py_entry);
+    SetAttrStringFromVoidPtr(m, iceberg_pq_write_py_entry);
+    SetAttrStringFromVoidPtr(m, pq_write_partitioned_py_entry);
+    SetAttrStringFromVoidPtr(m, snowflake_read_py_entry);
 
     return m;
 }
