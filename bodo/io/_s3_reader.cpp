@@ -289,18 +289,14 @@ void s3_open_file(const char *fname,
 
 PyMODINIT_FUNC PyInit_s3_reader(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "s3_reader", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "s3_reader", "No docs", NULL);
+    if (m == NULL)
+        return NULL;
 
-    // Only ever called from C++
-    PyObject_SetAttrString(m, "init_s3_reader",
-                           PyLong_FromVoidPtr((void *)(&init_s3_reader)));
-    // Only ever called from C++
-    PyObject_SetAttrString(m, "s3_get_fs",
-                           PyLong_FromVoidPtr((void *)(&s3_get_fs)));
+    // Both only ever called from C++
+    SetAttrStringFromVoidPtr(m, init_s3_reader);
+    SetAttrStringFromVoidPtr(m, s3_get_fs);
+
     return m;
 }
 

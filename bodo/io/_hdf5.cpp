@@ -31,35 +31,23 @@ void h5g_close(hid_t group_id);
 
 PyMODINIT_FUNC PyInit__hdf5(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "_hdf5", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "_hdf5", "No docs", NULL);
+    if (m == NULL) {
+        return NULL;
+    }
 
-    PyObject_SetAttrString(m, "h5_open", PyLong_FromVoidPtr((void*)(&h5_open)));
-    PyObject_SetAttrString(
-        m, "h5_open_dset_or_group_obj",
-        PyLong_FromVoidPtr((void*)(&h5_open_dset_or_group_obj)));
-    PyObject_SetAttrString(m, "h5_size", PyLong_FromVoidPtr((void*)(&h5_size)));
-    PyObject_SetAttrString(m, "h5_read", PyLong_FromVoidPtr((void*)(&h5_read)));
-    PyObject_SetAttrString(m, "h5_read_filter",
-                           PyLong_FromVoidPtr((void*)(&h5_read_filter)));
-    PyObject_SetAttrString(m, "h5_close",
-                           PyLong_FromVoidPtr((void*)(&h5_close)));
-    PyObject_SetAttrString(m, "h5_create_dset",
-                           PyLong_FromVoidPtr((void*)(&h5_create_dset)));
-    PyObject_SetAttrString(m, "h5_create_group",
-                           PyLong_FromVoidPtr((void*)(&h5_create_group)));
-    PyObject_SetAttrString(m, "h5_write",
-                           PyLong_FromVoidPtr((void*)(&h5_write)));
-    PyObject_SetAttrString(m, "h5g_get_num_objs",
-                           PyLong_FromVoidPtr((void*)(&h5g_get_num_objs)));
-    PyObject_SetAttrString(
-        m, "h5g_get_objname_by_idx",
-        PyLong_FromVoidPtr((void*)(&h5g_get_objname_by_idx)));
-    PyObject_SetAttrString(m, "h5g_close",
-                           PyLong_FromVoidPtr((void*)(&h5g_close)));
+    SetAttrStringFromVoidPtr(m, h5_open);
+    SetAttrStringFromVoidPtr(m, h5_open_dset_or_group_obj);
+    SetAttrStringFromVoidPtr(m, h5_size);
+    SetAttrStringFromVoidPtr(m, h5_read);
+    SetAttrStringFromVoidPtr(m, h5_read_filter);
+    SetAttrStringFromVoidPtr(m, h5_close);
+    SetAttrStringFromVoidPtr(m, h5_create_dset);
+    SetAttrStringFromVoidPtr(m, h5_create_group);
+    SetAttrStringFromVoidPtr(m, h5_write);
+    SetAttrStringFromVoidPtr(m, h5g_get_num_objs);
+    SetAttrStringFromVoidPtr(m, h5g_get_objname_by_idx);
+    SetAttrStringFromVoidPtr(m, h5g_close);
 
     return m;
 }
@@ -315,7 +303,8 @@ void h5_close_file_objects(hid_t file_id, unsigned types) {
     // get object id list
     size_t count = H5Fget_obj_count(file_id, types);
     hid_t* obj_list = (hid_t*)malloc(sizeof(hid_t) * count);
-    if (obj_list == NULL) return;
+    if (obj_list == NULL)
+        return;
     H5Fget_obj_ids(file_id, types, count, obj_list);
     // TODO: check file_id of objects like h5py/files.py:close
     // for(size_t i=0; i<count; i++)
@@ -325,7 +314,8 @@ void h5_close_file_objects(hid_t file_id, unsigned types) {
     for (size_t i = 0; i < count; i++) {
         hid_t obj_id = obj_list[i];
         // if (H5Iget_file_id(obj_id)==file_id)
-        if (obj_id != -1) h5_close_object(obj_id);
+        if (obj_id != -1)
+            h5_close_object(obj_id);
     }
     free(obj_list);
 }
@@ -416,7 +406,8 @@ void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind) {
     int size = H5Lget_name_by_idx(file_id, ".", H5_INDEX_NAME, H5_ITER_NATIVE,
                                   (hsize_t)ind, NULL, 0, H5P_DEFAULT);
     char* name = (char*)malloc(size + 1);
-    if (name == NULL) return NULL;
+    if (name == NULL)
+        return NULL;
     (void)H5Lget_name_by_idx(file_id, ".", H5_INDEX_NAME, H5_ITER_NATIVE,
                              (hsize_t)ind, name, size + 1, H5P_DEFAULT);
     // printf("g name:%s\n", name);

@@ -28,8 +28,8 @@ class SnowflakeReader : public ArrowDataframeReader {
           conn(_conn),
           total_nrows(_total_nrows),
           only_length_query(_only_length_query),
-          is_independent(_is_independent),
-          is_select_query(_is_select_query) {
+          is_select_query(_is_select_query),
+          is_independent(_is_independent) {
         // Initialize reader
         init_arrow_reader(str_as_dict_cols, true,
                           allow_unsafe_dt_to_ts_cast_cols);

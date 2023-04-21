@@ -15,8 +15,6 @@
 
 #define root 0
 
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
-
 template <class T>
 std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T> &my_array,
                                              int64_t total_size, int myrank,
@@ -75,36 +73,19 @@ void compute_series_monotonicity_py_entry(double *res, array_info *arr,
 
 PyMODINIT_FUNC PyInit_quantile_alg(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "quantile_alg", "No docs", -1, NULL,
-    };
-    bodo_common_init();
-    m = PyModule_Create(&moduledef);
+    MOD_DEF(m, "quantile_alg", "No docs", NULL);
     if (m == NULL) {
         return NULL;
     }
 
-    PyObject_SetAttrString(m, "quantile_sequential",
-                           PyLong_FromVoidPtr((void *)(&quantile_sequential)));
-    PyObject_SetAttrString(m, "quantile_parallel",
-                           PyLong_FromVoidPtr((void *)(&quantile_parallel)));
-    PyObject_SetAttrString(
-        m, "median_series_computation_py_entry",
-        PyLong_FromVoidPtr((void *)(&median_series_computation_py_entry)));
-    PyObject_SetAttrString(
-        m, "autocorr_series_computation_py_entry",
-        PyLong_FromVoidPtr((void *)(&autocorr_series_computation_py_entry)));
-    PyObject_SetAttrString(
-        m, "compute_series_monotonicity_py_entry",
-        PyLong_FromVoidPtr((void *)(&compute_series_monotonicity_py_entry)));
-    PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void *)(&get_stats_alloc)));
-    PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void *)(&get_stats_free)));
-    PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void *)(&get_stats_mi_alloc)));
-    PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void *)(&get_stats_mi_free)));
+    bodo_common_init();
+
+    SetAttrStringFromVoidPtr(m, quantile_sequential);
+    SetAttrStringFromVoidPtr(m, quantile_parallel);
+    SetAttrStringFromVoidPtr(m, median_series_computation_py_entry);
+    SetAttrStringFromVoidPtr(m, autocorr_series_computation_py_entry);
+    SetAttrStringFromVoidPtr(m, compute_series_monotonicity_py_entry);
+
     return m;
 }
 
