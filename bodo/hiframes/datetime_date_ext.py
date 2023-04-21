@@ -984,6 +984,7 @@ def create_cmp_op_overload(op):
     """create overload function for comparison operators with datetime_date_type."""
 
     def overload_date_cmp(lhs, rhs):
+        # datetime.date and datetime.date
         if lhs == datetime_date_type and rhs == datetime_date_type:
 
             def impl(lhs, rhs):  # pragma: no cover
@@ -993,6 +994,20 @@ def create_cmp_op_overload(op):
                 return op(_cmp((y, m, d), (y2, m2, d2)), 0)
 
             return impl
+
+        # datetime.date and datetime64
+        if lhs == datetime_date_type and rhs == bodo.datetime64ns:
+            return lambda lhs, rhs: op(
+                bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.Timestamp(lhs)),
+                rhs,
+            )  # pragma: no cover
+
+        # datetime64 and datetime.date
+        if rhs == datetime_date_type and lhs == bodo.datetime64ns:
+            return lambda lhs, rhs: op(
+                lhs,
+                bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.Timestamp(rhs)),
+            )  # pragma: no cover
 
     return overload_date_cmp
 
