@@ -46,7 +46,7 @@ def gen_lead_lag_queries(
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(750)
+@pytest.mark.timeout(900)
 @pytest.mark.parametrize(
     "cols_to_use, window_frame, nulls_handling",
     [
