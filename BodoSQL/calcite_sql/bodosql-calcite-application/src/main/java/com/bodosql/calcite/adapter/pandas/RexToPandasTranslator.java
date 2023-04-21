@@ -895,7 +895,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "CURRENT_DATE":
           case "CURDATE":
             assert operands.size() == 0;
-            return generateCurdateCode(fnName);
+            return generateCurdateCode();
           case "YEARWEEK":
             assert operands.size() == 1;
             return getYearWeekFnInfo(operands.get(0));
