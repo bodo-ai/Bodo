@@ -22,8 +22,6 @@
 #include "_join.h"
 #include "_shuffle.h"
 
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
-
 array_info* struct_array_to_info(int64_t n_fields, array_info** inner_arrays,
                                  char** field_names, NRT_MemInfo* null_bitmap) {
     std::vector<std::shared_ptr<array_info>> inner_arrs_vec(
@@ -1422,10 +1420,7 @@ char* array_info_getdata1(array_info* arr) { return arr->data1(); }
 
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "array_ext", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
+    MOD_DEF(m, "array_ext", "No docs", NULL);
     if (m == NULL)
         return NULL;
 
@@ -1437,276 +1432,126 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
 
     bodo_common_init();
 
-    // initialize decimal_mpi_type
-    // TODO: free when program exits
-    if (decimal_mpi_type == MPI_DATATYPE_NULL) {
-        MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
-        MPI_Type_commit(&decimal_mpi_type);
-    }
-
     // DEC_MOD_METHOD(string_array_to_info);
-    PyObject_SetAttrString(
-        m, "array_item_array_to_info",
-        PyLong_FromVoidPtr((void*)(&array_item_array_to_info)));
-    PyObject_SetAttrString(m, "struct_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&struct_array_to_info)));
+    SetAttrStringFromVoidPtr(m, array_item_array_to_info);
+    SetAttrStringFromVoidPtr(m, struct_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "string_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&string_array_to_info)));
+    SetAttrStringFromVoidPtr(m, string_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "dict_str_array_to_info",
-        PyLong_FromVoidPtr((void*)(&dict_str_array_to_info)));
-    PyObject_SetAttrString(
-        m, "get_has_global_dictionary",
-        PyLong_FromVoidPtr((void*)(&get_has_global_dictionary)));
-    PyObject_SetAttrString(
-        m, "get_has_deduped_local_dictionary",
-        PyLong_FromVoidPtr((void*)(&get_has_deduped_local_dictionary)));
+    SetAttrStringFromVoidPtr(m, dict_str_array_to_info);
+    SetAttrStringFromVoidPtr(m, get_has_global_dictionary);
+    SetAttrStringFromVoidPtr(m, get_has_deduped_local_dictionary);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "numpy_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
+    SetAttrStringFromVoidPtr(m, numpy_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "categorical_array_to_info",
-        PyLong_FromVoidPtr((void*)(&categorical_array_to_info)));
+    SetAttrStringFromVoidPtr(m, categorical_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "nullable_array_to_info",
-        PyLong_FromVoidPtr((void*)(&nullable_array_to_info)));
-    PyObject_SetAttrString(
-        m, "interval_array_to_info",
-        PyLong_FromVoidPtr((void*)(&interval_array_to_info)));
+    SetAttrStringFromVoidPtr(m, nullable_array_to_info);
+    SetAttrStringFromVoidPtr(m, interval_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "decimal_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&decimal_array_to_info)));
-    PyObject_SetAttrString(m, "time_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&time_array_to_info)));
-    PyObject_SetAttrString(m, "info_to_string_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_string_array)));
-    PyObject_SetAttrString(
-        m, "info_to_array_item_array",
-        PyLong_FromVoidPtr((void*)(&info_to_array_item_array)));
-    PyObject_SetAttrString(m, "info_to_struct_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_struct_array)));
-    PyObject_SetAttrString(m, "get_child_info",
-                           PyLong_FromVoidPtr((void*)(&get_child_info)));
-    PyObject_SetAttrString(m, "info_to_numpy_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_numpy_array)));
-    PyObject_SetAttrString(
-        m, "info_to_nullable_array",
-        PyLong_FromVoidPtr((void*)(&info_to_nullable_array)));
-    PyObject_SetAttrString(
-        m, "info_to_interval_array",
-        PyLong_FromVoidPtr((void*)(&info_to_interval_array)));
-    PyObject_SetAttrString(m, "alloc_numpy",
-                           PyLong_FromVoidPtr((void*)(&alloc_numpy)));
-    PyObject_SetAttrString(m, "alloc_string_array",
-                           PyLong_FromVoidPtr((void*)(&alloc_string_array)));
-    PyObject_SetAttrString(
-        m, "arr_info_list_to_table",
-        PyLong_FromVoidPtr((void*)(&arr_info_list_to_table)));
+    SetAttrStringFromVoidPtr(m, decimal_array_to_info);
+    SetAttrStringFromVoidPtr(m, time_array_to_info);
+    SetAttrStringFromVoidPtr(m, info_to_string_array);
+    SetAttrStringFromVoidPtr(m, info_to_array_item_array);
+    SetAttrStringFromVoidPtr(m, info_to_struct_array);
+    SetAttrStringFromVoidPtr(m, get_child_info);
+    SetAttrStringFromVoidPtr(m, info_to_numpy_array);
+    SetAttrStringFromVoidPtr(m, info_to_nullable_array);
+    SetAttrStringFromVoidPtr(m, info_to_interval_array);
+    SetAttrStringFromVoidPtr(m, alloc_numpy);
+    SetAttrStringFromVoidPtr(m, alloc_string_array);
+    SetAttrStringFromVoidPtr(m, arr_info_list_to_table);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "info_from_table",
-                           PyLong_FromVoidPtr((void*)(&info_from_table)));
+    SetAttrStringFromVoidPtr(m, info_from_table);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "delete_info",
-                           PyLong_FromVoidPtr((void*)(&delete_info)));
+    SetAttrStringFromVoidPtr(m, delete_info);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "delete_table",
-                           PyLong_FromVoidPtr((void*)(&delete_table)));
-    PyObject_SetAttrString(
-        m, "shuffle_table_py_entrypt",
-        PyLong_FromVoidPtr((void*)(&shuffle_table_py_entrypt)));
-    PyObject_SetAttrString(m, "get_shuffle_info",
-                           PyLong_FromVoidPtr((void*)(&get_shuffle_info)));
-    PyObject_SetAttrString(m, "delete_shuffle_info",
-                           PyLong_FromVoidPtr((void*)(&delete_shuffle_info)));
-    PyObject_SetAttrString(m, "reverse_shuffle_table",
-                           PyLong_FromVoidPtr((void*)(&reverse_shuffle_table)));
-    PyObject_SetAttrString(
-        m, "shuffle_renormalization_py_entrypt",
-        PyLong_FromVoidPtr((void*)(&shuffle_renormalization_py_entrypt)));
-    PyObject_SetAttrString(
-        m, "shuffle_renormalization_group_py_entrypt",
-        PyLong_FromVoidPtr((void*)(&shuffle_renormalization_group_py_entrypt)));
-    PyObject_SetAttrString(m, "hash_join_table",
-                           PyLong_FromVoidPtr((void*)(&hash_join_table)));
-    PyObject_SetAttrString(m, "cross_join_table",
-                           PyLong_FromVoidPtr((void*)(&cross_join_table)));
-    PyObject_SetAttrString(m, "interval_join_table",
-                           PyLong_FromVoidPtr((void*)(&interval_join_table)));
-    PyObject_SetAttrString(m, "sample_table_py_entry",
-                           PyLong_FromVoidPtr((void*)(&sample_table_py_entry)));
-    PyObject_SetAttrString(
-        m, "sort_values_table_py_entry",
-        PyLong_FromVoidPtr((void*)(&sort_values_table_py_entry)));
-    PyObject_SetAttrString(
-        m, "sort_table_for_interval_join_py_entrypoint",
-        PyLong_FromVoidPtr(
-            (void*)(&sort_table_for_interval_join_py_entrypoint)));
-    PyObject_SetAttrString(
-        m, "drop_duplicates_table_py_entry",
-        PyLong_FromVoidPtr((void*)(&drop_duplicates_table_py_entry)));
-    PyObject_SetAttrString(m, "union_tables",
-                           PyLong_FromVoidPtr((void*)(&union_tables)));
-    PyObject_SetAttrString(m, "groupby_and_aggregate",
-                           PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
-    PyObject_SetAttrString(
-        m, "drop_duplicates_local_dictionary_py_entry",
-        PyLong_FromVoidPtr(
-            (void*)(&drop_duplicates_local_dictionary_py_entry)));
-    PyObject_SetAttrString(
-        m, "get_groupby_labels_py_entry",
-        PyLong_FromVoidPtr((void*)(&get_groupby_labels_py_entry)));
-    PyObject_SetAttrString(m, "array_isin_py_entry",
-                           PyLong_FromVoidPtr((void*)(&array_isin_py_entry)));
-    PyObject_SetAttrString(
-        m, "get_search_regex_py_entry",
-        PyLong_FromVoidPtr((void*)(&get_search_regex_py_entry)));
-    PyObject_SetAttrString(
-        m, "get_replace_regex_py_entry",
-        PyLong_FromVoidPtr((void*)(&get_replace_regex_py_entry)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "count_total_elems_list_array",
-        PyLong_FromVoidPtr((void*)(&count_total_elems_list_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "array_item_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&array_item_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "struct_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&struct_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "map_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&map_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "string_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&string_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "np_array_from_struct_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "np_array_from_array_item_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_array_item_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "np_array_from_map_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_map_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "array_getitem",
-                           PyLong_FromVoidPtr((void*)(&array_getitem)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "list_check",
-                           PyLong_FromVoidPtr((void*)(&list_check)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "dict_keys",
-                           PyLong_FromVoidPtr((void*)(&dict_keys)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "dict_values",
-                           PyLong_FromVoidPtr((void*)(&dict_values)));
+    SetAttrStringFromVoidPtr(m, delete_table);
+    SetAttrStringFromVoidPtr(m, shuffle_table_py_entrypt);
+    SetAttrStringFromVoidPtr(m, get_shuffle_info);
+    SetAttrStringFromVoidPtr(m, delete_shuffle_info);
+    SetAttrStringFromVoidPtr(m, reverse_shuffle_table);
+    SetAttrStringFromVoidPtr(m, shuffle_renormalization_py_entrypt);
+    SetAttrStringFromVoidPtr(m, shuffle_renormalization_group_py_entrypt);
+    SetAttrStringFromVoidPtr(m, hash_join_table);
+    SetAttrStringFromVoidPtr(m, cross_join_table);
+    SetAttrStringFromVoidPtr(m, interval_join_table);
+    SetAttrStringFromVoidPtr(m, sample_table_py_entry);
+    SetAttrStringFromVoidPtr(m, sort_values_table_py_entry);
+    SetAttrStringFromVoidPtr(m, sort_table_for_interval_join_py_entrypoint);
+    SetAttrStringFromVoidPtr(m, drop_duplicates_table_py_entry);
+    SetAttrStringFromVoidPtr(m, union_tables);
+    SetAttrStringFromVoidPtr(m, groupby_and_aggregate);
+    SetAttrStringFromVoidPtr(m, drop_duplicates_local_dictionary_py_entry);
+    SetAttrStringFromVoidPtr(m, get_groupby_labels_py_entry);
+    SetAttrStringFromVoidPtr(m, array_isin_py_entry);
+    SetAttrStringFromVoidPtr(m, get_search_regex_py_entry);
+    SetAttrStringFromVoidPtr(m, get_replace_regex_py_entry);
+
+    // Functions in the section below only use C which cannot throw exceptions,
+    // so typical exception handling is not required
+    SetAttrStringFromVoidPtr(m, count_total_elems_list_array);
+    SetAttrStringFromVoidPtr(m, array_item_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, struct_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, map_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, string_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, np_array_from_struct_array);
+    SetAttrStringFromVoidPtr(m, np_array_from_array_item_array);
+    SetAttrStringFromVoidPtr(m, np_array_from_map_array);
+    SetAttrStringFromVoidPtr(m, array_getitem);
+    SetAttrStringFromVoidPtr(m, list_check);
+    SetAttrStringFromVoidPtr(m, dict_keys);
+    SetAttrStringFromVoidPtr(m, dict_values);
     // This function calls PyErr_Set_String, but the function is called inside
     // box/unbox functions in Python, where we don't yet know how best to
     // detect and raise errors. Once we do, we should raise an error in Python
     // if this function calls PyErr_Set_String. TODO
-    PyObject_SetAttrString(m, "dict_merge_from_seq2",
-                           PyLong_FromVoidPtr((void*)(&dict_merge_from_seq2)));
+    SetAttrStringFromVoidPtr(m, dict_merge_from_seq2);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise it in Python.
     // We currently don't know the best way to detect and raise exceptions
     // in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(m, "seq_getitem",
-                           PyLong_FromVoidPtr((void*)(&seq_getitem)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "is_na_value",
-                           PyLong_FromVoidPtr((void*)(&is_na_value)));
+    SetAttrStringFromVoidPtr(m, seq_getitem);
+    SetAttrStringFromVoidPtr(m, is_na_value);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise an exception in
     // Python. We currently don't know the best way to detect and raise
     // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(m, "is_pd_int_array",
-                           PyLong_FromVoidPtr((void*)(&is_pd_int_array)));
+    SetAttrStringFromVoidPtr(m, is_pd_int_array);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise an exception in
     // Python. We currently don't know the best way to detect and raise
     // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(m, "is_pd_float_array",
-                           PyLong_FromVoidPtr((void*)(&is_pd_float_array)));
+    SetAttrStringFromVoidPtr(m, is_pd_float_array);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise an exception in
     // Python. We currently don't know the best way to detect and raise
     // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(
-        m, "int_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&int_array_from_sequence)));
+    SetAttrStringFromVoidPtr(m, int_array_from_sequence);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise an exception in
     // Python. We currently don't know the best way to detect and raise
     // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(
-        m, "float_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&float_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
+    SetAttrStringFromVoidPtr(m, float_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, get_stats_alloc);
+    SetAttrStringFromVoidPtr(m, get_stats_free);
+    SetAttrStringFromVoidPtr(m, get_stats_mi_alloc);
+    SetAttrStringFromVoidPtr(m, get_stats_mi_free);
+    SetAttrStringFromVoidPtr(m, array_info_getitem);
+    SetAttrStringFromVoidPtr(m, array_info_getdata1);
+    // End section of functions which only use C and cannot throw exceptions
 
-    PyObject_SetAttrString(m, "array_info_getitem",
-                           PyLong_FromVoidPtr((void*)(&array_info_getitem)));
-
-    PyObject_SetAttrString(m, "array_info_getdata1",
-                           PyLong_FromVoidPtr((void*)(&array_info_getdata1)));
     // C++ Cache functions for Like Kernel with dictionary encoded inputs
-    PyObject_SetAttrString(
-        m, "alloc_like_kernel_cache",
-        PyLong_FromVoidPtr((void*)(&alloc_like_kernel_cache)));
-    PyObject_SetAttrString(
-        m, "add_to_like_kernel_cache",
-        PyLong_FromVoidPtr((void*)(&add_to_like_kernel_cache)));
-    PyObject_SetAttrString(
-        m, "check_like_kernel_cache",
-        PyLong_FromVoidPtr((void*)(&check_like_kernel_cache)));
-    PyObject_SetAttrString(
-        m, "dealloc_like_kernel_cache",
-        PyLong_FromVoidPtr((void*)(&dealloc_like_kernel_cache)));
-    PyObject_SetAttrString(
-        m, "NRT_MemInfo_alloc_safe_aligned",
-        PyLong_FromVoidPtr((void*)(&NRT_MemInfo_alloc_safe_aligned)));
+    SetAttrStringFromVoidPtr(m, alloc_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, add_to_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, check_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, dealloc_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, NRT_MemInfo_alloc_safe_aligned);
+
     return m;
 }
