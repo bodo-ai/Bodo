@@ -758,6 +758,8 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             }
             break;
         }
+        case Bodo_FTypes::var_pop:
+        case Bodo_FTypes::std_pop:
         case Bodo_FTypes::var:
         case Bodo_FTypes::std: {
             std::shared_ptr<array_info> count_col = aux_cols[0];
@@ -824,6 +826,26 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                     m3_col->set_null_bit(i_grp, true);
                     m4_col->set_null_bit(i_grp, true);
                 }
+            }
+            break;
+        }
+        case Bodo_FTypes::var_pop_eval: {
+            std::shared_ptr<array_info> count_col = aux_cols[0];
+            std::shared_ptr<array_info> m2_col = aux_cols[2];
+            for (size_t i = 0; i < in_col->length; i++) {
+                var_pop_eval(getv<double>(out_col, i),
+                             getv<uint64_t>(count_col, i),
+                             getv<double>(m2_col, i));
+            }
+            break;
+        }
+        case Bodo_FTypes::std_pop_eval: {
+            std::shared_ptr<array_info> count_col = aux_cols[0];
+            std::shared_ptr<array_info> m2_col = aux_cols[2];
+            for (size_t i = 0; i < in_col->length; i++) {
+                std_pop_eval(getv<double>(out_col, i),
+                             getv<uint64_t>(count_col, i),
+                             getv<double>(m2_col, i));
             }
             break;
         }
@@ -1045,6 +1067,8 @@ void apply_to_column_nullable(
 #define APPLY_TO_COLUMN_FIND_GROUP                  \
     switch (ftype) {                                \
         case Bodo_FTypes::mean_eval:                \
+        case Bodo_FTypes::var_pop_eval:             \
+        case Bodo_FTypes::std_pop_eval:             \
         case Bodo_FTypes::var_eval:                 \
         case Bodo_FTypes::std_eval:                 \
         case Bodo_FTypes::skew_eval:                \
@@ -1064,6 +1088,11 @@ void apply_to_column_nullable(
         case Bodo_FTypes::mean_eval:                                        \
             valid_group =                                                   \
                 in_col->get_null_bit(i) && getv<uint64_t>(in_col, i) > 0;   \
+            break;                                                          \
+        case Bodo_FTypes::var_pop_eval:                                     \
+        case Bodo_FTypes::std_pop_eval:                                     \
+            valid_group = aux_cols[0]->get_null_bit(i) &&                   \
+                          getv<uint64_t>(aux_cols[0], i) > 0;               \
             break;                                                          \
         case Bodo_FTypes::var_eval:                                         \
         case Bodo_FTypes::std_eval:                                         \
@@ -1143,6 +1172,8 @@ void apply_to_column_nullable(
             out_col->set_null_bit(i_grp, true);                                \
             aux_cols[0]->set_null_bit(i_grp, true);                            \
             break;                                                             \
+        case Bodo_FTypes::var_pop:                                             \
+        case Bodo_FTypes::std_pop:                                             \
         case Bodo_FTypes::var:                                                 \
         case Bodo_FTypes::std:                                                 \
             var_agg<T, dtype>::apply(getv<T>(in_col, i),                       \
@@ -1182,6 +1213,18 @@ void apply_to_column_nullable(
             break;                                                             \
         case Bodo_FTypes::mean_eval:                                           \
             mean_eval(getv<double>(out_col, i), getv<uint64_t>(in_col, i));    \
+            out_col->set_null_bit(i, true);                                    \
+            break;                                                             \
+        case Bodo_FTypes::var_pop_eval:                                        \
+            var_pop_eval(getv<double>(out_col, i),                             \
+                         getv<uint64_t>(aux_cols[0], i),                       \
+                         getv<double>(aux_cols[2], i));                        \
+            out_col->set_null_bit(i, true);                                    \
+            break;                                                             \
+        case Bodo_FTypes::std_pop_eval:                                        \
+            std_pop_eval(getv<double>(out_col, i),                             \
+                         getv<uint64_t>(aux_cols[0], i),                       \
+                         getv<double>(aux_cols[2], i));                        \
             out_col->set_null_bit(i, true);                                    \
             break;                                                             \
         case Bodo_FTypes::var_eval:                                            \
@@ -1576,6 +1619,42 @@ void do_apply_to_column(std::shared_ptr<array_info> in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::mean, Bodo_CTypes::FLOAT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::mean, Bodo_CTypes::DECIMAL)
             break;
+        case Bodo_FTypes::var_pop:
+            // VAR
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::INT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::UINT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::INT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::UINT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::INT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::UINT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::INT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::UINT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::DATE)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::TIME)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::DATETIME)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::TIMEDELTA)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::FLOAT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::FLOAT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::var_pop, Bodo_CTypes::DECIMAL)
+            break;
+        case Bodo_FTypes::std_pop:
+            // STDDEV
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::INT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::UINT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::INT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::UINT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::INT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::UINT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::INT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::UINT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::DATE)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::TIME)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::DATETIME)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::TIMEDELTA)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::FLOAT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::FLOAT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::std_pop, Bodo_CTypes::DECIMAL)
+            break;
         case Bodo_FTypes::var:
             // VAR
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::var, Bodo_CTypes::INT8)
@@ -1775,6 +1854,26 @@ void do_apply_to_column(std::shared_ptr<array_info> in_col,
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
             return apply_to_column<double, Bodo_FTypes::mean_eval,
+                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
+                                                         aux_cols, grp_info);
+        case Bodo_FTypes::var_pop_eval:
+            // EVAL step for VAR_POP. This transforms each group from several
+            // arrays to the final single array output. Note we don't care about
+            // the input types here as the supported types are always
+            // hard coded.
+            // TODO: Move elsewhere? Every row is processed instead of reduce
+            // to groups.
+            return apply_to_column<double, Bodo_FTypes::var_pop_eval,
+                                   Bodo_CTypes::FLOAT64>(in_col, out_col,
+                                                         aux_cols, grp_info);
+        case Bodo_FTypes::std_pop_eval:
+            // EVAL step for STDDEV_POP. This transforms each group from several
+            // arrays to the final single array output. Note we don't care about
+            // the input types here as the supported types are always
+            // hard coded.
+            // TODO: Move elsewhere? Every row is processed instead of reduce
+            // to groups.
+            return apply_to_column<double, Bodo_FTypes::std_pop_eval,
                                    Bodo_CTypes::FLOAT64>(in_col, out_col,
                                                          aux_cols, grp_info);
         case Bodo_FTypes::var_eval:

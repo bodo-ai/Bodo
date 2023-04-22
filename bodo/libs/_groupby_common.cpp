@@ -46,6 +46,8 @@ void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
                 ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last ||
                 ftype == Bodo_FTypes::boolor_agg ||
                 ftype == Bodo_FTypes::mean || ftype == Bodo_FTypes::var ||
+                ftype == Bodo_FTypes::var_pop ||
+                ftype == Bodo_FTypes::std_pop ||
                 ftype == Bodo_FTypes::kurtosis || ftype == Bodo_FTypes::skew ||
                 ftype == Bodo_FTypes::std || ftype == Bodo_FTypes::median) {
                 // if input is all nulls, max, min, first, last, kurtosis, skew,
@@ -422,6 +424,8 @@ void get_groupby_output_dtype(int ftype,
             return;
         case Bodo_FTypes::median:
         case Bodo_FTypes::mean:
+        case Bodo_FTypes::var_pop:
+        case Bodo_FTypes::std_pop:
         case Bodo_FTypes::var:
         case Bodo_FTypes::std:
         case Bodo_FTypes::kurtosis:

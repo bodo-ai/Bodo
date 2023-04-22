@@ -43,35 +43,39 @@ struct Bodo_FTypes {
         last = 19,
         idxmin = 20,
         idxmax = 21,
-        var = 22,
-        std = 23,
-        kurtosis = 24,
-        skew = 25,
-        boolor_agg = 26,
-        count_if = 27,
-        udf = 28,
-        gen_udf = 29,
-        window = 30,
-        row_number = 31,
-        min_row_number_filter = 32,
-        num_funcs = 33,  // num_funcs is used to know how many functions up to
+        var_pop = 22,
+        std_pop = 23,
+        var = 24,
+        std = 25,
+        kurtosis = 26,
+        skew = 27,
+        boolor_agg = 28,
+        count_if = 29,
+        udf = 30,
+        gen_udf = 31,
+        window = 32,
+        row_number = 33,
+        min_row_number_filter = 34,
+        num_funcs = 35,  // num_funcs is used to know how many functions up to
                          // this point. Below this point are functions that are
                          // defined in the C++ code but not the Python enum.
-        mean_eval = 34,
-        var_eval = 35,
-        std_eval = 36,
-        kurt_eval = 37,
-        skew_eval = 38,
+        mean_eval = 36,
+        var_pop_eval = 37,
+        std_pop_eval = 38,
+        var_eval = 39,
+        std_eval = 40,
+        kurt_eval = 41,
+        skew_eval = 42,
         // These are internal operators used by groupby.window
         // when the orderby clause has na values first.
-        idxmin_na_first = 39,
-        idxmax_na_first = 40,
+        idxmin_na_first = 43,
+        idxmax_na_first = 44,
         // This is the operator for when we are generating one
         // of the 4 idx functions to operate over N columns. Each
         // column may have a different function so we cannot defineF
         // more explicit ftypes. This is used only in the min_row_number_filter
         // window function path.
-        idx_n_columns = 41
+        idx_n_columns = 45
     };
 };
 
