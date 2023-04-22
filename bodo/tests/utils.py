@@ -948,7 +948,6 @@ def _test_equal(
 
         if object in py_out_dtypes or np.bool_ in py_out_dtypes:
             check_dtype = False
-
         pd.testing.assert_frame_equal(
             bodo_out,
             py_out,

@@ -318,7 +318,9 @@ def test_groupby_agg_funcs_udf(memory_leak_check):
         return df.groupby(by=["A"]).B.agg((np.sum, np.sum))
 
     df = pd.DataFrame({"A": [1, 2, 2], "B": [1, 2, 2], "C": ["aba", "aba", "aba"]})
-    with pytest.raises(BodoError, match=".* 'func' must be user defined function"):
+    with pytest.raises(
+        BodoError, match="unsupported numpy method for use as an aggregate function"
+    ):
         bodo.jit(impl)(df)
 
 
@@ -373,7 +375,9 @@ def test_groupby_aggregate_funcs_udf(memory_leak_check):
         return df.groupby(by=["A"]).B.aggregate((np.sum, np.sum))
 
     df = pd.DataFrame({"A": [1, 2, 2], "B": [1, 2, 2], "C": ["aba", "aba", "aba"]})
-    with pytest.raises(BodoError, match=".* 'func' must be user defined function"):
+    with pytest.raises(
+        BodoError, match="unsupported numpy method for use as an aggregate function"
+    ):
         bodo.jit(impl)(df)
 
 
