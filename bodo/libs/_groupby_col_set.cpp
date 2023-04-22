@@ -335,12 +335,27 @@ void VarStdColSet::eval(const grouping_info& grp_info) {
 
     std::vector<std::shared_ptr<array_info>> aux_cols = {
         mycols->at(1), mycols->at(2), mycols->at(3)};
-    if (this->ftype == Bodo_FTypes::var) {
-        do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
-                           Bodo_FTypes::var_eval);
-    } else {
-        do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
-                           Bodo_FTypes::std_eval);
+    switch (this->ftype) {
+        case Bodo_FTypes::var_pop: {
+            do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+                               Bodo_FTypes::var_pop_eval);
+            break;
+        }
+        case Bodo_FTypes::std_pop: {
+            do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+                               Bodo_FTypes::std_pop_eval);
+            break;
+        }
+        case Bodo_FTypes::var: {
+            do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+                               Bodo_FTypes::var_eval);
+            break;
+        }
+        case Bodo_FTypes::std: {
+            do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+                               Bodo_FTypes::std_eval);
+            break;
+        }
     }
 }
 
@@ -595,8 +610,8 @@ void UdfColSet::alloc_update_columns(
     // output column)
     for (int i = udf_table_idx + offset; i < udf_table_idx + 1 + n_redvars;
          i++) {
-        // we get the type from the udf dummy table that was passed to C++
-        // library
+        // we get the type from the udf dummy table that was passed
+        // to C++ library
         bodo_array_type::arr_type_enum arr_type =
             udf_table->columns[i]->arr_type;
         Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
@@ -610,8 +625,8 @@ void UdfColSet::alloc_update_columns(
 }
 
 void UdfColSet::update(const std::vector<grouping_info>& grp_infos) {
-    // do nothing because this is done in JIT-compiled code (invoked from
-    // GroupbyPipeline once for all udf columns sets)
+    // do nothing because this is done in JIT-compiled code (invoked
+    // from GroupbyPipeline once for all udf columns sets)
 }
 
 typename std::vector<std::shared_ptr<array_info>>::iterator
@@ -624,8 +639,8 @@ UdfColSet::update_after_shuffle(
 void UdfColSet::alloc_combine_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
     for (int i = udf_table_idx; i < udf_table_idx + 1 + n_redvars; i++) {
-        // we get the type from the udf dummy table that was passed to C++
-        // library
+        // we get the type from the udf dummy table that was passed
+        // to C++ library
         bodo_array_type::arr_type_enum arr_type =
             udf_table->columns[i]->arr_type;
         Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
@@ -637,13 +652,13 @@ void UdfColSet::alloc_combine_columns(
 }
 
 void UdfColSet::combine(const grouping_info& grp_info) {
-    // do nothing because this is done in JIT-compiled code (invoked from
-    // GroupbyPipeline once for all udf columns sets)
+    // do nothing because this is done in JIT-compiled code (invoked
+    // from GroupbyPipeline once for all udf columns sets)
 }
 
 void UdfColSet::eval(const grouping_info& grp_info) {
-    // do nothing because this is done in JIT-compiled code (invoked from
-    // GroupbyPipeline once for all udf columns sets)
+    // do nothing because this is done in JIT-compiled code (invoked
+    // from GroupbyPipeline once for all udf columns sets)
 }
 
 GeneralUdfColSet::GeneralUdfColSet(std::shared_ptr<array_info> in_col,
@@ -663,8 +678,8 @@ void GeneralUdfColSet::fill_in_columns(
         int64_t i_grp = grp_info.row_to_group[i];
         group_rows[i_grp].push_back(i);
     }
-    // retrieve one column per group from the input column, add it to the
-    // general UDF input table
+    // retrieve one column per group from the input column, add it
+    // to the general UDF input table
     for (size_t i = 0; i < grp_info.num_groups; i++) {
         std::shared_ptr<array_info> col =
             RetrieveArray_SingleColumn(in_col, group_rows[i]);
@@ -705,7 +720,8 @@ void NUniqueColSet::update(const std::vector<grouping_info>& grp_infos) {
             : this->in_col;
     // TODO: check nunique with pivot_table operation
     if (my_nunique_table != nullptr) {
-        // use the grouping_info that corresponds to my nunique table
+        // use the grouping_info that corresponds to my nunique
+        // table
         aggfunc_output_initialize(this->update_cols[0], Bodo_FTypes::sum,
                                   use_sql_rules);  // zero initialize
         nunique_computation(input_col, this->update_cols[0],
@@ -730,8 +746,8 @@ void CumOpColSet::alloc_update_columns(
     //       (NOT the number of groups)
     bodo_array_type::arr_type_enum out_type = this->in_col->arr_type;
     if (out_type == bodo_array_type::DICT) {
-        // for dictionary-encoded input the arrtype of the output is regular
-        // string
+        // for dictionary-encoded input the arrtype of the output is
+        // regular string
         out_type = bodo_array_type::STRING;
     }
     out_cols.push_back(alloc_array(this->in_col->length, 1, 1, out_type,
@@ -825,7 +841,8 @@ HeadColSet::~HeadColSet() {}
 void HeadColSet::alloc_update_columns(
     size_t update_col_len, std::vector<std::shared_ptr<array_info>>& out_cols) {
     // NOTE: output size of head is dependent on number of rows to
-    // get from each group. This is computed in GroupbyPipeline::update().
+    // get from each group. This is computed in
+    // GroupbyPipeline::update().
     out_cols.push_back(alloc_array(update_col_len, 1, 1, this->in_col->arr_type,
                                    this->in_col->dtype, 0,
                                    this->in_col->num_categories));
@@ -843,7 +860,8 @@ WindowColSet::WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
                            int64_t _window_func, std::vector<bool>& _asc,
                            std::vector<bool>& _na_pos, bool _is_parallel,
                            bool use_sql_rules)
-    :  // Note the inputCol in BasicColSet is not used by WindowColSet
+    :  // Note the inputCol in BasicColSet is not used by
+       // WindowColSet
       BasicColSet(nullptr, Bodo_FTypes::window, false, use_sql_rules),
       input_cols(in_cols),
       window_func(_window_func),
@@ -915,7 +933,8 @@ std::unique_ptr<BasicColSet> makeColSet(
     BasicColSet* colset;
     if (ftype != Bodo_FTypes::window && in_cols.size() != 1) {
         throw std::runtime_error(
-            "Only window functions can have multiple input columns");
+            "Only window functions can have multiple input "
+            "columns");
     }
     switch (ftype) {
         case Bodo_FTypes::udf:
@@ -943,6 +962,8 @@ std::unique_ptr<BasicColSet> makeColSet(
         case Bodo_FTypes::mean:
             colset = new MeanColSet(in_cols[0], do_combine, use_sql_rules);
             break;
+        case Bodo_FTypes::var_pop:
+        case Bodo_FTypes::std_pop:
         case Bodo_FTypes::var:
         case Bodo_FTypes::std:
             colset =

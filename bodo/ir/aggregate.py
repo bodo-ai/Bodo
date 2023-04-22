@@ -266,6 +266,8 @@ supported_agg_funcs = [
     "last",
     "idxmin",
     "idxmax",
+    "var_pop",
+    "std_pop",
     "var",
     "std",
     "kurtosis",
@@ -328,7 +330,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     # udfs at runtime (see gen_update_cb, gen_combine_cb and gen_eval_cb),
     # to know which columns in the table received from C++ library correspond
     # to udfs and which to builtin functions
-    if func_name in {"var", "std"}:
+    if func_name in {"var_pop", "std_pop", "var", "std"}:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.fname = func_name
@@ -579,6 +581,12 @@ def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
     if bodo.utils.typing.is_builtin_function(f_val):
         # Builtin function case (e.g. df.groupby("B").agg(sum))
         func_name = bodo.utils.typing.get_builtin_function_name(f_val)
+        return get_agg_func(func_ir, func_name, rhs, series_type, typemap)
+    if bodo.utils.typing.is_numpy_function(f_val):
+        # Numpy function case (e.g. df.groupby("B").agg(np.var))
+        func_name = bodo.hiframes.pd_groupby_ext.get_agg_name_for_numpy_method(
+            bodo.utils.typing.get_builtin_function_name(f_val)
+        )
         return get_agg_func(func_ir, func_name, rhs, series_type, typemap)
     if isinstance(f_val, (tuple, list)):
         lambda_count = 0

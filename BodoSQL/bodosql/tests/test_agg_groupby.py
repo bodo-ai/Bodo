@@ -31,13 +31,6 @@ def test_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aggregation calls in queries"""
-    # Skipping VAR_POP, VARIANCE_POP, and STDDEV_POP with groupby due to [BE-910]
-    if (
-        numeric_agg_builtin_funcs == "STDDEV_POP"
-        or numeric_agg_builtin_funcs == "VAR_POP"
-        or numeric_agg_builtin_funcs == "VARIANCE_POP"
-    ):
-        return
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -60,13 +53,6 @@ def test_agg_numeric_larger_group(
     grouped_dfs, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aggregation calls in queries on DataFrames with a larger data in each group."""
-    # Skipping VAR_POP, VARIANCE_POP, and STDDEV_POP with groupby due to [BE-910]
-    if (
-        numeric_agg_builtin_funcs == "STDDEV_POP"
-        or numeric_agg_builtin_funcs == "VAR_POP"
-        or numeric_agg_builtin_funcs == "VARIANCE_POP"
-    ):
-        return
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -90,13 +76,6 @@ def test_aliasing_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aliasing of aggregations in queries"""
-    # Skipping VAR_POP, VARIANCE_POP, and STDDEV_POP with groupby due to [BE-910]
-    if (
-        numeric_agg_builtin_funcs == "STDDEV_POP"
-        or numeric_agg_builtin_funcs == "VAR_POP"
-        or numeric_agg_builtin_funcs == "VARIANCE_POP"
-    ):
-        return
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
