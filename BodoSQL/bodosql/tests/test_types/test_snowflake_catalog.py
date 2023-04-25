@@ -711,6 +711,241 @@ def test_current_timestamp_case(
     )
 
 
+@pytest.mark.parametrize(
+    "transient_default",
+    [
+        True,
+        pytest.param(False, marks=pytest.mark.slow),
+    ],
+)
+def test_default_table_type(
+    transient_default, test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that the default table type is dependent on the default
+    type for the database/schema it's created in/
+    """
+
+    # The default table type depends on the default for the database/schema
+    if transient_default:
+        # default for test_db_snowflake_catalog is transient
+        catalog = test_db_snowflake_catalog
+        db = test_db_snowflake_catalog.database
+        schema = test_db_snowflake_catalog.connection_params["schema"]
+    else:
+        # E2E_TESTS_DB.PUBLIC defaults to permanent
+        catalog = bodosql.SnowflakeCatalog(
+            os.environ.get("SF_USERNAME", ""),
+            os.environ.get("SF_PASSWORD", ""),
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            "E2E_TESTS_DB",
+            connection_params={"schema": "PUBLIC"},
+        )
+        db = "E2E_TESTS_DB"
+        schema = "PUBLIC"
+
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+
+    # Create the table
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    comm = MPI.COMM_WORLD
+    table_name = None
+    if bodo.get_rank() == 0:
+        table_name = gen_unique_table_id(
+            "bodosql_catalog_write_create_table_does_not_already_exist"
+        )
+    table_name = comm.bcast(table_name)
+
+    # Write to Snowflake
+    succsess_query = f"CREATE OR REPLACE TABLE {schema}.{table_name} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
+
+    exception_occured_in_test_body = False
+    try:
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
+        output_df = None
+        # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+        # to reduce the demand on Snowflake.
+        if bodo.get_rank() == 0:
+            conn_str = get_snowflake_connection_string(db, schema)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            # Reset the columns to the original names for simpler testing.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+
+        output_df = comm.bcast(output_df)
+        # Recreate the expected output by manually doing an append.
+        result_df = pd.DataFrame(
+            {
+                "column1": "literal",
+                "column2": np.arange(1, 11),
+                "column3": pd.Timestamp("2023-02-21"),
+            }
+        )
+        output_df.columns = output_df.columns.str.upper()
+        result_df.columns = result_df.columns.str.upper()
+        assert_tables_equal(output_df, result_df)
+
+        table_type = None
+        if bodo.get_rank() == 0:
+            table_type = pd.read_sql(
+                f"SHOW TABLES LIKE '{table_name}' in SCHEMA IDENTIFIER('{db}.{schema}')",
+                conn_str,
+            )["kind"][0]
+
+        table_type = comm.bcast(table_type)
+        expected_table_type = "TRANSIENT" if transient_default else "TABLE"
+        assert (
+            table_type == expected_table_type
+        ), f"Table type is not as expected. Expected {expected_table_type} but found {table_type}"
+
+    except Exception as e:
+        # In the case that another exception ocurred within the body of the try,
+        # We may not have created a table to drop.
+        # because of this, we call drop_snowflake_table in a try/except, to avoid
+        # masking the original exception
+        exception_occured_in_test_body = True
+        raise e
+    finally:
+        if exception_occured_in_test_body:
+            try:
+                drop_snowflake_table(table_name, db, schema)
+            except:
+                pass
+        else:
+            drop_snowflake_table(table_name, db, schema)
+
+
+def test_snowflake_catalog_create_table_temporary(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that explicitly supplying "TEMPORARY" as the table type works.
+    Since the table will be dropped before we have the opportunity to read
+    it, we're just testing that it runs without error.
+    """
+    # default for test_db_snowflake_catalog is transient
+    catalog = test_db_snowflake_catalog
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    comm = MPI.COMM_WORLD
+    table_name = None
+    if bodo.get_rank() == 0:
+        table_name = gen_unique_table_id(
+            "bodosql_catalog_write_create_table_does_not_already_exist"
+        )
+    table_name = comm.bcast(table_name)
+
+    succsess_query = f"CREATE OR REPLACE TEMPORARY TABLE {schema}.{table_name} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
+    check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
+
+
+def test_snowflake_catalog_create_table_transient(memory_leak_check):
+    """tests that explicitly supplying "TRANSIENT" as the table type works"""
+
+    # E2E_TESTS_DB defaults to permanent, this is needed to make sure
+    # that the default table type is NOT transient
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "E2E_TESTS_DB",
+        connection_params={"schema": "PUBLIC"},
+    )
+    db = "E2E_TESTS_DB"
+    schema = "PUBLIC"
+
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    comm = MPI.COMM_WORLD
+    table_name = None
+    if bodo.get_rank() == 0:
+        table_name = gen_unique_table_id(
+            "bodosql_catalog_write_create_table_does_not_already_exist"
+        )
+    table_name = comm.bcast(table_name)
+
+    succsess_query = f"CREATE OR REPLACE TRANSIENT TABLE {schema}.{table_name} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
+    exception_occured_in_test_body = False
+    try:
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
+
+        output_df = None
+        # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+        # to reduce the demand on Snowflake.
+        if bodo.get_rank() == 0:
+            conn_str = get_snowflake_connection_string(db, schema)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            # Reset the columns to the original names for simpler testing.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+
+        output_df = comm.bcast(output_df)
+        # Recreate the expected output by manually doing an append.
+        result_df = pd.DataFrame(
+            {
+                "column1": "literal",
+                "column2": np.arange(1, 11),
+                "column3": pd.Timestamp("2023-02-21"),
+            }
+        )
+        output_df.columns = output_df.columns.str.upper()
+        result_df.columns = result_df.columns.str.upper()
+        assert_tables_equal(output_df, result_df)
+
+        output_table_type = None
+        if bodo.get_rank() == 0:
+            output_table_type = pd.read_sql(
+                f"SHOW TABLES LIKE '{table_name}' in SCHEMA IDENTIFIER('{db}.{schema}')",
+                conn_str,
+            )["kind"][0]
+
+        output_table_type = comm.bcast(output_table_type)
+        assert (
+            output_table_type == "TRANSIENT"
+        ), f"Table type is not as expected. Expected TRANSIENT but found {output_table_type}"
+
+    except Exception as e:
+        # In the case that another exception ocurred within the body of the try,
+        # We may not have created a table to drop.
+        # because of this, we call drop_snowflake_table in a try/except, to avoid
+        # masking the original exception
+        exception_occured_in_test_body = True
+        raise e
+    finally:
+        if exception_occured_in_test_body:
+            try:
+                drop_snowflake_table(table_name, db, schema)
+            except:
+                pass
+        else:
+            drop_snowflake_table(table_name, db, schema)
+
+
 def test_snowflake_catalog_create_table_does_not_already_exists(
     test_db_snowflake_catalog, use_default_schema, memory_leak_check
 ):

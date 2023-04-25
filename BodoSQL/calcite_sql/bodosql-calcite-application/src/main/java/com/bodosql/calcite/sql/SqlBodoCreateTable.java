@@ -16,8 +16,6 @@
  */
 package com.bodosql.calcite.sql;
 
-import static org.apache.calcite.util.Static.RESOURCE;
-
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
@@ -34,32 +32,25 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  */
 public class SqlBodoCreateTable extends SqlCreateTable {
 
-  // CHECKSTYLE: IGNORE 2; can't use 'volatile' because it is a Java keyword
-  // but checkstyle does not like trailing or preceding '_'
-  private final boolean _volatile;
-
   /** Creates a SqlBodoCreateTable. */
   public SqlBodoCreateTable(
       SqlParserPos pos,
       boolean replace,
-      boolean volatile_,
+      SqlCreateTable.CreateTableType tableType,
       boolean ifNotExists,
       SqlIdentifier name,
       SqlNodeList columnList,
       SqlNode query) {
     super(pos, replace, ifNotExists, name, columnList, query);
-    this._volatile = volatile_;
+
+    this.createType = tableType;
   }
 
   @Override
   public void validate(final SqlValidator validator, final SqlValidatorScope scope) {
     // Validate the clauses that are specific to Bodo's create table statement,
     // and then defers to the superclass for the rest.
-    // Currently, we do not support volatile/temporary tables due to the fact that bodo doesn't
-    // keep track of session information.
-    if (this._volatile) {
-      throw validator.newValidationError(this, RESOURCE.createTableUnsupportedClause("VOLATILE"));
-    }
+    // (currently none)
 
     super.validate(validator, scope);
   }
@@ -67,8 +58,8 @@ public class SqlBodoCreateTable extends SqlCreateTable {
   @Override
   public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
     writer.keyword("CREATE");
-    if (_volatile) {
-      writer.keyword("VOLATILE");
+    if (!this.getCreateTableType().equals(CreateTableType.DEFAULT)) {
+      writer.keyword(this.getCreateTableType().asStringKeyword());
     }
     writer.keyword("TABLE");
     if (ifNotExists) {

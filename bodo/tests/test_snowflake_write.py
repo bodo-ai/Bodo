@@ -299,11 +299,11 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_create_table_handle_exists(
-        cursor, stage_name, location, sf_schema, if_exists
+        cursor, stage_name, location, sf_schema, if_exists, table_type=""
     ):
         with bodo.objmode():
             create_table_handle_exists(
-                cursor, stage_name, location, sf_schema, if_exists
+                cursor, stage_name, location, sf_schema, if_exists, table_type
             )
 
     bodo_impl = bodo.jit(distributed=False)(test_impl_create_table_handle_exists)
@@ -394,6 +394,18 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
             tables_desc = cursor.execute(show_tables_sql, _is_internal=True).fetchall()
             first_table_creation_time = tables_desc[0]
 
+            # Check that the table was created with the correct type
+            # We expect TRANSIENT because we didn't specify a table type, and SNOWFLAKE_WRITE_TEST
+            # is a TRANSIENT database.
+            assert first_table_creation_time[4] in (
+                "TABLE",
+                "TRANSIENT",
+                "TEMPORARY",
+            ), "Table type is not an expected value"
+            assert (
+                first_table_creation_time[4] == "TRANSIENT"
+            ), "Table schema is not TRANSIENT"
+
             describe_table_columns_sql = (
                 f"DESCRIBE TABLE {table_name} TYPE=COLUMNS "
                 f"/* Python:bodo.tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
@@ -442,9 +454,10 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
     bodo.barrier()
 
     # Step 4: Call create_table_handle_exists again with if_exists="replace".
+    # And a different table type ("TEMPORARY").
     # This should succeed after dropping the table from Step 1.
     if bodo.get_rank() == 0:
-        bodo_impl(cursor, stage_name, table_name, sf_schema, "replace")
+        bodo_impl(cursor, stage_name, table_name, sf_schema, "replace", "TEMPORARY")
     bodo.barrier()
 
     if bodo.get_rank() == 0:
@@ -455,6 +468,14 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
             )
             tables_desc = cursor.execute(show_tables_sql, _is_internal=True).fetchall()
             assert tables_desc[0] != first_table_creation_time
+
+            # Check that the table was created with the correct type
+            assert tables_desc[0][4] in (
+                "TABLE",
+                "TRANSIENT",
+                "TEMPORARY",
+            ), "Table type is not an expected value"
+            assert tables_desc[0][4] == "TEMPORARY", "Table schema is not TEMPORARY"
 
         except Exception as e:
             print("".join(traceback.format_exception(None, e, e.__traceback__)))
