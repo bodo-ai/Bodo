@@ -21,6 +21,6 @@ class PandasTableCreateRule private constructor(config: Config) : ConverterRule(
         return PandasTableCreate(rel.cluster, traitSet,
             convert(create.input,
                 create.input.traitSet.replace(PandasRel.CONVENTION)),
-            create.schema, create.tableName, create.isReplace, create.schemaPath)
+            create.schema, create.tableName, create.isReplace, create.createTableType, create.schemaPath)
     }
 }

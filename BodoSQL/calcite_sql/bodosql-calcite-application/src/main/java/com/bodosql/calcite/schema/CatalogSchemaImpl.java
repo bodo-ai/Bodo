@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.Set;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
 
 public class CatalogSchemaImpl extends BodoSqlSchema {
   /**
@@ -116,11 +117,21 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    * @param varName The name of the variable being written.
    * @param tableName The name of the table as the write destination.
    * @param ifExists Behavior of the write if the table already exists
+   * @param createTableType Behavior of the write if we're creating a new table. Defaults to DEFAULT
    * @return The generated code to compute the write in Python.
    */
   public String generateWriteCode(
+      String varName,
+      String tableName,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType) {
+    return this.catalog.generateWriteCode(
+        varName, this.getName(), tableName, ifExists, createTableType);
+  }
+
+  public String generateWriteCode(
       String varName, String tableName, BodoSQLCatalog.ifExistsBehavior ifExists) {
-    return this.catalog.generateWriteCode(varName, this.getName(), tableName, ifExists);
+    return generateWriteCode(varName, tableName, ifExists, SqlCreateTable.CreateTableType.DEFAULT);
   }
 
   /**

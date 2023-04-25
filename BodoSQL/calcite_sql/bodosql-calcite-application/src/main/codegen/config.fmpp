@@ -38,6 +38,8 @@ data: {
     # not a reserved keyword, add it to the 'nonReservedKeywords' section.
     keywords: [
       "IF",
+      "TEMP",
+      "TRANSIENT",
       "VOLATILE",
     ]
 
@@ -53,6 +55,8 @@ data: {
         "METHOD",
         "LEAD",
         "USER",
+        "TEMP",
+        "TRANSIENT",
     ]
 
     # List of additional join types. Each is a method with no arguments.

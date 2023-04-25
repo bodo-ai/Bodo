@@ -4295,9 +4295,14 @@ def to_sql_overload(
     method=None,
     # Custom Bodo Arguments
     _bodo_allow_downcasting=False,
+    _bodo_create_table_type="",
     # Additional entry
     _is_parallel=False,
 ):
+    """
+    _bodo_create_table_type: str. Only used when creating a snowflake table. Must be one of "", "TRANSIENT", or "TEMPORARY"
+    """
+
     import warnings
 
     # Currently to_sql (Iceberg, Snowflake, SQL writes) does not support
@@ -4346,7 +4351,7 @@ def to_sql_overload(
         "    df, name, con,\n"
         "    schema=None, if_exists='fail', index=True,\n"
         "    index_label=None, chunksize=None, dtype=None,\n"
-        "    method=None, _bodo_allow_downcasting=False,\n"
+        '    method=None, _bodo_allow_downcasting=False, _bodo_create_table_type="",\n'
         "    _is_parallel=False,\n"
         "):\n"
     )
@@ -4624,7 +4629,7 @@ def to_sql_overload(
         "        with bodo.objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
         f"                cursor, stage_name, location, {sf_schema},\n"
-        "                if_exists, num_files_global, old_creds, tmp_folder,\n"
+        "                if_exists, _bodo_create_table_type, num_files_global, old_creds, tmp_folder,\n"
         "                azure_stage_direct_upload, old_core_site,\n"
         "                old_sas_token,\n"
         "            )\n"
