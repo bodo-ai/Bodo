@@ -487,6 +487,13 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     if (m == NULL)
         return NULL;
 
+    // make sure MPI is initialized, assuming this will be called
+    // on all processes
+    int is_initialized;
+    MPI_Initialized(&is_initialized);
+    if (!is_initialized)
+        MPI_Init(NULL, NULL);
+
 #if defined(CHECK_LICENSE_PLATFORM)
     int num_pes_plat;
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes_plat);
@@ -573,13 +580,6 @@ PyMODINIT_FUNC PyInit_hdist(void) {
         }
     }
 #endif
-
-    // make sure MPI is initialized, assuming this will be called
-    // on all processes
-    int is_initialized;
-    MPI_Initialized(&is_initialized);
-    if (!is_initialized)
-        MPI_Init(NULL, NULL);
 
 #ifdef CHECK_LICENSE_CORE_COUNT
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
