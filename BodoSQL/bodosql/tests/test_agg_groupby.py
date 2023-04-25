@@ -1084,8 +1084,8 @@ def test_all_nulls(memory_leak_check):
 @pytest.mark.parametrize(
     "agg_cols",
     [
-        pytest.param("BDFK", id="fast_tests"),
-        pytest.param("CEGHIJ", id="slow_tests", marks=pytest.mark.slow),
+        pytest.param("BDGK", id="fast_tests"),
+        pytest.param("CEFHIJ", id="slow_tests", marks=pytest.mark.slow),
     ],
 )
 def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):

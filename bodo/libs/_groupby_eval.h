@@ -116,7 +116,14 @@ inline void skew_eval(double& result, uint64_t count, double m1, double m2,
         double numerator =
             m3 - 3.0 * m2 * sum + 2.0 * count * std::pow(sum, 3.0);
         double denominator = m2 - sum * m1;
-        if (numerator == 0.0 || denominator == 0.0) {
+        // If the numerator is zero, or the denominator is very close to zero,
+        // then the skew should be set to zero to avoid floating point
+        // arithmetic errors. The threshold for when to count the denominator
+        // as nearly-zero is based on the sigmoid of the logarithm of the
+        // second power-sum, thus ensuring that the threshold is always small,
+        // but becomes especially small when the values involved are tiny.
+        if (numerator == 0.0 ||
+            std::abs(denominator) < 0.1 / (1.0 + std::exp(-std::log(m2)))) {
             result = 0.0;
         } else {
             double s = ((count * std::pow((count - 1), 1.5) / (count - 2)) *
@@ -149,7 +156,13 @@ inline void kurt_eval(double& result, uint64_t count, double m1, double m2,
         double fm = (m4 - 4 * m3 * sum + 6 * m2 * std::pow(sum, 2.0) -
                      3 * count * std::pow(sum, 4.0));
         double sm = m2 - sum * m1;
-        if (fm == 0.0 || sm == 0.0) {
+        // If the numerator is zero, or the denominator is very close to zero,
+        // then the kurtosis should be set to zero to avoid floating point
+        // arithmetic errors. The threshold for when to count the denominator
+        // as nearly-zero is based on the sigmoid of the logarithm of the
+        // second power-sum, thus ensuring that the threshold is always small,
+        // but becomes especially small when the values involved are tiny.
+        if (fm == 0.0 || std::abs(sm) < 0.1 / (1.0 + std::exp(-std::log(m2)))) {
             result = 0.0;
         } else {
             double adj =
