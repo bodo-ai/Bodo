@@ -1136,6 +1136,7 @@ def create_table_handle_exists(
     location: str,
     sf_schema,
     if_exists: str,
+    table_type: str,
 ):  # pragma: no cover
     """Automatically create a new table in Snowflake at the given location if
     it doesn't exist, following the schema of staged files.
@@ -1150,6 +1151,7 @@ def create_table_handle_exists(
             "replace": If table exists, drop it, recreate it, and insert data.
                 Create if does not exist
             "append": If table exists, insert data. Create if does not exist
+        table_type: Type of table to create. Must be one of "", "TRANSIENT", or "TEMPORARY"
 
     """
     ev = tracing.Event("create_table_if_not_exists", is_parallel=False)
@@ -1165,13 +1167,18 @@ def create_table_handle_exists(
             "or 'pip install snowflake-connector-python'."
         )
 
-    # Handle `if_exists`
+    # TODO: handle {table_type}
+
+    # Handle `if_exists` and `table_type`
+    if table_type not in ["", "TRANSIENT", "TEMPORARY"]:
+        raise ValueError(f"'{table_type}' is not valid value for table_type")
+
     if if_exists == "fail":
-        create_table_cmd = "CREATE TABLE"
+        create_table_cmd = f"CREATE {table_type} TABLE"
     elif if_exists == "replace":
-        create_table_cmd = "CREATE OR REPLACE TABLE"
+        create_table_cmd = f"CREATE OR REPLACE {table_type} TABLE"
     elif if_exists == "append":
-        create_table_cmd = "CREATE TABLE IF NOT EXISTS"
+        create_table_cmd = f"CREATE {table_type} TABLE IF NOT EXISTS"
     else:
         raise ValueError(f"'{if_exists}' is not valid for if_exists")
 
@@ -1640,6 +1647,7 @@ def create_table_copy_into(
     location: str,
     sf_schema,
     if_exists: str,
+    table_type: str,
     num_files_uploaded: int,
     old_creds,
     tmp_folder: TemporaryDirectory,
@@ -1662,6 +1670,7 @@ def create_table_copy_into(
             "replace": If table exists, drop it, recreate it, and insert data.
                 Create if does not exist
             "append": If table exists, insert data. Create if does not exist
+        table_type: Type of table to create. Must be one of "", "TRANSIENT", or "TEMPORARY"
         num_files_uploaded: Number of files that were uploaded to the stage. We use this
             to validate that the COPY INTO went through successfully. Also, in case
             this is 0, we skip the COPY INTO step.
@@ -1685,7 +1694,6 @@ def create_table_copy_into(
             for more details), which we'll restore in this function.
     """
     ev = tracing.Event("create_table_copy_into", is_parallel=False)
-
     comm = MPI.COMM_WORLD
     my_rank = comm.Get_rank()
 
@@ -1703,6 +1711,7 @@ def create_table_copy_into(
                 location,
                 sf_schema,
                 if_exists,
+                table_type,
             )
             # No point of running COPY INTO if there are no files.
             if num_files_uploaded > 0:

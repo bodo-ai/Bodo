@@ -43,6 +43,7 @@ import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.*;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
@@ -800,11 +801,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
       ifExists = BodoSQLCatalog.ifExistsBehavior.FAIL;
     }
 
+    SqlCreateTable.CreateTableType createTableType = node.getCreateTableType();
+
     this.generatedCode
         .append(getBodoIndent())
         .append(
             outputSchemaAsCatalog.generateWriteCode(
-                this.varGenStack.pop(), node.getTableName(), ifExists))
+                this.varGenStack.pop(), node.getTableName(), ifExists, createTableType))
         .append("\n");
   }
 
