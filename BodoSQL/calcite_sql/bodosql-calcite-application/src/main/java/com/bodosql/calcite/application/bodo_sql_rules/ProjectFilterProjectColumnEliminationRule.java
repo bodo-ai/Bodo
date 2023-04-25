@@ -1,17 +1,25 @@
 package com.bodosql.calcite.application.bodo_sql_rules;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
-import java.util.*;
-import javax.annotation.*;
-import kotlin.*;
-import org.apache.calcite.plan.*;
-import org.apache.calcite.rel.*;
-import org.apache.calcite.rel.core.*;
-import org.apache.calcite.rel.rules.*;
-import org.apache.calcite.rex.*;
-import org.apache.calcite.sql.fun.*;
-import org.apache.calcite.tools.*;
-import org.immutables.value.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import javax.annotation.Nullable;
+import kotlin.Pair;
+import org.apache.calcite.plan.RelOptRuleCall;
+import org.apache.calcite.plan.RelRule;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.Filter;
+import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.rules.TransformationRule;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexUtil;
+import org.apache.calcite.sql.fun.SqlCastFunction;
+import org.apache.calcite.tools.RelBuilder;
+import org.immutables.value.Value;
 
 /**
  * Rule that looks at two projections separated by a filter and determines if any computation in the
@@ -257,7 +265,8 @@ public class ProjectFilterProjectColumnEliminationRule
   @Value.Immutable
   public interface Config extends RelRule.Config {
     ProjectFilterProjectColumnEliminationRule.Config DEFAULT =
-        ImmutableProjectFilterProjectColumnEliminationRule.Config.of()
+        com.bodosql.calcite.application.bodo_sql_rules
+            .ImmutableProjectFilterProjectColumnEliminationRule.Config.of()
             .withOperandFor(Project.class, Filter.class);
 
     @Override
@@ -276,7 +285,6 @@ public class ProjectFilterProjectColumnEliminationRule
                       .oneInput(
                           b1 ->
                               b1.operand(filterClass)
-                                  .predicate(f -> !f.containsOver())
                                   .oneInput(
                                       b2 ->
                                           b2.operand(projectClass)
