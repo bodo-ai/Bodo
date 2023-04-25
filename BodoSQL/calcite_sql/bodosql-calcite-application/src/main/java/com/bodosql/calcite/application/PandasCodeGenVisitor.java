@@ -6,6 +6,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SampleCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.*;
@@ -326,7 +327,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else if (node instanceof PandasTableModify) {
       this.visitLogicalTableModify((TableModify) node);
     } else if (node instanceof PandasTableCreate) {
-      visitLogicalTableCreate((PandasTableCreate) node);
+      this.visitLogicalTableCreate((PandasTableCreate) node);
+    } else if (node instanceof PandasRowSample) {
+      this.visitRowSample((PandasRowSample) node);
+    } else if (node instanceof PandasSample) {
+      this.visitSample((PandasSample) node);
     } else if (node instanceof Correlate) {
       throw new BodoSQLCodegenException(
           "Internal Error: BodoSQL does not support Correlated Queries");
@@ -2064,6 +2069,52 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.genRelnodeTimerStop(node);
     }
     varGenStack.push(outVar);
+  }
+
+  /**
+   * Visitor for RowSample: Supports SAMPLE clause in SQL with a fixed number of rows.
+   *
+   * @param node rowSample node being visited
+   */
+  public void visitRowSample(PandasRowSample node) {
+    // We always assume row sample has exactly one input
+    assert node.getInputs().size() == 1;
+
+    // Visit the input
+    RelNode inp = node.getInput(0);
+    this.visit(inp, 0, node);
+    String inpExpr = varGenStack.pop();
+
+    String outVar = this.genDfVar();
+    this.genRelnodeTimerStart(node);
+
+    this.generatedCode.append(generateRowSampleCode(outVar, inpExpr, node.getParams()));
+
+    varGenStack.push(outVar);
+    this.genRelnodeTimerStop(node);
+  }
+
+  /**
+   * Visitor for Sample: Supports SAMPLE clause in SQL with a fraction of the input.
+   *
+   * @param node sample node being visited
+   */
+  public void visitSample(PandasSample node) {
+    // We always assume sample has exactly one input
+    assert node.getInputs().size() == 1;
+
+    // Visit the input
+    RelNode inp = node.getInput(0);
+    this.visit(inp, 0, node);
+    String inpExpr = varGenStack.pop();
+
+    String outVar = this.genDfVar();
+    this.genRelnodeTimerStart(node);
+
+    this.generatedCode.append(generateSampleCode(outVar, inpExpr, node.getParams()));
+
+    varGenStack.push(outVar);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
