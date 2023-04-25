@@ -2,6 +2,8 @@
 """
 Test correctness of SQL cast queries on BodoSQL
 """
+import datetime
+
 import pandas as pd
 import pytest
 from bodosql.tests.utils import bodosql_use_date_type, check_query
@@ -618,9 +620,7 @@ def test_implicit_cast_date_to_tz_aware(tz_aware_df, memory_leak_check):
         )
 
 
-def test_cast_date_scalar_to_timestamp(
-    basic_df, use_sf_cast_syntax, memory_leak_check
-):
+def test_cast_date_scalar_to_timestamp(basic_df, use_sf_cast_syntax, memory_leak_check):
     """tests casting date scalar to timestamp"""
 
     if use_sf_cast_syntax:
@@ -632,6 +632,74 @@ def test_cast_date_scalar_to_timestamp(
     check_query(
         query,
         basic_df,
+        None,
+        check_names=False,
+        expected_output=expected_output,
+    )
+
+
+def test_cast_scalars_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak_check):
+    """tests casting date and string scalars to timestamp_ntz"""
+
+    if use_sf_cast_syntax:
+        query = "SELECT DATE('2013-05-06')::TIMESTAMP_NTZ, '2013-05-06 12:34:56'::TIMESTAMP_NTZ"
+    else:
+        query = "SELECT CAST(DATE('2013-05-06') as TIMESTAMP_NTZ), CAST('2013-05-06 12:34:56' as TIMESTAMP_NTZ)"
+
+    expected_output = pd.DataFrame(
+        {"A": [pd.Timestamp(2013, 5, 6)], "B": [pd.Timestamp(2013, 5, 6, 12, 34, 56)]}
+    )
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_names=False,
+        expected_output=expected_output,
+    )
+
+
+def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak_check):
+    """tests casting date and string columns to timestamp_ntz"""
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "DATES": pd.Series(
+                    [
+                        datetime.date(2022, 1, 1),
+                        datetime.date(2022, 3, 15),
+                        None,
+                        datetime.date(2019, 3, 15),
+                        datetime.date(2010, 1, 11),
+                    ]
+                    * 3
+                ),
+                "STRINGS": pd.Series(
+                    [
+                        "2011-01-01",
+                        "1971-02-02 16:43:25",
+                        "2021-03-03",
+                        None,
+                        "2007-01-01 03:30:00",
+                    ]
+                    * 3
+                ),
+            }
+        )
+    }
+    if use_sf_cast_syntax:
+        query = "SELECT DATES::TIMESTAMP_NTZ, STRINGS::TIMESTAMP_NTZ from table1"
+    else:
+        query = "SELECT CAST(DATES as TIMESTAMP_NTZ), CAST(STRINGS as TIMESTAMP_NTZ) from table1"
+
+    expected_output = pd.DataFrame(
+        {
+            "DATES": [pd.Timestamp(date) for date in ctx["table1"]["DATES"]],
+            "STRINGS": [pd.Timestamp(string) for string in ctx["table1"]["STRINGS"]],
+        }
+    )
+    check_query(
+        query,
+        ctx,
         None,
         check_names=False,
         expected_output=expected_output,
