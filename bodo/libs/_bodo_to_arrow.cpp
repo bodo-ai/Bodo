@@ -17,24 +17,6 @@
     }                                                          \
     lhs = std::move(res).ValueOrDie();
 
-/// Convert Bodo date (year, month, day) from int64 to Arrow date32
-static inline int32_t bodo_date64_to_arrow_date32(int64_t date) {
-    int64_t year = date >> 32;
-    int64_t month = (date >> 16) & 0xFFFF;
-    int64_t day = date & 0xFFFF;
-    // NOTE that get_days_from_date returns int64 and we are downcasting to
-    // int32
-    return get_days_from_date(year, month, day);
-}
-
-/// Convert Bodo date array (year, month, day elements) to Arrow date32 array
-static void CastBodoDateToArrowDate32(const int64_t *input, int64_t length,
-                                      int32_t *output) {
-    for (int64_t i = 0; i < length; ++i) {
-        *output++ = bodo_date64_to_arrow_date32(*input++);
-    }
-}
-
 /**
  * @brief Create Arrow Chunked Array from Bodo's array_info
  *
@@ -266,8 +248,7 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                                        type);
                 break;
             case Bodo_CTypes::DATE:
-                // input from Bodo uses int64 for dates
-                in_num_bytes = sizeof(int64_t) * array->length;
+                in_num_bytes = sizeof(int32_t) * array->length;
                 type = arrow::date32();
                 break;
             case Bodo_CTypes::TIME:
@@ -341,21 +322,8 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
 
         ret_type = type;
 
-        if (array->dtype == Bodo_CTypes::DATE) {
-            // allocate buffer to store date32 values in Arrow format
-            std::shared_ptr<arrow::Buffer> out_buffer;
-            arrow::Result<std::unique_ptr<arrow::Buffer>> res =
-                AllocateBuffer(sizeof(int32_t) * array->length, pool);
-            CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
-            CastBodoDateToArrowDate32((int64_t *)array->data1(), array->length,
-                                      (int32_t *)out_buffer->mutable_data());
-
-            auto arr_data = arrow::ArrayData::Make(
-                type, array->length, {null_bitmap, out_buffer}, null_count_, 0);
-            *out = arrow::MakeArray(arr_data);
-
-        } else if (array->dtype == Bodo_CTypes::TIME &&
-                   (array->precision != 9 || downcast_time_ns_to_us)) {
+        if (array->dtype == Bodo_CTypes::TIME &&
+            (array->precision != 9 || downcast_time_ns_to_us)) {
             std::shared_ptr<arrow::Buffer> out_buffer;
             if (array->precision == 6 ||
                 (array->precision == 9 && downcast_time_ns_to_us)) {
@@ -1039,6 +1007,10 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_numeric_array_to_bodo<arrow::UInt32Array>(
                 std::static_pointer_cast<arrow::UInt32Array>(arrow_arr),
                 Bodo_CTypes::UINT32);
+        case arrow::Type::DATE32:
+            return arrow_numeric_array_to_bodo<arrow::Date32Array>(
+                std::static_pointer_cast<arrow::Date32Array>(arrow_arr),
+                Bodo_CTypes::DATE);
         case arrow::Type::INT32:
             return arrow_numeric_array_to_bodo<arrow::Int32Array>(
                 std::static_pointer_cast<arrow::Int32Array>(arrow_arr),

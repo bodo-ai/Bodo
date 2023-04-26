@@ -618,7 +618,8 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
             out_hashes, (uint16_t*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
-    if (array->dtype == Bodo_CTypes::INT32) {
+    if (array->dtype == Bodo_CTypes::INT32 ||
+        array->dtype == Bodo_CTypes::DATE) {
         return hash_array_inner<int32_t>(
             out_hashes, (int32_t*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask(), use_murmurhash);
@@ -644,8 +645,7 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
             (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     // TODO: [BE-4106] Split Time into Time32 and Time64
-    if (array->dtype == Bodo_CTypes::DATE ||
-        array->dtype == Bodo_CTypes::DATETIME ||
+    if (array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_inner<int64_t>(
@@ -868,7 +868,8 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             out_hashes, (uint16_t*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask());
     }
-    if (array->dtype == Bodo_CTypes::INT32) {
+    if (array->dtype == Bodo_CTypes::INT32 ||
+        array->dtype == Bodo_CTypes::DATE) {
         return hash_array_combine_inner<int32_t>(
             out_hashes, (int32_t*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask());
@@ -889,8 +890,7 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             (uint8_t*)array->null_bitmask());
     }
     // TODO: [BE-4106] Split Time into Time32 and Time64
-    if (array->dtype == Bodo_CTypes::DATE ||
-        array->dtype == Bodo_CTypes::DATETIME ||
+    if (array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_combine_inner<int64_t>(

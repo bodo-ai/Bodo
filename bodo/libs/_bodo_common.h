@@ -11,6 +11,7 @@
 #include <Python.h>
 #include <arrow/api.h>
 #include <vector>
+#include "_datetime_utils.h"
 #include "_meminfo.h"
 #include "simd-block-fixed-fpp.h"
 #include "tracing.h"
@@ -490,10 +491,10 @@ struct array_info {
                                    offsets[idx + 1] - offsets[idx]);
             }
             case Bodo_CTypes::DATE: {
-                int64_t val = this->at<int64_t>(idx);
-                int year = val >> 32;
-                int month = (val >> 16) & 0xFFFF;
-                int day = val & 0xFFFF;
+                int64_t day = this->at<int32_t>(idx);
+                int64_t year = days_to_yearsdays(&day);
+                int64_t month;
+                get_month_day(year, day, &month, &day);
                 std::string date_str;
                 date_str.reserve(10);
                 date_str += std::to_string(year) + "-";
