@@ -91,13 +91,12 @@ def test_date_casting_functions(
         )
 
 
-# TODO: [BE-4671]Support date type with CASE statement
-# Now CASE statement sets the array type to timestamp when parsing the query
+@pytest.mark.slow
 def test_date_casting_functions_case(
     dt_fn_dataframe, test_fn, date_casting_input_type, memory_leak_check
 ):
     """
-    tests DATE/TO_DATE/TRY_TO_DATE on valid datetime string/digit string/timestamp values in a case statment
+    tests DATE/TO_DATE/TRY_TO_DATE on valid datetime string/digit string/timestamp values in a case statement
     """
     query = (
         f"SELECT CASE WHEN {test_fn}({date_casting_input_type}) < DATE '2013-01-03' "
@@ -115,14 +114,14 @@ def test_date_casting_functions_case(
             )
         }
     )
-    check_query(
-        query,
-        dt_fn_dataframe_nullable,
-        None,
-        check_dtype=False,
-        check_names=False,
-        expected_output=expected_output,
-    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            dt_fn_dataframe_nullable,
+            None,
+            check_names=False,
+            expected_output=expected_output,
+        )
 
 
 def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
@@ -147,8 +146,6 @@ def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
         )
 
 
-# TODO: [BE-4671]Support date type with CASE statement
-# Now CASE statement sets the array type to timestamp when parsing the query
 def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
     """tests DATE/TO_DATE/TRY_TO_DATE on valid datetime values in a case statment"""
     df = pd.DataFrame(
@@ -164,17 +161,18 @@ def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
         f"SELECT CASE WHEN B THEN {test_fn}(timestamps) END as timestamps from table1"
     )
     to_date_series = (
-        df["timestamps"].dt.normalize().apply(lambda t: t.tz_localize(None))
+        df["timestamps"].dt.normalize().apply(lambda t: t.date())
     )
     to_date_series[~df.B] = None
     expected_output = pd.DataFrame({"timestamps": to_date_series})
 
-    check_query(
-        query,
-        ctx,
-        None,
-        expected_output=expected_output,
-    )
+    with bodosql_use_date_type():
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=expected_output,
+        )
 
 
 def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
