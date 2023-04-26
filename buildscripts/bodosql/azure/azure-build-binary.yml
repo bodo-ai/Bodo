@@ -7,14 +7,15 @@ parameters:
 jobs:
 - job: ${{ parameters.name }}
   timeoutInMinutes: 240
-  pool:
-    vmImage: ${{ parameters.vmImage }}
+  pool: ScalingVMSet
 
   steps:
   - task: UsePythonVersion@0
     inputs:
-      versionSpec: '3.9'
-    displayName: 'Use Python 3.9'
+      versionSpec: '3.8'
+      #Github Token used to download python from the GitHub registry if it doesn't already exist locally
+      githubToken: $(GITHUB_REGISTRY_DL_TOKEN)
+    displayName: 'Use Python 3.8'
 
   - script: |
       set -exo pipefail
