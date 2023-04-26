@@ -94,7 +94,6 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 .parserConfig(
                     SqlParser.Config.DEFAULT
                         .withCaseSensitive(false)
-                        .withQuoting(Quoting.BACK_TICK)
                         .withQuotedCasing(Casing.UNCHANGED)
                         .withUnquotedCasing(Casing.UNCHANGED)
                         .withConformance(SqlConformanceEnum.LENIENT)
