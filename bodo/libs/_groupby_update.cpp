@@ -441,7 +441,7 @@ void cumulative_computation(std::shared_ptr<array_info> arr,
                 return cumulative_computation_T<double, Bodo_CTypes::FLOAT64>(
                     arr, out_arr, grp_info, ftype, skipna);
             case Bodo_CTypes::DATE:
-                return cumulative_computation_T<int64_t, Bodo_CTypes::DATE>(
+                return cumulative_computation_T<int32_t, Bodo_CTypes::DATE>(
                     arr, out_arr, grp_info, ftype, skipna);
             case Bodo_CTypes::TIME:
                 return cumulative_computation_T<int64_t, Bodo_CTypes::TIME>(

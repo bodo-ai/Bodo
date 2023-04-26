@@ -430,11 +430,11 @@ static MPI_Datatype get_MPI_typ(int typ_enum) {
         case Bodo_CTypes::UINT8:
             return MPI_UNSIGNED_CHAR;
         case Bodo_CTypes::INT32:
+        case Bodo_CTypes::DATE:
             return MPI_INT;
         case Bodo_CTypes::UINT32:
             return MPI_UNSIGNED;
         case Bodo_CTypes::INT64:
-        case Bodo_CTypes::DATE:
         case Bodo_CTypes::DATETIME:
         case Bodo_CTypes::TIMEDELTA:
         // TODO: [BE-4106] Split Time into Time32 and Time64
@@ -468,12 +468,13 @@ static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) {
     // XXX: LONG is used for uint64
     // XXX: INT is used for sizes <= int32_t. The data is cast to an
     // int type at runtime
-    if (typ_enum == Bodo_CTypes::DATE || typ_enum == Bodo_CTypes::DATETIME ||
-        typ_enum == Bodo_CTypes::TIMEDELTA)
-        // treat date 64-bit values as int64
+    if (typ_enum == Bodo_CTypes::DATETIME || typ_enum == Bodo_CTypes::TIMEDELTA)
         typ_enum = Bodo_CTypes::INT64;
     if (typ_enum == Bodo_CTypes::_BOOL) {
         typ_enum = Bodo_CTypes::INT8;
+    }
+    if (typ_enum == Bodo_CTypes::DATE) {
+        typ_enum = Bodo_CTypes::INT32;
     }
     if (typ_enum < 0 || typ_enum > 9) {
         std::cerr << "Invalid MPI_Type"

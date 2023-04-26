@@ -268,13 +268,13 @@ hid_t get_h5_typ(int typ_enum) {
         case Bodo_CTypes::UINT16:
             return H5T_NATIVE_USHORT;
         case Bodo_CTypes::INT32:
+        case Bodo_CTypes::DATE:
             return H5T_NATIVE_INT;
         case Bodo_CTypes::UINT32:
             return H5T_NATIVE_UINT;
         case Bodo_CTypes::INT64:
             return H5T_NATIVE_LLONG;
         case Bodo_CTypes::UINT64:
-        case Bodo_CTypes::DATE:
         case Bodo_CTypes::DATETIME:
             return H5T_NATIVE_ULLONG;
         case Bodo_CTypes::FLOAT32:
