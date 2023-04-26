@@ -200,8 +200,7 @@ def test_comparison_operators_within_table(
     comparison_df,
     comparison_query_args,
     spark_info,
-    # seems to be leaking memory sporadically
-    # memory_leak_check
+    memory_leak_check,
 ):
     cmp_op, use_case = comparison_query_args
     if use_case:
@@ -351,6 +350,7 @@ def test_where_and(join_dataframes, spark_info, memory_leak_check):
         pytest.skip(
             "No support for binary literals: https://bodo.atlassian.net/browse/BE-3304"
         )
+
     elif isinstance(join_dataframes["table1"]["A"].values[0], str):
         assert isinstance(join_dataframes["table2"]["A"].values[0], str)
         scalar_val1 = "'" + join_dataframes["table1"]["A"].values[0] + "'"

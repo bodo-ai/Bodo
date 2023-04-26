@@ -436,8 +436,7 @@ def test_having_numeric(
     bodosql_numeric_types,
     comparison_ops,
     spark_info,
-    # seems to be leaking memory sporadically, see [BS-534]
-    # memory_leak_check
+    memory_leak_check,
 ):
     """
     Tests having with a constant and groupby.

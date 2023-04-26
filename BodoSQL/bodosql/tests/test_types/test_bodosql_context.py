@@ -144,6 +144,8 @@ def test_remove_view(memory_leak_check):
     )
 
 
+# Note that this test will fail if ran from the wrong working directory, due to
+# the filepaths.
 @pytest.mark.parametrize(
     "bc",
     [

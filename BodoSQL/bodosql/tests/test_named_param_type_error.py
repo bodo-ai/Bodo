@@ -15,7 +15,7 @@ from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
-def test_string_limit(basic_df, spark_info):
+def test_string_limit(basic_df, spark_info, memory_leak_check):
     """
     Check that limit enforces the integer requirement.
     """
@@ -32,7 +32,7 @@ def test_string_limit(basic_df, spark_info):
 
 
 @pytest.mark.slow
-def test_string_offset(basic_df, spark_info):
+def test_string_offset(basic_df, spark_info, memory_leak_check):
     """
     Check that offset enforces the integer requirement.
     """
@@ -49,7 +49,9 @@ def test_string_offset(basic_df, spark_info):
 
 
 @pytest.mark.slow
-def test_string_cast(bodosql_string_types, spark_info, int_named_params):
+def test_string_cast(
+    bodosql_string_types, spark_info, int_named_params, memory_leak_check
+):
     """
     Check that limit a string function will cast a non-string
     named Parameter.

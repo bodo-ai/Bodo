@@ -172,7 +172,7 @@ def test_coalesce_scalars(spark_info, memory_leak_check):
     check_query(query, {"table1": df}, spark_info, check_dtype=False, check_names=False)
 
 
-def test_coalesce_nested_expresions(spark_info):
+def test_coalesce_nested_expresions(spark_info, memory_leak_check):
     df = pd.DataFrame(
         {
             "ColA": pd.Series(pd.array([None, None, None, None, 1, 2, 3, 4])),

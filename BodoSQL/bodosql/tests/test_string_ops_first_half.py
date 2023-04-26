@@ -277,7 +277,7 @@ def test_like_constants(
     check_query(query, basic_df, spark_info, check_dtype=False)
 
 
-def test_nested_upper_lower(bodosql_string_types, spark_info):
+def test_nested_upper_lower(bodosql_string_types, spark_info, memory_leak_check):
     """
     Tests that lower/upper calls nest properly
     """
@@ -553,7 +553,7 @@ def test_both_percent_scalar(
 
 
 @pytest.mark.slow
-def test_utf_scalar(spark_info):
+def test_utf_scalar(spark_info, memory_leak_check):
     check_query(
         "select 'ǖǘǚǜ'",
         {},

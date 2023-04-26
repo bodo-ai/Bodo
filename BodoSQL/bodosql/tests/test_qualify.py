@@ -16,6 +16,7 @@ import bodo
 # [BE-3894] TODO: refactor this file like how test_rows.py was refactored
 # for window fusion
 
+
 # Helper environment variable to allow for testing locally, while avoiding
 # memory issues on CI
 testing_locally = os.environ.get("BODOSQL_TESTING_LOCALLY", False)

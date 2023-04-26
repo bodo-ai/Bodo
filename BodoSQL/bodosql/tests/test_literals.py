@@ -90,7 +90,9 @@ def test_timestamp_literal_pd_error(basic_df, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip("Currently unsupported timestamp literal formats")
+@pytest.mark.skip(
+    "Unsupported timestamp format in Calcite: https://bodo.atlassian.net/browse/BE-3300"
+)
 def test_mysql_timestamp_literal(basic_df, spark_info, memory_leak_check):
     """tests a number of different timestamp formats that are currently supported by MySQL, but which we
     may/may not ultimately end up supporting"""
