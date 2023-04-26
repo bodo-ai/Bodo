@@ -100,11 +100,11 @@ def test_distinct_interval(bodosql_interval_types, spark_info, memory_leak_check
 
 
 @pytest.mark.slow
-def test_distinct_within_table(join_dataframes, spark_info):
+def test_distinct_within_table(join_dataframes, spark_info, memory_leak_check):
     """
     Tests distinct works in the case where we are selecting multiple columns from the same table
     """
-    # TODO: Enable memory leak check
+
     if any(
         [
             isinstance(

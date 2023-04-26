@@ -325,7 +325,11 @@ def test_binary_to_str(basic_df, use_sf_cast_syntax, spark_info, memory_leak_che
 
 @pytest.mark.slow
 def test_numeric_scalar_to_numeric(
-    bodosql_numeric_types, use_sf_cast_syntax, spark_info, numeric_type_names
+    bodosql_numeric_types,
+    use_sf_cast_syntax,
+    spark_info,
+    numeric_type_names,
+    memory_leak_check,
 ):
     """Tests casting int scalars (from columns) to other numeric types"""
     spark_query = f"SELECT CASE WHEN B > 5 THEN CAST(A AS {numeric_type_names}) ELSE CAST(1 AS {numeric_type_names}) END FROM TABLE1"
@@ -347,7 +351,11 @@ def test_numeric_scalar_to_numeric(
 
 @pytest.mark.slow
 def test_numeric_nullable_scalar_to_numeric(
-    bodosql_nullable_numeric_types, use_sf_cast_syntax, spark_info, numeric_type_names
+    bodosql_nullable_numeric_types,
+    use_sf_cast_syntax,
+    spark_info,
+    numeric_type_names,
+    memory_leak_check,
 ):
     """Tests casting nullable int scalars (from columns) to numeric types"""
     spark_query = f"SELECT CASE WHEN B > 5 THEN CAST(A AS {numeric_type_names}) ELSE CAST (1 AS {numeric_type_names}) END FROM TABLE1"
@@ -369,7 +377,11 @@ def test_numeric_nullable_scalar_to_numeric(
 
 @pytest.mark.slow
 def test_string_scalar_to_numeric(
-    bodosql_integers_string_types, use_sf_cast_syntax, spark_info, numeric_type_names
+    bodosql_integers_string_types,
+    use_sf_cast_syntax,
+    spark_info,
+    numeric_type_names,
+    memory_leak_check,
 ):
     """Tests casting string scalars (from columns) to numeric types"""
     spark_query = f"SELECT CASE WHEN B = '43' THEN CAST(A AS {numeric_type_names}) ELSE CAST (1 AS {numeric_type_names}) END FROM TABLE1"
@@ -390,7 +402,9 @@ def test_string_scalar_to_numeric(
 
 
 @pytest.mark.slow
-def test_numeric_scalar_to_str(bodosql_numeric_types, use_sf_cast_syntax, spark_info):
+def test_numeric_scalar_to_str(
+    bodosql_numeric_types, use_sf_cast_syntax, spark_info, memory_leak_check
+):
     """Tests casting int scalars (from columns) to str types"""
     # Use substring to avoid difference in Number of decimal places for
 
@@ -413,7 +427,7 @@ def test_numeric_scalar_to_str(bodosql_numeric_types, use_sf_cast_syntax, spark_
 
 @pytest.mark.slow
 def test_numeric_nullable_scalar_to_str(
-    bodosql_nullable_numeric_types, use_sf_cast_syntax, spark_info
+    bodosql_nullable_numeric_types, use_sf_cast_syntax, spark_info, memory_leak_check
 ):
     """Tests casting nullable int scalars (from columns) to str types"""
 
@@ -435,7 +449,9 @@ def test_numeric_nullable_scalar_to_str(
 
 
 @pytest.mark.slow
-def test_string_scalar_to_str(bodosql_string_types, use_sf_cast_syntax, spark_info):
+def test_string_scalar_to_str(
+    bodosql_string_types, use_sf_cast_syntax, spark_info, memory_leak_check
+):
     """Tests casting string scalars (from columns) to str types"""
     if use_sf_cast_syntax:
         query = (
@@ -456,7 +472,7 @@ def test_string_scalar_to_str(bodosql_string_types, use_sf_cast_syntax, spark_in
 
 @pytest.mark.slow
 def test_timestamp_scalar_to_str(
-    bodosql_datetime_types, use_sf_cast_syntax, spark_info
+    bodosql_datetime_types, use_sf_cast_syntax, spark_info, memory_leak_check
 ):
     """Tests casting datetime scalars (from columns) to string types"""
     if use_sf_cast_syntax:
@@ -476,7 +492,7 @@ def test_timestamp_scalar_to_str(
 
 @pytest.mark.slow
 def test_numeric_nullable_scalar_to_datetime(
-    bodosql_nullable_numeric_types, use_sf_cast_syntax, spark_info
+    bodosql_nullable_numeric_types, use_sf_cast_syntax, spark_info, memory_leak_check
 ):
     """Tests casting numeric scalars (from columns) to str types"""
     if use_sf_cast_syntax:
@@ -497,7 +513,11 @@ def test_numeric_nullable_scalar_to_datetime(
 
 @pytest.mark.slow
 def test_datetime_scalar_to_datetime(
-    bodosql_datetime_types, spark_info, sql_datetime_typestrings, use_sf_cast_syntax
+    bodosql_datetime_types,
+    spark_info,
+    sql_datetime_typestrings,
+    use_sf_cast_syntax,
+    memory_leak_check,
 ):
     """Tests casting datetime scalars (from columns) to datetime types"""
     if use_sf_cast_syntax:
@@ -515,7 +535,9 @@ def test_datetime_scalar_to_datetime(
     )
 
 
-def test_timestamp_col_to_str(bodosql_datetime_types, use_sf_cast_syntax, spark_info):
+def test_timestamp_col_to_str(
+    bodosql_datetime_types, use_sf_cast_syntax, spark_info, memory_leak_check
+):
     """Tests casting datetime columns to string types"""
     if use_sf_cast_syntax:
         query = "SELECT A::VARCHAR FROM TABLE1"

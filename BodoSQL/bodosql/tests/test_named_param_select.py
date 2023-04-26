@@ -12,7 +12,9 @@ from bodosql.tests.named_params_common import (  # noqa
 from bodosql.tests.utils import check_query
 
 
-def test_select_named_param(basic_df, spark_info, named_params_all_column_types):
+def test_select_named_param(
+    basic_df, spark_info, named_params_all_column_types, memory_leak_check
+):
     """
     Tests that selects works with named parameters
     """
@@ -44,7 +46,9 @@ def test_select_named_param(basic_df, spark_info, named_params_all_column_types)
     )
 
 
-def test_mixed_column_scalar(basic_df, spark_info, named_params_all_column_types):
+def test_mixed_column_scalar(
+    basic_df, spark_info, named_params_all_column_types, memory_leak_check
+):
     """
     Tests that a mix of scalar and columns in result work
     """

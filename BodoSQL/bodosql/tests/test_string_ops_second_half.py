@@ -592,7 +592,7 @@ def test_strcmp_nonascii(args, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_format(args, spark_info, bodosql_string_fn_testing_df):
+def test_format(args, spark_info, bodosql_string_fn_testing_df, memory_leak_check):
     query, refsol = args
 
     check_query(

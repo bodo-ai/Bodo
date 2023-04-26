@@ -326,8 +326,7 @@ def test_tpcxbb_q25(tpcxbb_data, spark_info, memory_leak_check):
 
 @pytest.mark.skip("[BS-633] Resolve nightly issues for TPCx-BB")
 @pytest.mark.slow
-def test_tpcxbb_q26(tpcxbb_data, spark_info):
-    # TODO: re add memory leak check, see BS-574
+def test_tpcxbb_q26(tpcxbb_data, spark_info, memory_leak_check):
     tpcxbb_query = """
         SELECT
             ss.ss_customer_sk AS cid,

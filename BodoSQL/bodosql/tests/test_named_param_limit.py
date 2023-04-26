@@ -14,7 +14,8 @@ from bodosql.tests.utils import check_query
 import bodo
 
 
-def test_limit_unsigned(basic_df, spark_info, int_named_params):
+
+def test_limit_unsigned(basic_df, spark_info, int_named_params, memory_leak_check):
     """
     Checks using a named parameter
     inside a limit clause.
@@ -23,7 +24,7 @@ def test_limit_unsigned(basic_df, spark_info, int_named_params):
     check_query(query, basic_df, spark_info, named_params=int_named_params)
 
 
-def test_limit_offset(basic_df, spark_info, int_named_params):
+def test_limit_offset(basic_df, spark_info, int_named_params, memory_leak_check):
     """
     Checks using a named parameter
     inside limit and offset clauses.
@@ -42,7 +43,9 @@ def test_limit_offset(basic_df, spark_info, int_named_params):
     )
 
 
-def test_limit_offset_keyword(basic_df, spark_info, int_named_params):
+def test_limit_offset_keyword(
+    basic_df, spark_info, int_named_params, memory_leak_check
+):
     """
     Checks using a named parameter
     inside limit and offset clauses.
@@ -61,7 +64,7 @@ def test_limit_offset_keyword(basic_df, spark_info, int_named_params):
     )
 
 
-def test_limit_named_param_constant(basic_df, spark_info):
+def test_limit_named_param_constant(basic_df, spark_info, memory_leak_check):
     """
     Checks that using a constant named_param compiles.
     """

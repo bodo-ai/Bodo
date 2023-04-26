@@ -9,7 +9,9 @@ from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
-def test_int_func(bodosql_nullable_numeric_types, spark_info, int_named_params):
+def test_int_func(
+    bodosql_nullable_numeric_types, spark_info, int_named_params, memory_leak_check
+):
     """
     Checks that named params can be used in an integer function
     """
@@ -25,7 +27,9 @@ def test_int_func(bodosql_nullable_numeric_types, spark_info, int_named_params):
 
 
 @pytest.mark.slow
-def test_float_func(bodosql_numeric_types, spark_info, float_named_params):
+def test_float_func(
+    bodosql_numeric_types, spark_info, float_named_params, memory_leak_check
+):
     """
     Checks that named params can be used in a float function
     """
@@ -40,7 +44,9 @@ def test_float_func(bodosql_numeric_types, spark_info, float_named_params):
     )
 
 
-def test_string_func(bodosql_string_types, spark_info, string_named_params):
+def test_string_func(
+    bodosql_string_types, spark_info, string_named_params, memory_leak_check
+):
     """
     Checks that named params can be used in a string function
     """
@@ -55,7 +61,9 @@ def test_string_func(bodosql_string_types, spark_info, string_named_params):
 
 
 @pytest.mark.slow
-def test_datetime_func(bodosql_datetime_types, spark_info, timestamp_named_params):
+def test_datetime_func(
+    bodosql_datetime_types, spark_info, timestamp_named_params, memory_leak_check
+):
     """
     Checks that named params can be used in a timestamp function
     """
@@ -71,7 +79,9 @@ def test_datetime_func(bodosql_datetime_types, spark_info, timestamp_named_param
 
 
 @pytest.mark.slow
-def test_interval_func(bodosql_datetime_types, spark_info, timedelta_named_params):
+def test_interval_func(
+    bodosql_datetime_types, spark_info, timedelta_named_params, memory_leak_check
+):
     """
     Checks that named params can be used in a timestamp function
     """
