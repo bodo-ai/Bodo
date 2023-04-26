@@ -199,6 +199,7 @@ void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
                               std::numeric_limits<uint16_t>::max());
                     return;
                 case Bodo_CTypes::INT32:
+                case Bodo_CTypes::DATE:
                     std::fill((int32_t*)out_col->data1(),
                               (int32_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<int32_t>::max());
@@ -218,7 +219,6 @@ void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
                               (uint64_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<uint64_t>::max());
                     return;
-                case Bodo_CTypes::DATE:
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
                 // TODO: [BE-4106] Split Time into Time32 and Time64
@@ -292,6 +292,7 @@ void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
                               std::numeric_limits<uint16_t>::min());
                     return;
                 case Bodo_CTypes::INT32:
+                case Bodo_CTypes::DATE:
                     std::fill((int32_t*)out_col->data1(),
                               (int32_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<int32_t>::min());
@@ -311,7 +312,6 @@ void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
                               (uint64_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<uint64_t>::min());
                     return;
-                case Bodo_CTypes::DATE:
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
                 // TODO: [BE-4106] Split Time into Time32 and Time64
@@ -356,7 +356,6 @@ void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
                 // for first & last, we only need an initial value for the
                 // non-null bitmask cases where the datatype has a nan
                 // representation
-                case Bodo_CTypes::DATE:
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
                 // TODO: [BE-4106] Split Time into Time32 and Time64
@@ -365,6 +364,12 @@ void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
                     std::fill((int64_t*)out_col->data1(),
                               (int64_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<int64_t>::min());
+                    return;
+                case Bodo_CTypes::DATE:
+                    // nat representation for date values is int32_t min value
+                    std::fill((int32_t*)out_col->data1(),
+                              (int32_t*)out_col->data1() + out_col->length,
+                              std::numeric_limits<int32_t>::min());
                     return;
                 case Bodo_CTypes::FLOAT32:
                     // initialize to quiet_NaN so that result is nan if all

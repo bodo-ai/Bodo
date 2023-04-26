@@ -41,52 +41,6 @@ inline void convertArrowToTime64(const uint8_t* buff, uint8_t* out_data,
     }
 }
 
-// copied from Arrow since not in exported APIs
-// https://github.com/apache/arrow/blob/329c9944554ddb142b0a2ac26a4abdf477636e37/cpp/src/arrow/python/datetime.cc#L150
-// Extracts the month and year and day number from a number of days
-static void get_date_from_days(int64_t days, int64_t* date_year,
-                               int64_t* date_month, int64_t* date_day) {
-    int64_t i;
-
-    *date_year = days_to_yearsdays(&days);
-    const int* month_lengths = days_per_month_table[is_leapyear(*date_year)];
-
-    for (i = 0; i < 12; ++i) {
-        if (days < month_lengths[i]) {
-            *date_month = i + 1;
-            *date_day = days + 1;
-            return;
-        } else {
-            days -= month_lengths[i];
-        }
-    }
-
-    // Should never get here
-    return;
-}
-
-/**
- * @brief copy date32 data into our packed datetime.date arrays
- *
- * @param out_data output data
- * @param buff date32 value buffer from Arrow
- * @param rows_to_skip number of items to skip in buff
- * @param rows_to_read number of items to read after skipping
- */
-inline void copy_data_dt32(uint64_t* out_data, const int32_t* buff,
-                           int64_t rows_to_skip, int64_t rows_to_read) {
-    for (int64_t i = 0; i < rows_to_read; i++) {
-        int32_t val = buff[rows_to_skip + i];
-        // convert date32 into packed datetime.date value
-        // assigned to non-realized value to make any error crash.
-        int64_t year = -1;
-        int64_t month = -1;
-        int64_t day = -1;
-        get_date_from_days(val, &year, &month, &day);
-        out_data[i] = (year << 32) + (month << 16) + day;
-    }
-}
-
 bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
                          Bodo_CTypes::CTypeEnum pq_type) {
     switch (arrow_type->id()) {
@@ -119,6 +73,8 @@ bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
             return pq_type == Bodo_CTypes::STRING;
         case Type::BINARY:
             return pq_type == Bodo_CTypes::BINARY;
+        case Type::DATE32:
+            return pq_type == Bodo_CTypes::DATE;
         case Type::DICTIONARY:
             // Dictionary array's codes are always read into proper integer
             // array type, so buffer data types are the same
@@ -134,13 +90,8 @@ inline void copy_data_dispatch(uint8_t* out_data, const uint8_t* buff,
                                int64_t rows_to_skip, int64_t rows_to_read,
                                std::shared_ptr<arrow::DataType> arrow_type,
                                Bodo_CTypes::CTypeEnum out_dtype) {
-    // read date32 values into datetime.date arrays, default from Arrow >= 0.13
-    if (arrow_type->id() == Type::DATE32 && out_dtype == Bodo_CTypes::DATE) {
-        copy_data_dt32((uint64_t*)out_data, (int32_t*)buff, rows_to_skip,
-                       rows_to_read);
-    }
     // datetime64 cases
-    else if (out_dtype == Bodo_CTypes::DATETIME) {
+    if (out_dtype == Bodo_CTypes::DATETIME) {
         // similar to arrow_to_pandas.cc
         if (arrow_type->id() == Type::DATE32) {
             // days since epoch
@@ -379,6 +330,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
                 case Bodo_CTypes::INT16:
                 case Bodo_CTypes::UINT8:
                 case Bodo_CTypes::INT8:
+                case Bodo_CTypes::DATE:
                     return;
                 default:
                     // Fallthrough for unsupported zero-copy cases

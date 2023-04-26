@@ -18,8 +18,6 @@ int64_t dayofweek(int64_t y, int64_t m, int64_t d);
 void get_isocalendar(int64_t year, int64_t month, int64_t day,
                      int64_t* year_res, int64_t* week_res, int64_t* dow_res);
 void extract_year_days(npy_datetime* dt, int64_t* year, int64_t* days);
-void get_month_day(npy_int64 year, npy_int64 days, npy_int64* month,
-                   npy_int64* day);
 npy_int64 get_datetimestruct_days(int64_t dt_year, int dt_month, int dt_day);
 npy_datetime npy_datetimestruct_to_datetime(int64_t year, int month, int day,
                                             int hour, int min, int sec, int us);
@@ -144,33 +142,6 @@ void extract_year_days(npy_datetime* dt, int64_t* year, int64_t* days) {
     *year = days_to_yearsdays(days);
 }
 
-/**
- * @brief Get extracts month and day from days offset within a year
- * from Pandas:
- * https://github.com/pandas-dev/pandas/blob/844dc4a4fb8d213303085709aa4a3649400ed51a/pandas/_libs/tslibs/src/datetime/np_datetime.c#L230
- * @param year[in]
- * @param days[in]
- * @param month[out]
- * @param day[out]
- */
-void get_month_day(npy_int64 year, npy_int64 days, npy_int64* month,
-                   npy_int64* day) {
-    const int* month_lengths;
-    int i;
-
-    month_lengths = days_per_month_table[is_leapyear(year)];
-
-    for (i = 0; i < 12; ++i) {
-        if (days < month_lengths[i]) {
-            *month = i + 1;
-            *day = days + 1;
-            return;
-        } else {
-            days -= month_lengths[i];
-        }
-    }
-}
-
 // copeid from Pandas, but input is changed from npy_datetime to year/month/day
 // fields
 // https://github.com/pandas-dev/pandas/blob/b8043724c48890e86fda0265ad5b6ac3d31f1940/pandas/_libs/tslibs/src/datetime/np_datetime.c#L106
@@ -257,7 +228,7 @@ npy_datetime npy_datetimestruct_to_datetime(int64_t year, int month, int day,
  * @param[in] data pointer to 64-bit values
  * @param[in] null_bitmap bitvector representing nulls (Arrow format)
  */
-void* box_datetime_date_array(int64_t n, const int64_t* data,
+void* box_datetime_date_array(int64_t n, const int32_t* data,
                               const uint8_t* null_bitmap) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
@@ -284,10 +255,11 @@ void* box_datetime_date_array(int64_t n, const int64_t* data,
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
         CHECK(p, "getting offset in numpy array failed");
         if (!is_na(null_bitmap, i)) {
-            int64_t val = data[i];
-            int64_t year = val >> 32;
-            int64_t month = (val >> 16) & 0xFFFF;
-            int64_t day = val & 0xFFFF;
+            int64_t day = data[i], month = 0;
+
+            int64_t year = days_to_yearsdays(&day);
+            get_month_day(year, day, &month, &day);
+
             PyObject* d = PyObject_CallFunction(datetime_date_constructor,
                                                 "LLL", year, month, day);
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, d);
@@ -313,10 +285,10 @@ void* box_datetime_date_array(int64_t n, const int64_t* data,
  *
  * @param obj ndarray object of datetime.date objects
  * @param n number of values
- * @param data pointer to 64-bit data buffer
+ * @param data pointer to 32-bit data buffer
  * @param null_bitmap pointer to null_bitmap buffer
  */
-void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
+void unbox_datetime_date_array(PyObject* obj, int64_t n, int32_t* data,
                                uint8_t* null_bitmap) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
@@ -352,13 +324,13 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None, nan, or pd.NA
         bool value_bitmap;
-        int64_t value_data;
+        int32_t value_data;
         if (s == Py_None ||
             (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
             s == C_NA || s == C_NAT) {
             value_bitmap = false;
             // Set na data to a legal value for array getitem.
-            value_data = (1970L << 32) + (1L << 16) + 1L;
+            value_data = 0;
         } else {
             PyObject* year_obj = PyObject_GetAttrString(s, "year");
             PyObject* month_obj = PyObject_GetAttrString(s, "month");
@@ -367,7 +339,7 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
             int64_t year = PyLong_AsLongLong(year_obj);
             int64_t month = PyLong_AsLongLong(month_obj);
             int64_t day = PyLong_AsLongLong(day_obj);
-            value_data = (year << 32) + (month << 16) + day;
+            value_data = (int32_t)get_days_from_date(year, month, day);
             Py_DECREF(year_obj);
             Py_DECREF(month_obj);
             Py_DECREF(day_obj);
@@ -864,6 +836,7 @@ PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
     SetAttrStringFromVoidPtr(m, unbox_datetime_timedelta_array);
     SetAttrStringFromVoidPtr(m, unbox_date_offset);
     SetAttrStringFromVoidPtr(m, box_date_offset);
+    SetAttrStringFromVoidPtr(m, get_days_from_date);
 
     return m;
 }

@@ -659,18 +659,6 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
     } else if (dtype == Bodo_CTypes::_BOOL) {
         bool* ptr = (bool*)data;
         ptr[ind] = (item == Py_True);
-    } else if (dtype == Bodo_CTypes::DATE) {
-        int64_t* ptr = (int64_t*)data;
-        PyObject* year_obj = PyObject_GetAttrString(item, "year");
-        PyObject* month_obj = PyObject_GetAttrString(item, "month");
-        PyObject* day_obj = PyObject_GetAttrString(item, "day");
-        int64_t year = PyLong_AsLongLong(year_obj);
-        int64_t month = PyLong_AsLongLong(month_obj);
-        int64_t day = PyLong_AsLongLong(day_obj);
-        ptr[ind] = (year << 32) + (month << 16) + day;
-        Py_DECREF(year_obj);
-        Py_DECREF(month_obj);
-        Py_DECREF(day_obj);
     } else
         std::cerr << "data type " << dtype
                   << " not supported for unboxing array(item) array."
@@ -762,13 +750,6 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
     } else if (dtype == Bodo_CTypes::_BOOL) {
         bool* ptr = (bool*)data;
         return PyBool_FromLong((long)(ptr[ind]));
-    } else if (dtype == Bodo_CTypes::DATE) {
-        int64_t* ptr = (int64_t*)data;
-        int64_t val = ptr[ind];
-        int year = val >> 32;
-        int month = (val >> 16) & 0xFFFF;
-        int day = val & 0xFFFF;
-        return PyDate_FromDate(year, month, day);
     } else
         std::cerr << "data type " << dtype
                   << " not supported for boxing array(item) array."

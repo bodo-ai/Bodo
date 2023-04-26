@@ -107,8 +107,7 @@ DTYPE_TO_C_TYPE(bool, Bodo_CTypes::_BOOL)
 DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATETIME)
 DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIMEDELTA)
 DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIME)
-// TODO[BE-2711]: update when we move to date32 type
-DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATE)
+DTYPE_TO_C_TYPE(int32_t, Bodo_CTypes::DATE)
 DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::DECIMAL)
 DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
 
@@ -180,7 +179,7 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
     if (dtype == Bodo_CTypes::FLOAT64)
         return double(GetTentry<double>(ptr));
     if (dtype == Bodo_CTypes::DATE)
-        return double(GetTentry<int64_t>(ptr));
+        return double(GetTentry<int32_t>(ptr));
     if (dtype == Bodo_CTypes::DATETIME)
         return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::TIMEDELTA)
@@ -620,14 +619,13 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         return NumericComparison_int<int16_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT16)
         return NumericComparison_int<uint16_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::INT32)
+    if (dtype == Bodo_CTypes::INT32 || dtype == Bodo_CTypes::DATE)
         return NumericComparison_int<int32_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT32)
         return NumericComparison_int<uint32_t>(ptr1, ptr2, na_position);
     // for DATE/TIME, the missing value is done via NULLABLE_INT_BOOL
     // TODO: [BE-4106] Split Time into Time32 and Time64
-    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::DATE ||
-        dtype == Bodo_CTypes::TIME)
+    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::TIME)
         return NumericComparison_int<int64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT64)
         return NumericComparison_int<uint64_t>(ptr1, ptr2, na_position);

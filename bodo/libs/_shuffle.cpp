@@ -508,6 +508,7 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
             return fill_send_array_inner<uint16_t>(
                 (uint16_t*)send_arr->data1(), (uint16_t*)in_arr->data1(),
                 send_disp, n_rows, row_dest, filter, is_parallel);
+        case Bodo_CTypes::DATE:
         case Bodo_CTypes::INT32:
             return fill_send_array_inner<int32_t>(
                 (int32_t*)send_arr->data1(), (int32_t*)in_arr->data1(),
@@ -517,7 +518,6 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
                 (uint32_t*)send_arr->data1(), (uint32_t*)in_arr->data1(),
                 send_disp, n_rows, row_dest, filter, is_parallel);
         case Bodo_CTypes::INT64:
-        case Bodo_CTypes::DATE:
         case Bodo_CTypes::DATETIME:
         case Bodo_CTypes::TIME:
         case Bodo_CTypes::TIMEDELTA:
