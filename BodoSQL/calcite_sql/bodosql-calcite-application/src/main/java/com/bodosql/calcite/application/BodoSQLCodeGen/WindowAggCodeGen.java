@@ -115,8 +115,6 @@ public class WindowAggCodeGen {
     windowMethods.put("MIN", ".min()");
     windowMethods.put("MAX", ".max()");
     windowMethods.put("COUNT_IF", ".sum()");
-    windowMethods.put("KURTOSIS", ".kurtosis()");
-    windowMethods.put("SKEW", ".skew()");
   }
 
   /**
@@ -438,8 +436,6 @@ public class WindowAggCodeGen {
           // These functions are handled via a slice and a Pandas method. Add
           // them to the relevant lists so that they can be dealt with en-masse
           // at the end.
-        case "KURTOSIS":
-        case "SKEW":
         case "MIN":
         case "MAX":
         case "COUNT_IF":
