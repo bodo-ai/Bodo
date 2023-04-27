@@ -131,7 +131,9 @@ def test_default_buffer_pool_options():
         }
     ):
         options = BufferPoolOptions.defaults()
-        assert options.memory_size == int(0.95 * total_mem)
+        # This has been temporarily changed to 95% to 500% to
+        # unblock issues in the latest release
+        assert options.memory_size == int(5.0 * total_mem)
 
 
 def test_malloc_allocation():
