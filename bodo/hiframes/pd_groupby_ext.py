@@ -1524,6 +1524,28 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             numba.core.registry.cpu_target.target_context,
         )[0]
 
+    @bound_function("groupby.kurtosis", no_unliteral=True)
+    def resolve_kurtosis(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "kurtosis",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
+    @bound_function("groupby.skew", no_unliteral=True)
+    def resolve_skew(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "skew",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
     @bound_function("groupby.first", no_unliteral=True)
     def resolve_first(self, grp, args, kws):
         return resolve_gb(
@@ -2290,7 +2312,6 @@ groupby_unsupported = {
     "quantile",
     "resample",
     "sample",
-    "skew",
     "take",
     "tshift",
 }

@@ -104,6 +104,60 @@ void shift_computation(std::shared_ptr<array_info> arr,
                        std::shared_ptr<array_info> out_arr,
                        grouping_info const& grp_info, int64_t const& periods);
 
+// Skew
+
+/**
+ * @brief Compute the skew update function for combining the result
+ * of local reductions on each rank.
+ *
+ * @param[in] count_col_in The count input column.
+ * @param[in] m1_col_in The first moment input column.
+ * @param[in] m2_col_in The second moment input column.
+ * @param[in] m3_col_in The third moment input column.
+ * @param[out] count_col_out The count output column.
+ * @param[out] m1_col_out The first moment output column.
+ * @param[out] m2_col_out The second moment output column.
+ * @param[out] m3_col_out The second moment output column.
+ * @param[in] grp_info The grouping information.
+ */
+void skew_combine(std::shared_ptr<array_info> count_col_in,
+                  std::shared_ptr<array_info> m1_col_in,
+                  std::shared_ptr<array_info> m2_col_in,
+                  std::shared_ptr<array_info> m3_col_in,
+                  std::shared_ptr<array_info> count_col_out,
+                  std::shared_ptr<array_info> m1_col_out,
+                  std::shared_ptr<array_info> m2_col_out,
+                  std::shared_ptr<array_info> m3_col_out,
+                  grouping_info const& grp_info);
+
+// Kurtosis
+
+/**
+ * @brief Compute the kurtosis update function for combining the result
+ * of local reductions on each rank.
+ *
+ * @param[in] count_col_in The count input column.
+ * @param[in] m1_col_in The first moment input column.
+ * @param[in] m2_col_in The second moment input column.
+ * @param[in] m3_col_in The third moment input column.
+ * @param[out] count_col_out The count output column.
+ * @param[out] m1_col_out The first moment output column.
+ * @param[out] m2_col_out The second moment output column.
+ * @param[out] m3_col_out The second moment output column.
+ * @param[in] grp_info The grouping information.
+ */
+void kurt_combine(std::shared_ptr<array_info> count_col_in,
+                  std::shared_ptr<array_info> m1_col_in,
+                  std::shared_ptr<array_info> m2_col_in,
+                  std::shared_ptr<array_info> m3_col_in,
+                  std::shared_ptr<array_info> m4_col_in,
+                  std::shared_ptr<array_info> count_col_out,
+                  std::shared_ptr<array_info> m1_col_out,
+                  std::shared_ptr<array_info> m2_col_out,
+                  std::shared_ptr<array_info> m3_col_out,
+                  std::shared_ptr<array_info> m4_col_out,
+                  grouping_info const& grp_info);
+
 // Variance
 
 /**
