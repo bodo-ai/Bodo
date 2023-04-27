@@ -365,7 +365,9 @@ ext_memory = Extension(
     define_macros=[],
     library_dirs=lid,
     libraries=["arrow", "arrow_python"] + mpi_libs,
-    extra_compile_args=eca_c,
+    # Cannot compile with -Werror yet because memory.cpp
+    # generated multiple unused variable warnings
+    extra_compile_args=[x for x in eca if x != "-Werror"],
     extra_link_args=ela,
     language="c++",
 )
