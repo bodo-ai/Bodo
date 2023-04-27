@@ -137,16 +137,28 @@ class Cost private constructor(private val rows: Double, private val cpu: Double
  * and will use those if available. Otherwise, it will pass the row count, cpu, and io as they are
  * and ignore the other parameters.
  *
- * All parameters except row count are optional.
+ * All parameters are optional. If row count is not specified, then this cost is assumed to be
+ * for a single row. This can be useful if the cost scales linearly based on row count since
+ * you can make a cost for a single row and then multiply by the number of rows.
  *
  * @param rows the number of rows produced by this operation.
  * @param cpu amount of cpu resource utilized by this operation.
  * @param io amount of io resource utilized by this operation.
  * @param mem amount of mem resource utilized by this operation.
  */
-fun RelOptPlanner.makeCost(rows: Double, cpu: Double = 0.0, io: Double = 0.0, mem: Double = 0.0): RelOptCost {
+fun RelOptPlanner.makeCost(rows: Double = 1.0, cpu: Double = 0.0, io: Double = 0.0, mem: Double = 0.0): RelOptCost {
     return when (val factory = costFactory) {
         is CostFactory -> factory.makeCost(rows, cpu, io, mem)
         else -> factory.makeCost(rows, cpu, io)
     }
+}
+
+/**
+ * Convenience method for producing a cost from another cost.
+ *
+ * This uses the parameters from the passed in cost but replaces
+ * the number of rows.
+ */
+fun RelOptPlanner.makeCost(rows: Double = 1.0, from: Cost): RelOptCost {
+    return makeCost(rows, cpu = from.cpu, io = from.io, mem = from.mem)
 }
