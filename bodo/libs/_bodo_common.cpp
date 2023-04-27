@@ -854,6 +854,20 @@ void incref_meminfo(MemInfo* meminfo) {
     }
 }
 
+void reset_col_if_last_table_ref(std::shared_ptr<table_info> const& table,
+                                 size_t col_idx) {
+    if (table.use_count() == 1) {
+        table->columns[col_idx].reset();
+    }
+}
+
+void clear_all_cols_if_last_table_ref(
+    std::shared_ptr<table_info> const& table) {
+    if (table.use_count() == 1) {
+        table->columns.clear();
+    }
+}
+
 // get memory alloc/free info from _meminfo.h
 size_t get_stats_alloc() { return NRT_MemSys_get_stats_alloc(); }
 size_t get_stats_free() { return NRT_MemSys_get_stats_free(); }

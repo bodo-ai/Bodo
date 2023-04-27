@@ -736,6 +736,32 @@ struct table_info {
     }
 };
 
+/**
+ * @brief Helper function for early reference (and potentially memory) release
+ * of a column in a table (to reduce peak memory usage wherever possible). This
+ * is useful in performance and memory critical regions to release memory of
+ * columns that are no longer needed. However, calling reset on the column is
+ * only safe if this is the last reference to the table. We pass the shared_ptr
+ * by reference to not incref the table_info during the function call.
+ * NOTE: This function is only useful for performance reasons and should only be
+ * used when you know what you are doing. See existing usages of this in our
+ * code to understand the use cases.
+ *
+ * @param table Shared Pointer to the table, passed by reference.
+ * @param col_idx Index of the column to reset.
+ */
+void reset_col_if_last_table_ref(std::shared_ptr<table_info> const& table,
+                                 size_t col_idx);
+
+/**
+ * @brief Similar to reset_col_if_last_table_ref, but instead, we clear
+ * all the shared_ptrs to the columns if this is the last reference to
+ * a table.
+ *
+ * @param table Shared Pointer to the table, passed by reference.
+ */
+void clear_all_cols_if_last_table_ref(std::shared_ptr<table_info> const& table);
+
 /* Compute the total memory of local chunk of the table on current rank
  *
  * @param table : The input table

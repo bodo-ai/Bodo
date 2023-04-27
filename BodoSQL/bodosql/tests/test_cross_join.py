@@ -5,10 +5,12 @@ import bodosql
 import pytest
 from bodosql.tests.utils import check_query
 
+from bodo.tests.utils import temp_env_override
 from bodo.utils.typing import BodoError
 
 
-def test_cross_join_simpl(basic_df, spark_info, memory_leak_check):
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_cross_join_simpl(basic_df, spark_info, broadcast: bool, memory_leak_check):
     """
     Tests a simple cross join on small tables
     """
@@ -17,13 +19,18 @@ def test_cross_join_simpl(basic_df, spark_info, memory_leak_check):
         "table2": basic_df["table1"],
     }
     query = "Select table1.C, table2.B from table1 cross join table2"
-    check_query(
-        query,
-        ctx,
-        spark_info,
-        check_dtype=False,
-        check_names=False,
-    )
+    # Set BODO_BCAST_JOIN_THRESHOLD to 0 to force non-broadcast (fully-parallel) case,
+    # and to 1GiB to force the broadcast join case.
+    with temp_env_override(
+        {"BODO_BCAST_JOIN_THRESHOLD": "0" if not broadcast else str(1024 * 1024 * 1024)}
+    ):
+        check_query(
+            query,
+            ctx,
+            spark_info,
+            check_dtype=False,
+            check_names=False,
+        )
 
 
 def test_nested_cross_join(join_dataframes, spark_info, memory_leak_check):
