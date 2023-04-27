@@ -31,7 +31,11 @@ def get_java_path() -> str:
     """
 
     # Currently inside a conda subenvironment
-    if "CONDA_PREFIX" in os.environ:
+    # except for platform
+    if (
+        "CONDA_PREFIX" in os.environ
+        and "BODO_PLATFORM_WORKSPACE_UUID" not in os.environ
+    ):
         conda_prefix = os.environ["CONDA_PREFIX"]
         if "JAVA_HOME" in os.environ:
             java_home = os.environ["JAVA_HOME"]
@@ -47,7 +51,7 @@ def get_java_path() -> str:
 
         else:
             warnings.warn(
-                "$JAVA_HOME is currently unset. This occurs when OpenJDK is not installed in your conda environment or when your environment has recently changed by not reactivates. The Bodo Iceberg Connector will default to using you system's Java."
+                "$JAVA_HOME is currently unset. This occurs when OpenJDK is not installed in your conda environment or when your environment has recently changed but not reactivated. The Bodo Iceberg Connector will default to using you system's Java."
                 "It is recommended that you use OpenJDK v11 from Conda with the Bodo Iceberg Connector. To do so, first run\n"
                 "    conda install openjdk=11 -c conda-forge\n"
                 "and then reactivate your environment via\n"

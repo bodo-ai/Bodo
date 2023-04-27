@@ -25,7 +25,11 @@ def get_java_path() -> str:
     """
 
     # Currently inside a conda subenvironment
-    if "CONDA_PREFIX" in os.environ:
+    # except for platform
+    if (
+        "CONDA_PREFIX" in os.environ
+        and "BODO_PLATFORM_WORKSPACE_UUID" not in os.environ
+    ):
         conda_prefix = os.environ["CONDA_PREFIX"]
         if "JAVA_HOME" in os.environ:
             java_home = os.environ["JAVA_HOME"]
