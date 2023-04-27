@@ -152,7 +152,7 @@ static inline int32_t get_months_since_epoch_from_datetime(int64_t* dt) {
     constexpr int64_t perday = 24LL * 60LL * 60LL * 1000LL * 1000LL * 1000LL;
     int64_t days = extract_unit(dt, perday);
     int64_t year = days_to_yearsdays(&days);
-    int64_t rem_months;
+    int64_t rem_months = -1;
     get_remaining_months(year, &days, &rem_months);
     // Compute months from 1970-01-01.
     return ((year - 1970) * 12) + rem_months;
@@ -686,7 +686,7 @@ std::string transform_val_to_str(std::string transform_name,
         int64_t day = transformed_arr->at<int64_t>(idx);
         int64_t year = days_to_yearsdays(&day);
 
-        int64_t rem_months;
+        int64_t rem_months = -1;
         get_remaining_months(year, &day, &rem_months);
         int64_t month = rem_months + 1;
         day += 1;
