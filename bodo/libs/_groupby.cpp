@@ -305,8 +305,8 @@ class GroupbyPipeline {
             // need the hashes and comm_info later.
             comm_info_ptr = std::make_shared<mpi_comm_info>(in_table->columns);
             comm_info_ptr->set_counts(hashes, is_parallel);
-            in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr,
-                                            is_parallel);
+            in_table = shuffle_table_kernel(std::move(in_table), hashes,
+                                            *comm_info_ptr, is_parallel);
             has_reverse_shuffle = cumulative_op || shift_op || transform_op ||
                                   ngroup_op || window_op;
             if (!has_reverse_shuffle) {
@@ -645,8 +645,8 @@ class GroupbyPipeline {
         }
         ev.add_attribute("passed_n_shuffle_keys", n_shuffle_keys);
         ev.add_attribute("num_shuffle_keys", num_shuffle_keys);
-        std::shared_ptr<table_info> shuf_table =
-            shuffle_table(update_table, num_shuffle_keys, is_parallel);
+        std::shared_ptr<table_info> shuf_table = shuffle_table(
+            std::move(update_table), num_shuffle_keys, is_parallel);
 
         update_table = cur_table = shuf_table;
 
@@ -745,7 +745,7 @@ class GroupbyPipeline {
              window_op) &&
             is_parallel) {
             std::shared_ptr<table_info> revshuf_table =
-                reverse_shuffle_table_kernel(out_table, in_hashes,
+                reverse_shuffle_table_kernel(std::move(out_table), in_hashes,
                                              *comm_info_ptr);
             in_hashes.reset();
             out_table = revshuf_table;
@@ -899,25 +899,26 @@ class GroupbyPipeline {
 
             // --------- shuffle column ---------
             if (shuffle_by_keys_and_value) {
+                uint64_t ncols = tmp->ncols();
                 if (drop_duplicates) {
                     // Note that tmp here no longer contains the
                     // original input arrays
-                    tmp2 = shuffle_table(tmp, tmp->ncols(), is_parallel);
+                    tmp2 = shuffle_table(std::move(tmp), ncols, is_parallel);
                 } else {
                     // Since the arrays are unmodified we can reuse the hashes
-                    tmp2 = shuffle_table(tmp, tmp->ncols(), is_parallel, false,
-                                         shared_key_value_hashes);
+                    tmp2 =
+                        shuffle_table(std::move(tmp), ncols, is_parallel, false,
+                                      std::move(shared_key_value_hashes));
                 }
             } else {
                 if (drop_duplicates) {
-                    tmp2 = shuffle_table(tmp, num_keys, is_parallel);
+                    tmp2 = shuffle_table(std::move(tmp), num_keys, is_parallel);
                 } else {
-                    tmp2 = shuffle_table(tmp, num_keys, is_parallel, false,
-                                         hashes);
+                    tmp2 = shuffle_table(std::move(tmp), num_keys, is_parallel,
+                                         false, hashes);
                 }
             }
             shared_key_value_hashes.reset();
-            tmp.reset();
             tmp2->num_keys = num_keys;
             tmp2->id = table_id_counter++;
             nunique_tables[col_idx] = tmp2;
