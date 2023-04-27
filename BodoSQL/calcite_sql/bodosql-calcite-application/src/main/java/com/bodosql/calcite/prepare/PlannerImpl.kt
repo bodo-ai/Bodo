@@ -29,6 +29,7 @@ import com.bodosql.calcite.application.BodoSQLOperatorTables.*
 import com.bodosql.calcite.application.bodo_sql_rules.*
 import com.bodosql.calcite.plan.CostFactory
 import com.bodosql.calcite.rel.metadata.PandasRelMdParallelism
+import com.bodosql.calcite.rel.metadata.PandasRelMdSize
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.Iterables
@@ -362,8 +363,10 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                     // TODO(jsternberg): Just using 2 as a default until
                     // we add a way to inject that from the caller.
                     PandasRelMdParallelism(2),
-                    BuiltInMetadata.Parallelism.Handler::class.java,
-                ),
+                    BuiltInMetadata.Parallelism.Handler::class.java),
+                ReflectiveRelMetadataProvider.reflectiveSource(
+                    PandasRelMdSize(),
+                    BuiltInMetadata.Size.Handler::class.java),
                 DefaultRelMetadataProvider.INSTANCE,
             ))),
         DecorrelateProgram(),
@@ -488,6 +491,9 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 ReflectiveRelMetadataProvider.reflectiveSource(
                     PandasRelMdParallelism(2),
                     BuiltInMetadata.Parallelism.Handler::class.java),
+                ReflectiveRelMetadataProvider.reflectiveSource(
+                    PandasRelMdSize(),
+                    BuiltInMetadata.Size.Handler::class.java),
                 DefaultRelMetadataProvider.INSTANCE,
             ))
             rel.cluster.invalidateMetadataQuery()

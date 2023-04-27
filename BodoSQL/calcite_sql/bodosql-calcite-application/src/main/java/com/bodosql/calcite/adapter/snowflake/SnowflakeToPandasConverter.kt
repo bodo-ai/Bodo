@@ -36,7 +36,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
             ?: (4.0 * getRowType().fieldCount)
 
         // Complete data size using the row count.
-        val rows = mq.getRowCount(this);
+        val rows = mq.getRowCount(this)
         val dataSize = averageRowSize * rows
 
         // Determine parallelism or default to no parallelism.

@@ -10,7 +10,6 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
-import org.apache.calcite.rel.hint.RelHint
 import org.apache.calcite.rex.RexNode
 
 class PandasJoin(
