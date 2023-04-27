@@ -20,15 +20,14 @@ class IcebergParquetReader : public ParquetReader {
                          PyObject* _expr_filters,
                          std::set<int> _selected_fields,
                          std::vector<bool> is_nullable,
-                         PyObject* pyarrow_schema, bool _is_merge_into_cow)
+                         PyObject* pyarrow_schema)
         : ParquetReader(/*path*/ nullptr, _parallel, _dnf_filters,
                         _expr_filters, /*storage_options*/ PyDict_New(),
                         pyarrow_schema, tot_rows_to_read, _selected_fields,
                         is_nullable, /*input_file_name_col*/ false),
           conn(_conn),
           database_schema(_database_schema),
-          table_name(_table_name),
-          is_merge_into_cow(_is_merge_into_cow) {}
+          table_name(_table_name) {}
 
     virtual ~IcebergParquetReader() {
         // When schema evolution is detected in
@@ -119,8 +118,6 @@ class IcebergParquetReader : public ParquetReader {
     const char* conn;
     const char* database_schema;
     const char* table_name;
-    // Is this a target table for merge into with cow?
-    bool is_merge_into_cow;
     // List of the original Iceberg file names as relative paths.
     // For example if the absolute path was
     // /Users/bodo/iceberg_db/my_table/part01.pq and the iceberg directory is
@@ -188,7 +185,7 @@ table_info* iceberg_pq_read_py_entry(
         IcebergParquetReader reader(conn, database_schema, table_name, parallel,
                                     tot_rows_to_read, dnf_filters, expr_filters,
                                     selected_fields, is_nullable,
-                                    pyarrow_schema, is_merge_into_cow);
+                                    pyarrow_schema);
 
         // Initialize reader
         reader.init_iceberg_reader(str_as_dict_cols, num_str_as_dict_cols);
