@@ -235,6 +235,54 @@ class VarStdColSet : public BasicColSet {
 };
 
 /**
+ * @brief Colset for Skew operation.
+ *
+ */
+class SkewColSet : public BasicColSet {
+   public:
+    SkewColSet(std::shared_ptr<array_info> in_col, int ftype, bool combine_step,
+               bool use_sql_rules);
+
+    virtual ~SkewColSet();
+
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+
+    virtual void update(const std::vector<grouping_info>& grp_infos);
+
+    virtual void alloc_combine_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+
+    virtual void combine(const grouping_info& grp_info);
+
+    virtual void eval(const grouping_info& grp_info);
+};
+
+/**
+ * @brief Colset for Kurtosis operation.
+ *
+ */
+class KurtColSet : public BasicColSet {
+   public:
+    KurtColSet(std::shared_ptr<array_info> in_col, int ftype, bool combine_step,
+               bool use_sql_rules);
+
+    virtual ~KurtColSet();
+
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+
+    virtual void update(const std::vector<grouping_info>& grp_infos);
+
+    virtual void alloc_combine_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+
+    virtual void combine(const grouping_info& grp_info);
+
+    virtual void eval(const grouping_info& grp_info);
+};
+
+/**
  * @brief Colset for UDF operations that have been optimized
  * in their compilation.
  */
