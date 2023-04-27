@@ -11,13 +11,17 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.util.Pair;
 
 /**
- * Class that returns the generated code for an Agg expression after all inputs have been visited.
+ * Class that returns the generated code for an Agg expression after all inputs
+ * have been visited.
  */
 public class AggCodeGen {
 
-  /* Hashmap of aggregation functions for which there is a one to one mapping between the SQL Function,
-    and a pandas method call in the form of Col_expr.Ag_fn(), and df.agg(col_name = pd.NamedAgg(column='B', aggfunc="ag_fn"))
-  */
+  /*
+   * Hashmap of aggregation functions for which there is a one to one mapping
+   * between the SQL Function,
+   * and a pandas method call in the form of Col_expr.Ag_fn(), and df.agg(col_name
+   * = pd.NamedAgg(column='B', aggfunc="ag_fn"))
+   */
   static HashMap<SqlKind, String> equivalentPandasMethodMap;
 
   static HashMap<SqlKind, String> equivalentNumpyFuncMap;
@@ -61,23 +65,29 @@ public class AggCodeGen {
     equivalentPandasNameMethodMap.put("KURTOSIS", "kurtosis");
     equivalentPandasNameMethodMap.put("SKEW", "skew");
     equivalentHelperFnMap.put("BOOLOR_AGG", "boolor_agg");
-    // Calcite's SINGLE_VALUE returns input if it has only one value, otherwise raises an error
+    // Calcite's SINGLE_VALUE returns input if it has only one value, otherwise
+    // raises an error
     // https://github.com/apache/calcite/blob/f14cf4c32b9079984a988bbad40230aa6a59b127/core/src/main/java/org/apache/calcite/sql/fun/SqlSingleValueAggFunction.java#L36
     equivalentHelperFnMap.put(
         "SINGLE_VALUE", "bodo.libs.bodosql_array_kernels.ensure_single_value");
   }
 
   /**
-   * Function that generates the code for an aggregate expression that does not require a Group By.
+   * Function that generates the code for an aggregate expression that does not
+   * require a Group By.
    *
-   * @param inVar The input variable.
+   * @param inVar            The input variable.
    * @param inputColumnNames The names of the columns of the input var.
-   * @param aggCallList The list of aggregations to be performed.
-   * @param aggCallNames The list of column names to be used for the output of the aggregations
-   * @param distOutput Is the output single row DataFrame distributed or replicated. When no group
-   *     is used as 1 step in an aggregation (e.g. group by cube), then the output is distributed.
-   *     When it is the only aggregation group across the entire output (e.g. select SUM(A) from
-   *     table1), then it is replicated.
+   * @param aggCallList      The list of aggregations to be performed.
+   * @param aggCallNames     The list of column names to be used for the output of
+   *                         the aggregations
+   * @param distOutput       Is the output single row DataFrame distributed or
+   *                         replicated. When no group
+   *                         is used as 1 step in an aggregation (e.g. group by
+   *                         cube), then the output is distributed.
+   *                         When it is the only aggregation group across the
+   *                         entire output (e.g. select SUM(A) from
+   *                         table1), then it is replicated.
    * @return The code generated for the aggregation.
    */
   public static String generateAggCodeNoGroupBy(
@@ -86,7 +96,8 @@ public class AggCodeGen {
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
       boolean distOutput) {
-    // Generates code like: pd.DataFrame({"sum(A)": [test_df1["A"].sum()], "mean(B)":
+    // Generates code like: pd.DataFrame({"sum(A)": [test_df1["A"].sum()],
+    // "mean(B)":
     // [test_df1["A"].mean()]})
     // Generate any filters. This is done on a separate line for simpler
     // code in case the series is empty.
@@ -199,14 +210,17 @@ public class AggCodeGen {
   }
 
   /**
-   * Function that generates the code for an aggregate expression that does not include any
-   * aggregations. This is equivalent to Select Distinct, on the current grouped columns IE,
-   * dropping all the duplicates. All other columns present in the total grouping set are set to
+   * Function that generates the code for an aggregate expression that does not
+   * include any
+   * aggregations. This is equivalent to Select Distinct, on the current grouped
+   * columns IE,
+   * dropping all the duplicates. All other columns present in the total grouping
+   * set are set to
    * null.
    *
-   * @param inVar The input variable.
+   * @param inVar            The input variable.
    * @param inputColumnNames The columns present in the input columns
-   * @param group This list of column indices by which we are grouping
+   * @param group            This list of column indices by which we are grouping
    * @return The code generated for the aggregation expression.
    */
   public static String generateAggCodeNoAgg(
@@ -226,7 +240,8 @@ public class AggCodeGen {
 
       aggString.append(inVar);
 
-      // First, prune unneeded columns, if they exist. This ensures that columns not being grouped
+      // First, prune unneeded columns, if they exist. This ensures that columns not
+      // being grouped
       // will be filled with null
       // when doing the concatenation
       if (group.size() < inputColumnNames.size()) {
@@ -235,9 +250,11 @@ public class AggCodeGen {
       aggString.append(".drop_duplicates()");
     } else {
       // If we're grouping by no columns with no aggregations, the expected
-      // output for this group is one row of all NULL's. In order to match this behavior, we create
+      // output for this group is one row of all NULL's. In order to match this
+      // behavior, we create
       // a dataframe
-      // with a length of one, with no columns. When doing the concat, the rows present in
+      // with a length of one, with no columns. When doing the concat, the rows
+      // present in
       // the other dataframes will be populated with NULL values.
       aggString.append("pd.DataFrame(index=pd.RangeIndex(0,1,1))");
     }
@@ -246,14 +263,18 @@ public class AggCodeGen {
   }
 
   /**
-   * Function that generates the code for an aggregate expression that requires a Group By. This
-   * code has a side effect of filling outputColumnNames with the column names generated for outVar.
+   * Function that generates the code for an aggregate expression that requires a
+   * Group By. This
+   * code has a side effect of filling outputColumnNames with the column names
+   * generated for outVar.
    *
-   * @param inVar The input variable.
-   * @param group Indices of the columns to group by for the current aggregation.
+   * @param inVar            The input variable.
+   * @param group            Indices of the columns to group by for the current
+   *                         aggregation.
    * @param inputColumnNames The names of the columns of the input var.
-   * @param aggCallList The list of aggregations to be performed.
-   * @param aggCallNames The list of column names in which to store the outputs of the aggregation
+   * @param aggCallList      The list of aggregations to be performed.
+   * @param aggCallNames     The list of column names in which to store the
+   *                         outputs of the aggregation
    * @return The code generated for the aggregation.
    */
   public static String generateAggCodeWithGroupBy(
@@ -269,8 +290,10 @@ public class AggCodeGen {
     aggString.append(generateGroupByCall(inputColumnNames, group));
 
     /*
-     * create the corresponding aggregation string using named aggregate syntax with tuples.
-     * e.g. .agg(out1=pd.NamedAgg(column="in1", aggfunc="sum"), out2=pd.NamedAgg(column="in2", aggfunc="sum"),
+     * create the corresponding aggregation string using named aggregate syntax with
+     * tuples.
+     * e.g. .agg(out1=pd.NamedAgg(column="in1", aggfunc="sum"),
+     * out2=pd.NamedAgg(column="in2", aggfunc="sum"),
      * out3=pd.NamedAgg(column="in1", aggfunc="mean"))
      */
     aggString.append(".agg(");
@@ -316,19 +339,25 @@ public class AggCodeGen {
   }
 
   /**
-   * Function that generates the code for a Group By aggregation expression that requires a group by
-   * apply. Returns a pair of Strings. The first is the group by apply aggregation expression, the
-   * second is a function definition, which must be appended to the generated code prior to the
+   * Function that generates the code for a Group By aggregation expression that
+   * requires a group by
+   * apply. Returns a pair of Strings. The first is the group by apply aggregation
+   * expression, the
+   * second is a function definition, which must be appended to the generated code
+   * prior to the
    * group by apply.
    *
-   * @param inVar The input variable.
+   * @param inVar            The input variable.
    * @param inputColumnNames The names of the columns of the input var.
-   * @param group Indices of the columns to group by for the current aggregation.
-   * @param aggCallList The list of aggregations to be performed.
-   * @param aggCallNames The column names into which to store the outputs of the aggregation
-   * @param funcName Name of the function generated for the apply.
-   * @return A pair of the code expression generated for the aggregation, and the function
-   *     definition that is used in the groupby apply.
+   * @param group            Indices of the columns to group by for the current
+   *                         aggregation.
+   * @param aggCallList      The list of aggregations to be performed.
+   * @param aggCallNames     The column names into which to store the outputs of
+   *                         the aggregation
+   * @param funcName         Name of the function generated for the apply.
+   * @return A pair of the code expression generated for the aggregation, and the
+   *         function
+   *         definition that is used in the groupby apply.
    */
   public static Pair<String, String> generateApplyCodeWithGroupBy(
       String inVar,
@@ -459,9 +488,10 @@ public class AggCodeGen {
   }
 
   /**
-   * Helper function to determine the name of the function and whether or not it is a method.
+   * Helper function to determine the name of the function and whether or not it
+   * is a method.
    *
-   * @param a Aggregation call that needs a function.
+   * @param a             Aggregation call that needs a function.
    * @param isGroupbyCall Is the being directly used inside a groupby agg?
    * @return Pair with the name of the call and whether or not it is a method.
    */
@@ -494,7 +524,8 @@ public class AggCodeGen {
       concatString.append(dfNames.get(i)).append(", ");
     }
 
-    // We put ignore_index as True, since we don't care about the index in BodoSQL, and this results
+    // We put ignore_index as True, since we don't care about the index in BodoSQL,
+    // and this results
     // in
     // faster runtime performance.
     return concatString.append("], ignore_index=True)").toString();

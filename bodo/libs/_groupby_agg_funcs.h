@@ -622,77 +622,24 @@ struct var_agg {
      * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
      * for more information.
      *
-     * @param[in] v: observed value
+     * @param[in] v2: observed value
      * @param[in,out] count: current number of observations
      * @param[in,out] mean_x: current mean
      * @param[in,out] m2: sum of squares of differences from the current mean
      */
-    inline static void apply(T val, uint64_t& count, double& mean_x,
+    inline static void apply(T& v2, uint64_t& count, double& mean_x,
                              double& m2) {
-        if (!isnan_alltype<T, dtype>(val)) {
-            double val_double = to_double<T, dtype>(val);
+        if (!isnan_alltype<T, dtype>(v2)) {
+            double v2_double = to_double<T, dtype>(v2);
             count += 1;
-            double delta = val_double - mean_x;
+            double delta = v2_double - mean_x;
             mean_x += delta / count;
-            double delta2 = val_double - mean_x;
+            double delta2 = v2_double - mean_x;
             m2 += delta * delta2;
         }
     }
 };
 
-// Skew
-
-template <typename T, int dtype>
-struct skew_agg {
-    /**
-     * Aggregation function for skew. The same principle as variance, but
-     * used to calculate the third moment.
-     *
-     * @param[in] val: observed value
-     * @param[in,out] count: current number of observations
-     * @param[in,out] m1: current sum of elements
-     * @param[in,out] m2: current sum of squares of elements
-     * @param[in,out] m3: current sum of cubes of elements
-     */
-    inline static void apply(T val, uint64_t& count, double& m1, double& m2,
-                             double& m3) {
-        if (!isnan_alltype<T, dtype>(val)) {
-            double val_double = to_double<T, dtype>(val);
-            count += 1;
-            m1 += val_double;
-            m2 += val_double * val_double;
-            m3 += val_double * val_double * val_double;
-        }
-    }
-};
-
-// kurtosis
-
-template <typename T, int dtype>
-struct kurt_agg {
-    /**
-     * Aggregation function for kurtosis. The same principle as variance, but
-     * used to calculate the fourth moment
-     *
-     * @param[in] val: observed value
-     * @param[in,out] count: current number of observations
-     * @param[in,out] m1: current sum of elements
-     * @param[in,out] m2: current sum of squares of elements
-     * @param[in,out] m3: current sum of cubes of elements
-     * @param[in,out] m4: current sum of fourths of elements
-     */
-    inline static void apply(T val, uint64_t& count, double& m1, double& m2,
-                             double& m3, double& m4) {
-        if (!isnan_alltype<T, dtype>(val)) {
-            double val_double = to_double<T, dtype>(val);
-            count += 1;
-            m1 += val_double;
-            m2 += val_double * val_double;
-            m3 += val_double * val_double * val_double;
-            m4 += val_double * val_double * val_double * val_double;
-        }
-    }
-};
 // Non inlined operations over multiple columns
 
 /**
