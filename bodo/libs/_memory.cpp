@@ -219,7 +219,9 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         // Fraction of total memory we should actually assign to the
         // buffer pool. We will read this from an environment variable
         // if it's set, but will default to 95% if it isn't.
-        double mem_fraction = 0.95;
+        // This has been temporarily set to 5.0 in order to to avoid
+        // memory issues in the upcoming release.
+        double mem_fraction = 5.0;
 
         // We expect this to be in percentages and not fraction,
         // i.e. it should be set to 45 if we want to use 45% (or 0.45)
