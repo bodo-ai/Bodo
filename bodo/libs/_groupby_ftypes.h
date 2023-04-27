@@ -72,7 +72,7 @@ struct Bodo_FTypes {
         idxmax_na_first = 44,
         // This is the operator for when we are generating one
         // of the 4 idx functions to operate over N columns. Each
-        // column may have a different function so we cannot define
+        // column may have a different function so we cannot defineF
         // more explicit ftypes. This is used only in the min_row_number_filter
         // window function path.
         idx_n_columns = 45

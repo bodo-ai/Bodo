@@ -765,3 +765,77 @@ def test_single_value_error():
                 # dummy output to avoid Spark errors
                 expected_output=1,
             )
+
+
+@pytest.mark.parametrize(
+    "agg_cols",
+    [
+        pytest.param("AD", id="fast_tests"),
+        pytest.param("BCEFGHIJKL", id="slow_tests", marks=pytest.mark.skip),
+    ],
+)
+def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
+    """Tests the Kurtosis and Skew functions"""
+    query = (
+        "SELECT "
+        + ", ".join(f"Skew({col}), Kurtosis({col})" for col in agg_cols)
+        + " FROM table1"
+    )
+    # Datasets designed to exhibit different distributions, thus producing myriad
+    # cases of kurtosis and skew calculations
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [int(np.log2(i**2 + 10)) for i in range(100)],
+                    dtype=pd.Int32Dtype(),
+                ),
+                "B": pd.Series([float(i) for i in range(100)]),
+                "C": pd.Series([i**2 for i in range(100)], dtype=pd.Int32Dtype()),
+                "D": pd.Series(
+                    [None if i % 2 == 0 else i for i in range(100)],
+                    dtype=pd.Int32Dtype(),
+                ),
+                "E": pd.Series(
+                    [None if i % 3 == 0 else float(i**2) for i in range(100)]
+                ),
+                "F": pd.Series([float((i**3) % 100) for i in range(100)]),
+                "G": pd.Series([2.718281828 for i in range(100)]),
+                "H": pd.Series([(i / 100) ** 0.5 for i in range(100)]),
+                "I": pd.Series(
+                    [np.arctanh(np.pi * (i - 49.5) / 160.5) for i in range(100)]
+                ),
+                "J": pd.Series([np.cbrt(i) for i in range(-49, 50)]),
+                "K": pd.Series(
+                    [i if i % 30 == 29 else None for i in range(100)],
+                    dtype=pd.Int32Dtype(),
+                ),
+                "L": pd.Series(
+                    [i if i % 50 == 30 else None for i in range(100)],
+                    dtype=pd.Int32Dtype(),
+                ),
+            }
+        )
+    }
+
+    def kurt_skew_refsol(cols):
+        result = pd.DataFrame({"A0": [0]})
+        i = 0
+        for col in cols:
+            result[f"A{i}"] = ctx["table1"][col].skew()
+            i += 1
+            result[f"A{i}"] = ctx["table1"][col].kurtosis()
+            i += 1
+        return result
+
+    answer = kurt_skew_refsol(agg_cols)
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+        is_out_distributed=False,
+    )

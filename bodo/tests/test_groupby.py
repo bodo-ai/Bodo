@@ -450,6 +450,93 @@ def test_sum_bool(df, memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.parametrize(
+    "df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": ["A"] * 10,
+                    "B": pd.Series([i**2 for i in range(10)]),
+                }
+            ),
+            id="1_group-no_null",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": ["A"] * 10,
+                    "B": pd.Series(
+                        [None if i % 4 == 3 else i**2 for i in range(10)],
+                        dtype=pd.Int32Dtype(),
+                    ),
+                }
+            ),
+            id="1_group-with_null",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": list("ABCDEFGHIJ") * 10,
+                    "B": pd.Series(
+                        [
+                            np.arctanh((i - 50) / 75) * i ** (1 / (1 + i % 10))
+                            for i in range(100)
+                        ]
+                    ),
+                }
+            ),
+            id="10_groups-no_null",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": list("ABCDEFGHIJ") * 10,
+                    "B": pd.Series(
+                        [
+                            None
+                            if (i**2) % 17 > 13
+                            else np.arctanh((i - 50) / 75) * i ** (1 / (1 + i % 10))
+                            for i in range(100)
+                        ]
+                    ),
+                }
+            ),
+            id="10_groups-with_null",
+        ),
+    ],
+)
+def test_kurtosis_skew(df, memory_leak_check):
+    """
+    Test groupby with pd.NamedAgg() for kurtosis and skew
+    """
+
+    def impl(df):
+        return df.groupby(["A"], as_index=False, dropna=False).agg(
+            out_1=pd.NamedAgg(column="B", aggfunc="kurtosis"),
+            out_2=pd.NamedAgg(column="B", aggfunc="skew"),
+        )
+
+    # A function that simulates the aggregation above since kurtosis is not
+    # natively supported in groupby.aggs
+    def py_impl(df):
+        result = df.groupby(["A"], as_index=False, dropna=False).apply(
+            lambda group: pd.DataFrame(
+                {
+                    "A": [group["A"].iloc[0]],
+                    "out_1": group["B"].kurtosis(),
+                    "out_2": group["B"].skew(),
+                }
+            )
+        )
+        result.index = result.index.droplevel(1)
+        return result
+
+    answer = py_impl(df)
+
+    check_func(impl, (df,), py_output=answer, sort_output=True, reset_index=True)
+
+
 @pytest.mark.slow
 def test_sum_string(memory_leak_check):
 

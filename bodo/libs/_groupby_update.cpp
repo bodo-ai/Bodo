@@ -689,6 +689,88 @@ void var_combine(std::shared_ptr<array_info> count_col_in,
     }
 }
 
+// Skew
+void skew_combine(std::shared_ptr<array_info> count_col_in,
+                  std::shared_ptr<array_info> m1_col_in,
+                  std::shared_ptr<array_info> m2_col_in,
+                  std::shared_ptr<array_info> m3_col_in,
+                  std::shared_ptr<array_info> count_col_out,
+                  std::shared_ptr<array_info> m1_col_out,
+                  std::shared_ptr<array_info> m2_col_out,
+                  std::shared_ptr<array_info> m3_col_out,
+                  grouping_info const& grp_info) {
+    for (size_t i = 0; i < count_col_in->length; i++) {
+        if (count_col_in->get_null_bit(i)) {
+            int64_t group_num = grp_info.row_to_group[i];
+            uint64_t& count_a = getv<uint64_t>(count_col_out, group_num);
+            uint64_t& count_b = getv<uint64_t>(count_col_in, i);
+            if (count_b == 0) {
+                continue;
+            }
+            double& m1_a = getv<double>(m1_col_out, group_num);
+            double& m1_b = getv<double>(m1_col_in, i);
+            double& m2_a = getv<double>(m2_col_out, group_num);
+            double& m2_b = getv<double>(m2_col_in, i);
+            double& m3_a = getv<double>(m3_col_out, group_num);
+            double& m3_b = getv<double>(m3_col_in, i);
+            count_a += count_b;
+            m1_a += m1_b;
+            m2_a += m2_b;
+            m3_a += m3_b;
+
+            // Set all the null bits to true.
+            count_col_out->set_null_bit(group_num, true);
+            m1_col_out->set_null_bit(group_num, true);
+            m2_col_out->set_null_bit(group_num, true);
+            m3_col_out->set_null_bit(group_num, true);
+        }
+    }
+}
+
+// Kurtosis
+void kurt_combine(std::shared_ptr<array_info> count_col_in,
+                  std::shared_ptr<array_info> m1_col_in,
+                  std::shared_ptr<array_info> m2_col_in,
+                  std::shared_ptr<array_info> m3_col_in,
+                  std::shared_ptr<array_info> m4_col_in,
+                  std::shared_ptr<array_info> count_col_out,
+                  std::shared_ptr<array_info> m1_col_out,
+                  std::shared_ptr<array_info> m2_col_out,
+                  std::shared_ptr<array_info> m3_col_out,
+                  std::shared_ptr<array_info> m4_col_out,
+                  grouping_info const& grp_info) {
+    for (size_t i = 0; i < count_col_in->length; i++) {
+        if (count_col_in->get_null_bit(i)) {
+            int64_t group_num = grp_info.row_to_group[i];
+            uint64_t& count_a = getv<uint64_t>(count_col_out, group_num);
+            uint64_t& count_b = getv<uint64_t>(count_col_in, i);
+            if (count_b == 0) {
+                continue;
+            }
+            double& m1_a = getv<double>(m1_col_out, group_num);
+            double& m1_b = getv<double>(m1_col_in, i);
+            double& m2_a = getv<double>(m2_col_out, group_num);
+            double& m2_b = getv<double>(m2_col_in, i);
+            double& m3_a = getv<double>(m3_col_out, group_num);
+            double& m3_b = getv<double>(m3_col_in, i);
+            double& m4_a = getv<double>(m4_col_out, group_num);
+            double& m4_b = getv<double>(m4_col_in, i);
+            count_a += count_b;
+            m1_a += m1_b;
+            m2_a += m2_b;
+            m3_a += m3_b;
+            m4_a += m4_b;
+
+            // Set all the null bits to true.
+            count_col_out->set_null_bit(group_num, true);
+            m1_col_out->set_null_bit(group_num, true);
+            m2_col_out->set_null_bit(group_num, true);
+            m3_col_out->set_null_bit(group_num, true);
+            m4_col_out->set_null_bit(group_num, true);
+        }
+    }
+}
+
 // NUNIQUE
 void nunique_computation(std::shared_ptr<array_info> arr,
                          std::shared_ptr<array_info> out_arr,
