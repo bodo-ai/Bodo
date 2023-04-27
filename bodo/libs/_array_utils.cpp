@@ -656,8 +656,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
 std::shared_ptr<array_info> RetrieveArray_SingleColumn(
     std::shared_ptr<array_info> in_arr, std::vector<int64_t> const& ListIdx,
     bool use_nullable_arr) {
-    return RetrieveArray_SingleColumn_F(in_arr, ListIdx.data(), ListIdx.size(),
-                                        use_nullable_arr);
+    return RetrieveArray_SingleColumn_F(std::move(in_arr), ListIdx.data(),
+                                        ListIdx.size(), use_nullable_arr);
 }
 
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
@@ -984,7 +984,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
 }
 
 std::shared_ptr<table_info> RetrieveTable(
-    std::shared_ptr<table_info> const& in_table,
+    std::shared_ptr<table_info> const in_table,
     std::vector<int64_t> const& ListIdx, int const& n_cols_arg) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     size_t n_cols;
@@ -995,18 +995,26 @@ std::shared_ptr<table_info> RetrieveTable(
     }
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
-        out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, ListIdx));
+        out_arrs.emplace_back(
+            RetrieveArray_SingleColumn(std::move(in_arr), ListIdx));
+        // Release reference (and potentially memory) for the column from this
+        // table if this is the last table reference.
+        reset_col_if_last_table_ref(in_table, i_col);
     }
     return std::make_shared<table_info>(out_arrs);
 }
 
 std::shared_ptr<table_info> RetrieveTable(
-    std::shared_ptr<table_info> const& in_table,
+    std::shared_ptr<table_info> const in_table,
     std::vector<int64_t> const& rowInds, std::vector<size_t> const& colInds) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     for (size_t i_col : colInds) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
-        out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, rowInds));
+        out_arrs.emplace_back(
+            RetrieveArray_SingleColumn(std::move(in_arr), rowInds));
+        // Release reference (and potentially memory) for the column from this
+        // table if this is the last table reference.
+        reset_col_if_last_table_ref(in_table, i_col);
     }
     return std::make_shared<table_info>(out_arrs);
 }

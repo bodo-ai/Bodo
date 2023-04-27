@@ -1549,8 +1549,8 @@ std::shared_ptr<table_info> shuffle_table_kernel(
                             comm_info.filtered, is_parallel);
 
             shuffle_array(
-                send_arr, out_arr, comm_info.send_count, comm_info.recv_count,
-                comm_info.send_disp, comm_info.recv_disp,
+                std::move(send_arr), out_arr, comm_info.send_count,
+                comm_info.recv_count, comm_info.send_disp, comm_info.recv_disp,
                 comm_info.send_count_sub[i], comm_info.recv_count_sub[i],
                 comm_info.send_disp_sub[i], comm_info.recv_disp_sub[i],
                 comm_info.send_count_sub_sub[i],
@@ -1585,6 +1585,9 @@ std::shared_ptr<table_info> shuffle_table_kernel(
                     0, 0, 0, true, true, in_arr->has_sorted_dictionary);
             out_arr = out_dict_arr;
         }
+        in_arr.reset();
+        // Release reference (and memory) early if possible.
+        reset_col_if_last_table_ref(in_table, i);
         out_arrs.push_back(out_arr);
     }
 
@@ -2032,6 +2035,8 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
                     0, 0, 0, true, true, in_arr->has_sorted_dictionary);
             out_arr = out_dict_arr;
         }
+        in_arr.reset();
+        reset_col_if_last_table_ref(in_table, i);
         out_arrs.push_back(out_arr);
     }
     return std::make_shared<table_info>(out_arrs);
@@ -2076,8 +2081,8 @@ std::shared_ptr<table_info> shuffle_table(std::shared_ptr<table_info> in_table,
     }
     comm_info->set_counts(hashes, is_parallel);
 
-    std::shared_ptr<table_info> table =
-        shuffle_table_kernel(in_table, hashes, *comm_info, is_parallel);
+    std::shared_ptr<table_info> table = shuffle_table_kernel(
+        std::move(in_table), hashes, *comm_info, is_parallel);
     if (keep_comm_info) {
         table->comm_info = comm_info;
         table->hashes = hashes;
@@ -2178,8 +2183,10 @@ std::shared_ptr<table_info> coherent_shuffle_table(
 
     // computing the hash data structure
     if (!hashes) {
-        hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
-                                          SEED_HASH_PARTITION, true);
+        hashes = coherent_hash_keys_table(in_table, std::move(ref_table),
+                                          n_keys, SEED_HASH_PARTITION, true);
+    } else {
+        ref_table.reset();
     }
     // coherent_shuffle_table only called in join with parallel options.
     // is_parallel = true
@@ -2190,7 +2197,7 @@ std::shared_ptr<table_info> coherent_shuffle_table(
         comm_info.set_counts<false>(hashes, true, filter, null_bitmask);
     }
     std::shared_ptr<table_info> table =
-        shuffle_table_kernel(in_table, hashes, comm_info, true);
+        shuffle_table_kernel(std::move(in_table), hashes, comm_info, true);
     if (delete_hashes) {
         hashes.reset();
     }
@@ -2612,6 +2619,7 @@ std::shared_ptr<table_info> broadcast_table(
                 /*has_deduped_local_dictionary=*/true,
                 ref_table->columns[i_col]->has_sorted_dictionary);
         }
+        in_arr.reset();
         out_arrs.push_back(out_arr);
     }
 
@@ -3310,6 +3318,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
             }  // else out_arr is already NULL, so doesn't need to be
                // handled
         }
+        in_arr.reset();
         out_arrs.push_back(out_arr);
     }
     return std::make_shared<table_info>(out_arrs);
@@ -3389,7 +3398,7 @@ std::shared_ptr<table_info> shuffle_renormalization_group(
         g.seed(random_seed);
         std::shuffle(random_order.begin(), random_order.end(), g);
         if (!parallel) {
-            return RetrieveTable(in_table, random_order, -1);
+            return RetrieveTable(std::move(in_table), random_order, -1);
         }
     }
 
@@ -3424,7 +3433,7 @@ std::shared_ptr<table_info> shuffle_renormalization_group(
     mpi_comm_info comm_info(in_table->columns);
     comm_info.set_counts(hashes, parallel);
     std::shared_ptr<table_info> ret_table =
-        shuffle_table_kernel(in_table, hashes, comm_info, parallel);
+        shuffle_table_kernel(std::move(in_table), hashes, comm_info, parallel);
     if (random) {
         // data arrives ordered by source and for each source in its
         // original (not random) order, so we need to do a local random
@@ -3436,7 +3445,7 @@ std::shared_ptr<table_info> shuffle_renormalization_group(
         }
         std::shuffle(random_order.begin(), random_order.end(), g);
         std::shared_ptr<table_info> shuffled_table =
-            RetrieveTable(ret_table, random_order, -1);
+            RetrieveTable(std::move(ret_table), random_order, -1);
         ret_table = shuffled_table;
     }
     ev.add_attribute("ret_table_nrows", ret_table->nrows());
@@ -3463,8 +3472,8 @@ table_info* shuffle_renormalization_group_py_entrypt(
 std::shared_ptr<table_info> shuffle_renormalization(
     std::shared_ptr<table_info> in_table, int random, int64_t random_seed,
     bool parallel) {
-    return shuffle_renormalization_group(in_table, random, random_seed,
-                                         parallel, 0, nullptr);
+    return shuffle_renormalization_group(std::move(in_table), random,
+                                         random_seed, parallel, 0, nullptr);
 }
 
 table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,

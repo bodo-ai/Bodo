@@ -35,6 +35,7 @@ from bodo.tests.utils import (
     gen_random_decimal_array,
     gen_random_list_string_array,
     get_start_end,
+    temp_env_override,
 )
 
 
@@ -1078,22 +1079,25 @@ def test_interval_join_detection(memory_leak_check):
                 }
             ),
         ),
-        (
-            pd.DataFrame(
-                {
-                    "P": np.array([1.21, 2.37, np.NaN] * 3),
-                    "E": np.array(
-                        [np.NaN, -1.0, 2.4, np.NaN, 6.0, 7.3, 1.1, np.NaN, np.NaN]
-                    ),
-                    "G": ["some", "string", "."] * 3,
-                }
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "P": np.array([1.21, 2.37, np.NaN] * 3),
+                        "E": np.array(
+                            [np.NaN, -1.0, 2.4, np.NaN, 6.0, 7.3, 1.1, np.NaN, np.NaN]
+                        ),
+                        "G": ["some", "string", "."] * 3,
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": np.array([1.0, 2.0, 3.0, 4.0] * 5),
+                        "B": np.array([1.1, 2.2, 3.3, 4.4, 5.5] * 4),
+                    }
+                ),
             ),
-            pd.DataFrame(
-                {
-                    "A": np.array([1.0, 2.0, 3.0, 4.0] * 5),
-                    "B": np.array([1.1, 2.2, 3.3, 4.4, 5.5] * 4),
-                }
-            ),
+            marks=pytest.mark.slow,
         ),
         # TODO: General Join does not support Decimal128 yet
         pytest.param(
@@ -1137,25 +1141,29 @@ def test_interval_join_detection(memory_leak_check):
             ),
             marks=pytest.mark.skip("[BE-4251] Support Decimal in Joins"),
         ),
-        (
-            pd.DataFrame(
-                {
-                    "P": [bodo.Time(x, 0, 0, x, precision=9) for x in range(8)]
-                    + [None, None],
-                    "E": (
-                        [bodo.Time(4 * x, 0, 0, precision=9) for x in range(4)] + [None]
-                    )
-                    * 2,
-                }
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "P": [bodo.Time(x, 0, 0, x, precision=9) for x in range(8)]
+                        + [None, None],
+                        "E": (
+                            [bodo.Time(4 * x, 0, 0, precision=9) for x in range(4)]
+                            + [None]
+                        )
+                        * 2,
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "A": [bodo.Time(x, 0, 0, precision=9) for x in range(4)] * 5,
+                        "B": [None, None]
+                        + [bodo.Time(x % 24, 0, 0, precision=9) for x in range(18)],
+                        "D": [1.1, 2.2, 3.3, 4.4] * 5,
+                    }
+                ),
             ),
-            pd.DataFrame(
-                {
-                    "A": [bodo.Time(x, 0, 0, precision=9) for x in range(4)] * 5,
-                    "B": [None, None]
-                    + [bodo.Time(x % 24, 0, 0, precision=9) for x in range(18)],
-                    "D": [1.1, 2.2, 3.3, 4.4] * 5,
-                }
-            ),
+            marks=pytest.mark.slow,
         ),
         (
             pd.DataFrame(
@@ -1245,21 +1253,23 @@ def interval_join_test_tables(request):
     "lcond,rcond",
     [
         (">=", "<"),
-        (">", "<"),
         (">", "<="),
-        (">=", "<="),
+        pytest.param(">", "<", marks=pytest.mark.slow),
+        pytest.param(">=", "<=", marks=pytest.mark.slow),
     ],
 )
 @pytest.mark.parametrize(
     "distributed", [None, [("point_df", 0)], [("range_df", 1)], False]
 )
 @pytest.mark.parametrize("how", ["inner", "left"])
+@pytest.mark.parametrize("broadcast", [True, False])
 def test_point_in_interval_join(
     interval_join_test_tables: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
     lcond: str,
     rcond: str,
     distributed: Union[List[Tuple[str, int]], bool, None],
     how: str,
+    broadcast: bool,
     memory_leak_check,
 ):
     """
@@ -1268,6 +1278,11 @@ def test_point_in_interval_join(
     where A, B in one table and P in the other table.
     Tests different datatypes, condition equalities, and distributions
     """
+    if broadcast and (distributed is not None):
+        pytest.skip(
+            "Broadcast Join only makes sense in the case where both sides are parallel."
+        )
+
     point_df, range_df, cross_df = interval_join_test_tables
 
     def impl(point_df, range_df, on_str, how):
@@ -1291,16 +1306,21 @@ def test_point_in_interval_join(
         bodo.jit((point_df_type, range_df_type, on_str_type, how_type))(impl)
         check_logger_msg(stream, "Using optimized interval range join")
 
-    check_func(
-        impl,
-        (point_df, range_df, on_str, how),
-        py_output=py_out,
-        sort_output=True,
-        reset_index=True,
-        check_dtype=False,
-        distributed=distributed,
-        is_out_distributed=False if distributed is False else None,
-    )
+    # Set BODO_BCAST_JOIN_THRESHOLD to 0 to force non-broadcast (fully-parallel) case,
+    # and to 1GiB to force the broadcast join case.
+    with temp_env_override(
+        {"BODO_BCAST_JOIN_THRESHOLD": "0" if not broadcast else str(1024 * 1024 * 1024)}
+    ):
+        check_func(
+            impl,
+            (point_df, range_df, on_str, how),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            distributed=distributed,
+            is_out_distributed=False if distributed is False else None,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1390,10 +1410,12 @@ def test_interval_overlap_join(
     memory_leak_check: None,
 ):
     """
-    Test Specialized Interval Overlap Join Operation
+    Test Interval Overlap Join Operation
     The condition must be in the form A (< or <=) P and E (< or <=) B
     where A, B in one table and P, E in the other table.
-    Tests different datatypes, condition equalities, and distributions
+    Tests different datatypes, condition equalities, and distributions.
+    This goes through regular cross join but might get a specialized implementation
+    in the future.
     """
 
     left_df, right_df, cross_df = interval_join_test_tables

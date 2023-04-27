@@ -253,7 +253,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
  * @return the table output.
  */
 std::shared_ptr<table_info> RetrieveTable(
-    std::shared_ptr<table_info> const& in_table,
+    std::shared_ptr<table_info> const in_table,
     std::vector<int64_t> const& ListIdx, int const& n_cols_arg = -1);
 
 /**
@@ -266,7 +266,7 @@ std::shared_ptr<table_info> RetrieveTable(
  * @return std::shared_ptr<table_info> output table with selected rows/columns
  */
 std::shared_ptr<table_info> RetrieveTable(
-    std::shared_ptr<table_info> const& in_table,
+    std::shared_ptr<table_info> const in_table,
     std::vector<int64_t> const& rowInds, std::vector<size_t> const& colInds);
 
 /** This code test if two keys are equal (Before that the hash should have been
