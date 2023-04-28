@@ -44,7 +44,7 @@ class PandasJoin(
         joinType: JoinRelType,
         semiJoinDone: Boolean
     ): Join {
-        return PandasJoin(cluster, traitSet, left, right, condition, joinType, rebalanceOutput)
+        return PandasJoin(cluster, traitSet, left, right, conditionExpr, joinType, rebalanceOutput)
     }
 
     override fun emit(builder: Module.Builder, inputs: () -> List<Dataframe>): Dataframe {
