@@ -13,10 +13,6 @@
 #include "arrow/result.h"
 #include "mpi.h"
 
-// decimal_mpi_type declared in _distributed.h as extern has
-// to be defined in each extension module that includes it
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
-
 // if expr is not true, form an err msg and raise a
 // runtime_error with it
 #define CHECK(expr, msg, file_type)                                  \
@@ -115,16 +111,18 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
 
 void import_fs_module(Bodo_Fs::FsEnum fs_option, const std::string &file_type,
                       PyObject *&f_mod) {
+    PyObject *ext_mod = PyImport_ImportModule("bodo.ext");
     if (fs_option == Bodo_Fs::s3) {
-        f_mod = PyImport_ImportModule("bodo.io.s3_reader");
-        CHECK(f_mod, "importing bodo.io.s3_reader module failed", file_type);
+        f_mod = PyObject_GetAttrString(ext_mod, "s3_reader");
+        CHECK(f_mod, "importing bodo.ext.s3_reader module failed", file_type);
     } else if (fs_option == Bodo_Fs::gcs) {
-        f_mod = PyImport_ImportModule("bodo.io.gcs_reader");
-        CHECK(f_mod, "importing bodo.io.gcs_reader module failed", file_type);
+        f_mod = PyObject_GetAttrString(ext_mod, "gcs_reader");
+        CHECK(f_mod, "importing bodo.ext.gcs_reader module failed", file_type);
     } else if (fs_option == Bodo_Fs::hdfs) {
-        f_mod = PyImport_ImportModule("bodo.io.hdfs_reader");
-        CHECK(f_mod, "importing bodo.io.hdfs_reader module failed", file_type);
+        f_mod = PyObject_GetAttrString(ext_mod, "hdfs_reader");
+        CHECK(f_mod, "importing bodo.ext.hdfs_reader module failed", file_type);
     }
+    Py_DECREF(ext_mod);
 }
 
 void get_fs_reader_pyobject(Bodo_Fs::FsEnum fs_option,
@@ -133,6 +131,9 @@ void get_fs_reader_pyobject(Bodo_Fs::FsEnum fs_option,
     if (fs_option == Bodo_Fs::s3) {
         func_obj = PyObject_GetAttrString(f_mod, "init_s3_reader");
         CHECK(func_obj, "getting s3_reader func_obj failed", file_type);
+    } else if (fs_option == Bodo_Fs::gcs) {
+        func_obj = PyObject_GetAttrString(f_mod, "init_gcs_reader");
+        CHECK(func_obj, "getting gcs_reader func_obj failed", file_type);
     } else if (fs_option == Bodo_Fs::hdfs) {
         func_obj = PyObject_GetAttrString(f_mod, "init_hdfs_reader");
         CHECK(func_obj, "getting hdfs_reader func_obj failed", file_type);
@@ -208,7 +209,8 @@ void create_dir_posix(int myrank, std::string &dirname,
     // create output directory
     int error = 0;
     if (std::filesystem::exists(dirname)) {
-        if (!std::filesystem::is_directory(dirname)) error = 1;
+        if (!std::filesystem::is_directory(dirname))
+            error = 1;
     } else {
         // for the parallel case, 'dirname' is the directory where the
         // different parts of the distributed table are stored (each as

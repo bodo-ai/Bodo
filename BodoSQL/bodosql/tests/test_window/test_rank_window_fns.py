@@ -7,7 +7,7 @@ from bodosql.tests.test_window.window_common import (  # noqa
     all_types_window_df,
     count_window_applies,
 )
-from bodosql.tests.utils import bodosql_use_date_type, check_query
+from bodosql.tests.utils import check_query
 
 import bodo
 
@@ -98,18 +98,17 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
     for i, func in enumerate(funcs):
         selects.append(f"{func} OVER (PARTITION BY W2 ORDER BY {order_clause}) AS C{i}")
     query = f"SELECT A, W4, {', '.join(selects)} FROM table1"
-    with bodosql_use_date_type():
-        pandas_code = check_query(
-            query,
-            all_types_window_df,
-            spark_info,
-            check_dtype=False,
-            check_names=False,
-            return_codegen=True,
-            only_jit_1DVar=True,
-            convert_columns_bytearray=convert_columns_bytearray,
-            convert_columns_tz_naive=convert_columns_tz_naive,
-        )["pandas_code"]
+    pandas_code = check_query(
+        query,
+        all_types_window_df,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        return_codegen=True,
+        only_jit_1DVar=True,
+        convert_columns_bytearray=convert_columns_bytearray,
+        convert_columns_tz_naive=convert_columns_tz_naive,
+    )["pandas_code"]
     count_window_applies(pandas_code, 1, ["RANK"])
 
 
@@ -425,10 +424,9 @@ def test_row_number_filter_multicolumn(input_arrs, memory_leak_check):
     py_output = pd.DataFrame(
         {"F": [1, 2, 5, 6, 8, 11, 12, 15, 16, 19, 20, 23, 24, 27, 29, 30]}
     )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=py_output,
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+    )

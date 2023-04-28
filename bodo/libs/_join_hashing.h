@@ -5,7 +5,8 @@
 #include "_bodo_common.h"
 
 /** This code tests if two rows in the same "table" are equal given a list
- * of column numbers. The table is defined as a std::vector<array_info*>.
+ * of column numbers. The table is defined as a
+ * std::vector<std::shared_ptr<array_info>>.
  *
  * @param table: the table
  * @param iRow1: the row of the first key
@@ -15,15 +16,16 @@
  * @return True if they are equal and false otherwise.
  *
  */
-inline bool TestRowsEqualGivenColumns(std::vector<array_info*> table,
-                                      size_t const& iRow1, size_t const& iRow2,
-                                      uint64_t* col_nums, uint64_t n_cols) {
+inline bool TestRowsEqualGivenColumns(
+    std::vector<std::shared_ptr<array_info>> table, size_t const& iRow1,
+    size_t const& iRow2, uint64_t* col_nums, uint64_t n_cols) {
     // iteration over the list of columns for the comparison.
     for (uint64_t i = 0; i < n_cols; i++) {
         size_t col_num = col_nums[i];
         bool test =
             TestEqualColumn(table[col_num], iRow1, table[col_num], iRow2, true);
-        if (!test) return false;
+        if (!test)
+            return false;
     }
     // If all columns are equal then we are ok and the rows are equals.
     return true;
@@ -95,7 +97,7 @@ struct KeyEqualHashJoinTable {
      */
     bool operator()(const size_t iRowA, const size_t iRowB) const {
         size_t jRowA, jRowB;
-        table_info *table_A, *table_B;
+        std::shared_ptr<table_info> table_A, table_B;
         if (iRowA < short_table_rows) {
             table_A = short_table;
             jRowA = iRowA;
@@ -123,8 +125,8 @@ struct KeyEqualHashJoinTable {
     }
     size_t short_table_rows;
     size_t n_key;
-    table_info* short_table;
-    table_info* long_table;
+    std::shared_ptr<table_info> short_table;
+    std::shared_ptr<table_info> long_table;
     bool is_na_equal;
 };
 
@@ -161,7 +163,7 @@ struct SecondLevelKeyEqualHashJoinTable {
                                          short_data_key_cols,
                                          short_data_key_n_cols);
     }
-    const table_info* short_table;
+    const std::shared_ptr<table_info> short_table;
     uint64_t* short_data_key_cols;
     uint64_t short_data_key_n_cols;
 };
@@ -178,7 +180,7 @@ struct SecondLevelKeyEqualHashJoinTable {
  *
  */
 std::unique_ptr<uint32_t[]> hash_data_cols_table(
-    const std::vector<array_info*>& in_table, uint64_t* col_nums, size_t n_cols,
-    uint32_t seed, bool is_parallel);
+    const std::vector<std::shared_ptr<array_info>>& in_table,
+    uint64_t* col_nums, size_t n_cols, uint32_t seed, bool is_parallel);
 
 #endif  // _JOIN_HASHING_H_INCLUDED

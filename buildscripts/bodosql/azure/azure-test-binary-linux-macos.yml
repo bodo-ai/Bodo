@@ -13,8 +13,7 @@ jobs:
   variables:
     - group: SnowflakeCredentials
   timeoutInMinutes: 360
-  pool:
-    vmImage: ${{ parameters.vmImage }}
+  pool: ScalingVMSet
   strategy:
     maxParallel: 11
     matrix:
@@ -24,7 +23,9 @@ jobs:
 
   - task: UsePythonVersion@0
     inputs:
-      versionSpec: '3.9'
+      versionSpec: '3.8'
+      #Github Token used to download python from the GitHub registry if it doesn't already exist locally
+      githubToken: $(GITHUB_REGISTRY_DL_TOKEN)
     displayName: 'Use Python $(python.version)'
 
   - script: |

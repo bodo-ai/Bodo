@@ -1,62 +1,27 @@
-// Copyright (C) 2019 Bodo Inc. All rights reserved.
+// Copyright (C) 2023 Bodo Inc. All rights reserved.
 #ifndef BODO_MEMINFO_INCLUDED
 #define BODO_MEMINFO_INCLUDED
-
-// #include "_import_py.h"
-// #include <numba/runtime/nrt.h>
-
-// /* Import MemInfo_* from numba.runtime._nrt_python.
-//  */
-// static void *
-// import_meminfo_func(const char * func) {
-// #define CHECK(expr, msg) if(!(expr)){std::cerr << msg << std::endl;
-// PyGILState_Release(gilstate); return NULL;}
-//     auto gilstate = PyGILState_Ensure();
-//     PyObject * helperdct = import_sym("numba.runtime._nrt_python",
-//     "c_helpers");
-//     CHECK(helperdct, "getting numba.runtime._nrt_python.c_helpers failed");
-//     /* helperdct[func] */
-//     PyObject * mi_rel_fn = PyDict_GetItemString(helperdct, func);
-//     CHECK(mi_rel_fn, "getting meminfo func failed");
-//     void * fnptr = PyLong_AsVoidPtr(mi_rel_fn);
-
-//     Py_XDECREF(helperdct);
-//     PyGILState_Release(gilstate);
-//     return fnptr;
-// #undef CHECK
-// }
-
-// typedef void (*MemInfo_release_type)(void*);
-// typedef MemInfo* (*MemInfo_alloc_aligned_type)(size_t size, unsigned align);
-// typedef void* (*MemInfo_data_type)(MemInfo* mi);
 
 #include <cassert>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
-
-extern "C" {
+#include "_memory.h"
 
 // ******** copied from Numba
 // NRT = NumbaRunTime
 // Related to managing memory between Numba and C++.
 // TODO: make Numba C library
 
-typedef void (*NRT_dtor_function)(void *ptr, size_t size, void *info);
-typedef size_t (*NRT_atomic_inc_dec_func)(size_t *ptr);
-typedef int (*NRT_atomic_cas_func)(void *volatile *ptr, void *cmp, void *repl,
-                                   void **oldptr);
-
+typedef void (*NRT_dtor_function)(void *ptr, size_t size, void *dtor_info);
 typedef void *(*NRT_malloc_func)(size_t size);
 typedef void *(*NRT_realloc_func)(void *ptr, size_t new_size);
 typedef void (*NRT_free_func)(void *ptr);
-typedef int (*atomic_meminfo_cas_func)(void **ptr, void *cmp, void *repl,
-                                       void **oldptr);
 
-struct Allocator {
-    Allocator(NRT_malloc_func malloc_, NRT_realloc_func realloc_,
-              NRT_free_func free_)
+struct MemInfoAllocator {
+    MemInfoAllocator(NRT_malloc_func malloc_, NRT_realloc_func realloc_,
+                     NRT_free_func free_)
         : malloc(malloc_), realloc(realloc_), free(free_) {}
     NRT_malloc_func malloc;
     NRT_realloc_func realloc;
@@ -66,21 +31,15 @@ struct Allocator {
 struct MemSys {
     MemSys(NRT_malloc_func malloc_, NRT_realloc_func realloc_,
            NRT_free_func free_)
-        : allocator(malloc_, realloc_, free_) {}
+        : mi_allocator(malloc_, realloc_, free_) {}
 
-    /* Atomic increment and decrement function */
-    NRT_atomic_inc_dec_func atomic_inc, atomic_dec;
-    /* Atomic CAS */
-    atomic_meminfo_cas_func atomic_cas;
-    /* Shutdown flag */
-    int shutting;
     /* Stats */
     size_t stats_alloc, stats_free, stats_mi_alloc, stats_mi_free;
-    /* System allocation functions */
-    Allocator allocator;
+    /* MemInfo allocation functions */
+    MemInfoAllocator mi_allocator;
 
     /// @brief Get pointer to singleton MemSys object.
-    /// Used to allow finding memory leaks in unit tests.
+    /// Used for finding memory leaks in unit tests.
     /// All the C extensions will use the same object.
     /// Ref:
     /// https://betterprogramming.pub/3-tips-for-using-singletons-in-c-c6822dc42649
@@ -113,7 +72,7 @@ struct MemInfo {
     NRT_dtor_function dtor;
     void *dtor_info;
     void *data;
-    size_t size; /* only used for NRT allocated memory */
+    size_t size; /* only used for memory allocated through the buffer pool */
     void *external_allocator;
 };
 
@@ -123,39 +82,42 @@ typedef struct MemInfo NRT_MemInfo;
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
 #endif
 
-/* ------- Wrappers around MemSys.allocator functions ------- */
-
-inline void *NRT_Allocate(size_t size) {
-    void *ptr = NRT_MemSys::instance()->allocator.malloc(size);
-    if (!ptr) {
-        std::cerr << "bad alloc: possible Out of Memory error\n";
-        exit(9);
-    }
-
-    NRT_MemSys::instance()->stats_alloc++;
-    return ptr;
-}
-
-inline void NRT_Free(void *ptr) {
-    NRT_MemSys::instance()->allocator.free(ptr);
-    NRT_MemSys::instance()->stats_free++;
-}
-
-/* ----------------------------------------------------------- */
+/* ------- Wrappers around MemSys.mi_allocator functions ------- */
 
 /**
- * @brief This only frees the MemInfo struct, and not the underlying
- * data (since they are allocated separately).
+ * @brief Allocate a MemInfo struct. This goes through
+ * the MemInfoAllocator (i.e. malloc).
+ *
+ */
+inline NRT_MemInfo *NRT_MemInfo_allocate() {
+    void *ptr =
+        NRT_MemSys::instance()->mi_allocator.malloc(sizeof(NRT_MemInfo));
+    if (!ptr) {
+        throw std::runtime_error("bad mi alloc: possible Out of Memory error");
+    }
+    /* Update stats */
+    NRT_MemSys::instance()->stats_alloc++;
+    NRT_MemSys::instance()->stats_mi_alloc++;
+    return (NRT_MemInfo *)ptr;
+}
+
+/**
+ * @brief Destroy a MemInfo struct. This only frees the MemInfo struct, and not
+ * the underlying data (since they are allocated separately).
  *
  * @param mi MemInfo struct to free.
  */
 inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
-    NRT_Free(mi);
+    NRT_MemSys::instance()->mi_allocator.free(static_cast<void *>(mi));
+    /* Update stats */
+    NRT_MemSys::instance()->stats_free++;
     NRT_MemSys::instance()->stats_mi_free++;
 }
 
+/* ------------------------------------------------------------- */
+
 /**
- * @brief Destructor for the Meminfo struct, which will also free the underlying
+ * @brief Destructor for the Meminfo struct which will also free the underlying
  * data through the dtor in the meminfo.
  *
  * NOTE: This function is to be called only from C++.
@@ -168,70 +130,14 @@ inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
  */
 inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
     assert(mi->refct == 0);  // The reference count should be exactly 0
-    if (mi->dtor && !NRT_MemSys::instance()->shutting) {
-        // We have a destructor and the system is not shutting down.
-        // This dtor will free the underlying data.
+    if (mi->dtor) {
+        // If we have a custom destructor (which we always should, and it should
+        // always be nrt_internal_custom_dtor), first call that. This dtor will
+        // free the underlying data.
         mi->dtor(mi->data, mi->size, mi->dtor_info);
     }
     // Clear and release MemInfo struct.
     NRT_MemInfo_destroy(mi);
-}
-
-/**
- * @brief Main function where memory for the Meminfo struct and the
- * underlying data is allocated.
- * We make separate allocations for the MemInfo struct itself and the underlying
- * data.
- * In the future, the data allocation will go through our buffer pool.
- *
- * @param size Size of data to allocate.
- * @param [out] mi_out Allocated MemInfo struct.
- * @return void* Pointer to allocated data buffer.
- */
-inline void *nrt_allocate_meminfo_and_data(size_t size, NRT_MemInfo **mi_out) {
-    NRT_MemInfo *mi;
-    char *data = (char *)NRT_Allocate(size);
-    mi = (NRT_MemInfo *)NRT_Allocate(sizeof(NRT_MemInfo));
-    *mi_out = mi;
-    return data;
-}
-
-/**
- * @brief Wrapper around nrt_allocate_meminfo_and_data (previous function) which
- * additionally ensures that the allocated underlying data is aligned.
- * It returns a pointer to the "aligned" address. Address to the original
- * allocation address is returned through the base_data_ptr parameter for
- * use during deallocation.
- *
- * @param size Allocation size.
- * @param align Alignment for the data buffer.
- * @param [out] mi Allocated MemInfo struct.
- * @param [out] base_data_ptr Address to the data allocation that can be used
- * with 'free' during de-allocation.
- * @return void* Aligned data pointer.
- */
-inline void *nrt_allocate_meminfo_and_data_align(size_t size, unsigned align,
-                                                 NRT_MemInfo **mi,
-                                                 void **base_data_ptr) {
-    size_t offset, intptr, remainder;
-    size_t capacity = size + 2 * align;
-    char *base = (char *)nrt_allocate_meminfo_and_data(capacity, mi);
-    intptr = (size_t)base;
-    /* See if we are aligned */
-    remainder = intptr % align;
-    if (remainder == 0) { /* Yes */
-        offset = 0;
-    } else { /* No, move forward `offset` bytes */
-        offset = align - remainder;
-    }
-
-    // Zero-pad to match Arrow
-    // https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/memory_pool.cc#L932
-    // https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/buffer.h#L125
-    memset(base + offset + size, 0, capacity - size - offset);
-
-    *base_data_ptr = base;
-    return base + offset;
 }
 
 /**
@@ -248,91 +154,139 @@ inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
     mi->data = data;
     mi->size = size;
     mi->external_allocator = external_allocator;
-    /* Update stats */
-    NRT_MemSys::instance()->stats_mi_alloc++;
 }
 
-/* ------ MemInfo + Data Allocation CodePath 1 ------ */
+/* ----------- Buffer Pool Data Allocation / Deallocation Helpers ----------- */
+
+/**
+ * @brief Allocate 'size' bytes (with 'align' bytes alignment) through the
+ * BufferPool for the MemInfo.
+ *
+ * @param size Bytes to allocated.
+ * @param align Byte alignment to use.
+ * @param mi MemInfo for which the data is being allocated. This is required
+ * since we need to point the "Swip" in the BufferPool to point to the
+ * data pointer in the MemInfo (for safe evictions).
+ */
+inline void buffer_pool_aligned_data_alloc(size_t size, unsigned align,
+                                           NRT_MemInfo *mi) {
+    std::shared_ptr<bodo::BufferPool> pool = bodo::BufferPool::Default();
+    if (align && (align > pool->alignment())) {
+        // TODO Add compiler hint to mark this as an unlikely branch.
+        throw std::runtime_error(
+            std::string("Requested alignment (") + std::to_string(align) +
+            std::string(") is greater than supported alignment (") +
+            std::to_string(pool->alignment()) + std::string(")."));
+    }
+    // Pass a pointer to the data pointer in the MemInfo to be used as
+    // the Swip by the BufferPool.
+    CHECK_ARROW_MEM(
+        pool->Allocate(size, reinterpret_cast<uint8_t **>(&(mi->data))),
+        "Allocation failed!");
+    // Update stats for memory_leak_check.
+    NRT_MemSys::instance()->stats_alloc++;
+}
+
+/**
+ * @brief Free memory allocated for a MemInfo through the BufferPool.
+ *
+ * @param ptr Pointer to the allocated memory region.
+ * @param size Number of bytes originally allocated for the data. This is the
+ * size stored in the MemInfo struct. The actual allocation (from a BufferPool
+ * perspective) might have been larger, but the BufferPool will handle it
+ * correctly.
+ */
+inline void buffer_pool_aligned_data_free(void *ptr, size_t size) {
+    std::shared_ptr<bodo::BufferPool> pool = bodo::BufferPool::Default();
+    pool->Free(static_cast<uint8_t *>(ptr), size);
+    NRT_MemSys::instance()->stats_free++;
+}
+
+/* -------------------------------------------------------------------------- */
 
 /// @brief Destructor for Meminfo (and underlying data) allocated
-/// through  NRT_MemInfo_alloc_dtor_safe.
-inline void nrt_internal_custom_safe_dtor(void *ptr, size_t size,
-                                          void *custom_dtor) {
+/// through NRT_MemInfo_alloc_common.
+inline void nrt_internal_custom_dtor(void *ptr, size_t size,
+                                     void *custom_dtor) {
+    // Get a pointer (if there is one) to the custom destructor
+    // provided during MemInfo creation. This is used for cases such as
+    // array-item arrays, etc.
     NRT_dtor_function dtor = (NRT_dtor_function)custom_dtor;
 
+    // If a customer dtor is provided (e.g. in case of array-item arrays), call
+    // that first.
     if (dtor) {
         dtor(ptr, size, NULL);
     }
 
-    // In this case, ptr points to the underlying data.
-    // Since there was no alignment offset, we can call 'free'
-    // directly on this location.
-    memset(ptr, 0xDE, MIN(size, 256));  // XXX Get rid of this?
-    NRT_Free(ptr);
+    // Add debug markers to indicate dead memory.
+    // XXX Move this to the BufferPool to centralize the logic?
+    memset(ptr, 0xDE, MIN(size, 256));
+
+    // Free the data buffer
+    buffer_pool_aligned_data_free(ptr, size);
 }
 
-/// @brief Allocate MemInfo and data (no alignment constraints)
-/// with a custom destructor.
+/**
+ * @brief Allocate a MemInfo with a data buffer of 'size' bytes.
+ * The allocated memory will be aligned as per 'align'. A custom
+ * constructor can be provided. This will be used in
+ * nrt_internal_custom_dtor when destroying the MemInfo.
+ *
+ * @param size Number of bytes to allocate
+ * @param align Byte-alignment for the allocated data. Set to 0
+ *  in case there are no alignment restrictions.
+ * @param dtor Custom destructor.
+ * @return NRT_MemInfo* Pointer to fully initialized MemInfo struct.
+ */
+inline NRT_MemInfo *NRT_MemInfo_alloc_common(size_t size, unsigned align,
+                                             NRT_dtor_function dtor) {
+    // Allocate the MemInfo object using standard allocator.
+    NRT_MemInfo *mi = NRT_MemInfo_allocate();
+
+    // Allocate the data buffer using the bodo::BufferPool and assign it to
+    // mi->data. This will also store a pointer to mi->data in the
+    // bodo::BufferPool for eviction purposes later.
+    buffer_pool_aligned_data_alloc(size, align, mi);
+
+    // Add debug markers.
+    // See notes here about why these memory markers are useful:
+    // https://stackoverflow.com/questions/370195/when-and-why-will-a-compiler-initialise-memory-to-0xcd-0xdd-etc-on-malloc-fre
+    // Only fill up a couple cachelines to minimize overhead.
+    // XXX Move this to the bodo::BufferPool to centralize the logic?
+    memset(mi->data, 0xCB, MIN(size, 256));
+
+    // Initialize the MemInfo object. We assign our custom
+    // destructor (nrt_internal_custom_dtor) which will be used
+    // to destroy the data buffer when destroying the MemInfo struct
+    // (e.g. see NRT_MemInfo_call_dtor).
+    NRT_MemInfo_init(mi, mi->data, size, nrt_internal_custom_dtor, (void *)dtor,
+                     NULL);
+    return mi;
+}
+
+/* ---------- MemInfo + Data Allocation functions ----------- */
+
+/// @brief Allocate MemInfo and data with a custom destructor (no alignment
+/// constraints).
 inline NRT_MemInfo *NRT_MemInfo_alloc_dtor_safe(size_t size,
                                                 NRT_dtor_function dtor) {
-    NRT_MemInfo *mi;
-
-    // Since we are not re-aligning the data, we don't need to store
-    // additional information about the base data pointer (unlike
-    // NRT_MemInfo_alloc_safe_aligned). In the destructor, we will
-    // call 'free' on the data pointer directly.
-    void *data = nrt_allocate_meminfo_and_data(size, &mi);
-    /* Only fill up a couple cachelines with debug markers, to minimize
-       overhead. */
-    memset(data, 0xCB, MIN(size, 256));
-    NRT_MemInfo_init(mi, data, size, nrt_internal_custom_safe_dtor,
-                     (void *)dtor, NULL);
-    return mi;
+    return NRT_MemInfo_alloc_common(size, 0, dtor);
 }
 
-/// @brief Wrapper around NRT_MemInfo_alloc_dtor_safe when no
-/// custom destructor is required.
+/// @brief Allocate MemInfo and data without a custom destructor (no alignment
+/// constraints).
 inline NRT_MemInfo *NRT_MemInfo_alloc_safe(size_t size) {
-    return NRT_MemInfo_alloc_dtor_safe(size, NULL);
+    return NRT_MemInfo_alloc_common(size, 0, nullptr);
 }
 
-/* -------------------------------------------------- */
-
-/* ------ MemInfo + Data Allocation CodePath 2 ------ */
-
-/// @brief Destructor for MemInfo (and underlying data) allocated through
-/// the NRT_MemInfo_alloc_safe_aligned function.
-inline void nrt_internal_safe_aligned_dtor(void *ptr, size_t size,
-                                           void *dtor_info) {
-    /* See NRT_MemInfo_alloc_safe() */
-    memset(ptr, 0xDE, MIN(size, 256));  // XXX Get rid of this?
-
-    // Free the underlying data.
-    void *base_data_ptr = dtor_info;
-    NRT_Free(base_data_ptr);
-}
-
-/// @brief Allocate MemInfo and data (aligned as per 'align').
+/// @brief Allocate MemInfo and data without a custom destructor, aligned as per
+/// 'align'.
 inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size,
                                                    unsigned align) {
-    NRT_MemInfo *mi;
-    // nrt_allocate_meminfo_and_data_align will return a data pointer
-    // with some offset (for alignment purposes). However, we need
-    // to retain a pointer to the original buffer since that's
-    // what we'll need to eventually call "free" on.
-    void *base_data_ptr;
-    void *data =
-        nrt_allocate_meminfo_and_data_align(size, align, &mi, &base_data_ptr);
-    /* Only fill up a couple cachelines with debug markers, to minimize
-       overhead. */
-    memset(data, 0xCB, MIN(size, 256));
-    NRT_MemInfo_init(mi, data, size, nrt_internal_safe_aligned_dtor,
-                     base_data_ptr, NULL);
-    return mi;
+    return NRT_MemInfo_alloc_common(size, align, nullptr);
 }
 
-/* -------------------------------------------------- */
-
-}  // extern "C"
+/* ---------------------------------------------------------- */
 
 #endif  // #ifndef BODO_MEMINFO_INCLUDED

@@ -19,16 +19,23 @@ if not os.path.samefile(cwd, setup_py_dir_path):
         "setup.py should only be invoked if the current working directory is in the same directory as Setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules."
     )
 
-# Inject required options for extensions compiled against the Numpy
-# C API (include dirs, library dirs etc.)
-np_compile_args = np_misc.get_info("npymath")
-
 is_win = platform.system() == "Windows"
 is_mac = platform.system() == "Darwin"
 is_m1_mac = is_mac and platform.machine() == "arm64"
 
-development_mode = "develop" in sys.argv
-if development_mode:
+# develop_mode: Compile the code, etc.
+# clean_mode: Delete build files
+# install_mode: Convert bodo/transform to .pyx files and Cythonize
+develop_mode = "develop" in sys.argv
+clean_mode = "clean" in sys.argv
+install_mode = (
+    ("install" in sys.argv) or ("build" in sys.argv) or ("bdist_wheel" in sys.argv)
+)
+
+if [develop_mode, clean_mode, install_mode].count(True) != 1:
+    raise ValueError(f"Please specify a valid mode [develop | clean | install]")
+
+if develop_mode:
     if "--no-ccache" not in sys.argv:
         import shutil
 
@@ -58,7 +65,6 @@ Use --no-ccache to build without ccache.
             exit(1)
     else:
         sys.argv.remove("--no-ccache")
-clean_mode = "clean" in sys.argv
 
 
 def readme():
@@ -95,11 +101,9 @@ else:
     _has_h5py = not is_win
     h5py_version = h5py.version.hdf5_version_tuple[1]
 
+
+# Define include dirs, library dirs, extra compile args, and extra link args
 ind = [PREFIX_DIR + "/include"]
-extra_hash_ind1 = ["bodo/libs/HashLibs/TSL/hopscotch-map"]
-extra_hash_ind2 = ["bodo/libs/HashLibs/TSL/robin-map"]
-extra_hash_ind3 = ["bodo/libs/HashLibs/TSL/sparse-map"]
-extra_hash_ind = extra_hash_ind1 + extra_hash_ind2 + extra_hash_ind3
 lid = [PREFIX_DIR + "/lib"]
 # eca = ["-std=c++20", "-fsanitize=address"]
 # ela = ["-std=c++20", "-fsanitize=address"]
@@ -118,522 +122,276 @@ else:
     eca_c = ["-g0", "-O3"]
     ela = ["-std=c++20"]
 
-if development_mode:
+if develop_mode:
     eca.append("-Werror")
     # avoid GCC errors for using int64 in allocations
     if not (is_m1_mac or is_mac):
         eca.append("-Wno-alloc-size-larger-than")
 
-MPI_LIBS = ["mpi"]
-H5_CPP_FLAGS = []
 
+# Use a single C-extension for all of Bodo
+# Copying ind, lid, eca, and ela to avoid aliasing, as we continue to append
+ext_metadata = dict(
+    name="bodo.ext",
+    sources=[],
+    depends=[],
+    include_dirs=list(ind),
+    define_macros=[],
+    library_dirs=list(lid),
+    libraries=[],
+    extra_compile_args=list(eca),
+    extra_link_args=list(ela),
+    language="c++",
+)
 
+# Add hash includes
+ext_metadata["include_dirs"] += [
+    os.path.join("bodo", "libs", "HashLibs", "TSL", "hopscotch-map"),
+    os.path.join("bodo", "libs", "HashLibs", "TSL", "robin-map"),
+    os.path.join("bodo", "libs", "HashLibs", "TSL", "sparse-map"),
+]
+
+# Add third-party libraries
+mpi_libs = ["mpi"]
 if is_win:
     # use Microsoft MPI on Windows
-    MPI_LIBS = ["msmpi"]
+    mpi_libs = ["msmpi"]
     if os.environ.get("BUILD_PIP", "") == "1":
         # building pip package, need to set additional include and library paths
-        ind.append(os.path.join(os.path.dirname(pyarrow.__file__), "include"))
-        ela.append(f"/LIBPATH:{os.path.join(os.path.dirname(pyarrow.__file__))}")
+        pyarrow_dirname = os.path.dirname(pyarrow.__file__)
+        ext_metadata["include_dirs"].append(os.path.join(pyarrow_dirname, "include"))
+        ext_metadata["extra_link_args"].append(f"/LIBPATH:{pyarrow_dirname}")
     # hdf5-parallel Windows build uses CMake which needs this flag
-    H5_CPP_FLAGS = [("H5_BUILT_AS_DYNAMIC_LIB", None)]
+    ext_metadata["define_macros"].append(("H5_BUILT_AS_DYNAMIC_LIB", None))
 
-hdf5_libs = MPI_LIBS + ["hdf5"]
-io_libs = MPI_LIBS + ["arrow"]
-
-
-ext_io = Extension(
-    name="bodo.libs.hio",
-    sources=[
-        "bodo/io/_io.cpp",
-        "bodo/io/_fs_io.cpp",
-    ],
-    depends=[
-        "bodo/libs/_bodo_common.h",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_distributed.h",
-        "bodo/libs/_import_py.h",
-        "bodo/io/_io.h",
-        "bodo/io/_bodo_file_reader.h",
-        "bodo/io/_fs_io.h",
-    ],
-    libraries=io_libs,
-    include_dirs=ind + np_compile_args["include_dirs"],
-    library_dirs=lid,
-    define_macros=H5_CPP_FLAGS,
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    language="c++",
-)
-
-
-s3_reader_libraries = MPI_LIBS + ["arrow"]
-ext_s3 = Extension(
-    name="bodo.io.s3_reader",
-    sources=["bodo/io/_s3_reader.cpp"],
-    depends=["bodo/io/_bodo_file_reader.h"],
-    libraries=s3_reader_libraries,
-    include_dirs=ind + np_compile_args["include_dirs"],
-    library_dirs=lid,
-    define_macros=[],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    language="c++",
-)
-
-
-fsspec_reader_libraries = MPI_LIBS + ["arrow", "arrow_python"]
-ext_fsspec = Extension(
-    name="bodo.io.fsspec_reader",
-    sources=["bodo/io/_fsspec_reader.cpp"],
-    depends=["bodo/io/_bodo_file_reader.h"],
-    libraries=fsspec_reader_libraries,
-    include_dirs=ind + np_compile_args["include_dirs"],
-    library_dirs=lid,
-    define_macros=[],
-    # We cannot compile with -Werror yet because _fsspec_reader.cpp
-    # depends on pyfs.cpp which generates a warning.
-    extra_compile_args=[x for x in eca if x != "-Werror"],
-    extra_link_args=ela,
-    language="c++",
-)
-
-
-hdfs_reader_libraries = MPI_LIBS + ["arrow"]
-ext_hdfs = Extension(
-    name="bodo.io.hdfs_reader",
-    sources=["bodo/io/_hdfs_reader.cpp"],
-    depends=["bodo/io/_bodo_file_reader.h"],
-    libraries=hdfs_reader_libraries,
-    include_dirs=ind + np_compile_args["include_dirs"],
-    library_dirs=lid,
-    define_macros=[],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    language="c++",
-)
+ext_metadata["libraries"] += mpi_libs + ["hdf5", "arrow", "arrow_python", "parquet"]
 
 # Even though we upgraded to 1.12 which changes the API, these flags keep the
 # 1.10 API. See the example: https://github.com/openmc-dev/openmc/pull/1533
 # This was also verified by looking at the .h files.
 # If we still have version 1.10 these are ignored.
-extra_eca_hdf5 = [
+ext_metadata["extra_compile_args"] += [
     "-DH5Oget_info_by_name_vers=1",
     "-DH5Oget_info_vers=1",
     "-DH5O_info_t_vers=1",
 ]
 
-ext_hdf5 = Extension(
-    name="bodo.io._hdf5",
-    sources=["bodo/io/_hdf5.cpp"],
-    depends=[],
-    libraries=hdf5_libs,
-    include_dirs=ind,
-    library_dirs=lid,
-    define_macros=H5_CPP_FLAGS,
-    extra_compile_args=eca + extra_eca_hdf5,
-    extra_link_args=ela,
-    language="c++",
-)
-
-
 # TODO Windows build fails because ssl.lib not found. Disabling licensing
 # check on windows for now
-dist_macros = []
-dist_includes = []
-dist_sources = []
-dist_libs = []
-if os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1":
-    dist_macros.append(("CHECK_LICENSE_EXPIRED", "1"))
+is_expired = os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1"
+is_core_count = os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1"
+is_platform = os.environ.get("CHECK_LICENSE_PLATFORM", None) == "1"
 
-if os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1":
-    dist_macros.append(("CHECK_LICENSE_CORE_COUNT", "1"))
+if is_expired:
+    ext_metadata["define_macros"].append(("CHECK_LICENSE_EXPIRED", "1"))
 
-if os.environ.get("CHECK_LICENSE_PLATFORM", None) == "1":
-    assert os.environ.get("CHECK_LICENSE_EXPIRED", None) != "1"
-    assert os.environ.get("CHECK_LICENSE_CORE_COUNT", None) != "1"
-    dist_macros.append(("CHECK_LICENSE_PLATFORM", "1"))
-    dist_includes += ["bodo/libs/gason"]
-    dist_sources += ["bodo/libs/gason/gason.cpp"]
-    dist_libs += ["curl"]
+if is_core_count:
+    ext_metadata["define_macros"].append(("CHECK_LICENSE_CORE_COUNT", "1"))
 
-if (
-    os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1"
-    or os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1"
-):
+if is_platform:
+    assert (not is_expired) and (not is_core_count)
+    ext_metadata["define_macros"].append(("CHECK_LICENSE_PLATFORM", "1"))
+    ext_metadata["include_dirs"].append("bodo/libs/gason")
+    ext_metadata["sources"].append("bodo/libs/gason/gason.cpp")
+    ext_metadata["libraries"].append("curl")
+
+if is_expired or is_core_count:
     if is_win:
-        dist_libs += ["libssl", "libcrypto"]
+        ext_metadata["libraries"] += ["libssl", "libcrypto"]
     else:
-        dist_libs += ["ssl", "crypto"]
+        ext_metadata["libraries"] += ["ssl", "crypto"]
+
+# -fno-strict-aliasing required by bloom filter implementation (see comment
+# in simd-block-fixed-fpp.h about violating strict aliasing rules)
+ext_metadata["extra_compile_args"].append("-fno-strict-aliasing")
+
+# Define sources and dependencies
+ext_metadata["sources"] += [
+    "bodo/io/_csv_json_reader.cpp",
+    "bodo/io/_csv_json_writer.cpp",
+    "bodo/io/_fs_io.cpp",
+    "bodo/io/_fsspec_reader.cpp",
+    "bodo/io/_hdf5.cpp",
+    "bodo/io/_hdfs_reader.cpp",
+    "bodo/io/_io.cpp",
+    "bodo/io/_s3_reader.cpp",
+    "bodo/io/arrow.cpp",
+    "bodo/io/arrow_reader.cpp",
+    "bodo/io/iceberg_parquet_reader.cpp",
+    "bodo/io/iceberg_parquet_write.cpp",
+    "bodo/io/parquet_reader.cpp",
+    "bodo/io/parquet_write.cpp",
+    "bodo/io/snowflake_reader.cpp",
+    "bodo/libs/_array.cpp",
+    "bodo/libs/_array_hash.cpp",
+    "bodo/libs/_array_operations.cpp",
+    "bodo/libs/_array_utils.cpp",
+    "bodo/libs/_bodo_common.cpp",
+    "bodo/libs/_bodo_to_arrow.cpp",
+    "bodo/libs/_datetime_ext.cpp",
+    "bodo/libs/_datetime_utils.cpp",
+    "bodo/libs/_decimal_ext.cpp",
+    "bodo/libs/_distributed.cpp",
+    "bodo/libs/_groupby.cpp",
+    "bodo/libs/_groupby_agg_funcs.cpp",
+    "bodo/libs/_groupby_col_set.cpp",
+    "bodo/libs/_groupby_common.cpp",
+    "bodo/libs/_groupby_do_apply_to_column.cpp",
+    "bodo/libs/_groupby_eval.cpp",
+    "bodo/libs/_groupby_ftypes.cpp",
+    "bodo/libs/_groupby_groups.cpp",
+    "bodo/libs/_groupby_mpi_exscan.cpp",
+    "bodo/libs/_groupby_update.cpp",
+    "bodo/libs/_join.cpp",
+    "bodo/libs/_join_hashing.cpp",
+    "bodo/libs/_memory.cpp",
+    "bodo/libs/_murmurhash3.cpp",
+    "bodo/libs/_quantile_alg.cpp",
+    "bodo/libs/_shuffle.cpp",
+    "bodo/libs/_str_ext.cpp",
+    "bodo/libs/iceberg_transforms.cpp",
+]
+ext_metadata["depends"] += [
+    "bodo/io/_bodo_file_reader.h",
+    "bodo/io/_csv_json_reader.h",
+    "bodo/io/_fs_io.h",
+    "bodo/io/_io.h",
+    "bodo/io/arrow_reader.h",
+    "bodo/io/parquet_reader.h",
+    "bodo/io/parquet_write.h",
+    "bodo/libs/_array_hash.h",
+    "bodo/libs/_array_operations.h",
+    "bodo/libs/_array_utils.h",
+    "bodo/libs/_bodo_common.h",
+    "bodo/libs/_bodo_to_arrow.h",
+    "bodo/libs/_datetime_utils.h",
+    "bodo/libs/_decimal_ext.h",
+    "bodo/libs/_distributed.h",
+    "bodo/libs/_groupby.h",
+    "bodo/libs/_groupby_agg_funcs.h",
+    "bodo/libs/_groupby_col_set.h",
+    "bodo/libs/_groupby_common.h",
+    "bodo/libs/_groupby_do_apply_to_column.h",
+    "bodo/libs/_groupby_eval.h",
+    "bodo/libs/_groupby_ftypes.h",
+    "bodo/libs/_groupby_groups.h",
+    "bodo/libs/_groupby_hashing.h",
+    "bodo/libs/_groupby_mpi_exscan.h",
+    "bodo/libs/_groupby_udf.h",
+    "bodo/libs/_groupby_update.h",
+    "bodo/libs/_join.h",
+    "bodo/libs/_join_hashing.h",
+    "bodo/libs/_import_py.h",
+    "bodo/libs/_meminfo.h",
+    "bodo/libs/_memory.h",
+    "bodo/libs/_murmurhash3.h",
+    "bodo/libs/_shuffle.h",
+    "bodo/libs/hyperloglog.hpp",
+    "bodo/libs/iceberg_transforms.h",
+    "bodo/libs/simd-block-fixed.h",
+]
+
+# We cannot compile with -Werror yet because _fsspec_reader.cpp
+# depends on pyfs.cpp which generates a warning.
+ext_metadata["extra_compile_args"] = [
+    x for x in ext_metadata["extra_compile_args"] if x != "-Werror"
+]
+
+# Inject required options for extensions compiled against the Numpy
+# C API (include dirs, library dirs etc.)
+np_compile_args = np_misc.get_info("npymath")
+ext_metadata["libraries"] += np_compile_args["libraries"]
+ext_metadata["include_dirs"] += np_compile_args["include_dirs"]
+ext_metadata["library_dirs"] += np_compile_args["library_dirs"]
+ext_metadata["define_macros"] += np_compile_args["define_macros"]
+
+# Compile Bodo extension
+bodo_ext = Extension(**ext_metadata)
 
 
-ext_hdist = Extension(
-    name="bodo.libs.hdist",
-    sources=["bodo/libs/_distributed.cpp"] + dist_sources,
-    depends=[
-        "bodo/libs/_bodo_common.h",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_bodo_to_arrow.cpp",
-        "bodo/libs/_distributed.h",
-    ],
-    libraries=MPI_LIBS + dist_libs,
-    define_macros=dist_macros,
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    include_dirs=ind + dist_includes,
-    library_dirs=lid,
-)
-
-
-ext_str = Extension(
-    name="bodo.libs.hstr_ext",
-    sources=[
-        "bodo/libs/_str_ext.cpp",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_bodo_to_arrow.cpp",
-        "bodo/libs/_datetime_utils.cpp",
-    ],
-    depends=[
-        "bodo/libs/_bodo_common.h",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_bodo_to_arrow.h",
-        "bodo/libs/_meminfo.h",
-        "bodo/libs/_datetime_utils.h",
-    ],
-    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow", "arrow_python"],
-    define_macros=np_compile_args["define_macros"],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    include_dirs=np_compile_args["include_dirs"] + ind,
-    library_dirs=np_compile_args["library_dirs"] + lid,
-)
-
-
-# TODO: make Arrow optional in decimal extension similar to parquet extension?
-ext_decimal = Extension(
-    name="bodo.libs.decimal_ext",
-    sources=[
-        "bodo/libs/_decimal_ext.cpp",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_bodo_to_arrow.cpp",
-        "bodo/libs/_datetime_utils.cpp",
-    ],
-    depends=[
-        "bodo/libs/_bodo_common.h",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_bodo_to_arrow.cpp",
-    ],
-    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
-    define_macros=np_compile_args["define_macros"],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    include_dirs=np_compile_args["include_dirs"] + ind,
-    library_dirs=np_compile_args["library_dirs"] + lid,
-)
-
-
-ext_arr = Extension(
-    name="bodo.libs.array_ext",
-    sources=[
-        "bodo/libs/_array.cpp",
-        "bodo/libs/_array_hash.cpp",
-        "bodo/libs/_array_operations.cpp",
-        "bodo/libs/_array_utils.cpp",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_bodo_to_arrow.cpp",
-        "bodo/libs/_datetime_utils.cpp",
-        "bodo/libs/_decimal_ext.cpp",
-        "bodo/libs/_groupby.cpp",
-        "bodo/libs/_groupby_agg_funcs.cpp",
-        "bodo/libs/_groupby_col_set.cpp",
-        "bodo/libs/_groupby_common.cpp",
-        "bodo/libs/_groupby_do_apply_to_column.cpp",
-        "bodo/libs/_groupby_eval.cpp",
-        "bodo/libs/_groupby_ftypes.cpp",
-        "bodo/libs/_groupby_groups.cpp",
-        "bodo/libs/_groupby_mpi_exscan.cpp",
-        "bodo/libs/_groupby_update.cpp",
-        "bodo/libs/_join.cpp",
-        "bodo/libs/_join_hashing.cpp",
-        "bodo/libs/_murmurhash3.cpp",
-        "bodo/libs/_shuffle.cpp",
-        "bodo/io/arrow_reader.cpp",
-    ],
-    depends=[
-        "bodo/libs/_array_hash.h",
-        "bodo/libs/_array_utils.h",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_bodo_to_arrow.h",
-        "bodo/libs/_bodo_common.h",
-        "bodo/libs/_datetime_utils.h",
-        "bodo/libs/_decimal_ext.cpp",
-        "bodo/libs/_decimal_ext.h",
-        "bodo/libs/_distributed.h",
-        "bodo/libs/_groupby.h",
-        "bodo/libs/_groupby_agg_funcs.h",
-        "bodo/libs/_groupby_col_set.h",
-        "bodo/libs/_groupby_common.h",
-        "bodo/libs/_groupby_do_apply_to_column.h",
-        "bodo/libs/_groupby_eval.h",
-        "bodo/libs/_groupby_ftypes.h",
-        "bodo/libs/_groupby_groups.h",
-        "bodo/libs/_groupby_hashing.h",
-        "bodo/libs/_groupby_mpi_exscan.h",
-        "bodo/libs/_groupby_udf.h",
-        "bodo/libs/_groupby_update.h",
-        "bodo/libs/_join.h",
-        "bodo/libs/_join_hashing.h",
-        "bodo/libs/_murmurhash3.h",
-        "bodo/libs/hyperloglog.hpp",
-        "bodo/libs/simd-block-fixed.h",
-    ],
-    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow", "arrow_python"],
-    # -fno-strict-aliasing required by bloom filter implementation (see comment
-    # in simd-block-fixed-fpp.h about violating strict aliasing rules)
-    extra_compile_args=eca + ["-fno-strict-aliasing"],
-    extra_link_args=ela,
-    define_macros=np_compile_args["define_macros"],
-    include_dirs=np_compile_args["include_dirs"] + ind + extra_hash_ind,
-    library_dirs=np_compile_args["library_dirs"] + lid,
-)
-
-
-ext_dt = Extension(
-    name="bodo.libs.hdatetime_ext",
-    sources=[
-        "bodo/libs/_datetime_ext.cpp",
-        "bodo/libs/_datetime_utils.cpp",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_bodo_to_arrow.cpp",
-    ],
-    depends=[
-        "bodo/libs/_bodo_common.h",
-        "bodo/libs/_datetime_utils.h",
-    ],
-    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
-    define_macros=np_compile_args["define_macros"],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    include_dirs=np_compile_args["include_dirs"] + ind,
-    library_dirs=np_compile_args["library_dirs"] + lid,
-    language="c++",
-)
-
-
-ext_quantile = Extension(
-    name="bodo.libs.quantile_alg",
-    sources=[
-        "bodo/libs/_quantile_alg.cpp",
-        "bodo/libs/_decimal_ext.cpp",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_array_utils.cpp",
-        "bodo/libs/_bodo_to_arrow.cpp",
-        "bodo/io/arrow_reader.cpp",
-        "bodo/libs/_datetime_utils.cpp",
-    ],
-    depends=[
-        "bodo/libs/_bodo_common.h",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_decimal_ext.cpp",
-        "bodo/libs/_decimal_ext.h",
-    ],
-    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    include_dirs=np_compile_args["include_dirs"] + ind + extra_hash_ind,
-    library_dirs=np_compile_args["library_dirs"] + lid,
-)
-
-
-# pq_libs = MPI_LIBS + ['arrow', 'parquet']
-pq_libs = MPI_LIBS.copy()
-
-csv_libs = pq_libs + ["arrow"]
-pq_libs += ["arrow", "parquet"]
-
-ext_csv = Extension(
-    name="bodo.io.csv_cpp",
-    sources=[
-        "bodo/io/_io.cpp",
-        "bodo/io/_fs_io.cpp",
-        "bodo/io/_csv_json_reader.cpp",
-        "bodo/io/_csv_json_writer.cpp",
-    ],
-    depends=[
-        "bodo/libs/_bodo_common.h",
-        "bodo/libs/_distributed.h",
-        "bodo/libs/_import_py.h",
-        "bodo/io/_io.h",
-        "bodo/io/_fs_io.h",
-        "bodo/io/_csv_json_reader.h",
-        "bodo/io/_bodo_file_reader.h",
-    ],
-    libraries=csv_libs,
-    include_dirs=["."] + ind,
-    define_macros=[],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    library_dirs=lid,
-)
-
-ext_json = Extension(
-    name="bodo.io.json_cpp",
-    sources=[
-        "bodo/io/_io.cpp",
-        "bodo/io/_fs_io.cpp",
-        "bodo/io/_csv_json_reader.cpp",
-        "bodo/io/_csv_json_writer.cpp",
-    ],
-    depends=[
-        "bodo/libs/_bodo_common.h",
-        "bodo/libs/_distributed.h",
-        "bodo/libs/_import_py.h",
-        "bodo/io/_fs_io.h",
-        "bodo/io/_csv_json_reader.h",
-        "bodo/io/_bodo_file_reader.h",
-    ],
-    libraries=csv_libs,
-    include_dirs=["."] + ind,
-    define_macros=[],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    library_dirs=lid,
-)
-
-ext_parquet = Extension(
-    name="bodo.io.arrow_cpp",
-    sources=[
-        "bodo/io/_fs_io.cpp",
-        "bodo/io/arrow.cpp",
-        "bodo/io/arrow_reader.cpp",
-        "bodo/io/parquet_reader.cpp",
-        "bodo/io/iceberg_parquet_reader.cpp",
-        "bodo/io/snowflake_reader.cpp",
-        "bodo/io/parquet_write.cpp",
-        "bodo/io/iceberg_parquet_write.cpp",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_bodo_to_arrow.cpp",
-        "bodo/libs/_decimal_ext.cpp",
-        "bodo/libs/_array_utils.cpp",
-        "bodo/libs/_array_hash.cpp",
-        "bodo/libs/_murmurhash3.cpp",
-        "bodo/io/_fsspec_reader.cpp",
-        "bodo/io/_hdfs_reader.cpp",
-        "bodo/io/_s3_reader.cpp",
-        "bodo/libs/iceberg_transforms.cpp",
-        "bodo/libs/_array_operations.cpp",
-        "bodo/libs/_datetime_utils.cpp",
-        "bodo/libs/_shuffle.cpp",
-    ],
-    depends=[
-        "bodo/libs/_bodo_common.h",
-        "bodo/libs/_bodo_common.cpp",
-        "bodo/libs/_bodo_to_arrow.h",
-        "bodo/libs/_bodo_to_arrow.cpp",
-        "bodo/libs/_array_hash.h",
-        "bodo/libs/_decimal_ext.h",
-        "bodo/io/_fs_io.h",
-        "bodo/io/arrow_reader.h",
-        "bodo/io/parquet_reader.h",
-        "bodo/io/parquet_write.h",
-        "bodo/libs/_murmurhash3.h",
-        "bodo/libs/iceberg_transforms.h",
-        "bodo/libs/_array_operations.h",
-        "bodo/libs/_datetime_utils.h",
-        "bodo/libs/_shuffle.h",
-    ],
-    libraries=pq_libs + np_compile_args["libraries"] + ["arrow", "arrow_python"],
-    include_dirs=["."] + np_compile_args["include_dirs"] + ind + extra_hash_ind,
-    define_macros=[],
-    # We cannot compile with -Werror yet because _fsspec_reader.cpp
-    # depends on pyfs.cpp which generates a warning.
-    extra_compile_args=[x for x in eca if x != "-Werror"],
-    extra_link_args=ela,
-    library_dirs=np_compile_args["library_dirs"] + lid,
-)
-
-# Cython files that are part of the code base that aren't just renamed .py
-# files during build
+# Build extensions for Cython files that are part of the code base, and aren't
+# just renamed .py files during build
+# These .pyx files are always part of Bodo (not generated during build)
+builtin_exts = []
 pyx_builtins = []
 
 ext_pyfs = Extension(
     name="bodo.io.pyfs",
-    sources=[
-        "bodo/io/pyfs.pyx",
-    ],
+    sources=["bodo/io/pyfs.pyx"],
     include_dirs=np_compile_args["include_dirs"] + ind,
     define_macros=[],
+    library_dirs=lid,
     # We cannot compile with -Werror yet because pyfs.cpp
     # generates serveral warnings.
     extra_compile_args=[x for x in eca if x != "-Werror"],
     extra_link_args=ela,
-    library_dirs=lid,
 )
-# the bodo/io/pyfs.pyx file is always part of Bodo (not generated during build)
-pyx_builtins += [os.path.join("bodo", "io", "pyfs.pyx")]
-
+builtin_exts.append(ext_pyfs)
+pyx_builtins.append(os.path.join("bodo", "io", "pyfs.pyx"))
 
 ext_hdfs_pyarrow = Extension(
     name="bodo.io._hdfs",
-    sources=[
-        "bodo/io/_hdfs.pyx",
-    ],
-    libraries=["arrow", "arrow_python"],
+    sources=["bodo/io/_hdfs.pyx"],
     include_dirs=np_compile_args["include_dirs"] + ind,
     define_macros=[],
+    library_dirs=lid,
+    libraries=["arrow", "arrow_python"],
     # We cannot compile with -Werror yet because hdfs.cpp
     # generates serveral warnings.
     extra_compile_args=[x for x in eca if x != "-Werror"],
     extra_link_args=ela,
-    library_dirs=lid,
     language="c++",
 )
-# the bodo/io/_hdfs.pyx file is always part of Bodo (not generated during build)
-pyx_builtins += [os.path.join("bodo", "io", "_hdfs.pyx")]
-
+builtin_exts.append(ext_hdfs_pyarrow)
+pyx_builtins.append(os.path.join("bodo", "io", "_hdfs.pyx"))
 
 ext_tracing = Extension(
     name="bodo.utils.tracing",
-    sources=[
-        "bodo/utils/tracing.pyx",
-    ],
+    sources=["bodo/utils/tracing.pyx"],
     include_dirs=ind,
-    libraries=MPI_LIBS,
     define_macros=[],
+    library_dirs=lid,
+    libraries=mpi_libs,
     extra_compile_args=eca_c,
     extra_link_args=ela,
-    library_dirs=lid,
 )
-pyx_builtins += [os.path.join("bodo", "utils", "tracing.pyx")]
+builtin_exts.append(ext_tracing)
+pyx_builtins.append(os.path.join("bodo", "utils", "tracing.pyx"))
+
+ext_memory = Extension(
+    name="bodo.libs.memory",
+    sources=["bodo/libs/memory.pyx", "bodo/libs/_memory.cpp"],
+    include_dirs=np_compile_args["include_dirs"] + ind,
+    define_macros=[],
+    library_dirs=lid,
+    libraries=["arrow", "arrow_python"] + mpi_libs,
+    # Cannot compile with -Werror yet because memory.cpp
+    # generated multiple unused variable warnings
+    extra_compile_args=[x for x in eca if x != "-Werror"],
+    extra_link_args=ela,
+    language="c++",
+)
+builtin_exts.append(ext_memory)
+pyx_builtins.append(os.path.join("bodo", "libs", "memory.pyx"))
 
 
-_ext_mods = [
-    ext_hdist,
-    ext_str,
-    ext_decimal,
-    ext_quantile,
-    ext_dt,
-    ext_io,
-    ext_arr,
-    ext_s3,
-    ext_fsspec,
-    ext_hdfs,
-]
-
-
+# Handle additional .pyx files not in pyx_builtins
 if clean_mode:
-    assert not development_mode
     _cython_ext_mods = [
         f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f not in pyx_builtins
     ]
-elif development_mode:
+elif develop_mode:
     _cython_ext_mods = []
     # make sure there are no .pyx files in development mode
     pyxs = [
         f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f not in pyx_builtins
     ]
-    assert len(pyxs) == 0
-else:
+    assert len(pyxs) == 0, (
+        "Found .pyx files in development mode. Please clear all of the "
+        "generated files in bodo/transforms and manually restore any deleted "
+        "Python files from Git."
+    )
+elif install_mode:
     import subprocess
 
     # rename select files to .pyx for cythonizing
@@ -641,13 +399,6 @@ else:
     _cython_ext_mods = [
         f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f not in pyx_builtins
     ]
-
-
-if _has_h5py:
-    _ext_mods.append(ext_hdf5)
-_ext_mods.append(ext_parquet)
-_ext_mods.append(ext_csv)
-_ext_mods.append(ext_json)
 
 
 setup(
@@ -687,22 +438,26 @@ setup(
     # in `install_requires` after building, so we set it to empty (we don't want to
     # install mpi4py_mpich in development mode, and it will also break CI)
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
-    install_requires=[]
-    if development_mode
-    else [
-        "numba==0.56.4",
-        "pyarrow==9.0.0",
-        "pandas>=1.3.*,<1.5",
-        "numpy>=1.18,<1.24",
-        "fsspec>=2021.09",
-        "mpi4py_mpich==3.1.2",
-    ],
+    install_requires=(
+        []
+        if develop_mode
+        else [
+            "numba==0.56.4",
+            "pyarrow==9.0.0",
+            "pandas>=1.3,<1.5",
+            "numpy>=1.18,<1.24",
+            "fsspec>=2021.09",
+            "mpi4py_mpich==3.1.2",
+        ]
+    ),
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},
     cmdclass=versioneer.get_cmdclass(),
-    ext_modules=_ext_mods
-    + cythonize(
-        _cython_ext_mods + [ext_pyfs, ext_hdfs_pyarrow, ext_tracing],
-        compiler_directives={"language_level": "3"},
-        compile_time_env=dict(BODO_DEV_BUILD=development_mode),
+    ext_modules=(
+        [bodo_ext]
+        + cythonize(
+            _cython_ext_mods + builtin_exts,
+            compiler_directives={"language_level": "3"},
+            compile_time_env=dict(BODO_DEV_BUILD=develop_mode),
+        )
     ),
 )

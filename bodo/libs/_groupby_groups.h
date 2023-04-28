@@ -27,7 +27,7 @@
  * @param[in] key_dropna whether to allow NA values in group keys or not.
  * @param[in] is_parallel: true if data is distributed
  */
-void get_group_info(std::vector<table_info*>& tables,
+void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
                     std::shared_ptr<uint32_t[]>& hashes, size_t nunique_hashes,
                     std::vector<grouping_info>& grp_infos,
                     bool check_for_null_keys, bool key_dropna,
@@ -49,7 +49,7 @@ void get_group_info(std::vector<table_info*>& tables,
  * @param[in] key_dropna whether to allow NA values in group keys or not.
  * @param[in] is_parallel: true if data is distributed
  */
-void get_group_info_iterate(std::vector<table_info*>& tables,
+void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
                             std::shared_ptr<uint32_t[]>& hashes,
                             size_t nunique_hashes,
                             std::vector<grouping_info>& grp_infos,
@@ -67,8 +67,13 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
  * @param is_parallel: true if data is distributed
  * @return int64_t total number of groups
  */
-int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
-                           int64_t* sort_idx, bool key_dropna,
-                           bool is_parallel);
+int64_t get_groupby_labels(std::shared_ptr<table_info> table,
+                           int64_t* out_labels, int64_t* sort_idx,
+                           bool key_dropna, bool is_parallel);
+
+// Python entry point for get_groupby_labels
+int64_t get_groupby_labels_py_entry(table_info* table, int64_t* out_labels,
+                                    int64_t* sort_idx, bool key_dropna,
+                                    bool is_parallel);
 
 #endif  // _GROUPBY_GROUPS_H_INCLUDED

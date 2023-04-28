@@ -22,12 +22,10 @@
 #include "_join.h"
 #include "_shuffle.h"
 
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
-
 array_info* struct_array_to_info(int64_t n_fields, array_info** inner_arrays,
                                  char** field_names, NRT_MemInfo* null_bitmap) {
-    std::vector<array_info*> inner_arrs_vec(inner_arrays,
-                                            inner_arrays + n_fields);
+    std::vector<std::shared_ptr<array_info>> inner_arrs_vec(
+        inner_arrays, inner_arrays + n_fields);
     std::vector<std::string> field_names_vec(field_names,
                                              field_names + n_fields);
     // get length from an inner array
@@ -35,9 +33,16 @@ array_info* struct_array_to_info(int64_t n_fields, array_info** inner_arrays,
     if (inner_arrs_vec.size() > 0) {
         n_items = inner_arrs_vec[0]->length;
     }
+
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)null_bitmap->data, n_bytes, null_bitmap);
+
+    // Python is responsible for deleting pointer
     return new array_info(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT, n_items,
-                          {null_bitmap}, inner_arrs_vec, 0, 0, 0, false, false,
-                          false, 0, field_names_vec);
+                          {null_bitmap_buff}, inner_arrs_vec, 0, 0, 0, false,
+                          false, false, 0, field_names_vec);
 }
 
 array_info* array_item_array_to_info(uint64_t n_items, array_info* inner_array,
@@ -50,8 +55,18 @@ array_info* array_item_array_to_info(uint64_t n_items, array_info* inner_array,
         array_type = bodo_array_type::LIST_STRING;
         dtype = Bodo_CTypes::LIST_STRING;
     }
-    return new array_info(array_type, dtype, n_items, {offsets, null_bitmap},
-                          {inner_array});
+
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> offsets_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)offsets->data, (n_items + 1) * sizeof(offset_t), offsets);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)null_bitmap->data, n_bytes, null_bitmap);
+
+    // Python is responsible for deleting pointer
+    return new array_info(array_type, dtype, n_items,
+                          {offsets_buff, null_bitmap_buff},
+                          {std::shared_ptr<array_info>(inner_array)});
 }
 
 array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
@@ -62,8 +77,20 @@ array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
     if (is_bytes) {
         dtype = Bodo_CTypes::BINARY;
     }
+
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    int64_t n_chars = ((offset_t*)offsets->data)[n_items];
+    std::shared_ptr<BodoBuffer> data_buff =
+        std::make_shared<BodoBuffer>((uint8_t*)data->data, n_chars, data);
+    std::shared_ptr<BodoBuffer> offsets_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)offsets->data, (n_items + 1) * sizeof(offset_t), offsets);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)null_bitmap->data, n_bytes, null_bitmap);
+
+    // Python is responsible for deleting
     return new array_info(bodo_array_type::STRING, dtype, n_items,
-                          {data, offsets, null_bitmap});
+                          {data_buff, offsets_buff, null_bitmap_buff});
 }
 
 array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
@@ -71,28 +98,22 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                                    int32_t has_deduped_local_dictionary) {
     // For now has_sorted_dictionary is only available and exposed in the C++
     // struct, so we set it to false
+
+    // Python is responsible for deleting
     return new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
-                          indices_arr->length, {}, {str_arr, indices_arr}, 0, 0,
-                          0, bool(has_global_dictionary),
+                          indices_arr->length, {},
+                          {std::shared_ptr<array_info>(str_arr),
+                           std::shared_ptr<array_info>(indices_arr)},
+                          0, 0, 0, bool(has_global_dictionary),
                           bool(has_deduped_local_dictionary), false);
 }
 
-array_info* get_nested_info(array_info* dict_arr, int32_t info_no) {
-    if (info_no == 1) {
-        return dict_arr->child_arrays[0];
-    } else if (info_no == 2) {
-        return dict_arr->child_arrays[1];
-    } else {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "get_nested_info: invalid info_no");
-        return NULL;
-    }
-}
-
+// Raw pointer since called from Python
 int32_t get_has_global_dictionary(array_info* dict_arr) {
     return int32_t(dict_arr->has_global_dictionary);
 }
 
+// Raw pointer since called from Python
 int32_t get_has_deduped_local_dictionary(array_info* dict_arr) {
     return int32_t(dict_arr->has_deduped_local_dictionary);
 }
@@ -104,29 +125,44 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // an offset of 16 bytes for int64 arrays (and n_items=2).
     // We use pointer arithmetic to get the offset since not explicitly stored
     // in Numpy struct.
+
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+
+    // Python is responsible for deleting
     return new array_info(bodo_array_type::NUMPY,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, {meminfo},
-                          {}, 0, 0, 0, false, false, false,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
+                          {data_buff}, {}, 0, 0, 0, false, false, false,
                           /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* categorical_array_to_info(uint64_t n_items, char* data,
                                       int typ_enum, int64_t num_categories,
                                       NRT_MemInfo* meminfo) {
-    return new array_info(bodo_array_type::CATEGORICAL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, {meminfo},
-                          {}, 0, 0, num_categories, false, false, false,
-                          /*offset*/ data - (char*)meminfo->data);
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+    // Python is responsible for deleting
+    return new array_info(
+        bodo_array_type::CATEGORICAL, (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
+        {data_buff}, {}, 0, 0, num_categories, false, false, false,
+        /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                    char* null_bitmap, NRT_MemInfo* meminfo,
                                    NRT_MemInfo* meminfo_bitmask) {
-    // TODO: better memory management of struct, meminfo refcount?
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+
+    // Python is responsible for deleting
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
-                          {meminfo, meminfo_bitmask}, {}, 0, 0, 0, false, false,
-                          false, /*offset*/ data - (char*)meminfo->data);
+                          {data_buff, null_bitmap_buff}, {}, 0, 0, 0, false,
+                          false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* interval_array_to_info(uint64_t n_items, char* left_data,
@@ -138,18 +174,33 @@ array_info* interval_array_to_info(uint64_t n_items, char* left_data,
         throw std::runtime_error(
             "interval_array_to_info: offsets not supported for interval array");
     }
+    std::shared_ptr<BodoBuffer> left_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)left_meminfo->data, n_items * numpy_item_size[typ_enum],
+        left_meminfo);
+    std::shared_ptr<BodoBuffer> right_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)right_meminfo->data, n_items * numpy_item_size[typ_enum],
+        right_meminfo);
+    // Python is responsible for deleting
     return new array_info(bodo_array_type::INTERVAL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
-                          {left_meminfo, right_meminfo});
+                          {left_buff, right_buff});
 }
 
 array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   char* null_bitmap, NRT_MemInfo* meminfo,
                                   NRT_MemInfo* meminfo_bitmask,
                                   int32_t precision, int32_t scale) {
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+
+    // Python is responsible for deleting
     return new array_info(
         bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
-        n_items, {meminfo, meminfo_bitmask}, {}, precision, scale, 0, false,
+        n_items, {data_buff, null_bitmap_buff}, {}, precision, scale, 0, false,
         false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
@@ -157,10 +208,18 @@ array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                char* null_bitmap, NRT_MemInfo* meminfo,
                                NRT_MemInfo* meminfo_bitmask,
                                int32_t precision) {
+    // wrap meminfo in BodoBuffer (increfs meminfo also)
+    std::shared_ptr<BodoBuffer> data_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo->data, n_items * numpy_item_size[typ_enum], meminfo);
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n_items);
+    std::shared_ptr<BodoBuffer> null_bitmap_buff = std::make_shared<BodoBuffer>(
+        (uint8_t*)meminfo_bitmask->data, n_bytes, meminfo_bitmask);
+
+    // Python is responsible for deleting
     return new array_info(
         bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
-        n_items, {meminfo, meminfo_bitmask}, {}, precision, 0, 0, false, false,
-        false, /*offset*/ data - (char*)meminfo->data);
+        n_items, {data_buff, null_bitmap_buff}, {}, precision, 0, 0, false,
+        false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* info_to_array_item_array(array_info* info, int64_t* length,
@@ -176,45 +235,68 @@ array_info* info_to_array_item_array(array_info* info, int64_t* length,
     }
     *length = info->length;
 
-    // create Numpy arrays for char/offset/null_bitmap buffers as expected by
+    // create Numpy arrays for offset/null_bitmap buffers as expected by
     // Python data model
-    incref_meminfo(info->meminfos[0]);
+    NRT_MemInfo* offsets_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(offsets_meminfo);
     int64_t n_offsets = info->length + 1;
     int64_t offset_itemsize = numpy_item_size[Bodo_CType_offset];
     *offsets_arr = make_numpy_array_payload(
-        info->meminfos[0], NULL, n_offsets, offset_itemsize,
-        (char*)info->meminfos[0]->data, n_offsets, offset_itemsize);
+        offsets_meminfo, NULL, n_offsets, offset_itemsize,
+        (char*)offsets_meminfo->data, n_offsets, offset_itemsize);
 
-    incref_meminfo(info->meminfos[1]);
+    NRT_MemInfo* nulls_meminfo = info->buffers[1]->getMeminfo();
+    incref_meminfo(nulls_meminfo);
     int64_t n_null_bytes = (info->length + 7) >> 3;
     int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
     *null_bitmap_arr = make_numpy_array_payload(
-        info->meminfos[1], NULL, n_null_bytes, null_itemsize,
-        (char*)info->meminfos[1]->data, n_null_bytes, null_itemsize);
+        nulls_meminfo, NULL, n_null_bytes, null_itemsize,
+        (char*)nulls_meminfo->data, n_null_bytes, null_itemsize);
 
-    return info->child_arrays[0];
+    // Passing raw pointer to Python without giving ownership.
+    // info_to_array() uses it to convert the child array recursively,
+    // so the parent array shared_ptr stays alive in the process and
+    // therefore the pointer stays valid.
+    return info->child_arrays[0].get();
 }
 
-array_info** info_to_struct_array(array_info* info,
-                                  numpy_arr_payload* null_bitmap_arr) {
+void info_to_struct_array(array_info* info,
+                          numpy_arr_payload* null_bitmap_arr) {
     if (info->arr_type != bodo_array_type::STRUCT) {
         PyErr_SetString(
             PyExc_RuntimeError,
             "_array.cpp::info_to_struct_array: info_to_struct_array "
             "requires struct array input.");
-        return nullptr;
+        return;
     }
 
     // create Numpy array for null_bitmap buffer as expected by
     // Python data model
-    incref_meminfo(info->meminfos[0]);
+    NRT_MemInfo* nulls_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(nulls_meminfo);
     int64_t n_null_bytes = (info->length + 7) >> 3;
     int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
     *null_bitmap_arr = make_numpy_array_payload(
-        info->meminfos[0], NULL, n_null_bytes, null_itemsize,
-        (char*)info->meminfos[0]->data, n_null_bytes, null_itemsize);
+        nulls_meminfo, NULL, n_null_bytes, null_itemsize,
+        (char*)nulls_meminfo->data, n_null_bytes, null_itemsize);
+}
 
-    return info->child_arrays.data();
+/**
+ * @brief return array_info* for child array
+ * Using raw pointers since called from Python
+ *
+ * @param in_info input array (must be nested)
+ * @param i index of child array
+ * @return array_info* child array
+ */
+array_info* get_child_info(array_info* in_info, int64_t i) {
+    if (in_info->child_arrays.size() <= (size_t)i) {
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            "_array.cpp::get_child_info: invalid child array index ");
+        return nullptr;
+    }
+    return in_info->child_arrays[i].get();
 }
 
 void info_to_string_array(array_info* info, int64_t* length,
@@ -231,26 +313,29 @@ void info_to_string_array(array_info* info, int64_t* length,
 
     // create Numpy arrays for char/offset/null_bitmap buffers as expected by
     // Python data model
-    incref_meminfo(info->meminfos[0]);
+    NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(data_meminfo);
     int64_t n_chars = info->n_sub_elems();
     int64_t char_itemsize = numpy_item_size[Bodo_CTypes::INT8];
     *data_arr = make_numpy_array_payload(
-        info->meminfos[0], NULL, n_chars, char_itemsize,
-        (char*)info->meminfos[0]->data, n_chars, char_itemsize);
+        data_meminfo, NULL, n_chars, char_itemsize, (char*)data_meminfo->data,
+        n_chars, char_itemsize);
 
-    incref_meminfo(info->meminfos[1]);
+    NRT_MemInfo* offsets_meminfo = info->buffers[1]->getMeminfo();
+    incref_meminfo(offsets_meminfo);
     int64_t n_offsets = info->length + 1;
     int64_t offset_itemsize = numpy_item_size[Bodo_CType_offset];
     *offsets_arr = make_numpy_array_payload(
-        info->meminfos[1], NULL, n_offsets, offset_itemsize,
-        (char*)info->meminfos[1]->data, n_offsets, offset_itemsize);
+        offsets_meminfo, NULL, n_offsets, offset_itemsize,
+        (char*)offsets_meminfo->data, n_offsets, offset_itemsize);
 
-    incref_meminfo(info->meminfos[2]);
+    NRT_MemInfo* nulls_meminfo = info->buffers[2]->getMeminfo();
+    incref_meminfo(nulls_meminfo);
     int64_t n_null_bytes = (info->length + 7) >> 3;
     int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
     *null_bitmap_arr = make_numpy_array_payload(
-        info->meminfos[2], NULL, n_null_bytes, null_itemsize,
-        (char*)info->meminfos[2]->data, n_null_bytes, null_itemsize);
+        nulls_meminfo, NULL, n_null_bytes, null_itemsize,
+        (char*)nulls_meminfo->data, n_null_bytes, null_itemsize);
 }
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
@@ -269,8 +354,9 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
 
     *n_items = info->length;
     *data = info->data1();
-    incref_meminfo(info->meminfos[0]);
-    *meminfo = info->meminfos[0];
+    NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(data_meminfo);
+    *meminfo = data_meminfo;
 }
 
 void info_to_nullable_array(array_info* info, uint64_t* n_items,
@@ -288,10 +374,12 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
     *data = info->data1();
     *null_bitmap = info->null_bitmask();
     // give Python a reference
-    incref_meminfo(info->meminfos[0]);
-    *meminfo = info->meminfos[0];
-    incref_meminfo(info->meminfos[1]);
-    *meminfo_bitmask = info->meminfos[1];
+    NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(data_meminfo);
+    *meminfo = data_meminfo;
+    NRT_MemInfo* nulls_meminfo = info->buffers[1]->getMeminfo();
+    incref_meminfo(nulls_meminfo);
+    *meminfo_bitmask = nulls_meminfo;
 }
 
 void info_to_interval_array(array_info* info, uint64_t* n_items,
@@ -307,19 +395,23 @@ void info_to_interval_array(array_info* info, uint64_t* n_items,
     *n_items = info->length;
     *left_data = info->data1();
     *right_data = info->data2();
-    incref_meminfo(info->meminfos[0]);
-    *left_meminfo = info->meminfos[0];
-    incref_meminfo(info->meminfos[1]);
-    *right_meminfo = info->meminfos[1];
+    NRT_MemInfo* l_meminfo = info->buffers[0]->getMeminfo();
+    incref_meminfo(l_meminfo);
+    *left_meminfo = l_meminfo;
+    NRT_MemInfo* r_meminfo = info->buffers[1]->getMeminfo();
+    incref_meminfo(r_meminfo);
+    *right_meminfo = r_meminfo;
 }
 
+// returns raw pointer since called from Python
 table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs) {
-    std::vector<array_info*> columns(arrs, arrs + n_arrs);
+    std::vector<std::shared_ptr<array_info>> columns(arrs, arrs + n_arrs);
     return new table_info(columns);
 }
 
+// Raw pointers since called from Python
 array_info* info_from_table(table_info* table, int64_t col_ind) {
-    return table->columns[col_ind];
+    return new array_info(*table->columns[col_ind]);
 }
 
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs)                              \
@@ -334,9 +426,9 @@ array_info* info_from_table(table_info* table, int64_t col_ind) {
  * @brief create a Bodo string array from a PyArrow string array
  *
  * @param obj PyArrow string array
- * @return array_info* Bodo string array
+ * @return std::shared_ptr<array_info> Bodo string array
  */
-array_info* string_array_from_pyarrow(PyObject* pyarrow_arr) {
+std::shared_ptr<array_info> string_array_from_pyarrow(PyObject* pyarrow_arr) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -391,11 +483,10 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
     *length = n;
     if (n == 0) {
         // empty sequence, this is not an error, need to set size
-        array_info* out_arr = alloc_array(0, 0, -1, bodo_array_type::STRING,
-                                          Bodo_CTypes::STRING, 0, 0);
-        info_to_string_array(out_arr, length, data_arr, offsets_arr,
+        std::shared_ptr<array_info> out_arr = alloc_array(
+            0, 0, -1, bodo_array_type::STRING, Bodo_CTypes::STRING, 0, 0);
+        info_to_string_array(out_arr.get(), length, data_arr, offsets_arr,
                              null_bitmap_arr);
-        delete_info_decref_array(out_arr);
         return;
     }
 
@@ -433,10 +524,10 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
             PyObject_CallMethod(pyarrow_arr, "cast", "s", "large_string");
         CHECK(pyarrow_arr_large_str, "array.cast(\"large_string\") failed");
 
-        array_info* arr = string_array_from_pyarrow(pyarrow_arr_large_str);
-        info_to_string_array(arr, length, data_arr, offsets_arr,
+        std::shared_ptr<array_info> arr =
+            string_array_from_pyarrow(pyarrow_arr_large_str);
+        info_to_string_array(arr.get(), length, data_arr, offsets_arr,
                              null_bitmap_arr);
-        delete_info_decref_array(arr);
         Py_DECREF(pyarrow_chunked_arr);
         Py_DECREF(pyarrow_arr);
         Py_DECREF(pyarrow_arr_large_str);
@@ -568,18 +659,6 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
     } else if (dtype == Bodo_CTypes::_BOOL) {
         bool* ptr = (bool*)data;
         ptr[ind] = (item == Py_True);
-    } else if (dtype == Bodo_CTypes::DATE) {
-        int64_t* ptr = (int64_t*)data;
-        PyObject* year_obj = PyObject_GetAttrString(item, "year");
-        PyObject* month_obj = PyObject_GetAttrString(item, "month");
-        PyObject* day_obj = PyObject_GetAttrString(item, "day");
-        int64_t year = PyLong_AsLongLong(year_obj);
-        int64_t month = PyLong_AsLongLong(month_obj);
-        int64_t day = PyLong_AsLongLong(day_obj);
-        ptr[ind] = (year << 32) + (month << 16) + day;
-        Py_DECREF(year_obj);
-        Py_DECREF(month_obj);
-        Py_DECREF(day_obj);
     } else
         std::cerr << "data type " << dtype
                   << " not supported for unboxing array(item) array."
@@ -671,13 +750,6 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
     } else if (dtype == Bodo_CTypes::_BOOL) {
         bool* ptr = (bool*)data;
         return PyBool_FromLong((long)(ptr[ind]));
-    } else if (dtype == Bodo_CTypes::DATE) {
-        int64_t* ptr = (int64_t*)data;
-        int64_t val = ptr[ind];
-        int year = val >> 32;
-        int month = (val >> 16) & 0xFFFF;
-        int day = val & 0xFFFF;
-        return PyDate_FromDate(year, month, day);
     } else
         std::cerr << "data type " << dtype
                   << " not supported for boxing array(item) array."
@@ -1329,10 +1401,7 @@ char* array_info_getdata1(array_info* arr) { return arr->data1(); }
 
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "array_ext", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
+    MOD_DEF(m, "array_ext", "No docs", NULL);
     if (m == NULL)
         return NULL;
 
@@ -1344,282 +1413,126 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
 
     bodo_common_init();
 
-    // initialize decimal_mpi_type
-    // TODO: free when program exits
-    if (decimal_mpi_type == MPI_DATATYPE_NULL) {
-        MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
-        MPI_Type_commit(&decimal_mpi_type);
-    }
-
     // DEC_MOD_METHOD(string_array_to_info);
-    PyObject_SetAttrString(
-        m, "array_item_array_to_info",
-        PyLong_FromVoidPtr((void*)(&array_item_array_to_info)));
-    PyObject_SetAttrString(m, "struct_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&struct_array_to_info)));
+    SetAttrStringFromVoidPtr(m, array_item_array_to_info);
+    SetAttrStringFromVoidPtr(m, struct_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "string_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&string_array_to_info)));
+    SetAttrStringFromVoidPtr(m, string_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "dict_str_array_to_info",
-        PyLong_FromVoidPtr((void*)(&dict_str_array_to_info)));
-    PyObject_SetAttrString(m, "get_nested_info",
-                           PyLong_FromVoidPtr((void*)(&get_nested_info)));
-    PyObject_SetAttrString(
-        m, "get_has_global_dictionary",
-        PyLong_FromVoidPtr((void*)(&get_has_global_dictionary)));
-    PyObject_SetAttrString(
-        m, "get_has_deduped_local_dictionary",
-        PyLong_FromVoidPtr((void*)(&get_has_deduped_local_dictionary)));
+    SetAttrStringFromVoidPtr(m, dict_str_array_to_info);
+    SetAttrStringFromVoidPtr(m, get_has_global_dictionary);
+    SetAttrStringFromVoidPtr(m, get_has_deduped_local_dictionary);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "numpy_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
+    SetAttrStringFromVoidPtr(m, numpy_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "categorical_array_to_info",
-        PyLong_FromVoidPtr((void*)(&categorical_array_to_info)));
+    SetAttrStringFromVoidPtr(m, categorical_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "nullable_array_to_info",
-        PyLong_FromVoidPtr((void*)(&nullable_array_to_info)));
-    PyObject_SetAttrString(
-        m, "interval_array_to_info",
-        PyLong_FromVoidPtr((void*)(&interval_array_to_info)));
+    SetAttrStringFromVoidPtr(m, nullable_array_to_info);
+    SetAttrStringFromVoidPtr(m, interval_array_to_info);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "decimal_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&decimal_array_to_info)));
-    PyObject_SetAttrString(m, "time_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&time_array_to_info)));
-    PyObject_SetAttrString(m, "info_to_string_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_string_array)));
-    PyObject_SetAttrString(
-        m, "info_to_array_item_array",
-        PyLong_FromVoidPtr((void*)(&info_to_array_item_array)));
-    PyObject_SetAttrString(m, "info_to_struct_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_struct_array)));
-    PyObject_SetAttrString(m, "info_to_numpy_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_numpy_array)));
-    PyObject_SetAttrString(
-        m, "info_to_nullable_array",
-        PyLong_FromVoidPtr((void*)(&info_to_nullable_array)));
-    PyObject_SetAttrString(
-        m, "info_to_interval_array",
-        PyLong_FromVoidPtr((void*)(&info_to_interval_array)));
-    PyObject_SetAttrString(m, "alloc_numpy",
-                           PyLong_FromVoidPtr((void*)(&alloc_numpy)));
-    PyObject_SetAttrString(m, "alloc_string_array",
-                           PyLong_FromVoidPtr((void*)(&alloc_string_array)));
-    PyObject_SetAttrString(
-        m, "arr_info_list_to_table",
-        PyLong_FromVoidPtr((void*)(&arr_info_list_to_table)));
+    SetAttrStringFromVoidPtr(m, decimal_array_to_info);
+    SetAttrStringFromVoidPtr(m, time_array_to_info);
+    SetAttrStringFromVoidPtr(m, info_to_string_array);
+    SetAttrStringFromVoidPtr(m, info_to_array_item_array);
+    SetAttrStringFromVoidPtr(m, info_to_struct_array);
+    SetAttrStringFromVoidPtr(m, get_child_info);
+    SetAttrStringFromVoidPtr(m, info_to_numpy_array);
+    SetAttrStringFromVoidPtr(m, info_to_nullable_array);
+    SetAttrStringFromVoidPtr(m, info_to_interval_array);
+    SetAttrStringFromVoidPtr(m, alloc_numpy);
+    SetAttrStringFromVoidPtr(m, alloc_string_array);
+    SetAttrStringFromVoidPtr(m, arr_info_list_to_table);
     // Not covered by error handler
-    PyObject_SetAttrString(m, "info_from_table",
-                           PyLong_FromVoidPtr((void*)(&info_from_table)));
+    SetAttrStringFromVoidPtr(m, info_from_table);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "delete_info_decref_array",
-        PyLong_FromVoidPtr((void*)(&delete_info_decref_array)));
+    SetAttrStringFromVoidPtr(m, delete_info);
     // Not covered by error handler
-    PyObject_SetAttrString(
-        m, "delete_table_decref_arrays",
-        PyLong_FromVoidPtr((void*)(&delete_table_decref_arrays)));
-    PyObject_SetAttrString(m, "decref_table_array",
-                           PyLong_FromVoidPtr((void*)(&decref_table_array)));
-    // Not covered by error handler
-    PyObject_SetAttrString(m, "delete_table",
-                           PyLong_FromVoidPtr((void*)(&delete_table)));
-    PyObject_SetAttrString(
-        m, "shuffle_table",
-        PyLong_FromVoidPtr((void*)(&shuffle_table_py_entrypt)));
-    PyObject_SetAttrString(m, "get_shuffle_info",
-                           PyLong_FromVoidPtr((void*)(&get_shuffle_info)));
-    PyObject_SetAttrString(m, "delete_shuffle_info",
-                           PyLong_FromVoidPtr((void*)(&delete_shuffle_info)));
-    PyObject_SetAttrString(m, "reverse_shuffle_table",
-                           PyLong_FromVoidPtr((void*)(&reverse_shuffle_table)));
-    PyObject_SetAttrString(
-        m, "shuffle_renormalization",
-        PyLong_FromVoidPtr((void*)(&shuffle_renormalization_py_entrypt)));
-    PyObject_SetAttrString(
-        m, "shuffle_renormalization_group",
-        PyLong_FromVoidPtr((void*)(&shuffle_renormalization_group_py_entrypt)));
-    PyObject_SetAttrString(m, "hash_join_table",
-                           PyLong_FromVoidPtr((void*)(&hash_join_table)));
-    PyObject_SetAttrString(m, "cross_join_table",
-                           PyLong_FromVoidPtr((void*)(&cross_join_table)));
-    PyObject_SetAttrString(m, "interval_join_table",
-                           PyLong_FromVoidPtr((void*)(&interval_join_table)));
-    PyObject_SetAttrString(m, "sample_table",
-                           PyLong_FromVoidPtr((void*)(&sample_table)));
-    PyObject_SetAttrString(m, "sort_values_table",
-                           PyLong_FromVoidPtr((void*)(&sort_values_table)));
-    PyObject_SetAttrString(m, "incref_array",
-                           PyLong_FromVoidPtr((void*)(&incref_array)));
-    PyObject_SetAttrString(
-        m, "sort_table_for_interval_join",
-        PyLong_FromVoidPtr(
-            (void*)(&sort_table_for_interval_join_py_entrypoint)));
-    PyObject_SetAttrString(m, "drop_duplicates_table",
-                           PyLong_FromVoidPtr((void*)(&drop_duplicates_table)));
-    PyObject_SetAttrString(m, "union_tables",
-                           PyLong_FromVoidPtr((void*)(&union_tables)));
-    PyObject_SetAttrString(m, "groupby_and_aggregate",
-                           PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
-    PyObject_SetAttrString(
-        m, "convert_local_dictionary_to_global",
-        PyLong_FromVoidPtr((void*)(&convert_local_dictionary_to_global)));
-    PyObject_SetAttrString(
-        m, "drop_duplicates_local_dictionary",
-        PyLong_FromVoidPtr((void*)(&drop_duplicates_local_dictionary)));
-    PyObject_SetAttrString(m, "get_groupby_labels",
-                           PyLong_FromVoidPtr((void*)(&get_groupby_labels)));
-    PyObject_SetAttrString(m, "array_isin",
-                           PyLong_FromVoidPtr((void*)(&array_isin)));
-    PyObject_SetAttrString(m, "get_search_regex",
-                           PyLong_FromVoidPtr((void*)(&get_search_regex)));
-    PyObject_SetAttrString(m, "get_replace_regex",
-                           PyLong_FromVoidPtr((void*)(&get_replace_regex)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "count_total_elems_list_array",
-        PyLong_FromVoidPtr((void*)(&count_total_elems_list_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "array_item_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&array_item_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "struct_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&struct_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "map_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&map_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "string_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&string_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "np_array_from_struct_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "np_array_from_array_item_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_array_item_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(
-        m, "np_array_from_map_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_map_array)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "array_getitem",
-                           PyLong_FromVoidPtr((void*)(&array_getitem)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "list_check",
-                           PyLong_FromVoidPtr((void*)(&list_check)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "dict_keys",
-                           PyLong_FromVoidPtr((void*)(&dict_keys)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "dict_values",
-                           PyLong_FromVoidPtr((void*)(&dict_values)));
+    SetAttrStringFromVoidPtr(m, delete_table);
+    SetAttrStringFromVoidPtr(m, shuffle_table_py_entrypt);
+    SetAttrStringFromVoidPtr(m, get_shuffle_info);
+    SetAttrStringFromVoidPtr(m, delete_shuffle_info);
+    SetAttrStringFromVoidPtr(m, reverse_shuffle_table);
+    SetAttrStringFromVoidPtr(m, shuffle_renormalization_py_entrypt);
+    SetAttrStringFromVoidPtr(m, shuffle_renormalization_group_py_entrypt);
+    SetAttrStringFromVoidPtr(m, hash_join_table);
+    SetAttrStringFromVoidPtr(m, cross_join_table);
+    SetAttrStringFromVoidPtr(m, interval_join_table);
+    SetAttrStringFromVoidPtr(m, sample_table_py_entry);
+    SetAttrStringFromVoidPtr(m, sort_values_table_py_entry);
+    SetAttrStringFromVoidPtr(m, sort_table_for_interval_join_py_entrypoint);
+    SetAttrStringFromVoidPtr(m, drop_duplicates_table_py_entry);
+    SetAttrStringFromVoidPtr(m, union_tables);
+    SetAttrStringFromVoidPtr(m, groupby_and_aggregate);
+    SetAttrStringFromVoidPtr(m, drop_duplicates_local_dictionary_py_entry);
+    SetAttrStringFromVoidPtr(m, get_groupby_labels_py_entry);
+    SetAttrStringFromVoidPtr(m, array_isin_py_entry);
+    SetAttrStringFromVoidPtr(m, get_search_regex_py_entry);
+    SetAttrStringFromVoidPtr(m, get_replace_regex_py_entry);
+
+    // Functions in the section below only use C which cannot throw exceptions,
+    // so typical exception handling is not required
+    SetAttrStringFromVoidPtr(m, count_total_elems_list_array);
+    SetAttrStringFromVoidPtr(m, array_item_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, struct_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, map_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, string_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, np_array_from_struct_array);
+    SetAttrStringFromVoidPtr(m, np_array_from_array_item_array);
+    SetAttrStringFromVoidPtr(m, np_array_from_map_array);
+    SetAttrStringFromVoidPtr(m, array_getitem);
+    SetAttrStringFromVoidPtr(m, list_check);
+    SetAttrStringFromVoidPtr(m, dict_keys);
+    SetAttrStringFromVoidPtr(m, dict_values);
     // This function calls PyErr_Set_String, but the function is called inside
     // box/unbox functions in Python, where we don't yet know how best to
     // detect and raise errors. Once we do, we should raise an error in Python
     // if this function calls PyErr_Set_String. TODO
-    PyObject_SetAttrString(m, "dict_merge_from_seq2",
-                           PyLong_FromVoidPtr((void*)(&dict_merge_from_seq2)));
+    SetAttrStringFromVoidPtr(m, dict_merge_from_seq2);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise it in Python.
     // We currently don't know the best way to detect and raise exceptions
     // in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(m, "seq_getitem",
-                           PyLong_FromVoidPtr((void*)(&seq_getitem)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "is_na_value",
-                           PyLong_FromVoidPtr((void*)(&is_na_value)));
+    SetAttrStringFromVoidPtr(m, seq_getitem);
+    SetAttrStringFromVoidPtr(m, is_na_value);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise an exception in
     // Python. We currently don't know the best way to detect and raise
     // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(m, "is_pd_int_array",
-                           PyLong_FromVoidPtr((void*)(&is_pd_int_array)));
+    SetAttrStringFromVoidPtr(m, is_pd_int_array);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise an exception in
     // Python. We currently don't know the best way to detect and raise
     // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(m, "is_pd_float_array",
-                           PyLong_FromVoidPtr((void*)(&is_pd_float_array)));
+    SetAttrStringFromVoidPtr(m, is_pd_float_array);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise an exception in
     // Python. We currently don't know the best way to detect and raise
     // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(
-        m, "int_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&int_array_from_sequence)));
+    SetAttrStringFromVoidPtr(m, int_array_from_sequence);
     // This function is C, but it has components that can fail, in which case
     // we should call PyErr_Set_String and detect this and raise an exception in
     // Python. We currently don't know the best way to detect and raise
     // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
-    PyObject_SetAttrString(
-        m, "float_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&float_array_from_sequence)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
-    // Only uses C which cannot throw exceptions, so typical exception
-    // handling is not required
-    PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
+    SetAttrStringFromVoidPtr(m, float_array_from_sequence);
+    SetAttrStringFromVoidPtr(m, get_stats_alloc);
+    SetAttrStringFromVoidPtr(m, get_stats_free);
+    SetAttrStringFromVoidPtr(m, get_stats_mi_alloc);
+    SetAttrStringFromVoidPtr(m, get_stats_mi_free);
+    SetAttrStringFromVoidPtr(m, array_info_getitem);
+    SetAttrStringFromVoidPtr(m, array_info_getdata1);
+    // End section of functions which only use C and cannot throw exceptions
 
-    PyObject_SetAttrString(m, "array_info_getitem",
-                           PyLong_FromVoidPtr((void*)(&array_info_getitem)));
-
-    PyObject_SetAttrString(m, "array_info_getdata1",
-                           PyLong_FromVoidPtr((void*)(&array_info_getdata1)));
     // C++ Cache functions for Like Kernel with dictionary encoded inputs
-    PyObject_SetAttrString(
-        m, "alloc_like_kernel_cache",
-        PyLong_FromVoidPtr((void*)(&alloc_like_kernel_cache)));
-    PyObject_SetAttrString(
-        m, "add_to_like_kernel_cache",
-        PyLong_FromVoidPtr((void*)(&add_to_like_kernel_cache)));
-    PyObject_SetAttrString(
-        m, "check_like_kernel_cache",
-        PyLong_FromVoidPtr((void*)(&check_like_kernel_cache)));
-    PyObject_SetAttrString(
-        m, "dealloc_like_kernel_cache",
-        PyLong_FromVoidPtr((void*)(&dealloc_like_kernel_cache)));
-    PyObject_SetAttrString(
-        m, "NRT_MemInfo_alloc_safe_aligned",
-        PyLong_FromVoidPtr((void*)(&NRT_MemInfo_alloc_safe_aligned)));
+    SetAttrStringFromVoidPtr(m, alloc_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, add_to_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, check_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, dealloc_like_kernel_cache);
+    SetAttrStringFromVoidPtr(m, NRT_MemInfo_alloc_safe_aligned);
+
     return m;
 }

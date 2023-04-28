@@ -27,8 +27,8 @@ struct grouping_info {
     std::vector<int64_t> group_to_first_row;
     std::vector<int64_t> next_row_in_group;
     std::vector<int64_t> list_missing;
-    table_info* dispatch_table = nullptr;
-    table_info* dispatch_info = nullptr;
+    std::shared_ptr<table_info> dispatch_table = nullptr;
+    std::shared_ptr<table_info> dispatch_info = nullptr;
     size_t num_groups;
     int mode;  // 1: for the update, 2: for the combine
 };
@@ -132,9 +132,14 @@ table_info* groupby_and_aggregate(
  * @param is_parallel: true if data is distributed
  * @return int64_t total number of groups
  */
-int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
-                           int64_t* sort_idx, bool key_dropna,
-                           bool is_parallel);
+int64_t get_groupby_labels(std::shared_ptr<table_info> table,
+                           int64_t* out_labels, int64_t* sort_idx,
+                           bool key_dropna, bool is_parallel);
+
+// Python entry point for get_groupby_labels
+int64_t get_groupby_labels_py_entry(table_info* table, int64_t* out_labels,
+                                    int64_t* sort_idx, bool key_dropna,
+                                    bool is_parallel);
 
 /**
  * @brief Copy values from the tmp_col into the update_col. This is used
@@ -145,7 +150,8 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
  * @param grouping_info[in]: structures used to get rows for each group
  *
  */
-void copy_values_transform(array_info* update_col, array_info* tmp_col,
+void copy_values_transform(std::shared_ptr<array_info> update_col,
+                           std::shared_ptr<array_info> tmp_col,
                            const grouping_info& grp_info, bool is_parallel);
 
 #endif  // _GROUPBY_H_INCLUDED

@@ -685,3 +685,18 @@ def test_interval_join_compilation(memory_leak_check):
     with set_logging_stream(logger, 2):
         bodo.jit((bodo.typeof(bc), numba.types.literal(query)))(impl)
         check_logger_msg(stream, "Using optimized interval range join")
+
+
+@pytest.mark.slow
+def test_join_div(spark_info, join_type, memory_leak_check):
+    """
+    Make sure div operation works inside join conditions
+    """
+    df1 = pd.DataFrame({"A": [2, 4, 3] * 4, "B": [3.1, 2.2, 0.1] * 4})
+    df2 = pd.DataFrame({"A": [1, 2] * 4, "D": [1.1, 3.3] * 4})
+    query1 = f"select B from t1 {join_type} join t2 on true where t1.B / t2.D > 2.0"
+    ctx = {
+        "t1": df1,
+        "t2": df2,
+    }
+    check_query(query1, ctx, spark_info, check_dtype=False, check_names=False)

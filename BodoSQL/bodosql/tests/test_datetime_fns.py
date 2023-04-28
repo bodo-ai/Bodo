@@ -7,7 +7,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import bodosql_use_date_type, check_query
+from bodosql.tests.utils import check_query
 
 from bodo.libs.bodosql_datetime_array_kernels import (
     standardize_snowflake_date_time_part_compile_time,
@@ -1110,63 +1110,75 @@ def test_monthname_date_scalars(fn_name, basic_df, memory_leak_check):
     )
 
 
-def test_make_date_cols(spark_info, dt_fn_dataframe, memory_leak_check):
-    """tests makedate on column values"""
+def test_makedate_scalars(basic_df, dt_fn_dataframe, memory_leak_check):
+    """tests makedate on scalar values"""
 
-    # TODO: fix null issues with make_date: https://bodo.atlassian.net/browse/BE-3640
-    ctx_dict = {"table1": dt_fn_dataframe["table1"].fillna(method="bfill")}
-
-    # Spark's make_date, takes three arguments: Y, M, D, where MYSQL's makedate is Y, D
-    query = "SELECT makedate(valid_year_integers, positive_integers) from table1"
-    spark_query = "SELECT DATE_ADD(MAKE_DATE(valid_year_integers, 1, 1), positive_integers-1) from table1"
-
-    # spark requires certain the second argument of make_date to not be of type bigint,
-    # but all pandas integer types are currently interpreted bigint when creating
-    # a spark dataframe from a pandas dataframe. Therefore, we need to cast the spark table
-    # to a valid type
-    cols_to_cast = {"table1": [("positive_integers", "int")]}
+    query = "SELECT makedate(2000, 200), makedate(2010, 300), makedate(2020, 400)"
+    output = pd.DataFrame(
+        {
+            "A": [datetime.date(2000, 7, 18)],
+            "B": [datetime.date(2010, 10, 27)],
+            "C": [datetime.date(2021, 2, 3)],
+        }
+    )
 
     check_query(
         query,
-        ctx_dict,
-        spark_info,
+        basic_df,
+        None,
         check_names=False,
-        check_dtype=False,
-        equivalent_spark_query=spark_query,
-        spark_input_cols_to_cast=cols_to_cast,
+        expected_output=output,
     )
 
 
-def test_make_date_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
-    """tests makedate on scalar values"""
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(
+            True,
+            id="with_case",
+        ),
+    ],
+)
+def test_makedate_cols(dt_fn_dataframe, use_case, memory_leak_check):
+    """tests makedate with case statement"""
+    if use_case:
+        query = "SELECT CASE WHEN makedate(valid_year_integers, positive_integers) > DATE '2211-01-01' THEN DATE '2000-01-01' ELSE makedate(valid_year_integers, positive_integers) END from table1"
+    else:
+        query = "SELECT makedate(valid_year_integers, positive_integers) from table1"
 
-    query = "SELECT CASE WHEN makedate(valid_year_integers, positive_integers) > TIMESTAMP '2211-01-01' THEN TIMESTAMP '2000-01-01' ELSE makedate(valid_year_integers, positive_integers) END from table1"
-    spark_query = "SELECT CASE WHEN DATE_ADD(make_date(valid_year_integers, 1, 1), positive_integers-1) > TIMESTAMP '2211-01-01' THEN TIMESTAMP '2000-01-01' ELSE DATE_ADD(make_date(valid_year_integers, 1, 1), positive_integers-1) END from table1"
+    def makedate_fn(dt_fn_dataframe):
+        n = len(dt_fn_dataframe["table1"]["valid_year_integers"])
+        res = pd.Series([None] * n)
+        for i in range(n):
+            year = dt_fn_dataframe["table1"]["valid_year_integers"][i]
+            day = dt_fn_dataframe["table1"]["positive_integers"][i]
+            if pd.isna(year) or pd.isna(day):
+                res[i] = None
+            else:
+                date = datetime.date(year=year, month=1, day=1) + pd.Timedelta(
+                    day - 1, unit="D"
+                )
+                res[i] = date
+        return res
 
-    # spark requires certain the second argument of make_date to not be of type bigint,
-    # but all pandas integer types are currently interpreted bigint when creating
-    # a spark dataframe from a pandas dataframe. Therefore, we need to cast the spark table
-    # to a valid type
-    cols_to_cast = {"table1": [("positive_integers", "int")]}
-
+    output = pd.DataFrame({"output": makedate_fn(dt_fn_dataframe)})
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         check_names=False,
-        check_dtype=False,
-        equivalent_spark_query=spark_query,
-        spark_input_cols_to_cast=cols_to_cast,
+        expected_output=output,
     )
 
 
 @pytest.mark.slow
-@pytest.mark.skip("Currently, not checking for invalid year/day values")
-def test_make_date_edgecases(spark_info, dt_fn_dataframe, memory_leak_check):
+def test_makedate_edgecases(spark_info, dt_fn_dataframe, memory_leak_check):
     """tests makedate on edgecases"""
 
     query = "SELECT makedate(valid_year_integers, mixed_integers), makedate(positive_integers, positive_integers) from table1"
-    spark_query = "SELECT DATE_ADD(make_date(valid_year_integers, 1, 1), mixed_integers), DATE_ADD(make_date(positive_integers, 1, 1), positive_integers) from table1"
+    spark_query = "SELECT DATE_ADD(make_date(valid_year_integers, 1, 1), mixed_integers-1), DATE_ADD(make_date(positive_integers, 1, 1), positive_integers-1) from table1"
 
     # spark requires certain arguments of make_date to not
     # be of type bigint, but all pandas integer types are currently inerpreted as bigint.
@@ -1177,7 +1189,6 @@ def test_make_date_edgecases(spark_info, dt_fn_dataframe, memory_leak_check):
         dt_fn_dataframe,
         spark_info,
         check_names=False,
-        check_dtype=False,
         equivalent_spark_query=spark_query,
         spark_input_cols_to_cast=cols_to_cast,
     )
@@ -1787,7 +1798,7 @@ def dateadd_date_df():
         ),
         pytest.param(
             (
-                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!r}, -25, col_dt) END",
+                "CASE WHEN col_int < 0 THEN DATE '1999-12-31' else DATEADD({!r}, -25, col_dt) END",
                 ["year", "quarter", "month", "week", "day"],
                 pd.DataFrame(
                     {
@@ -1795,48 +1806,44 @@ def dateadd_date_df():
                             None,
                             datetime.date(1988, 10, 27),
                             datetime.date(1990, 4, 1),
-                            None,
+                            datetime.date(1999, 12, 31),
                             datetime.date(1996, 12, 13),
                         ],
                         "quarter": [
                             None,
                             datetime.date(2007, 7, 27),
                             datetime.date(2009, 1, 1),
-                            None,
+                            datetime.date(1999, 12, 31),
                             datetime.date(2015, 9, 13),
                         ],
                         "month": [
                             None,
                             datetime.date(2011, 9, 27),
                             datetime.date(2013, 3, 1),
-                            None,
+                            datetime.date(1999, 12, 31),
                             datetime.date(2019, 11, 13),
                         ],
                         "week": [
                             None,
                             datetime.date(2013, 5, 5),
                             datetime.date(2014, 10, 8),
-                            None,
+                            datetime.date(1999, 12, 31),
                             datetime.date(2021, 6, 21),
                         ],
                         "day": [
                             None,
                             datetime.date(2013, 10, 2),
                             datetime.date(2015, 3, 7),
-                            None,
+                            datetime.date(1999, 12, 31),
                             datetime.date(2021, 11, 18),
                         ],
                     }
                 ),
             ),
-            id="case-date_units",
-            marks=pytest.mark.skip(reason="TODO: support date in CASE statements"),
-            # Calcite will set the return type to timestamp when parsing the case statement,
-            # so case statements with time units work but those with date units don't
         ),
         pytest.param(
             (
-                "CASE WHEN col_int < 0 THEN NULL else TIMESTAMPADD({!r}, -25, col_dt) END",
+                "CASE WHEN col_int < 0 THEN TIMESTAMP '1999-12-31' else TIMESTAMPADD({!r}, -25, col_dt) END",
                 ["hour", "minute", "second"],
                 pd.DataFrame(
                     {
@@ -1844,21 +1851,21 @@ def dateadd_date_df():
                             None,
                             pd.Timestamp("2013-10-25 23:00:00"),
                             pd.Timestamp("2015-03-30 23:00:00"),
-                            None,
+                            pd.Timestamp("1999-12-31 00:00:00"),
                             pd.Timestamp("2021-12-11 23:00:00"),
                         ],
                         "minute": [
                             None,
                             pd.Timestamp("2013-10-26 23:35:00"),
                             pd.Timestamp("2015-03-31 23:35:00"),
-                            None,
+                            pd.Timestamp("1999-12-31 00:00:00"),
                             pd.Timestamp("2021-12-12 23:35:00"),
                         ],
                         "second": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:35"),
                             pd.Timestamp("2015-03-31 23:59:35"),
-                            None,
+                            pd.Timestamp("1999-12-31 00:00:00"),
                             pd.Timestamp("2021-12-12 23:59:35"),
                         ],
                     }
@@ -1868,7 +1875,7 @@ def dateadd_date_df():
         ),
         pytest.param(
             (
-                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!r}, -25, col_dt) END",
+                "CASE WHEN col_int < 0 THEN TIMESTAMP '1999-12-31' else DATEADD({!r}, -25, col_dt) END",
                 ["millisecond", "microsecond", "nanosecond"],
                 pd.DataFrame(
                     {
@@ -1876,21 +1883,21 @@ def dateadd_date_df():
                             None,
                             pd.Timestamp("2013-10-26 23:59:59.975"),
                             pd.Timestamp("2015-03-31 23:59:59.975"),
-                            None,
+                            pd.Timestamp("1999-12-31 00:00:00"),
                             pd.Timestamp("2021-12-12 23:59:59.975"),
                         ],
                         "microsecond": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:59.999975"),
                             pd.Timestamp("2015-03-31T23:59:59.999975"),
-                            None,
+                            pd.Timestamp("1999-12-31 00:00:00"),
                             pd.Timestamp("2021-12-12T23:59:59.999975"),
                         ],
                         "nanosecond": [
                             None,
                             pd.Timestamp("2013-10-26 23:59:59.999999975"),
                             pd.Timestamp("2015-03-31 23:59:59.999999975"),
-                            None,
+                            pd.Timestamp("1999-12-31 00:00:00"),
                             pd.Timestamp("2021-12-12T23:59:59.999999975"),
                         ],
                     }
@@ -1922,15 +1929,14 @@ def test_snowflake_dateadd_date(
         selects.append(query_fmt.format(unit))
     query = "SELECT " + ", ".join(selects) + " FROM table1"
 
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            dateadd_date_df,
-            None,
-            check_names=False,
-            expected_output=answers,
-            only_jit_1DVar=True,
-        )
+    check_query(
+        query,
+        dateadd_date_df,
+        None,
+        check_names=False,
+        expected_output=answers,
+        only_jit_1DVar=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -2334,6 +2340,261 @@ def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
     )
 
 
+@pytest.fixture
+def date_add_sub_date_df():
+    return {
+        "table1": pd.DataFrame(
+            {
+                "start_dt": [
+                    datetime.date(2020, 6, 26),
+                    datetime.date(2025, 5, 3),
+                    datetime.date(1987, 3, 15),
+                    datetime.date(2117, 8, 29),
+                    datetime.date(1822, 12, 7),
+                    datetime.date(1906, 4, 14),
+                    None,
+                    datetime.date(1700, 2, 4),
+                ],
+                # TODO: support pd.DateOffset array
+                # "date_interval": [
+                #     pd.DateOffset(days=10),
+                #     pd.DateOffset(months=4),
+                #     pd.DateOffset(years=6),
+                #     None,
+                #     None,
+                #     pd.DateOffset(months=20),
+                #     pd.DateOffset(days=100),
+                #     pd.DateOffset(years=5),
+                # ],
+                "time_interval": [
+                    pd.Timedelta(hours=10),
+                    pd.Timedelta(minutes=4),
+                    None,
+                    pd.Timedelta(seconds=6),
+                    pd.Timedelta(hours=1),
+                    None,
+                    pd.Timedelta(minutes=100),
+                    pd.Timedelta(seconds=5),
+                ],
+            }
+        )
+    }
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                "SELECT DATE_ADD(start_dt, date_interval) FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            datetime.date(2020, 7, 6),
+                            datetime.date(2025, 9, 3),
+                            datetime.date(1987, 3, 15),
+                            None,
+                            None,
+                            datetime.date(1906, 4, 21),
+                            None,
+                            datetime.date(1705, 2, 4),
+                        ]
+                    }
+                ),
+            ),
+            id="DATE_ADD-vector_date_interval",
+            marks=pytest.mark.skip(reason="TODO: support pd.DateOffset array"),
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN start_dt IS NULL THEN DATE '1999-12-31' ELSE DATE_ADD(start_dt, INTERVAL 10 DAY) END FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            datetime.date(2020, 7, 6),
+                            datetime.date(2025, 5, 13),
+                            datetime.date(1987, 3, 25),
+                            datetime.date(2117, 9, 8),
+                            datetime.date(1822, 12, 17),
+                            datetime.date(1906, 4, 24),
+                            datetime.date(1999, 12, 31),
+                            datetime.date(1700, 2, 14),
+                        ]
+                    }
+                ),
+            ),
+            id="DATE_ADD-vector_scalar_date_interval_with_case",
+        ),
+        pytest.param(
+            (
+                "SELECT DATE_ADD(TO_DATE('2020-10-13'), INTERVAL 40 HOURS)",
+                pd.DataFrame({"outputs": [pd.Timestamp("2020-10-14 16:00:00")]}),
+            ),
+            id="DATE_ADD-scalar_time_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN time_interval IS NULL THEN TIMESTAMP '1999-12-31' ELSE ADDDATE(start_dt, time_interval) END FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            pd.Timestamp("2020-06-26 10:00:00"),
+                            pd.Timestamp("2025-05-03 00:04:00"),
+                            pd.Timestamp("1999-12-31 00:00:00"),
+                            pd.Timestamp("2117-08-29 00:00:06"),
+                            pd.Timestamp("1822-12-07 01:00:00"),
+                            pd.Timestamp("1999-12-31 00:00:00"),
+                            None,
+                            pd.Timestamp("1700-02-04 00:00:05"),
+                        ]
+                    }
+                ),
+            ),
+            id="ADDDATE-vector_time_interval_with_case",
+        ),
+        pytest.param(
+            (
+                "SELECT ADDDATE(TO_DATE('2022-3-5'), INTERVAL 8 MONTH)",
+                pd.DataFrame({"outputs": [datetime.date(2022, 11, 5)]}),
+            ),
+            id="ADDDATE-scalar_date_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT DATE_SUB(start_dt, date_interval) FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            datetime.date(2020, 7, 6),
+                            datetime.date(2025, 9, 3),
+                            datetime.date(1987, 3, 15),
+                            None,
+                            None,
+                            datetime.date(1906, 4, 21),
+                            None,
+                            datetime.date(1705, 2, 4),
+                        ]
+                    }
+                ),
+            ),
+            id="DATE_SUB-vector_date_interval",
+            marks=pytest.mark.skip(reason="TODO: support pd.DateOffset array"),
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN start_dt IS NULL THEN DATE '1999-12-31' ELSE DATE_SUB(start_dt, INTERVAL 5 MONTH) END FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            datetime.date(2020, 1, 26),
+                            datetime.date(2024, 12, 3),
+                            datetime.date(1986, 10, 15),
+                            datetime.date(2117, 3, 29),
+                            datetime.date(1822, 7, 7),
+                            datetime.date(1905, 11, 14),
+                            datetime.date(1999, 12, 31),
+                            datetime.date(1699, 9, 4),
+                        ]
+                    }
+                ),
+            ),
+            id="DATE_SUB-vector_scalar_date_interval_with_case",
+        ),
+        pytest.param(
+            (
+                "SELECT DATE_SUB(TO_DATE('2011-1-18'), INTERVAL 80 MINUTES)",
+                pd.DataFrame({"outputs": [pd.Timestamp("2011-1-17 22:40:00")]}),
+            ),
+            id="DATE_SUB-scalar_time_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT SUBDATE(start_dt, time_interval) FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            pd.Timestamp("2020-06-25 14:00:00"),
+                            pd.Timestamp("2025-05-02 23:56:00"),
+                            None,
+                            pd.Timestamp("2117-08-28 23:59:54"),
+                            pd.Timestamp("1822-12-06 23:00:00"),
+                            None,
+                            None,
+                            pd.Timestamp("1700-02-03 23:59:55"),
+                        ]
+                    }
+                ),
+            ),
+            id="SUBDATE-vector_time_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT SUBDATE(TO_DATE('2000-1-5'), INTERVAL 2 WEEK)",
+                pd.DataFrame({"outputs": [datetime.date(1999, 12, 22)]}),
+            ),
+            id="SUBDATE-scalar_date_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN start_dt IS NULL THEN DATE '1999-12-31' ELSE start_dt + INTERVAL 20 WEEK END FROM table1",
+                pd.DataFrame(
+                    {
+                        "outputs": [
+                            datetime.date(2020, 11, 13),
+                            datetime.date(2025, 9, 20),
+                            datetime.date(1987, 8, 2),
+                            datetime.date(2118, 1, 16),
+                            datetime.date(1823, 4, 26),
+                            datetime.date(1906, 9, 1),
+                            datetime.date(1999, 12, 31),
+                            datetime.date(1700, 6, 24),
+                        ]
+                    }
+                ),
+            ),
+            id="date_add_date_interval_with_case",
+        ),
+        pytest.param(
+            (
+                "SELECT TO_DATE('1990-11-3') - INTERVAL 10 DAY",
+                pd.DataFrame({"outputs": [datetime.date(1990, 10, 24)]}),
+            ),
+            id="date_minus_date_interval",
+        ),
+        pytest.param(
+            (
+                "SELECT INTERVAL 10 YEAR + TO_DATE('2004-5-23')",
+                pd.DataFrame({"outputs": [datetime.date(2014, 5, 23)]}),
+            ),
+            id="date_interval_add_date",
+        ),
+    ],
+)
+def date_add_sub_date_query(request):
+    return request.param
+
+
+def test_date_add_sub_interval_with_date_input(
+    date_add_sub_date_df,
+    date_add_sub_date_query,
+    memory_leak_check,
+):
+    """Tests the MySQL version of DATE_ADD and all of its equivalent functions
+    with datetime.date input
+    types. Meanings of the parametrized arguments:
+    date_add_date_df: The fixture containing the datetime-equivialent data
+    date_add_date_query: which function name is being used.
+    """
+    query, outputs = date_add_sub_date_query
+
+    check_query(
+        query,
+        date_add_sub_date_df,
+        None,
+        check_names=False,
+        expected_output=outputs,
+    )
+
+
 def test_subdate_cols_int_arg1(
     subdate_equiv_fns,
     dt_fn_dataframe,
@@ -2631,44 +2892,77 @@ def test_date_trunc_day_part_handling(time_df, day_part_strings, memory_leak_che
         )
 
 
-def test_date_trunc_date(date_df, day_part_strings, memory_leak_check):
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case", marks=pytest.mark.slow),
+        pytest.param(True, id="with_case"),
+    ],
+)
+def test_date_trunc_date(date_df, day_part_strings, use_case, memory_leak_check):
     """
     test DATE_TRUNC works for datetime.date input
     """
-    query = f"SELECT DATE_TRUNC('{day_part_strings}', A) as output from table1"
+    if use_case:
+        query = f"SELECT CASE WHEN A IS NULL THEN NULL ELSE DATE_TRUNC('{day_part_strings}', A) END from table1"
+    else:
+        query = f"SELECT DATE_TRUNC('{day_part_strings}', A) as output from table1"
     scalar_func = generate_date_trunc_date_func(day_part_strings)
     output = pd.DataFrame({"output": date_df["table1"]["A"].map(scalar_func)})
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            None,
-            check_names=False,
-            expected_output=output,
-        )
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        expected_output=output,
+    )
 
 
-def test_date_trunc_time_part_handling(date_df, time_part_strings, memory_leak_check):
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
+    ],
+)
+def test_date_trunc_time_part_handling(
+    date_df, time_part_strings, use_case, memory_leak_check
+):
     """
     test DATE_TRUNC can return the same date when date_or_time_expr is datetime.date
     and date_or_time_part is smaller than day.
     """
-    query = f"SELECT DATE_TRUNC('{time_part_strings}', A) as output from table1"
+    if use_case:
+        query = f"SELECT CASE WHEN A IS NULL THEN NULL ELSE DATE_TRUNC('{time_part_strings}', A) END from table1"
+    else:
+        query = f"SELECT DATE_TRUNC('{time_part_strings}', A) as output from table1"
     output = pd.DataFrame({"output": date_df["table1"]["A"]})
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            None,
-            check_names=False,
-            expected_output=output,
-        )
-
-
-def test_date_trunc_timestamp(dt_fn_dataframe, date_trunc_literal, memory_leak_check):
-    query = (
-        f"SELECT DATE_TRUNC('{date_trunc_literal}', TIMESTAMPS) as output from table1"
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        expected_output=output,
     )
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case", marks=pytest.mark.slow),
+        pytest.param(True, id="with_case"),
+    ],
+)
+def test_date_trunc_timestamp(
+    dt_fn_dataframe, date_trunc_literal, use_case, memory_leak_check
+):
+    """
+    test DATE_TRUNC works for timestamp input
+    """
+    if use_case:
+        query = f"SELECT CASE WHEN TIMESTAMPS IS NULL THEN NULL ELSE DATE_TRUNC('{date_trunc_literal}', TIMESTAMPS) END as output from table1"
+    else:
+        query = f"SELECT DATE_TRUNC('{date_trunc_literal}', TIMESTAMPS) as output from table1"
     scalar_func = generate_date_trunc_func(date_trunc_literal)
     py_output = pd.DataFrame(
         {"output": dt_fn_dataframe["table1"]["timestamps"].map(scalar_func)}
@@ -2906,20 +3200,18 @@ def test_next_previous_day_cols(
     py_output = pd.DataFrame(
         {"A": next_prev_day(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
     )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            dt_fn_dataframe,
-            None,
-            check_names=False,
-            check_dtype=False,
-            expected_output=py_output,
-        )
+    check_query(
+        query,
+        dt_fn_dataframe,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=py_output,
+    )
 
 
 @pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
 @pytest.mark.parametrize("dow_str", ["days_of_week", "su"])
-@pytest.mark.skip(reason="TODO: support date type with case statement")
 def test_next_previous_day_scalars(
     dt_fn_dataframe, next_or_prev, dow_str, memory_leak_check
 ):
@@ -2951,15 +3243,14 @@ def test_next_previous_day_scalars(
     py_output = pd.DataFrame(
         {"A": next_prev_day_case(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
     )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            dt_fn_dataframe,
-            None,
-            check_names=False,
-            check_dtype=False,
-            expected_output=py_output,
-        )
+    check_query(
+        query,
+        dt_fn_dataframe,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=py_output,
+    )
 
 
 @pytest.mark.tz_aware
@@ -3241,8 +3532,7 @@ def test_tz_aware_next_day(memory_leak_check):
         axis=1,
     )
     py_output = pd.DataFrame({"m": out_series})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3269,8 +3559,7 @@ def test_tz_aware_next_day_case(
     )
     week_series[~df.C] = None
     py_output = pd.DataFrame({"m": week_series})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3293,8 +3582,7 @@ def test_tz_aware_previous_day(memory_leak_check):
         axis=1,
     )
     py_output = pd.DataFrame({"m": out_series})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3321,8 +3609,7 @@ def test_tz_aware_previous_day_case(
     )
     week_series[~df.C] = None
     py_output = pd.DataFrame({"m": week_series})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3742,15 +4029,14 @@ def test_date_from_parts(date_from_parts_data, use_case, memory_leak_check):
     )
     ctx = {"table1": df}
     py_output = pd.DataFrame({0: pd.Series([s for s in answer])})
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=py_output,
-            check_dtype=False,
-            check_names=False,
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
+        check_names=False,
+    )
 
 
 @pytest.fixture(
@@ -3920,14 +4206,13 @@ def test_last_day_no_date_part(date_df, memory_leak_check):
             ]
         }
     )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            None,
-            check_names=False,
-            expected_output=output,
-        )
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        expected_output=output,
+    )
 
 
 def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
@@ -3959,14 +4244,13 @@ def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
                 expected_output=pd.DataFrame({}),
             )
     else:
-        with bodosql_use_date_type():
-            check_query(
-                query,
-                date_df,
-                None,
-                check_names=False,
-                expected_output=output,
-            )
+        check_query(
+            query,
+            date_df,
+            None,
+            check_names=False,
+            expected_output=output,
+        )
 
 
 def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
@@ -3985,3 +4269,18 @@ def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
             check_names=False,
             expected_output=pd.DataFrame({}),
         )
+
+
+@pytest.mark.parametrize("fn_name", ["CURDATE", "CURRENT_DATE"])
+def test_current_date(fn_name, memory_leak_check):
+    """
+    Test CURRENT_DATE function and its alias CURDATE
+    """
+    query = f"SELECT {fn_name}()"
+    check_query(
+        query,
+        {},
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({"output": [datetime.date.today()]}),
+    )

@@ -15,8 +15,7 @@ from pyspark.sql.types import IntegerType, StructField, StructType
 
 @pytest.mark.skip("[BS-633] Resolve nightly issues for TPCx-BB")
 @pytest.mark.slow
-def test_tpcxbb_q01(tpcxbb_data, spark_info):
-    # TODO: re add memory_leak_check, see BS-574
+def test_tpcxbb_q01(tpcxbb_data, spark_info, memory_leak_check):
     tpcxbb_query1 = """
         SELECT DISTINCT ss_item_sk, ss_ticket_number
         FROM store_sales s, item i
@@ -78,8 +77,7 @@ def test_tpcxbb_q01(tpcxbb_data, spark_info):
 
 @pytest.mark.skip("[BS-633] Resolve nightly issues for TPCx-BB")
 @pytest.mark.slow
-def test_tpcxbb_q06(tpcxbb_data, spark_info):
-    # TODO: re add memory_leak_check, see BS-574
+def test_tpcxbb_q06(tpcxbb_data, spark_info, memory_leak_check):
     q06_LIMIT = 100
     q06_YEAR = 2001
     tpcxbb_query = f"""
@@ -297,8 +295,7 @@ def test_tpcxbb_q11(tpcxbb_data, spark_info, memory_leak_check):
 
 @pytest.mark.skip("[BS-633] Resolve nightly issues for TPCx-BB")
 @pytest.mark.slow
-def test_tpcxbb_q12(tpcxbb_data, spark_info):
-    # TODO: re add memory leak check, BS-574
+def test_tpcxbb_q12(tpcxbb_data, spark_info, memory_leak_check):
     q12_i_category_IN = "'Books', 'Electronics'"
     tpcxbb_query = f"""
         SELECT DISTINCT wcs_user_sk
@@ -373,8 +370,7 @@ def test_tpcxbb_q14(tpcxbb_data, spark_info, memory_leak_check):
 
 @pytest.mark.skip("[BS-633] Resolve nightly issues for TPCx-BB")
 @pytest.mark.slow
-def test_tpcxbb_q15(tpcxbb_data, spark_info):
-    # TODO: re add memory_leak_check, BS-574
+def test_tpcxbb_q15(tpcxbb_data, spark_info, memory_leak_check):
     q15_startDate = "2001-09-02"
     q15_endDate = "2002-09-02"
     q15_store_sk = 10

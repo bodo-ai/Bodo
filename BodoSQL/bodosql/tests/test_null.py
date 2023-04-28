@@ -347,6 +347,7 @@ def test_boolean_null_comparisons_scalar(
 ):
     """tests logical operators work between a scalar and a column"""
     query = "Select CASE WHEN A and B THEN TRUE ELSE FALSE END, CASE WHEN A or B THEN TRUE ELSE FALSE END from table1"
+
     expected = get_expected_output_with_null_col_b(
         spark_info, bodosql_null_bool_df, query, "boolean"
     )

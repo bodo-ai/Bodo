@@ -15,8 +15,6 @@
 
 #define root 0
 
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
-
 template <class T>
 std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T> &my_array,
                                              int64_t total_size, int myrank,
@@ -51,8 +49,8 @@ double quantile_dispatch(void *data, int64_t local_size, double quantile,
     @param skipna: whether to skip the nan entries or not.
     @output res: the median as output
  */
-void median_series_computation(double *res, array_info *arr, bool parallel,
-                               bool skipna);
+void median_series_computation_py_entry(double *res, array_info *arr,
+                                        bool parallel, bool skipna);
 
 /* Compute the autocorrelation of the series.
    @output res: the autocorrelation as output
@@ -60,8 +58,8 @@ void median_series_computation(double *res, array_info *arr, bool parallel,
    @param lag: The lag for the autocorrelation
    @param parallel: whether it is parallel or not
  */
-void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
-                                 bool is_parallel);
+void autocorr_series_computation_py_entry(double *res, array_info *arr,
+                                          int64_t lag, bool is_parallel);
 
 /* Compute whether the array is monotonic or not
    @output res : the return value 1 for monotonic and 0 otherwise
@@ -70,41 +68,24 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
    is_monotonic_decreasing
    @param parallel: whether it is parallel or not
  */
-void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
-                                 bool is_parallel);
+void compute_series_monotonicity_py_entry(double *res, array_info *arr,
+                                          int64_t inc_dec, bool is_parallel);
 
 PyMODINIT_FUNC PyInit_quantile_alg(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "quantile_alg", "No docs", -1, NULL,
-    };
-    bodo_common_init();
-    m = PyModule_Create(&moduledef);
+    MOD_DEF(m, "quantile_alg", "No docs", NULL);
     if (m == NULL) {
         return NULL;
     }
 
-    PyObject_SetAttrString(m, "quantile_sequential",
-                           PyLong_FromVoidPtr((void *)(&quantile_sequential)));
-    PyObject_SetAttrString(m, "quantile_parallel",
-                           PyLong_FromVoidPtr((void *)(&quantile_parallel)));
-    PyObject_SetAttrString(
-        m, "median_series_computation",
-        PyLong_FromVoidPtr((void *)(&median_series_computation)));
-    PyObject_SetAttrString(
-        m, "autocorr_series_computation",
-        PyLong_FromVoidPtr((void *)(&autocorr_series_computation)));
-    PyObject_SetAttrString(
-        m, "compute_series_monotonicity",
-        PyLong_FromVoidPtr((void *)(&compute_series_monotonicity)));
-    PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void *)(&get_stats_alloc)));
-    PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void *)(&get_stats_free)));
-    PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void *)(&get_stats_mi_alloc)));
-    PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void *)(&get_stats_mi_free)));
+    bodo_common_init();
+
+    SetAttrStringFromVoidPtr(m, quantile_sequential);
+    SetAttrStringFromVoidPtr(m, quantile_parallel);
+    SetAttrStringFromVoidPtr(m, median_series_computation_py_entry);
+    SetAttrStringFromVoidPtr(m, autocorr_series_computation_py_entry);
+    SetAttrStringFromVoidPtr(m, compute_series_monotonicity_py_entry);
+
     return m;
 }
 
@@ -491,7 +472,8 @@ struct local_global_stat_nan {
  */
 template <class T, int dtype>
 inline typename std::enable_if<!is_decimal<dtype>::value, void>::type
-collecting_non_nan_entries(std::vector<T> &my_array, array_info *arr,
+collecting_non_nan_entries(std::vector<T> &my_array,
+                           std::shared_ptr<array_info> arr,
                            local_global_stat_nan const &e_stat) {
     if (e_stat.loc_nb_miss == 0) {
         // Remark: The data is indeed copied in that case as well.
@@ -530,7 +512,8 @@ collecting_non_nan_entries(std::vector<T> &my_array, array_info *arr,
  */
 template <class T, int dtype>
 inline typename std::enable_if<is_decimal<dtype>::value, void>::type
-collecting_non_nan_entries(std::vector<T> &my_array, array_info *arr,
+collecting_non_nan_entries(std::vector<T> &my_array,
+                           std::shared_ptr<array_info> arr,
                            local_global_stat_nan const &e_stat) {
     for (size_t i_row = 0; i_row < arr->length; i_row++) {
         if (GetBit((uint8_t *)arr->null_bitmask(), i_row)) {
@@ -572,7 +555,7 @@ T get_nth(std::vector<T> &my_array, int64_t k, bool parallel) {
     2) the case of integer/float is covered by the isnan_alltype function
  */
 template <typename T, int dtype>
-std::pair<int64_t, int64_t> nb_entries_local(array_info *arr) {
+std::pair<int64_t, int64_t> nb_entries_local(std::shared_ptr<array_info> arr) {
     int64_t nb_ok = 0, nb_miss = 0;
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         for (size_t i_row = 0; i_row < arr->length; i_row++) {
@@ -605,7 +588,8 @@ std::pair<int64_t, int64_t> nb_entries_local(array_info *arr) {
     Then use MPI_Allreduce to agglomerate them
  */
 template <typename T, int dtype>
-local_global_stat_nan nb_entries_global(array_info *arr, bool parallel) {
+local_global_stat_nan nb_entries_global(std::shared_ptr<array_info> arr,
+                                        bool parallel) {
     std::pair<int64_t, int64_t> pair = nb_entries_local<T, dtype>(arr);
     if (!parallel) {
         return {pair.first, pair.second, pair.first, pair.second};
@@ -660,8 +644,8 @@ void median_series_computation_eff(double *res, std::vector<T> &my_array,
    the median from the list of non-nan entries with two cases to consider.
  */
 template <typename T, int dtype>
-void median_series_computation_T(double *res, array_info *arr, bool parallel,
-                                 bool skipna) {
+void median_series_computation_T(double *res, std::shared_ptr<array_info> arr,
+                                 bool parallel, bool skipna) {
     local_global_stat_nan e_stat = nb_entries_global<T, dtype>(arr, parallel);
     if ((e_stat.glob_nb_miss > 0 && !skipna) || e_stat.glob_nb_ok == 0) {
         *res = std::nan("");
@@ -686,9 +670,10 @@ void median_series_computation_T(double *res, array_info *arr, bool parallel,
     ---
     According to the data type we trigger a different templatized function.
  */
-void median_series_computation(double *res, array_info *arr, bool parallel,
-                               bool skipna) {
+void median_series_computation_py_entry(double *res, array_info *p_arr,
+                                        bool parallel, bool skipna) {
     try {
+        std::shared_ptr<array_info> arr(p_arr);
         Bodo_CTypes::CTypeEnum dtype = arr->dtype;
         switch (dtype) {
             case Bodo_CTypes::INT8:
@@ -760,7 +745,8 @@ void median_series_computation(double *res, array_info *arr, bool parallel,
    ---We do the operation only for numerical NUMPY values.
    ---We only return the next rows. We could also return the previous ones.
 */
-array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
+std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
+                                               uint64_t const &level_next) {
     int myrank, n_pes;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -870,7 +856,8 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
     size_t sumnext =
         std::accumulate(ListNextSizes.begin(), ListNextSizes.end(), size_t(0));
     uint64_t ghost_length = std::min(sumnext, size_t(level_next));
-    array_info *ghost_arr = alloc_numpy(ghost_length, arr->dtype);
+    std::shared_ptr<array_info> ghost_arr =
+        alloc_numpy(ghost_length, arr->dtype);
     uint64_t siztype = numpy_item_size[arr->dtype];
     MPI_Datatype mpi_typ = get_MPI_typ(arr->dtype);
     uint64_t pos_index = 0;
@@ -928,9 +915,10 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
    @param inc_dec : 1 for testing is_monotonic_increasing / 2 for
    is_monotonic_decreasing
  */
-void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
-                                 bool is_parallel) {
+void compute_series_monotonicity_py_entry(double *res, array_info *p_arr,
+                                          int64_t inc_dec, bool is_parallel) {
     try {
+        std::shared_ptr<array_info> arr(p_arr);
         int64_t n_rows = arr->length;
         uint64_t siztype = numpy_item_size[arr->dtype];
         // First checking monotonicity locally
@@ -971,7 +959,7 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
             return;
         }
         // We need to compute the ghost rows to conclude
-        array_info *ghost_arr = compute_ghost_rows(arr, 1);
+        std::shared_ptr<array_info> ghost_arr = compute_ghost_rows(arr, 1);
         int value_glob_tot, value_glob = 0;
         if (ghost_arr->length > 0 &&
             n_rows >
@@ -998,16 +986,16 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
         } else {
             *res = 1.0;
         }
-        delete_info_decref_array(ghost_arr);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;
     }
 }
 
-void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
-                                 bool is_parallel) {
+void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
+                                          int64_t lag, bool is_parallel) {
     try {
+        std::shared_ptr<array_info> arr(p_arr);
         uint64_t n_rows = arr->length;
         uint64_t siztype = numpy_item_size[arr->dtype];
         if (!is_parallel) {
@@ -1047,7 +1035,7 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
             *res = std::nan("1.0");
             return;
         }
-        array_info *ghost_arr = compute_ghost_rows(arr, lag);
+        std::shared_ptr<array_info> ghost_arr = compute_ghost_rows(arr, lag);
         uint64_t ghost_siz = ghost_arr->length;
         std::vector<double> V(5, 0);
         double &sum1 = V[0];
@@ -1091,7 +1079,6 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
         double norm2 = sqrt(avg22 - avg2 * avg2);
         double autocorr = scal / (norm1 * norm2);
         *res = autocorr;
-        delete_info_decref_array(ghost_arr);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;

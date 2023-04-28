@@ -612,13 +612,13 @@ def test_cast_interval(args, memory_leak_check):
     [
         pytest.param(
             pd.Timestamp("2022-11-05 23:13:12.242"),
-            id="scalar",
+            id="timestamp-scalar",
         ),
         pytest.param(
             pd.Series(
                 [None] * 3 + list(pd.date_range("2022-1-1", periods=21, freq="40D5H4S"))
             ).values,
-            id="vector",
+            id="timestamp-vector",
         ),
     ],
 )
@@ -652,6 +652,108 @@ def test_cast_tz_naive_to_tz_aware(ts_val, representative_tz, memory_leak_check)
         check_dtype=False,
         reset_index=True,
     )
+
+
+@pytest.mark.parametrize(
+    "date_val",
+    [
+        pytest.param(
+            datetime.date(2023, 4, 10),
+            id="date-scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.date(1989, 10, 4),
+                    datetime.date(2012, 12, 31),
+                    None,
+                    datetime.date(2023, 1, 1),
+                    datetime.date(2002, 5, 13),
+                ]
+                * 4
+            ),
+            id="date-vector",
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_cast_date_to_tz_aware(date_val, representative_tz, memory_leak_check):
+    """
+    Tests cast_date_to_tz_aware kernel
+    """
+    tz_literal = representative_tz
+
+    def impl(date_val):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.cast_date_to_tz_aware(date_val, tz_literal)
+        )
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(date_val, datetime.date):
+        impl = lambda date_val: bodo.libs.bodosql_array_kernels.cast_date_to_tz_aware(
+            date_val, tz_literal
+        )
+
+    def localize_scalar_fn(date_val):
+        if pd.isna(date_val):
+            return None
+        else:
+            return pd.Timestamp(date_val).tz_localize(tz_literal)
+
+    answer = vectorized_sol((date_val,), localize_scalar_fn, None)
+    check_func(
+        impl,
+        (date_val,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_cast_date_to_tz_aware_non_literal_tz_error_handling(memory_leak_check):
+    """
+    Tests cast_date_to_tz_aware kernel can throw error
+    correctly when tz input is not a string literal
+    """
+    date_val = pd.Series(
+        [
+            datetime.date(1989, 10, 4),
+            datetime.date(2012, 12, 31),
+            None,
+            datetime.date(2023, 1, 1),
+            datetime.date(2002, 5, 13),
+        ]
+        * 4
+    )
+
+    tz = pd.Series(
+        [
+            "UTC",
+            "US/Pacific",
+            None,
+            "Europe/Berlin",
+            "Africa/Casablanca",
+        ]
+        * 4
+    )
+
+    def impl(date_val):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.cast_date_to_tz_aware(date_val, tz)
+        )
+
+    with pytest.raises(
+        Exception,
+        match="'tz' must be a literal value",
+    ):
+        check_func(
+            impl,
+            (date_val,),
+            py_output=pd.Series(),
+            check_dtype=False,
+            reset_index=True,
+        )
 
 
 @pytest.mark.parametrize(

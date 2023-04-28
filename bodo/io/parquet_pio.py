@@ -1342,8 +1342,10 @@ from numba.core import cgutils
 if bodo.utils.utils.has_pyarrow():
     from bodo.io import arrow_cpp
 
-    ll.add_symbol("pq_write", arrow_cpp.pq_write)
-    ll.add_symbol("pq_write_partitioned", arrow_cpp.pq_write_partitioned)
+    ll.add_symbol("pq_write_py_entry", arrow_cpp.pq_write_py_entry)
+    ll.add_symbol(
+        "pq_write_partitioned_py_entry", arrow_cpp.pq_write_partitioned_py_entry
+    )
 
 
 @intrinsic
@@ -1398,7 +1400,9 @@ def parquet_write_table_cpp(
                 lir.IntType(1),  # downcast_time_ns_to_us
             ],
         )
-        fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="pq_write")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="pq_write_py_entry"
+        )
         ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
@@ -1408,7 +1412,7 @@ def parquet_write_table_cpp(
             types.voidptr,
             table_t,
             col_names_t,
-            index_t,
+            types.voidptr,
             types.boolean,
             types.voidptr,
             types.voidptr,
@@ -1471,7 +1475,7 @@ def parquet_write_table_partitioned_cpp(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="pq_write_partitioned"
+            builder.module, fnty, name="pq_write_partitioned_py_entry"
         )
         builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -1482,7 +1486,7 @@ def parquet_write_table_partitioned_cpp(
             data_table_t,
             col_names_t,
             col_names_no_partitions_t,
-            cat_table_t,
+            types.voidptr,
             types.voidptr,
             types.int32,
             types.voidptr,

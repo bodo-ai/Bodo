@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import com.bodosql.calcite.ir.Expr;
+import java.util.ArrayList;
 import java.util.List;
 
 public class RegexpCodeGen {
@@ -94,23 +95,54 @@ public class RegexpCodeGen {
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static Expr generateRegexpSubstrInfo(List<Expr> operandsInfo) {
-    StringBuilder expr_code = new StringBuilder();
+    List<String> funcArgs = new ArrayList<>();
+    // funcArgs is the list of args to REGEXP_SUBSTR that will be
+    // modified over the course of this function.
+    // Below are the default values.
+    funcArgs.add(operandsInfo.get(0).emit()); // source
+    funcArgs.add(operandsInfo.get(1).emit()); // pattern
+    funcArgs.add("1"); // position
+    funcArgs.add("1"); // occurrence
+    funcArgs.add(makeQuoted("c")); // Regexp parameters
+    funcArgs.add("0"); // group number
 
-    Expr source = operandsInfo.get(0);
-    Expr pattern = operandsInfo.get(1);
-
-    expr_code.append("bodo.libs.bodosql_array_kernels.regexp_substr(");
-    expr_code.append(source.emit()).append(", ");
-    expr_code.append(pattern.emit()).append(", ");
-    expr_code.append(getCodeWithDefault(operandsInfo, 2, "1")).append(",");
-    expr_code.append(getCodeWithDefault(operandsInfo, 3, "1")).append(",");
-    // If a group was provided, ensure that the flags contain 'e'
-    if (operandsInfo.size() == 6) {
-      expr_code.append(operandsInfo.get(4).emit() + "+" + makeQuoted("e")).append(",");
-    } else {
-      expr_code.append(getCodeWithDefault(operandsInfo, 4, makeQuoted(""))).append(",");
+    // Overwrite default arguments with user-defined ones
+    for (int i = 2; i < operandsInfo.size(); i++) {
+      Expr arg = operandsInfo.get(i);
+      if (!arg.emit().equals("\"\"")) {
+        funcArgs.set(i, arg.emit());
+      }
     }
-    expr_code.append(getCodeWithDefault(operandsInfo, 5, "1")).append(")");
+
+    int regexpParamsIndex = 4;
+    int groupNumIndex = 5;
+
+    String regexpParams = funcArgs.get(regexpParamsIndex);
+    String groupNum = funcArgs.get(groupNumIndex);
+
+    // Edge case: if regex parameters exist and the group
+    // number is unspecified, <group_num> defaults to 1
+    if (regexpParams.contains("e") && groupNum == "0") {
+      funcArgs.set(groupNumIndex, "1");
+    }
+
+    // Edge case: if <group_num> is specified, Snowflake
+    // allows extraction even if "e" is not present in the
+    // regex parameters arg.
+    if (groupNum != "0" && !regexpParams.contains("e")) {
+      regexpParams = funcArgs.get(regexpParamsIndex);
+      funcArgs.set(regexpParamsIndex, regexpParams + "+" + makeQuoted("e"));
+    }
+
+    StringBuilder expr_code = new StringBuilder();
+    expr_code.append("bodo.libs.bodosql_array_kernels.regexp_substr(");
+
+    // Populate the output function call with the final arg values
+    for (int i = 0; i < 5; i++) {
+      expr_code.append(funcArgs.get(i)).append(", ");
+    }
+    expr_code.append(funcArgs.get(5));
+    expr_code.append(")");
 
     return new Expr.Raw(expr_code.toString());
   }
@@ -122,24 +154,54 @@ public class RegexpCodeGen {
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static Expr generateRegexpInstrInfo(List<Expr> operandsInfo) {
-    StringBuilder expr_code = new StringBuilder();
+    List<String> funcArgs = new ArrayList<>();
+    // funcArgs is the list of args to REGEXP_INSTR that will be
+    // modified over the course of this function.
+    // Below are the default values.
+    funcArgs.add(operandsInfo.get(0).emit()); // source
+    funcArgs.add(operandsInfo.get(1).emit()); // pattern
+    funcArgs.add("1"); // position
+    funcArgs.add("1"); // occurrence
+    funcArgs.add("0"); // option
+    funcArgs.add(makeQuoted("c")); // Regexp parameters
+    funcArgs.add("0"); // group number
 
-    Expr source = operandsInfo.get(0);
-    Expr pattern = operandsInfo.get(1);
-
-    expr_code.append("bodo.libs.bodosql_array_kernels.regexp_instr(");
-    expr_code.append(source.emit()).append(", ");
-    expr_code.append(pattern.emit()).append(", ");
-    expr_code.append(getCodeWithDefault(operandsInfo, 2, "1")).append(",");
-    expr_code.append(getCodeWithDefault(operandsInfo, 3, "1")).append(",");
-    expr_code.append(getCodeWithDefault(operandsInfo, 4, "0")).append(",");
-    // If a group was provided, ensure that the flags contain 'e'
-    if (operandsInfo.size() == 7) {
-      expr_code.append(operandsInfo.get(5).emit() + "+" + makeQuoted("e")).append(",");
-    } else {
-      expr_code.append(getCodeWithDefault(operandsInfo, 5, makeQuoted(""))).append(",");
+    // Overwrite default arguments with user-defined ones
+    for (int i = 2; i < operandsInfo.size(); i++) {
+      Expr arg = operandsInfo.get(i);
+      if (!arg.emit().equals("\"\"")) {
+        funcArgs.set(i, arg.emit());
+      }
     }
-    expr_code.append(getCodeWithDefault(operandsInfo, 6, "1")).append(")");
+
+    int regexpParamsIndex = 5;
+    int groupNumIndex = 6;
+
+    String regexpParams = funcArgs.get(regexpParamsIndex);
+    String groupNum = funcArgs.get(groupNumIndex);
+
+    // Edge case: if regex parameters exist and the group
+    // number is unspecified, <group_num> defaults to 1
+    if (regexpParams.contains("e") && groupNum == "0") {
+      funcArgs.set(groupNumIndex, "1");
+    }
+
+    // Edge case: if <group_num> is specified, Snowflake
+    // allows extraction even if "e" is not present in the
+    // regex parameters arg.
+    if (groupNum != "0" && !regexpParams.contains("e")) {
+      regexpParams = funcArgs.get(regexpParamsIndex);
+      funcArgs.set(regexpParamsIndex, regexpParams + "+" + makeQuoted("e"));
+    }
+
+    StringBuilder expr_code = new StringBuilder();
+    expr_code.append("bodo.libs.bodosql_array_kernels.regexp_instr(");
+
+    for (int i = 0; i < 6; i++) {
+      expr_code.append(funcArgs.get(i)).append(", ");
+    }
+    expr_code.append(funcArgs.get(6));
+    expr_code.append(")");
 
     return new Expr.Raw(expr_code.toString());
   }

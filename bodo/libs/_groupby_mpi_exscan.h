@@ -28,9 +28,10 @@ const int max_global_number_groups_exscan = 1000;
  * ---1 will use the MPI_Exscan strategy with CATEGORICAL column
  * ---2 will use the MPI_Exscan strategy with determination of the columns
  */
-int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
-                               int8_t* ncols_per_func, int64_t num_funcs,
-                               int* ftypes, bool input_has_index);
+int determine_groupby_strategy(std::shared_ptr<table_info> in_table,
+                               int64_t num_keys, int8_t* ncols_per_func,
+                               int64_t num_funcs, int* ftypes,
+                               bool input_has_index);
 
 /**
  * @brief This function is used to compute the groupby using the MPI_Exscan
@@ -46,13 +47,14 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
  * @param return_key Should we return the key?
  * @param return_index Should we return the index?
  * @param use_sql_rules Should we use SQL rules?
- * @return table_info* The table containing the result of the groupby.
+ * @return std::shared_ptr<table_info> The table containing the result of the
+ * groupby.
  */
-table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
-                                   int64_t num_keys, int* ftypes,
-                                   int* func_offsets, bool is_parallel,
-                                   bool skipdropna, bool return_key,
-                                   bool return_index, bool use_sql_rules);
+std::shared_ptr<table_info> mpi_exscan_computation(
+    std::shared_ptr<array_info> cat_column,
+    std::shared_ptr<table_info> in_table, int64_t num_keys, int* ftypes,
+    int* func_offsets, bool is_parallel, bool skipdropna, bool return_key,
+    bool return_index, bool use_sql_rules);
 
 /**
  * Create an array info that assigns an index to each unique category.
@@ -62,7 +64,8 @@ table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
  * @param key_dropna: whether we drop null keys or not.
  * @return key categorical array_info
  */
-array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
-                                      bool is_parallel, bool key_dropna = true);
+std::shared_ptr<array_info> compute_categorical_index(
+    std::shared_ptr<table_info> in_table, int64_t num_keys, bool is_parallel,
+    bool key_dropna = true);
 
 #endif  // _GROUPBY_MPI_EXSCAN_H_INCLUDED

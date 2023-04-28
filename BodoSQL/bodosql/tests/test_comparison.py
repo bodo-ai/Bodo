@@ -7,7 +7,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import bodosql_use_date_type, check_query
+from bodosql.tests.utils import check_query
 
 from bodo import Time
 
@@ -200,8 +200,7 @@ def test_comparison_operators_within_table(
     comparison_df,
     comparison_query_args,
     spark_info,
-    # seems to be leaking memory sporadically
-    # memory_leak_check
+    memory_leak_check,
 ):
     cmp_op, use_case = comparison_query_args
     if use_case:
@@ -213,15 +212,14 @@ def test_comparison_operators_within_table(
         query = f"SELECT A, B, A {cmp_op} B FROM table1"
     is_binary = type(comparison_df["table1"]["A"].iloc[-1]) == bytes
     convert_columns_bytearray = ["A", "B"] if is_binary else []
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            comparison_df,
-            spark_info,
-            check_dtype=False,
-            check_names=False,
-            convert_columns_bytearray=convert_columns_bytearray,
-        )
+    check_query(
+        query,
+        comparison_df,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        convert_columns_bytearray=convert_columns_bytearray,
+    )
 
 
 @pytest.fixture
@@ -283,15 +281,14 @@ def test_time_comparison_operators_within_table(
         expected_output = pd.DataFrame(
             {"A": ctx["table1"].A, "B": ctx["table1"].B, "C": answer}
         )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=expected_output,
-            check_dtype=False,
-            check_names=False,
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+        check_names=False,
+    )
 
 
 def test_comparison_operators_interval_within_table(
@@ -351,6 +348,7 @@ def test_where_and(join_dataframes, spark_info, memory_leak_check):
         pytest.skip(
             "No support for binary literals: https://bodo.atlassian.net/browse/BE-3304"
         )
+
     elif isinstance(join_dataframes["table1"]["A"].values[0], str):
         assert isinstance(join_dataframes["table2"]["A"].values[0], str)
         scalar_val1 = "'" + join_dataframes["table1"]["A"].values[0] + "'"
@@ -567,3 +565,79 @@ def test_between_str(
         spark_query = None
 
     check_query(query, bodosql_string_types, spark_info, check_dtype=False)
+
+
+@pytest.fixture
+def date_datetime64_comparison_args(comparison_query_args):
+    cmp_op, use_case = comparison_query_args
+    data = [
+        None,
+        datetime.date(1999, 12, 31),
+        datetime.date(2019, 7, 4),
+        datetime.date(2022, 2, 6),
+        datetime.date(2022, 3, 4),
+        datetime.date(2022, 3, 14),
+    ]
+    A = pd.Series(data * 6)
+    b = []
+    for elem in data:
+        b += [np.datetime64(elem)] * 6
+    B = pd.Series(b)
+    if use_case:
+        ctx = {"table1": pd.DataFrame({"B": B, "A": A})}
+    else:
+        ctx = {"table1": pd.DataFrame({"A": A, "B": B})}
+    row_funcs = {
+        "=": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else pd.Timestamp(x[0]) == pd.Timestamp(x[1]),
+        "<>": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else pd.Timestamp(x[0]) != pd.Timestamp(x[1]),
+        "!=": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else pd.Timestamp(x[0]) != pd.Timestamp(x[1]),
+        "<": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else pd.Timestamp(x[0]) < pd.Timestamp(x[1]),
+        "<=": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else pd.Timestamp(x[0]) <= pd.Timestamp(x[1]),
+        ">": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else pd.Timestamp(x[0]) > pd.Timestamp(x[1]),
+        ">=": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else pd.Timestamp(x[0]) >= pd.Timestamp(x[1]),
+        "<=>": lambda x: True
+        if pd.isna(x[0]) and pd.isna(x[1])
+        else (
+            False
+            if pd.isna(x[1]) or pd.isna(x[1])
+            else pd.Timestamp(x[0]) == pd.Timestamp(x[1])
+        ),
+    }
+    answer = ctx["table1"].apply(row_funcs[cmp_op], axis=1)
+    return cmp_op, use_case, ctx, answer
+
+
+def test_date_compare_datetime64(date_datetime64_comparison_args, memory_leak_check):
+    """
+    Checks that comparison operator works correctly between datetime.date
+    objects and np.datetime64 objects
+    """
+    cmp_op, use_case, ctx, answer = date_datetime64_comparison_args
+    if cmp_op == "<=>":
+        # <=> operator requires that both sides must be of the same type
+        return
+    if use_case:
+        query = f"SELECT CASE WHEN (B {cmp_op} A) IS NULL THEN NULL ELSE B {cmp_op} A END from table1"
+    else:
+        query = f"SELECT A {cmp_op} B from table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({"output": answer}),
+    )

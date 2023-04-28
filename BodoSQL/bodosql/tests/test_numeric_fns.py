@@ -568,7 +568,7 @@ def test_conv_scalars(bodosql_conv_df, spark_info, memory_leak_check):
         pytest.param("SELECT LOG(72.0, 2.0) FROM table1", id="all_scalar"),
     ],
 )
-def test_log_hybrid(query, spark_info):
+def test_log_hybrid(query, spark_info, memory_leak_check):
     """Testing log seperately since it reverses the order of the arguments"""
     ctx = {
         "table1": pd.DataFrame(

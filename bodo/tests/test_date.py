@@ -2,6 +2,7 @@
 
 import calendar
 import datetime
+import operator
 import random
 
 import numpy as np
@@ -1888,6 +1889,9 @@ def test_pd_to_datetime(memory_leak_check):
     )
     check_func(test_input, (date_arr,))
 
+    date_scalar = datetime.date(2023, 4, 18)
+    check_func(test_input, (date_scalar,))
+
     # input is already Series(dt64)
     S = pd.to_datetime(date_arr)
     check_func(test_input, (S,))
@@ -2474,3 +2478,60 @@ def test_datetime_compare_pd_timestamp(
 ):
     check_func(comparison_impl, (datetime, timestamp))
     check_func(comparison_impl, (timestamp, datetime))
+
+
+@pytest.mark.parametrize(
+    "date",
+    [
+        datetime.date(2019, 1, 1),
+        datetime.date(2020, 1, 1),
+        datetime.date(2030, 1, 1),
+    ],
+)
+@pytest.mark.parametrize(
+    "datetime64",
+    [
+        np.datetime64("2019-01-01", "ns"),
+        np.datetime64("2020-01-01", "ns"),
+        np.datetime64("2030-01-01", "ns"),
+    ],
+)
+@pytest.mark.parametrize(
+    "op",
+    [
+        pytest.param(operator.eq, id="eq"),
+        pytest.param(operator.ne, id="ne"),
+        pytest.param(operator.lt, id="lt"),
+        pytest.param(operator.le, id="le"),
+        pytest.param(operator.gt, id="gt"),
+        pytest.param(operator.ge, id="ge"),
+    ],
+)
+def test_date_compare_datetime64(date, datetime64, op, memory_leak_check):
+    """
+    Tests comparison operator works correctly between datetime.date
+    objects and np.datetime64 objects
+    """
+
+    def comparison_impl(op):
+        def cmp(a, b):
+            return op(a, b)
+
+        return cmp
+
+    def expected_output(lhs, rhs):
+        if isinstance(lhs, datetime.date) and isinstance(rhs, np.datetime64):
+            return op(pd.Timestamp(lhs), rhs)
+        if isinstance(rhs, datetime.date) and isinstance(lhs, np.datetime64):
+            return op(lhs, pd.Timestamp(rhs))
+
+    check_func(
+        comparison_impl(op),
+        (date, datetime64),
+        py_output=expected_output(date, datetime64),
+    )
+    check_func(
+        comparison_impl(op),
+        (datetime64, date),
+        py_output=expected_output(datetime64, date),
+    )

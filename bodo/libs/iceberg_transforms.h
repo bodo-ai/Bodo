@@ -43,10 +43,10 @@
  * bucket value
  * @param is_parallel Whether the operation is being performed in parallel. Used
  * for tracing.
- * @return array_info* Transformed array.
+ * @return std::shared_ptr<array_info> Transformed array.
  */
-array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
-                                     bool is_parallel);
+std::shared_ptr<array_info> array_transform_bucket_N(
+    std::shared_ptr<array_info> in_arr, int64_t N, bool is_parallel);
 
 /**
  * @brief Compute the Iceberg truncate transform on the input array and return a
@@ -62,10 +62,10 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
  * @param width Truncase width
  * @param is_parallel Whether the operation is being performed in parallel. Used
  * for tracing.
- * @return array_info* Transformed array.
+ * @return std::shared_ptr<array_info> Transformed array.
  */
-array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
-                                       bool is_parallel);
+std::shared_ptr<array_info> array_transform_truncate_W(
+    std::shared_ptr<array_info> in_arr, int64_t width, bool is_parallel);
 
 /**
  * @brief Compute the Iceberg void transform on the input array and return a
@@ -76,9 +76,10 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
  * @param in_arr Array to transform
  * @param is_parallel Whether the operation is being performed in parallel. Used
  * for tracing.
- * @return array_info* Transformed array.
+ * @return std::shared_ptr<array_info> Transformed array.
  */
-array_info* array_transform_void(array_info* in_arr, bool is_parallel);
+std::shared_ptr<array_info> array_transform_void(
+    std::shared_ptr<array_info> in_arr, bool is_parallel);
 
 /**
  * @brief Compute the Iceberg year transform on the input array and return a
@@ -88,9 +89,10 @@ array_info* array_transform_void(array_info* in_arr, bool is_parallel);
  * @param in_arr Array to transform
  * @param is_parallel Whether the operation is being performed in parallel. Used
  * for tracing.
- * @return array_info* Transformed array.
+ * @return std::shared_ptr<array_info> Transformed array.
  */
-array_info* array_transform_year(array_info* in_arr, bool is_parallel);
+std::shared_ptr<array_info> array_transform_year(
+    std::shared_ptr<array_info> in_arr, bool is_parallel);
 
 /**
  * @brief Compute the Iceberg month transform on the input array and return a
@@ -100,9 +102,10 @@ array_info* array_transform_year(array_info* in_arr, bool is_parallel);
  * @param in_arr Array to transform
  * @param is_parallel Whether the operation is being performed in parallel. Used
  * for tracing.
- * @return array_info* Transformed array.
+ * @return std::shared_ptr<array_info> Transformed array.
  */
-array_info* array_transform_month(array_info* in_arr, bool is_parallel);
+std::shared_ptr<array_info> array_transform_month(
+    std::shared_ptr<array_info> in_arr, bool is_parallel);
 
 /**
  * @brief Compute the Iceberg day transform on the input array and return a
@@ -113,9 +116,10 @@ array_info* array_transform_month(array_info* in_arr, bool is_parallel);
  * @param in_arr Array to transform
  * @param is_parallel Whether the operation is being performed in parallel. Used
  * for tracing.
- * @return array_info* Transformed array.
+ * @return std::shared_ptr<array_info> Transformed array.
  */
-array_info* array_transform_day(array_info* in_arr, bool is_parallel);
+std::shared_ptr<array_info> array_transform_day(
+    std::shared_ptr<array_info> in_arr, bool is_parallel);
 
 /**
  * @brief Compute the Iceberg hour transform on the input array and return a
@@ -125,28 +129,25 @@ array_info* array_transform_day(array_info* in_arr, bool is_parallel);
  * @param in_arr Array to transform
  * @param is_parallel Whether the operation is being performed in parallel. Used
  * for tracing.
- * @return array_info* Transformed array.
+ * @return std::shared_ptr<array_info> Transformed array.
  */
-array_info* array_transform_hour(array_info* in_arr, bool is_parallel);
+std::shared_ptr<array_info> array_transform_hour(
+    std::shared_ptr<array_info> in_arr, bool is_parallel);
 
 /**
  * @brief Compute the identity transform. In most cases, it returns the array as
  * is without any copies. In certain cases, we still need to perform some sort
  * of transformation (e.g. DATETIME needs to be converted to microseconds from
  * nanoseconds, and DATE needs to be converted to days since epoch from the bit
- * style representation). In those cases, we set `new_alloc = true`, else we set
- * it to `new_alloc`. Technically all datatypes are supported, but correctness
- * is only guaranteed for Iceberg datatypes.
+ * style representation).
  *
  * @param in_arr Array to transform
- * @param[out] new_alloc Whether a new allocation was made, or is the input
- * being returned as is.
  * @param is_parallel Whether the operation is being performed in parallel. Used
  * for tracing.
- * @return array_info* Transformed array.
+ * @return std::shared_ptr<array_info> Transformed array.
  */
-array_info* iceberg_identity_transform(array_info* in_arr, bool* new_alloc,
-                                       bool is_parallel);
+std::shared_ptr<array_info> iceberg_identity_transform(
+    std::shared_ptr<array_info> in_arr, bool is_parallel);
 
 /**
  * @brief Main entrypoint function to apply a transform on an input array.
@@ -159,13 +160,16 @@ array_info* iceberg_identity_transform(array_info* in_arr, bool* new_alloc,
  * argument is irrelevant and the value is ignored.
  * @param is_parallel Whether the operation is being performed in parallel. Used
  * for tracing.
- * @return array_info* Transformed array.
+ * @return std::shared_ptr<array_info> Transformed array.
  */
-array_info* iceberg_transform(array_info* in_arr, std::string transform_name,
-                              int64_t arg, bool is_parallel);
+std::shared_ptr<array_info> iceberg_transform(
+    std::shared_ptr<array_info> in_arr, std::string transform_name, int64_t arg,
+    bool is_parallel);
 
-std::string transform_val_to_str(std::string transform_name, array_info* in_arr,
-                                 array_info* transformed_arr, size_t idx);
+std::string transform_val_to_str(std::string transform_name,
+                                 std::shared_ptr<array_info> in_arr,
+                                 std::shared_ptr<array_info> transformed_arr,
+                                 size_t idx);
 
 /**
  * @brief Return python object representation of value in position `idx` of
@@ -177,6 +181,7 @@ std::string transform_val_to_str(std::string transform_name, array_info* in_arr,
  * @return PyObject* Python Object representation of value in position `idx` of
  * `arr` array
  */
-PyObject* iceberg_transformed_val_to_py(array_info* arr, size_t idx);
+PyObject* iceberg_transformed_val_to_py(std::shared_ptr<array_info> arr,
+                                        size_t idx);
 
 #endif  // _BODO_ICEBERG_TRANSFORMS_H

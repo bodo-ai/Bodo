@@ -2090,6 +2090,26 @@ def overload_to_datetime(
 
         return impl_np_datetime
 
+    # datetime.date input. This ignores other fields and just returns value wrapped
+    # in a timestamp
+    if arg_a == bodo.hiframes.datetime_date_ext.datetime_date_type:
+        def impl_date(
+                arg_a,
+                errors="raise",
+                dayfirst=False,
+                yearfirst=False,
+                utc=None,
+                format=None,
+                exact=True,
+                unit=None,
+                infer_datetime_format=False,
+                origin="unix",
+                cache=True,
+        ):  # pragma: no cover
+            return pd.Timestamp(arg_a)
+
+        return impl_date
+
     if is_overload_none(arg_a):  # pragma: no cover
 
         def impl_np_datetime(
@@ -2110,7 +2130,7 @@ def overload_to_datetime(
         return impl_np_datetime
 
     # TODO: input Type of a dataframe
-    raise_bodo_error(f"pd.to_datetime(): cannot convert date type {arg_a}")
+    raise_bodo_error(f"pd.to_datetime(): cannot convert data type {arg_a}")  # pragma: no cover
 
 
 @overload(pd.to_timedelta, inline="always", no_unliteral=True)

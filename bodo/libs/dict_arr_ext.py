@@ -253,7 +253,7 @@ def box_dict_arr(typ, val, c):
         from bodo.libs.array import array_info_type, array_to_info_codegen
 
         arr_info = array_to_info_codegen(
-            c.context, c.builder, array_info_type(typ), (val,), incref=False
+            c.context, c.builder, array_info_type(typ), (val,)
         )
         fnty = lir.FunctionType(
             c.pyapi.pyobj,

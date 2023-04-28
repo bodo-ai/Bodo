@@ -46,7 +46,6 @@ public class DateAddCodeGen {
    */
   public static Expr generateMySQLDateAddCode(
       Expr arg0, Expr arg1, boolean adding_delta, String fnName) {
-    StringBuilder addBuilder = new StringBuilder();
     if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
       arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
     }

@@ -13,10 +13,9 @@
 #include "arrow/result.h"
 #include "mpi.h"
 
-FileReader* f_reader = nullptr;
-;                           // File reader used by S3 / Hdfs
-PyObject* f_mod = nullptr;  // imported python module:
-                            // bodo.io.s3_reader, or bodo.io.hdfs_reader
+FileReader* f_reader = nullptr;  // File reader used by S3 / Hdfs
+PyObject* f_mod = nullptr;       // imported python module:
+                                 // bodo.io.s3_reader, or bodo.io.hdfs_reader
 
 #define CHECK_ARROW(expr, msg)                                                 \
     if (!(expr.ok())) {                                                        \
@@ -43,24 +42,16 @@ void file_write_parallel_py_entrypt(char* file_name, char* buff, int64_t start,
 
 PyMODINIT_FUNC PyInit_hio(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "hio", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "hio", "No docs", NULL);
+    if (m == NULL)
+        return NULL;
 
     // numpy read
-    PyObject_SetAttrString(m, "get_file_size",
-                           PyLong_FromVoidPtr((void*)(&get_file_size)));
-    PyObject_SetAttrString(m, "file_read",
-                           PyLong_FromVoidPtr((void*)(&file_read)));
-    PyObject_SetAttrString(m, "file_write",
-                           PyLong_FromVoidPtr((void*)(&file_write_py_entrypt)));
-    PyObject_SetAttrString(m, "file_read_parallel",
-                           PyLong_FromVoidPtr((void*)(&file_read_parallel)));
-    PyObject_SetAttrString(
-        m, "file_write_parallel",
-        PyLong_FromVoidPtr((void*)(&file_write_parallel_py_entrypt)));
+    SetAttrStringFromVoidPtr(m, get_file_size);
+    SetAttrStringFromVoidPtr(m, file_read);
+    SetAttrStringFromVoidPtr(m, file_write_py_entrypt);
+    SetAttrStringFromVoidPtr(m, file_read_parallel);
+    SetAttrStringFromVoidPtr(m, file_write_parallel_py_entrypt);
 
     return m;
 }
@@ -83,6 +74,7 @@ uint64_t get_file_size(char* file_name) {
             f_reader = func(file_name + 5, "", false, true);
             f_size = f_reader->getSize();
 
+            Py_DECREF(f_mod);
             Py_DECREF(func_obj);
         } else if (strncmp("hdfs://", file_name, 7) == 0) {
             // load hdfs_reader module, init hdfs_reader, then get size
@@ -95,6 +87,7 @@ uint64_t get_file_size(char* file_name) {
             f_reader = func(file_name, "", false, true);
             f_size = f_reader->getSize();
 
+            Py_DECREF(f_mod);
             Py_DECREF(func_obj);
         } else {
             // posix
@@ -138,9 +131,11 @@ void file_read(char* file_name, void* buff, int64_t size, int64_t offset) {
         } else {
             // posix
             FILE* fp = fopen(file_name, "rb");
-            if (fp == NULL) return;
+            if (fp == NULL)
+                return;
             int64_t seek_res = fseek(fp, offset, SEEK_SET);
-            if (seek_res != 0) return;
+            if (seek_res != 0)
+                return;
             size_t ret_code = fread(buff, 1, (size_t)size, fp);
             fclose(fp);
             if (ret_code != (size_t)size) {
@@ -210,7 +205,8 @@ void file_write(char* file_name, void* buff, int64_t size) {
     } else {
         // posix
         FILE* fp = fopen(file_name, "wb");
-        if (fp == NULL) return;
+        if (fp == NULL)
+            return;
         size_t ret_code = fwrite(buff, 1, (size_t)size, fp);
         fclose(fp);
         if (ret_code != (size_t)size) {
@@ -218,7 +214,6 @@ void file_write(char* file_name, void* buff, int64_t size) {
                                      std::string(file_name));
         }
     }
-    return;
 }
 
 void file_write_py_entrypt(char* file_name, void* buff, int64_t size) {
@@ -317,7 +312,8 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
     if (strncmp("s3://", file_name, 5) == 0) {
         std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
         std::string fname(file_name + 5);
-        // load s3_reader module, s3_get_fs, then write
+
+        // load bodo module, s3_get_fs, then write
         import_fs_module(Bodo_Fs::s3, "", f_mod);
         get_get_fs_pyobject(Bodo_Fs::s3, "", f_mod, func_obj);
         s3_get_fs_t s3_get_fs = (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
@@ -331,7 +327,8 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
         std::string orig_path(file_name);
         std::string fname;  // excluding hdfs:// prefix
         arrow::Status status;
-        // load hdfs_reader module, hdfs_get_fs, then write
+
+        // load bodo module, hdfs_get_fs, then write
         import_fs_module(Bodo_Fs::hdfs, "", f_mod);
         get_get_fs_pyobject(Bodo_Fs::hdfs, "", f_mod, func_obj);
         hdfs_get_fs_t hdfs_get_fs =
@@ -398,7 +395,8 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
                 printf("Error %s\n", err_string);
                 fflush(stdout);
                 throw std::runtime_error(
-                    "_io.cpp::file_write_parallel: File large write error: " +
+                    "_io.cpp::file_write_parallel: File large write "
+                    "error: " +
                     std::to_string(err_class) + file_name);
             }
             MPI_Type_free(&large_dtype);
@@ -419,7 +417,8 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
                                      (int)count, elem_dtype, MPI_STATUS_IGNORE);
 
         MPI_Type_free(&elem_dtype);
-        // if (ierr!=0) std::cerr << "File write error: " << file_name << '\n';
+        // if (ierr!=0) std::cerr << "File write error: " << file_name <<
+        // '\n';
         if (ierr != 0) {
             MPI_Error_class(ierr, &err_class);
             MPI_Error_string(ierr, err_string, &err_len);
@@ -432,7 +431,6 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
 
         MPI_File_close(&fh);
     }
-    return;
 }
 
 void file_write_parallel_py_entrypt(char* file_name, char* buff, int64_t start,

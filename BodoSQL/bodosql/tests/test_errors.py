@@ -565,7 +565,7 @@ def test_wrong_number_of_args_jit(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_coalesece():
+def test_coalesece(memory_leak_check):
     """
     Checks that supplying non unifiable types raises a BodoError in JIT
     """
@@ -585,7 +585,7 @@ def test_coalesece():
 
 
 @pytest.mark.slow
-def test_coalesece_jit():
+def test_coalesece_jit(memory_leak_check):
     """
     Checks that supplying non unifiable types raises a BodoError in JIT
     """
@@ -606,7 +606,7 @@ def test_coalesece_jit():
 
 
 @pytest.mark.slow
-def test_row_fn():
+def test_row_fn(memory_leak_check):
     """
     Checks that incorrectly formated windowed aggregations. Raise a JIT error
     """
@@ -626,7 +626,7 @@ def test_row_fn():
 
 
 @pytest.mark.slow
-def test_row_fn_jit():
+def test_row_fn_jit(memory_leak_check):
     """
     Checks that incorrectly formated windowed aggregations. Raise a JIT error
     """
@@ -647,7 +647,7 @@ def test_row_fn_jit():
 
 
 @pytest.mark.slow
-def test_invalid_syntax_fn():
+def test_invalid_syntax_fn(memory_leak_check):
     """
     Checks that incorrectly formated windowed aggregations. Raise a JIT error
     """
@@ -665,7 +665,7 @@ def test_invalid_syntax_fn():
 
 
 @pytest.mark.slow
-def test_invalid_syntax_fn_jit():
+def test_invalid_syntax_fn_jit(memory_leak_check):
     """
     Checks that incorrectly formated windowed aggregations. Raise a JIT error
     """
@@ -684,7 +684,7 @@ def test_invalid_syntax_fn_jit():
 
 
 @pytest.mark.slow
-def test_invalid_syntax_comma():
+def test_invalid_syntax_comma(memory_leak_check):
     """
     Checks that improper comma placement raises a JIT error
     """
@@ -705,7 +705,7 @@ def test_invalid_syntax_comma():
 
 
 @pytest.mark.slow
-def test_invalid_syntax_comma_jit():
+def test_invalid_syntax_comma_jit(memory_leak_check):
     """
     Checks that improper comma placement raises a JIT error
     """
@@ -727,7 +727,7 @@ def test_invalid_syntax_comma_jit():
 
 
 @pytest.mark.slow
-def test_invalid_named_param():
+def test_invalid_named_param(memory_leak_check):
     """
     Checks that not specifying named parameters raises a JIT error
     """
@@ -745,7 +745,7 @@ def test_invalid_named_param():
 
 
 @pytest.mark.slow
-def test_invalid_named_param_jit():
+def test_invalid_named_param_jit(memory_leak_check):
     """
     Checks that not specifying named parameters raises a JIT error
     """
@@ -764,7 +764,7 @@ def test_invalid_named_param_jit():
 
 
 @pytest.mark.slow
-def test_multi_table_colname():
+def test_multi_table_colname(memory_leak_check):
     """
     Checks ambiguous column selection raises a JIT error
     """
@@ -782,7 +782,7 @@ def test_multi_table_colname():
 
 
 @pytest.mark.slow
-def test_multi_table_colname_jit():
+def test_multi_table_colname_jit(memory_leak_check):
     """
     Checks ambiguous column selection raises a JIT error
     """
@@ -801,7 +801,7 @@ def test_multi_table_colname_jit():
 
 
 @pytest.mark.slow
-def test_string_row_min_max_error(bodosql_string_types):
+def test_string_row_min_max_error(bodosql_string_types, memory_leak_check):
     """tests that row functions with unsupported types raises an error"""
 
     def impl_max(df):
@@ -828,7 +828,7 @@ def test_string_row_min_max_error(bodosql_string_types):
 
 
 @pytest.mark.slow
-def test_qualify_no_groupby_err():
+def test_qualify_no_groupby_err(memory_leak_check):
     """tests that a reasonable error is thrown when using non grouped expressions in window functions"""
     table1 = pd.DataFrame(
         {
@@ -851,7 +851,7 @@ def test_qualify_no_groupby_err():
 
 
 @pytest.mark.slow
-def test_qualify_no_window_err():
+def test_qualify_no_window_err(memory_leak_check):
     """tests that a reasonable error is thrown when qualify contains no window functions"""
 
     table1 = pd.DataFrame(

@@ -28,7 +28,9 @@ data: {
     # Example: "org.apache.calcite.sql.*", "java.util.List".
     imports: [
       "com.bodosql.calcite.sql.SqlBodoCreateTable",
+      "com.bodosql.calcite.sql.ddl.SqlDropTable",
       "org.apache.calcite.sql.SqlCreate",
+      "org.apache.calcite.sql.SqlDrop",
       "org.apache.calcite.sql.ddl.SqlDdlNodes",
     ]
 
@@ -36,6 +38,8 @@ data: {
     # not a reserved keyword, add it to the 'nonReservedKeywords' section.
     keywords: [
       "IF",
+      "TEMP",
+      "TRANSIENT",
       "VOLATILE",
     ]
 
@@ -51,6 +55,8 @@ data: {
         "METHOD",
         "LEAD",
         "USER",
+        "TEMP",
+        "TRANSIENT",
     ]
 
     # List of additional join types. Each is a method with no arguments.
@@ -69,6 +75,14 @@ data: {
     # Example: "SqlCreateForeignSchema".
     createStatementParserMethods: [
         "SqlCreateTable"
+    ]
+
+    # List of methods for parsing extensions to "DROP" calls.
+    # Each must accept arguments "(SqlParserPos pos)".
+    # Example: "SqlDropSchema".
+    dropStatementParserMethods: [
+        "SqlDropTable",
+        "SqlDropView"
     ]
 
     # Binary operators tokens.

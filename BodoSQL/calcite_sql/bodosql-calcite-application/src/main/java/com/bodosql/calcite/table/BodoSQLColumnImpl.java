@@ -267,13 +267,8 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   }
 
   @Override
-  public boolean requiresReadCast(boolean useDateRuntime) {
-    return this.dataType.requiresReadCast(useDateRuntime);
-  }
-
-  @Override
-  public boolean requiresWriteCast(boolean useDateRuntime) {
-    return this.dataType.requiresWriteCast(useDateRuntime);
+  public boolean requiresReadCast() {
+    return this.dataType.requiresReadCast();
   }
 
   @Override
@@ -299,34 +294,11 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
    *     original data type with a read.
    */
   @Override
-  public String getReadCastExpr(String varName, boolean useDateRuntime) {
-    String dtype;
-    if (this.dataType == BodoSQLColumnDataType.CATEGORICAL) {
-      // Categorical data should be cast to the elem type. This cannot
-      // be described in a single BodoSQLColumnDataType yet.
-      dtype = this.elemType.getCastType(useDateRuntime).getTypeString();
-    } else {
-      dtype = this.dataType.getCastType(useDateRuntime).getTypeString();
-    }
+  public String getReadCastExpr(String varName) {
+    String dtype = this.elemType.getTypeString();
+    // Categorical data should be cast to the elem type. This cannot
+    // be described in a single BodoSQLColumnDataType yet.
     return getCommonCastExpr(varName, String.format("'%s'", dtype));
-  }
-
-  /**
-   * Generate the expression to cast this column to its BodoSQL type with a write.
-   *
-   * @param varName Name of the table to use.
-   * @return The string passed to __bodosql_replace_columns_dummy to cast this column to its
-   *     original data type with a write.
-   */
-  @Override
-  public String getWriteCastExpr(String varName) {
-    String dtype;
-    if (this.dataType == BodoSQLColumnDataType.DATE) {
-      dtype = "bodo.datetime_date_type";
-    } else {
-      dtype = String.format("'%s'", this.elemType.getTypeString());
-    }
-    return getCommonCastExpr(varName, dtype);
   }
 
   private String getCommonCastExpr(String varName, String castValue) {
