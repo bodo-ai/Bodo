@@ -17,11 +17,7 @@ from bodo.tests.timezone_common import (
     generate_date_trunc_func,
     generate_date_trunc_time_func,
 )
-from bodo.tests.utils import (
-    bodosql_use_date_type,
-    check_func,
-    nanoseconds_to_other_time_units,
-)
+from bodo.tests.utils import check_func, nanoseconds_to_other_time_units
 
 
 @pytest.mark.parametrize(
@@ -490,13 +486,12 @@ def test_interval_add_time_interval_to_date(
         None,
     )
 
-    with bodosql_use_date_type():
-        check_func(
-            impl,
-            (date_input, interval_input),
-            py_output=answer,
-            reset_index=True,
-        )
+    check_func(
+        impl,
+        (date_input, interval_input),
+        py_output=answer,
+        reset_index=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -1093,13 +1088,12 @@ def test_add_interval_date(unit, args, answers, memory_leak_check):
         fn_str = f"lambda amount, start_dt: bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt)"
     impl = eval(fn_str)
 
-    with bodosql_use_date_type():
-        check_func(
-            impl,
-            args,
-            py_output=answers[unit],
-            reset_index=True,
-        )
+    check_func(
+        impl,
+        args,
+        py_output=answers[unit],
+        reset_index=True,
+    )
 
 
 @pytest.fixture(
@@ -1476,12 +1470,11 @@ def test_last_day(dt, date_part, memory_leak_check):
         last_day_scalar_fn,
         None,
     )
-    with bodosql_use_date_type():
-        check_func(
-            impl,
-            (dt,),
-            py_output=last_day_answer,
-        )
+    check_func(
+        impl,
+        (dt,),
+        py_output=last_day_answer,
+    )
 
 
 def last_day_scalar_fn(elem, unit):
@@ -1649,14 +1642,13 @@ def test_monthname_date(datetime_dates_scalar_vector, memory_leak_check):
     monthname_answer = vectorized_sol(
         (datetime_dates_scalar_vector,), monthname_scalar_fn, None
     )
-    with bodosql_use_date_type():
-        check_func(
-            impl,
-            (datetime_dates_scalar_vector,),
-            py_output=monthname_answer,
-            check_dtype=False,
-            reset_index=True,
-        )
+    check_func(
+        impl,
+        (datetime_dates_scalar_vector,),
+        py_output=monthname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -1827,30 +1819,27 @@ def test_next_previous_day(dt, dow_str, memory_leak_check):
     next_day_answer = pd.Series(
         [next_prev_day_scalar_fn()(dt[i], dow_str[i]) for i in range(len(dt))]
     )
-    print(next_day_answer)
-    with bodosql_use_date_type():
-        check_func(
-            next_impl,
-            (
-                dt,
-                dow_str,
-            ),
-            py_output=next_day_answer,
-            reset_index=True,
-        )
+    check_func(
+        next_impl,
+        (
+            dt,
+            dow_str,
+        ),
+        py_output=next_day_answer,
+        reset_index=True,
+    )
     previous_day_answer = pd.Series(
         [next_prev_day_scalar_fn(True)(dt[i], dow_str[i]) for i in range(len(dt))]
     )
-    with bodosql_use_date_type():
-        check_func(
-            prev_impl,
-            (
-                dt,
-                dow_str,
-            ),
-            py_output=previous_day_answer,
-            reset_index=True,
-        )
+    check_func(
+        prev_impl,
+        (
+            dt,
+            dow_str,
+        ),
+        py_output=previous_day_answer,
+        reset_index=True,
+    )
 
 
 def test_weekday(dates_scalar_vector, memory_leak_check):
@@ -2208,14 +2197,13 @@ def test_date_trunc_date(day_part_strings, date_input, memory_leak_check):
     answer = vectorized_sol(
         (day_part_strings, date_input), date_trunc_date_scalar_fn, None
     )
-    with bodosql_use_date_type():
-        check_func(
-            impl,
-            (day_part_strings, date_input),
-            py_output=answer,
-            check_dtype=False,
-            reset_index=True,
-        )
+    check_func(
+        impl,
+        (day_part_strings, date_input),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -2613,14 +2601,13 @@ def test_date_from_parts(construct_date_data, memory_leak_check):
 
     answer = vectorized_sol((year, month, day), construct_date_scalar_fn, None)
 
-    with bodosql_use_date_type():
-        check_func(
-            impl,
-            args,
-            py_output=answer,
-            check_dtype=False,
-            reset_index=True,
-        )
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
 
 
 def test_add_interval_optional(memory_leak_check):

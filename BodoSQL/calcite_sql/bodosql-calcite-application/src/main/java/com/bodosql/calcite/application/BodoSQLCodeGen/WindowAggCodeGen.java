@@ -166,8 +166,7 @@ public class WindowAggCodeGen {
       final List<String> upperBoundExprs,
       final String zeroExpr,
       final List<List<WindowedAggregationArgument>> argsListList,
-      final List<Boolean> isRespectNulls,
-      boolean useDateRuntime) {
+      final List<Boolean> isRespectNulls) {
 
     // Buffer where we will store the text for the closure
     StringBuilder funcText = new StringBuilder();
@@ -399,8 +398,7 @@ public class WindowAggCodeGen {
                 aggName,
                 argsList,
                 colsToAddToOutputDf,
-                i,
-                useDateRuntime);
+                i);
 
             /* Otherwise, generate the FIRST_VALUE/LAST_VALUE/ANY_VALUE/NTH_VALUE
              * normally using a loop. Looks as follows:
@@ -430,8 +428,7 @@ public class WindowAggCodeGen {
                 aggName,
                 argsList,
                 colsToAddToOutputDf,
-                i,
-                useDateRuntime);
+                i);
           }
           break;
 
@@ -495,8 +492,7 @@ public class WindowAggCodeGen {
           loopAggNames,
           loopAggArgs,
           loopAggOutputs,
-          zeroExpr,
-          useDateRuntime);
+          zeroExpr);
     }
 
     /* If the sort-reverting flag is true, revert the sort. Afterwards, shove
@@ -544,8 +540,7 @@ public class WindowAggCodeGen {
       final String aggName,
       final List<WindowedAggregationArgument> argsList,
       final List<String> arraysToSort,
-      final int i,
-      boolean useDateRuntime) {
+      final int i) {
 
     String arrIdx;
 
@@ -574,7 +569,7 @@ public class WindowAggCodeGen {
     addIndent(funcText, 2);
     funcText.append(outputArrayName).append(" = ");
     funcText.append(
-        sqlTypeToNullableBodoArray(partitionLength, typs.get(i), useDateRuntime) + "\n");
+        sqlTypeToNullableBodoArray(partitionLength, typs.get(i)) + "\n");
 
     // Load the input array
     addIndent(funcText, 2);
@@ -667,8 +662,7 @@ public class WindowAggCodeGen {
       final String aggName,
       final List<WindowedAggregationArgument> argsList,
       final List<String> arraysToSort,
-      final int i,
-      boolean useDateRuntime) {
+      final int i) {
 
     assertWithErrMsg(argsList.size() == 1, aggName + " requires 1 input");
     assertWithErrMsg(argsList.get(0).isDfCol(), aggName + " requires a column input");
@@ -713,7 +707,7 @@ public class WindowAggCodeGen {
         na_arr_call.append(
             String.format(
                 "arr%d = %s\n",
-                i, sqlTypeToNullableBodoArray(partitionLength, typ, useDateRuntime)));
+                i, sqlTypeToNullableBodoArray(partitionLength, typ)));
       }
       addIndent(na_arr_call, 3);
       na_arr_call.append(String.format("for j in range(len(arr%d)):\n", i));
@@ -751,7 +745,7 @@ public class WindowAggCodeGen {
       addIndent(fill_op, 3);
       fill_op.append(
           String.format(
-              "arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, typ, useDateRuntime)));
+              "arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, typ)));
     }
     addIndent(fill_op, 3);
     fill_op.append(String.format("for j in range(len(arr%d)):\n", i));
@@ -813,8 +807,7 @@ public class WindowAggCodeGen {
       final List<String> aggNames,
       final List<List<WindowedAggregationArgument>> argsLists,
       final List<String> aggOutputs,
-      final String zeroExpr,
-      boolean useDateRuntime) {
+      final String zeroExpr) {
 
     // Generate all of the arrays that will store the outputs
     for (int i = 0; i < aggNames.size(); i++) {
@@ -856,7 +849,7 @@ public class WindowAggCodeGen {
           // dtype as the input array
         default:
           funcText.append(
-              sqlTypeToNullableBodoArray(partitionLength, typs.get(i), useDateRuntime) + "\n");
+              sqlTypeToNullableBodoArray(partitionLength, typs.get(i)) + "\n");
       }
     }
 

@@ -42,7 +42,7 @@ class ParquetReader : public ArrowDataframeReader {
         // initialize reader
         ArrowDataframeReader::init_arrow_reader(
             {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols},
-            false, {});
+            false);
 
         if (parallel) {
             // Get the average number of pieces per rank. This is used to

@@ -12,7 +12,6 @@ import bodo
 from bodo.libs.bodosql_array_kernels import *
 from bodo.tests.utils import (
     SeriesOptTestPipeline,
-    bodosql_use_date_type,
     check_func,
     dist_IR_count,
     find_nested_dispatcher_and_args,
@@ -1030,5 +1029,4 @@ def test_coalesce_date_timestamp(args, answer, memory_leak_check):
     impl_vars = {}
     exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
     impl = impl_vars["impl"]
-    with bodosql_use_date_type():
-        check_func(impl, args, py_output=answer, reset_index=True)
+    check_func(impl, args, py_output=answer, reset_index=True)

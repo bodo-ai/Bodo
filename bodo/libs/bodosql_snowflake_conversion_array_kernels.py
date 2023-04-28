@@ -164,11 +164,6 @@ def create_date_cast_util(func, error_on_fail):
     def overload_impl(conversionVal, format_str):
         verify_string_arg(format_str, func, "format_str")
 
-        # Determine wether to use datetime.date or pd.Timestamp
-        extraction_fn = (
-            "date" if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE else "normalize"
-        )
-
         # When returning a scalar we return a pd.Timestamp type.
         is_out_arr = bodo.utils.utils.is_array_typ(
             conversionVal, True
@@ -184,7 +179,7 @@ def create_date_cast_util(func, error_on_fail):
             scalar_text += "if not was_successful:\n"
             scalar_text += f"  {error_str}\n"
             scalar_text += "else:\n"
-            scalar_text += f"  res[i] = {unbox_str}(tmp_val.{extraction_fn}())\n"
+            scalar_text += f"  res[i] = {unbox_str}(tmp_val.date())\n"
 
         # NOTE: gen_vectorized will automatically map this function over the values dictionary
         # of a dict encoded string array instead of decoding it whenever possible
@@ -201,13 +196,21 @@ def create_date_cast_util(func, error_on_fail):
             scalar_text += "if (arg0.isnumeric() or (len(arg0) > 1 and arg0[0] == '-' and arg0[1:].isnumeric())):\n"
             scalar_text += "   int_val = np.int64(arg0)\n"
             scalar_text += "   if int_val < 31536000000:\n"
-            scalar_text += f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='s').{extraction_fn}())\n"
+            scalar_text += (
+                f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='s').date())\n"
+            )
             scalar_text += "   elif int_val < 31536000000000:\n"
-            scalar_text += f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='ms').{extraction_fn}())\n"
+            scalar_text += (
+                f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='ms').date())\n"
+            )
             scalar_text += "   elif int_val < 31536000000000000:\n"
-            scalar_text += f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='us').{extraction_fn}())\n"
+            scalar_text += (
+                f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='us').date())\n"
+            )
             scalar_text += "   else:\n"
-            scalar_text += f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='ns').{extraction_fn}())\n"
+            scalar_text += (
+                f"      res[i] = {unbox_str}(pd.Timestamp(int_val, unit='ns').date())\n"
+            )
 
             scalar_text += "else:\n"
             scalar_text += (
@@ -216,17 +219,15 @@ def create_date_cast_util(func, error_on_fail):
             scalar_text += "   if not was_successful:\n"
             scalar_text += f"      {error_str}\n"
             scalar_text += "   else:\n"
-            scalar_text += f"      res[i] = {unbox_str}(tmp_val.{extraction_fn}())\n"
+            scalar_text += f"      res[i] = {unbox_str}(tmp_val.date())\n"
 
         # If a tz-aware timestamp, construct a tz-naive timestamp with the same date
         elif is_valid_tz_aware_datetime_arg(conversionVal):
-            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day).{extraction_fn}())\n"
+            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day).date())\n"
 
         # If a non-tz timestamp/datetime, round it down to the nearest day
         elif is_valid_datetime_or_date_arg(conversionVal):
-            scalar_text = (
-                f"res[i] = {unbox_str}(pd.Timestamp(arg0).{extraction_fn}())\n"
-            )
+            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).date())\n"
 
         else:  # pragma: no cover
             raise raise_bodo_error(
@@ -237,11 +238,7 @@ def create_date_cast_util(func, error_on_fail):
         arg_types = [conversionVal, format_str]
         propagate_null = [True, False]
 
-        out_dtype = (
-            DatetimeDateArrayType()
-            if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-            else types.Array(bodo.datetime64ns, 1, "C")
-        )
+        out_dtype = DatetimeDateArrayType()
 
         extra_globals = {
             "to_date_error_checked": to_date_error_checked,
@@ -546,39 +543,27 @@ def try_to_binary(arr):
 
 
 @numba.generated_jit(nopython=True)
-def to_char(arr, treat_timestamp_as_date=False):
+def to_char(arr):
     """Handles cases where TO_CHAR receives optional arguments and forwards
     to the appropriate version of the real implementation"""
 
-    args = [arr, treat_timestamp_as_date]
-    for i in range(len(args)):
-        if isinstance(args[i], types.optional):  # pragma: no cover
-            return unopt_argument(
-                f"bodo.libs.bodosql_array_kernels.to_char",
-                ["arr", "treat_timestamp_as_date"],
-                i,
-            )
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument("bodo.libs.bodosql_array_kernels.to_char", ["arr"], 0)
 
-    def impl(arr, treat_timestamp_as_date):  # pragma: no cover
-        return to_char_util(arr, treat_timestamp_as_date)
+    def impl(arr):  # pragma: no cover
+        return to_char_util(arr)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def to_char_util(arr, treat_timestamp_as_date=False):
+def to_char_util(arr):
     """A dedicated kernel for the SQL function TO_CHAR which takes in a
     number (or column) and returns a string representation of it.
 
     Args:
         arr (numerical array/series/scalar): the number(s) being operated on
         opt_fmt_str (string array/series/scalar): the format string(s) to use
-        treat_timestamp_as_date (constant boolean): A flag used in BodoSQL codegen
-        to control the formatting of timestamp conversion. When set to true,
-        any timestamp inputs will be converted to strings with date formatting.
-        IE:
-        Timestamp('2023-03-28 09:46:41.630549') ---> '2023-03-28 09:46:41.630549' (treat_timestamp_as_date = False)
-        Timestamp('2023-03-28 09:46:41.630549') ---> '2023-03-28' (treat_timestamp_as_date = True)
 
         This argument is used to properly handle
         converting both Timestamp and Date values while we are in the process of
@@ -588,10 +573,9 @@ def to_char_util(arr, treat_timestamp_as_date=False):
         string series/scalar: the string representation of the number(s) with the
         specified null handling rules
     """
-    arg_names = ["arr", "treat_timestamp_as_date"]
-    arg_types = [arr, treat_timestamp_as_date]
+    arg_names = ["arr"]
+    arg_types = [arr]
     propagate_null = [True]
-    treat_timestamp_as_date = get_overload_const_bool(treat_timestamp_as_date)
 
     if is_str_arr_type(arr):
         # Strings are unchanged.
@@ -638,16 +622,7 @@ def to_char_util(arr, treat_timestamp_as_date=False):
     elif is_valid_datetime_or_date_arg(arr):
         if is_valid_date_arg(arr):
             scalar_text = "res[i] = str(arg0)\n"
-        elif (
-            is_valid_tz_naive_datetime_arg(arr) or is_valid_tz_aware_datetime_arg(arr)
-        ) and treat_timestamp_as_date:
-            # If we have a python timestamp object, which we are treating as a date in SQL
-            # we must convert to argument to a date object before calling str
-            # in order to get the correct formatting
-            # This will not be needed once we have a dedicated date type.
-            scalar_text = "res[i] = str(pd.Timestamp(arg0).date())\n"
         elif is_valid_tz_aware_datetime_arg(arr):
-
             # strftime returns (-/+) HHMM for UTC offset, when the default Bodo
             # timezone format is (-/+) HH:MM. So we must manually insert a ":" character
             scalar_text = "tz_raw = arg0.strftime('%z')\n"
