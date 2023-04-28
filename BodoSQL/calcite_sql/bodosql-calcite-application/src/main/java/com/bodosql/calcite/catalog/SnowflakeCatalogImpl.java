@@ -28,6 +28,7 @@ import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.json.simple.JSONObject;
 import org.slf4j.Logger;
@@ -531,14 +532,17 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       String varName,
       String schemaName,
       String tableName,
-      BodoSQLCatalog.ifExistsBehavior ifExists) {
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType tableType) {
     return String.format(
-        "%s.to_sql('%s', '%s', schema='%s', if_exists='%s', index=False)",
+        "%s.to_sql('%s', '%s', schema='%s', if_exists='%s', _bodo_create_table_type='%s',"
+            + " index=False)",
         varName,
         tableName,
         generatePythonConnStr(schemaName),
         schemaName,
-        ifExists.asToSqlKwArgument());
+        ifExists.asToSqlKwArgument(),
+        tableType.asStringKeyword());
   }
 
   /**
@@ -549,20 +553,10 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The generated code to produce a read.
    */
   @Override
-  public String generateReadCode(String schemaName, String tableName, boolean useDateRuntime) {
-    // _bodo_read_date_as_dt64=True to convert date columns to datetime64
-    // without astype() calls in the IR which cause issues for limit pushdown.
-    // see BE-4238
-    // TODO[BE-2954]: support a proper date type and remove this flag
-    final String dateAsInt64;
-    if (useDateRuntime) {
-      dateAsInt64 = "False";
-    } else {
-      dateAsInt64 = "True";
-    }
+  public String generateReadCode(String schemaName, String tableName) {
     return String.format(
-        "pd.read_sql('%s', '%s', _bodo_read_date_as_dt64=%s, _bodo_is_table_input=True)",
-        tableName, generatePythonConnStr(schemaName), dateAsInt64);
+        "pd.read_sql('%s', '%s', _bodo_is_table_input=True)",
+        tableName, generatePythonConnStr(schemaName));
   }
 
   /**

@@ -59,7 +59,7 @@ void* np_array_from_string_array(int64_t no_strings,
                                  const offset_t* offset_table,
                                  const char* buffer, const uint8_t* null_bitmap,
                                  const int is_bytes);
-void* pd_pyarrow_array_from_string_array(const array_info* str_arr);
+void* pd_pyarrow_array_from_string_array(array_info* str_arr);
 
 void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
@@ -122,10 +122,7 @@ void re_escape_with_output(char* pattern, int64_t length, char* out_pattern,
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "hstr_ext", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
+    MOD_DEF(m, "hstr_ext", "No docs", NULL);
     if (m == NULL)
         return NULL;
 
@@ -139,109 +136,53 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     // using exceptions, but most of those occur in box/unbox which we don't
     // know how to handle on the python side yet.
 
-    PyObject_SetAttrString(m, "init_string_const",
-                           PyLong_FromVoidPtr((void*)(&init_string_const)));
-    PyObject_SetAttrString(
-        m, "dtor_str_arr_split_view",
-        PyLong_FromVoidPtr((void*)(&dtor_str_arr_split_view)));
-    PyObject_SetAttrString(
-        m, "str_arr_split_view_alloc",
-        PyLong_FromVoidPtr((void*)(&str_arr_split_view_alloc)));
-    PyObject_SetAttrString(
-        m, "str_arr_split_view_impl",
-        PyLong_FromVoidPtr((void*)(&str_arr_split_view_impl)));
-    PyObject_SetAttrString(m, "get_c_str",
-                           PyLong_FromVoidPtr((void*)(&get_c_str)));
+    SetAttrStringFromVoidPtr(m, init_string_const);
+    SetAttrStringFromVoidPtr(m, dtor_str_arr_split_view);
+    SetAttrStringFromVoidPtr(m, str_arr_split_view_alloc);
+    SetAttrStringFromVoidPtr(m, str_arr_split_view_impl);
+    SetAttrStringFromVoidPtr(m, get_c_str);
 
-    PyObject_SetAttrString(m, "str_to_int64",
-                           PyLong_FromVoidPtr((void*)(&str_to_int64)));
-    PyObject_SetAttrString(m, "str_to_uint64",
-                           PyLong_FromVoidPtr((void*)(&str_to_uint64)));
-    PyObject_SetAttrString(m, "str_to_int64_base",
-                           PyLong_FromVoidPtr((void*)(&str_to_int64_base)));
-    PyObject_SetAttrString(m, "str_to_float64",
-                           PyLong_FromVoidPtr((void*)(&str_to_float64)));
-    PyObject_SetAttrString(m, "str_to_float32",
-                           PyLong_FromVoidPtr((void*)(&str_to_float32)));
-    PyObject_SetAttrString(m, "get_str_len",
-                           PyLong_FromVoidPtr((void*)(&get_str_len)));
-    PyObject_SetAttrString(
-        m, "pd_pyarrow_array_from_string_array",
-        PyLong_FromVoidPtr((void*)(&pd_pyarrow_array_from_string_array)));
-    PyObject_SetAttrString(
-        m, "np_array_from_string_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
-    PyObject_SetAttrString(m, "setitem_string_array",
-                           PyLong_FromVoidPtr((void*)(&setitem_string_array)));
-    PyObject_SetAttrString(m, "setitem_binary_array",
-                           PyLong_FromVoidPtr((void*)(&setitem_binary_array)));
+    SetAttrStringFromVoidPtr(m, str_to_int64);
+    SetAttrStringFromVoidPtr(m, str_to_uint64);
+    SetAttrStringFromVoidPtr(m, str_to_int64_base);
+    SetAttrStringFromVoidPtr(m, str_to_float64);
+    SetAttrStringFromVoidPtr(m, str_to_float32);
+    SetAttrStringFromVoidPtr(m, get_str_len);
+    SetAttrStringFromVoidPtr(m, pd_pyarrow_array_from_string_array);
+    SetAttrStringFromVoidPtr(m, np_array_from_string_array);
+    SetAttrStringFromVoidPtr(m, setitem_string_array);
+    SetAttrStringFromVoidPtr(m, setitem_binary_array);
 
-    PyObject_SetAttrString(
-        m, "set_string_array_range",
-        PyLong_FromVoidPtr((void*)(&set_string_array_range)));
-    PyObject_SetAttrString(
-        m, "convert_len_arr_to_offset32",
-        PyLong_FromVoidPtr((void*)(&convert_len_arr_to_offset32)));
-    PyObject_SetAttrString(
-        m, "convert_len_arr_to_offset",
-        PyLong_FromVoidPtr((void*)(&convert_len_arr_to_offset)));
-    PyObject_SetAttrString(m, "print_str_arr",
-                           PyLong_FromVoidPtr((void*)(&print_str_arr)));
-    PyObject_SetAttrString(m, "str_arr_to_int64",
-                           PyLong_FromVoidPtr((void*)(&str_arr_to_int64)));
-    PyObject_SetAttrString(m, "str_arr_to_float64",
-                           PyLong_FromVoidPtr((void*)(&str_arr_to_float64)));
-    PyObject_SetAttrString(m, "str_from_float32",
-                           PyLong_FromVoidPtr((void*)(&str_from_float32)));
-    PyObject_SetAttrString(m, "str_from_float64",
-                           PyLong_FromVoidPtr((void*)(&str_from_float64)));
-    PyObject_SetAttrString(m, "inplace_int64_to_str",
-                           PyLong_FromVoidPtr((void*)(&inplace_int64_to_str)));
-    PyObject_SetAttrString(m, "is_na", PyLong_FromVoidPtr((void*)(&is_na)));
-    PyObject_SetAttrString(m, "del_str", PyLong_FromVoidPtr((void*)(&del_str)));
-    PyObject_SetAttrString(m, "array_size",
-                           PyLong_FromVoidPtr((void*)(&array_size)));
-    PyObject_SetAttrString(m, "is_np_array",
-                           PyLong_FromVoidPtr((void*)(&is_np_array)));
-    PyObject_SetAttrString(m, "unicode_to_utf8",
-                           PyLong_FromVoidPtr((void*)(&unicode_to_utf8)));
-    PyObject_SetAttrString(m, "array_getptr1",
-                           PyLong_FromVoidPtr((void*)(&array_getptr1)));
-    PyObject_SetAttrString(m, "array_setitem",
-                           PyLong_FromVoidPtr((void*)(&array_setitem)));
-    PyObject_SetAttrString(m, "get_utf8_size",
-                           PyLong_FromVoidPtr((void*)(&get_utf8_size)));
-    PyObject_SetAttrString(m, "bool_arr_to_bitmap",
-                           PyLong_FromVoidPtr((void*)(&bool_arr_to_bitmap)));
-    PyObject_SetAttrString(m, "mask_arr_to_bitmap",
-                           PyLong_FromVoidPtr((void*)(&mask_arr_to_bitmap)));
-    PyObject_SetAttrString(m, "is_bool_array",
-                           PyLong_FromVoidPtr((void*)(&is_bool_array)));
-    PyObject_SetAttrString(m, "is_pd_boolean_array",
-                           PyLong_FromVoidPtr((void*)(&is_pd_boolean_array)));
-    PyObject_SetAttrString(m, "unbox_bool_array_obj",
-                           PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
-    PyObject_SetAttrString(m, "memcmp", PyLong_FromVoidPtr((void*)(&memcmp)));
-    PyObject_SetAttrString(m, "bytes_to_hex",
-                           PyLong_FromVoidPtr((void*)(&bytes_to_hex)));
-    PyObject_SetAttrString(m, "bytes_fromhex",
-                           PyLong_FromVoidPtr((void*)(&bytes_fromhex)));
-    PyObject_SetAttrString(m, "int_to_hex",
-                           PyLong_FromVoidPtr((void*)(&int_to_hex)));
-    PyObject_SetAttrString(m, "str_to_dict_str_array",
-                           PyLong_FromVoidPtr((void*)(&str_to_dict_str_array)));
-    PyObject_SetAttrString(m, "re_escape_length",
-                           PyLong_FromVoidPtr((void*)(&re_escape_length)));
-    PyObject_SetAttrString(m, "re_escape_with_output",
-                           PyLong_FromVoidPtr((void*)(&re_escape_with_output)));
-    PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
-    PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
-    PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
-    PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
+    SetAttrStringFromVoidPtr(m, set_string_array_range);
+    SetAttrStringFromVoidPtr(m, convert_len_arr_to_offset32);
+    SetAttrStringFromVoidPtr(m, convert_len_arr_to_offset);
+    SetAttrStringFromVoidPtr(m, print_str_arr);
+    SetAttrStringFromVoidPtr(m, str_arr_to_int64);
+    SetAttrStringFromVoidPtr(m, str_arr_to_float64);
+    SetAttrStringFromVoidPtr(m, str_from_float32);
+    SetAttrStringFromVoidPtr(m, str_from_float64);
+    SetAttrStringFromVoidPtr(m, inplace_int64_to_str);
+    SetAttrStringFromVoidPtr(m, is_na);
+    SetAttrStringFromVoidPtr(m, del_str);
+    SetAttrStringFromVoidPtr(m, array_size);
+    SetAttrStringFromVoidPtr(m, is_np_array);
+    SetAttrStringFromVoidPtr(m, unicode_to_utf8);
+    SetAttrStringFromVoidPtr(m, array_getptr1);
+    SetAttrStringFromVoidPtr(m, array_setitem);
+    SetAttrStringFromVoidPtr(m, get_utf8_size);
+    SetAttrStringFromVoidPtr(m, bool_arr_to_bitmap);
+    SetAttrStringFromVoidPtr(m, mask_arr_to_bitmap);
+    SetAttrStringFromVoidPtr(m, is_bool_array);
+    SetAttrStringFromVoidPtr(m, is_pd_boolean_array);
+    SetAttrStringFromVoidPtr(m, unbox_bool_array_obj);
+    SetAttrStringFromVoidPtr(m, memcmp);
+    SetAttrStringFromVoidPtr(m, bytes_to_hex);
+    SetAttrStringFromVoidPtr(m, bytes_fromhex);
+    SetAttrStringFromVoidPtr(m, int_to_hex);
+    SetAttrStringFromVoidPtr(m, str_to_dict_str_array);
+    SetAttrStringFromVoidPtr(m, re_escape_length);
+    SetAttrStringFromVoidPtr(m, re_escape_with_output);
+
     return m;
 }
 
@@ -636,11 +577,15 @@ void* np_array_from_string_array(int64_t no_strings,
 #undef CHECK
 }
 
-/// @brief  Create Pandas ArrowStringArray from Bodo's packed StringArray or
-/// dict-encoded string array
-/// @return Pandas ArrowStringArray
-/// @param[in] str_arr input string array or dict-encoded string array
-void* pd_pyarrow_array_from_string_array(const array_info* str_arr) {
+/**
+ * @brief Create Pandas ArrowStringArray from Bodo's packed StringArray or
+ * dict-encoded string array
+ *
+ * @param str_arr input string array or dict-encoded string array (deleted by
+ * function after use)
+ * @return void* Pandas ArrowStringArray
+ */
+void* pd_pyarrow_array_from_string_array(array_info* str_arr) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -651,7 +596,8 @@ void* pd_pyarrow_array_from_string_array(const array_info* str_arr) {
     // only str_arr and true arguments are relevant here
     std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    bodo_array_to_arrow(::arrow::default_memory_pool(), str_arr, &arrow_arr,
+    bodo_array_to_arrow(::arrow::default_memory_pool(),
+                        std::shared_ptr<array_info>(str_arr), &arrow_arr,
                         false /*convert_timedelta_to_int64*/, "", time_unit,
                         false /*downcast_time_ns_to_us*/);
 
@@ -938,7 +884,7 @@ void int_to_hex(char* output, int64_t output_len, uint64_t int_val) {
  * Most of the logic is shared with DictionaryEncodedFromStringBuilder
  * (TableBuilder::BuilderColumn subclass in arrow_reader.cpp)
  *
- * @param str_arr Input String Array (not consumed by function)
+ * @param str_arr Input String Array (deleted by function after use)
  * @return array_info* Output Dictionary Array with Copied Contents
  */
 array_info* str_to_dict_str_array(array_info* str_arr) {
@@ -946,7 +892,8 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
     const auto num_null_bitmask_bytes = (arr_len + 7) >> 3;
 
     // Dictionary Indices Array
-    auto indices_arr = alloc_nullable_array(arr_len, Bodo_CTypes::INT32);
+    std::shared_ptr<array_info> indices_arr =
+        alloc_nullable_array(arr_len, Bodo_CTypes::INT32);
     memcpy(indices_arr->null_bitmask(), str_arr->null_bitmask(),
            num_null_bitmask_bytes);
 
@@ -978,9 +925,10 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
 
         indices_arr->at<int32_t>(i) = elem_idx;
     }
+    delete str_arr;
 
     // Create Dictionary String Values
-    array_info* values_arr =
+    std::shared_ptr<array_info> values_arr =
         alloc_string_array(num_dict_strs, total_dict_chars);
     int64_t n_null_bytes = (num_dict_strs + 7) >> 3;
     memset(values_arr->null_bitmask(), 0xFF, n_null_bytes);  // No nulls
@@ -994,6 +942,7 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
     }
     out_offsets[num_dict_strs] = static_cast<offset_t>(total_dict_chars);
 
+    // Python is responsible for deleting pointer
     return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
                           arr_len, {}, {values_arr, indices_arr}, 0, 0, 0,
                           false, false, false);

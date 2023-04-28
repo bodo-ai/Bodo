@@ -873,6 +873,9 @@ def overload_roll_variable_apply(
     return roll_variable_apply_impl
 
 
+dummy_use = numba.njit(lambda a: None)
+
+
 def roll_variable_apply_impl(
     in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
@@ -938,6 +941,9 @@ def roll_variable_apply_impl(
             if raw == False:
                 bodo.libs.distributed_api.wait(l_recv_req_idx, True)
                 bodo.libs.distributed_api.wait(l_recv_t_req_idx, True)
+
+            # make sure unused buffer is not released before communication is done
+            dummy_use(l_recv_t_buff_idx)
 
             # values with start == 0 could potentially have left halo starts
             num_zero_starts = 0

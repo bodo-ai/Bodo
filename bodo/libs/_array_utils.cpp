@@ -224,13 +224,12 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
  * @param nRowOut number of rows in output array
  * @param use_nullable_arr use nullable integer/float data type if input data is
  * Numpy integer/float
- * @return array_info* output data array as specified by input
+ * @return std::shared_ptr<array_info> output data array as specified by input
  */
-array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr,
-                                               const int64_t* in_arr_idxs,
-                                               size_t nRowOut,
-                                               bool use_nullable_arr = false) {
-    array_info* out_arr = NULL;
+std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
+    std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
+    size_t nRowOut, bool use_nullable_arr = false) {
+    std::shared_ptr<array_info> out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     uint64_t siztype = numpy_item_size[dtype];
@@ -326,14 +325,15 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr,
  * @param in_arr_idxs array of indices into input array to create the output
  * array
  * @param nRowOut number of rows in output array
- * @return array_info* output data array as specified by input
+ * @return std::shared_ptr<array_info> output data array as specified by input
  */
-array_info* RetrieveArray_SingleColumn_F_nullable(array_info* in_arr,
-                                                  const int64_t* in_arr_idxs,
-                                                  size_t nRowOut) {
+std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
+    std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
+    size_t nRowOut) {
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
-    array_info* out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+    std::shared_ptr<array_info> out_arr =
+        alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
     uint64_t siztype = numpy_item_size[dtype];
 
     if (dtype == Bodo_CTypes::_BOOL) {
@@ -409,11 +409,10 @@ array_info* RetrieveArray_SingleColumn_F_nullable(array_info* in_arr,
     return out_arr;
 }
 
-array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
-                                         const int64_t* in_arr_idxs,
-                                         size_t nRowOut,
-                                         bool use_nullable_arr) {
-    array_info* out_arr = NULL;
+std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
+    std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
+    size_t nRowOut, bool use_nullable_arr) {
+    std::shared_ptr<array_info> out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     switch (arr_type) {
@@ -538,18 +537,19 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
             break;
         }
         case bodo_array_type::DICT: {
-            array_info* in_indices = in_arr->child_arrays[1];
-            array_info* out_indices = RetrieveArray_SingleColumn_F_nullable(
-                in_indices, in_arr_idxs, nRowOut);
+            std::shared_ptr<array_info> in_indices = in_arr->child_arrays[1];
+            std::shared_ptr<array_info> out_indices =
+                RetrieveArray_SingleColumn_F_nullable(in_indices, in_arr_idxs,
+                                                      nRowOut);
 
-            out_arr = new array_info(bodo_array_type::DICT, in_arr->dtype,
-                                     out_indices->length, {},
-                                     {in_arr->child_arrays[0], out_indices}, 0,
-                                     0, 0, in_arr->has_global_dictionary,
-                                     in_arr->has_deduped_local_dictionary,
-                                     in_arr->has_sorted_dictionary);
-            // input and output share the same dictionary array
-            incref_array(in_arr->child_arrays[0]);
+            out_arr = std::make_shared<array_info>(
+                bodo_array_type::DICT, in_arr->dtype, out_indices->length,
+                std::vector<std::shared_ptr<BodoBuffer>>({}),
+                std::vector<std::shared_ptr<array_info>>(
+                    {in_arr->child_arrays[0], out_indices}),
+                0, 0, 0, in_arr->has_global_dictionary,
+                in_arr->has_deduped_local_dictionary,
+                in_arr->has_sorted_dictionary);
             break;
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
@@ -618,7 +618,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
             // Arrow builder for output array. builds it dynamically (buffer
             // sizes are not known in advance)
             std::unique_ptr<arrow::ArrayBuilder> builder;
-            std::shared_ptr<arrow::Array> in_arrow_array = in_arr->to_arrow();
+            std::shared_ptr<arrow::Array> in_arrow_array = to_arrow(in_arr);
             (void)arrow::MakeBuilder(arrow::default_memory_pool(),
                                      in_arrow_array->type(), &builder);
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -653,16 +653,16 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr,
     return out_arr;
 };
 
-array_info* RetrieveArray_SingleColumn(array_info* in_arr,
-                                       std::vector<int64_t> const& ListIdx,
-                                       bool use_nullable_arr) {
-    return RetrieveArray_SingleColumn_F(in_arr, ListIdx.data(), ListIdx.size(),
-                                        use_nullable_arr);
+std::shared_ptr<array_info> RetrieveArray_SingleColumn(
+    std::shared_ptr<array_info> in_arr, std::vector<int64_t> const& ListIdx,
+    bool use_nullable_arr) {
+    return RetrieveArray_SingleColumn_F(std::move(in_arr), ListIdx.data(),
+                                        ListIdx.size(), use_nullable_arr);
 }
 
-array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
-                                           array_info* idx_arr,
-                                           bool use_nullable_arr) {
+std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
+    std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> idx_arr,
+    bool use_nullable_arr) {
     if (idx_arr->dtype != Bodo_CTypes::UINT64) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "UINT64 is the only index type allowed");
@@ -673,8 +673,9 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
                                         use_nullable_arr);
 }
 
-array_info* RetrieveArray_TwoColumns(
-    array_info* const& arr1, array_info* const& arr2,
+std::shared_ptr<array_info> RetrieveArray_TwoColumns(
+    std::shared_ptr<array_info> const& arr1,
+    std::shared_ptr<array_info> const& arr2,
     std::vector<int64_t> const& short_write_idxs,
     std::vector<int64_t> const& long_write_idxs) {
     if ((arr1 != nullptr) && (arr2 != nullptr) &&
@@ -686,7 +687,7 @@ array_info* RetrieveArray_TwoColumns(
             "dictionary");
     }
     size_t nRowOut = long_write_idxs.size();
-    array_info* out_arr = NULL;
+    std::shared_ptr<array_info> out_arr = NULL;
     /* The function for computing the returning values
      * In the output is the column index to use and the row index to use.
      * The row index may be -1 though.
@@ -694,8 +695,8 @@ array_info* RetrieveArray_TwoColumns(
      * @param the row index in the output
      * @return the pair (column,row) to be used.
      */
-    auto get_iRow =
-        [&](size_t const& iRowIn) -> std::pair<array_info*, int64_t> {
+    auto get_iRow = [&](size_t const& iRowIn)
+        -> std::pair<std::shared_ptr<array_info>, int64_t> {
         int64_t short_val = short_write_idxs[iRowIn];
         if (short_val != -1) {
             return {arr1, short_val};
@@ -717,7 +718,8 @@ array_info* RetrieveArray_TwoColumns(
         int64_t tot_size_index = 0;
         int64_t tot_size_data = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+            std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                get_iRow(iRow);
             offset_t size_index = 0;
             offset_t size_data = 0;
             if (ArrRow.second >= 0) {
@@ -744,13 +746,14 @@ array_info* RetrieveArray_TwoColumns(
         offset_t* out_data_offsets = (offset_t*)out_arr->data2();
         out_data_offsets[0] = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+            std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                get_iRow(iRow);
             offset_t size_index = ListSizes_index[iRow];
             offset_t size_data = ListSizes_data[iRow];
             out_index_offsets[iRow] = pos_index;
             bool bit = false;
             if (ArrRow.second >= 0) {
-                array_info* e_col = ArrRow.first;
+                std::shared_ptr<array_info> e_col = ArrRow.first;
                 size_t i_row = ArrRow.second;
                 offset_t* in_index_offsets = (offset_t*)e_col->data3();
                 offset_t* in_data_offsets = (offset_t*)e_col->data2();
@@ -788,7 +791,8 @@ array_info* RetrieveArray_TwoColumns(
         int64_t n_chars = 0;
         std::vector<offset_t> ListSizes(nRowOut);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+            std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                get_iRow(iRow);
             offset_t size = 0;
             if (ArrRow.second >= 0) {
                 offset_t* in_offsets = (offset_t*)ArrRow.first->data2();
@@ -803,12 +807,13 @@ array_info* RetrieveArray_TwoColumns(
         offset_t pos = 0;
         offset_t* out_offsets = (offset_t*)out_arr->data2();
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+            std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                get_iRow(iRow);
             offset_t size = ListSizes[iRow];
             out_offsets[iRow] = pos;
             bool bit = false;
             if (ArrRow.second >= 0) {
-                array_info* e_col = ArrRow.first;
+                std::shared_ptr<array_info> e_col = ArrRow.first;
                 offset_t* in_offsets = (offset_t*)e_col->data2();
                 offset_t start_offset = in_offsets[ArrRow.second];
                 char* out_ptr = out_arr->data1() + pos;
@@ -826,16 +831,17 @@ array_info* RetrieveArray_TwoColumns(
         // if (is_parallel && !arr1->has_global_dictionary)
         //    throw std::runtime_error("RetrieveArray_TwoColumns: reference
         //    column doesn't have a global dictionary");
-        array_info* out_indices =
+        std::shared_ptr<array_info> out_indices =
             alloc_array(nRowOut, -1, -1, arr1->child_arrays[1]->arr_type,
                         arr1->child_arrays[1]->dtype, 0, 0);
         uint64_t siztype = numpy_item_size[arr1->child_arrays[1]->dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+            std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                get_iRow(iRow);
             bool bit = false;
             char* out_ptr = out_indices->data1() + siztype * iRow;
             if (ArrRow.second >= 0) {
-                array_info* e_col = ArrRow.first;
+                std::shared_ptr<array_info> e_col = ArrRow.first;
                 char* in_ptr =
                     e_col->child_arrays[1]->data1() + siztype * ArrRow.second;
                 memcpy(out_ptr, in_ptr, siztype);
@@ -847,12 +853,13 @@ array_info* RetrieveArray_TwoColumns(
             }
             out_indices->set_null_bit(iRow, bit);
         }
-        out_arr = new array_info(
-            bodo_array_type::DICT, arr1->dtype, out_indices->length, {},
-            {arr1->child_arrays[0], out_indices}, 0, 0, 0,
-            arr1->has_global_dictionary, arr1->has_deduped_local_dictionary,
-            arr1->has_sorted_dictionary);
-        incref_array(arr1->child_arrays[0]);
+        out_arr = std::make_shared<array_info>(
+            bodo_array_type::DICT, arr1->dtype, out_indices->length,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>(
+                {arr1->child_arrays[0], out_indices}),
+            0, 0, 0, arr1->has_global_dictionary,
+            arr1->has_deduped_local_dictionary, arr1->has_sorted_dictionary);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // In the case of NULLABLE array, we do a single loop for
@@ -866,10 +873,11 @@ array_info* RetrieveArray_TwoColumns(
             // Nullable boolean arrays store 1 bit per boolean so we
             // need to use a different loop.
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-                std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+                std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                    get_iRow(iRow);
                 bool null_bit = false;
                 if (ArrRow.second >= 0) {
-                    array_info* e_col = ArrRow.first;
+                    std::shared_ptr<array_info> e_col = ArrRow.first;
                     bool data_bit =
                         GetBit((uint8_t*)e_col->data1(), ArrRow.second);
                     SetBitTo((uint8_t*)out_arr->data1(), iRow, data_bit);
@@ -880,10 +888,11 @@ array_info* RetrieveArray_TwoColumns(
         } else {
             uint64_t siztype = numpy_item_size[dtype];
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-                std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+                std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                    get_iRow(iRow);
                 bool bit = false;
                 if (ArrRow.second >= 0) {
-                    array_info* e_col = ArrRow.first;
+                    std::shared_ptr<array_info> e_col = ArrRow.first;
                     char* out_ptr = out_arr->data1() + siztype * iRow;
                     char* in_ptr = e_col->data1() + siztype * ArrRow.second;
                     memcpy(out_ptr, in_ptr, siztype);
@@ -902,7 +911,8 @@ array_info* RetrieveArray_TwoColumns(
         int64_t num_categories = arr1->num_categories;
         out_arr = alloc_categorical(nRowOut, dtype, num_categories);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+            std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                get_iRow(iRow);
             //
             char* out_ptr = out_arr->data1() + siztype * iRow;
             char* in_ptr;
@@ -926,7 +936,8 @@ array_info* RetrieveArray_TwoColumns(
         std::vector<char> vectNaN = RetrieveNaNentry(dtype);
         out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+            std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                get_iRow(iRow);
             //
             char* out_ptr = out_arr->data1() + siztype * iRow;
             char* in_ptr;
@@ -942,14 +953,15 @@ array_info* RetrieveArray_TwoColumns(
         // Arrow builder for output array. builds it dynamically (buffer
         // sizes are not known in advance)
         std::unique_ptr<arrow::ArrayBuilder> builder;
-        std::shared_ptr<arrow::Array> in_arr_typ = arr1->to_arrow();
+        std::shared_ptr<arrow::Array> in_arr_typ = to_arrow(arr1);
         (void)arrow::MakeBuilder(arrow::default_memory_pool(),
                                  in_arr_typ->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<array_info*, int64_t> ArrRow = get_iRow(iRow);
+            std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                get_iRow(iRow);
             if (ArrRow.second >= 0) {
                 // non-null value for output
-                std::shared_ptr<arrow::Array> in_arr = ArrRow.first->to_arrow();
+                std::shared_ptr<arrow::Array> in_arr = to_arrow(ArrRow.first);
                 size_t row = ArrRow.second;
                 // append value in position 'row' of input array to
                 // builder's array (this is a recursive algorithm, can
@@ -971,10 +983,10 @@ array_info* RetrieveArray_TwoColumns(
     return out_arr;
 }
 
-table_info* RetrieveTable(table_info* const& in_table,
-                          std::vector<int64_t> const& ListIdx,
-                          int const& n_cols_arg) {
-    std::vector<array_info*> out_arrs;
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    std::vector<int64_t> const& ListIdx, int const& n_cols_arg) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
     size_t n_cols;
     if (n_cols_arg == -1) {
         n_cols = (size_t)in_table->ncols();
@@ -982,27 +994,29 @@ table_info* RetrieveTable(table_info* const& in_table,
         n_cols = n_cols_arg;
     }
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
-        array_info* in_arr = in_table->columns[i_col];
-        out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, ListIdx));
-        // Standard stealing of reference (see shuffle_table_kernel for
-        // discussion)
-        decref_array(in_arr);
+        std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
+        out_arrs.emplace_back(
+            RetrieveArray_SingleColumn(std::move(in_arr), ListIdx));
+        // Release reference (and potentially memory) for the column from this
+        // table if this is the last table reference.
+        reset_col_if_last_table_ref(in_table, i_col);
     }
-    return new table_info(out_arrs);
+    return std::make_shared<table_info>(out_arrs);
 }
 
-table_info* RetrieveTable(table_info* const& in_table,
-                          std::vector<int64_t> const& rowInds,
-                          std::vector<size_t> const& colInds) {
-    std::vector<array_info*> out_arrs;
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    std::vector<int64_t> const& rowInds, std::vector<size_t> const& colInds) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
     for (size_t i_col : colInds) {
-        array_info* in_arr = in_table->columns[i_col];
-        out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, rowInds));
-        // decref input since not used anymore (see shuffle_table_kernel for
-        // discussion)
-        decref_array(in_arr);
+        std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
+        out_arrs.emplace_back(
+            RetrieveArray_SingleColumn(std::move(in_arr), rowInds));
+        // Release reference (and potentially memory) for the column from this
+        // table if this is the last table reference.
+        reset_col_if_last_table_ref(in_table, i_col);
     }
-    return new table_info(out_arrs);
+    return std::make_shared<table_info>(out_arrs);
 }
 
 template <typename T>
@@ -1216,8 +1230,9 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
     }
 }
 
-bool TestEqualColumn(const array_info* arr1, int64_t pos1,
-                     const array_info* arr2, int64_t pos2, bool is_na_equal) {
+bool TestEqualColumn(std::shared_ptr<array_info> arr1, int64_t pos1,
+                     std::shared_ptr<array_info> arr2, int64_t pos2,
+                     bool is_na_equal) {
     if (arr1->arr_type == bodo_array_type::STRUCT ||
         arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
         // TODO: Handle is_na_equal in Arrow arrays
@@ -1226,8 +1241,8 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
         int64_t pos2_s = pos2;
         int64_t pos2_e = pos2 + 1;
         bool na_position_bis = true;  // This value has no importance
-        int val = ComparisonArrowColumn(arr1->to_arrow(), pos1_s, pos1_e,
-                                        arr2->to_arrow(), pos2_s, pos2_e,
+        int val = ComparisonArrowColumn(to_arrow(arr1), pos1_s, pos1_e,
+                                        to_arrow(arr2), pos2_s, pos2_e,
                                         na_position_bis);
         return val == 0;
     }
@@ -1384,8 +1399,10 @@ bool TestEqualColumn(const array_info* arr1, int64_t pos1,
     return true;
 };
 
-int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
-                                 size_t const& iRow1, array_info* arr2,
+int KeyComparisonAsPython_Column(bool const& na_position_bis,
+                                 std::shared_ptr<array_info> arr1,
+                                 size_t const& iRow1,
+                                 std::shared_ptr<array_info> arr2,
                                  size_t const& iRow2) {
     if (arr1->arr_type == bodo_array_type::STRUCT ||
         arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
@@ -1393,8 +1410,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         int64_t pos1_e = iRow1 + 1;
         int64_t pos2_s = iRow2;
         int64_t pos2_e = iRow2 + 1;
-        return ComparisonArrowColumn(arr1->to_arrow(), pos1_s, pos1_e,
-                                     arr2->to_arrow(), pos2_s, pos2_e,
+        return ComparisonArrowColumn(to_arrow(arr1), pos1_s, pos1_e,
+                                     to_arrow(arr2), pos2_s, pos2_e,
                                      na_position_bis);
     }
     if (arr1->arr_type == bodo_array_type::NUMPY) {
@@ -1583,9 +1600,9 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         }
         // Since arr1->child_arrays[0] == arr2->child_arrays[0] (if arr2 is
         // DICT)
-        array_info* arr_dict = arr1->child_arrays[0];
-        array_info* arr1_indices = arr1->child_arrays[1];
-        array_info* arr2_indices = arr2->child_arrays[1];
+        std::shared_ptr<array_info> arr_dict = arr1->child_arrays[0];
+        std::shared_ptr<array_info> arr1_indices = arr1->child_arrays[1];
+        std::shared_ptr<array_info> arr2_indices = arr2->child_arrays[1];
 
         if (arr1->has_sorted_dictionary) {
             // In case of sorted dictionaries, we can simply compare the
@@ -1625,12 +1642,12 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
     return 0;
 }
 
-bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
-                           std::vector<array_info*> const& columns1,
-                           size_t const& shift_key1, size_t const& iRow1,
-                           std::vector<array_info*> const& columns2,
-                           size_t const& shift_key2, size_t const& iRow2,
-                           int64_t* na_position) {
+bool KeyComparisonAsPython(
+    size_t const& n_key, int64_t* vect_ascending,
+    std::vector<std::shared_ptr<array_info>> const& columns1,
+    size_t const& shift_key1, size_t const& iRow1,
+    std::vector<std::shared_ptr<array_info>> const& columns2,
+    size_t const& shift_key2, size_t const& iRow2, int64_t* na_position) {
     // iteration over the list of key for the comparison.
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         bool ascending = vect_ascending[iKey];
@@ -1662,7 +1679,7 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
  */
 template <Bodo_CTypes::CTypeEnum DType>
 requires(NullSentinelDtype<DType>) void fill_null_bitmask_numpy(
-    uint8_t* bitmask, const array_info* arr) {
+    uint8_t* bitmask, const std::shared_ptr<array_info> arr) {
     using T = typename dtype_to_type<DType>::type;
     T* data = (T*)(arr->data1());
     for (size_t i = 0; i < arr->length; i++) {
@@ -1681,7 +1698,8 @@ requires(NullSentinelDtype<DType>) void fill_null_bitmask_numpy(
  * @return uint8_t* Bitmask constructed for the array. Caller is responsible
  * for cleaning up the returned array using delete[].
  */
-uint8_t* create_temp_null_bitmask_for_array(const array_info* arr) {
+uint8_t* create_temp_null_bitmask_for_array(
+    const std::shared_ptr<array_info> arr) {
     uint64_t length = arr->length;
     int64_t n_bytes = ((length + 7) >> 3);
     uint8_t* bitmask = new uint8_t[n_bytes];
@@ -1722,7 +1740,7 @@ uint8_t* create_temp_null_bitmask_for_array(const array_info* arr) {
             // all cases including no nulls, all nulls (Null array type),
             // etc.
             for (size_t i = 0; i < arr->length; i++) {
-                SetBitTo(bitmask, i, !arr->to_arrow()->IsNull(i));
+                SetBitTo(bitmask, i, !to_arrow(arr)->IsNull(i));
             }
 
             // XXX If we want, we can do something smarter like:
@@ -1756,8 +1774,9 @@ uint8_t* create_temp_null_bitmask_for_array(const array_info* arr) {
     return bitmask;
 };
 
-uint8_t* bitwise_and_null_bitmasks(const std::vector<array_info*>& arrays,
-                                   const bool is_parallel) {
+uint8_t* bitwise_and_null_bitmasks(
+    const std::vector<std::shared_ptr<array_info>>& arrays,
+    const bool is_parallel) {
     tracing::Event ev("bitwise_and_null_bitmasks", is_parallel);
     ev.add_attribute("num_arrays", arrays.size());
     uint64_t length = arrays[0]->length;
@@ -1767,7 +1786,7 @@ uint8_t* bitwise_and_null_bitmasks(const std::vector<array_info*>& arrays,
     // XXX Might want to optimize for the single key case.
     memset(final_bitmask, 0xff, n_bytes);  // Start off as not nulls
 
-    for (array_info* arr : arrays) {
+    for (std::shared_ptr<array_info> arr : arrays) {
         uint8_t* arr_null_bitmask;
         bool free_bitmask = false;
         if (arr->null_bitmask()) {
@@ -1825,7 +1844,7 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         uint16_t* ptr = (uint16_t*)ptrdata;
         return std::to_string(*ptr);
     }
-    if (dtype == Bodo_CTypes::INT32) {
+    if (dtype == Bodo_CTypes::DATE || dtype == Bodo_CTypes::INT32) {
         int32_t* ptr = (int32_t*)ptrdata;
         return std::to_string(*ptr);
     }
@@ -1842,8 +1861,8 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         return std::to_string(*ptr);
     }
     // TODO: [BE-4106] Split Time into Time32 and Time64
-    if (dtype == Bodo_CTypes::DATE || dtype == Bodo_CTypes::DATETIME ||
-        dtype == Bodo_CTypes::TIMEDELTA || dtype == Bodo_CTypes::TIME) {
+    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA ||
+        dtype == Bodo_CTypes::TIME) {
         int64_t* ptr = (int64_t*)ptrdata;
         return std::to_string(*ptr);
     }
@@ -2049,7 +2068,8 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
 
 #undef DEBUG_DEBUG  // Yes, it is a concept
 
-std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
+std::vector<std::string> GetColumn_as_ListString(
+    const std::shared_ptr<array_info> arr) {
     size_t nRow = arr->length;
     std::vector<std::string> ListStr(nRow);
     std::string strOut;
@@ -2168,7 +2188,7 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
     }
     if (arr->arr_type == bodo_array_type::STRUCT ||
         arr->arr_type == bodo_array_type::ARRAY_ITEM) {
-        std::shared_ptr<arrow::Array> in_arr = arr->to_arrow();
+        std::shared_ptr<arrow::Array> in_arr = to_arrow(arr);
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             strOut = "";
             DEBUG_append_to_out_array(in_arr, iRow, iRow + 1, strOut);
@@ -2186,8 +2206,8 @@ std::vector<std::string> GetColumn_as_ListString(const array_info* arr) {
     return ListStr;
 }
 
-void DEBUG_PrintVectorArrayInfo(std::ostream& os,
-                                std::vector<array_info*> const& ListArr) {
+void DEBUG_PrintVectorArrayInfo(
+    std::ostream& os, std::vector<std::shared_ptr<array_info>> const& ListArr) {
     int nCol = ListArr.size();
     if (nCol == 0) {
         os << "number of columns nCol=" << nCol << " Nothing to print\n";
@@ -2234,8 +2254,8 @@ void DEBUG_PrintVectorArrayInfo(std::ostream& os,
         os << ListStrOut[iRow] << "\n";
 }
 
-void DEBUG_PrintSetOfColumn(std::ostream& os,
-                            std::vector<array_info*> const& ListArr) {
+void DEBUG_PrintSetOfColumn(
+    std::ostream& os, std::vector<std::shared_ptr<array_info>> const& ListArr) {
     int nCol = ListArr.size();
     if (nCol == 0) {
         os << "number of columns nCol=" << nCol << " Nothing to print\n";
@@ -2255,7 +2275,7 @@ void DEBUG_PrintSetOfColumn(std::ostream& os,
     DEBUG_PrintVectorArrayInfo(os, ListArr);
 }
 
-void DEBUG_PrintTable(std::ostream& os, table_info* table) {
+void DEBUG_PrintTable(std::ostream& os, std::shared_ptr<table_info> table) {
     DEBUG_PrintSetOfColumn(os, table->columns);
 }
 
@@ -2333,7 +2353,7 @@ std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type) {
 }
 
 void DEBUG_PrintRefct(std::ostream& os,
-                      std::vector<array_info*> const& ListArr) {
+                      std::vector<std::shared_ptr<array_info>> const& ListArr) {
     int nCol = ListArr.size();
     auto GetNRTinfo = [](NRT_MemInfo* meminf) -> std::string {
         if (meminf == NULL)
@@ -2346,23 +2366,24 @@ void DEBUG_PrintRefct(std::ostream& os,
            << " dtype=" << GetDtype_as_string(ListArr[iCol]->dtype);
         if (ListArr[iCol]->arr_type == bodo_array_type::DICT) {
             // Print details from child arrays in the dict case.
-            for (MemInfo* meminfo : ListArr[iCol]->child_arrays[0]->meminfos) {
-                os << " : child_arrays[0] meminfo=" << GetNRTinfo(meminfo)
-                   << "\n";
+            for (auto buffer : ListArr[iCol]->child_arrays[0]->buffers) {
+                os << " : child_arrays[0] meminfo="
+                   << GetNRTinfo(buffer->getMeminfo()) << "\n";
             }
-            for (MemInfo* meminfo : ListArr[iCol]->child_arrays[1]->meminfos) {
-                os << " : child_arrays[1] meminfo=" << GetNRTinfo(meminfo)
-                   << "\n";
+            for (auto buffer : ListArr[iCol]->child_arrays[1]->buffers) {
+                os << " : child_arrays[1] meminfo="
+                   << GetNRTinfo(buffer->getMeminfo()) << "\n";
             }
         } else {
-            for (MemInfo* meminfo : ListArr[iCol]->meminfos) {
-                os << " : meminfo=" << GetNRTinfo(meminfo) << "\n";
+            for (auto buffer : ListArr[iCol]->buffers) {
+                os << " : meminfo=" << GetNRTinfo(buffer->getMeminfo()) << "\n";
             }
         }
     }
 }
 
-void DEBUG_PrintColumn(std::ostream& os, const array_info* arr) {
+void DEBUG_PrintColumn(std::ostream& os,
+                       const std::shared_ptr<array_info> arr) {
     int n_rows = arr->length;
     os << "ARRAY_INFO: Column n=" << n_rows
        << " arr=" << GetArrType_as_string(arr->arr_type)
@@ -2472,48 +2493,44 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
  *
  * @param table_chunks input tables which are assumed to have the
  * same schema
- * @return table_info* concatenated table
+ * @return std::shared_ptr<table_info> concatenated table
  */
-table_info* concat_tables(const std::vector<table_info*>& table_chunks) {
+std::shared_ptr<table_info> concat_tables(
+    const std::vector<std::shared_ptr<table_info>>& table_chunks) {
     // get number of total rows for TableBuilder
     int64_t n_total_rows = 0;
-    for (table_info* table : table_chunks) {
+    for (std::shared_ptr<table_info> table : table_chunks) {
         n_total_rows += table->nrows();
     }
     assert(table_chunks->size() > 0);
     TableBuilder table_builder(table_chunks[0], n_total_rows);
-    for (table_info* table : table_chunks) {
+    for (std::shared_ptr<table_info> table : table_chunks) {
         table_builder.append(bodo_table_to_arrow(table));
     }
 
-    table_info* out_table = table_builder.get_table();
+    std::shared_ptr<table_info> out_table =
+        std::shared_ptr<table_info>(table_builder.get_table());
 
-    for (table_info* table : table_chunks) {
-        delete_table_decref_arrays(table);
+    for (std::shared_ptr<table_info> table : table_chunks) {
+        table->columns.clear();
     }
     return out_table;
 }
 
-array_info* concat_arrays(std::vector<array_info*>& arrays) {
+std::shared_ptr<array_info> concat_arrays(
+    std::vector<std::shared_ptr<array_info>>& arrays) {
     // Create dummy tables to pass to concat_tables
-    std::vector<table_info*> dummy_tables(arrays.size());
+    std::vector<std::shared_ptr<table_info>> dummy_tables(arrays.size());
     for (size_t i = 0; i < arrays.size(); i++) {
-        dummy_tables[i] = new table_info();
+        dummy_tables[i] = std::make_shared<table_info>();
         dummy_tables[i]->columns.push_back(arrays[i]);
     }
 
     // Concat the dummy tables and retrieve the concatenated column
-    table_info* concatenated_table = concat_tables(dummy_tables);
-    array_info* concatenated_arr = concatenated_table->columns[0];
-
-    // Not using delete_table since we need the column pointer
-    // to stick around.
-    delete concatenated_table;
-    concatenated_table = NULL;
-
-    // tables in dummy_tables were destroyed in concat_tables,
-    // and the dummy_tables vector will get destroyed when we exit
-    // the function.
+    std::shared_ptr<table_info> concatenated_table =
+        concat_tables(dummy_tables);
+    std::shared_ptr<array_info> concatenated_arr =
+        concatenated_table->columns[0];
 
     return concatenated_arr;
 }

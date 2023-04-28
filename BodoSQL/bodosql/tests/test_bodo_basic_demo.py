@@ -8,7 +8,7 @@ import pandas as pd
 import bodo
 
 
-def test_demo1(datapath):
+def test_demo1(datapath, memory_leak_check):
     """test for demo1.py"""
 
     @bodo.jit

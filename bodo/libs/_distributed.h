@@ -35,11 +35,6 @@ struct BODO_ReduceOps {
     };
 };
 
-// data type for Decimal128 values (2 64-bit ints)
-// initialized in dist/array tools C extensions
-// NOTE: needs to be initialized in all C extensions that use it
-extern MPI_Datatype decimal_mpi_type;
-
 static int dist_get_rank() __UNUSED__;
 static int dist_get_size() __UNUSED__;
 static int dist_get_node_count() __UNUSED__;
@@ -148,7 +143,8 @@ static size_t get_mpi_req_num_bytes() { return sizeof(MPI_Request); }
 static int dist_get_node_count() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
-    if (!is_initialized) MPI_Init(NULL, NULL);
+    if (!is_initialized)
+        MPI_Init(NULL, NULL);
 
     int rank, is_rank0, nodes;
     MPI_Comm shmcomm;
@@ -171,7 +167,8 @@ static int dist_get_node_count() {
 static int dist_get_rank() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
-    if (!is_initialized) MPI_Init(NULL, NULL);
+    if (!is_initialized)
+        MPI_Init(NULL, NULL);
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     // printf("my_rank:%d\n", rank);
@@ -272,7 +269,8 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
 
         // format: value + int (input format is int64+value)
         char* in_val_rank = (char*)malloc(val_idx_struct_size);
-        if (in_val_rank == NULL) return;
+        if (in_val_rank == NULL)
+            return;
         char* out_val_rank = (char*)malloc(val_idx_struct_size);
         if (out_val_rank == NULL) {
             free(in_val_rank);
@@ -402,7 +400,8 @@ static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
 }
 
 static void dist_wait(MPI_Request req, bool cond) {
-    if (cond) MPI_Wait(&req, MPI_STATUS_IGNORE);
+    if (cond)
+        MPI_Wait(&req, MPI_STATUS_IGNORE);
 }
 
 static void allgather(void* out_data, int size, void* in_data, int type_enum) {
@@ -413,6 +412,15 @@ static void allgather(void* out_data, int size, void* in_data, int type_enum) {
 }
 
 static MPI_Datatype get_MPI_typ(int typ_enum) {
+    // data type for Decimal128 values (2 64-bit ints)
+    static MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+    // initialize decimal_mpi_type
+    // TODO: free when program exits
+    if (decimal_mpi_type == MPI_DATATYPE_NULL) {
+        MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
+        MPI_Type_commit(&decimal_mpi_type);
+    }
+
     switch (typ_enum) {
         case Bodo_CTypes::_BOOL:
             return MPI_UNSIGNED_CHAR;  // MPI_C_BOOL doesn't support operations
@@ -422,11 +430,11 @@ static MPI_Datatype get_MPI_typ(int typ_enum) {
         case Bodo_CTypes::UINT8:
             return MPI_UNSIGNED_CHAR;
         case Bodo_CTypes::INT32:
+        case Bodo_CTypes::DATE:
             return MPI_INT;
         case Bodo_CTypes::UINT32:
             return MPI_UNSIGNED;
         case Bodo_CTypes::INT64:
-        case Bodo_CTypes::DATE:
         case Bodo_CTypes::DATETIME:
         case Bodo_CTypes::TIMEDELTA:
         // TODO: [BE-4106] Split Time into Time32 and Time64
@@ -460,12 +468,13 @@ static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) {
     // XXX: LONG is used for uint64
     // XXX: INT is used for sizes <= int32_t. The data is cast to an
     // int type at runtime
-    if (typ_enum == Bodo_CTypes::DATE || typ_enum == Bodo_CTypes::DATETIME ||
-        typ_enum == Bodo_CTypes::TIMEDELTA)
-        // treat date 64-bit values as int64
+    if (typ_enum == Bodo_CTypes::DATETIME || typ_enum == Bodo_CTypes::TIMEDELTA)
         typ_enum = Bodo_CTypes::INT64;
     if (typ_enum == Bodo_CTypes::_BOOL) {
         typ_enum = Bodo_CTypes::INT8;
+    }
+    if (typ_enum == Bodo_CTypes::DATE) {
+        typ_enum = Bodo_CTypes::INT32;
     }
     if (typ_enum < 0 || typ_enum > 9) {
         std::cerr << "Invalid MPI_Type"
@@ -505,7 +514,8 @@ static int get_elem_size(int type_enum) {
 static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
                                      int64_t count) {
     // printf("ind:%lld start:%lld count:%lld\n", ind, start, count);
-    if (ind >= start && ind < start + count) return ind - start;
+    if (ind >= start && ind < start + count)
+        return ind - start;
     return -1;
 }
 
@@ -674,7 +684,8 @@ static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t n_elems_local,
     std::vector<int64_t> AllSizes(num_ranks);
     MPI_Allgather(&n_elems_local, 1, MPI_INT64_T, AllSizes.data(), 1,
                   MPI_INT64_T, MPI_COMM_WORLD);
-    for (int i = 0; i < rank; i++) my_chunk_start += AllSizes[i];
+    for (int i = 0; i < rank; i++)
+        my_chunk_start += AllSizes[i];
 
     std::vector<int64_t> dest_ranks(n_elems_local);
     // find destination of every element in my chunk based on the permutation,
@@ -790,7 +801,8 @@ static void permutation_array_index(unsigned char* lhs, uint64_t len,
         auto offsets = send_disps;
         std::vector<unsigned char> send_buf(dest_ranks.size() * elem_size);
         for (size_t i = 0; i < dest_ranks.size(); ++i) {
-            if (dest_ranks[i] == -1) continue;
+            if (dest_ranks[i] == -1)
+                continue;
             auto send_buf_offset = offsets[dest_ranks[i]]++ * elem_size;
             auto* send_buf_begin = send_buf.data() + send_buf_offset;
             auto* rhs_begin = rhs + i * elem_size;
@@ -854,7 +866,8 @@ static void bodo_alltoallv(const void* sendbuf,
     MPI_Type_size(recvtype, &recv_typ_size);
     int big_shuffle = 0;
     for (int i = 0; i < n_pes; i++) {
-        if (big_shuffle > 1) break;  // error
+        if (big_shuffle > 1)
+            break;  // error
         // if any count or displacement doesn't fit in int we have to do big
         // shuffle
         if (send_counts[i] >= (int64_t)INT_MAX ||
@@ -963,7 +976,8 @@ static void oneD_reshape_shuffle(char* output, char* input,
         if (n_dest_ranks <= 0) {
             // using all ranks in COMM_WORLD
             n_dest_ranks = num_pes;
-            for (int i = 0; i < num_pes; i++) group_rank[i] = i;
+            for (int i = 0; i < num_pes; i++)
+                group_rank[i] = i;
         } else {
             for (int i = 0; i < n_dest_ranks; i++)
                 group_rank[dest_ranks[i]] = i;

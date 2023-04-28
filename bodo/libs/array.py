@@ -67,7 +67,6 @@ ll.add_symbol("array_item_array_to_info", array_ext.array_item_array_to_info)
 ll.add_symbol("struct_array_to_info", array_ext.struct_array_to_info)
 ll.add_symbol("string_array_to_info", array_ext.string_array_to_info)
 ll.add_symbol("dict_str_array_to_info", array_ext.dict_str_array_to_info)
-ll.add_symbol("get_nested_info", array_ext.get_nested_info)
 ll.add_symbol("get_has_global_dictionary", array_ext.get_has_global_dictionary)
 ll.add_symbol(
     "get_has_deduped_local_dictionary", array_ext.get_has_deduped_local_dictionary
@@ -80,43 +79,47 @@ ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
 ll.add_symbol("time_array_to_info", array_ext.time_array_to_info)
 ll.add_symbol("info_to_array_item_array", array_ext.info_to_array_item_array)
 ll.add_symbol("info_to_struct_array", array_ext.info_to_struct_array)
+ll.add_symbol("get_child_info", array_ext.get_child_info)
 ll.add_symbol("info_to_string_array", array_ext.info_to_string_array)
 ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
 ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
 ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
-ll.add_symbol("alloc_numpy", array_ext.alloc_numpy)
-ll.add_symbol("alloc_string_array", array_ext.alloc_string_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
-ll.add_symbol("delete_info_decref_array", array_ext.delete_info_decref_array)
-ll.add_symbol("delete_table_decref_arrays", array_ext.delete_table_decref_arrays)
-ll.add_symbol("decref_table_array", array_ext.decref_table_array)
+ll.add_symbol("delete_info", array_ext.delete_info)
 ll.add_symbol("delete_table", array_ext.delete_table)
-ll.add_symbol("shuffle_table", array_ext.shuffle_table)
+ll.add_symbol("shuffle_table_py_entrypt", array_ext.shuffle_table_py_entrypt)
 ll.add_symbol("get_shuffle_info", array_ext.get_shuffle_info)
 ll.add_symbol("delete_shuffle_info", array_ext.delete_shuffle_info)
 ll.add_symbol("reverse_shuffle_table", array_ext.reverse_shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
 ll.add_symbol("cross_join_table", array_ext.cross_join_table)
 ll.add_symbol("interval_join_table", array_ext.interval_join_table)
-ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
-ll.add_symbol("sort_values_table", array_ext.sort_values_table)
-ll.add_symbol("sort_table_for_interval_join", array_ext.sort_table_for_interval_join)
-ll.add_symbol("sample_table", array_ext.sample_table)
-ll.add_symbol("shuffle_renormalization", array_ext.shuffle_renormalization)
-ll.add_symbol("shuffle_renormalization_group", array_ext.shuffle_renormalization_group)
+ll.add_symbol(
+    "drop_duplicates_table_py_entry", array_ext.drop_duplicates_table_py_entry
+)
+ll.add_symbol("sort_values_table_py_entry", array_ext.sort_values_table_py_entry)
+ll.add_symbol(
+    "sort_table_for_interval_join_py_entrypoint",
+    array_ext.sort_table_for_interval_join_py_entrypoint,
+)
+ll.add_symbol("sample_table_py_entry", array_ext.sample_table_py_entry)
+ll.add_symbol(
+    "shuffle_renormalization_py_entrypt", array_ext.shuffle_renormalization_py_entrypt
+)
+ll.add_symbol(
+    "shuffle_renormalization_group_py_entrypt",
+    array_ext.shuffle_renormalization_group_py_entrypt,
+)
 ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate)
 ll.add_symbol(
-    "convert_local_dictionary_to_global", array_ext.convert_local_dictionary_to_global
+    "drop_duplicates_local_dictionary_py_entry",
+    array_ext.drop_duplicates_local_dictionary_py_entry,
 )
-ll.add_symbol(
-    "drop_duplicates_local_dictionary", array_ext.drop_duplicates_local_dictionary
-)
-ll.add_symbol("get_groupby_labels", array_ext.get_groupby_labels)
-ll.add_symbol("array_isin", array_ext.array_isin)
-ll.add_symbol("get_search_regex", array_ext.get_search_regex)
-ll.add_symbol("get_replace_regex", array_ext.get_replace_regex)
-ll.add_symbol("incref_array", array_ext.incref_array)
+ll.add_symbol("get_groupby_labels_py_entry", array_ext.get_groupby_labels_py_entry)
+ll.add_symbol("array_isin_py_entry", array_ext.array_isin_py_entry)
+ll.add_symbol("get_search_regex_py_entry", array_ext.get_search_regex_py_entry)
+ll.add_symbol("get_replace_regex_py_entry", array_ext.get_replace_regex_py_entry)
 ll.add_symbol("array_info_getitem", array_ext.array_info_getitem)
 ll.add_symbol("array_info_getdata1", array_ext.array_info_getdata1)
 ll.add_symbol("union_tables", array_ext.union_tables)
@@ -186,13 +189,18 @@ def lower_table_type(context, builder, fromty, toty, val):  # pragma: no cover
     return val
 
 
+@lower_cast(array_info_type, types.voidptr)
+def lower_array_type(context, builder, fromty, toty, val):  # pragma: no cover
+    return val
+
+
 @intrinsic
 def array_to_info(typingctx, arr_type_t=None):
     """convert array to array info wrapper to pass to C++"""
     return array_info_type(arr_type_t), array_to_info_codegen
 
 
-def array_to_info_codegen(context, builder, sig, args, incref=True):
+def array_to_info_codegen(context, builder, sig, args):
     """
     Codegen for array_to_info. This isn't a closure because
     this function is called directly to call array_to_info
@@ -201,11 +209,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
     (in_arr,) = args
     arr_type = sig.args[0]
 
-    # arr_info struct keeps a reference
-    if incref:
-        # avoid incref when it is a nested call since only top-level call has incref
-        # and should happen only once. See dict_str_arr_type case below
-        context.nrt.incref(builder, arr_type, in_arr)
+    # NOTE: arr_info struct keeps a reference
 
     if isinstance(arr_type, TupleArrayType):
         # TupleArray uses same model as StructArray so we just use a
@@ -227,17 +231,12 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         payload = _get_array_item_arr_payload(context, builder, arr_type, in_arr)
         inner_arr = payload.data
         inner_arr_info = array_to_info_codegen(
-            context, builder, array_info_type(arr_type.dtype), (inner_arr,), False
+            context, builder, array_info_type(arr_type.dtype), (inner_arr,)
         )
         offsets = context.make_helper(builder, offset_arr_type, payload.offsets)
         null_bitmap = context.make_helper(
             builder, null_bitmap_arr_type, payload.null_bitmap
         )
-
-        # Update refcounts to match references held in array_info in C++ (see string
-        # array case below).
-        if incref:
-            _decref_payload_meminfos(context, builder, arr_type, in_arr)
 
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
@@ -270,7 +269,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
             inner_arr = builder.extract_value(payload.data, i)
             inner_arr_infos.append(
                 array_to_info_codegen(
-                    context, builder, array_info_type(field_type), (inner_arr,), False
+                    context, builder, array_info_type(field_type), (inner_arr,)
                 )
             )
         inner_arr_infos_ptr = cgutils.alloca_once_value(
@@ -287,10 +286,6 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         null_bitmap = context.make_helper(
             builder, null_bitmap_arr_type, payload.null_bitmap
         )
-        # Update refcounts to match references held in array_info in C++ (see string
-        # array case below).
-        if incref:
-            _decref_payload_meminfos(context, builder, arr_type, in_arr)
 
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
@@ -322,13 +317,6 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         null_bitmap = context.make_helper(
             builder, null_bitmap_arr_type, payload.null_bitmap
         )
-
-        # Update refcounts to match references held in array_info in C++.
-        # The initial incref in array_to_info() increfs all meminfos including the
-        # array(item) payload meminfo, but array_info only holds references to buffer
-        # meminfos.
-        if incref:
-            _decref_payload_meminfos(context, builder, arr_type, in_arr)
 
         is_bytes = context.get_constant(types.int32, int(arr_type == binary_array_type))
         fnty = lir.FunctionType(
@@ -362,22 +350,10 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         str_arr = arr.data
         indices_arr = arr.indices
         sig = array_info_type(arr_type.data)
-        str_arr_info = array_to_info_codegen(context, builder, sig, (str_arr,), False)
-
-        # Update refcounts to match references held in array_info in C++ (see above).
-        if incref:
-            payload = _get_str_binary_arr_payload(
-                context, builder, str_arr, string_array_type
-            )
-            context.nrt.incref(builder, char_arr_type, payload.data)
-            context.nrt.incref(builder, offset_arr_type, payload.offsets)
-            context.nrt.incref(builder, null_bitmap_arr_type, payload.null_bitmap)
-            context.nrt.decref(builder, string_array_type, str_arr)
+        str_arr_info = array_to_info_codegen(context, builder, sig, (str_arr,))
 
         sig = array_info_type(bodo.libs.dict_arr_ext.dict_indices_arr_type)
-        indices_arr_info = array_to_info_codegen(
-            context, builder, sig, (indices_arr,), False
-        )
+        indices_arr_info = array_to_info_codegen(context, builder, sig, (indices_arr,))
 
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
@@ -411,9 +387,6 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
     # arrays.
     is_categorical = False
     if isinstance(arr_type, CategoricalArrayType):
-        # undo the initial incref since the original array is not fully passed to
-        # C++ (e.g. dtype value is not passed)
-        context.nrt.decref(builder, arr_type, in_arr)
         num_categories = context.compile_internal(
             builder,
             lambda a: len(a.dtype.categories),
@@ -424,8 +397,6 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         int_dtype = get_categories_int_type(arr_type.dtype)
         arr_type = types.Array(int_dtype, 1, "C")
         is_categorical = True
-        # incref the actual array passed to C++
-        context.nrt.incref(builder, arr_type, in_arr)
 
     # PandasDatetimeArray
     if isinstance(arr_type, bodo.DatetimeArrayType):
@@ -509,7 +480,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
         elif arr_type == datetime_date_array_type:
-            np_dtype = types.int64
+            np_dtype = types.int32
         elif arr_type == boolean_array_type:
             np_dtype = types.int8
         data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
@@ -654,43 +625,6 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         )
 
     raise_bodo_error(f"array_to_info(): array type {arr_type} is not supported")
-
-
-def _decref_payload_meminfos(context, builder, arr_type, arr):
-    """decref payload meminfos of input array while keeping refcount of data meminfos
-    the same.
-
-    This helps match references held in array_info in C++ where payload meminfos are not
-    passed currently.
-    """
-    if isinstance(arr_type, ArrayItemArrayType):
-        payload = _get_array_item_arr_payload(context, builder, arr_type, arr)
-        inner_arr = payload.data
-        context.nrt.incref(builder, arr_type.dtype, inner_arr)
-        context.nrt.incref(builder, offset_arr_type, payload.offsets)
-        context.nrt.incref(builder, null_bitmap_arr_type, payload.null_bitmap)
-        context.nrt.decref(builder, arr_type, arr)
-        _decref_payload_meminfos(context, builder, arr_type.dtype, inner_arr)
-
-    if isinstance(arr_type, StructArrayType):
-        payload = _get_struct_arr_payload(context, builder, arr_type, arr)
-
-        for i, field_type in enumerate(arr_type.data):
-            inner_arr = builder.extract_value(payload.data, i)
-            context.nrt.incref(builder, field_type, inner_arr)
-            _decref_payload_meminfos(context, builder, field_type, inner_arr)
-
-        context.nrt.incref(builder, null_bitmap_arr_type, payload.null_bitmap)
-        context.nrt.decref(builder, arr_type, arr)
-
-    if arr_type in (string_array_type, binary_array_type):
-        payload = _get_str_binary_arr_payload(context, builder, arr, arr_type)
-        context.nrt.incref(builder, char_arr_type, payload.data)
-        context.nrt.incref(builder, offset_arr_type, payload.offsets)
-        context.nrt.incref(builder, null_bitmap_arr_type, payload.null_bitmap)
-        context.nrt.decref(builder, arr_type, arr)
-
-    # TODO: other array types with payloads
 
 
 def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
@@ -845,7 +779,7 @@ def _lower_info_to_struct_array(context, builder, arr_type, in_info):
     fn_tp = cgutils.get_or_insert_function(
         builder.module, fnty, name="info_to_struct_array"
     )
-    child_arr_infos = builder.call(
+    builder.call(
         fn_tp,
         [
             in_info,
@@ -856,11 +790,20 @@ def _lower_info_to_struct_array(context, builder, arr_type, in_info):
         builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
     )  # pragma: no cover
 
+    fnty = lir.FunctionType(
+        lir.IntType(8).as_pointer(),
+        [
+            lir.IntType(8).as_pointer(),  # info
+            lir.IntType(64),
+        ],
+    )
+    fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="get_child_info")
+
     # convert inner array infos
     data_arrs = []
     for i, inner_arr_type in enumerate(arr_type.data):
-        inner_info = builder.load(
-            builder.gep(child_arr_infos, [context.get_constant(types.int64, i)])
+        inner_info = builder.call(
+            fn_tp, [in_info, context.get_constant(types.int64, i)]
         )
         data_arrs.append(
             info_to_array_codegen(
@@ -927,25 +870,25 @@ def info_to_array_codegen(context, builder, sig, args):
             lir.IntType(8).as_pointer(),
             [
                 lir.IntType(8).as_pointer(),  # info
-                # info number (1 for getting the string array or 2 for indices array)
-                lir.IntType(32),
+                # info number (0 for getting the string array or 1 for indices array)
+                lir.IntType(64),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="get_nested_info"
+            builder.module, fnty, name="get_child_info"
         )
         str_arr_info = builder.call(
             fn_tp,
             [
                 in_info,
-                lir.Constant(lir.IntType(32), 1),
+                lir.Constant(lir.IntType(64), 0),
             ],
         )
         indices_arr_info = builder.call(
             fn_tp,
             [
                 in_info,
-                lir.Constant(lir.IntType(32), 2),
+                lir.Constant(lir.IntType(64), 1),
             ],
         )
 
@@ -1077,7 +1020,7 @@ def info_to_array_codegen(context, builder, sig, args):
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
         elif arr_type == datetime_date_array_type:
-            np_dtype = types.int64
+            np_dtype = types.int32
         elif arr_type == boolean_array_type:
             # Boolean array stores bits so we can't use boolean.
             np_dtype = types.uint8
@@ -1345,59 +1288,6 @@ def info_to_array(typingctx, info_type, array_type):
 
 
 @intrinsic
-def test_alloc_np(typingctx, len_typ, arr_type):
-    array_type = (
-        arr_type.instance_type if isinstance(arr_type, types.TypeRef) else arr_type
-    )
-
-    def codegen(context, builder, sig, args):
-        length, _ = args
-        typ_enum = numba_to_c_type(array_type.dtype)
-        typ_arg = cgutils.alloca_once_value(
-            builder, lir.Constant(lir.IntType(32), typ_enum)
-        )
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(), [lir.IntType(64), lir.IntType(32)]  # num_items
-        )
-        fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="alloc_numpy")
-        return builder.call(fn_tp, [length, builder.load(typ_arg)])
-
-    return array_info_type(len_typ, arr_type), codegen
-
-
-@intrinsic
-def test_alloc_string(typingctx, len_typ, n_chars_typ):
-    def codegen(context, builder, sig, args):
-        length, n_chars = args
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(), [lir.IntType(64), lir.IntType(64)]  # num_items
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="alloc_string_array"
-        )
-        return builder.call(fn_tp, [length, n_chars])
-
-    return array_info_type(len_typ, n_chars_typ), codegen
-
-
-@intrinsic
-def incref_array_info(typingctx, arr_info_typ):
-    """increases the refcount of C++ array_info by one."""
-    assert (
-        arr_info_typ == array_info_type
-    ), "incref_array_info: array_info_type expected"
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer()])
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="incref_array"
-        )
-        builder.call(fn_tp, args)
-
-    return types.none(array_info_type), codegen
-
-
-@intrinsic
 def arr_info_list_to_table(typingctx, list_arr_info_typ=None):
     assert list_arr_info_typ == types.List(array_info_type)
     return table_type(list_arr_info_typ), arr_info_list_to_table_codegen
@@ -1420,24 +1310,6 @@ def arr_info_list_to_table_codegen(context, builder, sig, args):
     return builder.call(fn_tp, [inst.data, inst.size])
 
 
-@intrinsic
-def info_from_table(typingctx, table_t, ind_t):
-    # disabled assert because there are cfuncs that need to call info_from_table
-    # on void ptrs received from C++
-    # assert table_t == table_type
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64)]
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="info_from_table"
-        )
-        return builder.call(fn_tp, args)
-
-    return array_info_type(table_t, ind_t), codegen
-
-
 def array_from_cpp_table_codegen(context, builder, sig, args):
     """codegen for array_from_cpp_table() below"""
     fnty = lir.FunctionType(
@@ -1445,12 +1317,19 @@ def array_from_cpp_table_codegen(context, builder, sig, args):
     )
     fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="info_from_table")
     info_ptr = builder.call(fn_tp, args[:2])
-    return info_to_array_codegen(
+    out_arr = info_to_array_codegen(
         context,
         builder,
         sig.return_type(array_info_type, sig.args[2]),
         (info_ptr, args[2]),
     )
+
+    # delete array_info pointer returned from info_from_table()
+    fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer()])
+    fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="delete_info")
+    builder.call(fn_tp, [info_ptr])
+
+    return out_arr
 
 
 @intrinsic
@@ -1971,20 +1850,15 @@ def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t
     return loc_vars["impl"]
 
 
-delete_info_decref_array = types.ExternalFunction(
-    "delete_info_decref_array",
+delete_info = types.ExternalFunction(
+    "delete_info",
     types.void(array_info_type),
 )
 
 
-delete_table_decref_arrays = types.ExternalFunction(
-    "delete_table_decref_arrays",
+delete_table = types.ExternalFunction(
+    "delete_table",
     types.void(table_type),
-)
-
-decref_table_array = types.ExternalFunction(
-    "decref_table_array",
-    types.void(table_type, types.int32),
 )
 
 
@@ -2070,26 +1944,11 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
     # Step 3 convert the C++ table to a Python table.
     func_text += f"  out_py_table = bodo.libs.array.cpp_table_to_py_table(out_cpp_table, out_col_inds, out_table_typ)\n"
     # Step 4 free the output C++ table without modifying the refcounts.
-    func_text += f"  bodo.libs.array.delete_table_decref_arrays(out_cpp_table)\n"
+    func_text += f"  bodo.libs.array.delete_table(out_cpp_table)\n"
     func_text += f"  return out_py_table\n"
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["impl"]
-
-
-@intrinsic
-def delete_table(typingctx, table_t=None):
-    """Deletes table and its array_info objects. Doesn't delete array data."""
-    assert table_t == table_type
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer()])
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="delete_table"
-        )
-        builder.call(fn_tp, args)
-
-    return types.void(table_t), codegen
 
 
 # TODO Add a test for this
@@ -2115,7 +1974,7 @@ def shuffle_table(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="shuffle_table"
+            builder.module, fnty, name="shuffle_table_py_entrypt"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -2459,7 +2318,7 @@ def interval_join_table(
 
 
 @intrinsic
-def sort_values_table(
+def sort_values_table_py_entry(
     typingctx,
     table_t,
     n_keys_t,
@@ -2490,7 +2349,7 @@ def sort_values_table(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="sort_values_table"
+            builder.module, fnty, name="sort_values_table_py_entry"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -2539,7 +2398,7 @@ def sort_table_for_interval_join(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="sort_table_for_interval_join"
+            builder.module, fnty, name="sort_table_for_interval_join_py_entrypoint"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -2580,7 +2439,7 @@ def sample_table(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="sample_table"
+            builder.module, fnty, name="sample_table_py_entry"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -2619,7 +2478,7 @@ def shuffle_renormalization(typingctx, table_t, random_t, random_seed_t, is_para
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="shuffle_renormalization"
+            builder.module, fnty, name="shuffle_renormalization_py_entrypt"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -2655,7 +2514,7 @@ def shuffle_renormalization_group(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="shuffle_renormalization_group"
+            builder.module, fnty, name="shuffle_renormalization_group_py_entrypt"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -2693,7 +2552,7 @@ def drop_duplicates_table(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="drop_duplicates_table"
+            builder.module, fnty, name="drop_duplicates_table_py_entry"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -2829,8 +2688,8 @@ def groupby_and_aggregate(
 
 
 _drop_duplicates_local_dictionary = types.ExternalFunction(
-    "drop_duplicates_local_dictionary",
-    types.void(array_info_type, types.bool_),
+    "drop_duplicates_local_dictionary_py_entry",
+    array_info_type(array_info_type, types.bool_),
 )
 
 
@@ -2839,43 +2698,23 @@ def drop_duplicates_local_dictionary(dict_arr, sort_dictionary):  # pragma: no c
     dict_arr_info = array_to_info(dict_arr)
     # The _drop_duplicates_local_dictionary operation is done by modifying the
     # existing pointer, which is why we call info_to_array on the original array info
-    _drop_duplicates_local_dictionary(dict_arr_info, sort_dictionary)
+    out_dict_arr_info = _drop_duplicates_local_dictionary(
+        dict_arr_info, sort_dictionary
+    )
     check_and_propagate_cpp_exception()
-    out_arr = info_to_array(dict_arr_info, bodo.dict_str_arr_type)
-    delete_info_decref_array(dict_arr_info)
-    return out_arr
-
-
-_convert_local_dictionary_to_global = types.ExternalFunction(
-    "convert_local_dictionary_to_global",
-    types.void(array_info_type, types.bool_, types.bool_),
-)
-
-
-@numba.njit(no_cpython_wrapper=True)
-def convert_local_dictionary_to_global(
-    dict_arr, sort_dictionary, is_parallel=False
-):  # pragma: no cover
-    dict_arr_info = array_to_info(dict_arr)
-    # In addition to convert the dictionary to global, the call to
-    # _convert_local_dictionary_to_global will also remove any duplicate
-    # values in the inner dictionary. The operation is done by modifying the
-    # existing pointer, which is why we call info_to_array on the original array info
-    _convert_local_dictionary_to_global(dict_arr_info, is_parallel, sort_dictionary)
-    check_and_propagate_cpp_exception()
-    out_arr = info_to_array(dict_arr_info, bodo.dict_str_arr_type)
-    delete_info_decref_array(dict_arr_info)
+    out_arr = info_to_array(out_dict_arr_info, bodo.dict_str_arr_type)
+    delete_info(out_dict_arr_info)
     return out_arr
 
 
 get_groupby_labels = types.ExternalFunction(
-    "get_groupby_labels",
+    "get_groupby_labels_py_entry",
     types.int64(table_type, types.voidptr, types.voidptr, types.boolean, types.bool_),
 )
 
 
 _array_isin = types.ExternalFunction(
-    "array_isin",
+    "array_isin_py_entry",
     types.void(array_info_type, array_info_type, array_info_type, types.bool_),
 )
 
@@ -2888,8 +2727,6 @@ def array_isin(out_arr, in_arr, in_values, is_parallel):  # pragma: no cover
     in_arr_info = array_to_info(in_arr)
     in_values_info = array_to_info(in_values)
     out_arr_info = array_to_info(out_arr)
-    # NOTE: creating a dummy table to avoid Numba's bug in refcount pruning
-    dummy_table = arr_info_list_to_table([in_arr_info, in_values_info, out_arr_info])
 
     _array_isin(
         out_arr_info,
@@ -2898,12 +2735,10 @@ def array_isin(out_arr, in_arr, in_values, is_parallel):  # pragma: no cover
         is_parallel,
     )
     check_and_propagate_cpp_exception()
-    # no need to decref since array_isin decrefs input/output
-    delete_table(dummy_table)
 
 
 _get_search_regex = types.ExternalFunction(
-    "get_search_regex",
+    "get_search_regex_py_entry",
     # params: in array, case-sensitive flag, pattern, output boolean array
     types.void(
         array_info_type, types.bool_, types.bool_, types.voidptr, array_info_type
@@ -2911,7 +2746,7 @@ _get_search_regex = types.ExternalFunction(
 )
 
 _get_replace_regex = types.ExternalFunction(
-    "get_replace_regex",
+    "get_replace_regex_py_entry",
     # params: in array, pattern, replacement, is_parallel
     # Output: out array
     array_info_type(array_info_type, types.voidptr, types.voidptr, types.bool_),
@@ -2942,7 +2777,7 @@ def get_replace_regex(
     )
     check_and_propagate_cpp_exception()
     out = info_to_array(out_arr_info, in_arr)
-    delete_info_decref_array(out_arr_info)
+    delete_info(out_arr_info)
     return out
 
 
@@ -3079,8 +2914,8 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
         def getitem_func(typingctx, table_t, ind_t):
             def codegen(context, builder, sig, args):
                 # Define some constants
+                zero = lir.Constant(lir.IntType(64), 0)
                 one = lir.Constant(lir.IntType(64), 1)
-                two = lir.Constant(lir.IntType(64), 2)
 
                 table, row_ind = args
                 # cast void* to void**
@@ -3097,9 +2932,9 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                     ],
                 )
                 get_info_func = cgutils.get_or_insert_function(
-                    builder.module, fnty, name="get_nested_info"
+                    builder.module, fnty, name="get_child_info"
                 )
-                args = (col_ptr, two)
+                args = (col_ptr, one)
                 indices_array_info = builder.call(get_info_func, args)
                 # Extract the data from the array info
                 fnty = lir.FunctionType(
@@ -3119,7 +2954,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 )
                 # NA gets checked after this function.
                 # Extract the dictionary from the dict array
-                args = (col_ptr, one)
+                args = (col_ptr, zero)
                 dictionary_ptr = builder.call(get_info_func, args)
                 fnty = lir.FunctionType(
                     lir.IntType(8).as_pointer(),

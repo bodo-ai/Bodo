@@ -12,14 +12,13 @@ class SnowflakeReader : public ArrowDataframeReader {
    public:
     /**
      * Initialize SnowflakeReader.
-     * See snowflake_read function below for description of arguments.
+     * See snowflake_read_py_entry function below for description of arguments.
      */
     SnowflakeReader(const char* _query, const char* _conn, bool _parallel,
                     bool _is_independent, PyObject* pyarrow_schema,
                     std::set<int> selected_fields,
                     std::vector<bool> is_nullable,
                     std::vector<int> str_as_dict_cols,
-                    std::vector<int> allow_unsafe_dt_to_ts_cast_cols,
                     int64_t* _total_nrows, bool _only_length_query,
                     bool _is_select_query)
         : ArrowDataframeReader(_parallel, pyarrow_schema, -1, selected_fields,
@@ -28,11 +27,10 @@ class SnowflakeReader : public ArrowDataframeReader {
           conn(_conn),
           total_nrows(_total_nrows),
           only_length_query(_only_length_query),
-          is_independent(_is_independent),
-          is_select_query(_is_select_query) {
+          is_select_query(_is_select_query),
+          is_independent(_is_independent) {
         // Initialize reader
-        init_arrow_reader(str_as_dict_cols, true,
-                          allow_unsafe_dt_to_ts_cast_cols);
+        init_arrow_reader(str_as_dict_cols, true);
     }
 
     virtual ~SnowflakeReader() { Py_XDECREF(sf_conn); }
@@ -50,7 +48,8 @@ class SnowflakeReader : public ArrowDataframeReader {
     virtual PyObject* get_dataset() {
         // import bodo.io.snowflake
         PyObject* sf_mod = PyImport_ImportModule("bodo.io.snowflake");
-        if (PyErr_Occurred()) throw std::runtime_error("python");
+        if (PyErr_Occurred())
+            throw std::runtime_error("python");
 
         // ds = bodo.io.snowflake.get_dataset(query, conn, pyarrow_schema,
         //   only_length, is_select_query, is_parallel, is_independent)
@@ -92,7 +91,6 @@ class SnowflakeReader : public ArrowDataframeReader {
         size_t num_pieces = get_num_pieces();
         int64_t to_arrow_time = 0;
         int64_t append_time = 0;
-        int64_t cast_arrow_table_time = 0;
         ev.add_attribute("num_pieces", num_pieces);
 
         for (size_t piece_idx = 0; piece_idx < num_pieces; piece_idx++) {
@@ -114,14 +112,9 @@ class SnowflakeReader : public ArrowDataframeReader {
                 std::chrono::duration_cast<std::chrono::microseconds>((t2 - t1))
                     .count();
 
-            t1 = std::chrono::steady_clock::now();
             // Upcast Arrow table to expected schema
             // TODO: Integrate within TableBuilder
             table = ArrowDataframeReader::cast_arrow_table(table);
-            t2 = std::chrono::steady_clock::now();
-            cast_arrow_table_time +=
-                std::chrono::duration_cast<std::chrono::microseconds>((t2 - t1))
-                    .count();
 
             int64_t length = std::min(rows_left, table->num_rows() - offset);
             // pass zero-copy slice to TableBuilder to append to read data
@@ -137,8 +130,6 @@ class SnowflakeReader : public ArrowDataframeReader {
         }
         ev.add_attribute("total_to_arrow_time_micro", to_arrow_time);
         ev.add_attribute("total_append_time_micro", append_time);
-        ev.add_attribute("total_cast_arrow_table_time_micro",
-                         cast_arrow_table_time);
         ev.finalize();
     }
 
@@ -178,39 +169,24 @@ class SnowflakeReader : public ArrowDataframeReader {
  only compute the length.
  * @param _is_select_query: Boolean value for if the query is a select
  statement.
- * @param _allow_unsafe_dt_to_ts_cast_cols Indices of columns where we will be
- performing a cast from date to datetime64[ns] after reading, i.e. Snowflake is
- expected to send us "date" data, and we will cast it to datetime64[ns]. In
- particular, we will allow an "unsafe" cast (only overflow allowed) in these
- cases to match the behavior of Bodo's `astype` cast.
- * @param num_allow_unsafe_dt_to_ts_cast_cols Number of columns where we will be
- performing this unsafe cast from date to datetime64[ns].
  * @return table containing all the arrays read
  */
-table_info* snowflake_read(const char* query, const char* conn, bool parallel,
-                           bool is_independent, PyObject* arrow_schema,
-                           int64_t n_fields, int32_t* _is_nullable,
-                           int32_t* _str_as_dict_cols,
-                           int32_t num_str_as_dict_cols,
-                           int32_t* _allow_unsafe_dt_to_ts_cast_cols,
-                           int32_t num_allow_unsafe_dt_to_ts_cast_cols,
-                           int64_t* total_nrows, bool _only_length_query,
-                           bool _is_select_query) {
+table_info* snowflake_read_py_entry(
+    const char* query, const char* conn, bool parallel, bool is_independent,
+    PyObject* arrow_schema, int64_t n_fields, int32_t* _is_nullable,
+    int32_t* _str_as_dict_cols, int32_t num_str_as_dict_cols,
+    int64_t* total_nrows, bool _only_length_query, bool _is_select_query) {
     try {
         std::set<int> selected_fields;
-        for (auto i = 0; i < n_fields; i++) selected_fields.insert(i);
+        for (auto i = 0; i < n_fields; i++)
+            selected_fields.insert(i);
         std::vector<bool> is_nullable(_is_nullable, _is_nullable + n_fields);
         std::vector<int> str_as_dict_cols(
             {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols});
-        std::vector<int> allow_unsafe_dt_to_ts_cast_cols(
-            {_allow_unsafe_dt_to_ts_cast_cols,
-             _allow_unsafe_dt_to_ts_cast_cols +
-                 num_allow_unsafe_dt_to_ts_cast_cols});
 
         SnowflakeReader reader(query, conn, parallel, is_independent,
                                arrow_schema, selected_fields, is_nullable,
-                               str_as_dict_cols,
-                               allow_unsafe_dt_to_ts_cast_cols, total_nrows,
+                               str_as_dict_cols, total_nrows,
                                _only_length_query, _is_select_query);
 
         return reader.read();

@@ -23,8 +23,8 @@
  * @param use_sql_rules: If true, use SQL rules for null handling. If false, use
  * Pandas rules.
  */
-void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
-                                      bool use_sql_rules) {
+void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
+                                      int ftype, bool use_sql_rules) {
     // Generate an error message for unsupported paths that includes the name
     // of the function and the dtype.
     std::string error_msg = std::string("unsupported aggregate function: ") +
@@ -46,11 +46,14 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                 ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last ||
                 ftype == Bodo_FTypes::boolor_agg ||
                 ftype == Bodo_FTypes::mean || ftype == Bodo_FTypes::var ||
+                ftype == Bodo_FTypes::var_pop ||
+                ftype == Bodo_FTypes::std_pop ||
+                ftype == Bodo_FTypes::kurtosis || ftype == Bodo_FTypes::skew ||
                 ftype == Bodo_FTypes::std || ftype == Bodo_FTypes::median) {
-                // if input is all nulls, max, min, first, last, and boolor_agg
-                // output will be null. We null initialize median, mean, var,
-                // and std as well since we always output a nullable float at
-                // this time.
+                // if input is all nulls, max, min, first, last, kurtosis, skew,
+                // or boolor_agg, the output will be null. We null initialize
+                // median, mean, var, and std as well since we always output
+                // a nullable float at this time.
                 init_val = false;
             } else {
                 init_val = true;
@@ -196,6 +199,7 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                               std::numeric_limits<uint16_t>::max());
                     return;
                 case Bodo_CTypes::INT32:
+                case Bodo_CTypes::DATE:
                     std::fill((int32_t*)out_col->data1(),
                               (int32_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<int32_t>::max());
@@ -215,7 +219,6 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                               (uint64_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<uint64_t>::max());
                     return;
-                case Bodo_CTypes::DATE:
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
                 // TODO: [BE-4106] Split Time into Time32 and Time64
@@ -289,6 +292,7 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                               std::numeric_limits<uint16_t>::min());
                     return;
                 case Bodo_CTypes::INT32:
+                case Bodo_CTypes::DATE:
                     std::fill((int32_t*)out_col->data1(),
                               (int32_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<int32_t>::min());
@@ -308,7 +312,6 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                               (uint64_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<uint64_t>::min());
                     return;
-                case Bodo_CTypes::DATE:
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
                 // TODO: [BE-4106] Split Time into Time32 and Time64
@@ -353,7 +356,6 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                 // for first & last, we only need an initial value for the
                 // non-null bitmask cases where the datatype has a nan
                 // representation
-                case Bodo_CTypes::DATE:
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
                 // TODO: [BE-4106] Split Time into Time32 and Time64
@@ -362,6 +364,12 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                     std::fill((int64_t*)out_col->data1(),
                               (int64_t*)out_col->data1() + out_col->length,
                               std::numeric_limits<int64_t>::min());
+                    return;
+                case Bodo_CTypes::DATE:
+                    // nat representation for date values is int32_t min value
+                    std::fill((int32_t*)out_col->data1(),
+                              (int32_t*)out_col->data1() + out_col->length,
+                              std::numeric_limits<int32_t>::min());
                     return;
                 case Bodo_CTypes::FLOAT32:
                     // initialize to quiet_NaN so that result is nan if all
@@ -402,7 +410,7 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
     }
 }
 
-void aggfunc_output_initialize(array_info* out_col, int ftype,
+void aggfunc_output_initialize(std::shared_ptr<array_info> out_col, int ftype,
                                bool use_sql_rules) {
     aggfunc_output_initialize_kernel(out_col, ftype, use_sql_rules);
 }
@@ -421,8 +429,12 @@ void get_groupby_output_dtype(int ftype,
             return;
         case Bodo_FTypes::median:
         case Bodo_FTypes::mean:
+        case Bodo_FTypes::var_pop:
+        case Bodo_FTypes::std_pop:
         case Bodo_FTypes::var:
         case Bodo_FTypes::std:
+        case Bodo_FTypes::kurtosis:
+        case Bodo_FTypes::skew:
             array_type = bodo_array_type::NULLABLE_INT_BOOL;
             dtype = Bodo_CTypes::FLOAT64;
             return;

@@ -99,7 +99,7 @@ struct bool_aggfunc {
      * @param[in,out] current aggregate value, holds the result
      * @param[in] other input value.
      */
-    static void apply(array_info* arr, int64_t idx, T& v2);
+    static void apply(std::shared_ptr<array_info> arr, int64_t idx, T& v2);
 };
 
 /**
@@ -239,7 +239,8 @@ struct aggliststring<Bodo_FTypes::min> {
 // nullable boolean implementation
 template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::min> {
-    inline static void apply(array_info* arr, int64_t idx, bool& v2) {
+    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
+                             bool& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         // And to get the output.
         v1 = v1 && v2;
@@ -299,7 +300,8 @@ struct aggliststring<Bodo_FTypes::max> {
 // nullable boolean implementation
 template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::max> {
-    inline static void apply(array_info* arr, int64_t idx, bool& v2) {
+    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
+                             bool& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         // OR to get the output.
         v1 = v1 || v2;
@@ -334,7 +336,8 @@ struct aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::prod> {
 // nullable boolean implementation
 template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::prod> {
-    inline static void apply(array_info* arr, int64_t idx, bool& v2) {
+    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
+                             bool& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         v1 = v1 && v2;
         SetBitTo((uint8_t*)arr->data1(), idx, v1);
@@ -397,8 +400,8 @@ inline static void idxmin_dict(int32_t& v1, int32_t& v2, std::string& s1,
     }
 }
 
-inline static void idxmin_bool(array_info* arr, int64_t grp_num, bool& v2,
-                               uint64_t& index_pos, int64_t i) {
+inline static void idxmin_bool(std::shared_ptr<array_info> arr, int64_t grp_num,
+                               bool& v2, uint64_t& index_pos, int64_t i) {
     bool v1 = GetBit((uint8_t*)arr->data1(), grp_num);
     if (v2 < v1) {
         SetBitTo((uint8_t*)arr->data1(), grp_num, v2);
@@ -462,8 +465,8 @@ inline static void idxmax_dict(int32_t& v1, int32_t& v2, std::string& s1,
     }
 }
 
-inline static void idxmax_bool(array_info* arr, int64_t grp_num, bool& v2,
-                               uint64_t& index_pos, int64_t i) {
+inline static void idxmax_bool(std::shared_ptr<array_info> arr, int64_t grp_num,
+                               bool& v2, uint64_t& index_pos, int64_t i) {
     bool v1 = GetBit((uint8_t*)arr->data1(), grp_num);
     if (v2 > v1) {
         SetBitTo((uint8_t*)arr->data1(), grp_num, v2);
@@ -485,7 +488,8 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
      * @param idx The index to load/store for array.
      * @param v2 other input value.
      */
-    inline static void apply(array_info* arr, int64_t idx, T& v2) {
+    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
+                             T& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         v1 = (v1 || (v2 != 0));
         SetBitTo((uint8_t*)arr->data1(), idx, v1);
@@ -505,7 +509,8 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
      * @param v2 other input value.
      */
     // TODO: Compare decimal directly?
-    inline static void apply(array_info* arr, int64_t idx, T& v2) {
+    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
+                             T& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         v1 = v1 || ((decimal_to_double(v2)) != 0.0);
         SetBitTo((uint8_t*)arr->data1(), idx, v1);
@@ -550,7 +555,8 @@ struct aggliststring<Bodo_FTypes::last> {
 // nullable boolean implementation
 template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::last> {
-    inline static void apply(array_info* arr, int64_t idx, bool& v2) {
+    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
+                             bool& v2) {
         SetBitTo((uint8_t*)arr->data1(), idx, v2);
     }
 };
@@ -616,24 +622,77 @@ struct var_agg {
      * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
      * for more information.
      *
-     * @param[in] v2: observed value
+     * @param[in] v: observed value
      * @param[in,out] count: current number of observations
      * @param[in,out] mean_x: current mean
      * @param[in,out] m2: sum of squares of differences from the current mean
      */
-    inline static void apply(T& v2, uint64_t& count, double& mean_x,
+    inline static void apply(T val, uint64_t& count, double& mean_x,
                              double& m2) {
-        if (!isnan_alltype<T, dtype>(v2)) {
-            double v2_double = to_double<T, dtype>(v2);
+        if (!isnan_alltype<T, dtype>(val)) {
+            double val_double = to_double<T, dtype>(val);
             count += 1;
-            double delta = v2_double - mean_x;
+            double delta = val_double - mean_x;
             mean_x += delta / count;
-            double delta2 = v2_double - mean_x;
+            double delta2 = val_double - mean_x;
             m2 += delta * delta2;
         }
     }
 };
 
+// Skew
+
+template <typename T, int dtype>
+struct skew_agg {
+    /**
+     * Aggregation function for skew. The same principle as variance, but
+     * used to calculate the third moment.
+     *
+     * @param[in] val: observed value
+     * @param[in,out] count: current number of observations
+     * @param[in,out] m1: current sum of elements
+     * @param[in,out] m2: current sum of squares of elements
+     * @param[in,out] m3: current sum of cubes of elements
+     */
+    inline static void apply(T val, uint64_t& count, double& m1, double& m2,
+                             double& m3) {
+        if (!isnan_alltype<T, dtype>(val)) {
+            double val_double = to_double<T, dtype>(val);
+            count += 1;
+            m1 += val_double;
+            m2 += val_double * val_double;
+            m3 += val_double * val_double * val_double;
+        }
+    }
+};
+
+// kurtosis
+
+template <typename T, int dtype>
+struct kurt_agg {
+    /**
+     * Aggregation function for kurtosis. The same principle as variance, but
+     * used to calculate the fourth moment
+     *
+     * @param[in] val: observed value
+     * @param[in,out] count: current number of observations
+     * @param[in,out] m1: current sum of elements
+     * @param[in,out] m2: current sum of squares of elements
+     * @param[in,out] m3: current sum of cubes of elements
+     * @param[in,out] m4: current sum of fourths of elements
+     */
+    inline static void apply(T val, uint64_t& count, double& m1, double& m2,
+                             double& m3, double& m4) {
+        if (!isnan_alltype<T, dtype>(val)) {
+            double val_double = to_double<T, dtype>(val);
+            count += 1;
+            m1 += val_double;
+            m2 += val_double * val_double;
+            m3 += val_double * val_double * val_double;
+            m4 += val_double * val_double * val_double * val_double;
+        }
+    }
+};
 // Non inlined operations over multiple columns
 
 /**
@@ -659,8 +718,8 @@ struct var_agg {
  * @return false The comparison is a tie. If there are more columns we should
  * continue iterating.
  */
-bool idx_compare_column(array_info* out_arr, int64_t grp_num,
-                        array_info* in_arr, int64_t in_idx, bool asc,
-                        bool na_pos);
+bool idx_compare_column(std::shared_ptr<array_info> out_arr, int64_t grp_num,
+                        std::shared_ptr<array_info> in_arr, int64_t in_idx,
+                        bool asc, bool na_pos);
 
 #endif  // _GROUPBY_AGG_FUNCS_H_INCLUDED

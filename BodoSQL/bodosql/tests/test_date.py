@@ -8,7 +8,7 @@ import bodosql
 import pandas as pd
 import pytest
 from bodosql.context import BodoSQLContext
-from bodosql.tests.utils import bodosql_use_date_type, check_query
+from bodosql.tests.utils import check_query
 
 from bodo.tests.conftest import (  # noqa
     date_df,
@@ -48,8 +48,7 @@ def test_date_to_date_scalar(fn_name, scalar, expected, memory_leak_check):
     query = f"select {fn_name}({scalar}) as A"
     ctx = {}
     expected_output = pd.DataFrame({"A": [expected]})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=expected_output)
+    check_query(query, ctx, None, expected_output=expected_output)
 
 
 @pytest.mark.parametrize(
@@ -69,12 +68,11 @@ def test_date_to_date_scalar(fn_name, scalar, expected, memory_leak_check):
 def test_date_to_date_invalid(fn_name, scalar):
     query = f"select {fn_name}({scalar}) as A"
     ctx = {}
-    with bodosql_use_date_type():
-        with pytest.raises(
-            ValueError, match="Invalid input while converting to date value"
-        ):
-            bc = bodosql.BodoSQLContext()
-            bc.sql(query, ctx)
+    with pytest.raises(
+        ValueError, match="Invalid input while converting to date value"
+    ):
+        bc = bodosql.BodoSQLContext()
+        bc.sql(query, ctx)
 
 
 @pytest.mark.parametrize(
@@ -87,8 +85,7 @@ def test_date_cast_to_date(scalar_to_cast, memory_leak_check):
     query = f"select CAST({scalar_to_cast} AS DATE) as A"
     ctx = {}
     expected_output = pd.DataFrame({"A": [datetime.date(1999, 1, 1)]})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=expected_output)
+    check_query(query, ctx, None, expected_output=expected_output)
 
 
 @pytest.mark.parametrize(
@@ -102,8 +99,7 @@ def test_date_cast_from_date(to_type, expected, memory_leak_check):
     query = f"select CAST(DATE '1999-01-01' AS {to_type}) as A"
     ctx = {}
     expected_output = pd.DataFrame({"A": [expected]})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=expected_output)
+    check_query(query, ctx, None, expected_output=expected_output)
 
 
 @pytest.mark.parametrize(
@@ -219,23 +215,22 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             }
         )
     }
-    with bodosql_use_date_type():
-        if answer is None:
-            bc = BodoSQLContext(ctx)
-            with pytest.raises(
-                Exception, match=r"Cannot extract unit \w+ from DATE values"
-            ):
-                bc.sql(query)
-        else:
-            expected_output = pd.DataFrame({"U": answer})
-            check_query(
-                query,
-                ctx,
-                None,
-                expected_output=expected_output,
-                check_dtype=False,
-                sort_output=False,
-            )
+    if answer is None:
+        bc = BodoSQLContext(ctx)
+        with pytest.raises(
+            Exception, match=r"Cannot extract unit \w+ from DATE values"
+        ):
+            bc.sql(query)
+    else:
+        expected_output = pd.DataFrame({"U": answer})
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=expected_output,
+            check_dtype=False,
+            sort_output=False,
+        )
 
 
 @pytest.mark.parametrize(
@@ -345,15 +340,14 @@ def test_datediff_date_columns_time_units(
             ]
         }
     )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            None,
-            check_names=False,
-            check_dtype=False,
-            expected_output=output,
-        )
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=output,
+    )
 
 
 def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_check):
@@ -383,15 +377,14 @@ def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_
             ]
         }
     )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            None,
-            check_names=False,
-            check_dtype=False,
-            expected_output=output,
-        )
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=output,
+    )
 
 
 @pytest.mark.parametrize(
@@ -405,8 +398,7 @@ def test_date_next_day(func_name, expected, memory_leak_check):
     query = f"select {func_name}(TO_DATE('1999-01-01'), 'Sunday') as A"
     ctx = {}
     expected_output = pd.DataFrame({"A": [expected]})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=expected_output)
+    check_query(query, ctx, None, expected_output=expected_output)
 
 
 def test_max_date(date_df, memory_leak_check):
@@ -414,15 +406,14 @@ def test_max_date(date_df, memory_leak_check):
     Test that max is working for date type columns
     """
     query = "SELECT MAX(A) FROM table1"
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            None,
-            check_names=False,
-            expected_output=pd.DataFrame({"A": [datetime.date(2024, 1, 1)]}),
-            is_out_distributed=False,
-        )
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({"A": [datetime.date(2024, 1, 1)]}),
+        is_out_distributed=False,
+    )
 
 
 def test_min_date(date_df, memory_leak_check):
@@ -430,15 +421,14 @@ def test_min_date(date_df, memory_leak_check):
     Test that min is working for date type columns
     """
     query = "SELECT MIN(B) FROM table1"
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            None,
-            check_names=False,
-            expected_output=pd.DataFrame({"B": [datetime.date(1700, 2, 4)]}),
-            is_out_distributed=False,
-        )
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({"B": [datetime.date(1700, 2, 4)]}),
+        is_out_distributed=False,
+    )
 
 
 def test_max_date_group_by(date_df, spark_info, memory_leak_check):
@@ -446,13 +436,12 @@ def test_max_date_group_by(date_df, spark_info, memory_leak_check):
     Test that max with group by is working for date type columns
     """
     query = "SELECT MAX(A) FROM table1 GROUP BY C"
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            spark_info,
-            check_names=False,
-        )
+    check_query(
+        query,
+        date_df,
+        spark_info,
+        check_names=False,
+    )
 
 
 def test_min_date_group_by(date_df, spark_info, memory_leak_check):
@@ -460,13 +449,12 @@ def test_min_date_group_by(date_df, spark_info, memory_leak_check):
     Test that min with group by is working for date type columns
     """
     query = "SELECT MIN(B) FROM table1 GROUP BY C"
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            spark_info,
-            check_names=False,
-        )
+    check_query(
+        query,
+        date_df,
+        spark_info,
+        check_names=False,
+    )
 
 
 @pytest.mark.slow

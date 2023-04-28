@@ -91,15 +91,17 @@ def pytest_collection_modifyitems(items):
     called after collection has been performed.
     """
     azure_1p_markers = [
-        pytest.mark.bodo_1of9,
-        pytest.mark.bodo_2of9,
-        pytest.mark.bodo_3of9,
-        pytest.mark.bodo_4of9,
-        pytest.mark.bodo_5of9,
-        pytest.mark.bodo_6of9,
-        pytest.mark.bodo_7of9,
-        pytest.mark.bodo_8of9,
-        pytest.mark.bodo_9of9,
+        pytest.mark.bodo_1of11,
+        pytest.mark.bodo_2of11,
+        pytest.mark.bodo_3of11,
+        pytest.mark.bodo_4of11,
+        pytest.mark.bodo_5of11,
+        pytest.mark.bodo_6of11,
+        pytest.mark.bodo_7of11,
+        pytest.mark.bodo_8of11,
+        pytest.mark.bodo_9of11,
+        pytest.mark.bodo_10of11,
+        pytest.mark.bodo_11of11,
     ]
     azure_2p_markers = [
         pytest.mark.bodo_1of15,

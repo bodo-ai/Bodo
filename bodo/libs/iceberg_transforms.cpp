@@ -7,14 +7,55 @@
 //
 
 /**
+ * @brief Helper function to convert int32 date arrays to int64 date arrays,
+ * which are used for hashing dates.
+ *
+ * @param in_arr Input DATE array (NULLABLE)
+ * @return array_info* Nullable INT64 array.
+ */
+std::shared_ptr<array_info> convert_date_to_int64(
+    std::shared_ptr<array_info> in_arr) {
+    tracing::Event ev("convert_date_to_int64");
+    const uint64_t nRow = in_arr->length;
+    ev.add_attribute("nRows", nRow);
+
+    if (in_arr->dtype != Bodo_CTypes::DATE) {
+        throw std::runtime_error("Unsupported dtype type '" +
+                                 GetDtype_as_string(in_arr->dtype) +
+                                 "' provided to convert_date_to_int64. "
+                                 "Expected Bodo_CTypes::DATE array");
+    }
+
+    if (in_arr->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
+        throw std::runtime_error(
+            "Unsupported arr_type '" + GetArrType_as_string(in_arr->arr_type) +
+            "' provided to convert_date_to_int64. Expected "
+            "bodo_array_type::NULLABLE_INT_BOOL.");
+    }
+
+    std::shared_ptr<array_info> out_arr =
+        alloc_nullable_array(nRow, Bodo_CTypes::INT64, 0);
+    for (uint64_t i = 0; i < nRow; i++) {
+        out_arr->at<int64_t>(i) = in_arr->at<int32_t>(i);
+    }
+
+    int64_t n_bytes = ((nRow + 7) >> 3);
+    std::copy(in_arr->null_bitmask(), in_arr->null_bitmask() + n_bytes,
+              out_arr->null_bitmask());
+
+    return out_arr;
+}
+
+/**
  * @brief Helper function to convert nanoseconds to microseconds.
  * Essentially creates a new nullable int64 array where the values are divided
  * by 1000. NaTs in original array are converted to nulls.
  *
  * @param in_arr Input DATETIME array (NUMPY)
- * @return array_info* Nullable INT64 array.
+ * @return std::shared_ptr<array_info> Nullable INT64 array.
  */
-array_info* convert_datetime_ns_to_us(array_info* in_arr) {
+std::shared_ptr<array_info> convert_datetime_ns_to_us(
+    std::shared_ptr<array_info> in_arr) {
     tracing::Event ev("convert_datetime_ns_to_us");
     const uint64_t nRow = in_arr->length;
     ev.add_attribute("nRows", nRow);
@@ -33,7 +74,8 @@ array_info* convert_datetime_ns_to_us(array_info* in_arr) {
             "bodo_array_type::NUMPY.");
     }
 
-    array_info* out_arr = alloc_nullable_array(nRow, Bodo_CTypes::INT64, 0);
+    std::shared_ptr<array_info> out_arr =
+        alloc_nullable_array(nRow, Bodo_CTypes::INT64, 0);
     for (uint64_t i = 0; i < nRow; i++) {
         if (in_arr->at<int64_t>(i) == std::numeric_limits<int64_t>::min()) {
             // if value is NaT (equals
@@ -79,71 +121,6 @@ static inline int32_t get_years_since_epoch_from_datetime(int64_t* dt) {
 }
 
 /**
- * @brief Get the years since epoch from date object
- *
- * @param dt DATE (as int64)
- * @return int32_t Number of years since epoch
- */
-static inline int32_t get_years_since_epoch_from_date(int64_t* dt) {
-    return (*dt >> 32) - 1970;
-}
-
-/**
- * @brief Get the days since epoch from date object
- * Same as bodo_date64_to_arrow_date32 in parque_write.cpp
- *
- * @param dt DATE (as int64)
- * @return int64_t Number of days since epoch
- */
-static inline int64_t get_days_since_epoch_from_date(int64_t* dt) {
-    int64_t year = *dt >> 32;
-    int64_t month = (*dt >> 16) & 0xFFFF;
-    int64_t day = *dt & 0xFFFF;
-    return get_days_from_date(year, month, day);
-}
-
-/**
- * @brief Convert a DATE array (NULLABLE_INT) into a nullable int64 array with
- * days since epoch.
- *
- * @param in_arr DATE array to transform
- * @return array_info* int64 array containing days since epoch for each DATE
- * element.
- */
-array_info* convert_date_to_days_since_epoch(array_info* in_arr) {
-    tracing::Event ev("convert_date_to_days_since_epoch");
-    const uint64_t nRow = in_arr->length;
-    ev.add_attribute("nRows", nRow);
-
-    if (in_arr->dtype != Bodo_CTypes::DATE) {
-        throw std::runtime_error(
-            "Unsupported dtype type '" + GetDtype_as_string(in_arr->dtype) +
-            "' provided to convert_date_to_days_since_epoch. Expected "
-            "Bodo_CTypes::DATE array.");
-    }
-    if (in_arr->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
-        throw std::runtime_error(
-            "Unsupported arr_type '" + GetArrType_as_string(in_arr->arr_type) +
-            "' provided to convert_date_to_days_since_epoch. Expected "
-            "bodo_array_type::NULLABLE_INT_BOOL.");
-    }
-
-    // Iceberg Spec is unclear on whether "date" which is number
-    // of days since epoch, is int32 or int64. We choose int64
-    // because it works better for the bucket transform
-    // (see note in array_transform_bucket_N).
-    array_info* out_arr = alloc_nullable_array(nRow, Bodo_CTypes::INT64, 0);
-    for (uint64_t i = 0; i < nRow; i++) {
-        out_arr->at<int64_t>(i) =
-            get_days_since_epoch_from_date(&in_arr->at<int64_t>(i));
-    }
-    int64_t n_bytes = ((nRow + 7) >> 3);
-    // Copy the null bitmask as is
-    memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
-    return out_arr;
-}
-
-/**
  * @brief Helper function used in get_months_since_epoch_from_datetime which
  * calculates the month if we were to go days many days into the given year.
  *
@@ -175,21 +152,9 @@ static inline int32_t get_months_since_epoch_from_datetime(int64_t* dt) {
     constexpr int64_t perday = 24LL * 60LL * 60LL * 1000LL * 1000LL * 1000LL;
     int64_t days = extract_unit(dt, perday);
     int64_t year = days_to_yearsdays(&days);
-    int64_t rem_months;
+    int64_t rem_months = -1;
     get_remaining_months(year, &days, &rem_months);
     // Compute months from 1970-01-01.
-    return ((year - 1970) * 12) + rem_months;
-}
-
-/**
- * @brief Get the months since epoch from DATE object (represented as int64)
- *
- * @param dt DATE object (int64)
- * @return int32_t Number of months since epoch for the provided DATE object
- */
-static inline int32_t get_months_since_epoch_from_date(int64_t* dt) {
-    int32_t year = (*dt >> 32);
-    int32_t rem_months = ((*dt >> 16) & 0xFFFF) - 1;
     return ((year - 1970) * 12) + rem_months;
 }
 
@@ -221,14 +186,15 @@ static inline int32_t get_hours_since_epoch_from_datetime(int64_t* dt) {
 // Iceberg Partition Transforms
 //
 
-array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
-                                     bool is_parallel) {
+std::shared_ptr<array_info> array_transform_bucket_N(
+    std::shared_ptr<array_info> in_arr, int64_t N, bool is_parallel) {
     assert(N > 0);
     tracing::Event ev("array_transform_bucket_N", is_parallel);
     const uint64_t nRow = in_arr->length;
     ev.add_attribute("nRows", nRow);
 
-    array_info* out_arr = alloc_nullable_array(nRow, Bodo_CTypes::UINT32, 0);
+    std::shared_ptr<array_info> out_arr =
+        alloc_nullable_array(nRow, Bodo_CTypes::UINT32, 0);
     std::unique_ptr<uint32_t[]> hashes =
         std::unique_ptr<uint32_t[]>((uint32_t*)out_arr->data1());
 
@@ -268,7 +234,8 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
         if (in_arr->dtype == Bodo_CTypes::DATETIME) {
             // In case of datetime, first convert to microsecond (as int64 which
             // is important for correctness) and then hash
-            array_info* us_array = convert_datetime_ns_to_us(in_arr);
+            std::shared_ptr<array_info> us_array =
+                convert_datetime_ns_to_us(in_arr);
             // DATETIME arrays are always NUMPY so there's no null_bitmask
             // in in_arr. The array could have NaTs though, which
             // convert_datetime_ns_to_us will convert to nulls, so we can
@@ -276,30 +243,23 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
             memcpy(out_arr->null_bitmask(), us_array->null_bitmask(), n_bytes);
             hash_array(hashes, us_array, nRow, 0, is_parallel, false,
                        /*use_murmurhash=*/true);
-            decref_array(us_array);
-            delete us_array;
         } else if (in_arr->dtype == Bodo_CTypes::DATE) {
-            // For date, we need to convert to days from epoch before hashing.
             // Based on
             // https://iceberg.apache.org/spec/#appendix-b-32-bit-hash-requirements,
             // dates should be hashed as int32 (after computing number of days
             // since epoch), however Spark, Iceberg-Python and example in
             // Iceberg Spec seems to use int64.
-            array_info* days_since_epoch_array =
-                convert_date_to_days_since_epoch(in_arr);
-            hash_array(hashes, days_since_epoch_array, nRow, 0, is_parallel,
-                       false,
+            std::shared_ptr<array_info> i64_array(
+                convert_date_to_int64(in_arr));
+            hash_array(hashes, i64_array, nRow, 0, is_parallel, false,
                        /*use_murmurhash=*/true);
             // DATE arrays are always NULLABLE_INT_BOOL arrays, so we can copy
-            // over the null_bitmask as is. convert_date_to_days_since_epoch
-            // also copies over the null_bitmask, so it's the same.
+            // over the null_bitmask as is.
             memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
-            decref_array(days_since_epoch_array);
-            delete days_since_epoch_array;
         } else if (in_arr->dtype == Bodo_CTypes::INT32) {
             // in case of int32, we need to cast to int64 before hashing
             // (https://iceberg.apache.org/spec/#appendix-b-32-bit-hash-requirements)
-            array_info* int64_arr =
+            std::shared_ptr<array_info> int64_arr =
                 alloc_array(in_arr->length, in_arr->n_sub_elems(),
                             in_arr->n_sub_sub_elems(), in_arr->arr_type,
                             Bodo_CTypes::INT64, 0, 0);
@@ -321,8 +281,6 @@ array_info* array_transform_bucket_N(array_info* in_arr, int64_t N,
             }
             hash_array(hashes, int64_arr, nRow, 0, is_parallel, false,
                        /*use_murmurhash=*/true);
-            decref_array(int64_arr);
-            delete int64_arr;
         } else {
             hash_array(hashes, in_arr, nRow, 0, is_parallel, false,
                        /*use_murmurhash=*/true);
@@ -355,15 +313,15 @@ static inline T int_truncate_helper(T& v, int64_t W) {
     return v - (((v % W) + W) % W);
 }
 
-array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
-                                       bool is_parallel) {
+std::shared_ptr<array_info> array_transform_truncate_W(
+    std::shared_ptr<array_info> in_arr, int64_t width, bool is_parallel) {
     assert(width > 0);
     tracing::Event ev("array_transform_truncate_W", is_parallel);
     ev.add_attribute("W", width);
     const uint64_t nRow = in_arr->length;
     ev.add_attribute("nRows", nRow);
 
-    array_info* out_arr;
+    std::shared_ptr<array_info> out_arr;
     if (in_arr->arr_type == bodo_array_type::STRING) {
         offset_t* in_offsets = (offset_t*)in_arr->data2();
         offset_t str_len;
@@ -447,20 +405,24 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
         }
     }
     if (in_arr->arr_type == bodo_array_type::DICT) {
-        array_info* dict_data_arr = in_arr->child_arrays[0];
+        std::shared_ptr<array_info> dict_data_arr = in_arr->child_arrays[0];
         // Call recursively on the dictionary
-        array_info* trunc_dict_data_arr =
+        std::shared_ptr<array_info> trunc_dict_data_arr =
             array_transform_truncate_W(dict_data_arr, width, is_parallel);
         // Make a copy of the indices
-        array_info* indices_copy = copy_array(in_arr->child_arrays[1]);
+        std::shared_ptr<array_info> indices_copy =
+            copy_array(in_arr->child_arrays[1]);
         // Note that if the input dictionary was sorted, the
         // transformed dictionary would be sorted too since
         // it's just a truncation. It might not have all
         // unique elements though.
-        out_arr = new array_info(
-            bodo_array_type::DICT, in_arr->dtype, in_arr->length, {},
-            {trunc_dict_data_arr, indices_copy}, 0, 0, 0,
-            in_arr->has_global_dictionary, in_arr->has_deduped_local_dictionary,
+        out_arr = std::make_shared<array_info>(
+            bodo_array_type::DICT, in_arr->dtype, in_arr->length,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>(
+                {trunc_dict_data_arr, indices_copy}),
+            0, 0, 0, in_arr->has_global_dictionary,
+            in_arr->has_deduped_local_dictionary,
             in_arr->has_sorted_dictionary);
         return out_arr;
     }
@@ -469,7 +431,8 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
     throw std::runtime_error(err);
 }
 
-array_info* array_transform_void(array_info* in_arr, bool is_parallel) {
+std::shared_ptr<array_info> array_transform_void(
+    std::shared_ptr<array_info> in_arr, bool is_parallel) {
     tracing::Event ev("array_transform_void", is_parallel);
     // We simply return a nullable int32 array
     // with all nulls (as per the Iceberg spec)
@@ -477,19 +440,22 @@ array_info* array_transform_void(array_info* in_arr, bool is_parallel) {
                                           0);
 }
 
-array_info* array_transform_year(array_info* in_arr, bool is_parallel) {
+std::shared_ptr<array_info> array_transform_year(
+    std::shared_ptr<array_info> in_arr, bool is_parallel) {
     tracing::Event ev("array_transform_year", is_parallel);
     const uint64_t nRow = in_arr->length;
     ev.add_attribute("nRows", nRow);
-    array_info* out_arr = alloc_nullable_array(nRow, Bodo_CTypes::INT32, 0);
+    std::shared_ptr<array_info> out_arr =
+        alloc_nullable_array(nRow, Bodo_CTypes::INT32, 0);
 
     int64_t n_bytes = ((nRow + 7) >> 3);
 
     if ((in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) &&
         (in_arr->dtype == Bodo_CTypes::DATE)) {
         for (uint64_t i = 0; i < nRow; i++) {
-            out_arr->at<int32_t>(i) =
-                get_years_since_epoch_from_date(&in_arr->at<int64_t>(i));
+            int64_t days = in_arr->at<int32_t>(i);
+            int64_t years = days_to_yearsdays(&days);
+            out_arr->at<int32_t>(i) = years - 1970;
         }
         // Copy the null bitmask as is
         memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
@@ -519,18 +485,22 @@ array_info* array_transform_year(array_info* in_arr, bool is_parallel) {
     throw std::runtime_error(err);
 }
 
-array_info* array_transform_month(array_info* in_arr, bool is_parallel) {
+std::shared_ptr<array_info> array_transform_month(
+    std::shared_ptr<array_info> in_arr, bool is_parallel) {
     tracing::Event ev("array_transform_month", is_parallel);
     const uint64_t nRow = in_arr->length;
     ev.add_attribute("nRows", nRow);
-    array_info* out_arr = alloc_nullable_array(nRow, Bodo_CTypes::INT32, 0);
+    std::shared_ptr<array_info> out_arr =
+        alloc_nullable_array(nRow, Bodo_CTypes::INT32, 0);
     int64_t n_bytes = ((nRow + 7) >> 3);
 
     if ((in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) &&
         (in_arr->dtype == Bodo_CTypes::DATE)) {
         for (uint64_t i = 0; i < nRow; i++) {
-            out_arr->at<int32_t>(i) =
-                get_months_since_epoch_from_date(&in_arr->at<int64_t>(i));
+            int64_t days = in_arr->at<int32_t>(i), month = 0;
+            int64_t years = days_to_yearsdays(&days);
+            get_month_day(years, days, &month, &days);
+            out_arr->at<int32_t>(i) = (years - 1970) * 12 + month;
         }
         // Copy the null bitmask as is
         memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
@@ -563,19 +533,20 @@ array_info* array_transform_month(array_info* in_arr, bool is_parallel) {
     throw std::runtime_error(err);
 }
 
-array_info* array_transform_day(array_info* in_arr, bool is_parallel) {
+std::shared_ptr<array_info> array_transform_day(
+    std::shared_ptr<array_info> in_arr, bool is_parallel) {
     tracing::Event ev("array_transform_day", is_parallel);
     const uint64_t nRow = in_arr->length;
     ev.add_attribute("nRows", nRow);
-    array_info* out_arr = alloc_nullable_array(nRow, Bodo_CTypes::INT64, 0);
+    std::shared_ptr<array_info> out_arr =
+        alloc_nullable_array(nRow, Bodo_CTypes::INT64, 0);
 
     int64_t n_bytes = ((nRow + 7) >> 3);
 
     if ((in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) &&
         (in_arr->dtype == Bodo_CTypes::DATE)) {
         for (uint64_t i = 0; i < nRow; i++) {
-            out_arr->at<int64_t>(i) =
-                get_days_since_epoch_from_date(&in_arr->at<int64_t>(i));
+            out_arr->at<int64_t>(i) = in_arr->at<int32_t>(i);
         }
         // Copy the null bitmask as is
         memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
@@ -607,12 +578,14 @@ array_info* array_transform_day(array_info* in_arr, bool is_parallel) {
     throw std::runtime_error(err);
 }
 
-array_info* array_transform_hour(array_info* in_arr, bool is_parallel) {
+std::shared_ptr<array_info> array_transform_hour(
+    std::shared_ptr<array_info> in_arr, bool is_parallel) {
     tracing::Event ev("array_transform_hour", is_parallel);
     const uint64_t nRow = in_arr->length;
     ev.add_attribute("nRows", nRow);
 
-    array_info* out_arr = alloc_nullable_array(nRow, Bodo_CTypes::INT32, 0);
+    std::shared_ptr<array_info> out_arr =
+        alloc_nullable_array(nRow, Bodo_CTypes::INT32, 0);
 
     if ((in_arr->arr_type == bodo_array_type::NUMPY) &&
         (in_arr->dtype == Bodo_CTypes::DATETIME)) {
@@ -639,8 +612,8 @@ array_info* array_transform_hour(array_info* in_arr, bool is_parallel) {
     throw std::runtime_error(err);
 }
 
-array_info* iceberg_identity_transform(array_info* in_arr, bool* new_alloc,
-                                       bool is_parallel) {
+std::shared_ptr<array_info> iceberg_identity_transform(
+    std::shared_ptr<array_info> in_arr, bool is_parallel) {
     tracing::Event ev("iceberg_identity_transform", is_parallel);
     const uint64_t nRow = in_arr->length;
     ev.add_attribute("nRows", nRow);
@@ -654,23 +627,15 @@ array_info* iceberg_identity_transform(array_info* in_arr, bool* new_alloc,
         // same partition.
         // For sorting it would be fine to keep it in
         // nanoseconds, but we are not optimizing that at this time.
-        *new_alloc = true;
         return convert_datetime_ns_to_us(in_arr);
-    } else if (in_arr->dtype == Bodo_CTypes::DATE) {
-        // For partitioning, we need the partition value to be the number
-        // of days since epoch, instead of the bit-style DATE representation.
-        // XXX TODO Since we seem to need to return a string anyway, maybe we
-        // don't need this anymore?
-        *new_alloc = true;
-        return convert_date_to_days_since_epoch(in_arr);
     } else {
-        *new_alloc = false;
         return in_arr;  // return as is
     }
 }
 
-array_info* iceberg_transform(array_info* in_arr, std::string transform_name,
-                              int64_t arg, bool is_parallel) {
+std::shared_ptr<array_info> iceberg_transform(
+    std::shared_ptr<array_info> in_arr, std::string transform_name, int64_t arg,
+    bool is_parallel) {
     if (transform_name == "bucket")
         return array_transform_bucket_N(in_arr, arg, is_parallel);
     if (transform_name == "truncate")
@@ -690,8 +655,10 @@ array_info* iceberg_transform(array_info* in_arr, std::string transform_name,
                              "' provided.");
 }
 
-std::string transform_val_to_str(std::string transform_name, array_info* in_arr,
-                                 array_info* transformed_arr, size_t idx) {
+std::string transform_val_to_str(std::string transform_name,
+                                 std::shared_ptr<array_info> in_arr,
+                                 std::shared_ptr<array_info> transformed_arr,
+                                 size_t idx) {
     if (transformed_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         transformed_arr->arr_type == bodo_array_type::STRING ||
         transformed_arr->arr_type == bodo_array_type::DICT) {
@@ -719,7 +686,7 @@ std::string transform_val_to_str(std::string transform_name, array_info* in_arr,
         int64_t day = transformed_arr->at<int64_t>(idx);
         int64_t year = days_to_yearsdays(&day);
 
-        int64_t rem_months;
+        int64_t rem_months = -1;
         get_remaining_months(year, &day, &rem_months);
         int64_t month = rem_months + 1;
         day += 1;
@@ -740,7 +707,8 @@ std::string transform_val_to_str(std::string transform_name, array_info* in_arr,
     return transformed_arr->val_to_str(idx);
 }
 
-PyObject* iceberg_transformed_val_to_py(array_info* arr, size_t idx) {
+PyObject* iceberg_transformed_val_to_py(std::shared_ptr<array_info> arr,
+                                        size_t idx) {
     // Return Python None in case the null bit is set
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         arr->arr_type == bodo_array_type::STRING ||
@@ -751,6 +719,7 @@ PyObject* iceberg_transformed_val_to_py(array_info* arr, size_t idx) {
     }
     switch (arr->dtype) {
         case Bodo_CTypes::INT32:
+        case Bodo_CTypes::DATE:
             return PyLong_FromLong(arr->at<int32_t>(idx));
         case Bodo_CTypes::UINT32:
             return PyLong_FromUnsignedLong(arr->at<uint32_t>(idx));

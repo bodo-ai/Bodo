@@ -4,6 +4,7 @@
 #include <arrow/api.h>
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_bodo_to_arrow.h"
 
 /**
  * Computation of the NA value hash
@@ -526,9 +527,10 @@ void hash_arrow_array(std::unique_ptr<uint32_t[]>& out_hashes,
  * @param use_murmurhash: use murmurhash3_x86_32 hashes (used by Iceberg).
  * Default: false
  */
-void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
-                size_t n_rows, const uint32_t seed, bool is_parallel,
-                bool global_dict_needed, bool use_murmurhash) {
+void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
+                std::shared_ptr<array_info> array, size_t n_rows,
+                const uint32_t seed, bool is_parallel, bool global_dict_needed,
+                bool use_murmurhash) {
     // dispatch to proper function
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
@@ -544,7 +546,7 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
                 "_array_hash::hash_array: MurmurHash not supported for Arrow "
                 "arrays.");
         return hash_arrow_array(out_hashes, list_offsets, n_rows,
-                                array->to_arrow());
+                                to_arrow(array));
     }
     if (array->arr_type == bodo_array_type::STRING) {
         return hash_array_string(out_hashes, (char*)array->data1(),
@@ -616,7 +618,8 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
             out_hashes, (uint16_t*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
-    if (array->dtype == Bodo_CTypes::INT32) {
+    if (array->dtype == Bodo_CTypes::INT32 ||
+        array->dtype == Bodo_CTypes::DATE) {
         return hash_array_inner<int32_t>(
             out_hashes, (int32_t*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask(), use_murmurhash);
@@ -642,8 +645,7 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
             (uint8_t*)array->null_bitmask(), use_murmurhash);
     }
     // TODO: [BE-4106] Split Time into Time32 and Time64
-    if (array->dtype == Bodo_CTypes::DATE ||
-        array->dtype == Bodo_CTypes::DATETIME ||
+    if (array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_inner<int64_t>(
@@ -784,8 +786,9 @@ static void hash_array_combine_string(std::unique_ptr<uint32_t[]>& out_hashes,
 
 // See hash_array for documentation of parameters
 void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
-                        array_info* array, size_t n_rows, const uint32_t seed,
-                        bool global_dict_needed, bool is_parallel) {
+                        std::shared_ptr<array_info> array, size_t n_rows,
+                        const uint32_t seed, bool global_dict_needed,
+                        bool is_parallel) {
     // dispatch to proper function
     // TODO: general dispatcher
     if (array->arr_type == bodo_array_type::STRUCT ||
@@ -795,7 +798,7 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             list_offsets[i] = i;
         }
         return hash_arrow_array(out_hashes, list_offsets, n_rows,
-                                array->to_arrow());
+                                to_arrow(array));
     }
     if (array->arr_type == bodo_array_type::STRING) {
         return hash_array_combine_string(
@@ -865,7 +868,8 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             out_hashes, (uint16_t*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask());
     }
-    if (array->dtype == Bodo_CTypes::INT32) {
+    if (array->dtype == Bodo_CTypes::INT32 ||
+        array->dtype == Bodo_CTypes::DATE) {
         return hash_array_combine_inner<int32_t>(
             out_hashes, (int32_t*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask());
@@ -886,8 +890,7 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             (uint8_t*)array->null_bitmask());
     }
     // TODO: [BE-4106] Split Time into Time32 and Time64
-    if (array->dtype == Bodo_CTypes::DATE ||
-        array->dtype == Bodo_CTypes::DATETIME ||
+    if (array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_combine_inner<int64_t>(
@@ -931,8 +934,8 @@ get_value(T val) {
 
 template <typename T>
 void coherent_hash_array_inner_uint64(std::unique_ptr<uint32_t[]>& out_hashes,
-                                      array_info* array, size_t n_rows,
-                                      const uint32_t seed) {
+                                      std::shared_ptr<array_info> array,
+                                      size_t n_rows, const uint32_t seed) {
     T* data = (T*)array->data1();
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
@@ -955,8 +958,8 @@ void coherent_hash_array_inner_uint64(std::unique_ptr<uint32_t[]>& out_hashes,
 
 template <typename T>
 void coherent_hash_array_inner_int64(std::unique_ptr<uint32_t[]>& out_hashes,
-                                     array_info* array, size_t n_rows,
-                                     const uint32_t seed) {
+                                     std::shared_ptr<array_info> array,
+                                     size_t n_rows, const uint32_t seed) {
     T* data = (T*)array->data1();
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
@@ -980,8 +983,8 @@ void coherent_hash_array_inner_int64(std::unique_ptr<uint32_t[]>& out_hashes,
 
 template <typename T>
 void coherent_hash_array_inner_double(std::unique_ptr<uint32_t[]>& out_hashes,
-                                      array_info* array, size_t n_rows,
-                                      const uint32_t seed) {
+                                      std::shared_ptr<array_info> array,
+                                      size_t n_rows, const uint32_t seed) {
     T* data = (T*)array->data1();
     if (array->arr_type == bodo_array_type::NUMPY) {
         for (size_t i = 0; i < n_rows; i++) {
@@ -1004,9 +1007,9 @@ void coherent_hash_array_inner_double(std::unique_ptr<uint32_t[]>& out_hashes,
 }
 
 void coherent_hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
-                         array_info* array, array_info* ref_array,
-                         size_t n_rows, const uint32_t seed,
-                         bool is_parallel = true) {
+                         std::shared_ptr<array_info> array,
+                         std::shared_ptr<array_info> ref_array, size_t n_rows,
+                         const uint32_t seed, bool is_parallel = true) {
     if ((array->arr_type == bodo_array_type::DICT) &&
         (array->child_arrays[0] != ref_array->child_arrays[0])) {
         // This implementation of coherent_hash_array hashes data based on
@@ -1134,8 +1137,8 @@ void coherent_hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
 
 template <typename T>
 void coherent_hash_array_combine_inner_uint64(
-    std::unique_ptr<uint32_t[]>& out_hashes, array_info* array, size_t n_rows,
-    const uint32_t seed) {
+    std::unique_ptr<uint32_t[]>& out_hashes, std::shared_ptr<array_info> array,
+    size_t n_rows, const uint32_t seed) {
     T* data = (T*)array->data1();
     uint32_t out_hash;
     if (array->arr_type == bodo_array_type::NUMPY) {
@@ -1159,8 +1162,8 @@ void coherent_hash_array_combine_inner_uint64(
 
 template <typename T>
 void coherent_hash_array_combine_inner_int64(
-    std::unique_ptr<uint32_t[]>& out_hashes, array_info* array, size_t n_rows,
-    const uint32_t seed) {
+    std::unique_ptr<uint32_t[]>& out_hashes, std::shared_ptr<array_info> array,
+    size_t n_rows, const uint32_t seed) {
     T* data = (T*)array->data1();
     uint32_t out_hash;
     if (array->arr_type == bodo_array_type::NUMPY) {
@@ -1185,8 +1188,8 @@ void coherent_hash_array_combine_inner_int64(
 
 template <typename T>
 void coherent_hash_array_combine_inner_double(
-    std::unique_ptr<uint32_t[]>& out_hashes, array_info* array, size_t n_rows,
-    const uint32_t seed) {
+    std::unique_ptr<uint32_t[]>& out_hashes, std::shared_ptr<array_info> array,
+    size_t n_rows, const uint32_t seed) {
     T* data = (T*)array->data1();
     uint32_t out_hash;
     if (array->arr_type == bodo_array_type::NUMPY) {
@@ -1213,7 +1216,8 @@ void coherent_hash_array_combine_inner_double(
 }
 
 void coherent_hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
-                                 array_info* array, array_info* ref_array,
+                                 std::shared_ptr<array_info> array,
+                                 std::shared_ptr<array_info> ref_array,
                                  size_t n_rows, const uint32_t seed,
                                  bool is_parallel) {
     // For those types, no type conversion is ever needed.
@@ -1335,9 +1339,9 @@ void coherent_hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
    @return returning the list of hashes.
  */
 std::unique_ptr<uint32_t[]> coherent_hash_keys(
-    std::vector<array_info*> const& key_arrs,
-    std::vector<array_info*> const& ref_key_arrs, const uint32_t seed,
-    bool is_parallel) {
+    std::vector<std::shared_ptr<array_info>> const& key_arrs,
+    std::vector<std::shared_ptr<array_info>> const& ref_key_arrs,
+    const uint32_t seed, bool is_parallel) {
     tracing::Event ev("coherent_hash_keys", is_parallel);
     size_t n_rows = (size_t)key_arrs[0]->length;
     std::unique_ptr<uint32_t[]> hashes = std::make_unique<uint32_t[]>(n_rows);
@@ -1350,9 +1354,9 @@ std::unique_ptr<uint32_t[]> coherent_hash_keys(
     return hashes;
 }
 
-std::unique_ptr<uint32_t[]> hash_keys(std::vector<array_info*> const& key_arrs,
-                                      const uint32_t seed, bool is_parallel,
-                                      bool global_dict_needed) {
+std::unique_ptr<uint32_t[]> hash_keys(
+    std::vector<std::shared_ptr<array_info>> const& key_arrs,
+    const uint32_t seed, bool is_parallel, bool global_dict_needed) {
     tracing::Event ev("hash_keys", is_parallel);
     size_t n_rows = (size_t)key_arrs[0]->length;
     std::unique_ptr<uint32_t[]> hashes = std::make_unique<uint32_t[]>(n_rows);
@@ -1374,7 +1378,7 @@ std::unique_ptr<uint32_t[]> hash_keys(std::vector<array_info*> const& key_arrs,
  * @param arrs The arrays to unify.
  * @param is_parallels If each array is parallel.
  */
-void ensure_dicts_can_unify(std::vector<array_info*>& arrs,
+void ensure_dicts_can_unify(std::vector<std::shared_ptr<array_info>>& arrs,
                             std::vector<bool>& is_parallels) {
     for (size_t i = 0; i < arrs.size(); i++) {
         if (is_parallels[i] && !arrs[i]->has_global_dictionary) {
@@ -1401,9 +1405,10 @@ void ensure_dicts_can_unify(std::vector<array_info*>& arrs,
  */
 UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t, HashMultiArray,
                     MultiArrayInfoEqual>*
-create_several_array_hashmap(std::vector<array_info*>& arrs,
-                             std::vector<std::shared_ptr<uint32_t[]>>& hashes,
-                             std::vector<array_info*>& stored_arrs) {
+create_several_array_hashmap(
+    std::vector<std::shared_ptr<array_info>>& arrs,
+    std::vector<std::shared_ptr<uint32_t[]>>& hashes,
+    std::vector<std::shared_ptr<array_info>>& stored_arrs) {
     // hash map mapping dictionary values of arr1 and arr2 to index in unified
     // dictionary
     HashMultiArray hash_fct{hashes};
@@ -1449,9 +1454,10 @@ void insert_initial_dict_to_multiarray_hashmap(
                         HashMultiArray, MultiArrayInfoEqual>*
         dict_value_to_unified_index,
     std::vector<std::shared_ptr<uint32_t[]>>& hashes,
-    std::vector<array_info*>& stored_arrs, array_info* dict,
-    offset_t const* const offsets, const size_t len, dict_indices_t& next_index,
-    size_t& n_chars, const uint32_t hash_seed) {
+    std::vector<std::shared_ptr<array_info>>& stored_arrs,
+    std::shared_ptr<array_info> dict, offset_t const* const offsets,
+    const size_t len, dict_indices_t& next_index, size_t& n_chars,
+    const uint32_t hash_seed) {
     std::unique_ptr<uint32_t[]> arr_hashes = std::make_unique<uint32_t[]>(len);
     hash_array(arr_hashes, dict, len, hash_seed, false,
                /*global_dict_needed=*/false);
@@ -1495,12 +1501,12 @@ void insert_new_dict_to_multiarray_hashmap(
                         HashMultiArray, MultiArrayInfoEqual>*
         dict_value_to_unified_index,
     std::vector<std::shared_ptr<uint32_t[]>>& hashes,
-    std::vector<array_info*>& stored_arrs,
+    std::vector<std::shared_ptr<array_info>>& stored_arrs,
     std::vector<dict_indices_t>& arr_index_map,
     std::vector<std::vector<dict_indices_t>*>& unique_indices_all_arrs,
-    array_info* dict, offset_t const* const offsets, const size_t len,
-    dict_indices_t& next_index, size_t& n_chars, size_t arr_num,
-    const uint32_t hash_seed) {
+    std::shared_ptr<array_info> dict, offset_t const* const offsets,
+    const size_t len, dict_indices_t& next_index, size_t& n_chars,
+    size_t arr_num, const uint32_t hash_seed) {
     std::unique_ptr<uint32_t[]> arr_hashes = std::make_unique<uint32_t[]>(len);
     hash_array(arr_hashes, dict, len, hash_seed, false,
                /*global_dict_needed=*/false);
@@ -1541,15 +1547,14 @@ void insert_new_dict_to_multiarray_hashmap(
  * @param arr_index_map Mapping from the indices in this array to the indices
  * in the new dictionary.
  */
-void replace_dict_arr_indices(array_info* arr,
+void replace_dict_arr_indices(std::shared_ptr<array_info> arr,
                               std::vector<dict_indices_t>& arr_index_map) {
     // Update the indices for this array. If there is only one reference to
     // the dict_array remaining we can update the array inplace without
     // allocating a new array.
-    bool inplace = (arr->child_arrays[1]->meminfos[0]->refct == 1);
+    bool inplace = (arr->child_arrays[1]->buffers[0]->getMeminfo()->refct == 1);
     if (!inplace) {
-        array_info* indices = copy_array(arr->child_arrays[1]);
-        delete_info_decref_array(arr->child_arrays[1]);
+        std::shared_ptr<array_info> indices = copy_array(arr->child_arrays[1]);
         arr->child_arrays[1] = indices;
     }
 
@@ -1563,7 +1568,7 @@ void replace_dict_arr_indices(array_info* arr,
     }
 }
 
-void unify_several_dictionaries(std::vector<array_info*>& arrs,
+void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
                                 std::vector<bool>& is_parallels) {
     // Validate the inputs
     ensure_dicts_can_unify(arrs, is_parallels);
@@ -1572,7 +1577,7 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
     // array.
     std::vector<std::shared_ptr<uint32_t[]>> hashes;
     // Keep a vector of array infos
-    std::vector<array_info*> stored_arrs;
+    std::vector<std::shared_ptr<array_info>> stored_arrs;
     // Create the hash table. We will dynamically fill the vector of
     // hashes and dictionaries as we go.
     const uint32_t hash_seed = SEED_HASH_JOIN;
@@ -1583,7 +1588,7 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
 
     // The first dictionary will always be entirely included in the output
     // unified dictionary.
-    array_info* base_dict = arrs[0]->child_arrays[0];
+    std::shared_ptr<array_info> base_dict = arrs[0]->child_arrays[0];
     const size_t base_len = static_cast<size_t>(base_dict->length);
     offset_t const* const base_offsets = (offset_t*)base_dict->data2();
     bool added_first = false;
@@ -1600,8 +1605,8 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
         // any new dictionary entries in order by array (first all of arr1,
         // then anything new from arr2, etc). As a result, this means that the
         // entries in arr{i} can never modify the indices of arr{i-1}.
-        array_info* curr_arr = arrs[i];
-        array_info* curr_dict = curr_arr->child_arrays[0];
+        std::shared_ptr<array_info> curr_arr = arrs[i];
+        std::shared_ptr<array_info> curr_dict = curr_arr->child_arrays[0];
         offset_t const* const curr_dict_offsets = (offset_t*)curr_dict->data2();
 
         // Using this realization, we can then conclude that we can simply
@@ -1650,7 +1655,8 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
     // dictionary. The next_index is always num_strings + 1, so we can use that
     // to get the length of the dictionary.
     size_t n_strings = next_index - 1;
-    array_info* new_dict = alloc_string_array(n_strings, n_chars, 0);
+    std::shared_ptr<array_info> new_dict =
+        alloc_string_array(n_strings, n_chars, 0);
     offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2();
 
     // Initialize the offset and string index to the end of the base dictionary
@@ -1667,7 +1673,7 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
             unique_indices_all_arrs[i];
         // Load the relevant array. This is the i+1 array we stored for the
         // hashmap because we skip the base array.
-        array_info* dict_arr = stored_arrs[i + 1];
+        std::shared_ptr<array_info> dict_arr = stored_arrs[i + 1];
         offset_t const* const arr_offsets = (offset_t*)dict_arr->data2();
 
         for (dict_indices_t j : *arr_unique_indices) {
@@ -1682,19 +1688,15 @@ void unify_several_dictionaries(std::vector<array_info*>& arrs,
 
     // replace old dictionaries with a new one
     for (size_t i = 0; i < arrs.size(); i++) {
-        delete_info_decref_array(arrs[i]->child_arrays[0]);
         arrs[i]->child_arrays[0] = new_dict;
-        if (i != 0) {
-            // This same array is now in N places so we need to incref it.
-            incref_array(new_dict);
-        }
     }
 }
 
-void unify_dictionaries(array_info* arr1, array_info* arr2,
-                        bool arr1_is_parallel, bool arr2_is_parallel) {
+void unify_dictionaries(std::shared_ptr<array_info> arr1,
+                        std::shared_ptr<array_info> arr2, bool arr1_is_parallel,
+                        bool arr2_is_parallel) {
     // Validate the inputs
-    std::vector<array_info*> arrs = {arr1, arr2};
+    std::vector<std::shared_ptr<array_info>> arrs = {arr1, arr2};
     std::vector<bool> is_parallel = {arr1_is_parallel, arr2_is_parallel};
     ensure_dicts_can_unify(arrs, is_parallel);
 
@@ -1777,7 +1779,8 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
     arr1_hashes.reset();
     arr2_hashes.reset();
 
-    array_info* new_dict = alloc_string_array(n_strings, n_chars, 0);
+    std::shared_ptr<array_info> new_dict =
+        alloc_string_array(n_strings, n_chars, 0);
     offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2();
 
     // Initialize the offset and string index to the end of arr1's dictionary
@@ -1797,12 +1800,8 @@ void unify_dictionaries(array_info* arr1, array_info* arr2,
         new_dict_str_offsets[cur_offset_idx++] = cur_offset;
     }
 
-    // replace old dictionaries with new one
-    delete_info_decref_array(arr1->child_arrays[0]);
-    delete_info_decref_array(arr2->child_arrays[0]);
     arr1->child_arrays[0] = new_dict;
     arr2->child_arrays[0] = new_dict;
-    incref_array(new_dict);
 
     // convert old indices to new ones for arr2
     replace_dict_arr_indices(arr2, arr2_index_map);

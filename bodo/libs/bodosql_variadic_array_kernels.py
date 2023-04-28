@@ -48,6 +48,78 @@ def coalesce_util(A):  # pragma: no cover
     return
 
 
+def detect_coalesce_casting(arg_types, arg_names):
+    """Takes in the list of dtypes and argument names for a call to coalesce.
+    If the combination is one of the allowed special cases, returns a tuple
+    of True, the corresponding output dtype, and the casting instructions
+    required to transform some of the arguments to be compatible with the
+    new dtype.
+
+    The current list of allowed special cases:
+    - Mix of tz-naive timestamp and date -> cast dates to tz-naive timestamp
+    - Mix of tz-aware timestamp and date -> cast dates to tz-aware timestamp
+
+    Note: this function can be expanded in future (with great caution) to allow
+    more implicit casting cases.
+
+    Args:
+        arg_types (List[dtypes]): the types of the inputs to COALESCE
+        arg_names (List[string]): the names of the inputs to COALESCE
+
+    Returns:
+        Tuple[boolean, optional dtype, optional string]: a boolean indicating
+        whether the list of types matches one of the special cases described above,
+        the dtype htat the resulting array should have, and a multiline string
+        containing the prefix code required to cast all of the arguments
+        that need to be upcasted for the COALESCE to work.
+    """
+    default_result = (False, None, [])
+    time_zone = None
+    n = len(arg_types)
+    # Scan through the arrays and mark which ones belong to which of the
+    # dtypes of interest, aborting early if multiple different timezones
+    # are found.
+    tz_naive = np.array([False] * n)
+    tz_aware = np.array([False] * n)
+    date = np.array([False] * n)
+    for i in range(len(arg_types)):
+        if is_valid_date_arg(arg_types[i]):
+            date[i] = True
+        elif is_valid_tz_naive_datetime_arg(arg_types[i]):
+            tz_naive[i] = True
+        # [BE-4699] Investigate more timezone cases and if need be
+        elif is_valid_tz_aware_datetime_arg(arg_types[i]):
+            tz_aware[i] = True
+            tz = get_tz_if_exists(arg_types[i])
+            if time_zone is None:
+                time_zone = tz
+            elif tz != time_zone:
+                return default_result
+    # If all of all of teh arguments are the same underlying type, skip this
+    # subroutine as it is no longer necessary
+    if np.all(tz_naive) or np.all(tz_aware) or np.all(date):
+        return default_result
+    # Case 1: mix of tz-naive and date
+    if np.all(tz_naive | date):
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+        casts = [
+            f"{arg_names[i]} = bodo.libs.bodosql_array_kernels.to_timestamp({arg_names[i]}, None, None, 0)\n"
+            for i in range(n)
+            if date[i]
+        ]
+        return (True, out_dtype, "".join(casts))
+    # Case 2: mix of tz-aware and date
+    if np.all(tz_aware | date):
+        out_dtype = bodo.DatetimeArrayType(time_zone)
+        casts = [
+            f"{arg_names[i]} = bodo.libs.bodosql_array_kernels.to_timestamp({arg_names[i]}, None, {repr(time_zone)}, 0)\n"
+            for i in range(n)
+            if date[i]
+        ]
+        return (True, out_dtype, "".join(casts))
+    return default_result
+
+
 @overload(coalesce_util, no_unliteral=True)
 def overload_coalesce_util(A):
     """A dedicated kernel for the SQL function COALESCE which takes in array of
@@ -95,8 +167,18 @@ def overload_coalesce_util(A):
 
     arg_names = [f"A{i}" for i in range(len(A)) if i not in dead_cols]
     arg_types = [A[i] for i in range(len(A)) if i not in dead_cols]
-    # Determine the output dtype
-    out_dtype = get_common_broadcasted_type(arg_types, "COALESCE")
+    # Special case: detect if the type combinations correspond to one of the
+    # special combinations that are allowed to be coalesced, and if so
+    # return the combined type and the code required to handle the implicit casts
+    is_coalesce_casting_case, out_dtype, coalesce_casts = detect_coalesce_casting(
+        arg_types, arg_names
+    )
+    if not is_coalesce_casting_case:
+        # Normal case: determine the output dtype by combining all of the input types
+        out_dtype = get_common_broadcasted_type(arg_types, "COALESCE")
+        prefix_code = ""
+    else:
+        prefix_code = coalesce_casts
     # Determine if we have string data with an array output
     is_string_data = has_array_output and is_str_arr_type(out_dtype)
     propagate_null = [False] * (len(A) - len(dead_cols))
@@ -125,11 +207,10 @@ def overload_coalesce_util(A):
     dead_offset = 0
     # If we use dictionary encoding we will generate a prefix
     # to allocate for our custom implementation
-    prefix_code = None
     if dict_encode_data:
         # If we are dictionary encoding data then we will generate prefix code to compute new indices
         # and generate an original dictionary.
-        prefix_code = "num_strings = 0\n"
+        prefix_code += "num_strings = 0\n"
         prefix_code += "num_chars = 0\n"
         prefix_code += "is_dict_global = True\n"
         for i in range(len(A)):
@@ -178,7 +259,7 @@ def overload_coalesce_util(A):
                     f"   bodo.libs.str_arr_ext.get_str_arr_item_copy(res, i, A{i}, i)\n"
                 )
             else:
-                scalar_text += f"   res[i] = arg{i-dead_offset}\n"
+                scalar_text += f"   res[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg{i-dead_offset})\n"
             first = False
 
         # If A[i] is a non-NULL scalar, then it is the answer and stop searching
@@ -195,7 +276,7 @@ def overload_coalesce_util(A):
                 # dictionary. A scalar must only be the last element so its always index num_strings - 1
                 scalar_text += f"{indent}res[i] = num_strings - 1\n"
             else:
-                scalar_text += f"{indent}res[i] = arg{i-dead_offset}\n"
+                scalar_text += f"{indent}res[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg{i-dead_offset})\n"
             found_scalar = True
             break
 

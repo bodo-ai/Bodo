@@ -9,7 +9,11 @@ from bodosql.tests.utils import check_query
 
 
 def test_int_compare(
-    bodosql_nullable_numeric_types, spark_info, comparison_ops, int_named_params
+    bodosql_nullable_numeric_types,
+    spark_info,
+    comparison_ops,
+    int_named_params,
+    memory_leak_check,
 ):
     """
     Tests that comparison operators work with integer data and integer named parameters
@@ -32,7 +36,11 @@ def test_int_compare(
 
 
 def test_float_compare(
-    bodosql_numeric_types, spark_info, comparison_ops, float_named_params
+    bodosql_numeric_types,
+    spark_info,
+    comparison_ops,
+    float_named_params,
+    memory_leak_check,
 ):
     """
     Tests that comparison operators work with numeric data and float named parameters
@@ -56,7 +64,11 @@ def test_float_compare(
 
 @pytest.mark.slow
 def test_string_compare(
-    bodosql_string_types, spark_info, comparison_ops, string_named_params
+    bodosql_string_types,
+    spark_info,
+    comparison_ops,
+    string_named_params,
+    memory_leak_check,
 ):
     """
     Tests that comparison operators work with string data and string named parameters
@@ -79,7 +91,11 @@ def test_string_compare(
 
 
 def test_datetime_compare(
-    bodosql_datetime_types, spark_info, comparison_ops, timestamp_named_params
+    bodosql_datetime_types,
+    spark_info,
+    comparison_ops,
+    timestamp_named_params,
+    memory_leak_check,
 ):
     """
     Tests that comparison operators work with datetime data and timestamp named parameters
@@ -103,7 +119,11 @@ def test_datetime_compare(
 
 @pytest.mark.slow
 def test_interval_compare(
-    bodosql_interval_types, spark_info, comparison_ops, timedelta_named_params
+    bodosql_interval_types,
+    spark_info,
+    comparison_ops,
+    timedelta_named_params,
+    memory_leak_check,
 ):
     """
     Tests that comparison operators work with interval data and Timedelta named parameters

@@ -23,9 +23,9 @@ class Module(private val main: List<Op>) {
     /**
      * Builder is used to construct a new module.
      */
-    class Builder(val symbolTable: SymbolTable, val useDateRuntime: Boolean) {
-        constructor(useDateRuntime: Boolean) : this(symbolTable = SymbolTable(), useDateRuntime = useDateRuntime)
-        constructor(builder: Builder) : this(symbolTable = builder.symbolTable, useDateRuntime = builder.useDateRuntime)
+    class Builder(val symbolTable: SymbolTable) {
+        constructor() : this(symbolTable = SymbolTable())
+        constructor(builder: Builder) : this(symbolTable = builder.symbolTable)
 
         private val code: MutableList<Op> = mutableListOf()
 

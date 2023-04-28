@@ -8,9 +8,9 @@
  * variable type and therefore cannot be templated.
  */
 
-bool idx_compare_column(array_info* out_arr, int64_t grp_num,
-                        array_info* in_arr, int64_t in_idx, bool asc,
-                        bool na_pos) {
+bool idx_compare_column(std::shared_ptr<array_info> out_arr, int64_t grp_num,
+                        std::shared_ptr<array_info> in_arr, int64_t in_idx,
+                        bool asc, bool na_pos) {
     if (in_arr->arr_type != bodo_array_type::STRING &&
         in_arr->arr_type != bodo_array_type::DICT &&
         in_arr->arr_type != bodo_array_type::NULLABLE_INT_BOOL &&
@@ -187,6 +187,7 @@ bool idx_compare_column(array_info* out_arr, int64_t grp_num,
                 uint16_t new_value = getv<uint16_t>(in_arr, in_idx);
                 STANDARD_EQUALITY_CHECK
             }
+            case Bodo_CTypes::DATE:
             case Bodo_CTypes::INT32: {
                 int32_t old_value = getv<int32_t>(in_arr, curr_idx);
                 int32_t new_value = getv<int32_t>(in_arr, in_idx);
@@ -198,9 +199,7 @@ bool idx_compare_column(array_info* out_arr, int64_t grp_num,
                 STANDARD_EQUALITY_CHECK
             }
             case Bodo_CTypes::INT64:
-            case Bodo_CTypes::TIME:
-            // TODO: Move to int32 after date has int32 only support
-            case Bodo_CTypes::DATE: {
+            case Bodo_CTypes::TIME: {
                 int64_t old_value = getv<int64_t>(in_arr, curr_idx);
                 int64_t new_value = getv<int64_t>(in_arr, in_idx);
                 STANDARD_EQUALITY_CHECK

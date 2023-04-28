@@ -19,7 +19,8 @@
  *
  */
 template <typename T>
-void copy_nullable_values_transform(array_info* update_col, array_info* tmp_col,
+void copy_nullable_values_transform(std::shared_ptr<array_info> update_col,
+                                    std::shared_ptr<array_info> tmp_col,
                                     const grouping_info& grp_info) {
     int64_t nrows = update_col->length;
     for (int64_t iRow = 0; iRow < nrows; iRow++) {
@@ -41,10 +42,11 @@ void copy_nullable_values_transform(array_info* update_col, array_info* tmp_col,
  * @param grouping_info[in]: structures used to get rows for each group
  *
  * */
-void copy_string_values_transform(array_info* update_col, array_info* tmp_col,
+void copy_string_values_transform(std::shared_ptr<array_info> update_col,
+                                  std::shared_ptr<array_info> tmp_col,
                                   const grouping_info& grp_info) {
     int64_t num_groups = grp_info.num_groups;
-    array_info* out_arr = NULL;
+    std::shared_ptr<array_info> out_arr = NULL;
     // first we have to deal with offsets first so we
     // need one first loop to determine the needed length. In the second
     // loop, the assignation is made. If the entries are missing then the
@@ -95,7 +97,6 @@ void copy_string_values_transform(array_info* update_col, array_info* tmp_col,
     }
     out_offsets[nRowOut] = pos;
     *update_col = std::move(*out_arr);
-    delete out_arr;
 }
 
 /**
@@ -108,7 +109,8 @@ void copy_string_values_transform(array_info* update_col, array_info* tmp_col,
  *
  */
 template <typename T>
-void copy_values(array_info* update_col, array_info* tmp_col,
+void copy_values(std::shared_ptr<array_info> update_col,
+                 std::shared_ptr<array_info> tmp_col,
                  const grouping_info& grp_info) {
     if (tmp_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         if (tmp_col->dtype == Bodo_CTypes::_BOOL) {
@@ -150,16 +152,12 @@ void copy_values(array_info* update_col, array_info* tmp_col,
  * @param grouping_info[in]: structures used to get rows for each group
  *
  * */
-void copy_dict_string_values_transform(array_info* update_col,
-                                       array_info* tmp_col,
+void copy_dict_string_values_transform(std::shared_ptr<array_info> update_col,
+                                       std::shared_ptr<array_info> tmp_col,
                                        const grouping_info& grp_info,
                                        bool is_parallel) {
     copy_values<int32_t>(update_col->child_arrays[1], tmp_col->child_arrays[1],
                          grp_info);
-    decref_array(update_col->child_arrays[0]);
-    incref_array(tmp_col->child_arrays[0]);  // increase reference because we
-                                             // reuse the underlying data array.
-    delete update_col->child_arrays[0];
     update_col->child_arrays[0] = tmp_col->child_arrays[0];
     // reverse_shuffle_table needs the dictionary to be global
     // copy_dict_string_values_transform is only called on distributed data
@@ -168,7 +166,8 @@ void copy_dict_string_values_transform(array_info* update_col,
     make_dictionary_global_and_unique(update_col, is_parallel);
 }
 
-void copy_values_transform(array_info* update_col, array_info* tmp_col,
+void copy_values_transform(std::shared_ptr<array_info> update_col,
+                           std::shared_ptr<array_info> tmp_col,
                            const grouping_info& grp_info, bool is_parallel) {
     if (tmp_col->arr_type == bodo_array_type::DICT) {
         copy_dict_string_values_transform(update_col, tmp_col, grp_info,

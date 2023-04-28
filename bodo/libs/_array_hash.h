@@ -15,8 +15,9 @@
 #define SEED_HASH_CONTAINER 0xb0d01284
 
 void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
-                        array_info* array, size_t n_rows, const uint32_t seed,
-                        bool global_dict_needed, bool is_parallel);
+                        std::shared_ptr<array_info> array, size_t n_rows,
+                        const uint32_t seed, bool global_dict_needed,
+                        bool is_parallel);
 
 /**
  * Function for the computation of hashes for keys
@@ -27,18 +28,19 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
  * @return hash keys
  *
  */
-std::unique_ptr<uint32_t[]> hash_keys(std::vector<array_info*> const& key_arrs,
-                                      const uint32_t seed, bool is_parallel,
-                                      bool global_dict_needed = true);
+std::unique_ptr<uint32_t[]> hash_keys(
+    std::vector<std::shared_ptr<array_info>> const& key_arrs,
+    const uint32_t seed, bool is_parallel, bool global_dict_needed = true);
 
 std::unique_ptr<uint32_t[]> coherent_hash_keys(
-    std::vector<array_info*> const& key_arrs,
-    std::vector<array_info*> const& ref_key_arrs, const uint32_t seed,
-    bool is_parallel);
+    std::vector<std::shared_ptr<array_info>> const& key_arrs,
+    std::vector<std::shared_ptr<array_info>> const& ref_key_arrs,
+    const uint32_t seed, bool is_parallel);
 
-void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
-                size_t n_rows, const uint32_t seed, bool is_parallel,
-                bool global_dict_needed, bool use_murmurhash = false);
+void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
+                std::shared_ptr<array_info> array, size_t n_rows,
+                const uint32_t seed, bool is_parallel, bool global_dict_needed,
+                bool use_murmurhash = false);
 
 /**
  * Function for the getting table keys and returning its hashes
@@ -50,23 +52,22 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes, array_info* array,
  * @return hash keys
  *
  */
-inline std::unique_ptr<uint32_t[]> hash_keys_table(table_info* in_table,
-                                                   size_t num_keys,
-                                                   uint32_t seed,
-                                                   bool is_parallel) {
+inline std::unique_ptr<uint32_t[]> hash_keys_table(
+    std::shared_ptr<table_info> in_table, size_t num_keys, uint32_t seed,
+    bool is_parallel) {
     tracing::Event ev("hash_keys_table", is_parallel);
-    std::vector<array_info*> key_arrs(in_table->columns.begin(),
-                                      in_table->columns.begin() + num_keys);
+    std::vector<std::shared_ptr<array_info>> key_arrs(
+        in_table->columns.begin(), in_table->columns.begin() + num_keys);
     return hash_keys(key_arrs, seed, is_parallel);
 }
 
 inline std::unique_ptr<uint32_t[]> coherent_hash_keys_table(
-    table_info* in_table, table_info* ref_table, size_t num_keys, uint32_t seed,
-    bool is_parallel) {
+    std::shared_ptr<table_info> in_table, std::shared_ptr<table_info> ref_table,
+    size_t num_keys, uint32_t seed, bool is_parallel) {
     tracing::Event ev("coherent_hash_keys_table", is_parallel);
-    std::vector<array_info*> key_arrs(in_table->columns.begin(),
-                                      in_table->columns.begin() + num_keys);
-    std::vector<array_info*> ref_key_arrs(
+    std::vector<std::shared_ptr<array_info>> key_arrs(
+        in_table->columns.begin(), in_table->columns.begin() + num_keys);
+    std::vector<std::shared_ptr<array_info>> ref_key_arrs(
         ref_table->columns.begin(), ref_table->columns.begin() + num_keys);
     return coherent_hash_keys(key_arrs, ref_key_arrs, seed, is_parallel);
 }
@@ -78,18 +79,18 @@ inline std::unique_ptr<uint32_t[]> coherent_hash_keys_table(
  */
 struct multi_col_key {
     uint32_t hash;
-    table_info* table;
+    std::shared_ptr<table_info> table;
     int64_t row;
     bool is_parallel;
 
-    multi_col_key(uint32_t _hash, table_info* _table, int64_t _row,
-                  bool _is_parallel)
+    multi_col_key(uint32_t _hash, std::shared_ptr<table_info> _table,
+                  int64_t _row, bool _is_parallel)
         : hash(_hash), table(_table), row(_row), is_parallel(_is_parallel) {}
 
     bool operator==(const multi_col_key& other) const {
         for (int64_t i = 0; i < table->num_keys; i++) {
-            array_info* c1 = table->columns[i];
-            array_info* c2 = other.table->columns[i];
+            std::shared_ptr<array_info> c1 = table->columns[i];
+            std::shared_ptr<array_info> c2 = other.table->columns[i];
             size_t size_type;
             switch (c1->arr_type) {
                 case bodo_array_type::ARRAY_ITEM:
@@ -100,7 +101,7 @@ struct multi_col_key {
                     int64_t pos2_e = other.row + 1;
                     bool na_position_bis = true;
                     int test = ComparisonArrowColumn(
-                        c1->to_arrow(), pos1_s, pos1_e, c2->to_arrow(), pos2_s,
+                        to_arrow(c1), pos1_s, pos1_e, to_arrow(c2), pos2_s,
                         pos2_e, na_position_bis);
                     if (test != 0) {
                         return false;
@@ -276,8 +277,9 @@ struct multi_col_key_hash {
  * Replaces old dictionary with the new one.
  * Updates the indices to conform to the new dictionary.
  */
-void unify_dictionaries(array_info* arr1, array_info* arr2,
-                        bool arr1_is_parallel, bool arr2_is_parallel);
+void unify_dictionaries(std::shared_ptr<array_info> arr1,
+                        std::shared_ptr<array_info> arr2, bool arr1_is_parallel,
+                        bool arr2_is_parallel);
 
 // For hashing function involving dictionaries of dictionary-encoded arrays
 struct HashDict {
@@ -297,7 +299,7 @@ struct HashDict {
 struct KeyEqualDict {
     bool operator()(const size_t iRowA, const size_t iRowB) const {
         size_t jRowA, jRowB;
-        array_info *dict_A, *dict_B;
+        std::shared_ptr<array_info> dict_A, dict_B;
         if (iRowA < global_array_rows) {
             dict_A = global_dictionary;
             jRowA = iRowA;
@@ -317,8 +319,8 @@ struct KeyEqualDict {
     }
     // global_dict_len, global_dictionary, local_dictionary
     size_t global_array_rows;
-    array_info* global_dictionary;
-    array_info* local_dictionary;
+    std::shared_ptr<array_info> global_dictionary;
+    std::shared_ptr<array_info> local_dictionary;
 };
 
 /**
@@ -333,7 +335,7 @@ struct KeyEqualDict {
  * @param is_parallels If arrs[i] is parallel then is_parallels[i] is true.
  * This is used for checking the global condition for each array.
  */
-void unify_several_dictionaries(std::vector<array_info*>& arrs,
+void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
                                 std::vector<bool>& is_parallels);
 
 // Hash comparison for comparing multiple arrays where each array is inserted
@@ -356,12 +358,12 @@ struct MultiArrayInfoEqual {
         const size_t iTableA = hash_info1.second;
         const size_t iRowB = hash_info2.first;
         const size_t iTableB = hash_info2.second;
-        array_info* dict_A = arrs[iTableA];
-        array_info* dict_B = arrs[iTableB];
+        std::shared_ptr<array_info> dict_A = arrs[iTableA];
+        std::shared_ptr<array_info> dict_B = arrs[iTableB];
         // TODO inline?
         return TestEqualColumn(dict_A, iRowA, dict_B, iRowB, true);
     }
-    std::vector<array_info*>& arrs;
+    std::vector<std::shared_ptr<array_info>>& arrs;
 };
 
 /**
@@ -371,7 +373,8 @@ class ElementComparator {
    public:
     // Store data pointers to avoid extra struct access in performance critical
     // code
-    ElementComparator(const array_info* arr1_, const array_info* arr2_) {
+    ElementComparator(std::shared_ptr<array_info> arr1_,
+                      std::shared_ptr<array_info> arr2_) {
         // Store the index data for dict encoded arrays since index comparison
         // is enough in case of unified dictionaries. Only use when the
         // dictionaries are the same (and are deduped since otherwise the index
@@ -549,8 +552,8 @@ class ElementComparator {
     }
 
    private:
-    const array_info* arr1;
-    const array_info* arr2;
+    std::shared_ptr<array_info> arr1;
+    std::shared_ptr<array_info> arr2;
     const char* data_ptr_1;
     const char* data_ptr_2;
     const uint8_t* null_bitmask_1;
@@ -569,7 +572,8 @@ template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
           bool is_na_equal>
 class KeysEqualComparatorOneKey {
    public:
-    KeysEqualComparatorOneKey(const array_info* arr) : cmp(arr, arr) {}
+    KeysEqualComparatorOneKey(const std::shared_ptr<array_info> arr)
+        : cmp(arr, arr) {}
 
     constexpr bool operator()(const int64_t iRowA,
                               const int64_t iRowB) const noexcept {
@@ -597,7 +601,8 @@ template <bodo_array_type::arr_type_enum ArrType1,
           Bodo_CTypes::CTypeEnum DType2, bool is_na_equal>
 class KeysEqualComparatorTwoKeys {
    public:
-    KeysEqualComparatorTwoKeys(const array_info* arr1, const array_info* arr2)
+    KeysEqualComparatorTwoKeys(const std::shared_ptr<array_info> arr1,
+                               const std::shared_ptr<array_info> arr2)
         : cmp1(arr1, arr1), cmp2(arr2, arr2) {}
 
     constexpr bool operator()(const int64_t iRowA,
@@ -626,8 +631,8 @@ template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
           bool is_na_equal>
 class JoinKeysEqualComparatorOneKey {
    public:
-    JoinKeysEqualComparatorOneKey(const array_info* arr1,
-                                  const array_info* arr2)
+    JoinKeysEqualComparatorOneKey(const std::shared_ptr<array_info> arr1,
+                                  const std::shared_ptr<array_info> arr2)
         : cmp_arr1(arr1, arr1),
           cmp_arr2(arr2, arr2),
           cmp_arr1_arr2(arr1, arr2),
@@ -682,10 +687,10 @@ template <bodo_array_type::arr_type_enum ArrType1,
           Bodo_CTypes::CTypeEnum DType2, bool is_na_equal>
 class JoinKeysEqualComparatorTwoKeys {
    public:
-    JoinKeysEqualComparatorTwoKeys(const array_info* t1_k1,
-                                   const array_info* t1_k2,
-                                   const array_info* t2_k1,
-                                   const array_info* t2_k2)
+    JoinKeysEqualComparatorTwoKeys(const std::shared_ptr<array_info> t1_k1,
+                                   const std::shared_ptr<array_info> t1_k2,
+                                   const std::shared_ptr<array_info> t2_k1,
+                                   const std::shared_ptr<array_info> t2_k2)
         : cmp_k1_t1(t1_k1, t1_k1),
           cmp_k1_t2(t2_k1, t2_k1),
           cmp_k1_t1_t2(t1_k1, t2_k1),
@@ -920,24 +925,24 @@ inline constexpr decltype(auto) type_dispatcher(
  */
 class KeysEqualComparator {
    public:
-    KeysEqualComparator(const int64_t n_keys, const table_info* table,
+    KeysEqualComparator(const int64_t n_keys,
+                        const std::shared_ptr<table_info> table,
                         const bool is_na_equal)
         : n_keys{n_keys}, table{table}, is_na_equal(is_na_equal) {}
 
-    constexpr bool operator()(const int64_t iRowA,
-                              const int64_t iRowB) const noexcept {
-        auto equal_elements = [=, this](array_info* arr) {
+    bool operator()(const int64_t iRowA, const int64_t iRowB) const noexcept {
+        auto equal_elements = [=, this](std::shared_ptr<array_info> arr) {
             return type_dispatcher(arr->arr_type, arr->dtype, this->is_na_equal,
                                    ElementComparator{arr, arr}, iRowA, iRowB);
         };
 
-        return std::all_of(table->columns.begin(),
-                           table->columns.begin() + n_keys, equal_elements);
+        return std::all_of(table->columns.cbegin(),
+                           table->columns.cbegin() + n_keys, equal_elements);
     }
 
    private:
     const int64_t n_keys;
-    const table_info* table;
+    const std::shared_ptr<table_info> table;
     const bool is_na_equal;
 };
 

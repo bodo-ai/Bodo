@@ -22,8 +22,9 @@
  * @param grp_info Grouping information relating rows to the proper group.
  * @param ftype The aggregate function to apply
  */
-void do_apply_to_column(array_info* in_col, array_info* out_col,
-                        std::vector<array_info*>& aux_cols,
+void do_apply_to_column(std::shared_ptr<array_info> in_col,
+                        std::shared_ptr<array_info> out_col,
+                        std::vector<std::shared_ptr<array_info>>& aux_cols,
                         const grouping_info& grp_info, int ftype);
 
 /**
@@ -48,8 +49,8 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
  * @param[in] grp_info The grouping information.
  * @param ftype The function type. This is used for validating input.
  */
-void idx_n_columns_apply(array_info* out_arr,
-                         std::vector<array_info*>& orderby_arrs,
+void idx_n_columns_apply(std::shared_ptr<array_info> out_arr,
+                         std::vector<std::shared_ptr<array_info>>& orderby_arrs,
                          std::vector<bool>& asc_vect,
                          std::vector<bool>& na_pos_vect,
                          grouping_info const& grp_info, int ftype);

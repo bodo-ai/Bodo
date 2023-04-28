@@ -149,7 +149,8 @@ class PathInfo {
         // obtain path info on rank 0, broadcast to other ranks.
         // this sets PathInfo attributes on all ranks
         obtain_is_directory();
-        if (!is_valid) return;
+        if (!is_valid)
+            return;
         obtain_file_names_and_sizes();
         obtain_compression_scheme(compression_pyarg);
     }
@@ -481,7 +482,8 @@ class LocalFileReader : public SingleFileReader {
         return this->ok();
     }
     virtual ~LocalFileReader() {
-        if (fstream) delete fstream;
+        if (fstream)
+            delete fstream;
     }
 };
 
@@ -581,9 +583,12 @@ typedef struct {
 
 static void stream_reader_dealloc(stream_reader *self) {
     // we own the stream!
-    if (self->ifs) delete self->ifs;
-    if (self->path_info) delete self->path_info;
-    if (self->skiprows_list_info) delete self->skiprows_list_info;
+    if (self->ifs)
+        delete self->ifs;
+    if (self->path_info)
+        delete self->path_info;
+    if (self->skiprows_list_info)
+        delete self->skiprows_list_info;
     Py_TYPE(self)->tp_free(self);
 }
 
@@ -682,7 +687,8 @@ static void stream_reader_init(stream_reader *self, FileReader *ifs,
     // seek to our chunk beginning
     // only if sz > 0
     bool ok = true;
-    if (sz > 0) ok = self->ifs->seek(start);
+    if (sz > 0)
+        ok = self->ifs->seek(start);
     if (!ok) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "Could not seek to start position");
@@ -735,7 +741,8 @@ static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
     n = self->chunk_size - self->chunk_pos;
     if (size < 0 || size > n) {
         size = n;
-        if (size < 0) size = 0;
+        if (size < 0)
+            size = 0;
     }
 
     self->buf.resize(size);
@@ -791,72 +798,66 @@ static PyMethodDef stream_reader_methods[] = {
 
 // the actual Python type class
 static PyTypeObject stream_reader_type = {
-    PyVarObject_HEAD_INIT(NULL, 0) "bodo.libs.hio.StreamReader", /*tp_name*/
-    sizeof(stream_reader),                    /*tp_basicsize*/
-    0,                                        /*tp_itemsize*/
-    (destructor)stream_reader_dealloc,        /*tp_dealloc*/
-    0,                                        /*tp_print*/
-    0,                                        /*tp_getattr*/
-    0,                                        /*tp_setattr*/
-    0,                                        /*tp_compare*/
-    0,                                        /*tp_repr*/
-    0,                                        /*tp_as_number*/
-    0,                                        /*tp_as_sequence*/
-    0,                                        /*tp_as_mapping*/
-    0,                                        /*tp_hash */
-    0,                                        /*tp_call*/
-    0,                                        /*tp_str*/
-    0,                                        /*tp_getattro*/
-    0,                                        /*tp_setattro*/
-    0,                                        /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
-    "stream_reader objects",                  /* tp_doc */
-    0,                                        /* tp_traverse */
-    0,                                        /* tp_clear */
-    0,                                        /* tp_richcompare */
-    0,                                        /* tp_weaklistoffset */
-    stream_reader_iternext,                   /* tp_iter */
-    stream_reader_iternext,                   /* tp_iternext */
-    stream_reader_methods,                    /* tp_methods */
-    0,                                        /* tp_members */
-    0,                                        /* tp_getset */
-    0,                                        /* tp_base */
-    0,                                        /* tp_dict */
-    0,                                        /* tp_descr_get */
-    0,                                        /* tp_descr_set */
-    0,                                        /* tp_dictoffset */
-    stream_reader_pyinit,                     /* tp_init */
-    0,                                        /* tp_alloc */
-    stream_reader_new,                        /* tp_new */
+    PyVarObject_HEAD_INIT(NULL, 0) "bodo.libs.StreamReader", /*tp_name*/
+    sizeof(stream_reader),                                   /*tp_basicsize*/
+    0,                                                       /*tp_itemsize*/
+    (destructor)stream_reader_dealloc,                       /*tp_dealloc*/
+    0,                                                       /*tp_print*/
+    0,                                                       /*tp_getattr*/
+    0,                                                       /*tp_setattr*/
+    0,                                                       /*tp_compare*/
+    0,                                                       /*tp_repr*/
+    0,                                                       /*tp_as_number*/
+    0,                                                       /*tp_as_sequence*/
+    0,                                                       /*tp_as_mapping*/
+    0,                                                       /*tp_hash */
+    0,                                                       /*tp_call*/
+    0,                                                       /*tp_str*/
+    0,                                                       /*tp_getattro*/
+    0,                                                       /*tp_setattro*/
+    0,                                                       /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,                /*tp_flags*/
+    "stream_reader objects",                                 /* tp_doc */
+    0,                                                       /* tp_traverse */
+    0,                                                       /* tp_clear */
+    0,                      /* tp_richcompare */
+    0,                      /* tp_weaklistoffset */
+    stream_reader_iternext, /* tp_iter */
+    stream_reader_iternext, /* tp_iternext */
+    stream_reader_methods,  /* tp_methods */
+    0,                      /* tp_members */
+    0,                      /* tp_getset */
+    0,                      /* tp_base */
+    0,                      /* tp_dict */
+    0,                      /* tp_descr_get */
+    0,                      /* tp_descr_set */
+    0,                      /* tp_dictoffset */
+    stream_reader_pyinit,   /* tp_init */
+    0,                      /* tp_alloc */
+    stream_reader_new,      /* tp_new */
 };
 
 // at module load time we need to make our type known ot Python
 extern "C" void PyInit_csv(PyObject *m) {
-    if (PyType_Ready(&stream_reader_type) < 0) return;
+    if (PyType_Ready(&stream_reader_type) < 0)
+        return;
     Py_INCREF(&stream_reader_type);
     PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    PyObject_SetAttrString(
-        m, "csv_file_chunk_reader",
-        PyLong_FromVoidPtr((void *)(&csv_file_chunk_reader)));
-    PyObject_SetAttrString(m, "update_csv_reader",
-                           PyLong_FromVoidPtr((void *)(&update_csv_reader)));
-    PyObject_SetAttrString(
-        m, "initialize_csv_reader",
-        PyLong_FromVoidPtr((void *)(&initialize_csv_reader)));
+    SetAttrStringFromVoidPtr(m, csv_file_chunk_reader);
+    SetAttrStringFromVoidPtr(m, update_csv_reader);
+    SetAttrStringFromVoidPtr(m, initialize_csv_reader);
     // NOTE: old testing code that is commented out due to
     // introduction of FileReader interface.
     // TODO: update testing code
-    // PyObject_SetAttrString(m, "csv_string_chunk_reader",
-    //                        PyLong_FromVoidPtr((void*)(&csv_string_chunk_reader)));
+    // SetAttrStringFromVoidPtr(m, csv_string_chunk_reader);
 }
 
 extern "C" void PyInit_json(PyObject *m) {
-    if (PyType_Ready(&stream_reader_type) < 0) return;
+    if (PyType_Ready(&stream_reader_type) < 0)
+        return;
     Py_INCREF(&stream_reader_type);
     PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    PyObject_SetAttrString(
-        m, "json_file_chunk_reader",
-        PyLong_FromVoidPtr((void *)(&json_file_chunk_reader)));
+    SetAttrStringFromVoidPtr(m, json_file_chunk_reader);
 }
 
 /**
@@ -1105,7 +1106,8 @@ class MemReader : public FileReader {
             CHECK_ARROW(bytes_read_result, "read_compressed_file",
                         "istream->Read")
             int64_t bytes_read = bytes_read_result.ValueOrDie();
-            if (bytes_read == 0) break;
+            if (bytes_read == 0)
+                break;
             if (!skipped_header) {
                 // check for row_separator in new data read
                 for (int64_t i = actual_size; i < actual_size + bytes_read;
@@ -1150,7 +1152,8 @@ class MemReader : public FileReader {
                 // ranks can have '}' or ']' as last character. JSON multi-line
                 // rows end with }, so ranks will end up with '}' as last
                 // character after data_row_correction()
-                if (data.back() == '}') data.push_back(']');
+                if (data.back() == '}')
+                    data.push_back(']');
             }
         }
     }
@@ -1256,9 +1259,11 @@ void set_skiprows_list(MemReader *mem_reader, int64_t *skiprows,
                     // skiprows is 1-index based if file contains a header
                     skip_row = skiprows[i] - csv_header;
                     // needed to handle case skiprows=[0] and file has header
-                    if (skip_row == -1) skip_row = 0;
+                    if (skip_row == -1)
+                        skip_row = 0;
                     // Finished rows that are in this rank's range
-                    if (skip_row < rank_global_start) break;
+                    if (skip_row < rank_global_start)
+                        break;
                     if (skip_row >= rank_global_start &&
                         skip_row <= rank_global_end) {
                         // Copy from next row to end on this position
@@ -1291,8 +1296,10 @@ void set_skiprows_list(MemReader *mem_reader, int64_t *skiprows,
         int64_t num_rows = mem_reader->get_num_rows();
         for (int i = skiprows_list_len - 1; i >= 0; i--) {
             skip_row = skiprows[i] - csv_header;
-            if (skip_row >= num_rows) continue;
-            if (skip_row == -1) skip_row = 0;
+            if (skip_row >= num_rows)
+                continue;
+            if (skip_row == -1)
+                skip_row = 0;
             if (skip_row < num_rows) {
                 int64_t bytes_to_move = mem_reader->data.size() -
                                         mem_reader->row_offsets[skip_row + 1];
@@ -1325,7 +1332,8 @@ void set_skiprows_list(MemReader *mem_reader, int64_t *skiprows,
  */
 void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
     tracing::Event ev("skip_rows", is_parallel);
-    if (skiprows <= 0) return;
+    if (skiprows <= 0)
+        return;
     // we need to know the row offsets to skip rows
     reader->calc_row_offsets();
     if (is_parallel) {
@@ -1347,7 +1355,8 @@ void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
                 return;
             }
             skiprows -= rank_skip;
-            if (skiprows == 0) break;
+            if (skiprows == 0)
+                break;
         }
     } else {
         // data is replicated, so skip same number of rows on every rank
@@ -1369,7 +1378,8 @@ void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
  */
 void set_nrows(MemReader *reader, int64_t nrows, bool is_parallel) {
     tracing::Event ev("set_nrows", is_parallel);
-    if (nrows <= 0) return;
+    if (nrows <= 0)
+        return;
     // we need to know the row offsets to set specific number of rows to read
     reader->calc_row_offsets();
     if (is_parallel) {
@@ -1435,7 +1445,8 @@ void calc_row_transfer(const std::vector<int64_t> &num_rows, int64_t total_rows,
 
     // rows_left tracks how many rows I have left to send
     int64_t rows_left = num_rows[myrank];
-    if (rows_left == 0) return;
+    if (rows_left == 0)
+        return;
 
     typedef std::pair<int64_t, int64_t> range;
     // my current row range (in global dataset)
@@ -1454,9 +1465,11 @@ void calc_row_transfer(const std::vector<int64_t> &num_rows, int64_t total_rows,
         int64_t rows_to_send = 0;
         if (std::get<0>(overlap) <= std::get<1>(overlap))
             rows_to_send = std::get<1>(overlap) - std::get<0>(overlap);
-        if (rows_to_send > 0) to_send.emplace_back(rank, rows_to_send);
+        if (rows_to_send > 0)
+            to_send.emplace_back(rank, rows_to_send);
         rows_left -= rows_to_send;
-        if (rows_left == 0) break;
+        if (rows_left == 0)
+            break;
     }
 }
 
@@ -1487,7 +1500,8 @@ void balance_rows(MemReader *reader) {
         std::minmax_element(num_rows_ranks.begin(), num_rows_ranks.end());
     int64_t min = *result.first;
     int64_t max = *result.second;
-    if (min == max) return;  // already balanced
+    if (min == max)
+        return;  // already balanced
 
     // get total number of rows in global dataset
     int64_t total_rows = std::accumulate(num_rows_ranks.begin(),
@@ -1595,7 +1609,8 @@ static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
     for (int64_t i = i_start; i < bytes_read; i++) {
         if (local_data[i] == row_separator) {
             // skip empty lines
-            if (i > i_start && local_data[i - 1] == row_separator) continue;
+            if (i > i_start && local_data[i - 1] == row_separator)
+                continue;
             cur_row++;
             // avoid counting the skipped row.
             if (is_skiplist && cur_row == skiprows[skiprow_num]) {
@@ -1616,7 +1631,8 @@ static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
     }
     // If local_data is read and we still have rows remaining, add the
     // bytes_read to add this whole section to the total_bytes scanned so far.
-    if (rows_count) total_bytes += (bytes_read - i_start);
+    if (rows_count)
+        total_bytes += (bytes_read - i_start);
     // Otherwise, add the part of local_data that was scanned to the total_bytes
     else
         total_bytes += current_pos;
@@ -1656,7 +1672,8 @@ static void compute_skiprows_list_offsets(
     for (int64_t i = i_start; i < bytes_read; i++) {
         if (local_data[i] == row_separator) {
             // skip empty lines
-            if (i > i_start && local_data[i - 1] == row_separator) continue;
+            if (i > i_start && local_data[i - 1] == row_separator)
+                continue;
             // this is last row to read, next will be skipped
             // compute and store end of row to read
             if (rows_count == skiprows_list_info->skiprows[skiplist_idx] - 1) {
@@ -1673,7 +1690,8 @@ static void compute_skiprows_list_offsets(
             }
             rows_count++;
         }
-        if (skiplist_idx > skiprows_list_info->num_skiprows) break;
+        if (skiplist_idx > skiprows_list_info->num_skiprows)
+            break;
     }
     // If local_data is read and we still have rows to skip, add the
     // bytes_read to the total_bytes scanned so far.
@@ -1772,7 +1790,8 @@ void read_file_info(const std::vector<std::string> &file_names,
                 file->Read(read_size, local_data.data());
             CHECK_ARROW(bytes_read_result, "read_file_info", "file->Read")
             int64_t bytes_read = bytes_read_result.ValueOrDie();
-            if (bytes_read == 0) break;
+            if (bytes_read == 0)
+                break;
             bytes_left_to_read -= read_size;
             // 1. skiprows
             // Compute if skiprows is list or just a number > 0
@@ -1983,7 +2002,8 @@ void read_chunk_data_skiplist(MemReader *mem_reader, PathInfo *path_info,
     // chunk)
     for (int skiplist_i = 0; skiplist_i < skiprows_list_len + 1; skiplist_i++) {
         // next read is not in my chunk.
-        if (start_global >= main_end_global) break;
+        if (start_global >= main_end_global)
+            break;
         int64_t local_to_read = 0;
         // Check if the rank has data to read in this section.
         // 1. Compute start and end offsets to read
@@ -2018,7 +2038,8 @@ void read_chunk_data_skiplist(MemReader *mem_reader, PathInfo *path_info,
             (start_global == 0))
             start_global = read_start_offset[skiplist_i + 1];
     }
-    if (is_parallel) data_row_correction(mem_reader, row_separator);
+    if (is_parallel)
+        data_row_correction(mem_reader, row_separator);
 }
 // If skiprows and/or nrows are used
 // This is the threshold used to determine whether there's enough memory for
@@ -2125,7 +2146,8 @@ extern "C" PyObject *file_chunk_reader(
         // seem like something that should worry us right now
 
         char row_separator = '\n';
-        if (strcmp(suffix, "json") == 0) row_separator = '}';
+        if (strcmp(suffix, "json") == 0)
+            row_separator = '}';
 
         int rank = dist_get_rank();
         int num_ranks = dist_get_size();
@@ -2183,7 +2205,7 @@ extern "C" PyObject *file_chunk_reader(
             // TODO: Non-uniform cluster
             // Allreduce(first rank/node, SUM(node_sys_memory))
             size_t cluster_sys_memory =
-                getTotalSystemMemory() * dist_get_node_count();
+                get_total_node_memory() * dist_get_node_count();
             // Checks if memory size is low or user explicitly requested
             // low_memory.
             is_low_memory = (((double)bytes_meta_data[0] / cluster_sys_memory) >
@@ -2233,7 +2255,8 @@ extern "C" PyObject *file_chunk_reader(
                  is_low_memory) ||
                 (chunksize > 0)) {
                 // rank 0 finds update start, end offsets, and total size.
-                if (nrows > 0 && chunksize > nrows) chunksize = nrows;
+                if (nrows > 0 && chunksize > nrows)
+                    chunksize = nrows;
                 // rank 0 computes bytes information and broadcasts it.
                 if (rank == 0) {
                     read_file_info(file_names, file_sizes, header_size_bytes,
@@ -2358,7 +2381,8 @@ extern "C" PyObject *file_chunk_reader(
         }
 
         // shuffle data so that each rank has required number of rows
-        if (is_parallel) balance_rows(mem_reader);
+        if (is_parallel)
+            balance_rows(mem_reader);
 
         // prepare data for pandas
         mem_reader->finalize();
@@ -2375,7 +2399,8 @@ extern "C" PyObject *file_chunk_reader(
         if (reader == NULL || PyErr_Occurred()) {
             PyErr_Print();
             std::cerr << "Could not create chunk reader object" << std::endl;
-            if (reader) delete reader;
+            if (reader)
+                delete reader;
             reader = NULL;
         } else {
             stream_reader_init(
@@ -2529,7 +2554,8 @@ static bool stream_reader_update_reader(stream_reader *self) {
                                  self->skiprows_list_info->num_skiprows);
     }
     // shuffle data so that each rank has required number of rows
-    if (self->is_parallel) balance_rows(mem_reader);
+    if (self->is_parallel)
+        balance_rows(mem_reader);
     // prepare data for pandas
     mem_reader->pos = mem_reader->start;
     mem_reader->finalize();

@@ -13,7 +13,7 @@ from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
-def test_named_param_extract(bodosql_datetime_types):
+def test_named_param_extract(bodosql_datetime_types, memory_leak_check):
     """
     Checks that Named Params cannot be used in
     extract because the name must be a literal.
@@ -29,7 +29,7 @@ def test_named_param_extract(bodosql_datetime_types):
 
 
 @pytest.mark.slow
-def test_named_param_order_by(basic_df):
+def test_named_param_order_by(basic_df, memory_leak_check):
     """
     Checks that Named Params cannot be used in
     ASC/DESC for order by because it must be a literal.
@@ -45,7 +45,7 @@ def test_named_param_order_by(basic_df):
 
 
 @pytest.mark.slow
-def test_named_param_str_to_date():
+def test_named_param_str_to_date(memory_leak_check):
     """
     Checks that Named Params cannot be used in
     the format string for str_to_date
@@ -62,7 +62,7 @@ def test_named_param_str_to_date():
 
 
 @pytest.mark.slow
-def test_named_param_date_format(bodosql_datetime_types):
+def test_named_param_date_format(bodosql_datetime_types, memory_leak_check):
     """
     Checks that Named Params cannot be used in
     the format string for date_format

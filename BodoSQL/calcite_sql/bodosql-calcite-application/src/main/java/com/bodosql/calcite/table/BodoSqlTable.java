@@ -150,12 +150,10 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * <p>If there are no casts that need to be performed this returns the empty string.
    *
    * @param varName Name of the variable containing the loaded data.
-   * @param useDateRuntime Should the code be generated where the date java type uses the date
-   *     Python type.
    * @return Generated code used to cast the Table being read.
    */
-  public String generateReadCastCode(String varName, boolean useDateRuntime) {
-    return generateCommonCastCode(varName, false, useDateRuntime);
+  public String generateReadCastCode(String varName) {
+    return generateCommonCastCode(varName, false);
   }
 
   /**
@@ -166,12 +164,10 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * <p>If there are no casts that need to be performed this returns the empty string.
    *
    * @param varName Name of the variable containing the data to write.
-   * @param useDateRuntime Should the code be generated where the date java type uses the date
-   *     Python type.
    * @return Generated code used to cast the Table being writen.
    */
-  public String generateWriteCastCode(String varName, boolean useDateRuntime) {
-    return generateCommonCastCode(varName, true, useDateRuntime);
+  public String generateWriteCastCode(String varName) {
+    return generateCommonCastCode(varName, true);
   }
 
   /**
@@ -183,26 +179,17 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    *
    * @param varName Name of the variable to cast.
    * @param isWrite Is the cast for a read or write. This determines the cast direction.
-   * @param useDateRuntime Should the code be generated where the date java type uses the date
-   *     Python type.
    * @return The generated Python code or the empty string.
    */
-  private String generateCommonCastCode(String varName, boolean isWrite, boolean useDateRuntime) {
+  private String generateCommonCastCode(String varName, boolean isWrite) {
     // Name of the columns to cast
     List<String> castColNames = new ArrayList<>();
     // List of string to use to perform the cast
     List<String> castExprs = new ArrayList<>();
     for (BodoSQLColumn col : this.columns) {
-      if (isWrite) {
-        if (col.requiresWriteCast(useDateRuntime)) {
+      if (!isWrite && col.requiresReadCast()) {
           castColNames.add(col.getColumnName());
-          castExprs.add(col.getWriteCastExpr(varName));
-        }
-      } else {
-        if (col.requiresReadCast(useDateRuntime)) {
-          castColNames.add(col.getColumnName());
-          castExprs.add(col.getReadCastExpr(varName, useDateRuntime));
-        }
+          castExprs.add(col.getReadCastExpr(varName));
       }
     }
     if (castColNames.isEmpty()) {
@@ -261,7 +248,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    *
    * @return The generated code to read the table.
    */
-  public abstract String generateReadCode(boolean useDateRuntime);
+  public abstract String generateReadCode();
 
   /**
    * Generate the code needed to read the table. This function is called by specialized IO
@@ -269,10 +256,9 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    *
    * @param extraArgs Extra arguments to pass to the Python API. They are assume to be escaped by
    *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
-   * @param useDateRuntime When reading data should the date type use the Bodo date type?
    * @return The generated code to read the table.
    */
-  public abstract String generateReadCode(String extraArgs, boolean useDateRuntime);
+  public abstract String generateReadCode(String extraArgs);
 
   /**
    * Generates the code necessary to submit the remote query to the catalog DB. This is not

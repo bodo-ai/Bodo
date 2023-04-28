@@ -4,6 +4,7 @@ Tests filter pushdown with a Snowflake Catalog object.
 """
 import io
 import os
+import re
 
 import bodosql
 import numpy as np
@@ -2108,6 +2109,179 @@ def test_nonregex_string_match_functions(
 
         check_logger_msg(stream, f"Columns loaded ['a']")
         check_logger_msg(stream, "Filter pushdown successfully performed")
-        # Each function may have different number of args,
-        # so we will just check that the SQL function got logged.
         check_logger_msg(stream, sql_func)
+
+
+@pytest.mark.parametrize(
+    "test_cases",
+    [
+        pytest.param(
+            ("REGEXP_LIKE(A, '.*\w+-\w+.*')", ".*\w+-\w+.*", True), id="regexp_like"
+        ),
+        pytest.param(
+            ("REGEXP_LIKE(A, '.*\w+-\w+.*', 'c')", ".*\w+-\w+.*", True),
+            id="regexp_like_opt_arg",
+        ),
+        pytest.param(
+            ("RLIKE(A, 'bodo[sS].*')", "bodo[sS].*", True), id="regexp_like_alias_1"
+        ),
+        pytest.param(
+            ("RLIKE(A, 'bodo[sS].*', 'c')", "bodo[sS].*", True),
+            id="regexp_like_alias_1_opt_args",
+        ),
+        pytest.param(
+            ("A REGEXP 'hi* [bB].*'", "hi* [bB].*", True), id="regexp_like_alias_2"
+        ),
+        pytest.param(("REGEXP_INSTR(A, '\\W+') = 3", "\\W+", 3), id="regexp_instr"),
+        pytest.param(
+            ("REGEXP_INSTR(A, '\\W+', 1, 1, 0, 'i', 0) = 3", "\\W+", 3),
+            id="regexp_instr_opt_args",
+        ),
+        pytest.param(
+            ("REGEXP_SUBSTR(A, 'h\\w+') = 'hi'", "h\\w+", "hi"), id="regexp_substr"
+        ),
+        pytest.param(
+            ("REGEXP_SUBSTR(A, 'h\\w+', 1, 1, 'c', 0) = 'hi'", "h\\w+", "hi"),
+            id="regexp_substr_opt_args",
+        ),
+        pytest.param(("REGEXP_COUNT(A, '\\w+') = 3", "\\w+", 3), id="regexp_count"),
+        pytest.param(
+            ("REGEXP_COUNT(A, '\\w+', 1, 'c') = 3", "\\w+", 3),
+            id="regexp_count_opt_args",
+        ),
+        pytest.param(
+            (
+                "REGEXP_REPLACE(A, '\\w+', 'snowflake') = 'snowflake'",
+                "\\w+",
+                "snowflake",
+            ),
+            id="regexp_replace",
+        ),
+        pytest.param(
+            (
+                "REGEXP_REPLACE(A, '\\w+', 'snowflake', 1, 0, 'c') = 'snowflake'",
+                "\\w+",
+                "snowflake",
+            ),
+            id="regexp_replace_opt_args",
+        ),
+    ],
+)
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_regex_string_match_functions(
+    test_db_snowflake_catalog, test_cases, request, memory_leak_check
+):
+    sql_filter, pat, answer = test_cases
+
+    table_name = "STRING_DATA"
+    conn_str = get_snowflake_connection_string(
+        test_db_snowflake_catalog.database,
+        test_db_snowflake_catalog.connection_params["schema"],
+    )
+    df = pd.read_sql(f"select a from {table_name}", conn_str)
+
+    if "regexp_instr" in request.node.name:
+        func = (
+            lambda x: re.search(pat, x).start() + 1
+            if re.search(pat, x) is not None
+            else None
+        )
+    elif "regexp_substr" in request.node.name:
+        func = (
+            lambda x: re.search(pat, x).group()
+            if re.search(pat, x) is not None
+            else None
+        )
+    elif "regexp_count" in request.node.name:
+        func = lambda x: len(re.findall(pat, x))
+    elif "regexp_replace" in request.node.name:
+        func = lambda x: re.sub(pat, "snowflake", x)
+    elif "regexp_like" in request.node.name:
+        func = lambda x: re.match(pat, x) is not None
+
+    expected_output = df[df["a"].apply(func) == answer].dropna()
+    expected_output.columns = [x.lower() for x in expected_output.columns]
+
+    query = f"select a from {table_name} where {sql_filter}"
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # make sure filter pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=expected_output,
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
+
+        check_logger_msg(stream, f"Columns loaded ['a']")
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+
+
+def test_snowflake_coalesce_constant_date_string_filter_pushdown(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that queries of the form COALESCE(date, constanst_string) <COMPARISON OP> constant_string
+    can be pushed down to Snowflake.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+
+    df = pd.DataFrame(
+        {
+            "L_COMMITDATE": pd.Series(
+                ["2023-01-20", "2023-01-21", "2023-01-19", None, "2023-06-20"] * 10,
+                dtype="datetime64[ns]",
+            ),
+            "L_QUANTITY": pd.arrays.IntegerArray(
+                np.array([1, -3, 2, 3, 10] * 10, np.int8),
+                np.array([False, True, True, False, False] * 10),
+            ),
+        }
+    )
+
+    with create_snowflake_table(df, "simple_date_table", db, schema) as table_name:
+        expected_output = pd.DataFrame(
+            {
+                "L_QUANTITY": pd.arrays.IntegerArray(
+                    np.array([1, -3, 3, 10] * 10, np.int8),
+                    np.array([False, True, False, False] * 10),
+                ),
+            }
+        )
+        expected_output.columns = [x.lower() for x in expected_output.columns]
+
+        query = f"select l_quantity from {table_name} where coalesce(L_COMMITDATE, '2023-06-20') >= '2023-01-20'"
+
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=expected_output,
+                is_out_distributed=False,
+                reset_index=True,
+                sort_output=True,
+                # Pandas output is non-nullable
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "Filter pushdown successfully performed.")
+            check_logger_msg(stream, r"COALESCE(\"L_COMMITDATE\", {f0}) >= {f1} )")

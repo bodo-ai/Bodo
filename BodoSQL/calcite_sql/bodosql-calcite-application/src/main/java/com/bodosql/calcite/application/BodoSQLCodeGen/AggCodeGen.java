@@ -24,12 +24,15 @@ public class AggCodeGen {
 
   static HashMap<String, String> equivalentPandasNameMethodMap;
 
+  static HashMap<String, String> equivalentNumpyFuncNameMap;
+
   static HashMap<String, String> equivalentHelperFnMap;
 
   static {
     equivalentPandasMethodMap = new HashMap<>();
     equivalentNumpyFuncMap = new HashMap<>();
     equivalentPandasNameMethodMap = new HashMap<>();
+    equivalentNumpyFuncNameMap = new HashMap<>();
     equivalentHelperFnMap = new HashMap<>();
 
     equivalentPandasMethodMap.put(SqlKind.SUM, "sum");
@@ -49,8 +52,14 @@ public class AggCodeGen {
     equivalentNumpyFuncMap.put(SqlKind.STDDEV_POP, "np.std");
 
     equivalentPandasNameMethodMap.put("COUNT_IF", "count_if");
-    equivalentPandasNameMethodMap.put("VARIANCE_POP", "var_pop");
+    equivalentPandasNameMethodMap.put("KURTOSIS", "kurtosis");
+    equivalentPandasNameMethodMap.put("SKEW", "skew");
     equivalentPandasNameMethodMap.put("VARIANCE_SAMP", "var");
+
+    equivalentNumpyFuncNameMap.put("VARIANCE_POP", "np.var");
+
+    equivalentPandasNameMethodMap.put("KURTOSIS", "kurtosis");
+    equivalentPandasNameMethodMap.put("SKEW", "skew");
     equivalentHelperFnMap.put("BOOLOR_AGG", "boolor_agg");
     // Calcite's SINGLE_VALUE returns input if it has only one value, otherwise raises an error
     // https://github.com/apache/calcite/blob/f14cf4c32b9079984a988bbad40230aa6a59b127/core/src/main/java/org/apache/calcite/sql/fun/SqlSingleValueAggFunction.java#L36
@@ -140,9 +149,12 @@ public class AggCodeGen {
       if (aggFunc.equals("iloc")) {
         aggString.append(seriesBuilder);
         aggString.append(".iloc[0]");
-      } else if (aggFunc.equals("var_pop")) {
+      } else if (aggFunc.equals("np.var")) {
         aggString.append(seriesBuilder);
         aggString.append(".var(ddof=0)");
+      } else if (aggFunc.equals("np.std")) {
+        aggString.append(seriesBuilder);
+        aggString.append(".std(ddof=0)");
       } else if (aggFunc.equals("count_if")) {
         aggString.append(seriesBuilder);
         aggString.append(".sum()");
@@ -282,7 +294,9 @@ public class AggCodeGen {
       if (aggFunc == "iloc") {
         aggFunc = "first";
       }
-      aggFunc = makeQuoted(aggFunc);
+      if (!(aggFunc.equals("np.var") || aggFunc.equals("np.std"))) {
+        aggFunc = makeQuoted(aggFunc);
+      }
 
       aggString
           .append(tempName)
@@ -462,6 +476,8 @@ public class AggCodeGen {
       return new Pair<>(equivalentNumpyFuncMap.get(kind), false);
     } else if (equivalentPandasNameMethodMap.containsKey(name)) {
       return new Pair<>(equivalentPandasNameMethodMap.get(name), true);
+    } else if (equivalentNumpyFuncNameMap.containsKey(name)) {
+      return new Pair<>(equivalentNumpyFuncNameMap.get(name), false);
     } else if (equivalentHelperFnMap.containsKey(name)) {
       return new Pair<>(equivalentHelperFnMap.get(name), false);
     } else {

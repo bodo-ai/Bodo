@@ -47,10 +47,8 @@ from bodo.libs.array import (
     array_from_cpp_table,
     array_to_info,
     cpp_table_to_py_data,
-    decref_table_array,
-    delete_info_decref_array,
+    delete_info,
     delete_table,
-    delete_table_decref_arrays,
     groupby_and_aggregate,
     py_data_to_cpp_table,
 )
@@ -268,8 +266,12 @@ supported_agg_funcs = [
     "last",
     "idxmin",
     "idxmax",
+    "var_pop",
+    "std_pop",
     "var",
     "std",
+    "kurtosis",
+    "skew",
     "boolor_agg",
     "count_if",
     "udf",
@@ -328,12 +330,26 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     # udfs at runtime (see gen_update_cb, gen_combine_cb and gen_eval_cb),
     # to know which columns in the table received from C++ library correspond
     # to udfs and which to builtin functions
-    if func_name in {"var", "std"}:
+    if func_name in {"var_pop", "std_pop", "var", "std"}:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.fname = func_name
         func.ncols_pre_shuffle = 3
         func.ncols_post_shuffle = 4
+        return func
+    elif func_name == "skew":
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        func.ncols_pre_shuffle = 4
+        func.ncols_post_shuffle = 5
+        return func
+    elif func_name == "kurtosis":
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        func.ncols_pre_shuffle = 5
+        func.ncols_post_shuffle = 6
         return func
     if func_name in {"first", "last", "boolor_agg", "count_if"}:
         # We don't have a function definition for first/last/boolor_agg/count_if, and it is not needed
@@ -565,6 +581,12 @@ def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
     if bodo.utils.typing.is_builtin_function(f_val):
         # Builtin function case (e.g. df.groupby("B").agg(sum))
         func_name = bodo.utils.typing.get_builtin_function_name(f_val)
+        return get_agg_func(func_ir, func_name, rhs, series_type, typemap)
+    if bodo.utils.typing.is_numpy_function(f_val):
+        # Numpy function case (e.g. df.groupby("B").agg(np.var))
+        func_name = bodo.hiframes.pd_groupby_ext.get_agg_name_for_numpy_method(
+            bodo.utils.typing.get_builtin_function_name(f_val)
+        )
         return get_agg_func(func_ir, func_name, rhs, series_type, typemap)
     if isinstance(f_val, (tuple, list)):
         lambda_count = 0
@@ -1244,12 +1266,10 @@ def agg_distributed_run(
             "coerce_to_array": bodo.utils.conversion.coerce_to_array,
             "groupby_and_aggregate": groupby_and_aggregate,
             "array_from_cpp_table": array_from_cpp_table,
-            "delete_info_decref_array": delete_info_decref_array,
-            "delete_table": delete_table,
+            "delete_info": delete_info,
             "add_agg_cfunc_sym": add_agg_cfunc_sym,
             "get_agg_udf_addr": get_agg_udf_addr,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
-            "decref_table_array": decref_table_array,
+            "delete_table": delete_table,
             "decode_if_dict_array": decode_if_dict_array,
             "set_table_data": bodo.hiframes.table.set_table_data,
             "get_table_data": bodo.hiframes.table.get_table_data,
@@ -2103,10 +2123,7 @@ def gen_top_level_agg_func(
     func_text += (
         f"    ev_clean = bodo.utils.tracing.Event('tables_clean_up', {parallel})\n"
     )
-    func_text += "    delete_table_decref_arrays(table)\n"
-    func_text += "    delete_table_decref_arrays(udf_table_dummy)\n"
-
-    func_text += "    delete_table_decref_arrays(out_table)\n"
+    func_text += "    delete_table(out_table)\n"
     func_text += "    ev_clean.finalize()\n"
 
     func_text += "    return out_data\n"

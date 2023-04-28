@@ -12,7 +12,7 @@ class IcebergParquetReader : public ParquetReader {
    public:
     /**
      * Initialize IcebergParquetReader.
-     * See iceberg_pq_read function below for description of arguments.
+     * See iceberg_pq_read_py_entry function below for description of arguments.
      */
     IcebergParquetReader(const char* _conn, const char* _database_schema,
                          const char* _table_name, bool _parallel,
@@ -20,15 +20,14 @@ class IcebergParquetReader : public ParquetReader {
                          PyObject* _expr_filters,
                          std::set<int> _selected_fields,
                          std::vector<bool> is_nullable,
-                         PyObject* pyarrow_schema, bool _is_merge_into_cow)
+                         PyObject* pyarrow_schema)
         : ParquetReader(/*path*/ nullptr, _parallel, _dnf_filters,
                         _expr_filters, /*storage_options*/ PyDict_New(),
                         pyarrow_schema, tot_rows_to_read, _selected_fields,
                         is_nullable, /*input_file_name_col*/ false),
           conn(_conn),
           database_schema(_database_schema),
-          table_name(_table_name),
-          is_merge_into_cow(_is_merge_into_cow) {}
+          table_name(_table_name) {}
 
     virtual ~IcebergParquetReader() {
         // When schema evolution is detected in
@@ -69,7 +68,8 @@ class IcebergParquetReader : public ParquetReader {
     virtual PyObject* get_dataset() {
         // import bodo.io.iceberg
         PyObject* iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
-        if (PyErr_Occurred()) throw std::runtime_error("python");
+        if (PyErr_Occurred())
+            throw std::runtime_error("python");
 
         // ds = bodo.io.iceberg.get_iceberg_pq_dataset(
         //          conn, database_schema, table_name,
@@ -118,8 +118,6 @@ class IcebergParquetReader : public ParquetReader {
     const char* conn;
     const char* database_schema;
     const char* table_name;
-    // Is this a target table for merge into with cow?
-    bool is_merge_into_cow;
     // List of the original Iceberg file names as relative paths.
     // For example if the absolute path was
     // /Users/bodo/iceberg_db/my_table/part01.pq and the iceberg directory is
@@ -162,16 +160,15 @@ class IcebergParquetReader : public ParquetReader {
  * This is currently only used for MERGE INTO COW
  * @return Table containing all the read data
  */
-table_info* iceberg_pq_read(const char* conn, const char* database_schema,
-                            const char* table_name, bool parallel,
-                            int64_t tot_rows_to_read, PyObject* dnf_filters,
-                            PyObject* expr_filters, int32_t* _selected_fields,
-                            int32_t num_selected_fields, int32_t* _is_nullable,
-                            PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
-                            int32_t num_str_as_dict_cols,
-                            bool is_merge_into_cow, int64_t* total_rows_out,
-                            PyObject** file_list_ptr,
-                            int64_t* snapshot_id_ptr) {
+table_info* iceberg_pq_read_py_entry(
+    const char* conn, const char* database_schema, const char* table_name,
+    bool parallel, int64_t tot_rows_to_read, PyObject* dnf_filters,
+    PyObject* expr_filters, int32_t* _selected_fields,
+    int32_t num_selected_fields, int32_t* _is_nullable,
+    PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
+    int32_t num_str_as_dict_cols, bool is_merge_into_cow,
+    int64_t* total_rows_out, PyObject** file_list_ptr,
+    int64_t* snapshot_id_ptr) {
     try {
         if (is_merge_into_cow) {
             // If is_merge_into=True then we don't want to use any expr_filters
@@ -188,7 +185,7 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
         IcebergParquetReader reader(conn, database_schema, table_name, parallel,
                                     tot_rows_to_read, dnf_filters, expr_filters,
                                     selected_fields, is_nullable,
-                                    pyarrow_schema, is_merge_into_cow);
+                                    pyarrow_schema);
 
         // Initialize reader
         reader.init_iceberg_reader(str_as_dict_cols, num_str_as_dict_cols);
@@ -210,7 +207,7 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
         // is never dead for simplicity sake.
         if (is_merge_into_cow) {
             int64_t num_local_rows = reader.get_local_rows();
-            array_info* row_id_col_arr =
+            std::shared_ptr<array_info> row_id_col_arr =
                 alloc_numpy(num_local_rows, Bodo_CTypes::INT64);
 
             // Create the initial value on this rank

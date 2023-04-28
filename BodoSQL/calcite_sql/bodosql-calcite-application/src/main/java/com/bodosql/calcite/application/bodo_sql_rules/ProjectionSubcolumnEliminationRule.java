@@ -1,20 +1,31 @@
 package com.bodosql.calcite.application.bodo_sql_rules;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.*;
-import org.apache.calcite.plan.*;
-import org.apache.calcite.rel.*;
-import org.apache.calcite.rel.core.*;
-import org.apache.calcite.rel.logical.*;
-import org.apache.calcite.rel.rules.*;
-import org.apache.calcite.rex.*;
-import org.apache.calcite.sql.*;
-import org.apache.calcite.sql.fun.*;
-import org.apache.calcite.tools.*;
-import org.immutables.value.*;
+import java.util.Set;
+import java.util.TreeMap;
+import javax.annotation.Nullable;
+import org.apache.calcite.plan.RelOptRuleCall;
+import org.apache.calcite.plan.RelRule;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.logical.LogicalProject;
+import org.apache.calcite.rel.rules.TransformationRule;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexFieldCollation;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexOver;
+import org.apache.calcite.rex.RexWindow;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.fun.SqlCastFunction;
+import org.apache.calcite.tools.RelBuilder;
+import org.immutables.value.Value;
 
 /**
  * Planner rule that recognizes a {@link org.apache.calcite.rel.core.Project} that contains 2 or
@@ -41,7 +52,7 @@ public class ProjectionSubcolumnEliminationRule
   // cannot satisfy this rule to skip the check.
   static HashSet<Integer> seenNodes = new HashSet<>();
 
-  /** Creates an AliasPreservingAggregateProjectMergeRule. */
+  /** Creates a ProjectionSubcolumnEliminationRule. */
   protected ProjectionSubcolumnEliminationRule(ProjectionSubcolumnEliminationRule.Config config) {
     super(config);
   }
@@ -229,9 +240,23 @@ public class ProjectionSubcolumnEliminationRule
         }
       }
     }
-    // We don't do anything if we have a RexOver because we cannot
-    // replace a RexOver's subexpression.
-    if (!(node instanceof RexOver) && node instanceof RexCall) {
+    // If we have a RexOver we can only check paritition and order by columns
+    if (node instanceof RexOver) {
+      RexOver overNode = ((RexOver) node);
+      RexWindow window = overNode.getWindow();
+      for (RexNode partitionNode : window.partitionKeys) {
+        if (shouldReplaceColumn(partitionNode, minCount, replaceMap, oldColumns)) {
+          return true;
+        }
+      }
+      for (RexFieldCollation orderByField : window.orderKeys) {
+        RexNode orderByNode = orderByField.getKey();
+        if (shouldReplaceColumn(orderByNode, minCount, replaceMap, oldColumns)) {
+          return true;
+        }
+      }
+
+    } else if (node instanceof RexCall) {
       // Call expressions need to have their children traversed. No other RexNodes
       // should have children.
       RexCall callNode = ((RexCall) node);
@@ -460,7 +485,9 @@ public class ProjectionSubcolumnEliminationRule
   @Value.Immutable
   public interface Config extends RelRule.Config {
     ProjectionSubcolumnEliminationRule.Config DEFAULT =
-        ImmutableProjectionSubcolumnEliminationRule.Config.of().withOperandFor(Project.class);
+        com.bodosql.calcite.application.bodo_sql_rules.ImmutableProjectionSubcolumnEliminationRule
+            .Config.of()
+            .withOperandFor(Project.class);
 
     @Override
     default ProjectionSubcolumnEliminationRule toRule() {

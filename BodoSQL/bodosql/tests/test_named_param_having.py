@@ -9,7 +9,9 @@ from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
-def test_int_having(bodosql_nullable_numeric_types, spark_info, int_named_params):
+def test_int_having(
+    bodosql_nullable_numeric_types, spark_info, int_named_params, memory_leak_check
+):
     """
     Tests that having works with integer data and integer named parameters
     """
@@ -34,7 +36,9 @@ def test_int_having(bodosql_nullable_numeric_types, spark_info, int_named_params
 
 
 @pytest.mark.slow
-def test_float_having(bodosql_numeric_types, spark_info, float_named_params):
+def test_float_having(
+    bodosql_numeric_types, spark_info, float_named_params, memory_leak_check
+):
     """
     Tests that having works with numeric data and float named parameters
     """
@@ -59,7 +63,9 @@ def test_float_having(bodosql_numeric_types, spark_info, float_named_params):
 
 
 @pytest.mark.slow
-def test_string_having(bodosql_string_types, spark_info, string_named_params):
+def test_string_having(
+    bodosql_string_types, spark_info, string_named_params, memory_leak_check
+):
     """
     Tests that having works with string data and string named parameters
     """
@@ -83,7 +89,7 @@ def test_string_having(bodosql_string_types, spark_info, string_named_params):
     )
 
 
-def test_datetime_having(bodosql_datetime_types, spark_info, timestamp_named_params):
+def test_datetime_having(bodosql_datetime_types, spark_info, timestamp_named_params, memory_leak_check):
     """
     Tests that having works with datetime data and timestamp named parameters
     """
@@ -107,7 +113,9 @@ def test_datetime_having(bodosql_datetime_types, spark_info, timestamp_named_par
     )
 
 
-def test_interval_having(bodosql_interval_types, spark_info, timedelta_named_params):
+def test_interval_having(
+    bodosql_interval_types, spark_info, timedelta_named_params, memory_leak_check
+):
     """
     Tests that having works with interval data and Timedelta named parameters
     """

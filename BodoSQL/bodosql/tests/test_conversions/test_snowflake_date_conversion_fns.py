@@ -9,11 +9,7 @@ import bodosql
 import pandas as pd
 import pytest
 from bodosql.tests.test_datetime_fns import dt_fn_dataframe  # noqa
-from bodosql.tests.utils import (
-    bodosql_use_date_type,
-    check_query,
-    make_tables_nullable,
-)
+from bodosql.tests.utils import check_query, make_tables_nullable
 
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_date_conversion_array_kernels import (  # pragma: no cover
     scalar_to_date_equiv_fn,
@@ -80,24 +76,22 @@ def test_date_casting_functions(
         }
     )
 
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            dt_fn_dataframe,
-            None,
-            check_names=False,
-            check_dtype=False,
-            expected_output=expected_output,
-        )
+    check_query(
+        query,
+        dt_fn_dataframe,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
 
 
-# TODO: [BE-4671]Support date type with CASE statement
-# Now CASE statement sets the array type to timestamp when parsing the query
+@pytest.mark.slow
 def test_date_casting_functions_case(
     dt_fn_dataframe, test_fn, date_casting_input_type, memory_leak_check
 ):
     """
-    tests DATE/TO_DATE/TRY_TO_DATE on valid datetime string/digit string/timestamp values in a case statment
+    tests DATE/TO_DATE/TRY_TO_DATE on valid datetime string/digit string/timestamp values in a case statement
     """
     query = (
         f"SELECT CASE WHEN {test_fn}({date_casting_input_type}) < DATE '2013-01-03' "
@@ -119,7 +113,6 @@ def test_date_casting_functions_case(
         query,
         dt_fn_dataframe_nullable,
         None,
-        check_dtype=False,
         check_names=False,
         expected_output=expected_output,
     )
@@ -138,17 +131,14 @@ def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
     query = f"SELECT {test_fn}(timestamps) as dates from table1"
     expected_output = pd.DataFrame({"dates": df["timestamps"].dt.date})
 
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=expected_output,
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+    )
 
 
-# TODO: [BE-4671]Support date type with CASE statement
-# Now CASE statement sets the array type to timestamp when parsing the query
 def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
     """tests DATE/TO_DATE/TRY_TO_DATE on valid datetime values in a case statment"""
     df = pd.DataFrame(
@@ -163,9 +153,7 @@ def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
     query = (
         f"SELECT CASE WHEN B THEN {test_fn}(timestamps) END as timestamps from table1"
     )
-    to_date_series = (
-        df["timestamps"].dt.normalize().apply(lambda t: t.tz_localize(None))
-    )
+    to_date_series = df["timestamps"].dt.normalize().apply(lambda t: t.date())
     to_date_series[~df.B] = None
     expected_output = pd.DataFrame({"timestamps": to_date_series})
 
@@ -216,13 +204,12 @@ def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
     ctx = {"table1": df}
     query = f"SELECT TRY_TO_DATE(timestamps) as dates from table1"
 
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=expected_output,
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+    )
 
 
 # [BE-3774] Leaks Memory
@@ -354,15 +341,15 @@ def test_date_casting_functions_with_valid_format(
             )
         }
     )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            format_input_string_df,
-            None,
-            check_names=False,
-            check_dtype=False,
-            expected_output=expected_output,
-        )
+
+    check_query(
+        query,
+        format_input_string_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
 
 
 # [BE-3774] Leaks Memory
@@ -386,15 +373,14 @@ def test_date_casting_functions_with_invalid_format(
 
     if test_fn == "TRY_TO_DATE":
         expected_output = pd.DataFrame({"foo": pd.Series([None] * 24)})
-        with bodosql_use_date_type():
-            check_query(
-                query,
-                format_input_string_df,
-                None,
-                check_names=False,
-                check_dtype=False,
-                expected_output=expected_output,
-            )
+        check_query(
+            query,
+            format_input_string_df,
+            None,
+            check_names=False,
+            check_dtype=False,
+            expected_output=expected_output,
+        )
     else:
         msg = "Invalid input while converting to date value"
         with pytest.raises(Exception, match=msg):
@@ -418,15 +404,14 @@ def test_date_casting_with_colon(
         }
     )
 
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            dt_fn_dataframe,
-            None,
-            check_names=False,
-            check_dtype=False,
-            expected_output=expected_output,
-        )
+    check_query(
+        query,
+        dt_fn_dataframe,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
 
 
 def test_date_casting_with_colon_tz_aware(memory_leak_check):
@@ -442,15 +427,14 @@ def test_date_casting_with_colon_tz_aware(memory_leak_check):
     query = "SELECT (timestamps)::DATE from table1"
     expected_output = pd.DataFrame({"foo": df["timestamps"].dt.date})
 
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            check_names=False,
-            check_dtype=False,
-            expected_output=expected_output,
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
 
 
 # [BE-3774] Leaks Memory
@@ -461,9 +445,8 @@ def test_date_casting_with_colon_invalid_args(dt_fn_dataframe):
 
     msg = "Invalid input while converting to date value"
     with pytest.raises(Exception, match=msg):
-        with bodosql_use_date_type():
-            bc = bodosql.BodoSQLContext(dt_fn_dataframe)
-            bc.sql(query)
+        bc = bodosql.BodoSQLContext(dt_fn_dataframe)
+        bc.sql(query)
 
 
 _to_timestamp_string_data = [
@@ -684,15 +667,15 @@ def test_to_timestamp_non_numeric(
     )
     if use_case:
         expected_output[0][ctx["table1"]["b"]] = None
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=expected_output,
-            check_names=False,
-            only_jit_1DVar=True,
-        )
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_names=False,
+        only_jit_1DVar=True,
+    )
 
 
 @pytest.fixture(

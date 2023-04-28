@@ -35,7 +35,8 @@ int get_combine_func(int update_ftype);
  * @param[in] ftype The function type.
  * @param[in] skipna Whether to skip NA values.
  */
-void cumulative_computation(array_info* arr, array_info* out_arr,
+void cumulative_computation(std::shared_ptr<array_info> arr,
+                            std::shared_ptr<array_info> out_arr,
                             grouping_info const& grp_info, int32_t const& ftype,
                             bool const& skipna);
 
@@ -48,7 +49,8 @@ void cumulative_computation(array_info* arr, array_info* out_arr,
  * @param[out] out_arr output column data
  * @param[in] row_list: row indices to copy
  */
-void head_computation(array_info* arr, array_info* out_arr,
+void head_computation(std::shared_ptr<array_info> arr,
+                      std::shared_ptr<array_info> out_arr,
                       const std::vector<int64_t>& row_list);
 
 // NGROUP
@@ -67,7 +69,8 @@ void head_computation(array_info* arr, array_info* out_arr,
  * @param[in] is_parallel: true if data is distributed (used to indicate whether
  * we need to do cumsum on group numbers or not)
  */
-void ngroup_computation(array_info* arr, array_info* out_arr,
+void ngroup_computation(std::shared_ptr<array_info> arr,
+                        std::shared_ptr<array_info> out_arr,
                         grouping_info const& grp_info, bool is_parallel);
 
 // MEDIAN
@@ -82,7 +85,8 @@ void ngroup_computation(array_info* arr, array_info* out_arr,
  * @param[in] skipna: Whether to skip NA values.
  * @param[in] use_sql_rules: Should allocation use SQL rules.
  */
-void median_computation(array_info* arr, array_info* out_arr,
+void median_computation(std::shared_ptr<array_info> arr,
+                        std::shared_ptr<array_info> out_arr,
                         grouping_info const& grp_info, bool const& skipna,
                         bool const use_sql_rules);
 
@@ -96,8 +100,63 @@ void median_computation(array_info* arr, array_info* out_arr,
  * @param[in] grp_info: grouping_info about groups and rows organization
  * @param[in] periods: Number of periods to shift
  */
-void shift_computation(array_info* arr, array_info* out_arr,
+void shift_computation(std::shared_ptr<array_info> arr,
+                       std::shared_ptr<array_info> out_arr,
                        grouping_info const& grp_info, int64_t const& periods);
+
+// Skew
+
+/**
+ * @brief Compute the skew update function for combining the result
+ * of local reductions on each rank.
+ *
+ * @param[in] count_col_in The count input column.
+ * @param[in] m1_col_in The first moment input column.
+ * @param[in] m2_col_in The second moment input column.
+ * @param[in] m3_col_in The third moment input column.
+ * @param[out] count_col_out The count output column.
+ * @param[out] m1_col_out The first moment output column.
+ * @param[out] m2_col_out The second moment output column.
+ * @param[out] m3_col_out The second moment output column.
+ * @param[in] grp_info The grouping information.
+ */
+void skew_combine(std::shared_ptr<array_info> count_col_in,
+                  std::shared_ptr<array_info> m1_col_in,
+                  std::shared_ptr<array_info> m2_col_in,
+                  std::shared_ptr<array_info> m3_col_in,
+                  std::shared_ptr<array_info> count_col_out,
+                  std::shared_ptr<array_info> m1_col_out,
+                  std::shared_ptr<array_info> m2_col_out,
+                  std::shared_ptr<array_info> m3_col_out,
+                  grouping_info const& grp_info);
+
+// Kurtosis
+
+/**
+ * @brief Compute the kurtosis update function for combining the result
+ * of local reductions on each rank.
+ *
+ * @param[in] count_col_in The count input column.
+ * @param[in] m1_col_in The first moment input column.
+ * @param[in] m2_col_in The second moment input column.
+ * @param[in] m3_col_in The third moment input column.
+ * @param[out] count_col_out The count output column.
+ * @param[out] m1_col_out The first moment output column.
+ * @param[out] m2_col_out The second moment output column.
+ * @param[out] m3_col_out The second moment output column.
+ * @param[in] grp_info The grouping information.
+ */
+void kurt_combine(std::shared_ptr<array_info> count_col_in,
+                  std::shared_ptr<array_info> m1_col_in,
+                  std::shared_ptr<array_info> m2_col_in,
+                  std::shared_ptr<array_info> m3_col_in,
+                  std::shared_ptr<array_info> m4_col_in,
+                  std::shared_ptr<array_info> count_col_out,
+                  std::shared_ptr<array_info> m1_col_out,
+                  std::shared_ptr<array_info> m2_col_out,
+                  std::shared_ptr<array_info> m3_col_out,
+                  std::shared_ptr<array_info> m4_col_out,
+                  grouping_info const& grp_info);
 
 // Variance
 
@@ -113,9 +172,12 @@ void shift_computation(array_info* arr, array_info* out_arr,
  * @param[out] m2_col_out The mean^2 output column.
  * @param[in] grp_info The grouping information.
  */
-void var_combine(array_info* count_col_in, array_info* mean_col_in,
-                 array_info* m2_col_in, array_info* count_col_out,
-                 array_info* mean_col_out, array_info* m2_col_out,
+void var_combine(std::shared_ptr<array_info> count_col_in,
+                 std::shared_ptr<array_info> mean_col_in,
+                 std::shared_ptr<array_info> m2_col_in,
+                 std::shared_ptr<array_info> count_col_out,
+                 std::shared_ptr<array_info> mean_col_out,
+                 std::shared_ptr<array_info> m2_col_out,
                  grouping_info const& grp_info);
 
 // NUNIQUE
@@ -133,7 +195,8 @@ void var_combine(array_info* count_col_in, array_info* mean_col_in,
  * @param is_parallel: true if data is distributed (used to indicate whether
  * tracing should be parallel or not)
  */
-void nunique_computation(array_info* arr, array_info* out_arr,
+void nunique_computation(std::shared_ptr<array_info> arr,
+                         std::shared_ptr<array_info> out_arr,
                          grouping_info const& grp_info, bool const& dropna,
                          bool const& is_parallel);
 
@@ -158,8 +221,9 @@ void nunique_computation(array_info* arr, array_info* out_arr,
  * @param[in] is_parallel Is the data distributed? This is used for tracing
  * @param[in] use_sql_rules Do we use SQL or Pandas Null rules?
  */
-void window_computation(std::vector<array_info*>& orderby_arrs,
-                        int64_t window_func, array_info* out_arr,
+void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
+                        int64_t window_func,
+                        std::shared_ptr<array_info> out_arr,
                         grouping_info const& grp_info,
                         std::vector<bool>& asc_vect,
                         std::vector<bool>& na_pos_vect, bool is_parallel,

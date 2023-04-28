@@ -6,6 +6,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SampleCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.*;
@@ -43,6 +44,7 @@ import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.*;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
@@ -129,10 +131,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   private static int RelNodeTimingVerboseLevel = 2;
 
-  // Java equivalent for _BODOSQL_USE_DATE_TYPE that controls if we use the date runtime value
-  // or the old datetime64ns implementation.
-  private final boolean useDateRuntime;
-
   public PandasCodeGenVisitor(
       HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
       HashMap<String, RexNode> searchMap,
@@ -140,8 +138,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String originalSQLQuery,
       RelDataTypeSystem typeSystem,
       boolean debuggingDeltaTable,
-      int verboseLevel,
-      boolean useDateRuntime) {
+      int verboseLevel) {
     super();
     this.exprTypesMap = exprTypesMap;
     this.searchMap = searchMap;
@@ -153,8 +150,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.targetTableDf = null;
     this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
-    this.useDateRuntime = useDateRuntime;
-    this.generatedCode = new Module.Builder(this.useDateRuntime);
+    this.generatedCode = new Module.Builder();
   }
 
   /**
@@ -325,7 +321,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else if (node instanceof PandasTableModify) {
       this.visitLogicalTableModify((TableModify) node);
     } else if (node instanceof PandasTableCreate) {
-      visitLogicalTableCreate((PandasTableCreate) node);
+      this.visitLogicalTableCreate((PandasTableCreate) node);
+    } else if (node instanceof PandasRowSample) {
+      this.visitRowSample((PandasRowSample) node);
+    } else if (node instanceof PandasSample) {
+      this.visitSample((PandasSample) node);
     } else if (node instanceof Correlate) {
       throw new BodoSQLCodegenException(
           "Internal Error: BodoSQL does not support Correlated Queries");
@@ -414,7 +414,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
     this.genRelnodeTimerStart(node);
     this.generatedCode.append(
-        generateLogicalValuesCode(outVar, exprCodes, node.getRowType(), this, useDateRuntime));
+        generateLogicalValuesCode(outVar, exprCodes, node.getRowType(), this));
     this.varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
   }
@@ -580,7 +580,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           && (typeName != SqlTypeName.BIGINT)) {
         throw new BodoSQLCodegenException(
             "Limit value must be an integer, value is of type: "
-                + sqlTypenameToPandasTypename(typeName, true, useDateRuntime));
+                + sqlTypenameToPandasTypename(typeName, true));
       }
 
       // fetch is either a named Parameter or a literal from parsing.
@@ -600,7 +600,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           && (typeName != SqlTypeName.BIGINT)) {
         throw new BodoSQLCodegenException(
             "Offset value must be an integer, value is of type: "
-                + sqlTypenameToPandasTypename(typeName, true, useDateRuntime));
+                + sqlTypenameToPandasTypename(typeName, true));
       }
 
       // Offset is either a named Parameter or a literal from parsing.
@@ -768,8 +768,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 exprTypes,
                 sqlTypes,
                 this,
-                colNames.size(),
-                useDateRuntime);
+                colNames.size());
       }
     }
     this.generatedCode.append(outputCode);
@@ -800,11 +799,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
       ifExists = BodoSQLCatalog.ifExistsBehavior.FAIL;
     }
 
+    SqlCreateTable.CreateTableType createTableType = node.getCreateTableType();
+
     this.generatedCode
         .append(getBodoIndent())
         .append(
             outputSchemaAsCatalog.generateWriteCode(
-                this.varGenStack.pop(), node.getTableName(), ifExists))
+                this.varGenStack.pop(), node.getTableName(), ifExists, createTableType))
         .append("\n");
   }
 
@@ -957,7 +958,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public String handleCastAndRenameBeforeWrite(
       String outVar, List<String> colNames, BodoSqlTable bodoSqlTable) {
     StringBuilder outputCode = new StringBuilder();
-    String castExpr = bodoSqlTable.generateWriteCastCode(outVar, useDateRuntime);
+    String castExpr = bodoSqlTable.generateWriteCastCode(outVar);
     if (castExpr != "") {
       outputCode.append(getBodoIndent()).append(outVar).append(" = ").append(castExpr).append("\n");
     }
@@ -1820,8 +1821,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               upperBoundsList,
               zeroExpr,
               argsListList,
-              isRespectNulls,
-              useDateRuntime);
+              isRespectNulls);
       String fn_text = out.getKey();
       outputColList = out.getValue();
 
@@ -1906,7 +1906,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *     relational expression.
    */
   public RexNodeVisitorInfo visitLiteralScan(RexLiteral node, boolean isSingleRow) {
-    String literal = generateLiteralCode(node, isSingleRow, this, useDateRuntime);
+    String literal = generateLiteralCode(node, isSingleRow, this);
     return new RexNodeVisitorInfo(literal);
   }
 
@@ -1958,7 +1958,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               "Insert Into is only supported with Iceberg table destinations provided via"
                   + " the the SQL TablePath API");
         }
-        readCode = table.generateReadCode("_bodo_merge_into=True,", useDateRuntime);
+        readCode = table.generateReadCode("_bodo_merge_into=True,");
         this.fileListAndSnapshotIdArgs =
             String.format(
                 "snapshot_id=%s, old_fnames=%s,", icebergSnapshotIDName, icebergFileListVarName);
@@ -1968,7 +1968,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 outVar, icebergFileListVarName, icebergSnapshotIDName, readCode);
         targetTableDf = outVar;
       } else {
-        readCode = table.generateReadCode(useDateRuntime);
+        readCode = table.generateReadCode();
         readAssign = String.format("  %s = %s\n", outVar, readCode);
       }
 
@@ -1990,7 +1990,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         this.generatedCode.append(readAssign);
       }
 
-      String castExpr = table.generateReadCastCode(outVar, useDateRuntime);
+      String castExpr = table.generateReadCastCode(outVar);
       if (castExpr != "") {
         this.generatedCode.append(String.format("  %s = %s\n", outVar, castExpr));
       }
@@ -2061,6 +2061,52 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.genRelnodeTimerStop(node);
     }
     varGenStack.push(outVar);
+  }
+
+  /**
+   * Visitor for RowSample: Supports SAMPLE clause in SQL with a fixed number of rows.
+   *
+   * @param node rowSample node being visited
+   */
+  public void visitRowSample(PandasRowSample node) {
+    // We always assume row sample has exactly one input
+    assert node.getInputs().size() == 1;
+
+    // Visit the input
+    RelNode inp = node.getInput(0);
+    this.visit(inp, 0, node);
+    String inpExpr = varGenStack.pop();
+
+    String outVar = this.genDfVar();
+    this.genRelnodeTimerStart(node);
+
+    this.generatedCode.append(generateRowSampleCode(outVar, inpExpr, node.getParams()));
+
+    varGenStack.push(outVar);
+    this.genRelnodeTimerStop(node);
+  }
+
+  /**
+   * Visitor for Sample: Supports SAMPLE clause in SQL with a fraction of the input.
+   *
+   * @param node sample node being visited
+   */
+  public void visitSample(PandasSample node) {
+    // We always assume sample has exactly one input
+    assert node.getInputs().size() == 1;
+
+    // Visit the input
+    RelNode inp = node.getInput(0);
+    this.visit(inp, 0, node);
+    String inpExpr = varGenStack.pop();
+
+    String outVar = this.genDfVar();
+    this.genRelnodeTimerStart(node);
+
+    this.generatedCode.append(generateSampleCode(outVar, inpExpr, node.getParams()));
+
+    varGenStack.push(outVar);
+    this.genRelnodeTimerStop(node);
   }
 
   /**

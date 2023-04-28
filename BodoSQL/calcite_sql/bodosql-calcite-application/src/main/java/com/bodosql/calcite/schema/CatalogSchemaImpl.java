@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.Set;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
 
 public class CatalogSchemaImpl extends BodoSqlSchema {
   /**
@@ -116,23 +117,32 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    * @param varName The name of the variable being written.
    * @param tableName The name of the table as the write destination.
    * @param ifExists Behavior of the write if the table already exists
+   * @param createTableType Behavior of the write if we're creating a new table. Defaults to DEFAULT
    * @return The generated code to compute the write in Python.
    */
   public String generateWriteCode(
+      String varName,
+      String tableName,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType) {
+    return this.catalog.generateWriteCode(
+        varName, this.getName(), tableName, ifExists, createTableType);
+  }
+
+  public String generateWriteCode(
       String varName, String tableName, BodoSQLCatalog.ifExistsBehavior ifExists) {
-    return this.catalog.generateWriteCode(varName, this.getName(), tableName, ifExists);
+    return generateWriteCode(varName, tableName, ifExists, SqlCreateTable.CreateTableType.DEFAULT);
   }
 
   /**
    * API specific to CatalogSchemaImpl and not all schemas. Since schemas with the same catalog
    * often share the same code generation process, the read code for a given table with a catalog is
    * controlled by that catalog.
-   *
    * @param tableName The name of the table as the read source.
    * @return The generated code to compute the read in Python.
    */
-  public String generateReadCode(String tableName, boolean useDateRuntime) {
-    return this.catalog.generateReadCode(this.getName(), tableName, useDateRuntime);
+  public String generateReadCode(String tableName) {
+    return this.catalog.generateReadCode(this.getName(), tableName);
   }
 
   /** @return The catalog for the schema. */

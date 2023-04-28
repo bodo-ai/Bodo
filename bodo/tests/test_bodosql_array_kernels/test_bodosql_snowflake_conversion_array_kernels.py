@@ -222,11 +222,11 @@ def test_to_boolean_opt(to_boolean_test_arrs_null):
 _dates = pd.Series(pd.date_range("2010-1-1", periods=10, freq="841D")).apply(
     lambda x: x.date()
 )
-_times = pd.Series(pd.date_range("20130101", periods=10, freq="H"))
+_timestamps = pd.Series(pd.date_range("20130101", periods=10, freq="H"))
 _dates_nans = _dates.copy()
-_times_nans = _times.copy()
+_timestamps_nans = _timestamps.copy()
 _dates_nans[4] = _dates_nans[7] = np.nan
-_times_nans[2] = _dates_nans[7] = np.nan
+_timestamps_nans[2] = _timestamps_nans[7] = np.nan
 
 
 @pytest.mark.parametrize(
@@ -253,8 +253,8 @@ _times_nans[2] = _dates_nans[7] = np.nan
             id="date_to_str",
         ),
         pytest.param(
-            (_times,),
-            id="time_to_str",
+            (_timestamps,),
+            id="timestamps_to_str",
         ),
         pytest.param(
             (
@@ -301,28 +301,6 @@ def test_to_char(args):
         )
 
 
-def test_to_char_timestamp():
-    """specific test for timestamp to char conversion with the treat_timestamp_as_date
-    flag set to True"""
-
-    input = pd.Series(pd.date_range("2010-1-1", periods=10, freq="841D")).apply(
-        lambda x: x.date()
-    )
-    py_output = input.apply(lambda x: str(x))
-
-    def impl(arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.to_char(arr, True))
-
-    check_func(
-        impl,
-        (input,),
-        py_output=py_output,
-        check_dtype=False,
-        reset_index=True,
-        check_names=False,
-    )
-
-
 @pytest.mark.parametrize(
     "args",
     [
@@ -348,7 +326,7 @@ def test_to_char_timestamp():
             id="date_with_nulls",
         ),
         pytest.param(
-            (_times_nans,),
+            (_timestamps_nans,),
             id="time_with_nulls",
         ),
     ],

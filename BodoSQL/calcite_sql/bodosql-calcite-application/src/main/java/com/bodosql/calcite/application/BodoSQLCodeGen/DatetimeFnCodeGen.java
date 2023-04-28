@@ -188,8 +188,8 @@ public class DatetimeFnCodeGen {
    * @param opName The name of the function
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
-  public static Expr generateCurdateCode(String opName) {
-    String fnExpression = "pd.Timestamp.now().floor(freq=\"D\")";
+  public static Expr generateCurdateCode() {
+    String fnExpression = "datetime.date.today()";
     return new Expr.Raw(fnExpression);
   }
 

@@ -41,52 +41,6 @@ inline void convertArrowToTime64(const uint8_t* buff, uint8_t* out_data,
     }
 }
 
-// copied from Arrow since not in exported APIs
-// https://github.com/apache/arrow/blob/329c9944554ddb142b0a2ac26a4abdf477636e37/cpp/src/arrow/python/datetime.cc#L150
-// Extracts the month and year and day number from a number of days
-static void get_date_from_days(int64_t days, int64_t* date_year,
-                               int64_t* date_month, int64_t* date_day) {
-    int64_t i;
-
-    *date_year = days_to_yearsdays(&days);
-    const int* month_lengths = days_per_month_table[is_leapyear(*date_year)];
-
-    for (i = 0; i < 12; ++i) {
-        if (days < month_lengths[i]) {
-            *date_month = i + 1;
-            *date_day = days + 1;
-            return;
-        } else {
-            days -= month_lengths[i];
-        }
-    }
-
-    // Should never get here
-    return;
-}
-
-/**
- * @brief copy date32 data into our packed datetime.date arrays
- *
- * @param out_data output data
- * @param buff date32 value buffer from Arrow
- * @param rows_to_skip number of items to skip in buff
- * @param rows_to_read number of items to read after skipping
- */
-inline void copy_data_dt32(uint64_t* out_data, const int32_t* buff,
-                           int64_t rows_to_skip, int64_t rows_to_read) {
-    for (int64_t i = 0; i < rows_to_read; i++) {
-        int32_t val = buff[rows_to_skip + i];
-        // convert date32 into packed datetime.date value
-        // assigned to non-realized value to make any error crash.
-        int64_t year = -1;
-        int64_t month = -1;
-        int64_t day = -1;
-        get_date_from_days(val, &year, &month, &day);
-        out_data[i] = (year << 32) + (month << 16) + day;
-    }
-}
-
 bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
                          Bodo_CTypes::CTypeEnum pq_type) {
     switch (arrow_type->id()) {
@@ -119,6 +73,8 @@ bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
             return pq_type == Bodo_CTypes::STRING;
         case Type::BINARY:
             return pq_type == Bodo_CTypes::BINARY;
+        case Type::DATE32:
+            return pq_type == Bodo_CTypes::DATE;
         case Type::DICTIONARY:
             // Dictionary array's codes are always read into proper integer
             // array type, so buffer data types are the same
@@ -134,13 +90,8 @@ inline void copy_data_dispatch(uint8_t* out_data, const uint8_t* buff,
                                int64_t rows_to_skip, int64_t rows_to_read,
                                std::shared_ptr<arrow::DataType> arrow_type,
                                Bodo_CTypes::CTypeEnum out_dtype) {
-    // read date32 values into datetime.date arrays, default from Arrow >= 0.13
-    if (arrow_type->id() == Type::DATE32 && out_dtype == Bodo_CTypes::DATE) {
-        copy_data_dt32((uint64_t*)out_data, (int32_t*)buff, rows_to_skip,
-                       rows_to_read);
-    }
     // datetime64 cases
-    else if (out_dtype == Bodo_CTypes::DATETIME) {
+    if (out_dtype == Bodo_CTypes::DATETIME) {
         // similar to arrow_to_pandas.cc
         if (arrow_type->id() == Type::DATE32) {
             // days since epoch
@@ -379,6 +330,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
                 case Bodo_CTypes::INT16:
                 case Bodo_CTypes::UINT8:
                 case Bodo_CTypes::INT8:
+                case Bodo_CTypes::DATE:
                     return;
                 default:
                     // Fallthrough for unsupported zero-copy cases
@@ -458,7 +410,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         }
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array == nullptr && !temp_zero_copy_fallback) {
             if (arrays.empty()) {
                 // Avoid empty call to concatenate
@@ -488,13 +440,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
 /// Column builder for string arrays
 class StringBuilder : public TableBuilder::BuilderColumn {
    public:
-    /**
-     * @param type : Arrow type of input array
-     */
-    StringBuilder(std::shared_ptr<arrow::DataType> type)
-        : dtype(arrow_to_bodo_type(type->id())) {}
-
-    StringBuilder(Bodo_CTypes::CTypeEnum dtype) : dtype(dtype) {}
+    StringBuilder() {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // XXX hopefully keeping the string arrays around doesn't prevent other
@@ -504,103 +450,23 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                       chunked_arr->chunks().end());
     }
 
-    virtual array_info* get_output() {
-        if (out_array != nullptr) {
-            return out_array;
-        }
-        // copy from Arrow arrays to Bodo array
-        int64_t total_n_strings = 0;
-        int64_t total_n_chars = 0;
-        // This code works for both Binary and String arrays.
-        // NOTE: arrow::StringArray is a subclass of arrow::BinaryArray.
-        // We don't need StringArray specific methods or attributes, so we
-        // use BinaryArray everywhere.
-        // Same for arrow::LargeStringArray and arrow::LargeBinaryArray.
-        for (auto arr : arrays) {
-            if (arrow::is_binary_like(arr->type_id())) {
-                this->update_num_strings_num_chars_from_array<
-                    arrow::BinaryArray, uint32_t>(arr, total_n_strings,
-                                                  total_n_chars);
-            } else if (arrow::is_large_binary_like(arr->type_id())) {
-                this->update_num_strings_num_chars_from_array<
-                    arrow::LargeBinaryArray, uint64_t>(arr, total_n_strings,
-                                                       total_n_chars);
-            } else {
-                throw std::runtime_error(
-                    "Unsupported array type provided to StringBuilder.");
+    virtual std::shared_ptr<array_info> get_output() {
+        if (out_array == nullptr) {
+            if (arrays.empty()) {
+                // Handle empty call to concatenate
+                out_array = alloc_string_array(0, 0);
+                return out_array;
             }
+            arrow::Result<std::shared_ptr<arrow::Array>> res =
+                arrow::Concatenate(arrays, arrow::default_memory_pool());
+            std::shared_ptr<arrow::Array> concat_res;
+            CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
+            out_array = arrow_array_to_bodo(concat_res);
         }
-        out_array = alloc_array(total_n_strings, total_n_chars, -1,
-                                bodo_array_type::STRING, dtype, 0, -1);
-        int64_t n_null_bytes = (total_n_strings + 7) >> 3;
-        memset(out_array->null_bitmask(), 0, n_null_bytes);
-        int64_t n_strings_copied = 0;
-        int64_t n_chars_copied = 0;
-        offset_t* out_offsets = (offset_t*)out_array->data2();
-        out_offsets[0] = 0;
-        for (auto arr : arrays) {
-            if (arrow::is_binary_like(arr->type_id())) {
-                this->fill_from_array<arrow::BinaryArray, uint32_t>(
-                    arr, out_array, out_offsets, n_strings_copied,
-                    n_chars_copied);
-            } else {
-                // We don't need to check here since it would've
-                // errored-out in the previous for-loop.
-                this->fill_from_array<arrow::LargeBinaryArray, uint64_t>(
-                    arr, out_array, out_offsets, n_strings_copied,
-                    n_chars_copied);
-            }
-        }
-        out_offsets[total_n_strings] = static_cast<offset_t>(total_n_chars);
-        arrays.clear();  // free Arrow memory
         return out_array;
     }
 
    private:
-    template <typename ARROW_ARRAY_TYPE, typename OFFSET_TYPE>
-    void update_num_strings_num_chars_from_array(
-        const std::shared_ptr<arrow::Array>& arr, int64_t& total_n_strings,
-        int64_t& total_n_chars) {
-        auto str_arr = std::dynamic_pointer_cast<ARROW_ARRAY_TYPE>(arr);
-        const int64_t n_strings = str_arr->length();
-        const int64_t str_start_offset = str_arr->data()->offset;
-        const OFFSET_TYPE* in_offsets =
-            (OFFSET_TYPE*)str_arr->value_offsets()->data();
-        total_n_strings += n_strings;
-        total_n_chars += in_offsets[str_start_offset + n_strings] -
-                         in_offsets[str_start_offset];
-    }
-
-    template <typename ARROW_ARRAY_TYPE, typename OFFSET_TYPE>
-    void fill_from_array(const std::shared_ptr<arrow::Array>& arr,
-                         array_info* out_array, offset_t* out_offsets,
-                         int64_t& n_strings_copied, int64_t& n_chars_copied) {
-        auto str_arr = std::dynamic_pointer_cast<ARROW_ARRAY_TYPE>(arr);
-        const int64_t n_strings = str_arr->length();
-        const int64_t str_start_offset = str_arr->data()->offset;
-        const OFFSET_TYPE* in_offsets =
-            (OFFSET_TYPE*)str_arr->value_offsets()->data();
-
-        const int64_t n_chars = in_offsets[str_start_offset + n_strings] -
-                                in_offsets[str_start_offset];
-        memcpy(out_array->data1() + n_chars_copied,
-               str_arr->value_data()->data() + in_offsets[str_start_offset],
-               sizeof(char) * n_chars);  // data
-        for (int64_t i = 0; i < n_strings; i++) {
-            out_offsets[n_strings_copied + i + 1] =
-                out_offsets[n_strings_copied + i] +
-                in_offsets[str_start_offset + i + 1] -
-                in_offsets[str_start_offset + i];
-            if (!str_arr->IsNull(i)) {
-                SetBitTo((uint8_t*)out_array->null_bitmask(),
-                         n_strings_copied + i, true);
-            }
-        }
-        n_strings_copied += n_strings;
-        n_chars_copied += n_chars;
-    }
-
-    const Bodo_CTypes::CTypeEnum dtype;  // STRING or BINARY
     arrow::ArrayVector arrays;
 };
 
@@ -634,7 +500,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
                                 chunked_arr->chunks().end());
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array != nullptr) {
             return out_array;
         }
@@ -674,11 +540,12 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         // copy from Arrow arrays to Bodo array
 
         // copy dictionary
-        StringBuilder dictionary_builder(dictionary->type());
+        StringBuilder dictionary_builder;
         arrow::ArrayVector dict_v{dictionary};
         dictionary_builder.append(
             std::make_shared<arrow::ChunkedArray>(dict_v));
-        array_info* bodo_dictionary = dictionary_builder.get_output();
+        std::shared_ptr<array_info> bodo_dictionary =
+            dictionary_builder.get_output();
 
         // copy indices
         PrimitiveBuilder indices_builder(arrow::int32(), this->length,
@@ -693,11 +560,14 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         }
         indices_builder.append(
             std::make_shared<arrow::ChunkedArray>(indices_chunks));
-        array_info* bodo_indices = indices_builder.get_output();
+        std::shared_ptr<array_info> bodo_indices = indices_builder.get_output();
 
-        out_array = new array_info(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, {},
-            {bodo_dictionary, bodo_indices}, 0, 0, 0, false, false, false);
+        out_array = std::make_shared<array_info>(
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>(
+                {bodo_dictionary, bodo_indices}),
+            0, 0, 0, false, false, false);
 
         all_chunks.clear();
         return out_array;
@@ -756,7 +626,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         // needed anymore
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array != nullptr) {
             return out_array;
         }
@@ -767,7 +637,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
                 /*has_deduped_local_dictionary=*/false);
             return this->out_array;
         }
-        array_info* dict_arr =
+        std::shared_ptr<array_info> dict_arr =
             alloc_array(total_distinct_strings, total_distinct_chars, -1,
                         bodo_array_type::STRING, dtype, 0, -1);
         int64_t n_null_bytes = (total_distinct_strings + 7) >> 3;
@@ -786,9 +656,11 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         // We set _has_deduped_local_dictionary=true since we constructed the
         // dictionary ourselves and made sure not to put nulls in the
         // dictionary.
-        out_array = new array_info(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, {},
-            {dict_arr, indices_arr}, 0, 0, 0, false,
+        out_array = std::make_shared<array_info>(
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>({dict_arr, indices_arr}),
+            0, 0, 0, false,
             /*_has_deduped_local_dictionary=*/true, false);
         return out_array;
     }
@@ -830,7 +702,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
 
     const Bodo_CTypes::CTypeEnum dtype;  // STRING or BINARY
     const int64_t length;                // number of indices of output array
-    array_info* indices_arr;
+    std::shared_ptr<array_info> indices_arr;
     // str_to_ind maps string to its new index, new offset in the new
     // dictionary array. the 0th offset maps to 0.
     // Supports access with string_view. See comments for string_hash.
@@ -850,13 +722,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
 /// Column builder for list of string arrays
 class ListStringBuilder : public TableBuilder::BuilderColumn {
    public:
-    ListStringBuilder(std::shared_ptr<arrow::DataType> type) {
-        string_builder = new StringBuilder(type->field(0)->type());
-    }
-
-    ListStringBuilder(Bodo_CTypes::CTypeEnum dtype) {
-        string_builder = new StringBuilder(dtype);
-    }
+    ListStringBuilder() { string_builder = new StringBuilder(); }
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // get child (StringArray) chunks and pass them to StringBuilder
@@ -878,13 +744,14 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
                       chunked_arr->chunks().end());
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array != nullptr) {
             return out_array;
         }
 
         // get output Bodo string array
-        array_info* out_str_array = string_builder->get_output();
+        std::shared_ptr<array_info> out_str_array =
+            string_builder->get_output();
         int64_t total_n_strings = out_str_array->length;
         delete string_builder;
         int64_t total_n_lists = 0;
@@ -893,7 +760,7 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
 
         // allocate Bodo list of string array with preexisting string array
         // alloc_list_string_array deletes the string array_info struct
-        array_info* out_array =
+        std::shared_ptr<array_info> out_array =
             alloc_list_string_array(total_n_lists, out_str_array, 0);
 
         // copy list offsets and null bitmap
@@ -945,7 +812,7 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
                       chunked_arr->chunks().end());
     }
 
-    virtual array_info* get_output() {
+    virtual std::shared_ptr<array_info> get_output() {
         if (out_array != nullptr) {
             return out_array;
         }
@@ -1020,12 +887,11 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                     field->type(), num_rows));
             }
         } else if (arrow::is_base_binary_like(type)) {
-            columns.push_back(new StringBuilder(field->type()));
+            columns.push_back(new StringBuilder());
         } else if (type == arrow::Type::LIST &&
                    arrow::is_binary_like(
                        field->type()->field(0)->type()->id())) {
-            columns.push_back(
-                new ListStringBuilder(field->type()));  // list of string
+            columns.push_back(new ListStringBuilder());  // list of string
         } else if (type == arrow::Type::NA) {
             columns.push_back(new AllNullsBuilder(num_rows));
         } else {
@@ -1034,8 +900,9 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
     }
 }
 
-TableBuilder::TableBuilder(table_info* table, const int64_t num_rows) {
-    for (array_info* arr : table->columns) {
+TableBuilder::TableBuilder(std::shared_ptr<table_info> table,
+                           const int64_t num_rows) {
+    for (std::shared_ptr<array_info> arr : table->columns) {
         if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             columns.push_back(
                 new PrimitiveBuilder(arr->dtype, num_rows, true, false));
@@ -1048,9 +915,9 @@ TableBuilder::TableBuilder(table_info* table, const int64_t num_rows) {
         } else if (arr->arr_type == bodo_array_type::DICT) {
             columns.push_back(new DictionaryEncodedStringBuilder(num_rows));
         } else if (arr->arr_type == bodo_array_type::STRING) {
-            columns.push_back(new StringBuilder(arr->dtype));
+            columns.push_back(new StringBuilder());
         } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
-            columns.push_back(new ListStringBuilder(arr->dtype));
+            columns.push_back(new ListStringBuilder());
         } else if (arr->arr_type == bodo_array_type::STRUCT ||
                    arr->arr_type == bodo_array_type::ARRAY_ITEM) {
             columns.push_back(new ArrowBuilder());
@@ -1074,8 +941,7 @@ void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
 // -------------------- ArrowDataframeReader --------------------
 void ArrowDataframeReader::init_arrow_reader(
     const std::vector<int32_t>& str_as_dict_cols,
-    const bool create_dict_from_string,
-    const std::vector<int32_t>& allow_unsafe_dt_to_ts_cast_cols) {
+    const bool create_dict_from_string) {
     if (initialized)
         throw std::runtime_error("ArrowDataframeReader already initialized");
     tracing::Event ev("reader::init", parallel);
@@ -1105,28 +971,6 @@ void ArrowDataframeReader::init_arrow_reader(
         }
         str_as_dict_colnames_str += "]";
         ev.add_attribute("g_str_as_dict_cols", str_as_dict_colnames_str);
-    }
-
-    // Store the column names that will be cast from "date" to "datetime64[ns]".
-    // These will be used by the Snowflake Reader in "cast_arrow_table".
-    for (auto i : allow_unsafe_dt_to_ts_cast_cols) {
-        auto field = schema->field(i);
-        this->allow_unsafe_dt_to_ts_cast_colnames.emplace(field->name());
-    }
-    if (ev.is_tracing()) {
-        std::string allow_unsafe_dt_to_ts_cast_colnames_str = "[";
-        size_t i = 0;
-        for (auto colname : this->allow_unsafe_dt_to_ts_cast_colnames) {
-            if (i < allow_unsafe_dt_to_ts_cast_colnames.size() - 1) {
-                allow_unsafe_dt_to_ts_cast_colnames_str += colname + ", ";
-            } else {
-                allow_unsafe_dt_to_ts_cast_colnames_str += colname;
-            }
-            i++;
-        }
-        allow_unsafe_dt_to_ts_cast_colnames_str += "]";
-        ev.add_attribute("g_allow_unsafe_dt_to_ts_cast_cols",
-                         allow_unsafe_dt_to_ts_cast_colnames_str);
     }
 
     // total_rows = ds.total_rows
@@ -1277,16 +1121,6 @@ void ArrowDataframeReader::init_arrow_reader(
 
 std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
     std::shared_ptr<arrow::Table> table) {
-    // While we allow unsafe casts from date to datetime64[ns] when reading
-    // from Snowflake (only for BodoSQL), it can have dangerous correctness
-    // implications in certain cases. For those cases, we want to have the
-    // ability to only allow "safe" casts, which is what this environment
-    // variable achieves.
-    char* _bodo_disable_unsafe_date_to_ts_cast =
-        std::getenv("BODO_DISABLE_UNSAFE_DATE_TO_TS_CAST");
-    bool bodo_disable_unsafe_date_to_ts_cast =
-        (bool)_bodo_disable_unsafe_date_to_ts_cast;
-
     if (!table->schema()->Equals(this->schema)) {
         arrow::ChunkedArrayVector new_cols;
         for (int i = 0; i < table->num_columns(); i++) {
@@ -1333,10 +1167,6 @@ std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
 
                 // Dont bother checking if types are compatible, should
                 // be done at compile-time. Only sizes can change.
-                // This is not entirely true. In Snowflake reader
-                // in particular, we cast dates to timestamps (due to BodoSQL
-                // limitations), and that conversion happens here. This is
-                // temporary and will be removed hopefully soon.
             } else if (act_type->bit_width() < exp_type->bit_width() &&
                        nullable_eq) {
                 // bit-width is we-defined for all types with a fixed width. For
@@ -1344,23 +1174,7 @@ std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
                 // should be safe to compare.
                 // (https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4NK5arrow8DataType9bit_widthEv)
 
-                arrow::compute::CastOptions cast_options(/*safe=*/true);
-                if ((this->allow_unsafe_dt_to_ts_cast_colnames.count(
-                         this->schema->field(i)->name()) > 0) &&
-                    (!bodo_disable_unsafe_date_to_ts_cast)) {
-                    // BodoSQL doesn't support a native Date type. Because of
-                    // this, we always cast date to datetime64[ns]. This was
-                    // done using an `astype` earlier, but that caused issues
-                    // with limit pushdown, which is why we do it here instead.
-                    // There’s an issue that some dates cannot in fact be
-                    // represented using datetime64[ns] (max is 2262-04-11
-                    // 23:47:16.854775807). Bodo's `astype` replaces these with
-                    // garbage values. Setting `allow_time_overflow` essentially
-                    // matches this behavior.
-                    cast_options.allow_time_overflow = true;
-                }
-
-                auto res = arrow::compute::Cast(col, exp_type, cast_options);
+                auto res = arrow::compute::Cast(col, exp_type);
                 // TODO: Use std::format after fixing C++ compiler errors
                 CHECK_ARROW(res.status(),
                             "Unable to upcast from " + col->type()->ToString() +

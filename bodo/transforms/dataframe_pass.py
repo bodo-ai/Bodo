@@ -4,6 +4,7 @@ converts data frame operations to Series and Array operations
 as much as possible to provide implementation and enable optimization.
 Creates specialized IR nodes for complex operations like Join.
 """
+import datetime
 import operator
 import warnings
 from typing import List
@@ -925,6 +926,7 @@ class DataFramePass:
                 "bodo": bodo,
                 "bodosql": bodosql,
                 "out_arr_type": out_arr_type,
+                "datetime": datetime,
             }
             exec(func_text, glbls, loc_vars)
             f = loc_vars["f"]

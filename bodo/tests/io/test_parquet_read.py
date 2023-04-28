@@ -1671,7 +1671,7 @@ def test_pq_non_constant_filepath_error(datapath):
 
 
 # TODO: Not sure why this fails with memory_leak_check. Seems like the
-# exception returned from pq_read prevents the code that follows from
+# exception returned from pq_read_py_entry prevents the code that follows from
 # freeing something
 def test_read_parquet_invalid_path():
     """test error raise when parquet file path is invalid in C++ code."""

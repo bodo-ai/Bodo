@@ -10,7 +10,11 @@ from bodosql.tests.utils import check_query
 
 @pytest.mark.slow
 def test_int_arith(
-    bodosql_nullable_numeric_types, spark_info, arith_ops, int_named_params
+    bodosql_nullable_numeric_types,
+    spark_info,
+    arith_ops,
+    int_named_params,
+    memory_leak_check,
 ):
     """
     Tests that arithmetic operators work with integer data and integer named parameters
@@ -30,7 +34,9 @@ def test_int_arith(
 
 
 @pytest.mark.slow
-def test_float_arith(bodosql_numeric_types, spark_info, arith_ops, float_named_params):
+def test_float_arith(
+    bodosql_numeric_types, spark_info, arith_ops, float_named_params, memory_leak_check
+):
     """
     Tests that arithmetic operators work with numeric data and float named parameters
     """
@@ -48,7 +54,9 @@ def test_float_arith(bodosql_numeric_types, spark_info, arith_ops, float_named_p
 
 
 @pytest.mark.slow
-def test_string_arith(bodosql_string_types, spark_info, string_named_params):
+def test_string_arith(
+    bodosql_string_types, spark_info, string_named_params, memory_leak_check
+):
     """
     Tests that arithmetic operators work with string data and string named parameters
     """
@@ -67,7 +75,11 @@ def test_string_arith(bodosql_string_types, spark_info, string_named_params):
 
 @pytest.mark.slow
 def test_datetime_timedelta_arith(
-    bodosql_datetime_types, spark_info, datetime_arith_ops, timedelta_named_params
+    bodosql_datetime_types,
+    spark_info,
+    datetime_arith_ops,
+    timedelta_named_params,
+    memory_leak_check,
 ):
     """
     Tests that arithmetic operators work with datetime data and timedelta named parameters
@@ -87,7 +99,11 @@ def test_datetime_timedelta_arith(
 
 
 def test_datetime_dateoffset_arith(
-    bodosql_datetime_types, spark_info, datetime_arith_ops, dateoffset_named_params
+    bodosql_datetime_types,
+    spark_info,
+    datetime_arith_ops,
+    dateoffset_named_params,
+    memory_leak_check,
 ):
     """
     Tests that arithmetic operators work with datetime data and dateoffset named parameters
@@ -107,7 +123,11 @@ def test_datetime_dateoffset_arith(
 
 @pytest.mark.slow
 def test_interval_arith(
-    bodosql_interval_types, spark_info, datetime_arith_ops, timedelta_named_params
+    bodosql_interval_types,
+    spark_info,
+    datetime_arith_ops,
+    timedelta_named_params,
+    memory_leak_check,
 ):
     """
     Tests that arithmetic operators work with interval data and Timedelta named parameters

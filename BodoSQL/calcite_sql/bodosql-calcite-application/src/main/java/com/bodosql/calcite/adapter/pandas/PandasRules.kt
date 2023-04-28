@@ -23,6 +23,10 @@ class PandasRules private constructor() {
         val PANDAS_MINUS_RULE: RelOptRule = PandasMinusRule.DEFAULT_CONFIG.toRule()
         @JvmField
         val PANDAS_VALUES_RULE: RelOptRule = PandasValuesRule.DEFAULT_CONFIG.toRule()
+        @JvmField
+        val PANDAS_SAMPLE_RULE: RelOptRule = PandasSampleRule.DEFAULT_CONFIG.toRule()
+        @JvmField
+        val PANDAS_ROW_SAMPLE_RULE: RelOptRule = PandasRowSampleRule.DEFAULT_CONFIG.toRule()
 
         // TODO(jsternberg): The following rules aren't necessarily correct.
         // These ones should probably be part of a different section of the codebase
@@ -52,6 +56,8 @@ class PandasRules private constructor() {
             PANDAS_INTERSECT_RULE,
             PANDAS_MINUS_RULE,
             PANDAS_VALUES_RULE,
+            PANDAS_SAMPLE_RULE,
+            PANDAS_ROW_SAMPLE_RULE,
             PANDAS_TABLE_MODIFY_RULE,
             PANDAS_TABLE_CREATE_RULE,
             PANDAS_TABLE_SCAN,

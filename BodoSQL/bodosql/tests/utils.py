@@ -4,7 +4,6 @@ Infrastructure used to test correctness.
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import os
 import re
-from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -1383,19 +1382,3 @@ def get_equivalent_spark_agg_query(query):
 
     return spark_query
     # TODO (allai5): BY CUBE, BY ROLLUP
-
-
-@contextmanager
-def bodosql_use_date_type() -> None:
-    """
-    Sets the _BODOSQL_USE_DATE_TYPE to a True value so tests that
-    use the DATE type can run successfully. This context manager maintains
-    the original value to ensure that we do not need to alter the type until
-    all operations are supported and others tests are not impacted.
-    """
-    try:
-        old_bodosql_use_date_type = bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-        bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE = True
-        yield None
-    finally:
-        bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE = old_bodosql_use_date_type

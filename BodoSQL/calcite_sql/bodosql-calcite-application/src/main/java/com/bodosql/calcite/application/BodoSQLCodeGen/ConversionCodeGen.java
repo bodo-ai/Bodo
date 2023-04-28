@@ -161,26 +161,15 @@ public class ConversionCodeGen {
    *
    * @param operandsInfo List of operands
    * @param fnName Name of the function (TO_CHAR or TRY_VARCHAR)
-   * @param arg0IsDate If the argument to the function is of date type. This is used to ensure that
-   *     a "date" formatted string is generated in the case that we are representing the SQL date in
-   *     a pandas timestamp. IE we want: '2023-03-28 09:46:41.630549' (if the argument is timestamp)
-   *     '2023-03-28' (if the argument is actually a date)
-   *     <p>This argument will not be needed after we complete the transition to a dedicated date
-   *     type.
    * @return RexVisitorInfo for the TO_CHAR function
    */
-  public static Expr generateToCharFnCode(
-      List<Expr> operandsInfo, String fnName, boolean arg0IsDate) {
+  public static Expr generateToCharFnCode(List<Expr> operandsInfo, String fnName) {
     if (operandsInfo.size() > 1) {
       // TODO (BE-3742): Support format string for TO_CHAR
       throw new BodoSQLCodegenException(
           "Error, format string for " + fnName + " not yet supported");
     }
-    String exprCode = "bodo.libs.bodosql_array_kernels.to_char(" + operandsInfo.get(0).emit();
-    if (arg0IsDate) {
-      exprCode += ", treat_timestamp_as_date = True";
-    }
-    exprCode += ")";
+    String exprCode = "bodo.libs.bodosql_array_kernels.to_char(" + operandsInfo.get(0).emit() + ")";
     return new Expr.Raw(exprCode);
   }
 

@@ -42,7 +42,7 @@ from bodo.libs.array import (
     array_to_info,
     cpp_table_to_py_data,
     cross_join_table,
-    delete_table_decref_arrays,
+    delete_table,
     hash_join_table,
     interval_join_table,
     py_data_to_cpp_table,
@@ -1958,7 +1958,7 @@ def join_distributed_run(
             "cross_join_table": cross_join_table,
             "interval_join_table": interval_join_table,
             "hash_join_table": hash_join_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
+            "delete_table": delete_table,
             "add_join_gen_cond_cfunc_sym": add_join_gen_cond_cfunc_sym,
             "get_join_cond_addr": get_join_cond_addr,
             # key_in_output is defined to contain left_table then right_table
@@ -2633,7 +2633,7 @@ def _gen_join_cpp_call(
 
     if bool(join_node.out_used_cols) or index_col_type != types.none:
         # Only delete the C++ table if it is not a nullptr (0 output columns returns nullptr)
-        func_text += "    delete_table_decref_arrays(out_table)\n"
+        func_text += "    delete_table(out_table)\n"
     if out_table_type != types.none:
         # Create the left map from input key number to output col number
         left_key_num_to_out_col_num = {}

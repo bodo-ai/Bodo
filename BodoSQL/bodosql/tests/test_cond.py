@@ -3,6 +3,7 @@
 Test correctness of SQL conditional functions on BodoSQL
 """
 import copy
+import datetime
 from decimal import Decimal
 
 import numpy as np
@@ -61,6 +62,42 @@ def test_coalesce_128(spark_info, scalar, memory_leak_check):
     ctx = {"table1": make_d128_df()}
 
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
+
+
+def test_coalesce_timestamp_date(memory_leak_check):
+    """Tests the coalesce function on a timestamp column and the current date"""
+    query = f"select COALESCE(A, current_date()) from table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        pd.Timestamp("2018-7-4"),
+                        None,
+                        pd.Timestamp("2022-12-31"),
+                        None,
+                        pd.Timestamp("2000-1-1"),
+                    ]
+                )
+            }
+        )
+    }
+    current_date = datetime.date.today()
+    answer = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [
+                    pd.Timestamp("2018-7-4"),
+                    pd.Timestamp(current_date),
+                    pd.Timestamp("2022-12-31"),
+                    pd.Timestamp(current_date),
+                    pd.Timestamp("2000-1-1"),
+                ]
+            )
+        }
+    )
+
+    check_query(query, ctx, None, expected_output=answer, check_names=False)
 
 
 @pytest.mark.parametrize(
@@ -134,7 +171,7 @@ def test_coalesce_scalars(spark_info, memory_leak_check):
     check_query(query, {"table1": df}, spark_info, check_dtype=False, check_names=False)
 
 
-def test_coalesce_nested_expresions(spark_info):
+def test_coalesce_nested_expresions(spark_info, memory_leak_check):
     df = pd.DataFrame(
         {
             "ColA": pd.Series(pd.array([None, None, None, None, 1, 2, 3, 4])),
@@ -366,11 +403,11 @@ def test_if_dt(spark_info, memory_leak_check):
             {
                 "A": pd.Series(
                     [
-                        pd.Timestamp("2017-12-25"),
-                        pd.Timestamp("2005-06-13"),
-                        pd.Timestamp("1998-02-20"),
-                        pd.Timestamp("2010-03-14"),
-                        pd.Timestamp("2020-05-05"),
+                        datetime.date(2017, 12, 25),
+                        datetime.date(2005, 6, 13),
+                        datetime.date(1998, 2, 20),
+                        datetime.date(2010, 3, 14),
+                        datetime.date(2020, 5, 5),
                     ]
                 )
             }

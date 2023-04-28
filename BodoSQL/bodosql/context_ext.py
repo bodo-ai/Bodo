@@ -371,14 +371,12 @@ def _gen_pd_func_text_and_lowered_globals(
                     schema,
                     NAMED_PARAM_TABLE_NAME,
                     verbose_level,
-                    bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE,
                 )
             else:
                 generator = RelationalAlgebraGeneratorClass(
                     schema,
                     NAMED_PARAM_TABLE_NAME,
                     verbose_level,
-                    bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE,
                 )
         except Exception as e:
             # Raise BodoError outside except to avoid stack trace

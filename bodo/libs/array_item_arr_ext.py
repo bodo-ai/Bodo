@@ -350,7 +350,6 @@ def unbox_array_item_array(typ, val, c):
         types.int64,
         types.float64,
         types.bool_,
-        datetime_date_type,
     )
 
     n_arrays = bodo.utils.utils.object_length(c, val)

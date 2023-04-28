@@ -100,7 +100,8 @@ void gcs_get_fs(std::shared_ptr<arrow::py::fs::PyFileSystem> *fs) {
     }
 }
 
-std::shared_ptr<arrow::py::fs::PyFileSystem> get_fsspec_fs(const std::string &protocol) {
+std::shared_ptr<arrow::py::fs::PyFileSystem> get_fsspec_fs(
+    const std::string &protocol) {
     // Get the fsspec filesystem
     if (!pyfs[protocol]) {
         PyObject *fsspec = PyImport_ImportModule("fsspec");
@@ -156,13 +157,12 @@ int32_t finalize_fsspec() {
 
 PyMODINIT_FUNC PyInit_fsspec_reader(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "fsspec_reader", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
-    PyObject_SetAttrString(m, "finalize_fsspec",
-                           PyLong_FromVoidPtr((void *)(&finalize_fsspec)));
+    MOD_DEF(m, "fsspec_reader", "No docs", NULL);
+    if (m == NULL)
+        return NULL;
+
+    SetAttrStringFromVoidPtr(m, finalize_fsspec);
+
     return m;
 }
 

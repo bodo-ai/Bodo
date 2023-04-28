@@ -40,7 +40,6 @@ from bodo.libs.array import (
     array_from_cpp_table,
     array_to_info,
     delete_table,
-    delete_table_decref_arrays,
     get_groupby_labels,
     get_null_shuffle_info,
     get_shuffle_info,
@@ -362,9 +361,10 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             f"column type of list/tuple of {in_dtype} is not supported in groupby built-in function {func_name}",
         )
 
-    elif (func_name in {"median", "mean", "var", "std"}) and isinstance(
-        in_dtype, (Decimal128Type, types.Integer, types.Float)
-    ):
+    elif (
+        func_name
+        in {"median", "mean", "var_pop", "std_pop", "var", "std", "kurtosis", "skew"}
+    ) and isinstance(in_dtype, (Decimal128Type, types.Integer, types.Float)):
         # TODO: Only make the output nullable if the input is nullable?
         return to_nullable_type(dtype_to_array_type(types.float64)), "ok"
     elif func_name == "boolor_agg":
@@ -678,7 +678,7 @@ def get_agg_typ(
                         package_name="pandas",
                         module_name="GroupBy",
                     )
-                elif func_name in ("var", "std"):
+                elif func_name in ("var_pop", "std_pop", "var", "std"):
                     kws = dict(kws) if kws else {}
                     # pop arguments from kws or args
                     # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
@@ -792,6 +792,22 @@ def get_agg_typ(
     return signature(out_res, *args), gb_info
 
 
+def get_agg_name_for_numpy_method(method_name):
+    """Takes in the name of a numpy method that is supported for groupby
+    aggregation (e.g. var, std) and returns the corresponding name used
+    to describe it in the groupby aggregation internals (e.g. "var_pop",
+    "std_pop")"""
+    method_to_agg_names = {
+        "var": "var_pop",
+        "std": "std_pop",
+    }
+    if method_name not in method_to_agg_names:
+        raise BodoError(
+            f"unsupported numpy method for use as an aggregate function np.{method_name}"
+        )
+    return method_to_agg_names[method_name]
+
+
 def get_agg_funcname_and_outtyp(
     grp, col, f_val, typing_context, target_context, raise_on_any_error
 ):
@@ -809,7 +825,10 @@ def get_agg_funcname_and_outtyp(
         # Builtin functions like
         is_udf = False
         f_name = bodo.utils.typing.get_builtin_function_name(f_val)
-
+    elif bodo.utils.typing.is_numpy_function(f_val):
+        is_udf = False
+        method_name = bodo.utils.typing.get_builtin_function_name(f_val)
+        f_name = get_agg_name_for_numpy_method(method_name)
     if not is_udf:
         if f_name not in bodo.ir.aggregate.supported_agg_funcs[:-1]:
             raise BodoError(f"unsupported aggregate function {f_name}")
@@ -1447,6 +1466,19 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             self.context,
             numba.core.registry.cpu_target.target_context,
         )[0]
+    
+
+    @bound_function("groupby.std", no_unliteral=True)
+    def resolve_std(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "std",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
 
     @bound_function("groupby.prod", no_unliteral=True)
     def resolve_prod(self, grp, args, kws):
@@ -1470,13 +1502,46 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             numba.core.registry.cpu_target.target_context,
         )[0]
 
-    @bound_function("groupby.std", no_unliteral=True)
-    def resolve_std(self, grp, args, kws):
+    @bound_function("groupby.kurtosis", no_unliteral=True)
+    def resolve_kurtosis(self, grp, args, kws):
         return resolve_gb(
             grp,
             args,
             kws,
-            "std",
+            "kurtosis",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
+    @bound_function("groupby.skew", no_unliteral=True)
+    def resolve_skew(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "skew",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
+    @bound_function("groupby.kurtosis", no_unliteral=True)
+    def resolve_kurtosis(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "kurtosis",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
+
+    @bound_function("groupby.skew", no_unliteral=True)
+    def resolve_skew(self, grp, args, kws):
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "skew",
             self.context,
             numba.core.registry.cpu_target.target_context,
         )[0]
@@ -1953,7 +2018,6 @@ def get_group_indices_overload(keys, dropna, _is_parallel):
     func_text += "    group_labels = np.empty(len(keys[0]), np.int64)\n"
     func_text += "    sort_idx = np.empty(len(keys[0]), np.int64)\n"
     func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes, sort_idx.ctypes, dropna, _is_parallel)\n"
-    func_text += "    delete_table_decref_arrays(table)\n"
     func_text += "    ev.finalize()\n"
     func_text += "    return sort_idx, group_labels, ngroups\n"
     loc_vars = {}
@@ -1965,7 +2029,6 @@ def get_group_indices_overload(keys, dropna, _is_parallel):
             "get_groupby_labels": get_groupby_labels,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
         },
         loc_vars,
     )
@@ -2049,6 +2112,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         "array_to_info(in_index_arr)",
     )
     func_text += "  table = arr_info_list_to_table(info_list)\n"
+    # NOTE: C++ will delete table pointer
     func_text += f"  out_table = shuffle_table(table, {n_keys}, _is_parallel, 1)\n"
 
     # extract arrays from C++ table
@@ -2063,8 +2127,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
     func_text += f"  out_arr_index = array_from_cpp_table(out_table, {n_keys + n_cols}, ind_arr_typ)\n"
 
     func_text += "  shuffle_info = get_shuffle_info(out_table)\n"
-    func_text += "  delete_table_decref_arrays(out_table)\n"
-    func_text += "  delete_table(table)\n"
+    func_text += "  delete_table(out_table)\n"
 
     out_data = ", ".join(f"out_arr{i}" for i in range(n_cols))
     func_text += "  out_index = bodo.utils.conversion.index_from_array(out_arr_index)\n"
@@ -2081,7 +2144,6 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         "shuffle_table": shuffle_table,
         "array_from_cpp_table": array_from_cpp_table,
         "delete_table": delete_table,
-        "delete_table_decref_arrays": delete_table_decref_arrays,
         "get_shuffle_info": get_shuffle_info,
         "__col_name_meta_value_df_shuffle": ColNamesMetaType(df.columns),
         "ind_arr_typ": types.Array(types.int64, 1, "C")
@@ -2117,11 +2179,11 @@ def overload_reverse_shuffle(data, shuffle_info):
             ", ".join(f"array_to_info(data._data[{i}])" for i in range(n_fields)),
         )
         func_text += "  table = arr_info_list_to_table(info_list)\n"
+        # NOTE: C++ will delete table pointer
         func_text += "  out_table = reverse_shuffle_table(table, shuffle_info)\n"
         for i in range(n_fields):
             func_text += f"  out_arr{i} = array_from_cpp_table(out_table, {i}, data._data[{i}])\n"
-        func_text += "  delete_table_decref_arrays(out_table)\n"
-        func_text += "  delete_table(table)\n"
+        func_text += "  delete_table(out_table)\n"
         func_text += (
             "  return init_multi_index(({},), data._names, data._name)\n".format(
                 ", ".join(f"out_arr{i}" for i in range(n_fields))
@@ -2137,7 +2199,6 @@ def overload_reverse_shuffle(data, shuffle_info):
                 "reverse_shuffle_table": reverse_shuffle_table,
                 "array_from_cpp_table": array_from_cpp_table,
                 "delete_table": delete_table,
-                "delete_table_decref_arrays": delete_table_decref_arrays,
                 "init_multi_index": bodo.hiframes.pd_multi_index_ext.init_multi_index,
             },
             loc_vars,
@@ -2159,10 +2220,10 @@ def overload_reverse_shuffle(data, shuffle_info):
     def impl_arr(data, shuffle_info):  # pragma: no cover
         info_list = [array_to_info(data)]
         table = arr_info_list_to_table(info_list)
+        # NOTE: C++ will delete table pointer
         out_table = reverse_shuffle_table(table, shuffle_info)
         out_arr = array_from_cpp_table(out_table, 0, data)
-        delete_table_decref_arrays(out_table)
-        delete_table(table)
+        delete_table(out_table)
         return out_arr
 
     return impl_arr
@@ -2251,7 +2312,6 @@ groupby_unsupported = {
     "quantile",
     "resample",
     "sample",
-    "skew",
     "take",
     "tshift",
 }

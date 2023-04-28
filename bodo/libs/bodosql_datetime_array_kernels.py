@@ -547,12 +547,34 @@ def add_interval_util(start_dt, interval):
     scalar_text = ""
     extra_globals = None
 
+    # Scalars will return Timestamp values while vectors will remain
+    # in datetime64 format
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if bodo.utils.utils.is_array_typ(start_dt, True)
+        or bodo.utils.utils.is_array_typ(interval, True)
+        else ""
+    )
+    box_str0 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(start_dt, True)
+        else ""
+    )
+    box_str1 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(interval, True)
+        else ""
+    )
+
     if is_valid_time_arg(start_dt):
         scalar_text += "td_val = bodo.utils.conversion.box_if_dt64(arg1).value\n"
         scalar_text += "value = (arg0.value + td_val) % 86400000000000\n"
         scalar_text += "res[i] = bodo.Time(nanosecond=value)"
         out_dtype = bodo.TimeArrayType(9)
-
+    elif is_valid_date_arg(start_dt):
+        # If the time unit is smaller than or equal to hour, returns timestamp objects
+        scalar_text += f"res[i] = {unbox_str}(pd.Timestamp(arg0) + {box_str1}(arg1))\n"
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
     # Modified logic from add_interval_xxx functions
     elif time_zone is not None:
         if (
@@ -584,27 +606,7 @@ def add_interval_util(start_dt, interval):
         scalar_text += f"res[i] = arg0 + arg1\n"
         out_dtype = bodo.DatetimeArrayType(time_zone)
     else:
-        # Scalars will return Timestamp values while vectors will remain
-        # in datetime64 format
-        is_vector = bodo.utils.utils.is_array_typ(start_dt, True)
-        unbox_str = (
-            "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-            if bodo.utils.utils.is_array_typ(start_dt, True)
-            or bodo.utils.utils.is_array_typ(interval, True)
-            else ""
-        )
-        box_str0 = (
-            "bodo.utils.conversion.box_if_dt64"
-            if bodo.utils.utils.is_array_typ(start_dt, True)
-            else ""
-        )
-        box_str1 = (
-            "bodo.utils.conversion.box_if_dt64"
-            if bodo.utils.utils.is_array_typ(interval, True)
-            else ""
-        )
         scalar_text = f"res[i] = {unbox_str}({box_str0}(arg0) + {box_str1}(arg1))\n"
-
         out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
     return gen_vectorized(
@@ -770,11 +772,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                     scalar_text = f"td = datetime.timedelta({unit}=arg0)\n"
                     scalar_text += "res[i] = arg1 + td"
                 # If the time unit is larger than or equal to day, returns date objects
-                out_dtype = (
-                    DatetimeDateArrayType()
-                    if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-                    else types.Array(bodo.datetime64ns, 1, "C")
-                )
+                out_dtype = DatetimeDateArrayType()
             else:
                 if unit == "nanoseconds":
                     scalar_text = "td = pd.Timedelta(arg0)\n"
@@ -994,11 +992,7 @@ def create_last_day_util_overload(unit):
             else:  # timestamp need to be transformed to date first
                 scalar_text += "res[i] = arg0.date() + datetime.timedelta(days=(6-arg0.weekday()))\n"
 
-        out_dtype = (
-            DatetimeDateArrayType()
-            if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-            else types.Array(bodo.datetime64ns, 1, "C")
-        )
+        out_dtype = DatetimeDateArrayType()
 
         return gen_vectorized(
             arg_names, arg_types, propagate_null, scalar_text, out_dtype
@@ -1332,10 +1326,12 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
 
     def overload_dt_diff_fn(arr0, arr1):
         scalar_text = ""
-        if is_valid_time_arg(arr0):
-            assert is_valid_time_arg(arr1)
+        if is_overload_none(arr0) and is_valid_date_arg(arr1):
+            scalar_text += "arg1 = pd.Timestamp(arg1)\n"
+        elif is_valid_time_arg(arr0):
+            assert is_valid_time_arg(arr1) or is_overload_none(arr1)
         elif is_valid_date_arg(arr0):
-            assert is_valid_date_arg(arr1)
+            assert is_valid_date_arg(arr1) or is_overload_none(arr1)
             scalar_text += "arg0 = pd.Timestamp(arg0)\n"
             scalar_text += "arg1 = pd.Timestamp(arg1)\n"
         else:
@@ -1561,11 +1557,7 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
         scalar_text += "    res[i] = arg1 - datetime.timedelta(days=arg1.weekday())\n"
         scalar_text += "else:\n"  # when time unit is smaller than or equal to day, return the same date
         scalar_text += "    res[i] = arg1\n"
-        out_dtype = (
-            DatetimeDateArrayType()
-            if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-            else types.Array(bodo.datetime64ns, 1, "C")
-        )
+        out_dtype = DatetimeDateArrayType()
         return gen_vectorized(
             arg_names,
             arg_types,
@@ -1780,11 +1772,7 @@ def date_from_parts_util(year, month, day):
     scalar_text += "date = date + datetime.timedelta(days=arg2-1)\n"
     scalar_text += f"res[i] = date"
 
-    out_dtype = (
-        DatetimeDateArrayType()
-        if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-        else types.Array(bodo.datetime64ns, 1, "C")
-    )
+    out_dtype = DatetimeDateArrayType()
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -1897,20 +1885,17 @@ def makedate_util(year, day):
     """
     verify_int_arg(year, "MAKEDATE", "year")
     verify_int_arg(day, "MAKEDATE", "day")
-    # When returning a scalar we return a pd.Timestamp type.
-    unbox_str = (
-        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-        if bodo.utils.utils.is_array_typ(year, True)
-        or bodo.utils.utils.is_array_typ(day, True)
-        else ""
-    )
 
     arg_names = ["year", "day"]
     arg_types = [year, day]
     propagate_null = [True] * 2
-    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(year=arg0, month=1, day=1) + pd.Timedelta(days=arg1-1))"
+    scalar_text = (
+        "ord = bodo.hiframes.datetime_date_ext._days_before_year(arg0) + arg1\n"
+    )
+    scalar_text += "y, m, d = bodo.hiframes.datetime_date_ext._ord2ymd(ord)\n"
+    scalar_text += "res[i] = datetime.date(y, m, d)"
 
-    out_dtype = np.dtype("datetime64[ns]")
+    out_dtype = DatetimeDateArrayType()
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -2021,11 +2006,7 @@ def next_day_util(arr0, arr1):
     scalar_text += f"new_timestamp = {arg0_timestamp}.normalize() + pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed])\n"
     scalar_text += f"res[i] = new_timestamp.date()\n"
 
-    out_dtype = (
-        DatetimeDateArrayType()
-        if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-        else types.Array(bodo.datetime64ns, 1, "C")
-    )
+    out_dtype = DatetimeDateArrayType()
 
     return gen_vectorized(
         arg_names,
@@ -2076,11 +2057,7 @@ def previous_day_util(arr0, arr1):
     scalar_text += f"new_timestamp = {arg0_timestamp}.normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed])\n"
     scalar_text += f"res[i] = new_timestamp.date()\n"
 
-    out_dtype = (
-        DatetimeDateArrayType()
-        if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-        else types.Array(bodo.datetime64ns, 1, "C")
-    )
+    out_dtype = DatetimeDateArrayType()
 
     return gen_vectorized(
         arg_names,
@@ -2836,6 +2813,57 @@ def date_format_util(arr0, arr1):
 
     verify_datetime_arg_allow_tz(arr0, "DATE_FORMAT", "arr0")
     scalar_text = f"res[i] = {box_str}(arg0).strftime(arg1)"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def add_date_interval_to_date(start_dt, interval):
+    """Handles cases where adding intervals receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [start_dt, interval]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.add_date_interval_to_date",
+                ["start_dt", "interval"],
+                i,
+            )
+
+    def impl(start_dt, interval):  # pragma: no cover
+        return add_date_interval_to_date_util(start_dt, interval)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def add_date_interval_to_date_util(start_dt, interval):
+    """A dedicated kernel adding a timedelta with date unit to a datetime.date object
+    Args:
+        start_dt (datetime array/series/scalar): the datetime.date objects that are being
+        added to
+        interval (timedelta array/series/scalar): the offset being added to start_dt
+    Returns:
+        datetime series/scalar: start_dt + interval
+    """
+    verify_date_arg(start_dt, "add_date_interval_to_date", "start_dt")
+    verify_sql_interval(interval, "add_date_interval_to_date", "interval")
+
+    arg_names = ["start_dt", "interval"]
+    arg_types = [start_dt, interval]
+    propagate_null = [True] * 2
+
+    is_interval_vector = bodo.utils.utils.is_array_typ(interval, True)
+    box_str = "bodo.utils.conversion.box_if_dt64" if is_interval_vector else ""
+    scalar_text = f"dt = pd.Timestamp(arg0) + {box_str}(arg1)\n"
+    scalar_text += "res[i] = dt.date()\n"
+    out_dtype = DatetimeDateArrayType()
+
     return gen_vectorized(
         arg_names,
         arg_types,

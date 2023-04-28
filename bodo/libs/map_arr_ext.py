@@ -129,7 +129,6 @@ def unbox_map_array(typ, val, c):
             types.int64,
             types.float64,
             types.bool_,
-            datetime_date_type,
         )
         for t in (typ.key_arr_type, typ.value_arr_type)
     )

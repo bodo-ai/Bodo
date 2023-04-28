@@ -31,13 +31,6 @@ def test_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aggregation calls in queries"""
-    # Skipping VAR_POP, VARIANCE_POP, and STDDEV_POP with groupby due to [BE-910]
-    if (
-        numeric_agg_builtin_funcs == "STDDEV_POP"
-        or numeric_agg_builtin_funcs == "VAR_POP"
-        or numeric_agg_builtin_funcs == "VARIANCE_POP"
-    ):
-        return
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -60,13 +53,6 @@ def test_agg_numeric_larger_group(
     grouped_dfs, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aggregation calls in queries on DataFrames with a larger data in each group."""
-    # Skipping VAR_POP, VARIANCE_POP, and STDDEV_POP with groupby due to [BE-910]
-    if (
-        numeric_agg_builtin_funcs == "STDDEV_POP"
-        or numeric_agg_builtin_funcs == "VAR_POP"
-        or numeric_agg_builtin_funcs == "VARIANCE_POP"
-    ):
-        return
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -90,13 +76,6 @@ def test_aliasing_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aliasing of aggregations in queries"""
-    # Skipping VAR_POP, VARIANCE_POP, and STDDEV_POP with groupby due to [BE-910]
-    if (
-        numeric_agg_builtin_funcs == "STDDEV_POP"
-        or numeric_agg_builtin_funcs == "VAR_POP"
-        or numeric_agg_builtin_funcs == "VARIANCE_POP"
-    ):
-        return
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -457,8 +436,7 @@ def test_having_numeric(
     bodosql_numeric_types,
     comparison_ops,
     spark_info,
-    # seems to be leaking memory sporadically, see [BS-534]
-    # memory_leak_check
+    memory_leak_check,
 ):
     """
     Tests having with a constant and groupby.
@@ -566,9 +544,15 @@ def test_rename(basic_df, spark_info, memory_leak_check):
     Tests that a columns without a legal Python identifiers is renamed
     in a simple query (no intermediate names).
     """
-    query = "Select sum(A) as `sum(A)`, max(A) as `max(A)` from table1 group by B"
+    query = 'Select sum(A) as "sum(A)", max(A) as "max(A)" from table1 group by B'
+    spark_query = query.replace('"', "`")
     result = check_query(
-        query, basic_df, spark_info, check_dtype=False, return_codegen=True
+        query,
+        basic_df,
+        spark_info,
+        equivalent_spark_query=spark_query,
+        check_dtype=False,
+        return_codegen=True,
     )
     pandas_code = result["pandas_code"]
     assert "rename" in pandas_code
@@ -1100,3 +1084,79 @@ def test_all_nulls(memory_leak_check):
     from table1 group by A
     """
     check_query(query, ctx, None, check_dtype=False, expected_output=py_output)
+
+
+@pytest.mark.parametrize(
+    "agg_cols",
+    [
+        pytest.param("BDGK", id="fast_tests"),
+        pytest.param("CEFHIJ", id="slow_tests", marks=pytest.mark.skip),
+    ],
+)
+def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
+    """Tests the Kurtosis and Skew functions"""
+    query = (
+        "SELECT "
+        + ", ".join(f"Skew({col}), Kurtosis({col})" for col in agg_cols)
+        + " FROM table1 GROUP BY A"
+    )
+    # Datasets designed to exhibit different distributions, thus producing myriad
+    # cases of kurtosis and skew calculations
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [int(np.log2(i**2 + 10)) for i in range(100)],
+                    dtype=pd.Int32Dtype(),
+                ),
+                "B": pd.Series([float(i) for i in range(100)]),
+                "C": pd.Series([i**2 for i in range(100)], dtype=pd.Int32Dtype()),
+                "D": pd.Series(
+                    [None if i % 2 == 0 else i for i in range(100)],
+                    dtype=pd.Int32Dtype(),
+                ),
+                "E": pd.Series(
+                    [None if i % 3 == 0 else float(i**2) for i in range(100)]
+                ),
+                "F": pd.Series([float((i**3) % 100) for i in range(100)]),
+                "G": pd.Series([2.718281828 for i in range(100)]),
+                "H": pd.Series([(i / 100) ** 0.5 for i in range(100)]),
+                "I": pd.Series(
+                    [np.arctanh(np.pi * (i - 49.5) / 160.5) for i in range(100)]
+                ),
+                "J": pd.Series([np.cbrt(i) for i in range(-49, 50)]),
+                "K": pd.Series([max(0, (i - 40) // 15) for i in range(100)]),
+            }
+        )
+    }
+
+    def kurt_skew_refsol(cols):
+        result = pd.DataFrame({"A0": ctx["table1"]["A"].drop_duplicates()})
+        i = 0
+        for col in cols:
+            result[f"A{i}"] = (
+                ctx["table1"]
+                .groupby("A")
+                .agg(res=pd.NamedAgg(col, aggfunc=pd.Series.skew))["res"]
+                .values
+            )
+            i += 1
+            result[f"A{i}"] = (
+                ctx["table1"]
+                .groupby("A")
+                .agg(res=pd.NamedAgg(col, aggfunc=pd.Series.kurtosis))["res"]
+                .values
+            )
+            i += 1
+        return result
+
+    answer = kurt_skew_refsol(agg_cols)
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+    )

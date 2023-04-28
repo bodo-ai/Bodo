@@ -15,9 +15,9 @@
 #include "parquet/file_writer.h"
 
 /**
- * Struct used during pq_write_partitioned and iceberg_pq_write to store the
- * information for a partition that this process is going to write: the file
- * path of the parquet file for this partition (e.g.
+ * Struct used during pq_write_partitioned_py_entry and iceberg_pq_write to
+ * store the information for a partition that this process is going to write:
+ * the file path of the parquet file for this partition (e.g.
  * sales_date=2020-01-01/part-00.parquet), and the rows in the table that
  * correspond to this partition.
  * In case of Iceberg, we also store a Python tuple with the information
@@ -80,8 +80,9 @@ Bodo_Fs::FsEnum filesystem_type(const char *fname);
  * @returns size of the written file (in bytes)
  */
 int64_t pq_write(
-    const char *_path_name, const table_info *table,
-    const array_info *col_names_arr, const array_info *index, bool write_index,
+    const char *_path_name, const std::shared_ptr<table_info> table,
+    const std::shared_ptr<array_info> col_names_arr,
+    const std::shared_ptr<array_info> index, bool write_index,
     const char *metadata, const char *compression, bool is_parallel,
     bool write_rangeindex_to_metadata, const int ri_start, const int ri_stop,
     const int ri_step, const char *idx_name, const char *bucket_region,
@@ -93,15 +94,16 @@ int64_t pq_write(
     std::string filename = "",
     std::shared_ptr<arrow::Schema> expected_schema = nullptr);
 
-int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
-                          const array_info *col_names_arr,
-                          const array_info *index, bool write_index,
-                          const char *metadata, const char *compression,
-                          bool is_parallel, bool write_rangeindex_to_metadata,
-                          const int ri_start, const int ri_stop,
-                          const int ri_step, const char *idx_name,
-                          const char *bucket_region, int64_t row_group_size,
-                          const char *tz);
+int64_t pq_write_py_entry(const char *_path_name, table_info *table,
+                          array_info *col_names_arr, array_info *index,
+                          bool write_index, const char *metadata,
+                          const char *compression, bool is_parallel,
+                          bool write_rangeindex_to_metadata, const int ri_start,
+                          const int ri_stop, const int ri_step,
+                          const char *idx_name, const char *bucket_region,
+                          int64_t row_group_size, const char *prefix,
+                          bool convert_timedelta_to_int64, const char *tz,
+                          bool downcast_time_ns_to_us);
 
 /**
  * Write the Bodo table (this process' chunk) to a partitioned directory of
@@ -125,11 +127,9 @@ int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
  * string ("") to not specify one. NOTE: this will be applied for all datetime
  * columns.
  */
-void pq_write_partitioned(const char *_path_name, table_info *table,
-                          const array_info *col_names_arr,
-                          const array_info *col_names_arr_no_partitions,
-                          table_info *categories_table, int *partition_cols_idx,
-                          int num_partition_cols, const char *compression,
-                          bool is_parallel, const char *bucket_region,
-                          int64_t row_group_size, const char *prefix,
-                          const char *tz);
+void pq_write_partitioned_py_entry(
+    const char *_path_name, table_info *in_table, array_info *in_col_names_arr,
+    array_info *in_col_names_arr_no_partitions, table_info *in_categories_table,
+    int *partition_cols_idx, int num_partition_cols, const char *compression,
+    bool is_parallel, const char *bucket_region, int64_t row_group_size,
+    const char *prefix, const char *tz);

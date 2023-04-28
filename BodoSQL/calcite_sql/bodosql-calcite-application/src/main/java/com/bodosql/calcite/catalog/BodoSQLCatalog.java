@@ -5,6 +5,7 @@ import java.sql.*;
 import java.util.*;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.*;
 
 public interface BodoSQLCatalog {
@@ -88,7 +89,8 @@ public interface BodoSQLCatalog {
       String varName,
       String schemaName,
       String tableName,
-      BodoSQLCatalog.ifExistsBehavior ifExists);
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType);
 
   /**
    * Generates the code necessary to produce a read expression from the given catalog.
@@ -97,7 +99,7 @@ public interface BodoSQLCatalog {
    * @param tableName Name of the table to use when reading.
    * @return The generated code to produce a read.
    */
-  String generateReadCode(String schemaName, String tableName, boolean useDateRuntime);
+  String generateReadCode(String schemaName, String tableName);
 
   /**
    * Close any connections to the remote DataBase. If there are no connections this should be a

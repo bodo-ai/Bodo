@@ -28,7 +28,7 @@ public class LiteralCodeGen {
    * @return The code generated that matches the Literal.
    */
   public static String generateLiteralCode(
-      RexLiteral node, boolean isSingleRow, PandasCodeGenVisitor visitor, boolean useDateRuntime) {
+      RexLiteral node, boolean isSingleRow, PandasCodeGenVisitor visitor) {
     StringBuilder codeBuilder = new StringBuilder();
     SqlTypeName typeName = node.getType().getSqlTypeName();
     String out = "";
@@ -154,12 +154,7 @@ public class LiteralCodeGen {
               // Month is 0-indexed in GregorianCalendar
               int month = calendar.get(Calendar.MONTH) + 1;
               int day = calendar.get(Calendar.DAY_OF_MONTH);
-              if (useDateRuntime) {
-                codeBuilder.append(String.format("datetime.date(%d, %d, %d)", year, month, day));
-              } else {
-                codeBuilder.append(
-                    String.format("pd.Timestamp(year=%d, month=%d, day=%d)", year, month, day));
-              }
+              codeBuilder.append(String.format("datetime.date(%d, %d, %d)", year, month, day));
               break;
             }
           case CHAR:
