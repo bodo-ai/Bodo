@@ -2085,16 +2085,18 @@ class TypingTransforms:
             if is_bodosql_array_kernel and fdef[0] in (
                 "coalesce",
                 "concat_ws",
+                "least",
+                "greatest",
             ):  # pragma: no cover
                 # coalesce takes a tuple input
                 # We only push down 2-arg scalar case, i.e. coalesce((column, scalar))
-                if fdef[0] == "coalesce":  # pragma: no cover
-                    require((len(var_def.args) == 1) and not var_def.kws)
-                else:
+                if fdef[0] == "concat_ws":  # pragma: no cover
                     require(
                         isinstance(read_node, bodo.ir.sql_ext.SqlReader)
                         and read_node.db_type in ("snowflake", "iceberg")
                     )
+                else:
+                    require((len(var_def.args) == 1) and not var_def.kws)
 
                 args = find_build_tuple(self.func_ir, var_def.args[0])
                 require(len(args) == 2)

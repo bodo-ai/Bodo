@@ -2107,7 +2107,7 @@ def test_nonregex_string_match_functions(
             check_dtype=False,
         )
 
-        check_logger_msg(stream, f"Columns loaded ['a']")
+        check_logger_msg(stream, f"Columns loaded ['date_col']")
         check_logger_msg(stream, "Filter pushdown successfully performed")
         check_logger_msg(stream, sql_func)
 
@@ -2285,3 +2285,46 @@ def test_snowflake_coalesce_constant_date_string_filter_pushdown(
             )
             check_logger_msg(stream, "Filter pushdown successfully performed.")
             check_logger_msg(stream, r"COALESCE(\"L_COMMITDATE\", {f0}) >= {f1} )")
+
+
+@pytest.mark.parametrize(
+    "sql_func, expected_output",
+    [
+        pytest.param(
+            "LEAST",
+            pd.DataFrame({"float_col": [3.2, 3.1, 1.26, 2.99, 2.6]}),
+            id="least",
+        ),
+        pytest.param(
+            "GREATEST",
+            pd.DataFrame({"float_col": [-3.2, -4.51, -4.49, -5.25, 0, 0]}),
+            id="greatest",
+        ),
+    ],
+)
+def test_least_greatest(
+    test_db_snowflake_catalog, sql_func, expected_output, memory_leak_check
+):
+    query = f"select float_col from numeric_data where {sql_func}(float_col, 1.0) = 1.0"
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # make sure filter pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=expected_output,
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
+
+        check_logger_msg(stream, f"Columns loaded ['float_col']")
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+        check_logger_msg(stream, sql_func)

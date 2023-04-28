@@ -101,7 +101,9 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                         .withParserFactory(SqlBodoParserImpl.FACTORY)
                 )
                 .convertletTable(
-                    StandardConvertletTable(StandardConvertletTableConfig(false, false))
+                    BodoConvertletTable(
+                        StandardConvertletTable(StandardConvertletTableConfig(false, false))
+                    )
                 )
                 .sqlValidatorConfig(
                     SqlValidator.Config.DEFAULT
