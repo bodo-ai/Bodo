@@ -96,7 +96,7 @@ public class Utils {
    * @return The pandas type
    */
   public static String sqlTypenameToPandasTypename(
-      SqlTypeName typeName, boolean outputScalar, boolean useDateRuntime) {
+      SqlTypeName typeName, boolean outputScalar) {
     String dtype;
     switch (typeName) {
       case BOOLEAN:
@@ -150,14 +150,12 @@ public class Utils {
         }
         break;
       case DATE:
-        if (useDateRuntime) {
-          if (outputScalar) {
-            dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_pd_to_date";
-          } else {
-            dtype = "bodo.datetime_date_type";
-          }
-          break;
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_pd_to_date";
+        } else {
+          dtype = "bodo.datetime_date_type";
         }
+        break;
       case TIMESTAMP:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_pd_to_datetime";

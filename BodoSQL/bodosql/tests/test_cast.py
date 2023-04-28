@@ -6,7 +6,7 @@ import datetime
 
 import pandas as pd
 import pytest
-from bodosql.tests.utils import bodosql_use_date_type, check_query
+from bodosql.tests.utils import check_query
 
 
 @pytest.fixture(
@@ -631,15 +631,14 @@ def test_implicit_cast_date_to_tz_aware(tz_aware_df, memory_leak_check):
     ) & (tz_aware_df["table1"]["A"] <= pd.Timestamp("2021-12-31", tz="US/Pacific"))
     expected_output = tz_aware_df["table1"][expected_filter]
 
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            tz_aware_df,
-            None,
-            check_dtype=False,
-            check_names=False,
-            expected_output=expected_output,
-        )
+    check_query(
+        query,
+        tz_aware_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output,
+    )
 
 
 def test_cast_date_scalar_to_timestamp(basic_df, use_sf_cast_syntax, memory_leak_check):

@@ -48,8 +48,7 @@ public class ProjectCodeGen {
       List<BodoSQLExprType.ExprType> exprTypes,
       List<RelDataType> sqlTypes,
       PandasCodeGenVisitor pdVisitorClass,
-      int numInputTableColumns,
-      boolean useDateRuntime) {
+      int numInputTableColumns) {
 
     final String indent = getBodoIndent();
     StringBuilder outString = new StringBuilder();
@@ -111,7 +110,7 @@ public class ProjectCodeGen {
         // Scalars require separate code path to handle null.
         String globalName =
             pdVisitorClass.lowerAsGlobal(
-                sqlTypeToBodoArrayType(sqlTypes.get(idx), true, useDateRuntime));
+                sqlTypeToBodoArrayType(sqlTypes.get(idx), true));
         outString
             .append("bodo.utils.conversion.coerce_scalar_to_array(")
             .append(childExprs.get(idx).getExprCode())

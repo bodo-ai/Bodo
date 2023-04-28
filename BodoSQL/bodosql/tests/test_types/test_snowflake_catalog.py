@@ -786,7 +786,7 @@ def test_default_table_type(
             {
                 "column1": "literal",
                 "column2": np.arange(1, 11),
-                "column3": pd.Timestamp("2023-02-21"),
+                "column3": datetime.date(2023, 2, 21),
             }
         )
         output_df.columns = output_df.columns.str.upper()
@@ -910,7 +910,7 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
             {
                 "column1": "literal",
                 "column2": np.arange(1, 11),
-                "column3": pd.Timestamp("2023-02-21"),
+                "column3": datetime.date(2023, 2, 21),
             }
         )
         output_df.columns = output_df.columns.str.upper()
@@ -999,7 +999,7 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
             {
                 "column1": "literal",
                 "column2": np.arange(1, 11),
-                "column3": pd.Timestamp("2023-02-21"),
+                "column3": datetime.date(2023, 2, 21),
             }
         )
         output_df.columns = output_df.columns.str.upper()

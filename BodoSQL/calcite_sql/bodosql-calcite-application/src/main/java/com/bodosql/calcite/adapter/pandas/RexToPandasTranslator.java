@@ -101,7 +101,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   @Override
   public Expr visitLiteral(RexLiteral literal) {
     String code =
-        LiteralCodeGen.generateLiteralCode(literal, false, visitor, builder.getUseDateRuntime());
+        LiteralCodeGen.generateLiteralCode(literal, false, visitor);
     return new Expr.Raw(code);
   }
 
@@ -388,8 +388,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             node.getType(),
             visitor,
             oldBuilder,
-            innerBuilder,
-            builder.getUseDateRuntime());
+            innerBuilder);
 
     return new Expr.Raw(codeExpr);
   }
@@ -405,7 +404,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     Expr child = args.get(0);
     String exprCode =
         generateCastCode(
-            child.emit(), inputType, outputType, outputScalar, builder.getUseDateRuntime());
+            child.emit(), inputType, outputType, outputScalar);
     return new Expr.Raw(exprCode);
   }
 
@@ -680,8 +679,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                         operands.get(0).emit(),
                         inputType,
                         outputType,
-                        exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow,
-                        builder.getUseDateRuntime());
+                        exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
                 arg0 = new Expr.Raw(casted_expr);
               }
               // add/minus a date interval to a date object should return a date object
@@ -774,10 +772,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             assert fnOperation.getOperands().size() == 1
                 : "Error: TO_CHAR supplied improper number of arguments, Bodo only supports one"
                     + " argument.";
-            return generateToCharFnCode(
-                operands,
-                fnName,
-                fnOperation.getOperands().get(0).getType().getSqlTypeName() == SqlTypeName.DATE);
+            return generateToCharFnCode(operands, fnName);
           case "TO_DOUBLE":
           case "TRY_TO_DOUBLE":
             return generateToDoubleFnCode(operands, fnName);
@@ -1247,7 +1242,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     @Override
     public Expr visitLiteral(RexLiteral literal) {
       String code =
-          LiteralCodeGen.generateLiteralCode(literal, true, visitor, builder.getUseDateRuntime());
+          LiteralCodeGen.generateLiteralCode(literal, true, visitor);
       return new Expr.Raw(code);
     }
 
@@ -1259,7 +1254,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       List<Expr> args = visitList(operation.operands);
       Expr child = args.get(0);
       String exprCode =
-          generateCastCode(child.emit(), inputType, outputType, true, builder.getUseDateRuntime());
+          generateCastCode(child.emit(), inputType, outputType, true);
       return new Expr.Raw(exprCode);
     }
 

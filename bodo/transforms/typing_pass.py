@@ -3641,7 +3641,6 @@ class TypingTransforms:
                 _bodo_merge_into,  # is_merge_into
                 file_list_type,  # file_list_type
                 snapshot_id_type,  # snapshot_id_type
-                [],  # sf_dt_to_ts_cols
             )
         ]
         data_args = ["table_val", "idx_arr_val", "file_list_val", "snapshot_id_val"]

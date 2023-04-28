@@ -336,7 +336,7 @@ def test_coalesce_filter_pushdown(datapath, memory_leak_check):
         )
         check_logger_msg(
             stream,
-            "(((pa.compute.coalesce(ds.field('A'), ds.scalar(f0)).cast(pyarrow.timestamp('ns'), safe=False) > ds.scalar(f1))))",
+            "(((pa.compute.coalesce(ds.field('A'), ds.scalar(f0)) > ds.scalar(f1))))",
         )
 
 

@@ -2447,22 +2447,6 @@ pytest_snowflake = [
 
 
 @contextmanager
-def bodosql_use_date_type() -> None:
-    """
-    Sets the _BODOSQL_USE_DATE_TYPE to a True value so tests that
-    use the DATE type can run successfully. This context manager maintains
-    the original value to ensure that we do not need to alter the type until
-    all operations are supported and others tests are not impacted.
-    """
-    try:
-        old_bodosql_use_date_type = bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-        bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE = True
-        yield None
-    finally:
-        bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE = old_bodosql_use_date_type
-
-
-@contextmanager
 def temp_env_override(env_vars):
     """Update the current environment variables with key-value pairs provided
     in a dictionary and then restore it after.

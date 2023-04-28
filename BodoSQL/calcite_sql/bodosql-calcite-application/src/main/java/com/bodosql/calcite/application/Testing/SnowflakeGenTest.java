@@ -45,7 +45,7 @@ public class SnowflakeGenTest {
     schema.addTable(table);
 
     RelationalAlgebraGenerator generator =
-        new RelationalAlgebraGenerator(catalog, schema, "dummy_param_table_name", 0, false);
+        new RelationalAlgebraGenerator(catalog, schema, "dummy_param_table_name", 0);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);

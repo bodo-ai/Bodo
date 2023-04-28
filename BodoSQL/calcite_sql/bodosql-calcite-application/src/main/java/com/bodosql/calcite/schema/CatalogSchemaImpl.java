@@ -138,12 +138,11 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    * API specific to CatalogSchemaImpl and not all schemas. Since schemas with the same catalog
    * often share the same code generation process, the read code for a given table with a catalog is
    * controlled by that catalog.
-   *
    * @param tableName The name of the table as the read source.
    * @return The generated code to compute the read in Python.
    */
-  public String generateReadCode(String tableName, boolean useDateRuntime) {
-    return this.catalog.generateReadCode(this.getName(), tableName, useDateRuntime);
+  public String generateReadCode(String tableName) {
+    return this.catalog.generateReadCode(this.getName(), tableName);
   }
 
   /** @return The catalog for the schema. */

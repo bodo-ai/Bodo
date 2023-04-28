@@ -7,7 +7,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import bodosql_use_date_type, check_query
+from bodosql.tests.utils import check_query
 
 from bodo.libs.bodosql_datetime_array_kernels import (
     standardize_snowflake_date_time_part_compile_time,
@@ -1164,14 +1164,13 @@ def test_makedate_cols(dt_fn_dataframe, use_case, memory_leak_check):
         return res
 
     output = pd.DataFrame({"output": makedate_fn(dt_fn_dataframe)})
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            dt_fn_dataframe,
-            None,
-            check_names=False,
-            expected_output=output,
-        )
+    check_query(
+        query,
+        dt_fn_dataframe,
+        None,
+        check_names=False,
+        expected_output=output,
+    )
 
 
 @pytest.mark.slow
@@ -1930,15 +1929,14 @@ def test_snowflake_dateadd_date(
         selects.append(query_fmt.format(unit))
     query = "SELECT " + ", ".join(selects) + " FROM table1"
 
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            dateadd_date_df,
-            None,
-            check_names=False,
-            expected_output=answers,
-            only_jit_1DVar=True,
-        )
+    check_query(
+        query,
+        dateadd_date_df,
+        None,
+        check_names=False,
+        expected_output=answers,
+        only_jit_1DVar=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -2588,14 +2586,13 @@ def test_date_add_sub_interval_with_date_input(
     """
     query, outputs = date_add_sub_date_query
 
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_add_sub_date_df,
-            None,
-            check_names=False,
-            expected_output=outputs,
-        )
+    check_query(
+        query,
+        date_add_sub_date_df,
+        None,
+        check_names=False,
+        expected_output=outputs,
+    )
 
 
 def test_subdate_cols_int_arg1(
@@ -2912,14 +2909,13 @@ def test_date_trunc_date(date_df, day_part_strings, use_case, memory_leak_check)
         query = f"SELECT DATE_TRUNC('{day_part_strings}', A) as output from table1"
     scalar_func = generate_date_trunc_date_func(day_part_strings)
     output = pd.DataFrame({"output": date_df["table1"]["A"].map(scalar_func)})
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            None,
-            check_names=False,
-            expected_output=output,
-        )
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        expected_output=output,
+    )
 
 
 @pytest.mark.parametrize(
@@ -2941,14 +2937,13 @@ def test_date_trunc_time_part_handling(
     else:
         query = f"SELECT DATE_TRUNC('{time_part_strings}', A) as output from table1"
     output = pd.DataFrame({"output": date_df["table1"]["A"]})
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            None,
-            check_names=False,
-            expected_output=output,
-        )
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        expected_output=output,
+    )
 
 
 @pytest.mark.parametrize(
@@ -3205,15 +3200,14 @@ def test_next_previous_day_cols(
     py_output = pd.DataFrame(
         {"A": next_prev_day(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
     )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            dt_fn_dataframe,
-            None,
-            check_names=False,
-            check_dtype=False,
-            expected_output=py_output,
-        )
+    check_query(
+        query,
+        dt_fn_dataframe,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=py_output,
+    )
 
 
 @pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
@@ -3249,15 +3243,14 @@ def test_next_previous_day_scalars(
     py_output = pd.DataFrame(
         {"A": next_prev_day_case(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
     )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            dt_fn_dataframe,
-            None,
-            check_names=False,
-            check_dtype=False,
-            expected_output=py_output,
-        )
+    check_query(
+        query,
+        dt_fn_dataframe,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=py_output,
+    )
 
 
 @pytest.mark.tz_aware
@@ -3539,8 +3532,7 @@ def test_tz_aware_next_day(memory_leak_check):
         axis=1,
     )
     py_output = pd.DataFrame({"m": out_series})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3567,8 +3559,7 @@ def test_tz_aware_next_day_case(
     )
     week_series[~df.C] = None
     py_output = pd.DataFrame({"m": week_series})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3591,8 +3582,7 @@ def test_tz_aware_previous_day(memory_leak_check):
         axis=1,
     )
     py_output = pd.DataFrame({"m": out_series})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -3619,8 +3609,7 @@ def test_tz_aware_previous_day_case(
     )
     week_series[~df.C] = None
     py_output = pd.DataFrame({"m": week_series})
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.tz_aware
@@ -4040,15 +4029,14 @@ def test_date_from_parts(date_from_parts_data, use_case, memory_leak_check):
     )
     ctx = {"table1": df}
     py_output = pd.DataFrame({0: pd.Series([s for s in answer])})
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=py_output,
-            check_dtype=False,
-            check_names=False,
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
+        check_names=False,
+    )
 
 
 @pytest.fixture(
@@ -4218,14 +4206,13 @@ def test_last_day_no_date_part(date_df, memory_leak_check):
             ]
         }
     )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            date_df,
-            None,
-            check_names=False,
-            expected_output=output,
-        )
+    check_query(
+        query,
+        date_df,
+        None,
+        check_names=False,
+        expected_output=output,
+    )
 
 
 def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
@@ -4257,14 +4244,13 @@ def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
                 expected_output=pd.DataFrame({}),
             )
     else:
-        with bodosql_use_date_type():
-            check_query(
-                query,
-                date_df,
-                None,
-                check_names=False,
-                expected_output=output,
-            )
+        check_query(
+            query,
+            date_df,
+            None,
+            check_names=False,
+            expected_output=output,
+        )
 
 
 def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
@@ -4291,11 +4277,10 @@ def test_current_date(fn_name, memory_leak_check):
     Test CURRENT_DATE function and its alias CURDATE
     """
     query = f"SELECT {fn_name}()"
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            {},
-            None,
-            check_names=False,
-            expected_output=pd.DataFrame({"output": [datetime.date.today()]}),
-        )
+    check_query(
+        query,
+        {},
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({"output": [datetime.date.today()]}),
+    )
