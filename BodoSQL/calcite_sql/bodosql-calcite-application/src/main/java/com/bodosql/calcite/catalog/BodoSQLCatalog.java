@@ -99,7 +99,7 @@ public interface BodoSQLCatalog {
    * @param tableName Name of the table to use when reading.
    * @return The generated code to produce a read.
    */
-  String generateReadCode(String schemaName, String tableName, boolean useDateRuntime);
+  String generateReadCode(String schemaName, String tableName);
 
   /**
    * Close any connections to the remote DataBase. If there are no connections this should be a

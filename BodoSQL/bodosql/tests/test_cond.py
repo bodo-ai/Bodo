@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.string_ops_common import bodosql_string_fn_testing_df  # noqa
-from bodosql.tests.utils import bodosql_use_date_type, check_query
+from bodosql.tests.utils import check_query
 
 import bodo
 
@@ -97,8 +97,7 @@ def test_coalesce_timestamp_date(memory_leak_check):
         }
     )
 
-    with bodosql_use_date_type():
-        check_query(query, ctx, None, expected_output=answer, check_names=False)
+    check_query(query, ctx, None, expected_output=answer, check_names=False)
 
 
 @pytest.mark.parametrize(
@@ -414,14 +413,13 @@ def test_if_dt(spark_info, memory_leak_check):
             }
         )
     }
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            spark_info,
-            check_names=False,
-            equivalent_spark_query=equivalent_spark_query,
-        )
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        equivalent_spark_query=equivalent_spark_query,
+    )
 
 
 @pytest.mark.slow

@@ -85,11 +85,6 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
                 // all table references and it's better if this doesn't have any
                 // potentially unexpected behavior.
                 Expr.StringLiteral(input.generatePythonConnStr("")),
-            ),
-            namedArgs = listOf(
-                // Special parameter to read date as dt64.
-                "_bodo_read_date_as_dt64" to Expr.BooleanLiteral(builder.useDateRuntime),
-                // We do not include _bodo_is_table_input because this is not a table input.
             )
         )
 

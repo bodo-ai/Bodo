@@ -898,24 +898,12 @@ class UntypedPass:
             use_default=True,
             default=None,
         )
-        # BodoSQL SnowflakeCatalog uses this flag to convert date columns to datetime64
-        # without astype() calls in the IR which cause issues for limit pushdown.
-        # see BE-4238
-        _bodo_read_date_as_dt64 = self._get_const_arg(
-            "read_sql",
-            rhs.args,
-            kws,
-            10e5,
-            "_bodo_read_date_as_dt64",
-            rhs.loc,
-            default=False,
-        )
         # TODO[BE-4362]: detect table input automatically
         _bodo_is_table_input = self._get_const_arg(
             "read_sql",
             rhs.args,
             kws,
-            10e6,
+            10e5,
             "_bodo_is_table_input",
             rhs.loc,
             default=False,
@@ -948,7 +936,6 @@ class UntypedPass:
             "con",
             "index_col",
             "_bodo_read_as_dict",
-            "_bodo_read_date_as_dt64",
             "_bodo_is_table_input",
         )
 
@@ -979,30 +966,6 @@ class UntypedPass:
             _bodo_is_table_input,
             self._is_independent,
         )
-
-        # Collect the columns where we cast dates to datetime64[ns] during the read.
-        # Only applicable when _bodo_read_date_as_dt64.
-        sf_dt_to_ts_cols = []
-
-        # convert date array types to datetime64
-        if _bodo_read_date_as_dt64:
-            import pyarrow as pa
-
-            # NOTE: Snowflake reader converts input data types to the pyarrow schema
-            # see https://github.com/Bodo-inc/Bodo/blob/730d0b80d318c652855700c9dbb33616aa4426c4/bodo/io/snowflake_reader.cpp#L115
-            new_out_types = []
-            new_pyarrow_fields = []
-            for i, bodo_type in enumerate(out_types):
-                pa_field = pyarrow_table_schema.field(i)
-                if bodo_type == bodo.datetime_date_array_type:
-                    bodo_type = types.Array(bodo.datetime64ns, 1, "C")
-                    pa_field = pa.field(pa_field.name, pa.timestamp("ns"))
-                    sf_dt_to_ts_cols.append(i)
-                new_out_types.append(bodo_type)
-                new_pyarrow_fields.append(pa_field)
-
-            out_types = new_out_types
-            pyarrow_table_schema = pa.schema(new_pyarrow_fields)
 
         index_ind = None
         index_col_name = None
@@ -1043,7 +1006,6 @@ class UntypedPass:
                 False,  # is_merge_into
                 types.none,  # file_list_type
                 types.none,  # snapshot_id_type
-                sf_dt_to_ts_cols,
             )
         ]
 

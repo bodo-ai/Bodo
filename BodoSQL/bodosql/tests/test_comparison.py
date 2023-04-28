@@ -7,7 +7,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import bodosql_use_date_type, check_query
+from bodosql.tests.utils import check_query
 
 from bodo import Time
 
@@ -212,15 +212,14 @@ def test_comparison_operators_within_table(
         query = f"SELECT A, B, A {cmp_op} B FROM table1"
     is_binary = type(comparison_df["table1"]["A"].iloc[-1]) == bytes
     convert_columns_bytearray = ["A", "B"] if is_binary else []
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            comparison_df,
-            spark_info,
-            check_dtype=False,
-            check_names=False,
-            convert_columns_bytearray=convert_columns_bytearray,
-        )
+    check_query(
+        query,
+        comparison_df,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        convert_columns_bytearray=convert_columns_bytearray,
+    )
 
 
 @pytest.fixture
@@ -282,15 +281,14 @@ def test_time_comparison_operators_within_table(
         expected_output = pd.DataFrame(
             {"A": ctx["table1"].A, "B": ctx["table1"].B, "C": answer}
         )
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=expected_output,
-            check_dtype=False,
-            check_names=False,
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+        check_names=False,
+    )
 
 
 def test_comparison_operators_interval_within_table(
@@ -636,11 +634,10 @@ def test_date_compare_datetime64(date_datetime64_comparison_args, memory_leak_ch
         query = f"SELECT CASE WHEN (B {cmp_op} A) IS NULL THEN NULL ELSE B {cmp_op} A END from table1"
     else:
         query = f"SELECT A {cmp_op} B from table1"
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            check_names=False,
-            expected_output=pd.DataFrame({"output": answer}),
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({"output": answer}),
+    )

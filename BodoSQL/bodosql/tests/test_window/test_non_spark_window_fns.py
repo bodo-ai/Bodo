@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.test_window.window_common import count_window_applies
-from bodosql.tests.utils import bodosql_use_date_type, check_query
+from bodosql.tests.utils import check_query
 
 from bodo import Time
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_window_agg_kernels import (
@@ -589,17 +589,16 @@ def test_mode(data_col, bounds, answer, memory_leak_check):
         )
     }
 
-    with bodosql_use_date_type():
-        check_query(
-            query,
-            ctx,
-            None,
-            check_dtype=False,
-            check_names=False,
-            sort_output=False,
-            expected_output=answer,
-            only_jit_1DVar=True,
-        )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        sort_output=False,
+        expected_output=answer,
+        only_jit_1DVar=True,
+    )
 
 
 @pytest.mark.slow

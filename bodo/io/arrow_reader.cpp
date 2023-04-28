@@ -941,8 +941,7 @@ void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
 // -------------------- ArrowDataframeReader --------------------
 void ArrowDataframeReader::init_arrow_reader(
     const std::vector<int32_t>& str_as_dict_cols,
-    const bool create_dict_from_string,
-    const std::vector<int32_t>& allow_unsafe_dt_to_ts_cast_cols) {
+    const bool create_dict_from_string) {
     if (initialized)
         throw std::runtime_error("ArrowDataframeReader already initialized");
     tracing::Event ev("reader::init", parallel);
@@ -972,28 +971,6 @@ void ArrowDataframeReader::init_arrow_reader(
         }
         str_as_dict_colnames_str += "]";
         ev.add_attribute("g_str_as_dict_cols", str_as_dict_colnames_str);
-    }
-
-    // Store the column names that will be cast from "date" to "datetime64[ns]".
-    // These will be used by the Snowflake Reader in "cast_arrow_table".
-    for (auto i : allow_unsafe_dt_to_ts_cast_cols) {
-        auto field = schema->field(i);
-        this->allow_unsafe_dt_to_ts_cast_colnames.emplace(field->name());
-    }
-    if (ev.is_tracing()) {
-        std::string allow_unsafe_dt_to_ts_cast_colnames_str = "[";
-        size_t i = 0;
-        for (auto colname : this->allow_unsafe_dt_to_ts_cast_colnames) {
-            if (i < allow_unsafe_dt_to_ts_cast_colnames.size() - 1) {
-                allow_unsafe_dt_to_ts_cast_colnames_str += colname + ", ";
-            } else {
-                allow_unsafe_dt_to_ts_cast_colnames_str += colname;
-            }
-            i++;
-        }
-        allow_unsafe_dt_to_ts_cast_colnames_str += "]";
-        ev.add_attribute("g_allow_unsafe_dt_to_ts_cast_cols",
-                         allow_unsafe_dt_to_ts_cast_colnames_str);
     }
 
     // total_rows = ds.total_rows
@@ -1144,16 +1121,6 @@ void ArrowDataframeReader::init_arrow_reader(
 
 std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
     std::shared_ptr<arrow::Table> table) {
-    // While we allow unsafe casts from date to datetime64[ns] when reading
-    // from Snowflake (only for BodoSQL), it can have dangerous correctness
-    // implications in certain cases. For those cases, we want to have the
-    // ability to only allow "safe" casts, which is what this environment
-    // variable achieves.
-    char* _bodo_disable_unsafe_date_to_ts_cast =
-        std::getenv("BODO_DISABLE_UNSAFE_DATE_TO_TS_CAST");
-    bool bodo_disable_unsafe_date_to_ts_cast =
-        (bool)_bodo_disable_unsafe_date_to_ts_cast;
-
     if (!table->schema()->Equals(this->schema)) {
         arrow::ChunkedArrayVector new_cols;
         for (int i = 0; i < table->num_columns(); i++) {
@@ -1200,10 +1167,6 @@ std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
 
                 // Dont bother checking if types are compatible, should
                 // be done at compile-time. Only sizes can change.
-                // This is not entirely true. In Snowflake reader
-                // in particular, we cast dates to timestamps (due to BodoSQL
-                // limitations), and that conversion happens here. This is
-                // temporary and will be removed hopefully soon.
             } else if (act_type->bit_width() < exp_type->bit_width() &&
                        nullable_eq) {
                 // bit-width is we-defined for all types with a fixed width. For
@@ -1211,23 +1174,7 @@ std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
                 // should be safe to compare.
                 // (https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4NK5arrow8DataType9bit_widthEv)
 
-                arrow::compute::CastOptions cast_options(/*safe=*/true);
-                if ((this->allow_unsafe_dt_to_ts_cast_colnames.count(
-                         this->schema->field(i)->name()) > 0) &&
-                    (!bodo_disable_unsafe_date_to_ts_cast)) {
-                    // BodoSQL doesn't support a native Date type. Because of
-                    // this, we always cast date to datetime64[ns]. This was
-                    // done using an `astype` earlier, but that caused issues
-                    // with limit pushdown, which is why we do it here instead.
-                    // There’s an issue that some dates cannot in fact be
-                    // represented using datetime64[ns] (max is 2262-04-11
-                    // 23:47:16.854775807). Bodo's `astype` replaces these with
-                    // garbage values. Setting `allow_time_overflow` essentially
-                    // matches this behavior.
-                    cast_options.allow_time_overflow = true;
-                }
-
-                auto res = arrow::compute::Cast(col, exp_type, cast_options);
+                auto res = arrow::compute::Cast(col, exp_type);
                 // TODO: Use std::format after fixing C++ compiler errors
                 CHECK_ARROW(res.status(),
                             "Unable to upcast from " + col->type()->ToString() +

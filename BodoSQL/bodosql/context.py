@@ -924,13 +924,11 @@ class BodoSQLContext:
                 self.schema,
                 NAMED_PARAM_TABLE_NAME,
                 verbose_level,
-                bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE,
             )
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
             NAMED_PARAM_TABLE_NAME,
             verbose_level,
-            bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE,
         )
         return generator
 

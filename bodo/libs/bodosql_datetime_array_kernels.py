@@ -772,11 +772,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                     scalar_text = f"td = datetime.timedelta({unit}=arg0)\n"
                     scalar_text += "res[i] = arg1 + td"
                 # If the time unit is larger than or equal to day, returns date objects
-                out_dtype = (
-                    DatetimeDateArrayType()
-                    if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-                    else types.Array(bodo.datetime64ns, 1, "C")
-                )
+                out_dtype = DatetimeDateArrayType()
             else:
                 if unit == "nanoseconds":
                     scalar_text = "td = pd.Timedelta(arg0)\n"
@@ -996,11 +992,7 @@ def create_last_day_util_overload(unit):
             else:  # timestamp need to be transformed to date first
                 scalar_text += "res[i] = arg0.date() + datetime.timedelta(days=(6-arg0.weekday()))\n"
 
-        out_dtype = (
-            DatetimeDateArrayType()
-            if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-            else types.Array(bodo.datetime64ns, 1, "C")
-        )
+        out_dtype = DatetimeDateArrayType()
 
         return gen_vectorized(
             arg_names, arg_types, propagate_null, scalar_text, out_dtype
@@ -1334,10 +1326,12 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
 
     def overload_dt_diff_fn(arr0, arr1):
         scalar_text = ""
-        if is_valid_time_arg(arr0):
-            assert is_valid_time_arg(arr1)
+        if is_overload_none(arr0) and is_valid_date_arg(arr1):
+            scalar_text += "arg1 = pd.Timestamp(arg1)\n"
+        elif is_valid_time_arg(arr0):
+            assert is_valid_time_arg(arr1) or is_overload_none(arr1)
         elif is_valid_date_arg(arr0):
-            assert is_valid_date_arg(arr1)
+            assert is_valid_date_arg(arr1) or is_overload_none(arr1)
             scalar_text += "arg0 = pd.Timestamp(arg0)\n"
             scalar_text += "arg1 = pd.Timestamp(arg1)\n"
         else:
@@ -1563,11 +1557,7 @@ def overload_date_trunc_util(date_or_time_part, date_or_time_expr):
         scalar_text += "    res[i] = arg1 - datetime.timedelta(days=arg1.weekday())\n"
         scalar_text += "else:\n"  # when time unit is smaller than or equal to day, return the same date
         scalar_text += "    res[i] = arg1\n"
-        out_dtype = (
-            DatetimeDateArrayType()
-            if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-            else types.Array(bodo.datetime64ns, 1, "C")
-        )
+        out_dtype = DatetimeDateArrayType()
         return gen_vectorized(
             arg_names,
             arg_types,
@@ -1782,11 +1772,7 @@ def date_from_parts_util(year, month, day):
     scalar_text += "date = date + datetime.timedelta(days=arg2-1)\n"
     scalar_text += f"res[i] = date"
 
-    out_dtype = (
-        DatetimeDateArrayType()
-        if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-        else types.Array(bodo.datetime64ns, 1, "C")
-    )
+    out_dtype = DatetimeDateArrayType()
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -2020,11 +2006,7 @@ def next_day_util(arr0, arr1):
     scalar_text += f"new_timestamp = {arg0_timestamp}.normalize() + pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed])\n"
     scalar_text += f"res[i] = new_timestamp.date()\n"
 
-    out_dtype = (
-        DatetimeDateArrayType()
-        if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-        else types.Array(bodo.datetime64ns, 1, "C")
-    )
+    out_dtype = DatetimeDateArrayType()
 
     return gen_vectorized(
         arg_names,
@@ -2075,11 +2057,7 @@ def previous_day_util(arr0, arr1):
     scalar_text += f"new_timestamp = {arg0_timestamp}.normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed])\n"
     scalar_text += f"res[i] = new_timestamp.date()\n"
 
-    out_dtype = (
-        DatetimeDateArrayType()
-        if bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-        else types.Array(bodo.datetime64ns, 1, "C")
-    )
+    out_dtype = DatetimeDateArrayType()
 
     return gen_vectorized(
         arg_names,
@@ -2873,8 +2851,7 @@ def add_date_interval_to_date_util(start_dt, interval):
     Returns:
         datetime series/scalar: start_dt + interval
     """
-    verify_datetime_arg(start_dt, "add_date_interval_to_date", "start_dt")
-    # TODO:This kernel will only allow date args after we finish the transition to the dedicated date type
+    verify_date_arg(start_dt, "add_date_interval_to_date", "start_dt")
     verify_sql_interval(interval, "add_date_interval_to_date", "interval")
 
     arg_names = ["start_dt", "interval"]
