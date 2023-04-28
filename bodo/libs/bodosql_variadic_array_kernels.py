@@ -9,7 +9,12 @@ from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import is_str_arr_type, raise_bodo_error
+from bodo.utils.typing import (
+    get_common_scalar_dtype,
+    is_str_arr_type,
+    raise_bodo_error,
+)
+from bodo.utils.utils import is_array_typ
 
 
 def coalesce(A):  # pragma: no cover
@@ -627,3 +632,178 @@ def overload_concat_ws_util(A, sep):
         arg_string,
         arg_sources,
     )
+
+
+def least_greatest_codegen(A, is_greatest):
+    """
+    A codegen function for SQL functions LEAST and GREATEST,
+    which takes in an array of 1+ columns/scalars. Depending on
+    the value of is_greatest, a flag which indicates whether
+    the function is LEAST or GREATEST, this function will return
+    the smallest/largest value.
+
+    Args:
+        A (any array/scalar tuple): the array of values that are compared
+        to find the smallest value.
+
+    Raises:
+        BodoError: if there are 0 columns, or the types don't match
+
+    Returns:
+        an array containing the smallest/largest value of the input array
+    """
+
+    if len(A) == 0:
+        raise_bodo_error("Cannot compare 0 columns")
+
+    arg_names = []
+    arg_types = []
+    has_array_typ = False
+
+    for i, arr_typ in enumerate(A):
+        arg_name = f"A{i}"
+        arg_names.append(arg_name)
+        arg_types.append(arr_typ)
+        if is_array_typ(arr_typ):
+            has_array_typ = True
+
+    propagate_null = [True] * len(arg_names)
+
+    func = "GREATEST" if is_greatest else "LEAST"
+    if has_array_typ:
+        out_dtype = get_common_broadcasted_type(arg_types, func)
+    else:
+        out_dtype = get_common_scalar_dtype(arg_types)[0]
+
+    # Create the mapping from the tuple to the local variable.
+    arg_string = "A"
+    arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A))}
+
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = "unbox_if_tz_naive_timestamp" if is_array_typ(out_dtype) else ""
+    valid_arg_typ = out_dtype.dtype if is_array_typ(out_dtype) else out_dtype
+
+    if is_valid_datetime_or_date_arg(valid_arg_typ):
+        func_args = ", ".join(f"{unbox_str}(arg{i})" for i in range(len(arg_names)))
+    else:
+        func_args = ", ".join(f"arg{i}" for i in range(len(arg_names)))
+
+    func = "max" if is_greatest else "min"
+    scalar_text = f"  res[i] = {func}(({func_args}))\n"
+
+    extra_globals = {
+        "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
+    }
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        arg_string,
+        arg_sources,
+        extra_globals=extra_globals,
+    )
+
+
+def least(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(least)
+def overload_least(A):
+    """Handles cases where LEAST receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if not isinstance(A, (types.Tuple, types.UniTuple)):
+        raise_bodo_error("Least argument must be a tuple")
+    for i in range(len(A)):
+        if isinstance(A[i], types.optional):
+            # Note: If we have an optional scalar and its not the last argument,
+            # then the NULL vs non-NULL case can lead to different decisions
+            # about dictionary encoding in the output. This will lead to a memory
+            # leak as the dict-encoding result will be cast to a regular string array.
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.least",
+                ["A"],
+                0,
+                container_arg=i,
+                container_length=len(A),
+            )
+
+    def impl(A):  # pragma: no cover
+        return least_util(A)
+
+    return impl
+
+
+def least_util(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(least_util, no_unliteral=True)
+def overload_least_util(A):
+    """A dedicated kernel for the SQL function LEAST which takes in array of
+       1+ columns/scalars and returns the smallest value.
+
+    Args:
+        A (any array/scalar tuple): the array of values that are compared
+        to find the smallest value.
+
+    Returns:
+        an array containing the smallest value of the input array
+    """
+
+    return least_greatest_codegen(A, is_greatest=False)
+
+
+def greatest(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(greatest)
+def overload_greatest(A):
+    """Handles cases where GREATEST receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if not isinstance(A, (types.Tuple, types.UniTuple)):
+        raise_bodo_error("Greatest argument must be a tuple")
+    for i in range(len(A)):
+        if isinstance(A[i], types.optional):
+            # Note: If we have an optional scalar and its not the last argument,
+            # then the NULL vs non-NULL case can lead to different decisions
+            # about dictionary encoding in the output. This will lead to a memory
+            # leak as the dict-encoding result will be cast to a regular string array.
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.greatest",
+                ["A"],
+                0,
+                container_arg=i,
+                container_length=len(A),
+            )
+
+    def impl(A):  # pragma: no cover
+        return greatest_util(A)
+
+    return impl
+
+
+def greatest_util(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(greatest_util, no_unliteral=True)
+def overload_greatest_util(A):
+    """A dedicated kernel for the SQL function GREATEST which takes in array of
+       1+ columns/scalars and returns the largest value.
+
+    Args:
+        A (any array/scalar tuple): the array of values that are compared
+        to find the largest value.
+
+    Returns:
+        an array containing the largest value of the input array
+    """
+    return least_greatest_codegen(A, is_greatest=True)
