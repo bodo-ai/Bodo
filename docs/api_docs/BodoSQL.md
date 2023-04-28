@@ -1426,6 +1426,16 @@ numeric types
 
     Compute the variance for a column with N degrees of freedom.
 
+#### SKEW
+-   `#!sql SKEW`
+
+    Compute the skew of a column
+
+#### KURTOSIS
+-   `#!sql KURTOSIS`
+
+    Compute the kurtosis of a column
+
 #### BOOLOR_AGG
 -   `#!sql BOOLOR_AGG`
 
@@ -2778,6 +2788,18 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
     !!! note 
         In case of a tie, BodoSQL will choose a value arbitrarily based on performance considerations.
 
+#### SKEW
+-   `#!sql SKEW(COLUMN_EXPRESSION)`
+
+    Compute the skew over the window, or `NULL` if the window contains fewer
+    than 3 non-`NULL` entries.
+
+
+#### KURTOSIS
+-   `#!sql KURTOSIS(COLUMN_EXPRESSION)`
+
+    Compute the skew over the window, or `NULL` if the window contains fewer
+    than 4 non-`NULL` entries.
 
 
 #### LEAD

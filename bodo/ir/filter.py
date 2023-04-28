@@ -70,6 +70,10 @@ string_funcs_map = {
     "charindex": "POSITION",
     "editdistance_no_max": "EDITDISTANCE",
     "editdistance_with_max": "EDITDISTANCE",
+    "regexp_substr": "REGEXP_SUBSTR",
+    "regexp_instr": "REGEXP_INSTR",
+    "regexp_replace": "REGEXP_REPLACE",
+    "regexp_count": "REGEXP_COUNT",
 }
 
 numeric_funcs_map = {

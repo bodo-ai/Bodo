@@ -11,11 +11,35 @@
 #include <Python.h>
 #include <arrow/api.h>
 #include <vector>
+#include "_datetime_utils.h"
 #include "_meminfo.h"
 #include "simd-block-fixed-fpp.h"
 #include "tracing.h"
 
 #define ALIGNMENT 64  // preferred alignment for AVX512
+
+// Convenience macros from
+// https://github.com/numba/numba/blob/main/numba/_pymodule.h
+#define MOD_DEF(ob, name, doc, methods)                                     \
+    {                                                                       \
+        static struct PyModuleDef moduledef = {PyModuleDef_HEAD_INIT, name, \
+                                               doc, -1, methods};           \
+        ob = PyModule_Create(&moduledef);                                   \
+    }
+
+#define SetAttrStringFromVoidPtr(m, name)                 \
+    do {                                                  \
+        PyObject* tmp = PyLong_FromVoidPtr((void*)&name); \
+        PyObject_SetAttrString(m, #name, tmp);            \
+        Py_DECREF(tmp);                                   \
+    } while (0)
+
+#define SetAttrStringFromPyInit(m, name)       \
+    do {                                       \
+        PyObject* mod = PyInit_##name();       \
+        PyObject_SetAttrString(m, #name, mod); \
+        Py_DECREF(mod);                        \
+    } while (0)
 
 inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
     std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
@@ -23,7 +47,7 @@ inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
     PyErr_SetString(type, message);
 }
 
-#undef DEBUG_ARRAY_ACCESS
+class BodoBuffer;
 
 // get memory alloc/free info from _meminfo.h
 size_t get_stats_alloc();
@@ -67,6 +91,10 @@ typedef int32_t dict_indices_t;
 typedef uint64_t offset_t;
 #define OFFSET_BITWIDTH 64
 #define Bodo_CType_offset Bodo_CTypes::CTypeEnum::UINT64
+
+std::unique_ptr<BodoBuffer> AllocateBodoBuffer(const int64_t size);
+std::unique_ptr<BodoBuffer> AllocateBodoBuffer(const int64_t length,
+                                               Bodo_CTypes::CTypeEnum typ_enum);
 
 inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
     if (typ == Bodo_CTypes::UINT8)
@@ -258,10 +286,10 @@ struct array_info {
 
     // Data buffer meminfos for this array, e.g. data/offsets/null_bitmap for
     // string array. Last element is always the null bitmap buffer.
-    std::vector<NRT_MemInfo*> meminfos;
+    std::vector<std::shared_ptr<BodoBuffer>> buffers;
 
     // Child arrays for nested array cases (dict-encoded arrays only currently)
-    std::vector<array_info*> child_arrays;
+    std::vector<std::shared_ptr<array_info>> child_arrays;
     // name of each field in struct array (empty for other arrays)
     std::vector<std::string> field_names;
 
@@ -279,17 +307,15 @@ struct array_info {
     // an offset of 16 bytes for int64 arrays (and n_items=2).
     int64_t offset;
 
-    explicit array_info(bodo_array_type::arr_type_enum _arr_type,
-                        Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
-                        std::vector<NRT_MemInfo*> _meminfos,
-                        std::vector<array_info*> _child_arrays = {},
-                        int32_t _precision = 0, int32_t _scale = 0,
-                        int64_t _num_categories = 0,
-                        bool _has_global_dictionary = false,
-                        bool _has_deduped_local_dictionary = false,
-                        bool _has_sorted_dictionary = false,
-                        int64_t _offset = 0,
-                        std::vector<std::string> _field_names = {})
+    array_info(bodo_array_type::arr_type_enum _arr_type,
+               Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
+               std::vector<std::shared_ptr<BodoBuffer>> _buffers,
+               std::vector<std::shared_ptr<array_info>> _child_arrays = {},
+               int32_t _precision = 0, int32_t _scale = 0,
+               int64_t _num_categories = 0, bool _has_global_dictionary = false,
+               bool _has_deduped_local_dictionary = false,
+               bool _has_sorted_dictionary = false, int64_t _offset = 0,
+               std::vector<std::string> _field_names = {})
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -300,7 +326,7 @@ struct array_info {
           has_deduped_local_dictionary(_has_deduped_local_dictionary),
           has_sorted_dictionary(_has_sorted_dictionary),
           offset(_offset) {
-        this->meminfos = std::move(_meminfos);
+        this->buffers = std::move(_buffers);
         this->child_arrays = std::move(_child_arrays);
         this->field_names = std::move(_field_names);
     }
@@ -310,93 +336,28 @@ struct array_info {
      *
      * @return char* data pointer
      */
-    char* data1() const {
-        switch (arr_type) {
-            case bodo_array_type::NULLABLE_INT_BOOL:
-            case bodo_array_type::STRING:
-            case bodo_array_type::NUMPY:
-            case bodo_array_type::CATEGORICAL:
-            case bodo_array_type::INTERVAL:
-                return (char*)this->meminfos[0]->data + this->offset;
-            case bodo_array_type::LIST_STRING:
-                return this->child_arrays[0]->data1();
-            case bodo_array_type::DICT:
-            case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::STRUCT:
-            default:
-                return nullptr;
-        }
-    }
+    char* data1() const;
 
     /**
      * @brief returns the second data pointer for the array if any.
      *
      * @return char* data pointer
      */
-    char* data2() const {
-        switch (arr_type) {
-            case bodo_array_type::STRING:
-            case bodo_array_type::INTERVAL:
-                return (char*)this->meminfos[1]->data;
-            case bodo_array_type::LIST_STRING:
-                return this->child_arrays[0]->data2();
-            case bodo_array_type::DICT:
-            case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::STRUCT:
-            case bodo_array_type::NULLABLE_INT_BOOL:
-            case bodo_array_type::NUMPY:
-            case bodo_array_type::CATEGORICAL:
-            default:
-                return nullptr;
-        }
-    }
+    char* data2() const;
 
     /**
      * @brief returns the third data pointer for the array if any.
      *
      * @return char* data pointer
      */
-    char* data3() const {
-        switch (arr_type) {
-            case bodo_array_type::LIST_STRING:
-                return (char*)this->meminfos[0]->data;
-            case bodo_array_type::STRING:
-            case bodo_array_type::INTERVAL:
-            case bodo_array_type::DICT:
-            case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::STRUCT:
-            case bodo_array_type::NULLABLE_INT_BOOL:
-            case bodo_array_type::NUMPY:
-            case bodo_array_type::CATEGORICAL:
-            default:
-                return nullptr;
-        }
-    }
+    char* data3() const;
 
     /**
      * @brief returns the pointer to null bitmask buffer for the array if any.
      *
      * @return char* null bitmask pointer
      */
-    char* null_bitmask() const {
-        switch (arr_type) {
-            case bodo_array_type::NULLABLE_INT_BOOL:
-            case bodo_array_type::LIST_STRING:
-            case bodo_array_type::ARRAY_ITEM:
-                return (char*)this->meminfos[1]->data;
-            case bodo_array_type::STRING:
-                return (char*)this->meminfos[2]->data;
-            case bodo_array_type::DICT:
-                return (char*)this->child_arrays[1]->null_bitmask();
-            case bodo_array_type::STRUCT:
-                return (char*)this->meminfos[0]->data;
-            case bodo_array_type::INTERVAL:
-            case bodo_array_type::NUMPY:
-            case bodo_array_type::CATEGORICAL:
-            default:
-                return nullptr;
-        }
-    }
+    char* null_bitmask() const;
 
     /**
      * @brief returns the pointer to null bitmask buffer for the nested array if
@@ -473,13 +434,6 @@ struct array_info {
     }
 
     /**
-     * @brief Convert array_info to equivalent Arrow array.
-     *
-     * @return std::shared_ptr<arrow::Array> equivalent Array array
-     */
-    std::shared_ptr<arrow::Array> to_arrow() const;
-
-    /**
      * Return code in position `idx` of categorical array as int64
      */
     int64_t get_code_as_int64(size_t idx) {
@@ -537,10 +491,10 @@ struct array_info {
                                    offsets[idx + 1] - offsets[idx]);
             }
             case Bodo_CTypes::DATE: {
-                int64_t val = this->at<int64_t>(idx);
-                int year = val >> 32;
-                int month = (val >> 16) & 0xFFFF;
-                int day = val & 0xFFFF;
+                int64_t day = this->at<int32_t>(idx);
+                int64_t year = days_to_yearsdays(&day);
+                int64_t month;
+                get_month_day(year, day, &month, &day);
                 std::string date_str;
                 date_str.reserve(10);
                 date_str += std::to_string(year) + "-";
@@ -576,49 +530,57 @@ struct array_info {
     void set_null_bit(size_t idx, bool bit) {
         SetBitTo((uint8_t*)null_bitmask(), idx, bit);
     }
-
-    array_info& operator=(
-        array_info&& other) noexcept;  // move assignment operator
 };
 
-array_info* alloc_array(int64_t length, int64_t n_sub_elems,
-                        int64_t n_sub_sub_elems,
-                        bodo_array_type::arr_type_enum arr_type,
-                        Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
-                        int64_t num_categories);
+/**
+ * @brief Convert array_info to equivalent Arrow array.
+ *
+ * @return std::shared_ptr<arrow::Array> equivalent Array array
+ */
+std::shared_ptr<arrow::Array> to_arrow(std::shared_ptr<array_info> info);
 
-array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum);
+std::shared_ptr<array_info> alloc_array(int64_t length, int64_t n_sub_elems,
+                                        int64_t n_sub_sub_elems,
+                                        bodo_array_type::arr_type_enum arr_type,
+                                        Bodo_CTypes::CTypeEnum dtype,
+                                        int64_t extra_null_bytes,
+                                        int64_t num_categories);
 
-array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
-                             Bodo_CTypes::CTypeEnum dtype);
-array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
-                              int64_t num_categories);
+std::shared_ptr<array_info> alloc_numpy(int64_t length,
+                                        Bodo_CTypes::CTypeEnum typ_enum);
 
-array_info* alloc_nullable_array(int64_t length,
-                                 Bodo_CTypes::CTypeEnum typ_enum,
-                                 int64_t extra_null_bytes = 0);
+std::shared_ptr<array_info> alloc_array_item(int64_t n_arrays,
+                                             int64_t n_total_items,
+                                             Bodo_CTypes::CTypeEnum dtype);
+std::shared_ptr<array_info> alloc_categorical(int64_t length,
+                                              Bodo_CTypes::CTypeEnum typ_enum,
+                                              int64_t num_categories);
 
-array_info* alloc_nullable_array_no_nulls(int64_t length,
-                                          Bodo_CTypes::CTypeEnum typ_enum,
-                                          int64_t extra_null_bytes);
+std::shared_ptr<array_info> alloc_nullable_array(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    int64_t extra_null_bytes = 0);
 
-array_info* alloc_nullable_array_all_nulls(int64_t length,
-                                           Bodo_CTypes::CTypeEnum typ_enum,
-                                           int64_t extra_null_bytes);
+std::shared_ptr<array_info> alloc_nullable_array_no_nulls(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes);
 
-array_info* alloc_string_array(int64_t length, int64_t n_chars,
-                               int64_t extra_null_bytes = 0);
+std::shared_ptr<array_info> alloc_nullable_array_all_nulls(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes);
 
-array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr,
-                                    int64_t extra_null_bytes);
+std::shared_ptr<array_info> alloc_string_array(int64_t length, int64_t n_chars,
+                                               int64_t extra_null_bytes = 0);
 
-array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
-                                    int64_t n_chars, int64_t extra_null_bytes);
+std::shared_ptr<array_info> alloc_list_string_array(
+    int64_t n_lists, std::shared_ptr<array_info> string_arr,
+    int64_t extra_null_bytes);
 
-array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
-                                    int64_t n_chars_keys,
-                                    bool has_global_dictionary,
-                                    bool has_deduped_local_dictionary);
+std::shared_ptr<array_info> alloc_list_string_array(int64_t n_lists,
+                                                    int64_t n_strings,
+                                                    int64_t n_chars,
+                                                    int64_t extra_null_bytes);
+
+std::shared_ptr<array_info> alloc_dict_string_array(
+    int64_t length, int64_t n_keys, int64_t n_chars_keys,
+    bool has_global_dictionary, bool has_deduped_local_dictionary);
 
 /**
  * @brief Create a string array from
@@ -627,11 +589,12 @@ array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
  * @param grp_info The group info.
  * @param null_bitmap The null bitmap for the array.
  * @param list_string The vector of strings.
- * @return array_info* A string type array info constructed from the
- * vector of strings.
+ * @return std::shared_ptr<array_info> A string type array info constructed from
+ * the vector of strings.
  */
-array_info* create_string_array(std::vector<uint8_t> const& null_bitmap,
-                                std::vector<std::string> const& list_string);
+std::shared_ptr<array_info> create_string_array(
+    std::vector<uint8_t> const& null_bitmap,
+    std::vector<std::string> const& list_string);
 
 /**
  * @brief Create an array of list of strings,
@@ -642,10 +605,10 @@ array_info* create_string_array(std::vector<uint8_t> const& null_bitmap,
  * @param list_list_pair The vector of list of strings. The list of strings
  * is a pair of string and a boolean. The boolean is true if the list entry is
  * null.
- * @return array_info* A list of strings type array info constructed from the
- * vector.
+ * @return std::shared_ptr<array_info> A list of strings type array info
+ * constructed from the vector.
  */
-array_info* create_list_string_array(
+std::shared_ptr<array_info> create_list_string_array(
     std::vector<uint8_t> const& null_bitmap,
     std::vector<std::vector<std::pair<std::string, bool>>> const&
         list_list_pair);
@@ -660,13 +623,13 @@ array_info* create_list_string_array(
  * @param has_deduped_local_dictionary Can dict_arr contain
  * duplicates on this rank?
  * @param has_sorted_dictionary Is dict_arr sorted on this rank?
- * @return array_info* The dictionary array.
+ * @return std::shared_ptr<array_info> The dictionary array.
  */
-array_info* create_dict_string_array(array_info* dict_arr,
-                                     array_info* indices_arr,
-                                     bool has_global_dictionary = false,
-                                     bool has_deduped_local_dictionary = false,
-                                     bool has_sorted_dictionary = false);
+std::shared_ptr<array_info> create_dict_string_array(
+    std::shared_ptr<array_info> dict_arr,
+    std::shared_ptr<array_info> indices_arr, bool has_global_dictionary = false,
+    bool has_deduped_local_dictionary = false,
+    bool has_sorted_dictionary = false);
 
 /* The "get-value" functionality for array_info.
    This is the equivalent of at functionality.
@@ -674,14 +637,14 @@ array_info* create_dict_string_array(array_info* dict_arr,
  */
 
 template <typename T>
-inline T& getv(array_info* arr, size_t idx) {
+inline T& getv(std::shared_ptr<array_info> arr, size_t idx) {
     return ((T*)arr->data1())[idx];
 }
 
 struct mpi_comm_info {
     int myrank;
     int n_pes;
-    std::vector<array_info*> arrays;
+    std::vector<std::shared_ptr<array_info>> arrays;
     size_t n_rows;
     bool has_nulls;
     // generally required MPI counts
@@ -713,7 +676,7 @@ struct mpi_comm_info {
     // true if using a bloom filter to discard rows before shuffling
     bool filtered = false;
 
-    explicit mpi_comm_info(std::vector<array_info*>& _arrays);
+    explicit mpi_comm_info(std::vector<std::shared_ptr<array_info>>& _arrays);
 
     /**
      * Computation of:
@@ -750,7 +713,7 @@ struct mpi_comm_info {
 };
 
 struct table_info {
-    std::vector<array_info*> columns;
+    std::vector<std::shared_ptr<array_info>> columns;
     // this is set and used by groupby to avoid putting additional info in
     // multi_col_key (which is only needed when key equality is checked but not
     // for hashing)
@@ -759,82 +722,76 @@ struct table_info {
     // keep shuffle info to be able to reverse the shuffle if necessary
     // currently used in groupby apply
     // TODO: refactor out?
-    mpi_comm_info* comm_info;
+    std::shared_ptr<mpi_comm_info> comm_info;
     std::shared_ptr<uint32_t[]> hashes;
     int id;
     table_info() {}
-    explicit table_info(std::vector<array_info*>& _columns)
+    explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns)
         : columns(_columns) {}
     uint64_t nrows() const { return columns[0]->length; }
     uint64_t ncols() const { return columns.size(); }
-    array_info* operator[](size_t idx) { return columns[idx]; }
-    const array_info* operator[](size_t idx) const { return columns[idx]; }
+    std::shared_ptr<array_info> operator[](size_t idx) { return columns[idx]; }
+    const std::shared_ptr<array_info> operator[](size_t idx) const {
+        return columns[idx];
+    }
 };
+
+/**
+ * @brief Helper function for early reference (and potentially memory) release
+ * of a column in a table (to reduce peak memory usage wherever possible). This
+ * is useful in performance and memory critical regions to release memory of
+ * columns that are no longer needed. However, calling reset on the column is
+ * only safe if this is the last reference to the table. We pass the shared_ptr
+ * by reference to not incref the table_info during the function call.
+ * NOTE: This function is only useful for performance reasons and should only be
+ * used when you know what you are doing. See existing usages of this in our
+ * code to understand the use cases.
+ *
+ * @param table Shared Pointer to the table, passed by reference.
+ * @param col_idx Index of the column to reset.
+ */
+void reset_col_if_last_table_ref(std::shared_ptr<table_info> const& table,
+                                 size_t col_idx);
+
+/**
+ * @brief Similar to reset_col_if_last_table_ref, but instead, we clear
+ * all the shared_ptrs to the columns if this is the last reference to
+ * a table.
+ *
+ * @param table Shared Pointer to the table, passed by reference.
+ */
+void clear_all_cols_if_last_table_ref(std::shared_ptr<table_info> const& table);
 
 /* Compute the total memory of local chunk of the table on current rank
  *
  * @param table : The input table
  * @return the total size of the local chunk of the table
  */
-int64_t table_local_memory_size(table_info* table);
+int64_t table_local_memory_size(std::shared_ptr<table_info> table);
 
 /* Compute the total memory of the table accross all processors.
  *
  * @param table : The input table
  * @return the total size of the table all over the processors
  */
-int64_t table_global_memory_size(table_info* table);
+int64_t table_global_memory_size(std::shared_ptr<table_info> table);
 
 /// Initialize numpy_item_size and verify size of dtypes
 void bodo_common_init();
 
-array_info* copy_array(array_info* arr);
+std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> arr);
 
 NRT_MemInfo* alloc_meminfo(int64_t length);
 
 /**
  * Free underlying array of array_info pointer and delete the pointer
  */
-void delete_info_decref_array(array_info* arr);
+void delete_info(array_info* arr);
 
 /**
  * delete table pointer and its column array_info pointers (but not the arrays).
  */
 void delete_table(table_info* table);
-
-/**
- * Decref all arrays of a table and delete the table.
- */
-void delete_table_decref_arrays(table_info* table);
-
-/**
- * Free an array of a table
- */
-void decref_table_array(table_info* table, int arr_no);
-
-/**
- * @brief incref all arrays in a table
- *
- * @param table input table
- */
-void incref_table_arrays(table_info* table);
-
-/**
- * @brief decref all arrays in a table
- *
- * @param table input table
- */
-void decref_table_arrays(table_info* table);
-
-/**
- * decref Bodo array and free all memory if refcount is zero.
- */
-void decref_array(array_info* arr);
-
-/**
- * incref Bodo array
- */
-void incref_array(const array_info* arr);
 
 /**
  * decref meminfo refcount
@@ -963,31 +920,21 @@ inline struct numpy_arr_payload make_numpy_array_payload(
 }
 #endif
 
-#ifdef MS_WINDOWS
-
-#define NOMINMAX
-#include <windows.h>
-
-inline size_t getTotalSystemMemory() {
-    MEMORYSTATUSEX status;
-    status.dwLength = sizeof(status);
-    GlobalMemoryStatusEx(&status);
-    auto memory_size = static_cast<size_t>(status.ullTotalPhys);
-    return memory_size;
-}
-
-#else
-
-#include <unistd.h>
-
-#define getTotalSystemMemory()                   \
-    ({                                           \
-        unsigned long long memory_size;          \
-        long pages = sysconf(_SC_PHYS_PAGES);    \
-        long page_size = sysconf(_SC_PAGE_SIZE); \
-        memory_size = pages * page_size;         \
-        static_cast<size_t>(memory_size);        \
-    })
-#endif
+extern "C" {
+PyMODINIT_FUNC PyInit_hdist(void);
+PyMODINIT_FUNC PyInit_hstr_ext(void);
+PyMODINIT_FUNC PyInit_decimal_ext(void);
+PyMODINIT_FUNC PyInit_quantile_alg(void);
+PyMODINIT_FUNC PyInit_hdatetime_ext(void);
+PyMODINIT_FUNC PyInit_hio(void);
+PyMODINIT_FUNC PyInit_array_ext(void);
+PyMODINIT_FUNC PyInit_s3_reader(void);
+PyMODINIT_FUNC PyInit_fsspec_reader(void);
+PyMODINIT_FUNC PyInit_hdfs_reader(void);
+PyMODINIT_FUNC PyInit__hdf5(void);
+PyMODINIT_FUNC PyInit_arrow_cpp(void);
+PyMODINIT_FUNC PyInit_csv_cpp(void);
+PyMODINIT_FUNC PyInit_json_cpp(void);
+}  // extern "C"
 
 #endif /* BODO_COMMON_H_INCLUDED_ */

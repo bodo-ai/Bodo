@@ -107,8 +107,7 @@ DTYPE_TO_C_TYPE(bool, Bodo_CTypes::_BOOL)
 DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATETIME)
 DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIMEDELTA)
 DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::TIME)
-// TODO[BE-2711]: update when we move to date32 type
-DTYPE_TO_C_TYPE(int64_t, Bodo_CTypes::DATE)
+DTYPE_TO_C_TYPE(int32_t, Bodo_CTypes::DATE)
 DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::DECIMAL)
 DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
 
@@ -125,7 +124,8 @@ concept NullSentinelDtype = ((DType == Bodo_CTypes::FLOAT32) ||
 
 // ------------------------------------------------
 
-inline void CheckEqualityArrayType(array_info* arr1, array_info* arr2) {
+inline void CheckEqualityArrayType(std::shared_ptr<array_info> arr1,
+                                   std::shared_ptr<array_info> arr2) {
     if (arr1->arr_type != arr2->arr_type) {
         throw std::runtime_error(
             "array_info passed to Cpp code have different arr_type");
@@ -179,7 +179,7 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
     if (dtype == Bodo_CTypes::FLOAT64)
         return double(GetTentry<double>(ptr));
     if (dtype == Bodo_CTypes::DATE)
-        return double(GetTentry<int64_t>(ptr));
+        return double(GetTentry<int32_t>(ptr));
     if (dtype == Bodo_CTypes::DATETIME)
         return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::TIMEDELTA)
@@ -213,22 +213,23 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
  * @param long_write_idxs is the vector of indices in the long table
  * @return one column of the table output.
  */
-array_info* RetrieveArray_TwoColumns(
-    array_info* const& arr1, array_info* const& arr2,
+std::shared_ptr<array_info> RetrieveArray_TwoColumns(
+    std::shared_ptr<array_info> const& arr1,
+    std::shared_ptr<array_info> const& arr2,
     std::vector<int64_t> const& short_write_idxs,
     std::vector<int64_t> const& long_write_idxs);
 
 /** This function returns the column with the rows with the rows given in
  * "ListIdx"
  *
- * @param array_info* : the input pointer
+ * @param std::shared_ptr<array_info> : the input pointer
  * @param ListIdx is the vector of list of rows selected
  * @param use_nullable_arr use nullable int/float output for Numpy array input
  * @return one array
  */
-array_info* RetrieveArray_SingleColumn(array_info* in_arr,
-                                       std::vector<int64_t> const& ListIdx,
-                                       bool use_nullable_arr = false);
+std::shared_ptr<array_info> RetrieveArray_SingleColumn(
+    std::shared_ptr<array_info> in_arr, std::vector<int64_t> const& ListIdx,
+    bool use_nullable_arr = false);
 
 /** This function uses the combinatorial information computed in the
  * "ListIdx" array and return the column with the selected rows.
@@ -238,9 +239,9 @@ array_info* RetrieveArray_SingleColumn(array_info* in_arr,
  * @param use_nullable_arr use nullable int/float output for Numpy array input
  * @return one array
  */
-array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
-                                           array_info* idx_arr,
-                                           bool use_nullable_arr = false);
+std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
+    std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> idx_arr,
+    bool use_nullable_arr = false);
 
 /** This function takes a table, a list of rows and returns the rows obtained
  * by selecting the rows.
@@ -251,9 +252,9 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
  * selected
  * @return the table output.
  */
-table_info* RetrieveTable(table_info* const& in_table,
-                          std::vector<int64_t> const& ListIdx,
-                          int const& n_cols_arg = -1);
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    std::vector<int64_t> const& ListIdx, int const& n_cols_arg = -1);
 
 /**
  * @brief select rows and columns in input table specified by list of indices
@@ -262,11 +263,11 @@ table_info* RetrieveTable(table_info* const& in_table,
  * @param in_table input table to select from
  * @param rowInds list of row indices to select
  * @param colInds list of column indices to select
- * @return table_info* output table with selected rows/columns
+ * @return std::shared_ptr<table_info> output table with selected rows/columns
  */
-table_info* RetrieveTable(table_info* const& in_table,
-                          std::vector<int64_t> const& rowInds,
-                          std::vector<size_t> const& colInds);
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    std::vector<int64_t> const& rowInds, std::vector<size_t> const& colInds);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
@@ -280,8 +281,9 @@ table_info* RetrieveTable(table_info* const& in_table,
  * @param is_na_equal should na values be considered equal
  * @return True if they are equal and false otherwise.
  */
-bool TestEqualColumn(const array_info* arr1, int64_t pos1,
-                     const array_info* arr2, int64_t pos2, bool is_na_equal);
+bool TestEqualColumn(const std::shared_ptr<array_info> arr1, int64_t pos1,
+                     const std::shared_ptr<array_info> arr2, int64_t pos2,
+                     bool is_na_equal);
 
 /* This function test if two rows of two arrow columns (which may or may not be
  * the same) are equal, greater or lower than the other.
@@ -315,7 +317,7 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
  * @param iRow2 the row of the second key
  * @return True if they are equal and false otherwise.
  */
-inline bool TestEqual(std::vector<array_info*> const& columns,
+inline bool TestEqual(std::vector<std::shared_ptr<array_info>> const& columns,
                       size_t const& n_key, size_t const& shift_key1,
                       size_t const& iRow1, size_t const& shift_key2,
                       size_t const& iRow2) {
@@ -345,7 +347,8 @@ inline bool TestEqual(std::vector<array_info*> const& columns,
  * @param is_na_equal Are NA values considered equal
  * @return True if they are equal and false otherwise.
  */
-inline bool TestEqualJoin(const table_info* table1, const table_info* table2,
+inline bool TestEqualJoin(const std::shared_ptr<table_info> table1,
+                          const std::shared_ptr<table_info> table2,
                           size_t const& iRow1, size_t const& iRow2,
                           size_t const& n_key, bool is_na_equal) {
     // iteration over the list of key for the comparison.
@@ -616,14 +619,13 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         return NumericComparison_int<int16_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT16)
         return NumericComparison_int<uint16_t>(ptr1, ptr2, na_position);
-    if (dtype == Bodo_CTypes::INT32)
+    if (dtype == Bodo_CTypes::INT32 || dtype == Bodo_CTypes::DATE)
         return NumericComparison_int<int32_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT32)
         return NumericComparison_int<uint32_t>(ptr1, ptr2, na_position);
     // for DATE/TIME, the missing value is done via NULLABLE_INT_BOOL
     // TODO: [BE-4106] Split Time into Time32 and Time64
-    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::DATE ||
-        dtype == Bodo_CTypes::TIME)
+    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::TIME)
         return NumericComparison_int<int64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT64)
         return NumericComparison_int<uint64_t>(ptr1, ptr2, na_position);
@@ -662,15 +664,17 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
  * largest, if false smallest.
  * @return true if (shift_key1,iRow1) < (shift_key2,iRow2) , false otherwise
  */
-bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
-                           std::vector<array_info*> const& columns1,
-                           size_t const& shift_key1, size_t const& iRow1,
-                           std::vector<array_info*> const& columns2,
-                           size_t const& shift_key2, size_t const& iRow2,
-                           int64_t* na_position);
+bool KeyComparisonAsPython(
+    size_t const& n_key, int64_t* vect_ascending,
+    std::vector<std::shared_ptr<array_info>> const& columns1,
+    size_t const& shift_key1, size_t const& iRow1,
+    std::vector<std::shared_ptr<array_info>> const& columns2,
+    size_t const& shift_key2, size_t const& iRow2, int64_t* na_position);
 
-int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
-                                 size_t const& iRow1, array_info* arr2,
+int KeyComparisonAsPython_Column(bool const& na_position_bis,
+                                 std::shared_ptr<array_info> arr1,
+                                 size_t const& iRow1,
+                                 std::shared_ptr<array_info> arr2,
                                  size_t const& iRow2);
 
 /**
@@ -687,8 +691,9 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
  * @param is_parallel Are the arrays distributed (for tracing purposes).
  * @return uint8_t* Output bitmask.
  */
-uint8_t* bitwise_and_null_bitmasks(const std::vector<array_info*>& arrays,
-                                   const bool is_parallel);
+uint8_t* bitwise_and_null_bitmasks(
+    const std::vector<std::shared_ptr<array_info>>& arrays,
+    const bool is_parallel);
 
 // ----------------------- Debug functions -----------------------
 
@@ -698,7 +703,7 @@ uint8_t* bitwise_and_null_bitmasks(const std::vector<array_info*>& arrays,
  * @param os is the output stream
  * @param arr is the pointer.
  */
-void DEBUG_PrintColumn(std::ostream& os, const array_info* arr);
+void DEBUG_PrintColumn(std::ostream& os, const std::shared_ptr<array_info> arr);
 
 /** The DEBUG_PrintSetOfColumn is printing the contents of the table to
  * the output stream.
@@ -711,14 +716,14 @@ void DEBUG_PrintColumn(std::ostream& os, const array_info* arr);
  * @param ListArr the list of columns in input
  * @return Nothing. Everything is put in the stream
  */
-void DEBUG_PrintSetOfColumn(std::ostream& os,
-                            std::vector<array_info*> const& ListArr);
+void DEBUG_PrintSetOfColumn(
+    std::ostream& os, std::vector<std::shared_ptr<array_info>> const& ListArr);
 
 /**
  * @brief Print the contents of a table to the output stream.
  * See DEBUG_PrintSetOfColumn for more details
  */
-void DEBUG_PrintTable(std::ostream& os, table_info* table);
+void DEBUG_PrintTable(std::ostream& os, std::shared_ptr<table_info> table);
 
 /**
  * @brief Prints contents of a std::unordered_map to the output stream.
@@ -740,9 +745,10 @@ void DEBUG_PrintUnorderedMap(std::ostream& os,
  * @return nothing. Everything is printed to the stream
  */
 void DEBUG_PrintRefct(std::ostream& os,
-                      std::vector<array_info*> const& ListArr);
+                      std::vector<std::shared_ptr<array_info>> const& ListArr);
 
-inline bool does_keys_have_nulls(std::vector<array_info*> const& key_cols) {
+inline bool does_keys_have_nulls(
+    std::vector<std::shared_ptr<array_info>> const& key_cols) {
     for (auto key_col : key_cols) {
         if ((key_col->arr_type == bodo_array_type::NUMPY &&
              (key_col->dtype == Bodo_CTypes::FLOAT32 ||
@@ -760,8 +766,9 @@ inline bool does_keys_have_nulls(std::vector<array_info*> const& key_cols) {
     return false;
 }
 
-inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
-                               int64_t const& i) {
+inline bool does_row_has_nulls(
+    std::vector<std::shared_ptr<array_info>> const& key_cols,
+    int64_t const& i) {
     for (auto key_col : key_cols) {
         if (key_col->arr_type == bodo_array_type::CATEGORICAL) {
             std::vector<char> vectNaN = RetrieveNaNentry(key_col->dtype);
@@ -827,9 +834,10 @@ std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type);
  * be fully deleted (decref arrays and delete pointers).
  *
  * @param table_chunks input tables which are assumed to have the same schema
- * @return table_info* concatenated table
+ * @return std::shared_ptr<table_info> concatenated table
  */
-table_info* concat_tables(const std::vector<table_info*>& table_chunks);
+std::shared_ptr<table_info> concat_tables(
+    const std::vector<std::shared_ptr<table_info>>& table_chunks);
 
 /**
  * @brief Concatenate the arrays into a single array.
@@ -847,9 +855,10 @@ table_info* concat_tables(const std::vector<table_info*>& table_chunks);
  * concat_tables)
  *
  * @param arrays Vector of arrays to concatenate together.
- * @return array_info* Concatenated array.
+ * @return std::shared_ptr<array_info> Concatenated array.
  */
-array_info* concat_arrays(std::vector<array_info*>& arrays);
+std::shared_ptr<array_info> concat_arrays(
+    std::vector<std::shared_ptr<array_info>>& arrays);
 
 /**
  * @brief Check if the interval (arr1[idx], arr2[idx]) is within
@@ -867,8 +876,10 @@ array_info* concat_arrays(std::vector<array_info*>& arrays);
  * @param arr2 Array for the end of the interval
  * @param idx Index to check
  */
-inline bool within_bounds_of_rank(array_info* bounds_arr, uint32_t rank,
-                                  int n_pes, array_info* arr1, array_info* arr2,
+inline bool within_bounds_of_rank(std::shared_ptr<array_info> bounds_arr,
+                                  uint32_t rank, int n_pes,
+                                  std::shared_ptr<array_info> arr1,
+                                  std::shared_ptr<array_info> arr2,
                                   uint64_t idx) {
     // na_position_bis is true in our case since asc = true and na_last = true
     // which means that na_bis = (!na_last) ^ asc = true
@@ -891,7 +902,8 @@ inline bool within_bounds_of_rank(array_info* bounds_arr, uint32_t rank,
  * @param strict Whether to consider [A, A] to be a bad interval
  * @return If the interval [arr1[idx], arr2[idx]] is bad
  */
-inline bool is_bad_interval(array_info* arr1, array_info* arr2, uint64_t idx,
+inline bool is_bad_interval(std::shared_ptr<array_info> arr1,
+                            std::shared_ptr<array_info> arr2, uint64_t idx,
                             bool strict = true) {
     auto comp = KeyComparisonAsPython_Column(true, arr1, idx, arr2, idx);
     // strict == true: comp == -1 (A > B) or comp == 0 (A == B)
@@ -939,8 +951,8 @@ inline std::vector<T> flatten(std::vector<std::vector<T>> const& vec,
  * index that can be used in restore_col_order to restore the original ordering.
  */
 inline const std::unordered_map<uint64_t, uint64_t> move_cols_to_front(
-    table_info* table, std::vector<uint64_t> col_ids) {
-    std::vector<array_info*> new_columns(table->columns.size());
+    std::shared_ptr<table_info> table, std::vector<uint64_t> col_ids) {
+    std::vector<std::shared_ptr<array_info>> new_columns(table->columns.size());
     std::set<uint64_t> col_ids_set(col_ids.begin(), col_ids.end());
     std::unordered_map<uint64_t, uint64_t> col_mapping;
     uint64_t itr = 0;
@@ -973,8 +985,9 @@ inline const std::unordered_map<uint64_t, uint64_t> move_cols_to_front(
  * of move_cols_to_front.
  */
 inline void restore_col_order(
-    table_info* table, std::unordered_map<uint64_t, uint64_t>& col_mapping) {
-    std::vector<array_info*> new_columns(table->columns.size());
+    std::shared_ptr<table_info> table,
+    std::unordered_map<uint64_t, uint64_t>& col_mapping) {
+    std::vector<std::shared_ptr<array_info>> new_columns(table->columns.size());
     for (auto it = col_mapping.begin(); it != col_mapping.end(); it++) {
         new_columns[it->first] = table->columns[it->second];
     }

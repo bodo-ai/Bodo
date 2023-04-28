@@ -20,7 +20,43 @@
  * @param[in,out] sum of observed values, will be modified to contain the mean
  * @param count: number of observations
  */
-inline void mean_eval(double& result, uint64_t& count) { result /= count; }
+inline void mean_eval(double& result, uint64_t count) { result /= count; }
+
+/**
+ * Perform final evaluation step for population std, which calculates the
+ * standard deviation based on the count and m2 values. See
+ * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
+ * for more information.
+ *
+ * @param[in,out] stores the calculated std
+ * @param count: number of observations
+ * @param m2: sum of squares of differences from the current mean
+ */
+inline void std_pop_eval(double& result, uint64_t& count, double& m2) {
+    if (count == 0) {
+        result = std::numeric_limits<double>::quiet_NaN();
+    } else {
+        result = sqrt(m2 / count);
+    }
+}
+
+/**
+ * Perform final evaluation step for population variance, which calculates the
+ * variance based on the count and m2 values. See
+ * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
+ * for more information.
+ *
+ * @param[in,out] stores the calculated variance
+ * @param count: number of observations
+ * @param m2: sum of squares of differences from the current mean
+ */
+inline void var_pop_eval(double& result, uint64_t& count, double& m2) {
+    if (count == 0) {
+        result = std::numeric_limits<double>::quiet_NaN();
+    } else {
+        result = m2 / count;
+    }
+}
 
 /**
  * Perform final evaluation step for std, which calculates the standard
@@ -32,7 +68,7 @@ inline void mean_eval(double& result, uint64_t& count) { result /= count; }
  * @param count: number of observations
  * @param m2: sum of squares of differences from the current mean
  */
-inline void std_eval(double& result, uint64_t& count, double& m2) {
+inline void std_eval(double& result, uint64_t count, double m2) {
     if (count <= 1) {
         result = std::numeric_limits<double>::quiet_NaN();
     } else {
@@ -50,11 +86,92 @@ inline void std_eval(double& result, uint64_t& count, double& m2) {
  * @param count: number of observations
  * @param m2: sum of squares of differences from the current mean
  */
-inline void var_eval(double& result, uint64_t& count, double& m2) {
+inline void var_eval(double& result, uint64_t count, double m2) {
     if (count <= 1) {
         result = std::numeric_limits<double>::quiet_NaN();
     } else {
         result = m2 / (count - 1);
+    }
+}
+
+/**
+ * Perform final evaluation step for skew, which calculates the skew
+ * based on the count and the precursor calculations to the first three moments.
+ * See https://en.wikipedia.org/wiki/Skew
+ * for more information. Precise formula taken from
+ * https://github.com/pandas-dev/pandas/blob/7187e675002fe88e639b8c9c62a8625a1dd1235b/pandas/core/nanops.py
+ *
+ * @param[in,out] stores the calculated skew
+ * @param count: number of observations
+ * @param m1: the sum of elmements (precursor to the first moment)
+ * @param m2: the sum of squares of elements (precursor to the second moment)
+ * @param m3: the sum of cubes of elements (precursor to the third moment)
+ */
+inline void skew_eval(double& result, uint64_t count, double m1, double m2,
+                      double m3) {
+    if (count < 3) {
+        result = std::numeric_limits<double>::quiet_NaN();
+    } else {
+        double sum = m1 / count;
+        double numerator =
+            m3 - 3.0 * m2 * sum + 2.0 * count * std::pow(sum, 3.0);
+        double denominator = m2 - sum * m1;
+        // If the numerator is zero, or the denominator is very close to zero,
+        // then the skew should be set to zero to avoid floating point
+        // arithmetic errors. The threshold for when to count the denominator
+        // as nearly-zero is based on the sigmoid of the logarithm of the
+        // second power-sum, thus ensuring that the threshold is always small,
+        // but becomes especially small when the values involved are tiny.
+        if (numerator == 0.0 ||
+            std::abs(denominator) < 0.1 / (1.0 + std::exp(-std::log(m2)))) {
+            result = 0.0;
+        } else {
+            double s = ((count * std::pow((count - 1), 1.5) / (count - 2)) *
+                        numerator / std::pow(denominator, 1.5));
+            result = s / (count - 1);
+        }
+    }
+}
+
+/**
+ * Perform final evaluation step for kurtosis, which calculates the kurtosis
+ * based on the count and the precursor calculations to the first four moments.
+ * See https://en.wikipedia.org/wiki/Kurtosis
+ * for more information. Precise formula taken from
+ * https://github.com/pandas-dev/pandas/blob/7187e675002fe88e639b8c9c62a8625a1dd1235b/pandas/core/nanops.py
+ *
+ * @param[in,out] stores the calculated skew
+ * @param count: number of observations
+ * @param m1: the sum of elmements (precursor to the first moment)
+ * @param m2: the sum of squares of elements (precursor to the second moment)
+ * @param m3: the sum of cubes of elements (precursor to the third moment)
+ * @param m4: the sum of fourths of elements (precursor to the fourth moment)
+ */
+inline void kurt_eval(double& result, uint64_t count, double m1, double m2,
+                      double m3, double m4) {
+    if (count < 4) {
+        result = std::numeric_limits<double>::quiet_NaN();
+    } else {
+        double sum = m1 / count;
+        double fm = (m4 - 4 * m3 * sum + 6 * m2 * std::pow(sum, 2.0) -
+                     3 * count * std::pow(sum, 4.0));
+        double sm = m2 - sum * m1;
+        // If the numerator is zero, or the denominator is very close to zero,
+        // then the kurtosis should be set to zero to avoid floating point
+        // arithmetic errors. The threshold for when to count the denominator
+        // as nearly-zero is based on the sigmoid of the logarithm of the
+        // second power-sum, thus ensuring that the threshold is always small,
+        // but becomes especially small when the values involved are tiny.
+        if (fm == 0.0 || std::abs(sm) < 0.1 / (1.0 + std::exp(-std::log(m2)))) {
+            result = 0.0;
+        } else {
+            double adj =
+                3 * std::pow(count - 1, 2.0) / ((count - 2) * (count - 3));
+            double numer = count * (count + 1) * (count - 1) * fm;
+            double denom = (count - 2) * (count - 3) * std::pow(sm, 2.0);
+            double s = (count - 1) * (numer / denom - adj);
+            result = s / (count - 1);
+        }
     }
 }
 

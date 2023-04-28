@@ -3,7 +3,7 @@
 #define BODO_DATETIME_H_INCLUDED_
 #include <cstdint>
 
-static int is_leapyear(int64_t year) {
+static inline int is_leapyear(int64_t year) {
     return (year & 0x3) == 0 && /* year % 4 == 0 */
            ((year % 100) != 0 || (year % 400) == 0);
 }

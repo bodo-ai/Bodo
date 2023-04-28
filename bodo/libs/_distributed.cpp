@@ -122,7 +122,8 @@ static int verify_license(EVP_PKEY *key, const void *msg, const size_t mlen,
     EVP_MD_CTX *mdctx = NULL;
 
     // create the Message Digest Context
-    if (!(mdctx = EVP_MD_CTX_create())) return 0;
+    if (!(mdctx = EVP_MD_CTX_create()))
+        return 0;
 
     // initialize the DigestSign operation - use SHA-256 as the message
     // digest function
@@ -130,13 +131,16 @@ static int verify_license(EVP_PKEY *key, const void *msg, const size_t mlen,
         return 0;
 
     // call update with the message
-    if (1 != EVP_DigestVerifyUpdate(mdctx, msg, mlen)) return 0;
+    if (1 != EVP_DigestVerifyUpdate(mdctx, msg, mlen))
+        return 0;
 
     // verify the signature
-    if (1 != EVP_DigestVerifyFinal(mdctx, sig, slen)) return 0;
+    if (1 != EVP_DigestVerifyFinal(mdctx, sig, slen))
+        return 0;
 
     // clean up
-    if (mdctx) EVP_MD_CTX_destroy(mdctx);
+    if (mdctx)
+        EVP_MD_CTX_destroy(mdctx);
 
     return 1;  // verified correctly
 }
@@ -176,7 +180,8 @@ static int get_license_platform(int &license_type,
     std::vector<char> data;   // store license
     bool b64_encoded = true;  // license encoded in Base64
     int read_license = read_license_common(data, b64_encoded);
-    if (!read_license) return 0;
+    if (!read_license)
+        return 0;
 
     license_type = ((int *)data.data())[0] >> 16;
     if (license_type != PLATFORM_LIC_TYPE_AWS &&
@@ -418,8 +423,6 @@ static int verify_license_platform() {
 
 #endif  // CHECK_LICENSE_PLATFORM
 
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
-
 #if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT)
 
 /**
@@ -436,10 +439,13 @@ static bool is_expired(int exp_year, int exp_month, int exp_day) {
     int month_now = now->tm_mon + 1;
     int day_now = now->tm_mday;
 
-    if (year_now > exp_year) return true;
+    if (year_now > exp_year)
+        return true;
     if (year_now == exp_year) {
-        if (month_now > exp_month) return true;
-        if (month_now == exp_month) return day_now > exp_day;
+        if (month_now > exp_month)
+            return true;
+        if (month_now == exp_month)
+            return day_now > exp_day;
     }
     return false;
 }
@@ -477,11 +483,16 @@ static int num_days_till_license_expiration(int exp_year, int exp_month,
 
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "hdist", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "hdist", "No docs", NULL);
+    if (m == NULL)
+        return NULL;
+
+    // make sure MPI is initialized, assuming this will be called
+    // on all processes
+    int is_initialized;
+    MPI_Initialized(&is_initialized);
+    if (!is_initialized)
+        MPI_Init(NULL, NULL);
 
 #if defined(CHECK_LICENSE_PLATFORM)
     int num_pes_plat;
@@ -570,12 +581,6 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     }
 #endif
 
-    // make sure MPI is initialized, assuming this will be called
-    // on all processes
-    int is_initialized;
-    MPI_Initialized(&is_initialized);
-    if (!is_initialized) MPI_Init(NULL, NULL);
-
 #ifdef CHECK_LICENSE_CORE_COUNT
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     if (num_pes > max_cores) {
@@ -588,88 +593,49 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     }
 #endif
 
-    // initialize decimal_mpi_type
-    // TODO: free when program exits
-    if (decimal_mpi_type == MPI_DATATYPE_NULL) {
-        MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
-        MPI_Type_commit(&decimal_mpi_type);
-    }
-
     int decimal_bytes;
-    MPI_Type_size(decimal_mpi_type, &decimal_bytes);
+    MPI_Type_size(get_MPI_typ(Bodo_CTypes::DECIMAL), &decimal_bytes);
     // decimal_value should be exactly 128 bits to match Python
     if (decimal_bytes != 16)
         std::cerr << "invalid decimal mpi type size" << std::endl;
 
-    PyObject_SetAttrString(m, "dist_get_rank",
-                           PyLong_FromVoidPtr((void *)(&dist_get_rank)));
-    PyObject_SetAttrString(m, "dist_get_size",
-                           PyLong_FromVoidPtr((void *)(&dist_get_size)));
-    PyObject_SetAttrString(m, "dist_get_start",
-                           PyLong_FromVoidPtr((void *)(&dist_get_start)));
-    PyObject_SetAttrString(m, "dist_get_end",
-                           PyLong_FromVoidPtr((void *)(&dist_get_end)));
-    PyObject_SetAttrString(
-        m, "dist_get_node_portion",
-        PyLong_FromVoidPtr((void *)(&dist_get_node_portion)));
-    PyObject_SetAttrString(m, "dist_get_time",
-                           PyLong_FromVoidPtr((void *)(&dist_get_time)));
-    PyObject_SetAttrString(m, "get_time",
-                           PyLong_FromVoidPtr((void *)(&get_time)));
-    PyObject_SetAttrString(m, "barrier",
-                           PyLong_FromVoidPtr((void *)(&barrier)));
+    SetAttrStringFromVoidPtr(m, dist_get_rank);
+    SetAttrStringFromVoidPtr(m, dist_get_size);
+    SetAttrStringFromVoidPtr(m, dist_get_start);
+    SetAttrStringFromVoidPtr(m, dist_get_end);
+    SetAttrStringFromVoidPtr(m, dist_get_node_portion);
+    SetAttrStringFromVoidPtr(m, dist_get_time);
+    SetAttrStringFromVoidPtr(m, get_time);
+    SetAttrStringFromVoidPtr(m, barrier);
 
-    PyObject_SetAttrString(m, "dist_reduce",
-                           PyLong_FromVoidPtr((void *)(&dist_reduce)));
-    PyObject_SetAttrString(m, "dist_exscan",
-                           PyLong_FromVoidPtr((void *)(&dist_exscan)));
-    PyObject_SetAttrString(m, "dist_arr_reduce",
-                           PyLong_FromVoidPtr((void *)(&dist_arr_reduce)));
-    PyObject_SetAttrString(m, "dist_irecv",
-                           PyLong_FromVoidPtr((void *)(&dist_irecv)));
-    PyObject_SetAttrString(m, "dist_isend",
-                           PyLong_FromVoidPtr((void *)(&dist_isend)));
-    PyObject_SetAttrString(m, "dist_recv",
-                           PyLong_FromVoidPtr((void *)(&dist_recv)));
-    PyObject_SetAttrString(m, "dist_send",
-                           PyLong_FromVoidPtr((void *)(&dist_send)));
-    PyObject_SetAttrString(m, "dist_wait",
-                           PyLong_FromVoidPtr((void *)(&dist_wait)));
-    PyObject_SetAttrString(
-        m, "dist_get_item_pointer",
-        PyLong_FromVoidPtr((void *)(&dist_get_item_pointer)));
-    PyObject_SetAttrString(m, "get_dummy_ptr",
-                           PyLong_FromVoidPtr((void *)(&get_dummy_ptr)));
-    PyObject_SetAttrString(m, "c_gather_scalar",
-                           PyLong_FromVoidPtr((void *)(&c_gather_scalar)));
-    PyObject_SetAttrString(m, "c_gatherv",
-                           PyLong_FromVoidPtr((void *)(&c_gatherv)));
-    PyObject_SetAttrString(m, "c_allgatherv",
-                           PyLong_FromVoidPtr((void *)(&c_allgatherv)));
-    PyObject_SetAttrString(m, "c_scatterv",
-                           PyLong_FromVoidPtr((void *)(&c_scatterv)));
-    PyObject_SetAttrString(m, "c_bcast",
-                           PyLong_FromVoidPtr((void *)(&c_bcast)));
-    PyObject_SetAttrString(m, "c_alltoallv",
-                           PyLong_FromVoidPtr((void *)(&c_alltoallv)));
-    PyObject_SetAttrString(m, "c_alltoall",
-                           PyLong_FromVoidPtr((void *)(&c_alltoall)));
-    PyObject_SetAttrString(m, "allgather",
-                           PyLong_FromVoidPtr((void *)(&allgather)));
-    PyObject_SetAttrString(m, "finalize",
-                           PyLong_FromVoidPtr((void *)(&finalize)));
-    PyObject_SetAttrString(m, "oneD_reshape_shuffle",
-                           PyLong_FromVoidPtr((void *)(&oneD_reshape_shuffle)));
-    PyObject_SetAttrString(m, "permutation_int",
-                           PyLong_FromVoidPtr((void *)(&permutation_int)));
-    PyObject_SetAttrString(
-        m, "permutation_array_index",
-        PyLong_FromVoidPtr((void *)(&permutation_array_index)));
+    SetAttrStringFromVoidPtr(m, dist_reduce);
+    SetAttrStringFromVoidPtr(m, dist_exscan);
+    SetAttrStringFromVoidPtr(m, dist_arr_reduce);
+    SetAttrStringFromVoidPtr(m, dist_irecv);
+    SetAttrStringFromVoidPtr(m, dist_isend);
+    SetAttrStringFromVoidPtr(m, dist_recv);
+    SetAttrStringFromVoidPtr(m, dist_send);
+    SetAttrStringFromVoidPtr(m, dist_wait);
+    SetAttrStringFromVoidPtr(m, dist_get_item_pointer);
+    SetAttrStringFromVoidPtr(m, get_dummy_ptr);
+    SetAttrStringFromVoidPtr(m, c_gather_scalar);
+    SetAttrStringFromVoidPtr(m, c_gatherv);
+    SetAttrStringFromVoidPtr(m, c_allgatherv);
+    SetAttrStringFromVoidPtr(m, c_scatterv);
+    SetAttrStringFromVoidPtr(m, c_bcast);
+    SetAttrStringFromVoidPtr(m, c_alltoallv);
+    SetAttrStringFromVoidPtr(m, c_alltoall);
+    SetAttrStringFromVoidPtr(m, allgather);
+    SetAttrStringFromVoidPtr(m, finalize);
+    SetAttrStringFromVoidPtr(m, oneD_reshape_shuffle);
+    SetAttrStringFromVoidPtr(m, permutation_int);
+    SetAttrStringFromVoidPtr(m, permutation_array_index);
 
     // add actual int value to module
     PyObject_SetAttrString(m, "mpi_req_num_bytes",
                            PyLong_FromSize_t(get_mpi_req_num_bytes()));
     PyObject_SetAttrString(m, "ANY_SOURCE",
                            PyLong_FromLong((long)MPI_ANY_SOURCE));
+
     return m;
 }

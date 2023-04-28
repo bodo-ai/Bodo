@@ -64,13 +64,15 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
         if ((hdfs_config.host != options.connection_config.host) ||
             (hdfs_config.port != options.connection_config.port) ||
             (hdfs_config.user != options.connection_config.user)) {
-            hdfs_fs = nullptr;  // destructor calls Close, which calls Disconnect
+            hdfs_fs =
+                nullptr;  // destructor calls Close, which calls Disconnect
             hdfs_config = options.connection_config;
         } else {
             return hdfs_fs;
         }
     }
-    if (boost::starts_with(uri_string, "abfs://") || boost::starts_with(uri_string, "abfss://"))
+    if (boost::starts_with(uri_string, "abfs://") ||
+        boost::starts_with(uri_string, "abfss://"))
         // need to pass whole URI as host to libhdfs
         options.ConfigureEndPoint(uri_string, 0);
     // connect to hdfs
@@ -97,7 +99,7 @@ std::pair<std::string, int64_t> hdfs_extract_file_name_size(
 }
 
 bool hdfs_sort_by_name(const std::pair<std::string, int64_t> &a,
-                  const std::pair<std::string, int64_t> &b) {
+                       const std::pair<std::string, int64_t> &b) {
     return (a.first < b.first);
 }
 
@@ -122,7 +124,8 @@ class HdfsFileReader : public SingleFileReader {
             ::arrow::fs::FileSystemFromUri(fname, &path);
         // open file
         result = fs->OpenInputFile(path);
-        CHECK_ARROW_AND_ASSIGN(result, "HdfsFileSystem::OpenInputFile", hdfs_file)
+        CHECK_ARROW_AND_ASSIGN(result, "HdfsFileSystem::OpenInputFile",
+                               hdfs_file)
     }
     bool seek(int64_t pos) {
         status = hdfs_file->Seek(pos + this->csv_header_bytes);
@@ -204,15 +207,15 @@ FileReader *init_hdfs_reader(const char *fname, const char *suffix,
     arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
         ::arrow::fs::FileSystemFromUri(fname, &path);
     arrow::fs::FileInfo file_stat;
-    
+
     arrow::internal::Uri uri;
     (void)uri.Parse(fname);
-    arrow::Result<arrow::fs::FileInfo> result =
-        fs->GetFileInfo(uri.path());
+    arrow::Result<arrow::fs::FileInfo> result = fs->GetFileInfo(uri.path());
     CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat)
-    
+
     if (file_stat.IsDirectory()) {
-        return new HdfsDirectoryFileReader(fname, suffix, csv_header, json_lines);
+        return new HdfsDirectoryFileReader(fname, suffix, csv_header,
+                                           json_lines);
     } else if (file_stat.IsFile()) {
         return new HdfsFileReader(fname, suffix, csv_header, json_lines);
     } else {
@@ -230,7 +233,8 @@ void hdfs_open_file(const char *fname,
     arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
         ::arrow::fs::FileSystemFromUri(f_name, &path);
     arrow::Result<std::shared_ptr<::arrow::io::RandomAccessFile>> result;
-    if (boost::starts_with(f_name, "abfs://") || boost::starts_with(f_name, "abfss://"))
+    if (boost::starts_with(f_name, "abfs://") ||
+        boost::starts_with(f_name, "abfss://"))
         // need to pass whole URI to libhdfs
         result = fs->OpenInputFile(f_name);
     else
@@ -244,17 +248,13 @@ void hdfs_open_file(const char *fname,
 
 PyMODINIT_FUNC PyInit_hdfs_reader(void) {
     PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "hdfs_reader", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "hdfs_reader", "No docs", NULL);
+    if (m == NULL)
+        return NULL;
 
-    PyObject_SetAttrString(m, "init_hdfs_reader",
-                           PyLong_FromVoidPtr((void *)(&init_hdfs_reader)));
-    PyObject_SetAttrString(m, "hdfs_get_fs",
-                           PyLong_FromVoidPtr((void *)(&hdfs_get_fs)));
-    PyObject_SetAttrString(m, "disconnect_hdfs",
-                           PyLong_FromVoidPtr((void *)(&disconnect_hdfs)));
+    SetAttrStringFromVoidPtr(m, init_hdfs_reader);
+    SetAttrStringFromVoidPtr(m, hdfs_get_fs);
+    SetAttrStringFromVoidPtr(m, disconnect_hdfs);
+
     return m;
 }

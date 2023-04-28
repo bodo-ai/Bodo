@@ -13,6 +13,8 @@ jobs:
   - task: UsePythonVersion@0
     inputs:
       versionSpec: '3.8'
+      #Github Token used to download python from the GitHub registry if it doesn't already exist locally
+      githubToken: $(GITHUB_REGISTRY_DL_TOKEN)
     displayName: 'Use Python 3.8'
 
   - script: |
@@ -85,7 +87,7 @@ jobs:
         export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
       fi
       buildscripts/setup_osx_sdk.sh
-    condition: eq('${{ parameters.vmImage }}', 'macOS-latest') 
+    condition: eq('${{ parameters.vmImage }}', 'macOS-latest')
     displayName: 'Setup OSX SDK'
 
   - script: |
@@ -104,7 +106,7 @@ jobs:
       export PATH=$HOME/mambaforge/bin:$PATH
       export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
       export CONDA_BUILD_SYSROOT="/opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
-      
+
       set +x
       source activate bodo_build
       set -x
@@ -113,7 +115,7 @@ jobs:
       setup_conda_rc ./ ./buildscripts/bodo/bodo-m1-conda-recipe ./buildscripts/bodo/bodo-m1-conda-recipe/release_conda_build_config.yaml
       /usr/bin/sudo mangle_homebrew
       /usr/bin/sudo -k
-      
+
       set +x
       source run_conda_forge_build_setup
     condition: and(eq('${{ parameters.vmImage }}', 'macOS-latest'), eq('${{ parameters.buildARM }}', 'true'))
@@ -140,7 +142,7 @@ jobs:
       set -exo pipefail
       export PATH=$HOME/mambaforge/bin:$PATH
       unamestr=`uname`
-      
+
       # macOS_ARM
       if [[ "$unamestr" == 'Darwin' ]] && [[ "${{ parameters.buildARM }}" == "true" ]]; then
         export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
@@ -178,7 +180,7 @@ jobs:
       else
         export CONDA_VARIANT_ARG="-e nightly_conda_build_config.yaml"
       fi
-      
+
       conda mambabuild . -c conda-forge --no-test $VERIFY_ARG --debug --no-anaconda-upload $CONDA_VARIANT_ARG
     displayName: 'Build Bodo'
 

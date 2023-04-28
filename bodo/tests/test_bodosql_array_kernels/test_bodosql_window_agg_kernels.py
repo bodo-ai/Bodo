@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import bodosql_use_date_type, check_func
+from bodo.tests.utils import check_func
 
 
 @bodo.jit(distributed=False)
@@ -756,20 +756,19 @@ def test_windowed_mode(
         else:
             return pd.Series(L, dtype=S.dtype)
 
-    with bodosql_use_date_type():
-        check_func(
-            impl,
-            (data, lower_bound, upper_bound),
-            py_output=generate_answers(
-                data, lower_bound, upper_bound, dataset == "float64_nan"
-            ),
-            check_dtype=False,
-            reset_index=True,
-            # For now, only works sequentially because it can only be used inside
-            # of a Window function with a partition
-            only_seq=True,
-            is_out_distributed=False,
-        )
+    check_func(
+        impl,
+        (data, lower_bound, upper_bound),
+        py_output=generate_answers(
+            data, lower_bound, upper_bound, dataset == "float64_nan"
+        ),
+        check_dtype=False,
+        reset_index=True,
+        # For now, only works sequentially because it can only be used inside
+        # of a Window function with a partition
+        only_seq=True,
+        is_out_distributed=False,
+    )
 
 
 @pytest.mark.parametrize(

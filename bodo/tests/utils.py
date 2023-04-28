@@ -948,7 +948,6 @@ def _test_equal(
 
         if object in py_out_dtypes or np.bool_ in py_out_dtypes:
             check_dtype = False
-
         pd.testing.assert_frame_equal(
             bodo_out,
             py_out,
@@ -2448,16 +2447,33 @@ pytest_snowflake = [
 
 
 @contextmanager
-def bodosql_use_date_type() -> None:
+def temp_env_override(env_vars):
+    """Update the current environment variables with key-value pairs provided
+    in a dictionary and then restore it after.
+
+    Args
+        env_vars (Dict(str, str or None)): A dictionary of environment variables to set.
+            A value of None indicates a variable should be removed.
     """
-    Sets the _BODOSQL_USE_DATE_TYPE to a True value so tests that
-    use the DATE type can run successfully. This context manager maintains
-    the original value to ensure that we do not need to alter the type until
-    all operations are supported and others tests are not impacted.
-    """
+
+    def update_env_vars(env_vars):
+        old_env_vars = {}
+        for k, v in env_vars.items():
+            if k in os.environ:
+                old_env_vars[k] = os.environ[k]
+            else:
+                old_env_vars[k] = None
+
+            if v is None:
+                if k in os.environ:
+                    del os.environ[k]
+            else:
+                os.environ[k] = v
+        return old_env_vars
+
+    old_env = {}
     try:
-        old_bodosql_use_date_type = bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE
-        bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE = True
-        yield None
+        old_env = update_env_vars(env_vars)
+        yield
     finally:
-        bodo.hiframes.boxing._BODOSQL_USE_DATE_TYPE = old_bodosql_use_date_type
+        update_env_vars(old_env)

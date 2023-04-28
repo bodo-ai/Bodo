@@ -17,14 +17,17 @@ std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
     // str may be of the form 0.45000000000 or 4.000000000
     size_t last_char = str.length();
     while (true) {
-        if (str[last_char - 1] != '0') break;
+        if (str[last_char - 1] != '0')
+            break;
         last_char--;
     }
     // position reduce str to 0.45  or 4.
-    if (str[last_char - 1] == '.') last_char--;
+    if (str[last_char - 1] == '.')
+        last_char--;
     // position reduce str to 0.45 or 4
     str = str.substr(0, last_char);
-    if (str == "0.E-18") return "0";
+    if (str == "0.E-18")
+        return "0";
     return str;
 }
 
@@ -77,11 +80,9 @@ bool decimal_cmp_le(decimal_value val1, int64_t scale1, decimal_value val2,
 
 PyMODINIT_FUNC PyInit_decimal_ext(void) {
     PyObject* m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "decimal_ext", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
+    MOD_DEF(m, "decimal_ext", "No docs", NULL);
+    if (m == NULL)
+        return NULL;
 
     // init numpy
     import_array();
@@ -94,37 +95,18 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
 
     // These are all C functions, so they don't throw any exceptions.
     // We might still need to add better error handling in the future.
+    SetAttrStringFromVoidPtr(m, box_decimal_array);
+    SetAttrStringFromVoidPtr(m, unbox_decimal_array);
+    SetAttrStringFromVoidPtr(m, unbox_decimal);
+    SetAttrStringFromVoidPtr(m, decimal_to_str);
+    SetAttrStringFromVoidPtr(m, str_to_decimal);
+    SetAttrStringFromVoidPtr(m, decimal_cmp_eq);
+    SetAttrStringFromVoidPtr(m, decimal_cmp_ne);
+    SetAttrStringFromVoidPtr(m, decimal_cmp_gt);
+    SetAttrStringFromVoidPtr(m, decimal_cmp_ge);
+    SetAttrStringFromVoidPtr(m, decimal_cmp_lt);
+    SetAttrStringFromVoidPtr(m, decimal_cmp_le);
 
-    PyObject_SetAttrString(m, "box_decimal_array",
-                           PyLong_FromVoidPtr((void*)(&box_decimal_array)));
-    PyObject_SetAttrString(m, "unbox_decimal_array",
-                           PyLong_FromVoidPtr((void*)(&unbox_decimal_array)));
-    PyObject_SetAttrString(m, "unbox_decimal",
-                           PyLong_FromVoidPtr((void*)(&unbox_decimal)));
-    PyObject_SetAttrString(m, "decimal_to_str",
-                           PyLong_FromVoidPtr((void*)(&decimal_to_str)));
-    PyObject_SetAttrString(m, "str_to_decimal",
-                           PyLong_FromVoidPtr((void*)(&str_to_decimal)));
-    PyObject_SetAttrString(m, "decimal_cmp_eq",
-                           PyLong_FromVoidPtr((void*)(&decimal_cmp_eq)));
-    PyObject_SetAttrString(m, "decimal_cmp_ne",
-                           PyLong_FromVoidPtr((void*)(&decimal_cmp_ne)));
-    PyObject_SetAttrString(m, "decimal_cmp_gt",
-                           PyLong_FromVoidPtr((void*)(&decimal_cmp_gt)));
-    PyObject_SetAttrString(m, "decimal_cmp_ge",
-                           PyLong_FromVoidPtr((void*)(&decimal_cmp_ge)));
-    PyObject_SetAttrString(m, "decimal_cmp_lt",
-                           PyLong_FromVoidPtr((void*)(&decimal_cmp_lt)));
-    PyObject_SetAttrString(m, "decimal_cmp_le",
-                           PyLong_FromVoidPtr((void*)(&decimal_cmp_le)));
-    PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
-    PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
-    PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
-    PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
     return m;
 }
 

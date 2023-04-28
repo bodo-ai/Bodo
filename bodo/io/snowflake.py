@@ -21,7 +21,6 @@ from bodo.io.helpers import (
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
-from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
@@ -131,6 +130,7 @@ INT_BITSIZE_TO_ARROW_DATATYPE = {
     4: pa.int32(),
     8: pa.int64(),
 }
+STRING_TYPE_CODE = 2
 
 
 def gen_snowflake_schema(column_names, column_datatypes):  # pragma: no cover
@@ -395,8 +395,7 @@ def snowflake_connect(
                 import json
 
                 params[key] = json.loads(val)
-    # pass Bodo identifier to Snowflake
-    params["application"] = "bodo"
+
     # Set a short login timeout so people don't have to wait the default
     # 60 seconds to find out they added the wrong credentials.
     params["login_timeout"] = 5
@@ -457,7 +456,9 @@ def get_schema_from_metadata(
     sql_query: str,
     is_select_query: bool,
     is_table_input: bool,
-) -> Tuple[List[pa.Field], List, List[int], List[pa.DataType]]:  # pragma: no cover
+) -> Tuple[
+    List[pa.Field], List, List[bool], List[int], List[pa.DataType]
+]:  # pragma: no cover
     """
     Determine the Arrow schema and Bodo types of the query output
     The approach is described in a Confluence Doc:
@@ -473,6 +474,7 @@ def get_schema_from_metadata(
         pa_fields: List of PyArrow Fields for Each Column
             Contains source column name, type, and nullability
         col_types: List of Output Bodo Types for Each Column
+        check_dict_encoding: Should we check dictionary encoding for this column?
         unsupported_columns: Output Column Names with Unsupported Types
             Bodo can't read the column in but should still recognize it for
             other uses, like column pruning
@@ -489,10 +491,16 @@ def get_schema_from_metadata(
 
     arrow_fields: List[pa.Field] = []  # Equivalent PyArrow Fields
     col_names_to_check: List[str] = []  # Columns to get typeof metadata for
+    check_dict_encoding: List[
+        bool
+    ] = []  # Should we check dictionary encoding for this type.
     col_idxs_to_check: List[int] = []  # Index of columns to get typeof metadata
     for i, field_meta in enumerate(query_field_metadata):
         dtype = TYPE_CODE_TO_ARROW_TYPE[field_meta.type_code](field_meta, tz)
         arrow_fields.append(pa.field(field_meta.name, dtype, field_meta.is_nullable))
+        # Only check dictionary encoding for STRING columns, not other columns
+        # that we load as strings.
+        check_dict_encoding.append(field_meta.type_code == STRING_TYPE_CODE)
         if pa.types.is_int64(dtype):
             col_names_to_check.append(field_meta.name)
             col_idxs_to_check.append(i)
@@ -552,7 +560,13 @@ def get_schema_from_metadata(
             # Store the unsupported arrow type for future error messages
             unsupported_arrow_types.append(field.type)
 
-    return arrow_fields, col_types, unsupported_columns, unsupported_arrow_types
+    return (
+        arrow_fields,
+        col_types,
+        check_dict_encoding,
+        unsupported_columns,
+        unsupported_arrow_types,
+    )
 
 
 def _get_table_row_count(cursor, table_name):
@@ -722,14 +736,15 @@ def get_schema(
     (
         pa_fields,
         col_types,
+        check_dict_encoding,
         unsupported_columns,
         unsupported_arrow_types,
     ) = get_schema_from_metadata(cursor, sql_query, is_select_query, is_table_input)
 
     str_as_dict_cols = _bodo_read_as_dict if _bodo_read_as_dict else []
     str_col_name_to_ind = {}
-    for i, t in enumerate(col_types):
-        if t == string_array_type:
+    for i, check_dict_encoding in enumerate(check_dict_encoding):
+        if check_dict_encoding:
             str_col_name_to_ind[pa_fields[i].name] = i
 
     # Map the snowflake original column name to the name that
@@ -1044,7 +1059,7 @@ def create_internal_stage(cursor: "SnowflakeCursor", is_temporary: bool = False)
 
             create_stage_sql = (
                 f'{create_stage_cmd} "{stage_name}" '
-                f"/* Python:bodo.io.snowflake.create_internal_stage() */ "
+                f"/* io.snowflake.create_internal_stage() */ "
             )
             cursor.execute(create_stage_sql, _is_internal=True).fetchall()  # type: ignore
             break
@@ -1072,8 +1087,7 @@ def drop_internal_stage(cursor: "SnowflakeCursor", stage_name: str):
     ev = tracing.Event("drop_internal_stage", is_parallel=False)
 
     drop_stage_sql = (
-        f'DROP STAGE "{stage_name}" '
-        f"/* Python:bodo.io.snowflake.drop_internal_stage() */ "
+        f'DROP STAGE "{stage_name}" ' f"/* io.snowflake.drop_internal_stage() */ "
     )
     cursor.execute(drop_stage_sql, _is_internal=True)
 
@@ -1112,7 +1126,7 @@ def do_upload_and_cleanup(
         )
         upload_sql = (
             f"PUT 'file://{chunk_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
-            f"/* Python:bodo.io.snowflake.do_upload_and_cleanup() */"
+            f"/* io.snowflake.do_upload_and_cleanup() */"
         )
         cursor.execute(upload_sql, _is_internal=True).fetchall()  # type: ignore
         ev_upload_parquet.finalize()
@@ -1138,6 +1152,7 @@ def create_table_handle_exists(
     location: str,
     sf_schema,
     if_exists: str,
+    table_type: str,
 ):  # pragma: no cover
     """Automatically create a new table in Snowflake at the given location if
     it doesn't exist, following the schema of staged files.
@@ -1152,6 +1167,7 @@ def create_table_handle_exists(
             "replace": If table exists, drop it, recreate it, and insert data.
                 Create if does not exist
             "append": If table exists, insert data. Create if does not exist
+        table_type: Type of table to create. Must be one of "", "TRANSIENT", or "TEMPORARY"
 
     """
     ev = tracing.Event("create_table_if_not_exists", is_parallel=False)
@@ -1167,13 +1183,18 @@ def create_table_handle_exists(
             "or 'pip install snowflake-connector-python'."
         )
 
-    # Handle `if_exists`
+    # TODO: handle {table_type}
+
+    # Handle `if_exists` and `table_type`
+    if table_type not in ["", "TRANSIENT", "TEMPORARY"]:
+        raise ValueError(f"'{table_type}' is not valid value for table_type")
+
     if if_exists == "fail":
-        create_table_cmd = "CREATE TABLE"
+        create_table_cmd = f"CREATE {table_type} TABLE"
     elif if_exists == "replace":
-        create_table_cmd = "CREATE OR REPLACE TABLE"
+        create_table_cmd = f"CREATE OR REPLACE {table_type} TABLE"
     elif if_exists == "append":
-        create_table_cmd = "CREATE TABLE IF NOT EXISTS"
+        create_table_cmd = f"CREATE {table_type} TABLE IF NOT EXISTS"
     else:
         raise ValueError(f"'{if_exists}' is not valid for if_exists")
 
@@ -1195,7 +1216,7 @@ def create_table_handle_exists(
     create_table_columns = ", ".join(create_table_col_lst)
     create_table_sql = (
         f"{create_table_cmd} {location} ({create_table_columns}) "
-        f"/* Python:bodo.io.snowflake.create_table_if_not_exists() */"
+        f"/* io.snowflake.create_table_if_not_exists() */"
     )
     cursor.execute(create_table_sql, _is_internal=True)
     ev_create_table.finalize()
@@ -1268,7 +1289,7 @@ def execute_copy_into(
         f'FROM (SELECT {parquet_columns} FROM @"{stage_name}") '
         f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION=AUTO BINARY_AS_TEXT=False) "
         f"PURGE=TRUE ON_ERROR={SF_WRITE_COPY_INTO_ON_ERROR} "
-        f"/* Python:bodo.io.snowflake.execute_copy_into() */"
+        f"/* io.snowflake.execute_copy_into() */"
     )
     copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()  # type: ignore
 
@@ -1370,7 +1391,7 @@ def get_snowflake_stage_info(
     # Run `_execute_helper` to get stage info dict from Snowflake
     upload_sql = (
         f"PUT 'file://{query_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
-        f"/* Python:bodo.io.snowflake.get_snowflake_stage_info() */"
+        f"/* io.snowflake.get_snowflake_stage_info() */"
     )
     stage_info = cursor._execute_helper(upload_sql, is_internal=True)
 
@@ -1642,6 +1663,7 @@ def create_table_copy_into(
     location: str,
     sf_schema,
     if_exists: str,
+    table_type: str,
     num_files_uploaded: int,
     old_creds,
     tmp_folder: TemporaryDirectory,
@@ -1664,6 +1686,7 @@ def create_table_copy_into(
             "replace": If table exists, drop it, recreate it, and insert data.
                 Create if does not exist
             "append": If table exists, insert data. Create if does not exist
+        table_type: Type of table to create. Must be one of "", "TRANSIENT", or "TEMPORARY"
         num_files_uploaded: Number of files that were uploaded to the stage. We use this
             to validate that the COPY INTO went through successfully. Also, in case
             this is 0, we skip the COPY INTO step.
@@ -1687,7 +1710,6 @@ def create_table_copy_into(
             for more details), which we'll restore in this function.
     """
     ev = tracing.Event("create_table_copy_into", is_parallel=False)
-
     comm = MPI.COMM_WORLD
     my_rank = comm.Get_rank()
 
@@ -1695,9 +1717,7 @@ def create_table_copy_into(
     err = None  # Forward declaration
     if my_rank == 0:
         try:
-            begin_transaction_sql = (
-                "BEGIN /* Python:bodo.io.snowflake.create_table_copy_into() */"
-            )
+            begin_transaction_sql = "BEGIN /* io.snowflake.create_table_copy_into() */"
             cursor.execute(begin_transaction_sql)
 
             # Table should be created even if the dataframe is empty.
@@ -1707,6 +1727,7 @@ def create_table_copy_into(
                 location,
                 sf_schema,
                 if_exists,
+                table_type,
             )
             # No point of running COPY INTO if there are no files.
             if num_files_uploaded > 0:
@@ -1728,7 +1749,7 @@ def create_table_copy_into(
                     )
 
             commit_transaction_sql = (
-                "COMMIT /* Python:bodo.io.snowflake.create_table_copy_into() */"
+                "COMMIT /* io.snowflake.create_table_copy_into() */"
             )
             cursor.execute(commit_transaction_sql)
 

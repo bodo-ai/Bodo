@@ -307,6 +307,16 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
+  public static final SqlAggFunction KURTOSIS =
+      SqlBasicAggFunction.create(
+              "KURTOSIS", SqlKind.OTHER_FUNCTION, ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
+  public static final SqlAggFunction SKEW =
+      SqlBasicAggFunction.create(
+              "SKEW", SqlKind.OTHER_FUNCTION, ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
   public static final SqlAggFunction RATIO_TO_REPORT =
       SqlBasicAggFunction.create(
           "RATIO_TO_REPORT",
@@ -391,6 +401,8 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           LOG2,
           CORR,
           MEDIAN,
+          KURTOSIS,
+          SKEW,
           RATIO_TO_REPORT,
           POW,
           CONV,

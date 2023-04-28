@@ -2067,6 +2067,13 @@ def is_builtin_function(func):
     )
 
 
+def is_numpy_function(func):
+    """
+    Determine if func is a builtin function from NumPy.
+    """
+    return isinstance(func, types.Function) and func.typing_key.__module__ == "numpy"
+
+
 def get_builtin_function_name(func):
     """
     Given a builtin function, which is a types.Function,

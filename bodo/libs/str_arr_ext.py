@@ -1456,7 +1456,7 @@ def box_str_arr(typ, val, c):
         from bodo.libs.array import array_info_type, array_to_info_codegen
 
         arr_info = array_to_info_codegen(
-            c.context, c.builder, array_info_type(typ), (val,), incref=False
+            c.context, c.builder, array_info_type(typ), (val,)
         )
         fnty = lir.FunctionType(
             c.pyapi.pyobj,
@@ -2389,11 +2389,7 @@ def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
         (str_arr,) = args
 
         str_arr_info = bodo.libs.array.array_to_info_codegen(
-            context,
-            builder,
-            bodo.libs.array.array_info_type(sig.args[0]),
-            (str_arr,),
-            False,
+            context, builder, bodo.libs.array.array_info_type(sig.args[0]), (str_arr,)
         )
 
         fnty = lir.FunctionType(
@@ -2422,9 +2418,7 @@ def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
                 lir.IntType(8).as_pointer(),
             ],
         )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="delete_info_decref_array"
-        )
+        fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="delete_info")
         builder.call(fn_tp, [dict_array_info])
 
         return dict_arr

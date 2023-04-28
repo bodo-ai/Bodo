@@ -53,6 +53,7 @@ typedef void (*cond_expr_fn_batch_t)(
 
 /** This function does the joining of the table and returns the joined
  * table
+ * Using raw pointers since called from Python.
  *
  * This implementation follows the Shared partition procedure.
  * The data is partitioned and shuffled with the _gen_par_shuffle.
@@ -132,6 +133,7 @@ table_info* hash_join_table(
 
 /**
  * @brief cross join two tables (parallel if any input is parallel)
+ * Using raw pointers since called from Python.
  *
  * @param left_table left input table
  * @param right_table right input table
@@ -172,6 +174,8 @@ table_info* cross_join_table(
  * @brief Point-in-interval or interval-overlap join of two tables (parallel if
  * any input is parallel).
  * Design doc: https://bodo.atlassian.net/l/cp/1JCnntP1
+ *
+ * Using raw pointers since called from Python.
  *
  * @param left_table left input table
  * @param right_table right input table

@@ -3793,6 +3793,24 @@ List<Object> Expression2(ExprContext exprContext) :
                     |
                         <ALL> { op = SqlStdOperatorTable.ALL_NOT_LIKE; }
                     )
+                |
+                    <ILIKE>
+                    (
+                        <SOME> { op = SqlStdOperatorTable.SOME_ILIKE; }
+                    |
+                        <ANY> { op = SqlStdOperatorTable.SOME_ILIKE; }
+                    |
+                        <ALL> { op = SqlStdOperatorTable.ALL_ILIKE; }
+                    )
+                |
+                    <NOT> <ILIKE>
+                    (
+                        <SOME> { op = SqlStdOperatorTable.SOME_NOT_ILIKE; }
+                    |
+                        <ANY> { op = SqlStdOperatorTable.SOME_NOT_ILIKE; }
+                    |
+                        <ALL> { op = SqlStdOperatorTable.ALL_NOT_ILIKE; }
+                    )
                 )
                 { s.clear().add(this); }
                 nodeList = ParenthesizedQueryOrCommaList(ExprContext.ACCEPT_NONCURSOR)
@@ -6053,6 +6071,13 @@ SqlTypeNameSpec DateTimeTypeName() :
         }
         return new SqlBasicTypeNameSpec(typeName, precision, s.end(this));
     }
+|
+    <TIMESTAMP_NTZ> {
+        s = span();
+        precision = PrecisionOpt();
+        typeName = SqlTypeName.TIMESTAMP;
+        return new SqlBasicTypeNameSpec(typeName, precision, s.end(this));
+    }
 }
 
 // Parse an optional data type precision, default is -1.
@@ -8305,6 +8330,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < TIES: "TIES" >
 |   < TIME: "TIME" >
 |   < TIMESTAMP: "TIMESTAMP" >
+|   < TIMESTAMP_NTZ: "TIMESTAMP_NTZ" >
 |   < TIMESTAMPADD: "TIMESTAMPADD" >
 |   < TIMESTAMPDIFF: "TIMESTAMPDIFF" >
 |   < TIMEZONE_HOUR: "TIMEZONE_HOUR" >

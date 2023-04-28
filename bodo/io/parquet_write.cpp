@@ -156,8 +156,9 @@ static arrow::Status WriteTable(
 // ----------------------------------------------------------------------------
 
 int64_t pq_write(
-    const char *_path_name, const table_info *table,
-    const array_info *col_names_arr, const array_info *index, bool write_index,
+    const char *_path_name, const std::shared_ptr<table_info> table,
+    const std::shared_ptr<array_info> col_names_arr,
+    const std::shared_ptr<array_info> index, bool write_index,
     const char *metadata, const char *compression, bool is_parallel,
     bool write_rangeindex_to_metadata, const int ri_start, const int ri_stop,
     const int ri_step, const char *idx_name, const char *bucket_region,
@@ -196,7 +197,8 @@ int64_t pq_write(
             "Fatal error: number of written char for metadata is greater "
             "than new_metadata size");
 
-    if (row_group_size == -1) row_group_size = DEFAULT_ROW_GROUP_SIZE;
+    if (row_group_size == -1)
+        row_group_size = DEFAULT_ROW_GROUP_SIZE;
     if (row_group_size <= 0)
         throw std::runtime_error(
             "to_parquet(): row_group_size must be greater than 0");
@@ -445,19 +447,21 @@ int64_t pq_write(
     return file_size;
 }
 
-int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
-                          const array_info *col_names_arr,
-                          const array_info *index, bool write_index,
-                          const char *metadata, const char *compression,
-                          bool is_parallel, bool write_rangeindex_to_metadata,
-                          const int ri_start, const int ri_stop,
-                          const int ri_step, const char *idx_name,
-                          const char *bucket_region, int64_t row_group_size,
-                          const char *prefix, bool convert_timedelta_to_int64,
-                          const char *tz, bool downcast_time_ns_to_us) {
+int64_t pq_write_py_entry(const char *_path_name, table_info *table,
+                          array_info *col_names_arr, array_info *index,
+                          bool write_index, const char *metadata,
+                          const char *compression, bool is_parallel,
+                          bool write_rangeindex_to_metadata, const int ri_start,
+                          const int ri_stop, const int ri_step,
+                          const char *idx_name, const char *bucket_region,
+                          int64_t row_group_size, const char *prefix,
+                          bool convert_timedelta_to_int64, const char *tz,
+                          bool downcast_time_ns_to_us) {
     try {
         int64_t file_size = pq_write(
-            _path_name, table, col_names_arr, index, write_index, metadata,
+            _path_name, std::shared_ptr<table_info>(table),
+            std::shared_ptr<array_info>(col_names_arr),
+            std::shared_ptr<array_info>(index), write_index, metadata,
             compression, is_parallel, write_rangeindex_to_metadata, ri_start,
             ri_stop, ri_step, idx_name, bucket_region, row_group_size, prefix,
             convert_timedelta_to_int64, tz, downcast_time_ns_to_us);
@@ -468,14 +472,12 @@ int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
     }
 }
 
-void pq_write_partitioned(const char *_path_name, table_info *table,
-                          const array_info *col_names_arr,
-                          const array_info *col_names_arr_no_partitions,
-                          table_info *categories_table, int *partition_cols_idx,
-                          int num_partition_cols, const char *compression,
-                          bool is_parallel, const char *bucket_region,
-                          int64_t row_group_size, const char *prefix,
-                          const char *tz) {
+void pq_write_partitioned_py_entry(
+    const char *_path_name, table_info *in_table, array_info *in_col_names_arr,
+    array_info *in_col_names_arr_no_partitions, table_info *in_categories_table,
+    int *partition_cols_idx, int num_partition_cols, const char *compression,
+    bool is_parallel, const char *bucket_region, int64_t row_group_size,
+    const char *prefix, const char *tz) {
     // TODOs
     // - Do is parallel here?
     // - sequential (only rank 0 writes, or all write with same name -which?-)
@@ -491,13 +493,24 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             throw std::runtime_error(
                 "to_parquet partitioned not implemented in sequential mode");
 
+        // convert raw pointers to smart pointers to enable automatic
+        // refcounting
+        std::shared_ptr<table_info> table =
+            std::shared_ptr<table_info>(in_table);
+        std::shared_ptr<array_info> col_names_arr =
+            std::shared_ptr<array_info>(in_col_names_arr);
+        std::shared_ptr<array_info> col_names_arr_no_partitions =
+            std::shared_ptr<array_info>(in_col_names_arr_no_partitions);
+        std::shared_ptr<table_info> categories_table =
+            std::shared_ptr<table_info>(in_categories_table);
+
         // new_table will have partition columns at the beginning and the rest
         // after (to use multi_col_key for hashing which assumes that keys are
         // at the beginning), and we will then drop the partition columns from
         // it for writing
-        table_info *new_table = new table_info();
+        std::shared_ptr<table_info> new_table = std::make_shared<table_info>();
         std::vector<bool> is_part_col(table->ncols(), false);
-        std::vector<array_info *> partition_cols;
+        std::vector<std::shared_ptr<array_info>> partition_cols;
         std::vector<std::string> part_col_names;
         offset_t *offsets = (offset_t *)col_names_arr->data2();
         for (int i = 0; i < num_partition_cols; i++) {
@@ -542,7 +555,8 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             if (p.rows.size() == 0) {
                 // generate output file name
                 p.fpath = std::string(_path_name);
-                if (p.fpath.back() != '/') p.fpath += "/";
+                if (p.fpath.back() != '/')
+                    p.fpath += "/";
                 int64_t cat_col_idx = 0;
                 for (int j = 0; j < num_partition_cols; j++) {
                     auto part_col = partition_cols[j];
@@ -606,9 +620,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
         for (auto it = key_to_partition.begin(); it != key_to_partition.end();
              it++) {
             const partition_write_info &p = it->second;
-            // RetrieveTable steals the reference but we still need them
-            for (auto a : new_table->columns) incref_array(a);
-            table_info *part_table =
+            std::shared_ptr<table_info> part_table =
                 RetrieveTable(new_table, p.rows, new_table->ncols());
             // NOTE: we pass is_parallel=False because we already took care
             // of is_parallel here
@@ -625,9 +637,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                      /*idx_name=*/"", bucket_region, row_group_size, prefix,
                      false /* TODO: convert_timedelta_to_int64*/, tz,
                      false /* TODO: downcast_time_ns_to_us*/);
-            delete_table_decref_arrays(part_table);
         }
-        delete new_table;
 
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

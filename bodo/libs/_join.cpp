@@ -62,9 +62,11 @@ double compute_population_skew(int64_t val) {
  *
  * @param original_output The original output of the join. If
  * there is not significant skew this will be returned.
- * @return table_info* The table output after rebalancing the ranks.
+ * @return std::shared_ptr<table_info> The table output after rebalancing the
+ * ranks.
  */
-table_info* rebalance_join_output(table_info* original_output) {
+std::shared_ptr<table_info> rebalance_join_output(
+    std::shared_ptr<table_info> original_output) {
     tracing::Event ev("rebalance_join_output", true);
     // Communicate the number of rows on each rank.
     int64_t nrows = original_output->nrows();
@@ -85,11 +87,8 @@ table_info* rebalance_join_output(table_info* original_output) {
         // 2600. As a result we use 3.0 as the threshold for rebalancing to be
         // slightly more conservative until we have more data/have done further
         // testing.
-        table_info* out_table =
-            shuffle_renormalization(original_output, 0, 0, true);
-        // shuffle_renormalization calls shuffle_table_kernel which decrefs the
-        // input arrays.
-        delete original_output;
+        std::shared_ptr<table_info> out_table =
+            shuffle_renormalization(std::move(original_output), 0, 0, true);
         return out_table;
     } else {
         return original_output;
@@ -105,7 +104,8 @@ table_info* rebalance_join_output(table_info* original_output) {
  * @param extra_data_col Is there an extra data column generated to handle an
  * extra key?
  */
-void validate_equi_join_input(table_info* left_table, table_info* right_table,
+void validate_equi_join_input(std::shared_ptr<table_info> left_table,
+                              std::shared_ptr<table_info> right_table,
                               size_t n_key, bool extra_data_col) {
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         // Check that all of the key pairs have matching types.
@@ -133,8 +133,8 @@ void validate_equi_join_input(table_info* left_table, table_info* right_table,
  * @param right_parallel right table is parallel
  * @param n_keys number of keys
  */
-void equi_join_keys_handle_dict_encoded(table_info* left_table,
-                                        table_info* right_table,
+void equi_join_keys_handle_dict_encoded(std::shared_ptr<table_info> left_table,
+                                        std::shared_ptr<table_info> right_table,
                                         bool left_parallel, bool right_parallel,
                                         size_t n_key) {
     // Unify dictionaries of DICT key columns (required for key comparison)
@@ -158,8 +158,8 @@ void equi_join_keys_handle_dict_encoded(table_info* left_table,
     // then convert_local_dictionary_to_global will also drop duplicate and
     // drop_duplicates_local_dictionary will be a no-op.
     for (size_t i = 0; i < n_key; i++) {
-        array_info* arr1 = left_table->columns[i];
-        array_info* arr2 = right_table->columns[i];
+        std::shared_ptr<array_info> arr1 = left_table->columns[i];
+        std::shared_ptr<array_info> arr2 = right_table->columns[i];
         if ((arr1->arr_type == bodo_array_type::DICT) &&
             (arr2->arr_type == bodo_array_type::DICT)) {
             make_dictionary_global_and_unique(arr1, left_parallel);
@@ -185,7 +185,7 @@ void equi_join_keys_handle_dict_encoded(table_info* left_table,
  * to the set.
  */
 void insert_non_equi_func_set(UNORD_SET_CONTAINER<int64_t>* set,
-                              table_info* table,
+                              std::shared_ptr<table_info> table,
                               uint64_t* non_equi_func_col_nums,
                               uint64_t len_non_equi, bool is_parallel,
                               size_t n_key) {
@@ -196,7 +196,7 @@ void insert_non_equi_func_set(UNORD_SET_CONTAINER<int64_t>* set,
         // If a column is in both the non-equality C funcs and the regular
         // equality check we don't include it in the set.
         if (col_num >= n_key) {
-            array_info* arr = table->columns[col_num];
+            std::shared_ptr<array_info> arr = table->columns[col_num];
             if (arr->arr_type == bodo_array_type::DICT) {
                 make_dictionary_global_and_unique(arr, is_parallel);
             }
@@ -227,7 +227,8 @@ void insert_non_equi_func_set(UNORD_SET_CONTAINER<int64_t>* set,
  * numbers that are used in the non-equality C funcs.
  */
 std::tuple<UNORD_SET_CONTAINER<int64_t>*, UNORD_SET_CONTAINER<int64_t>*>
-create_non_equi_func_sets(table_info* left_table, table_info* right_table,
+create_non_equi_func_sets(std::shared_ptr<table_info> left_table,
+                          std::shared_ptr<table_info> right_table,
                           uint64_t* left_non_equi_func_col_nums,
                           uint64_t len_left_non_equi,
                           uint64_t* right_non_equi_func_col_nums,
@@ -380,21 +381,23 @@ int get_bcast_join_threshold() {
  * @param n_pes The total number of processes.
  * @param n_key The total number of key columns in the equality function.
  * @param is_na_equal When doing a merge, are NA values considered equal?
- * @return std::tuple<table_info*, table_info *, bool, bool> A tuple of the new
- * left and right tables after any shuffling and whether or not the left and
- * right tables are replicated. A table will become replicated if we broadcast
- * it.
+ * @return std::tuple<std::shared_ptr<table_info>, std::shared_ptr<table_info>
+ * , bool, bool> A tuple of the new left and right tables after any shuffling
+ * and whether or not the left and right tables are replicated. A table will
+ * become replicated if we broadcast it.
  */
-std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
-    table_info* left_table, table_info* right_table, bool is_left_outer,
-    bool is_right_outer, bool left_parallel, bool right_parallel, int64_t n_pes,
-    size_t n_key, const bool is_na_equal) {
+std::tuple<std::shared_ptr<table_info>, std::shared_ptr<table_info>, bool, bool>
+equi_join_shuffle(std::shared_ptr<table_info> left_table,
+                  std::shared_ptr<table_info> right_table, bool is_left_outer,
+                  bool is_right_outer, bool left_parallel, bool right_parallel,
+                  int64_t n_pes, size_t n_key, const bool is_na_equal) {
     // Create a tracing event for the shuffle.
     tracing::Event ev("equi_join_table_shuffle",
                       left_parallel || right_parallel);
 
     // By default the work tables are the inputs.
-    table_info *work_left_table = left_table, *work_right_table = right_table;
+    std::shared_ptr<table_info> work_left_table = left_table;
+    std::shared_ptr<table_info> work_right_table = right_table;
     // Default replicated values are opposite of parallel. These
     // are updated if we broadcast a table.
     bool left_replicated = !left_parallel, right_replicated = !right_parallel;
@@ -440,8 +443,6 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
             // Broadcast the left table
             work_left_table = gather_table(left_table, -1, all_gather, true);
             left_replicated = true;
-            // Delete the left_table as it is no longer used.
-            delete_table(left_table);
         } else if (right_total_memory <= left_total_memory &&
                    right_total_memory < bcast_join_threshold &&
                    right_total_memory <
@@ -450,8 +451,6 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
             // Broadcast the right table
             work_right_table = gather_table(right_table, -1, all_gather, true);
             right_replicated = true;
-            // Delete the right_table as it is no longer used.
-            delete_table(right_table);
         } else {
             using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
             // If the smaller table is larger than the threshold
@@ -480,13 +479,13 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
             // can keep these rows on this same rank (i.e. avoid shuffle and
             // skew generated by sending all nulls to the same rank).
             if (!is_na_equal) {
-                std::vector<array_info*> key_arrs_left(
+                std::vector<std::shared_ptr<array_info>> key_arrs_left(
                     left_table->columns.begin(),
                     left_table->columns.begin() + n_key);
                 null_bitmask_keys_left =
                     bitwise_and_null_bitmasks(key_arrs_left, true);
 
-                std::vector<array_info*> key_arrs_right(
+                std::vector<std::shared_ptr<array_info>> key_arrs_right(
                     right_table->columns.begin(),
                     right_table->columns.begin() + n_key);
                 null_bitmask_keys_right =
@@ -629,9 +628,6 @@ std::tuple<table_info*, table_info*, bool, bool> equi_join_shuffle(
                 right_table, left_table, n_key, hashes_right, bloom_left,
                 null_bitmask_keys_right,
                 /*keep_nulls_and_filter_misses=*/is_right_outer);
-            // Delete left_table and right_table as they are no longer used.
-            delete_table(left_table);
-            delete_table(right_table);
             if (bloom_left != nullptr) {
                 delete bloom_left;
             }
@@ -911,11 +907,20 @@ void insert_probe_table_equi_join_some_non_equality(
     size_t probe_table_rows, std::vector<uint8_t>& V_build_map,
     std::vector<uint8_t>& V_probe_map, std::vector<int64_t>& build_write_idxs,
     std::vector<int64_t>& probe_write_idxs, bool build_is_left,
-    std::vector<array_info*>& left_table_infos,
-    std::vector<array_info*>& right_table_infos,
+    std::vector<std::shared_ptr<array_info>>& left_table_infos,
+    std::vector<std::shared_ptr<array_info>>& right_table_infos,
     std::vector<void*>& col_ptrs_left, std::vector<void*>& col_ptrs_right,
     std::vector<void*>& null_bitmap_left, std::vector<void*>& null_bitmap_right,
     cond_expr_fn_t cond_func) {
+    // get raw array_info pointers for cond_func
+    std::vector<array_info*> left_table_info_ptrs, right_table_info_ptrs;
+    for (std::shared_ptr<array_info> arr : left_table_infos) {
+        left_table_info_ptrs.push_back(arr.get());
+    }
+    for (std::shared_ptr<array_info> arr : right_table_infos) {
+        right_table_info_ptrs.push_back(arr.get());
+    }
+
     for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
         size_t i_probe_shift = i_probe + build_table_rows;
         auto iter = key_rows_map->find(i_probe_shift);
@@ -950,11 +955,11 @@ void insert_probe_table_equi_join_some_non_equality(
                     left_ind = i_probe;
                     right_ind = cmp_row;
                 }
-                bool match =
-                    cond_func(left_table_infos.data(), right_table_infos.data(),
-                              col_ptrs_left.data(), col_ptrs_right.data(),
-                              null_bitmap_left.data(), null_bitmap_right.data(),
-                              left_ind, right_ind);
+                bool match = cond_func(
+                    left_table_info_ptrs.data(), right_table_info_ptrs.data(),
+                    col_ptrs_left.data(), col_ptrs_right.data(),
+                    null_bitmap_left.data(), null_bitmap_right.data(), left_ind,
+                    right_ind);
                 if (match) {
                     // If our group matches, add every row and
                     // update the bitmap
@@ -1219,10 +1224,11 @@ void insert_probe_table_broadcast_misses(std::vector<uint8_t>& V_probe_map,
  */
 void generate_col_last_use_info(
     std::vector<uint8_t>& last_col_use_left,
-    std::vector<uint8_t>& last_col_use_right, table_info* work_left_table,
-    table_info* work_right_table, size_t n_tot_left, size_t n_tot_right,
-    size_t n_key, int64_t* vect_same_key, bool* key_in_output,
-    UNORD_SET_CONTAINER<int64_t>* left_cond_func_cols_set,
+    std::vector<uint8_t>& last_col_use_right,
+    std::shared_ptr<table_info> work_left_table,
+    std::shared_ptr<table_info> work_right_table, size_t n_tot_left,
+    size_t n_tot_right, size_t n_key, int64_t* vect_same_key,
+    bool* key_in_output, UNORD_SET_CONTAINER<int64_t>* left_cond_func_cols_set,
     UNORD_SET_CONTAINER<int64_t>* right_cond_func_cols_set, bool extra_data_col,
     bool is_join) {
     offset_t key_in_output_idx = 0;
@@ -1282,14 +1288,12 @@ void generate_col_last_use_info(
     // If the arrays aren't used in the output decref immediately.
     for (size_t i = 0; i < n_tot_left; i++) {
         if (last_col_use_left[i] == 0) {
-            array_info* left_arr = work_left_table->columns[i];
-            decref_array(left_arr);
+            work_left_table->columns[i].reset();
         }
     }
     for (size_t i = 0; i < n_tot_right; i++) {
         if (last_col_use_right[i] == 0) {
-            array_info* right_arr = work_right_table->columns[i];
-            decref_array(right_arr);
+            work_right_table->columns[i].reset();
         }
     }
 }
@@ -1302,13 +1306,15 @@ void generate_col_last_use_info(
  */
 template <typename Map>
 void hash_join_compute_tuples_helper(
-    /*const*/ table_info* work_left_table,
-    /*const*/ table_info* work_right_table, const size_t n_tot_left,
-    const size_t n_tot_right, const bool uses_cond_func,
-    const bool build_is_left, uint64_t* cond_func_left_columns,
-    const uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    /*const*/ std::shared_ptr<table_info> work_left_table,
+    /*const*/ std::shared_ptr<table_info> work_right_table,
+    const size_t n_tot_left, const size_t n_tot_right,
+    const bool uses_cond_func, const bool build_is_left,
+    uint64_t* cond_func_left_columns, const uint64_t cond_func_left_column_len,
+    uint64_t* cond_func_right_columns,
     const uint64_t cond_func_right_column_len, const bool parallel_trace,
-    const size_t build_table_rows, const table_info* build_table,
+    const size_t build_table_rows,
+    const std::shared_ptr<table_info> build_table,
     const size_t probe_table_rows, const bool probe_miss_needs_reduction,
     Map* key_rows_map, std::vector<std::vector<size_t>*>* groups,
     const bool build_table_outer, const bool probe_table_outer,
@@ -1325,8 +1331,10 @@ void hash_join_compute_tuples_helper(
     // the array_infos, which handle general types, and one with just data1
     // as a fast path for accessing numeric data. These include both keys
     // and data columns as either can be used in the cond_func.
-    std::vector<array_info*>& left_table_infos = work_left_table->columns;
-    std::vector<array_info*>& right_table_infos = work_right_table->columns;
+    std::vector<std::shared_ptr<array_info>>& left_table_infos =
+        work_left_table->columns;
+    std::vector<std::shared_ptr<array_info>>& right_table_infos =
+        work_right_table->columns;
     std::vector<void*> col_ptrs_left(n_tot_left);
     std::vector<void*> col_ptrs_right(n_tot_right);
     // Vectors for null bitmaps for fast null checking from the cfunc
@@ -1533,8 +1541,9 @@ void hash_join_compute_tuples_helper(
 //    hash-map. Thus the size of the table is just one parameter in the choice.
 //    We put a factor of 6.0 in this choice. Variable is CritQuotientNrows.
 
-table_info* hash_join_table_inner(
-    table_info* left_table, table_info* right_table, bool left_parallel,
+std::shared_ptr<table_info> hash_join_table_inner(
+    std::shared_ptr<table_info> left_table,
+    std::shared_ptr<table_info> right_table, bool left_parallel,
     bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
@@ -1644,7 +1653,7 @@ table_info* hash_join_table_inner(
     // This corresponds to is_left_outer/is_right_outer and determines
     // if the build/probe tables are outer joins.
     bool build_table_outer, probe_table_outer;
-    table_info *build_table, *probe_table;
+    std::shared_ptr<table_info> build_table, probe_table;
     bool build_replicated, probe_replicated;
     // Flag set to true if left table is assigned as build table,
     // used in equal_fct below
@@ -1797,10 +1806,10 @@ table_info* hash_join_table_inner(
 
     // Use faster specialized implementation for common 1 key cases.
     if (n_key == 1) {
-        array_info* build_arr = build_table->columns[0];
+        std::shared_ptr<array_info> build_arr = build_table->columns[0];
         bodo_array_type::arr_type_enum build_arr_type = build_arr->arr_type;
         Bodo_CTypes::CTypeEnum build_dtype = build_arr->dtype;
-        array_info* probe_arr = probe_table->columns[0];
+        std::shared_ptr<array_info> probe_arr = probe_table->columns[0];
         bodo_array_type::arr_type_enum probe_arr_type = probe_arr->arr_type;
         Bodo_CTypes::CTypeEnum probe_dtype = probe_arr->dtype;
 
@@ -1838,15 +1847,15 @@ table_info* hash_join_table_inner(
             EQ_JOIN_IMPL_ELSE_CASE;
         }
     } else if (n_key == 2) {
-        array_info* build_arr1 = build_table->columns[0];
-        array_info* build_arr2 = build_table->columns[1];
+        std::shared_ptr<array_info> build_arr1 = build_table->columns[0];
+        std::shared_ptr<array_info> build_arr2 = build_table->columns[1];
         bodo_array_type::arr_type_enum build_arr_type1 = build_arr1->arr_type;
         Bodo_CTypes::CTypeEnum build_dtype1 = build_arr1->dtype;
         bodo_array_type::arr_type_enum build_arr_type2 = build_arr2->arr_type;
         Bodo_CTypes::CTypeEnum build_dtype2 = build_arr2->dtype;
 
-        array_info* probe_arr1 = probe_table->columns[0];
-        array_info* probe_arr2 = probe_table->columns[1];
+        std::shared_ptr<array_info> probe_arr1 = probe_table->columns[0];
+        std::shared_ptr<array_info> probe_arr2 = probe_table->columns[1];
         bodo_array_type::arr_type_enum probe_arr_type1 = probe_arr1->arr_type;
         Bodo_CTypes::CTypeEnum probe_dtype1 = probe_arr1->dtype;
         bodo_array_type::arr_type_enum probe_arr_type2 = probe_arr2->arr_type;
@@ -2034,7 +2043,7 @@ table_info* hash_join_table_inner(
     // TODO if we are tight on memory for the next phase and
     // build_write_idxs/probe_write_idxs capacity is much greater than its
     // size, we could do a realloc+resize here
-    std::vector<array_info*> out_arrs;
+    std::vector<std::shared_ptr<array_info>> out_arrs;
     // Computing the last time at which a column is used.
     // This is for the call to decref_array.
     // There are many cases to cover, so it is better to preprocess
@@ -2071,8 +2080,8 @@ table_info* hash_join_table_inner(
     if (extra_data_col) {
         tracing::Event ev_fill_optional("fill_extra_data_col", parallel_trace);
         size_t i = 0;
-        array_info* left_arr = work_left_table->columns[i];
-        array_info* right_arr = work_right_table->columns[i];
+        std::shared_ptr<array_info> left_arr = work_left_table->columns[i];
+        std::shared_ptr<array_info> right_arr = work_right_table->columns[i];
         if (build_is_left) {
             out_arrs.push_back(RetrieveArray_TwoColumns(
                 left_arr, right_arr, build_write_idxs, probe_write_idxs));
@@ -2082,10 +2091,10 @@ table_info* hash_join_table_inner(
         }
         // After adding the optional collect decref the original values
         if (last_col_use_left[i] == 1) {
-            decref_array(left_arr);
+            work_left_table->columns[i].reset();
         }
         if (last_col_use_right[i] == 1) {
-            decref_array(right_arr);
+            work_right_table->columns[i].reset();
         }
     }
 
@@ -2104,8 +2113,10 @@ table_info* hash_join_table_inner(
             if (vect_same_key[i] == 1) {
                 // If we are merging the same in two table then
                 // additional NaNs cannot happen.
-                array_info* left_arr = work_left_table->columns[i];
-                array_info* right_arr = work_right_table->columns[i];
+                std::shared_ptr<array_info> left_arr =
+                    work_left_table->columns[i];
+                std::shared_ptr<array_info> right_arr =
+                    work_right_table->columns[i];
                 if (build_is_left) {
                     out_arrs.emplace_back(RetrieveArray_TwoColumns(
                         left_arr, right_arr, build_write_idxs,
@@ -2117,15 +2128,16 @@ table_info* hash_join_table_inner(
                 }
                 // Decref columns that are no longer used
                 if (last_col_use_left[i] == 2) {
-                    decref_array(left_arr);
+                    work_left_table->columns[i].reset();
                 }
                 if (last_col_use_right[i] == 2) {
-                    decref_array(right_arr);
+                    work_right_table->columns[i].reset();
                 }
             } else {
                 // We are just inserting the keys so converting to a nullable
                 // array depends on the type of join.
-                array_info* left_arr = work_left_table->columns[i];
+                std::shared_ptr<array_info> left_arr =
+                    work_left_table->columns[i];
                 bool use_nullable_arr = use_nullable_arr_type[idx];
                 if (build_is_left) {
                     out_arrs.push_back(RetrieveArray_SingleColumn(
@@ -2136,7 +2148,7 @@ table_info* hash_join_table_inner(
                 }
                 // Decref columns that are no longer used
                 if (last_col_use_left[i] == 3) {
-                    decref_array(left_arr);
+                    work_left_table->columns[i].reset();
                 }
             }
             // update the output indices
@@ -2151,7 +2163,7 @@ table_info* hash_join_table_inner(
             // condition we have to check if its in the output.
             continue;
         }
-        array_info* left_arr = work_left_table->columns[i];
+        std::shared_ptr<array_info> left_arr = work_left_table->columns[i];
         bool use_nullable_arr = use_nullable_arr_type[idx];
         if (build_is_left) {
             out_arrs.push_back(RetrieveArray_SingleColumn(
@@ -2164,7 +2176,7 @@ table_info* hash_join_table_inner(
         idx++;
         // Decref columns that are no longer used
         if (last_col_use_left[i] == 3) {
-            decref_array(left_arr);
+            work_left_table->columns[i].reset();
         }
     }
     // Delete to free memory
@@ -2183,7 +2195,8 @@ table_info* hash_join_table_inner(
         if (vect_same_key[i] == 0 && !is_join) {
             // If we might insert a key we have to verify it is in the output.
             if (key_in_output[key_in_output_idx++]) {
-                array_info* right_arr = work_right_table->columns[i];
+                std::shared_ptr<array_info> right_arr =
+                    work_right_table->columns[i];
                 bool use_nullable_arr = use_nullable_arr_type[idx];
                 if (build_is_left) {
                     out_arrs.push_back(RetrieveArray_SingleColumn(
@@ -2196,7 +2209,7 @@ table_info* hash_join_table_inner(
                 idx++;
                 // Decref columns that are no longer used
                 if (last_col_use_right[i] == 4) {
-                    decref_array(right_arr);
+                    work_right_table->columns[i].reset();
                 }
             }
         }
@@ -2209,7 +2222,7 @@ table_info* hash_join_table_inner(
             // condition we have to check if its in the output.
             continue;
         }
-        array_info* right_arr = work_right_table->columns[i];
+        std::shared_ptr<array_info> right_arr = work_right_table->columns[i];
         bool use_nullable_arr = use_nullable_arr_type[idx];
         if (build_is_left) {
             out_arrs.push_back(RetrieveArray_SingleColumn(
@@ -2222,7 +2235,7 @@ table_info* hash_join_table_inner(
         idx++;
         // Decref columns that are no longer used
         if (last_col_use_right[i] == 4) {
-            decref_array(right_arr);
+            work_right_table->columns[i].reset();
         }
     }
 
@@ -2233,7 +2246,7 @@ table_info* hash_join_table_inner(
     // Create indicator column if indicator=True
     if (indicator) {
         tracing::Event ev_indicator("create_indicator", parallel_trace);
-        array_info* indicator_col =
+        std::shared_ptr<array_info> indicator_col =
             alloc_array(num_rows, -1, -1, bodo_array_type::CATEGORICAL,
                         Bodo_CTypes::INT8, 0, 3);
         for (size_t rownum = 0; rownum < num_rows; rownum++) {
@@ -2263,9 +2276,6 @@ table_info* hash_join_table_inner(
         ev_indicator.finalize();
     }
 
-    // Delete the inputs
-    delete_table(work_left_table);
-    delete_table(work_right_table);
     // Only return a table if there is at least 1
     // output column.
     if (out_arrs.size() == 0) {
@@ -2274,7 +2284,8 @@ table_info* hash_join_table_inner(
         return nullptr;
     }
 
-    table_info* out_table = new table_info(out_arrs);
+    std::shared_ptr<table_info> out_table =
+        std::make_shared<table_info>(out_arrs);
 
     // Check for skew if BodoSQL suggested we should
     if (rebalance_if_skewed && (left_parallel || right_parallel)) {
@@ -2297,13 +2308,20 @@ table_info* hash_join_table(
     uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
     uint64_t* num_rows_ptr) {
     try {
-        return hash_join_table_inner(
-            left_table, right_table, left_parallel, right_parallel, n_key_t,
-            n_data_left_t, n_data_right_t, vect_same_key, key_in_output,
-            use_nullable_arr_type, is_left_outer, is_right_outer, is_join,
-            extra_data_col, indicator, is_na_equal, rebalance_if_skewed,
-            cond_func, cond_func_left_columns, cond_func_left_column_len,
-            cond_func_right_columns, cond_func_right_column_len, num_rows_ptr);
+        std::shared_ptr<table_info> out_table = hash_join_table_inner(
+            std::shared_ptr<table_info>(left_table),
+            std::shared_ptr<table_info>(right_table), left_parallel,
+            right_parallel, n_key_t, n_data_left_t, n_data_right_t,
+            vect_same_key, key_in_output, use_nullable_arr_type, is_left_outer,
+            is_right_outer, is_join, extra_data_col, indicator, is_na_equal,
+            rebalance_if_skewed, cond_func, cond_func_left_columns,
+            cond_func_left_column_len, cond_func_right_columns,
+            cond_func_right_column_len, num_rows_ptr);
+        // join returns nullptr if output table is empty
+        if (out_table == nullptr) {
+            return nullptr;
+        }
+        return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -2319,17 +2337,17 @@ table_info* hash_join_table(
  * @param left_parallel left table is parallel
  * @param right_parallel right table is parallel
  */
-void cross_join_handle_dict_encoded(table_info* left_table,
-                                    table_info* right_table, bool left_parallel,
-                                    bool right_parallel) {
+void cross_join_handle_dict_encoded(std::shared_ptr<table_info> left_table,
+                                    std::shared_ptr<table_info> right_table,
+                                    bool left_parallel, bool right_parallel) {
     // make all dictionaries global (necessary for broadcast and potentially
     // other operations)
-    for (array_info* a : left_table->columns) {
+    for (std::shared_ptr<array_info> a : left_table->columns) {
         if (a->arr_type == bodo_array_type::DICT) {
             make_dictionary_global_and_unique(a, left_parallel);
         }
     }
-    for (array_info* a : right_table->columns) {
+    for (std::shared_ptr<array_info> a : right_table->columns) {
         if (a->arr_type == bodo_array_type::DICT) {
             make_dictionary_global_and_unique(a, right_parallel);
         }
@@ -2344,13 +2362,17 @@ void cross_join_handle_dict_encoded(table_info* left_table,
  * and data columns as either can be used in the cond_func.
  *
  * @param table input table
- * @return std::tuple<std::vector<array_info*>, std::vector<void*>,
- * std::vector<void*>> vectors of array infos, data1 pointers, and null bitmap
- * pointers
+ * @return std::tuple<std::vector<std::shared_ptr<array_info>>,
+ * std::vector<void*>, std::vector<void*>> vectors of array infos, data1
+ * pointers, and null bitmap pointers
  */
 std::tuple<std::vector<array_info*>, std::vector<void*>, std::vector<void*>>
-get_gen_cond_data_ptrs(table_info* table) {
-    std::vector<array_info*> table_infos = table->columns;
+get_gen_cond_data_ptrs(std::shared_ptr<table_info> table) {
+    // get raw array_info pointers for cond_func
+    std::vector<array_info*> table_infos;
+    for (std::shared_ptr<array_info> arr : table->columns) {
+        table_infos.push_back(arr.get());
+    }
     std::vector<void*> col_ptrs(table->ncols());
     std::vector<void*> null_bitmaps(table->ncols());
 
@@ -2427,16 +2449,15 @@ void add_unmatched_rows(std::vector<uint8_t>& bit_map, size_t n_rows,
  * @param cond_func_right_columns: Array of column numbers in the right table
  * used by cond_func.
  * @param cond_func_right_column_len: Length of cond_func_right_columns.
- * @param decref_arrs whether input arrays should be decrefed after use.
- * @return table_info* output table of join
+ * @return std::shared_ptr<table_info> output table of join
  */
-table_info* create_out_table(
-    table_info* left_table, table_info* right_table,
-    std::vector<int64_t>& left_idxs, std::vector<int64_t>& right_idxs,
-    bool* key_in_output, int64_t* use_nullable_arr_type,
-    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
-    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
-    bool decref_arrs = true) {
+std::shared_ptr<table_info> create_out_table(
+    std::shared_ptr<table_info> left_table,
+    std::shared_ptr<table_info> right_table, std::vector<int64_t>& left_idxs,
+    std::vector<int64_t>& right_idxs, bool* key_in_output,
+    int64_t* use_nullable_arr_type, uint64_t* cond_func_left_columns,
+    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    uint64_t cond_func_right_column_len) {
     // Create sets for cond func columns. These columns act
     // like key columns and are contained inside of key_in_output,
     // so we need an efficient lookup.
@@ -2456,12 +2477,12 @@ table_info* create_out_table(
     }
 
     // create output columns
-    std::vector<array_info*> out_arrs;
+    std::vector<std::shared_ptr<array_info>> out_arrs;
     int idx = 0;
     offset_t key_in_output_idx = 0;
     // add left columns to output
     for (size_t i = 0; i < left_table->ncols(); i++) {
-        array_info* in_arr = left_table->columns[i];
+        std::shared_ptr<array_info> in_arr = left_table->columns[i];
 
         // cond columns may be dead
         if (!left_cond_func_cols_set.contains(i) ||
@@ -2471,14 +2492,16 @@ table_info* create_out_table(
                                                              use_nullable_arr));
             idx++;
         }
-        if (decref_arrs) {
-            decref_array(in_arr);
-        }
+        // Release reference (and potentially memory) early if possible.
+        reset_col_if_last_table_ref(left_table, i);
     }
+    left_table.reset();
+
+    // XXX Drop left indices sooner (using shrink_to_fit) or wrap in shared_ptr?
 
     // add right columns to output
     for (size_t i = 0; i < right_table->ncols(); i++) {
-        array_info* in_arr = right_table->columns[i];
+        std::shared_ptr<array_info> in_arr = right_table->columns[i];
 
         // cond columns may be dead
         if (!right_cond_func_cols_set.contains(i) ||
@@ -2488,12 +2511,12 @@ table_info* create_out_table(
                                                              use_nullable_arr));
             idx++;
         }
-        if (decref_arrs) {
-            decref_array(in_arr);
-        }
+        // Release reference (and potentially memory) early if possible.
+        reset_col_if_last_table_ref(right_table, i);
     }
+    right_table.reset();
 
-    return new table_info(out_arrs);
+    return std::make_shared<table_info>(out_arrs);
 }
 
 /**
@@ -2514,9 +2537,9 @@ table_info* create_out_table(
  * join only)
  * @param right_row_is_matched bitmap of matched right table rows to fill (right
  * join only)
- * @return table_info* cross join output table
  */
-void cross_join_table_local(table_info* left_table, table_info* right_table,
+void cross_join_table_local(std::shared_ptr<table_info> left_table,
+                            std::shared_ptr<table_info> right_table,
                             bool is_left_outer, bool is_right_outer,
                             cond_expr_fn_batch_t cond_func, bool parallel_trace,
                             std::vector<int64_t>& left_idxs,
@@ -2607,7 +2630,7 @@ void cross_join_table_local(table_info* left_table, table_info* right_table,
 // design overview:
 // https://bodo.atlassian.net/l/cp/Av2ijf9A
 table_info* cross_join_table(
-    table_info* left_table, table_info* right_table, bool left_parallel,
+    table_info* in_left_table, table_info* in_right_table, bool left_parallel,
     bool right_parallel, bool is_left_outer, bool is_right_outer,
     bool* key_in_output, int64_t* use_nullable_arr_type,
     bool rebalance_if_skewed, cond_expr_fn_batch_t cond_func,
@@ -2615,11 +2638,18 @@ table_info* cross_join_table(
     uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
     uint64_t* num_rows_ptr) {
     try {
+        std::shared_ptr<table_info> left_table =
+            std::shared_ptr<table_info>(in_left_table);
+        std::shared_ptr<table_info> right_table =
+            std::shared_ptr<table_info>(in_right_table);
+
         cross_join_handle_dict_encoded(left_table, right_table, left_parallel,
                                        right_parallel);
         bool parallel_trace = (left_parallel || right_parallel);
         tracing::Event ev("cross_join_table", parallel_trace);
-        table_info* out_table;
+        std::shared_ptr<table_info> out_table;
+        bool left_bcast_join = false;
+        bool right_bcast_join = false;
 
         // use broadcast join if left or right table is small (allgather the
         // small table)
@@ -2630,21 +2660,21 @@ table_info* cross_join_table(
             if (left_total_memory < right_total_memory &&
                 left_total_memory < bcast_join_threshold) {
                 // Broadcast the left table
-                table_info* work_left_table =
-                    gather_table(left_table, -1, true, true);
+                left_table =
+                    gather_table(std::move(left_table), -1, true, true);
                 left_parallel = false;
-                delete_table(left_table);
-                left_table = work_left_table;
+                left_bcast_join = true;
             } else if (right_total_memory <= left_total_memory &&
                        right_total_memory < bcast_join_threshold) {
                 // Broadcast the right table
-                table_info* work_right_table =
-                    gather_table(right_table, -1, true, true);
+                right_table =
+                    gather_table(std::move(right_table), -1, true, true);
                 right_parallel = false;
-                delete_table(right_table);
-                right_table = work_right_table;
+                right_bcast_join = true;
             }
         }
+        ev.add_attribute("left_bcast_join", left_bcast_join);
+        ev.add_attribute("right_bcast_join", right_bcast_join);
 
         // handle parallel cross join by broadcasting one side's table chunks of
         // from every rank (loop over all ranks). For outer join handling, the
@@ -2659,7 +2689,7 @@ table_info* cross_join_table(
             int n_pes, myrank;
             MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
             MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-            std::vector<table_info*> out_table_chunks;
+            std::vector<std::shared_ptr<table_info>> out_table_chunks;
             out_table_chunks.reserve(n_pes);
 
             size_t n_rows_left = left_table->nrows();
@@ -2669,8 +2699,8 @@ table_info* cross_join_table(
             int64_t left_table_size = table_global_memory_size(left_table);
             int64_t right_table_size = table_global_memory_size(right_table);
             bool left_table_bcast = left_table_size < right_table_size;
-            table_info* bcast_table = left_table;
-            table_info* other_table = right_table;
+            std::shared_ptr<table_info> bcast_table = left_table;
+            std::shared_ptr<table_info> other_table = right_table;
             size_t n_bytes_other = is_right_outer ? (n_rows_right + 7) >> 3 : 0;
             if (!left_table_bcast) {
                 bcast_table = right_table;
@@ -2684,14 +2714,7 @@ table_info* cross_join_table(
             std::vector<uint8_t> other_row_is_matched(n_bytes_other, 0);
 
             for (int p = 0; p < n_pes; p++) {
-                // NOTE: broadcast_table steals a reference from bcast_table on
-                // root rank. We need to keep bcast_table alive throughout this
-                // loop since dictionary values are necessary as part of the
-                // "reference" table on all ranks.
-                if (myrank == p) {
-                    incref_table_arrays(bcast_table);
-                }
-                table_info* bcast_table_chunk =
+                std::shared_ptr<table_info> bcast_table_chunk =
                     broadcast_table(bcast_table, bcast_table,
                                     bcast_table->ncols(), parallel_trace, p);
                 bool is_bcast_outer = (is_left_outer && left_table_bcast) ||
@@ -2729,21 +2752,18 @@ table_info* cross_join_table(
                                        bcast_table_chunk->nrows(), right_idxs,
                                        left_idxs, true);
                 }
-                // incref since create_out_table() decrefs all arrays
-                incref_table_arrays(other_table);
-                table_info* left_in_chunk = bcast_table_chunk;
-                table_info* right_in_chunk = other_table;
+                std::shared_ptr<table_info> left_in_chunk = bcast_table_chunk;
+                std::shared_ptr<table_info> right_in_chunk = other_table;
                 if (!left_table_bcast) {
                     left_in_chunk = other_table;
                     right_in_chunk = bcast_table_chunk;
                 }
-                table_info* out_table_chunk = create_out_table(
+                std::shared_ptr<table_info> out_table_chunk = create_out_table(
                     left_in_chunk, right_in_chunk, left_idxs, right_idxs,
                     key_in_output, use_nullable_arr_type,
                     cond_func_left_columns, cond_func_left_column_len,
                     cond_func_right_columns, cond_func_right_column_len);
                 out_table_chunks.emplace_back(out_table_chunk);
-                delete bcast_table_chunk;
             }
 
             // handle non-bcast table's unmatched rows of if outer
@@ -2752,28 +2772,24 @@ table_info* cross_join_table(
                 std::vector<int64_t> right_idxs;
                 add_unmatched_rows(other_row_is_matched, left_table->nrows(),
                                    left_idxs, right_idxs, false);
-                table_info* out_table_chunk = create_out_table(
-                    left_table, right_table, left_idxs, right_idxs,
-                    key_in_output, use_nullable_arr_type,
+                std::shared_ptr<table_info> out_table_chunk = create_out_table(
+                    std::move(left_table), std::move(right_table), left_idxs,
+                    right_idxs, key_in_output, use_nullable_arr_type,
                     cond_func_left_columns, cond_func_left_column_len,
-                    cond_func_right_columns, cond_func_right_column_len, false);
+                    cond_func_right_columns, cond_func_right_column_len);
                 out_table_chunks.emplace_back(out_table_chunk);
-            }
-            if (is_right_outer && left_table_bcast) {
+            } else if (is_right_outer && left_table_bcast) {
                 std::vector<int64_t> left_idxs;
                 std::vector<int64_t> right_idxs;
                 add_unmatched_rows(other_row_is_matched, right_table->nrows(),
                                    right_idxs, left_idxs, false);
-                table_info* out_table_chunk = create_out_table(
-                    left_table, right_table, left_idxs, right_idxs,
-                    key_in_output, use_nullable_arr_type,
+                std::shared_ptr<table_info> out_table_chunk = create_out_table(
+                    std::move(left_table), std::move(right_table), left_idxs,
+                    right_idxs, key_in_output, use_nullable_arr_type,
                     cond_func_left_columns, cond_func_left_column_len,
-                    cond_func_right_columns, cond_func_right_column_len, false);
+                    cond_func_right_columns, cond_func_right_column_len);
                 out_table_chunks.emplace_back(out_table_chunk);
             }
-
-            decref_table_arrays(left_table);
-            decref_table_arrays(right_table);
 
             out_table = concat_tables(out_table_chunks);
         }
@@ -2809,14 +2825,14 @@ table_info* cross_join_table(
             }
 
             out_table = create_out_table(
-                left_table, right_table, left_idxs, right_idxs, key_in_output,
-                use_nullable_arr_type, cond_func_left_columns,
-                cond_func_left_column_len, cond_func_right_columns,
-                cond_func_right_column_len);
+                std::move(left_table), std::move(right_table), left_idxs,
+                right_idxs, key_in_output, use_nullable_arr_type,
+                cond_func_left_columns, cond_func_left_column_len,
+                cond_func_right_columns, cond_func_right_column_len);
         }
         // Check for skew if BodoSQL suggested we should
         if (rebalance_if_skewed && (left_parallel || right_parallel)) {
-            out_table = rebalance_join_output(out_table);
+            out_table = rebalance_join_output(std::move(out_table));
         }
 
         // NOTE: no need to delete table pointers since done in generated Python
@@ -2825,18 +2841,17 @@ table_info* cross_join_table(
         // number of local output rows is passed to Python in case all output
         // columns are dead.
         *num_rows_ptr = out_table->nrows();
-        return out_table;
+        return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
     }
 }
 
-bool is_point_right_of_interval_start(array_info* left_interval_col,
-                                      const size_t& int_idx,
-                                      array_info* point_col,
-                                      const size_t& point_idx,
-                                      bool strictly_right) {
+bool is_point_right_of_interval_start(
+    std::shared_ptr<array_info> left_interval_col, const size_t& int_idx,
+    std::shared_ptr<array_info> point_col, const size_t& point_idx,
+    bool strictly_right) {
     if (point_col->null_bitmask() != nullptr &&
         !point_col->get_null_bit((size_t)point_idx)) {
         return false;
@@ -2883,11 +2898,12 @@ bool is_point_right_of_interval_start(array_info* left_interval_col,
  * repesenting the output
  */
 std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
-    table_info* interval_table, table_info* point_table,
-    cond_expr_fn_batch_t cond_func, uint64_t interval_start_col_id,
-    uint64_t interval_end_col_id, uint64_t point_col_id, int curr_rank,
-    int n_pes, bool interval_parallel, bool point_parallel, bool is_point_outer,
-    bool is_strict_contained, bool is_strict_start_cond, bool point_left) {
+    std::shared_ptr<table_info> interval_table,
+    std::shared_ptr<table_info> point_table, cond_expr_fn_batch_t cond_func,
+    uint64_t interval_start_col_id, uint64_t interval_end_col_id,
+    uint64_t point_col_id, int curr_rank, int n_pes, bool interval_parallel,
+    bool point_parallel, bool is_point_outer, bool is_strict_contained,
+    bool is_strict_start_cond, bool point_left) {
     tracing::Event ev("interval_merge", interval_parallel || point_parallel);
 
     // When the point side is empty, the output will be empty regardless of
@@ -2953,8 +2969,9 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
     }
 
     // Start Col of Interval Table and Point Col
-    array_info* left_inter_col = interval_table->columns[interval_start_col_id];
-    array_info* point_col = point_table->columns[point_col_id];
+    std::shared_ptr<array_info> left_inter_col =
+        interval_table->columns[interval_start_col_id];
+    std::shared_ptr<array_info> point_col = point_table->columns[point_col_id];
 
     // Rows of the Output Joined Table
     std::vector<int64_t> joined_interval_idxs;
@@ -2997,7 +3014,8 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
                                                  is_strict_start_cond)) {
             point_pos++;
         }
-        if (point_pos >= point_table->nrows()) break;
+        if (point_pos >= point_table->nrows())
+            break;
 
         // Because tables are sorted, a consecutive range of rows in point table
         // will fit in the interval.
@@ -3053,7 +3071,7 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
 }
 
 table_info* interval_join_table(
-    table_info* left_table, table_info* right_table, bool left_parallel,
+    table_info* in_left_table, table_info* in_right_table, bool left_parallel,
     bool right_parallel, bool is_left, bool is_right, bool is_left_point,
     bool strict_start, bool strict_end, uint64_t point_col_id,
     uint64_t interval_start_col_id, uint64_t interval_end_col_id,
@@ -3063,15 +3081,17 @@ table_info* interval_join_table(
     uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
     uint64_t* num_rows_ptr) {
     try {
+        std::shared_ptr<table_info> left_table =
+            std::shared_ptr<table_info>(in_left_table);
+        std::shared_ptr<table_info> right_table =
+            std::shared_ptr<table_info>(in_right_table);
+
         // TODO: Make this an assertion
         if ((is_left_point && is_right) || (!is_left_point && is_left)) {
             throw std::runtime_error(
                 "Point-In-Interval Join should only support Inner or Left "
                 "Joins");
         }
-
-        // TODO Use broadcast join if one of the tables is very small (allgather
-        // the small table)
 
         bool strict_contained = strict_start || strict_end;
         bool parallel_trace = (left_parallel || right_parallel);
@@ -3087,14 +3107,48 @@ table_info* interval_join_table(
 
         tracing::Event ev_sort("interval_join_table_sort", parallel_trace);
 
-        table_info* point_table = left_table;
-        table_info* interval_table = right_table;
-        bool point_table_parallel = left_parallel;
-        bool interval_table_parallel = right_parallel;
-        bool is_outer_point = is_left;
-        if (!is_left_point) {
-            point_table = right_table;
-            interval_table = left_table;
+        bool left_table_bcast = false;
+        bool right_table_bcast = false;
+
+        // use broadcast join if left or right table is small (allgather the
+        // small table)
+        if (left_parallel && right_parallel) {
+            int bcast_join_threshold = get_bcast_join_threshold();
+            int64_t left_total_memory = table_global_memory_size(left_table);
+            int64_t right_total_memory = table_global_memory_size(right_table);
+            if (left_total_memory < right_total_memory &&
+                left_total_memory < bcast_join_threshold) {
+                // Broadcast the left table
+                left_table =
+                    gather_table(std::move(left_table), -1, true, true);
+                left_parallel = false;
+                left_table_bcast = true;
+            } else if (right_total_memory <= left_total_memory &&
+                       right_total_memory < bcast_join_threshold) {
+                // Broadcast the right table
+                right_table =
+                    gather_table(std::move(right_table), -1, true, true);
+                right_parallel = false;
+                right_table_bcast = true;
+            }
+        }
+        ev.add_attribute("left_table_bcast", left_table_bcast);
+        ev.add_attribute("right_table_bcast", right_table_bcast);
+
+        std::shared_ptr<table_info> point_table;
+        std::shared_ptr<table_info> interval_table;
+        bool point_table_parallel;
+        bool interval_table_parallel;
+        bool is_outer_point;
+        if (is_left_point) {
+            point_table = std::move(left_table);
+            interval_table = std::move(right_table);
+            point_table_parallel = left_parallel;
+            interval_table_parallel = right_parallel;
+            is_outer_point = is_left;
+        } else {
+            point_table = std::move(right_table);
+            interval_table = std::move(left_table);
             point_table_parallel = right_parallel;
             interval_table_parallel = left_parallel;
             is_outer_point = is_right;
@@ -3116,8 +3170,9 @@ table_info* interval_join_table(
         // interval table during the sort.
         auto [sorted_point_table, sorted_interval_table] =
             sort_tables_for_point_in_interval_join(
-                point_table, interval_table, point_table_parallel,
-                interval_table_parallel, strict_contained);
+                std::move(point_table), std::move(interval_table),
+                point_table_parallel, interval_table_parallel,
+                strict_contained);
 
         // Put point column back in the right location
         restore_col_order(sorted_point_table, point_table_restore_map);
@@ -3137,35 +3192,35 @@ table_info* interval_join_table(
             n_pes, interval_table_parallel, point_table_parallel,
             is_outer_point, strict_contained, strict_start, is_left_point);
 
-        table_info *sorted_left_table, *sorted_right_table;
+        std::shared_ptr<table_info> sorted_left_table, sorted_right_table;
         std::vector<int64_t> left_idxs, right_idxs;
         if (is_left_point) {
-            sorted_left_table = sorted_point_table;
-            sorted_right_table = sorted_interval_table;
+            sorted_left_table = std::move(sorted_point_table);
+            sorted_right_table = std::move(sorted_interval_table);
             left_idxs = point_idxs;
             right_idxs = interval_idxs;
         } else {
-            sorted_left_table = sorted_interval_table;
-            sorted_right_table = sorted_point_table;
+            sorted_left_table = std::move(sorted_interval_table);
+            sorted_right_table = std::move(sorted_point_table);
             left_idxs = interval_idxs;
             right_idxs = point_idxs;
         }
-        table_info* out_table = create_out_table(
-            sorted_left_table, sorted_right_table, left_idxs, right_idxs,
-            key_in_output, use_nullable_arr_type, cond_func_left_columns,
-            cond_func_left_column_len, cond_func_right_columns,
-            cond_func_right_column_len);
+        std::shared_ptr<table_info> out_table = create_out_table(
+            std::move(sorted_left_table), std::move(sorted_right_table),
+            left_idxs, right_idxs, key_in_output, use_nullable_arr_type,
+            cond_func_left_columns, cond_func_left_column_len,
+            cond_func_right_columns, cond_func_right_column_len);
 
         // Check for skew if BodoSQL suggested we should
         if (rebalance_if_skewed && (left_parallel || right_parallel)) {
-            out_table = rebalance_join_output(out_table);
+            out_table = rebalance_join_output(std::move(out_table));
         }
 
         // number of local output rows is passed to Python in case all output
         // columns are dead.
         *num_rows_ptr = out_table->nrows();
         ev.add_attribute("out_table_nrows", *num_rows_ptr);
-        return out_table;
+        return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;

@@ -1,9 +1,13 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.argumentRange;
 import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.isOutputNullableCompile;
 
+import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.google.common.collect.Sets;
+
 import java.util.*;
 import javax.annotation.Nullable;
 import org.apache.calcite.avatica.util.TimeUnit;
@@ -15,36 +19,106 @@ import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 public final class DatetimeOperatorTable implements SqlOperatorTable {
   /**
-   * Determine the return type for a function that outputs a timestamp (possibly tz-aware) based on
-   * the first or last argument, such as DATEADD (Snowflake verison), DATEADD (MySQL verison)
-   * DATE_ADD, and ADDATE
+   * Determine the return type for the DATE_TRUNC function
    *
    * @param binding The operand bindings for the function signature.
-   * @return The return type of the first/last argument if either is a timezone-aware type,
-   *     otherwise TIMESTAMP
+   * @return The return type of the function
    */
-  public static RelDataType timezoneFirstOrLastArgumentReturnType(SqlOperatorBinding binding) {
+  public static RelDataType datetruncReturnType(SqlOperatorBinding binding) {
+    List<RelDataType> operandTypes = binding.collectOperandTypes();
+    // Determine if the output is nullable.
+    boolean nullable = isOutputNullableCompile(operandTypes);
+    RelDataTypeFactory typeFactory = binding.getTypeFactory();
+    return typeFactory.createTypeWithNullability(operandTypes.get(1), nullable);
+  }
+
+  /**
+   * Call the corresponding return type function for the DATEADD function
+   *
+   * @param binding The operand bindings for the function signature.
+   * @return The return type of the function
+   */
+  public static RelDataType dateaddReturnType(SqlOperatorBinding binding) {
+    List<RelDataType> operandTypes = binding.collectOperandTypes();
+    if (operandTypes.size() == 2)
+      return mySqlDateaddReturnType(binding);
+    return snowflakeDateaddReturnType(binding, "DATEADD");
+  }
+
+  /**
+   * Determine the return type of the Snowflake DATEADD function
+   *
+   * @param binding The operand bindings for the function signature.
+   * @return The return type of the function
+   */
+  public static RelDataType snowflakeDateaddReturnType(SqlOperatorBinding binding, String fnName) {
     List<RelDataType> operandTypes = binding.collectOperandTypes();
     // Determine if the output is nullable.
     boolean nullable = isOutputNullableCompile(operandTypes);
     RelDataTypeFactory typeFactory = binding.getTypeFactory();
 
-    // Determine output type based on the first/last argument
-    RelDataType firstArg = operandTypes.get(0);
-    RelDataType lastArg = operandTypes.get(operandTypes.size() - 1);
+    RelDataType datetimeType = operandTypes.get(2);
+    String unit = binding.getOperandLiteralValue(0, String.class);
+    unit = standardizeTimeUnit(fnName, unit, DateTimeType.TIMESTAMP);
+    // TODO: refactor standardizeTimeUnit function to change the third argument to SqlTypeName
     RelDataType returnType;
-    if (firstArg instanceof TZAwareSqlType) {
-      // If the input is tzAware the output is as well.
-      returnType = firstArg;
-    } else if (lastArg instanceof TZAwareSqlType) {
-      // If the input is tzAware the output is as well.
-      returnType = lastArg;
+    if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
+      Set<String> DATE_UNITS =
+          new HashSet<>(Arrays.asList("year",
+              "quarter",
+              "month",
+              "week",
+              "day"));
+      if (DATE_UNITS.contains(unit))
+        returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
+      else
+        returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
     } else {
-      // Otherwise we output a tzNaive Timestamp.
-      // TODO: FIXME once we have proper date support.
-      // The output should actually always be a date type for some fns.
-      // https://docs.snowflake.com/en/sql-reference/functions/dateadd.html
-      returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+      // If the input is tzAware/tzNaive/time the output is as well.
+      returnType = datetimeType;
+    }
+    return typeFactory.createTypeWithNullability(returnType, nullable);
+  }
+
+  /**
+   * Determine the return type of the MySQL DATEADD, DATE_ADD, ADDDATE, DATE_SUB, SUBDATE function
+   *
+   * @param binding The operand bindings for the function signature.
+   * @return The return type of the function
+   */
+  public static RelDataType mySqlDateaddReturnType(SqlOperatorBinding binding) {
+    List<RelDataType> operandTypes = binding.collectOperandTypes();
+    // Determine if the output is nullable.
+    boolean nullable = isOutputNullableCompile(operandTypes);
+    RelDataTypeFactory typeFactory = binding.getTypeFactory();
+    RelDataType datetimeType = operandTypes.get(0);
+    RelDataType returnType;
+
+    if (operandTypes.get(1).equals(OperandTypes.INTEGER)) {
+      // when the second argument is integer, it is equivalent to adding day interval
+      if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE))
+        returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
+      else
+        returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+    }
+    else {
+      // if the first argument is date, the return type depends on the interval type
+      if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE)) {
+        Set<SqlTypeName> DATE_INTERVAL_TYPES =
+            Sets.immutableEnumSet(SqlTypeName.INTERVAL_YEAR_MONTH,
+                SqlTypeName.INTERVAL_YEAR,
+                SqlTypeName.INTERVAL_MONTH,
+                SqlTypeName.INTERVAL_WEEK,
+                SqlTypeName.INTERVAL_DAY);
+        if (DATE_INTERVAL_TYPES.contains(operandTypes.get(1).getSqlTypeName()))
+          returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
+        else
+          returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+      } else if (datetimeType instanceof TZAwareSqlType) {
+        returnType = datetimeType;
+      } else {
+        returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+      }
     }
     return typeFactory.createTypeWithNullability(returnType, nullable);
   }
@@ -68,7 +142,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "DATEADD",
           SqlKind.OTHER_FUNCTION,
-          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
+          opBinding -> dateaddReturnType(opBinding),
           null,
           OperandTypes.or(
               OperandTypes.sequence(
@@ -86,7 +160,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "TIMEADD",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.TIME_NULLABLE,
+          opBinding -> snowflakeDateaddReturnType(opBinding, "TIMEADD"),
           null,
           OperandTypes.sequence(
               "TIMEADD(UNIT, VALUE, TIME)",
@@ -103,7 +177,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
+          opBinding -> mySqlDateaddReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -464,7 +538,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
+          opBinding -> mySqlDateaddReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -485,7 +559,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
+          opBinding -> mySqlDateaddReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -505,7 +579,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
+          opBinding -> mySqlDateaddReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -805,7 +879,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
+          ReturnTypes.DATE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -854,7 +928,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
+          opBinding -> datetruncReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

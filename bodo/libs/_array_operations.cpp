@@ -24,8 +24,10 @@
  * @param in_arr the list of values on input
  * @param in_values the list of values that we need to check with
  */
-static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
-                              array_info* in_values, bool is_parallel) {
+static void array_isin_kernel(std::shared_ptr<array_info> out_arr,
+                              std::shared_ptr<array_info> in_arr,
+                              std::shared_ptr<array_info> in_values,
+                              bool is_parallel) {
     CheckEqualityArrayType(in_arr, in_values);
     if (out_arr->dtype != Bodo_CTypes::_BOOL) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
@@ -49,7 +51,7 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
     std::function<bool(int64_t, int64_t)> equal_fct =
         [&](int64_t const& pos1, int64_t const& pos2) -> bool {
         int64_t pos1_b, pos2_b;
-        array_info *arr1_b, *arr2_b;
+        std::shared_ptr<array_info> arr1_b, arr2_b;
         if (pos1 < len_values) {
             arr1_b = in_values;
             pos1_b = pos1;
@@ -88,34 +90,42 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
     }
 }
 
-void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
-                bool is_parallel) {
+void array_isin_py_entry(array_info* p_out_arr, array_info* p_in_arr,
+                         array_info* p_in_values, bool is_parallel) {
     try {
+        // convert raw pointers coming from Python to smart pointers and take
+        // ownership
+        std::shared_ptr<array_info> out_arr =
+            std::shared_ptr<array_info>(p_out_arr);
+        std::shared_ptr<array_info> in_arr =
+            std::shared_ptr<array_info>(p_in_arr);
+        std::shared_ptr<array_info> in_values =
+            std::shared_ptr<array_info>(p_in_values);
+
         if (!is_parallel) {
             array_isin_kernel(out_arr, in_arr, in_values, is_parallel);
-            decref_array(out_arr);
-            decref_array(in_arr);
-            decref_array(in_values);
             return;
         }
-        std::vector<array_info*> vect_in_values = {in_values};
-        table_info table_in_values = table_info(vect_in_values);
-        std::vector<array_info*> vect_in_arr = {in_arr};
-        table_info* table_in_arr = new table_info(vect_in_arr);
+        std::vector<std::shared_ptr<array_info>> vect_in_values = {in_values};
+        std::shared_ptr<table_info> table_in_values =
+            std::make_shared<table_info>(vect_in_values);
+        std::vector<std::shared_ptr<array_info>> vect_in_arr = {in_arr};
+        std::shared_ptr<table_info> table_in_arr =
+            std::make_shared<table_info>(vect_in_arr);
 
         int64_t num_keys = 1;
-        table_info* shuf_table_in_values =
-            shuffle_table(&table_in_values, num_keys, is_parallel);
+        std::shared_ptr<table_info> shuf_table_in_values =
+            shuffle_table(std::move(table_in_values), num_keys, is_parallel);
         // we need the comm_info and hashes for the reverse shuffling
         mpi_comm_info comm_info(table_in_arr->columns);
         std::shared_ptr<uint32_t[]> hashes =
             hash_keys_table(table_in_arr, 1, SEED_HASH_PARTITION, is_parallel);
         comm_info.set_counts(hashes, is_parallel);
-        table_info* shuf_table_in_arr =
-            shuffle_table_kernel(table_in_arr, hashes, comm_info, is_parallel);
+        std::shared_ptr<table_info> shuf_table_in_arr = shuffle_table_kernel(
+            std::move(table_in_arr), hashes, comm_info, is_parallel);
         // Creation of the output array.
         int64_t len = shuf_table_in_arr->columns[0]->length;
-        array_info* shuf_out_arr =
+        std::shared_ptr<array_info> shuf_out_arr =
             alloc_array(len, -1, -1, out_arr->arr_type, out_arr->dtype, 0,
                         out_arr->num_categories);
         // Calling isin on the shuffled info
@@ -123,17 +133,11 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                           shuf_table_in_values->columns[0], is_parallel);
 
         // Deleting the data after usage
-        delete_table_decref_arrays(shuf_table_in_values);
-        delete_table_decref_arrays(shuf_table_in_arr);
+        shuf_table_in_values.reset();
+        shuf_table_in_arr.reset();
         // Now the reverse shuffling operation.
         reverse_shuffle_preallocated_data_array(shuf_out_arr, out_arr, hashes,
                                                 comm_info);
-        // free temporary shuffle array
-        delete_info_decref_array(shuf_out_arr);
-        // release extra reference for output array (array_info wrapper's
-        // reference)
-        decref_array(out_arr);
-        delete table_in_arr;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;
@@ -154,12 +158,12 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
  * @param n_loc_sample Number of samples to get
  * @param n_local Length of the table
  * @param parallel Only for tracing purposes
- * @return table_info* Table with samples. Shape: n_loc_sample rows, n_key_t
- * columns
+ * @return std::shared_ptr<table_info> Table with samples. Shape: n_loc_sample
+ * rows, n_key_t columns
  */
-table_info* get_samples_from_table_local(table_info* local_sort,
-                                         int64_t n_key_t, int64_t n_loc_sample,
-                                         int64_t n_local, bool parallel) {
+std::shared_ptr<table_info> get_samples_from_table_local(
+    std::shared_ptr<table_info> local_sort, int64_t n_key_t,
+    int64_t n_loc_sample, int64_t n_local, bool parallel) {
     tracing::Event ev("get_samples_from_table_local", parallel);
     std::mt19937 gen(1234567890);
     double block_size = double(n_local) / n_loc_sample;
@@ -171,11 +175,8 @@ table_info* get_samples_from_table_local(table_info* local_sort,
         ListIdx[i] = std::uniform_int_distribution<int64_t>(lo, hi)(gen);
         cur_lo += block_size;
     }
-    // Incref since RetrieveTable will steal a reference.
-    for (int64_t i_key = 0; i_key < n_key_t; i_key++) {
-        incref_array(local_sort->columns[i_key]);
-    }
-    table_info* samples = RetrieveTable(local_sort, ListIdx, n_key_t);
+    std::shared_ptr<table_info> samples =
+        RetrieveTable(std::move(local_sort), ListIdx, n_key_t);
     return samples;
 }
 
@@ -191,13 +192,12 @@ table_info* get_samples_from_table_local(table_info* local_sort,
  * @param n_local Local table length (=> length of local_sort)
  * @param parallel Whether the execution is happening in parallel. Passed for
  * consistency and tracing purposes.
- * @return table_info* Table of samples on rank 0, empty table on all other
- * ranks.
+ * @return std::shared_ptr<table_info> Table of samples on rank 0, empty table
+ * on all other ranks.
  */
-table_info* get_samples_from_table_parallel(table_info* local_sort,
-                                            int64_t n_key_t, int n_pes,
-                                            int64_t n_total, int64_t n_local,
-                                            bool parallel) {
+std::shared_ptr<table_info> get_samples_from_table_parallel(
+    std::shared_ptr<table_info> local_sort, int64_t n_key_t, int n_pes,
+    int64_t n_total, int64_t n_local, bool parallel) {
     tracing::Event ev("get_samples_from_table_parallel", parallel);
     ev.add_attribute("n_key_t", n_key_t);
     ev.add_attribute("n_local", n_local);
@@ -233,14 +233,13 @@ table_info* get_samples_from_table_parallel(table_info* local_sort,
     int64_t n_loc_sample = std::min(n_global_sample / n_pes, double(n_local));
 
     // Get n_loc_sample many local samples from the local sorted chunk
-    table_info* samples = get_samples_from_table_local(
-        local_sort, n_key_t, n_loc_sample, n_local, parallel);
+    std::shared_ptr<table_info> samples = get_samples_from_table_local(
+        std::move(local_sort), n_key_t, n_loc_sample, n_local, parallel);
 
     // Collecting all samples
     bool all_gather = false;
-    table_info* all_samples =
-        gather_table(samples, n_key_t, all_gather, parallel);
-    delete_table(samples);
+    std::shared_ptr<table_info> all_samples =
+        gather_table(std::move(samples), n_key_t, all_gather, parallel);
     return all_samples;
 }
 
@@ -254,10 +253,10 @@ table_info* get_samples_from_table_parallel(table_info* local_sort,
  * @param is_parallel: true if data is distributed (used to indicate whether
  * tracing should be parallel or not)
  */
-table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
-                                    int64_t* vect_ascending,
-                                    int64_t* na_position, int64_t* dead_keys,
-                                    bool is_parallel) {
+std::shared_ptr<table_info> sort_values_table_local(
+    std::shared_ptr<table_info> in_table, int64_t n_key_t,
+    int64_t* vect_ascending, int64_t* na_position, int64_t* dead_keys,
+    bool is_parallel) {
     tracing::Event ev("sort_values_table_local", is_parallel);
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
@@ -273,7 +272,7 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
         // case. We call KeyComparisonAsPython_Column directly without looping
         // through the keys, assume fixed values for some parameters and pass
         // less parameters around
-        array_info* key_col = in_table->columns[0];
+        std::shared_ptr<array_info> key_col = in_table->columns[0];
         bool ascending = vect_ascending[0];
         bool na_last = na_position[0];
         if (ascending) {
@@ -306,23 +305,26 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
         gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
     }
 
-    table_info* ret_table;
+    std::shared_ptr<table_info> ret_table;
     if (dead_keys == nullptr) {
-        ret_table = RetrieveTable(in_table, ListIdx, -1);
+        ret_table = RetrieveTable(std::move(in_table), ListIdx, -1);
     } else {
         uint64_t n_cols = in_table->ncols();
         std::vector<size_t> colInds;
-        for (uint64_t i = 0; i < n_cols; i++) {
-            if (i < n_key && dead_keys[i]) {
-                array_info* in_arr = in_table->columns[i];
-                // decref dead keys since not used anymore
-                // RetrieveTable decrefs other arrays
-                decref_array(in_arr);
-                continue;
+        for (uint64_t i = 0; i < n_key; i++) {
+            if (dead_keys[i]) {
+                // If this is the last reference to this
+                // table, we can safely release reference (and potentially
+                // memory if any) for the dead keys at this point.
+                reset_col_if_last_table_ref(in_table, i);
+            } else {
+                colInds.push_back(i);
             }
+        }
+        for (uint64_t i = n_key; i < n_cols; i++) {
             colInds.push_back(i);
         }
-        ret_table = RetrieveTable(in_table, ListIdx, colInds);
+        ret_table = RetrieveTable(std::move(in_table), ListIdx, colInds);
     }
 
     return ret_table;
@@ -349,22 +351,22 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
  * @param myrank MPI rank of the calling process.
  * @param n_pes Total number of MPI ranks.
  * @param parallel Is the process parallel.
- * @return table_info* Bounds table with n_pes-1 rows. A full bounds table is
- * computed on rank 0, broadcasted to all ranks and returned.
+ * @return std::shared_ptr<table_info> Bounds table with n_pes-1 rows. A full
+ * bounds table is computed on rank 0, broadcasted to all ranks and returned.
  */
-table_info* compute_bounds_from_samples(table_info* all_samples,
-                                        table_info* ref_table, int64_t n_key_t,
-                                        int64_t* vect_ascending,
-                                        int64_t* na_position, int myrank,
-                                        int n_pes, bool parallel) {
+std::shared_ptr<table_info> compute_bounds_from_samples(
+    std::shared_ptr<table_info> all_samples,
+    std::shared_ptr<table_info> ref_table, int64_t n_key_t,
+    int64_t* vect_ascending, int64_t* na_position, int myrank, int n_pes,
+    bool parallel) {
     tracing::Event ev("compute_bounds_from_samples", parallel);
     int mpi_root = 0;
     // Computing the bounds (splitters) on root
-    table_info* pre_bounds = nullptr;
+    std::shared_ptr<table_info> pre_bounds = nullptr;
     if (myrank == mpi_root) {
-        table_info* all_samples_sort =
-            sort_values_table_local(all_samples, n_key_t, vect_ascending,
-                                    na_position, nullptr, parallel);
+        std::shared_ptr<table_info> all_samples_sort = sort_values_table_local(
+            std::move(all_samples), n_key_t, vect_ascending, na_position,
+            nullptr, parallel);
         int64_t n_samples = all_samples_sort->nrows();
         int64_t step = ceil(double(n_samples) / double(n_pes));
         std::vector<int64_t> ListIdxBounds(n_pes - 1);
@@ -372,8 +374,8 @@ table_info* compute_bounds_from_samples(table_info* all_samples,
             size_t pos = std::min((i + 1) * step, n_samples - 1);
             ListIdxBounds[i] = pos;
         }
-        pre_bounds = RetrieveTable(all_samples_sort, ListIdxBounds, -1);
-        delete_table(all_samples_sort);
+        pre_bounds =
+            RetrieveTable(std::move(all_samples_sort), ListIdxBounds, -1);
     } else {
         // all ranks need to trace the event
         // TODO the right way would be to call sort_values_table_local with
@@ -386,12 +388,9 @@ table_info* compute_bounds_from_samples(table_info* all_samples,
     // This is because pre_bounds is NULL for ranks != 0
     // The underlying dictionary is the same for local_sort and pre_bounds
     // for the dict columns, as needed for broadcast_table.
-    table_info* bounds =
-        broadcast_table(ref_table, pre_bounds, n_key_t, parallel, mpi_root);
-
-    if (myrank == mpi_root) {
-        delete_table(pre_bounds);
-    }
+    std::shared_ptr<table_info> bounds =
+        broadcast_table(std::move(ref_table), std::move(pre_bounds), n_key_t,
+                        parallel, mpi_root);
 
     return bounds;
 }
@@ -410,162 +409,161 @@ table_info* compute_bounds_from_samples(table_info* all_samples,
  * @param n_pes total MPI ranks
  * @param parallel parallel flag (should be true here but passing around for
  * code consistency)
- * @return table_info* Bounds table with n_pes-1 rows.
+ * @return std::shared_ptr<table_info> Bounds table with n_pes-1 rows.
  */
-table_info* get_parallel_sort_bounds(table_info* local_sort, int64_t n_key_t,
-                                     int64_t* vect_ascending,
-                                     int64_t* na_position, int64_t n_local,
-                                     int64_t n_total, int myrank, int n_pes,
-                                     bool parallel) {
+std::shared_ptr<table_info> get_parallel_sort_bounds(
+    std::shared_ptr<table_info> local_sort, int64_t n_key_t,
+    int64_t* vect_ascending, int64_t* na_position, int64_t n_local,
+    int64_t n_total, int myrank, int n_pes, bool parallel) {
     tracing::Event ev("get_parallel_sort_bounds", parallel);
     // Compute samples from the locally sorted table.
     // (Filled on rank 0, empty on all other ranks)
-    table_info* all_samples = get_samples_from_table_parallel(
+    std::shared_ptr<table_info> all_samples = get_samples_from_table_parallel(
         local_sort, n_key_t, n_pes, n_total, n_local, parallel);
 
     // Compute split bounds from the samples.
     // Output is broadcasted to all ranks.
-    table_info* bounds = compute_bounds_from_samples(
-        all_samples, local_sort, n_key_t, vect_ascending, na_position, myrank,
-        n_pes, parallel);
-
-    delete_table(all_samples);
+    std::shared_ptr<table_info> bounds = compute_bounds_from_samples(
+        std::move(all_samples), std::move(local_sort), n_key_t, vect_ascending,
+        na_position, myrank, n_pes, parallel);
 
     return bounds;
 }
 
-table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
-                              int64_t* vect_ascending, int64_t* na_position,
-                              int64_t* dead_keys, int64_t* out_n_rows,
-                              table_info* bounds, bool parallel) {
+std::shared_ptr<table_info> sort_values_table(
+    std::shared_ptr<table_info> in_table, int64_t n_key_t,
+    int64_t* vect_ascending, int64_t* na_position, int64_t* dead_keys,
+    int64_t* out_n_rows, std::shared_ptr<table_info> bounds, bool parallel) {
+    tracing::Event ev("sort_values_table", parallel);
+
+    if (out_n_rows != nullptr) {
+        // Initialize to the input because local sort won't
+        // change the number of elements. If we do a
+        // distributed source the rows per rank may change.
+        *out_n_rows = (int64_t)in_table->nrows();
+    }
+
+    // Convert all local dictionaries to global for dict columns.
+    // Also sort the dictionaries, so the sorting process
+    // is more efficient (we can compare indices directly)
+    for (std::shared_ptr<array_info> arr : in_table->columns) {
+        if (arr->arr_type == bodo_array_type::DICT) {
+            // For dictionary encoded arrays we need the data to be unique
+            // and global in case the dictionary is sorted (because we will
+            // compare indices directly)
+            make_dictionary_global_and_unique(arr, parallel, true);
+        }
+    }
+
+    int64_t n_local = in_table->nrows();
+    int64_t n_total = n_local;
+    if (parallel) {
+        MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
+                      MPI_COMM_WORLD);
+    }
+
+    // Want to keep dead keys only when we will perform a shuffle operation
+    // later in the function
+    std::shared_ptr<table_info> local_sort = sort_values_table_local(
+        in_table, n_key_t, vect_ascending, na_position,
+        (parallel && n_total != 0) ? nullptr : dead_keys, parallel);
+
+    if (!parallel) {
+        return local_sort;
+    } else if (n_total == 0) {
+        return local_sort;
+    }
+
+    tracing::Event ev_sample("sort sampling", parallel);
+
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    if (bounds == nullptr) {
+        bounds = get_parallel_sort_bounds(local_sort, n_key_t, vect_ascending,
+                                          na_position, n_local, n_total, myrank,
+                                          n_pes, parallel);
+    } else if (n_key_t != 1) {
+        // throw error if more than one key since the rest of manual bounds
+        // handling only supports one key cases
+        throw std::runtime_error(
+            "sort_values_table(): passing bounds only supported when there "
+            "is a single key.");
+    }
+
+    // Now computing to which process it all goes.
+    tracing::Event ev_hashes("compute_destinations", parallel);
+    std::shared_ptr<uint32_t[]> hashes = std::make_unique<uint32_t[]>(n_local);
+    uint32_t rank_id = 0;
+    for (int64_t i = 0; i < n_local; i++) {
+        size_t shift_key1 = 0, shift_key2 = 0;
+        // using 'while' since a partition can be empty which needs to be
+        // skipped
+        // Go to next destination rank if bound of current destination rank
+        // is less than the current key. All destination keys should be less
+        // than or equal its bound (k <= bounds[rank_id])
+        while (rank_id < uint32_t(n_pes - 1) &&
+               KeyComparisonAsPython(n_key_t, vect_ascending, bounds->columns,
+                                     shift_key2, rank_id, local_sort->columns,
+                                     shift_key1, i, na_position)) {
+            rank_id++;
+        }
+        hashes[i] = rank_id;
+    }
+    bounds.reset();
+
+    // Now shuffle all the data
+    mpi_comm_info comm_info(local_sort->columns);
+    comm_info.set_counts(hashes, parallel);
+    ev_hashes.finalize();
+    ev_sample.finalize();
+    std::shared_ptr<table_info> collected_table = shuffle_table_kernel(
+        std::move(local_sort), hashes, comm_info, parallel);
+
+    // NOTE: local sort doesn't change the number of rows
+    // ret_table cannot be used since all output columns may be dead (only
+    // length is needed)
+    if (out_n_rows != nullptr) {
+        *out_n_rows = (int64_t)collected_table->nrows();
+    }
+
+    // Final local sorting
+    std::shared_ptr<table_info> ret_table = sort_values_table_local(
+        std::move(collected_table), n_key_t, vect_ascending, na_position,
+        dead_keys, parallel);
+    return ret_table;
+}
+
+table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_key_t,
+                                       int64_t* vect_ascending,
+                                       int64_t* na_position, int64_t* dead_keys,
+                                       int64_t* out_n_rows, table_info* bounds,
+                                       bool parallel) {
     try {
-        tracing::Event ev("sort_values_table", parallel);
-
-        if (out_n_rows != nullptr) {
-            // Initialize to the input because local sort won't
-            // change the number of elements. If we do a
-            // distributed source the rows per rank may change.
-            *out_n_rows = (int64_t)in_table->nrows();
-        }
-
-        // Convert all local dictionaries to global for dict columns.
-        // Also sort the dictionaries, so the sorting process
-        // is more efficient (we can compare indices directly)
-        for (array_info* arr : in_table->columns) {
-            if (arr->arr_type == bodo_array_type::DICT) {
-                // For dictionary encoded arrays we need the data to be unique
-                // and global in case the dictionary is sorted (because we will
-                // compare indices directly)
-                make_dictionary_global_and_unique(arr, parallel, true);
-            }
-        }
-
-        int64_t n_local = in_table->nrows();
-        int64_t n_total = n_local;
-        if (parallel) {
-            MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                          MPI_COMM_WORLD);
-        }
-
-        // Want to keep dead keys only when we will perform a shuffle operation
-        // later in the function
-        table_info* local_sort = sort_values_table_local(
-            in_table, n_key_t, vect_ascending, na_position,
-            (parallel && n_total != 0) ? nullptr : dead_keys, parallel);
-
-        if (!parallel) {
-            return local_sort;
-        } else if (n_total == 0) {
-            if (bounds != nullptr) {
-                delete_table_decref_arrays(bounds);
-            }
-            return local_sort;
-        }
-
-        tracing::Event ev_sample("sort sampling", parallel);
-
-        int n_pes, myrank;
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-
-        if (bounds == nullptr) {
-            bounds = get_parallel_sort_bounds(
-                local_sort, n_key_t, vect_ascending, na_position, n_local,
-                n_total, myrank, n_pes, parallel);
-        } else if (n_key_t != 1) {
-            // throw error if more than one key since the rest of manual bounds
-            // handling only supports one key cases
-            throw std::runtime_error(
-                "sort_values_table(): passing bounds only supported when there "
-                "is a single key.");
-        }
-
-        // Now computing to which process it all goes.
-        tracing::Event ev_hashes("compute_destinations", parallel);
-        std::shared_ptr<uint32_t[]> hashes =
-            std::make_unique<uint32_t[]>(n_local);
-        uint32_t rank_id = 0;
-        for (int64_t i = 0; i < n_local; i++) {
-            size_t shift_key1 = 0, shift_key2 = 0;
-            // using 'while' since a partition can be empty which needs to be
-            // skipped
-            // Go to next destination rank if bound of current destination rank
-            // is less than the current key. All destination keys should be less
-            // than or equal its bound (k <= bounds[rank_id])
-            while (rank_id < uint32_t(n_pes - 1) &&
-                   KeyComparisonAsPython(n_key_t, vect_ascending,
-                                         bounds->columns, shift_key2, rank_id,
-                                         local_sort->columns, shift_key1, i,
-                                         na_position)) {
-                rank_id++;
-            }
-            hashes[i] = rank_id;
-        }
-        delete_table_decref_arrays(bounds);
-
-        // Now shuffle all the data
-        mpi_comm_info comm_info(local_sort->columns);
-        comm_info.set_counts(hashes, parallel);
-        ev_hashes.finalize();
-        ev_sample.finalize();
-        table_info* collected_table =
-            shuffle_table_kernel(local_sort, hashes, comm_info, parallel);
-        // NOTE: shuffle_table_kernel decrefs input arrays
-        delete_table(local_sort);
-
-        // NOTE: local sort doesn't change the number of rows
-        // ret_table cannot be used since all output columns may be dead (only
-        // length is needed)
-        if (out_n_rows != nullptr) {
-            *out_n_rows = (int64_t)collected_table->nrows();
-        }
-
-        // Final local sorting
-        table_info* ret_table =
-            sort_values_table_local(collected_table, n_key_t, vect_ascending,
-                                    na_position, dead_keys, parallel);
-        delete_table(collected_table);
-        return ret_table;
+        std::shared_ptr<table_info> out = sort_values_table(
+            std::shared_ptr<table_info>(in_table), n_key_t, vect_ascending,
+            na_position, dead_keys, out_n_rows,
+            std::shared_ptr<table_info>(bounds), parallel);
+        return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
     }
 }
 
-array_info* sort_values_array_local(array_info* in_arr, bool is_parallel,
-                                    int64_t ascending, int64_t na_position) {
-    std::vector<array_info*> cols = {in_arr};
-    table_info* dummy_table = new table_info(cols);
+std::shared_ptr<array_info> sort_values_array_local(
+    std::shared_ptr<array_info> in_arr, bool is_parallel, int64_t ascending,
+    int64_t na_position) {
+    std::vector<std::shared_ptr<array_info>> cols = {in_arr};
+    std::shared_ptr<table_info> dummy_table =
+        std::make_shared<table_info>(cols);
     int64_t zero = 0;
     // sort_values_table_local will decref all arrays in dummy_table (i.e.
     // in_arr) by 1.
-    table_info* sorted_table = sort_values_table_local(
+    std::shared_ptr<table_info> sorted_table = sort_values_table_local(
         dummy_table, 1, &ascending, &na_position, &zero, is_parallel);
-    // We don't want to call `delete` on `in_arr` (since we don't own it), which
-    // is what `delete_table` would do.
-    delete dummy_table;
-    array_info* sorted_arr = sorted_table->columns[0];
-    delete sorted_table;
+    std::shared_ptr<array_info> sorted_arr = sorted_table->columns[0];
     return sorted_arr;
 }
 
@@ -584,8 +582,9 @@ array_info* sort_values_array_local(array_info* in_arr, bool is_parallel,
  * @param n_total Number of global rows for each of the tables.
  */
 void validate_inputs_for_get_parallel_sort_bounds_for_domain(
-    std::vector<table_info*> tables, std::vector<uint64_t> n_keys,
-    std::vector<uint64_t> n_local, std::vector<uint64_t> n_total) {
+    std::vector<std::shared_ptr<table_info>> tables,
+    std::vector<uint64_t> n_keys, std::vector<uint64_t> n_local,
+    std::vector<uint64_t> n_total) {
     // Basic validation
     if (n_keys.size() == 0) {
         throw std::runtime_error(
@@ -713,11 +712,12 @@ void validate_inputs_for_get_parallel_sort_bounds_for_domain(
  * @param[out] hashes Reference to am array to fill the hashes in. In this
  * case, we directly fill the ranks (and can treat them as hashes).
  * @param parallel Only for tracing purposes
- * @return table_info* The new table and the
+ * @return std::shared_ptr<table_info> The new table and the
  * destination rank ids for rows in the new table.
  */
-table_info* create_send_table_and_hashes_from_rank_to_row_ids(
-    table_info* table, const std::vector<std::vector<int64_t>> rank_to_row_ids,
+std::shared_ptr<table_info> create_send_table_and_hashes_from_rank_to_row_ids(
+    std::shared_ptr<table_info> table,
+    const std::vector<std::vector<int64_t>> rank_to_row_ids,
     std::shared_ptr<uint32_t[]>& hashes, bool parallel) {
     tracing::Event ev("create_send_table_and_hashes_from_rank_to_row_ids",
                       parallel);
@@ -739,7 +739,8 @@ table_info* create_send_table_and_hashes_from_rank_to_row_ids(
         flatten<int64_t>(rank_to_row_ids, total_rows);
     // Create new table using the indices.
     // NOTE: RetrieveTable decrefs all arrays.
-    table_info* new_table = RetrieveTable(table, indices, -1);
+    std::shared_ptr<table_info> new_table =
+        RetrieveTable(std::move(table), indices, -1);
 
     // Fill hashes array (i.e. the rank that rows in the new_table should go to)
     hashes.reset(new uint32_t[total_rows]);
@@ -777,8 +778,8 @@ table_info* create_send_table_and_hashes_from_rank_to_row_ids(
  * nature of the algorithm, each vector will be sorted.
  */
 const std::vector<std::vector<int64_t>> compute_destinations_for_interval(
-    table_info* table, array_info* bounds_arr, int n_pes, bool parallel,
-    bool strict) {
+    std::shared_ptr<table_info> table, std::shared_ptr<array_info> bounds_arr,
+    int n_pes, bool parallel, bool strict) {
     tracing::Event ev("compute_destinations_for_interval", parallel);
     // TODO XXX Convert to use uint64_t
     std::vector<std::vector<int64_t>> rank_to_row_ids(n_pes);
@@ -841,7 +842,8 @@ const std::vector<std::vector<int64_t>> compute_destinations_for_interval(
  * the rows in the input table.
  */
 std::shared_ptr<uint32_t[]> compute_destinations_for_point_table(
-    table_info* table, array_info* bounds_arr, int n_pes, bool parallel) {
+    std::shared_ptr<table_info> table, std::shared_ptr<array_info> bounds_arr,
+    int n_pes, bool parallel) {
     tracing::Event ev("compute_destinations_for_point_table", parallel);
     uint64_t n_local = table->nrows();
     // We call them hashes for consistency, but in this case, they're actually
@@ -879,10 +881,11 @@ std::shared_ptr<uint32_t[]> compute_destinations_for_point_table(
  * @param parallel Whether the process is being done in parallel.
  */
 inline void handle_dict_encoded_arrays_for_interval_join_sort(
-    const std::vector<table_info*> tables, const std::vector<bool> parallel) {
+    const std::vector<std::shared_ptr<table_info>> tables,
+    const std::vector<bool> parallel) {
     for (size_t i = 0; i < tables.size(); i++) {
-        table_info* table = tables[i];
-        for (array_info* arr : table->columns) {
+        std::shared_ptr<table_info> table = tables[i];
+        for (std::shared_ptr<array_info> arr : table->columns) {
             if (arr->arr_type == bodo_array_type::DICT) {
                 convert_local_dictionary_to_global(arr, parallel[i]);
             }
@@ -907,13 +910,13 @@ inline void handle_dict_encoded_arrays_for_interval_join_sort(
  * @param n_pes Total number of MPI processes.
  * @param parallel Whether the process is being done in parallel. This should
  * always be true. The variable is passed for consistency.
- * @return array_info* Array of bounds computed based on the domain columns. It
- * will be of length n_pes-1.
+ * @return std::shared_ptr<array_info> Array of bounds computed based on the
+ * domain columns. It will be of length n_pes-1.
  */
-array_info* get_parallel_sort_bounds_for_domain(
-    std::vector<table_info*>& tables, std::vector<uint64_t>& n_keys,
-    std::vector<uint64_t>& n_local, std::vector<uint64_t>& n_total, int myrank,
-    int n_pes, bool parallel) {
+std::shared_ptr<array_info> get_parallel_sort_bounds_for_domain(
+    std::vector<std::shared_ptr<table_info>>& tables,
+    std::vector<uint64_t>& n_keys, std::vector<uint64_t>& n_local,
+    std::vector<uint64_t>& n_total, int myrank, int n_pes, bool parallel) {
     tracing::Event ev("get_parallel_sort_bounds_for_domain", parallel);
     // Validate input values
     validate_inputs_for_get_parallel_sort_bounds_for_domain(tables, n_keys,
@@ -922,86 +925,62 @@ array_info* get_parallel_sort_bounds_for_domain(
     int mpi_root = 0;
 
     uint64_t total_cols = std::accumulate(n_keys.begin(), n_keys.end(), 0);
-    std::vector<array_info*> sample_cols;
+    std::vector<std::shared_ptr<array_info>> sample_cols;
     sample_cols.reserve(total_cols);
     for (size_t table_idx = 0; table_idx < tables.size(); table_idx++) {
         for (uint64_t key_idx = 0; key_idx < n_keys[table_idx]; key_idx++) {
-            array_info* col = tables[table_idx]->columns[key_idx];
-            array_info* sorted_col = col;
-            bool free_sorted_col = false;
+            std::shared_ptr<array_info> col =
+                tables[table_idx]->columns[key_idx];
+            std::shared_ptr<array_info> sorted_col = col;
             if (key_idx > 0) {
                 // If it's not the first key, we need to sort it.
                 // In this case, we'll need to free this array at the
                 // end.
-                // sort_values_array_local decrefs the array, so we need
-                // to incref first.
                 // If it's the first key, then we can use it as is (already
                 // sorted)
-                incref_array(col);
                 sorted_col =
                     sort_values_array_local(col, parallel, ascending, na_pos);
-                free_sorted_col = true;
             }
             // Create a dummy single column table
-            table_info* dummy_table = new table_info();
+            std::shared_ptr<table_info> dummy_table =
+                std::make_shared<table_info>();
             dummy_table->columns.push_back(sorted_col);
 
             // Output of get_samples_from_table_parallel is output of
             // gather_table, which means that on non-root ranks, the table
             // columns are just NULLs.
-            table_info* all_samples = get_samples_from_table_parallel(
-                dummy_table, /*n_key_t*/ 1, n_pes, n_total[table_idx],
-                n_local[table_idx], parallel);
-            array_info* all_samples_arr = all_samples->columns[0];
+            std::shared_ptr<table_info> all_samples =
+                get_samples_from_table_parallel(
+                    std::move(dummy_table), /*n_key_t*/ 1, n_pes,
+                    n_total[table_idx], n_local[table_idx], parallel);
+            std::shared_ptr<array_info> all_samples_arr =
+                all_samples->columns[0];
             sample_cols.push_back(all_samples_arr);
-
-            if (free_sorted_col) {
-                decref_array(sorted_col);
-            }
-            // Not using delete_table since we need the pointers in sample_cols
-            // to stick around.
-            delete all_samples;
-            all_samples = NULL;
-            delete dummy_table;
-            dummy_table = NULL;
         }
     }
 
-    array_info* concatenated_samples = NULL;
+    std::shared_ptr<array_info> concatenated_samples = NULL;
     if (myrank == mpi_root) {
         // Concatenate locally_sorted_cols into a single array_info, sort it and
         // then compute the split bounds on this.
         concatenated_samples = concat_arrays(sample_cols);
     }
 
-    table_info* concatenated_samples_table = new table_info();
+    std::shared_ptr<table_info> concatenated_samples_table =
+        std::make_shared<table_info>();
     concatenated_samples_table->columns.push_back(concatenated_samples);
 
     // Create a reference table for broadcast step in
     // compute_bounds_from_samples using the first column of the first
     // table.
-    table_info* dummy_table = new table_info();
+    std::shared_ptr<table_info> dummy_table = std::make_shared<table_info>();
     dummy_table->columns.push_back(tables[0]->columns[0]);
 
-    table_info* bounds = compute_bounds_from_samples(
+    std::shared_ptr<table_info> bounds = compute_bounds_from_samples(
         concatenated_samples_table, dummy_table, 1, &ascending, &na_pos, myrank,
         n_pes, parallel);
 
-    delete dummy_table;
-    dummy_table = NULL;
-    // concatenated_samples will get decref-ed as part of
-    // compute_bounds_from_samples, so we just need to delete the table
-    delete_table(concatenated_samples_table);
-
-    // We don't need to free arrays in sample_cols since
-    // concat_arrays will already do that.
-
-    array_info* bounds_arr = bounds->columns[0];
-    // Not using delete_table since we want the bounds_arr
-    // pointer to stick around.
-    delete bounds;
-    bounds = NULL;
-
+    std::shared_ptr<array_info> bounds_arr = bounds->columns[0];
     return bounds_arr;
 }
 
@@ -1022,14 +1001,12 @@ array_info* get_parallel_sort_bounds_for_domain(
  * @param parallel Whether the table is distributed.
  * @param strict Only filter strict bad intervals (where A > B instead of A >=
  * B)
- * @return table_info* sorted table.
+ * @return std::shared_ptr<table_info> sorted table.
  */
-table_info* sort_table_for_interval_join(table_info* table,
-                                         bool table_already_sorted,
-                                         array_info* bounds_arr,
-                                         bool is_table_point_side, int myrank,
-                                         int n_pes, bool parallel,
-                                         bool strict = false) {
+std::shared_ptr<table_info> sort_table_for_interval_join(
+    std::shared_ptr<table_info> table, bool table_already_sorted,
+    std::shared_ptr<array_info> bounds_arr, bool is_table_point_side,
+    int myrank, int n_pes, bool parallel, bool strict = false) {
     tracing::Event ev("sort_table_for_interval_join", parallel);
     ev.add_attribute("is_table_point_side", is_table_point_side);
     ev.add_attribute("table_len_local", table->nrows());
@@ -1037,11 +1014,13 @@ table_info* sort_table_for_interval_join(table_info* table,
     int64_t asc[2] = {1, 1};
     int64_t na_pos[2] = {1, 1};
 
-    table_info* local_sort_table = table;
+    std::shared_ptr<table_info> local_sort_table;
     if (!table_already_sorted) {
-        local_sort_table =
-            sort_values_table_local(table, (is_table_point_side ? 1 : 2), asc,
-                                    na_pos, nullptr, parallel);
+        local_sort_table = sort_values_table_local(
+            std::move(table), (is_table_point_side ? 1 : 2), asc, na_pos,
+            nullptr, parallel);
+    } else {
+        local_sort_table = std::move(table);
     }
 
     if (!parallel) {
@@ -1052,7 +1031,7 @@ table_info* sort_table_for_interval_join(table_info* table,
     // 1. Compute destination ranks for each row in both tables
     //
 
-    table_info* table_to_send = NULL;
+    std::shared_ptr<table_info> table_to_send = NULL;
     // In this case, we compute the ranks directly, and treat them as the hashes
     // (the modulo step later doesn't end up changing these values since they're
     // all already between 0 and n_pes-1).
@@ -1062,7 +1041,7 @@ table_info* sort_table_for_interval_join(table_info* table,
     if (is_table_point_side) {
         table_to_send = local_sort_table;
         table_to_send_hashes = compute_destinations_for_point_table(
-            local_sort_table, bounds_arr, n_pes, parallel);
+            std::move(local_sort_table), bounds_arr, n_pes, parallel);
     } else {
         // NOTE: This will skip bad intervals.
         std::vector<std::vector<int64_t>> rank_to_row_ids_for_table =
@@ -1072,8 +1051,8 @@ table_info* sort_table_for_interval_join(table_info* table,
         // create_send_table_and_hashes_from_rank_to_row_ids will decref
         // all arrays in local_sort_table.
         table_to_send = create_send_table_and_hashes_from_rank_to_row_ids(
-            local_sort_table, rank_to_row_ids_for_table, table_to_send_hashes,
-            parallel);
+            std::move(local_sort_table), rank_to_row_ids_for_table,
+            table_to_send_hashes, parallel);
     }
 
     //
@@ -1083,43 +1062,18 @@ table_info* sort_table_for_interval_join(table_info* table,
     mpi_comm_info comm_info_table(table_to_send->columns);
     comm_info_table.set_counts(table_to_send_hashes, parallel);
     // NOTE: shuffle_table_kernel decrefs input arrays
-    table_info* collected_table = shuffle_table_kernel(
-        table_to_send, table_to_send_hashes, comm_info_table, parallel);
-
-    // There are a few cases for cleanup:
-    // 1. Table was already sorted: In this case, local_sort_table = table, so
-    // we don't own local_sort_table and can't delete it.
-    // 1.1 If point table --> table_to_send = local_sort_table = table.
-    // Shuffle will decref table_to_send (and hence local_sort_table and table),
-    // so no additional clean up should be needed.
-    // 1.2 If interval table -->
-    // create_send_table_and_hashes_from_rank_to_row_ids will decref
-    // local_sort_table (and hence table), and then shuffle will decref
-    // table_to_send. We own table_to_send and will delete it.
-    // 2. Table was not already sorted: sort_values_table_local will decref
-    // table.
-    // 2.1 If point table --> table_to_send = local_sort_table, Shuffle
-    // will decref table_to_send (and hence local_sort_table). Deleting
-    // local_sort_table is sufficient for cleanup.
-    // 2.2 If interval table -->
-    // create_send_table_and_hashes_from_rank_to_row_ids will decref
-    // local_sort_table. Shuffle will decref table_to_send.
-    // We own both local_sort_table and table_to_send, and can delete both.
-    if (!table_already_sorted) {
-        delete_table(local_sort_table);
-    }
-    if (!is_table_point_side) {
-        delete_table(table_to_send);
-    }
+    std::shared_ptr<table_info> collected_table =
+        shuffle_table_kernel(std::move(table_to_send), table_to_send_hashes,
+                             comm_info_table, parallel);
+    table_to_send_hashes.reset();
 
     //
     // 3. Sort the shuffled tables locally
     //
 
-    table_info* ret_table =
-        sort_values_table_local(collected_table, (is_table_point_side ? 1 : 2),
-                                asc, na_pos, nullptr, parallel);
-    delete_table(collected_table);
+    std::shared_ptr<table_info> ret_table = sort_values_table_local(
+        std::move(collected_table), (is_table_point_side ? 1 : 2), asc, na_pos,
+        nullptr, parallel);
     return ret_table;
 }
 
@@ -1132,11 +1086,11 @@ table_info* sort_table_for_interval_join_py_entrypoint(table_info* table,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     try {
-        table_info* sorted_table = sort_table_for_interval_join(
-            table, false, bounds_arr, is_table_point_side, myrank, n_pes,
-            parallel);
-        delete_info_decref_array(bounds_arr);
-        return sorted_table;
+        std::shared_ptr<table_info> sorted_table = sort_table_for_interval_join(
+            std::shared_ptr<table_info>(table), false,
+            std::shared_ptr<array_info>(bounds_arr), is_table_point_side,
+            myrank, n_pes, parallel);
+        return new table_info(*sorted_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -1152,11 +1106,14 @@ table_info* sort_table_for_interval_join_py_entrypoint(table_info* table,
  * @param table_2_parallel Whether the second table is distributed.
  * @param is_table_1_point_side Whether the first table is the point side table
  * in a point in interval join.
- * @return std::tuple<table_info*, table_info*, array_info*> sorted table 1,
- * sorted table 2, and bounds for the ranks.
+ * @return std::tuple<std::shared_ptr<table_info>, std::shared_ptr<table_info>,
+ * std::shared_ptr<array_info>> sorted table 1, sorted table 2, and bounds for
+ * the ranks.
  */
-std::tuple<table_info*, table_info*, array_info*>
-sort_both_tables_for_interval_join(table_info* table_1, table_info* table_2,
+std::tuple<std::shared_ptr<table_info>, std::shared_ptr<table_info>,
+           std::shared_ptr<array_info>>
+sort_both_tables_for_interval_join(std::shared_ptr<table_info> table_1,
+                                   std::shared_ptr<table_info> table_2,
                                    bool table_1_parallel, bool table_2_parallel,
                                    bool is_table_1_point_side, bool strict) {
     bool parallel_trace = (table_1_parallel || table_2_parallel);
@@ -1168,7 +1125,7 @@ sort_both_tables_for_interval_join(table_info* table_1, table_info* table_2,
         "sort_both_tables_for_interval_join_handle_dict_encoded_arrays",
         parallel_trace);
     handle_dict_encoded_arrays_for_interval_join_sort(
-        std::vector<table_info*>{table_1, table_2},
+        std::vector<std::shared_ptr<table_info>>{table_1, table_2},
         std::vector<bool>{table_1_parallel, table_2_parallel});
     ev_dict.finalize();
 
@@ -1192,11 +1149,11 @@ sort_both_tables_for_interval_join(table_info* table_1, table_info* table_2,
 
     // sort_values_table_local will decref all arrays in table_1
     // and table_2.
-    table_info* local_sort_table_1 =
-        sort_values_table_local(table_1, (is_table_1_point_side ? 1 : 2), asc,
-                                na_pos, nullptr, table_1_parallel);
-    table_info* local_sort_table_2 = sort_values_table_local(
-        table_2, 2, asc, na_pos, nullptr, table_2_parallel);
+    std::shared_ptr<table_info> local_sort_table_1 = sort_values_table_local(
+        std::move(table_1), (is_table_1_point_side ? 1 : 2), asc, na_pos,
+        nullptr, table_1_parallel);
+    std::shared_ptr<table_info> local_sort_table_2 = sort_values_table_local(
+        std::move(table_2), 2, asc, na_pos, nullptr, table_2_parallel);
 
     // Return the local sort output in the non-parallel case,
     // or if both tables are empty.
@@ -1220,12 +1177,14 @@ sort_both_tables_for_interval_join(table_info* table_1, table_info* table_2,
     // 2. Compute the split bounds
     //
 
-    std::vector<table_info*> tables_vec{local_sort_table_1, local_sort_table_2};
+    std::vector<std::shared_ptr<table_info>> tables_vec{local_sort_table_1,
+                                                        local_sort_table_2};
     std::vector<uint64_t> n_keys_vec{
         static_cast<uint64_t>(is_table_1_point_side ? 1 : 2), 2};
-    array_info* bounds_arr = get_parallel_sort_bounds_for_domain(
-        tables_vec, n_keys_vec, n_local_vec, n_total_vec, myrank, n_pes,
-        parallel);
+    std::shared_ptr<array_info> bounds_arr =
+        get_parallel_sort_bounds_for_domain(tables_vec, n_keys_vec, n_local_vec,
+                                            n_total_vec, myrank, n_pes,
+                                            parallel);
 
     //
     // 3. Compute destination ranks for each row in both tables, shuffle the
@@ -1233,44 +1192,43 @@ sort_both_tables_for_interval_join(table_info* table_1, table_info* table_2,
     // intervals (i.e. start > end) will be filtered out.
     //
 
-    // All arrays in local_sort_table_1 will be decref-ed
-    table_info* ret_table_1 = sort_table_for_interval_join(
-        local_sort_table_1, true, bounds_arr, is_table_1_point_side, myrank,
-        n_pes, parallel, strict);
-    delete_table(local_sort_table_1);
+    std::shared_ptr<table_info> ret_table_1 = sort_table_for_interval_join(
+        std::move(local_sort_table_1), true, bounds_arr, is_table_1_point_side,
+        myrank, n_pes, parallel, strict);
 
     // All arrays in local_sort_table_2 will be decref-ed
-    table_info* ret_table_2 =
-        sort_table_for_interval_join(local_sort_table_2, true, bounds_arr,
-                                     false, myrank, n_pes, parallel, strict);
-    delete_table(local_sort_table_2);
+    std::shared_ptr<table_info> ret_table_2 = sort_table_for_interval_join(
+        std::move(local_sort_table_2), true, bounds_arr, false, myrank, n_pes,
+        parallel, strict);
 
     return {ret_table_1, ret_table_2, bounds_arr};
 }
 
-std::pair<table_info*, table_info*> sort_tables_for_point_in_interval_join(
-    table_info* table_point, table_info* table_interval,
-    bool table_point_parallel, bool table_interval_parallel, bool strict) {
-    table_info *sorted_point, *sorted_interval;
-    array_info* bounds_arr;
+std::pair<std::shared_ptr<table_info>, std::shared_ptr<table_info>>
+sort_tables_for_point_in_interval_join(
+    std::shared_ptr<table_info> table_point,
+    std::shared_ptr<table_info> table_interval, bool table_point_parallel,
+    bool table_interval_parallel, bool strict) {
+    std::shared_ptr<table_info> sorted_point, sorted_interval;
+    std::shared_ptr<array_info> bounds_arr;
 
     std::tie(sorted_point, sorted_interval, bounds_arr) =
         sort_both_tables_for_interval_join(
-            table_point, table_interval, table_point_parallel,
-            table_interval_parallel, true, strict);
+            std::move(table_point), std::move(table_interval),
+            table_point_parallel, table_interval_parallel, true, strict);
 
-    if (bounds_arr != nullptr) {
-        delete_info_decref_array(bounds_arr);
-    }
     return {sorted_point, sorted_interval};
 }
 
-std::tuple<table_info*, table_info*, array_info*>
-sort_tables_for_interval_overlap_join(table_info* table_1, table_info* table_2,
+std::tuple<std::shared_ptr<table_info>, std::shared_ptr<table_info>,
+           std::shared_ptr<array_info>>
+sort_tables_for_interval_overlap_join(std::shared_ptr<table_info> table_1,
+                                      std::shared_ptr<table_info> table_2,
                                       bool table_1_parallel,
                                       bool table_2_parallel) {
     return sort_both_tables_for_interval_join(
-        table_1, table_2, table_1_parallel, table_2_parallel, false, true);
+        std::move(table_1), std::move(table_2), table_1_parallel,
+        table_2_parallel, false, true);
 }
 
 //
@@ -1318,7 +1276,7 @@ struct KeyEqualDropDuplicates {
         size_t shift_A = 0, shift_B = 0;
         return TestEqual(*key_arrs, num_keys, shift_A, iRowA, shift_B, iRowB);
     }
-    std::vector<array_info*>* key_arrs;
+    std::vector<std::shared_ptr<array_info>>* key_arrs;
     int64_t num_keys;
 };
 }  // namespace
@@ -1335,13 +1293,12 @@ struct KeyEqualDropDuplicates {
  * @param is_parallel: whether we run in parallel or not.
  * @return the table to be used.
  */
-static table_info* drop_duplicates_keys_inner(table_info* in_table,
-                                              int64_t num_keys,
-                                              bool dropna = true,
-                                              bool is_parallel = true) {
+static std::shared_ptr<table_info> drop_duplicates_keys_inner(
+    std::shared_ptr<table_info> in_table, int64_t num_keys, bool dropna = true,
+    bool is_parallel = true) {
     size_t n_rows = (size_t)in_table->nrows();
-    std::vector<array_info*> key_arrs(in_table->columns.begin(),
-                                      in_table->columns.begin() + num_keys);
+    std::vector<std::shared_ptr<array_info>> key_arrs(
+        in_table->columns.begin(), in_table->columns.begin() + num_keys);
     uint32_t seed = SEED_HASH_CONTAINER;
     std::shared_ptr<uint32_t[]> hashes = hash_keys(key_arrs, seed, is_parallel);
     HashDropDuplicates hash_fct{hashes};
@@ -1373,7 +1330,8 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
         }
     }
     // Now building the out_arrs array. We select only the first num_keys.
-    table_info* ret_table = RetrieveTable(in_table, ListIdx, num_keys);
+    std::shared_ptr<table_info> ret_table =
+        RetrieveTable(std::move(in_table), ListIdx, num_keys);
     //
     hashes.reset();
     return ret_table;
@@ -1411,11 +1369,10 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
  * of the operation after the rows have been merged on the computation
  * @return the table to be used.
  */
-table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
-                                        int64_t keep, int step,
-                                        bool is_parallel, bool dropna,
-                                        bool drop_duplicates_dict,
-                                        std::shared_ptr<uint32_t[]> hashes) {
+std::shared_ptr<table_info> drop_duplicates_table_inner(
+    std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t keep,
+    int step, bool is_parallel, bool dropna, bool drop_duplicates_dict,
+    std::shared_ptr<uint32_t[]> hashes) {
     tracing::Event ev("drop_duplicates_table_inner", is_parallel);
     ev.add_attribute("table_nrows_before",
                      static_cast<size_t>(in_table->nrows()));
@@ -1425,9 +1382,9 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
     }
     const bool delete_hashes = bool(hashes);
     size_t n_rows = (size_t)in_table->nrows();
-    std::vector<array_info*> key_arrs(num_keys);
+    std::vector<std::shared_ptr<array_info>> key_arrs(num_keys);
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++) {
-        array_info* key = in_table->columns[iKey];
+        std::shared_ptr<array_info> key = in_table->columns[iKey];
         // If we are dropping duplicates dictionary encoding assumes
         // that the dictionary values are unique.
         if (key->arr_type == bodo_array_type::DICT) {
@@ -1529,7 +1486,8 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
         ListIdx = RetrieveListIdx2();
     }
     // Now building the out_arrs array.
-    table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
+    std::shared_ptr<table_info> ret_table =
+        RetrieveTable(std::move(in_table), ListIdx, -1);
     //
     if (delete_hashes) {
         hashes.reset();
@@ -1555,8 +1513,9 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
  * @param dropna: whether we drop null keys or not.
  * @return the vector of pointers to be used.
  */
-table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
-                                 bool is_parallel, bool dropna) {
+std::shared_ptr<table_info> drop_duplicates_keys(
+    std::shared_ptr<table_info> in_table, int64_t num_keys, bool is_parallel,
+    bool dropna) {
     // serial case
     if (!is_parallel) {
         return drop_duplicates_keys_inner(in_table, num_keys, dropna,
@@ -1564,22 +1523,19 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
     }
     // parallel case
     // pre reduction of duplicates
-    table_info* red_table =
+    std::shared_ptr<table_info> red_table =
         drop_duplicates_keys_inner(in_table, num_keys, dropna, is_parallel);
     // shuffling of values
-    table_info* shuf_table = shuffle_table(red_table, num_keys, is_parallel, 0);
-    // no need to decref since shuffle_table() steals a reference
-    delete_table(red_table);
+    std::shared_ptr<table_info> shuf_table =
+        shuffle_table(std::move(red_table), num_keys, is_parallel, 0);
     // reduction after shuffling
     int keep = 0;
     // Set dropna=False for drop_duplicates_table_inner because
     // drop_duplicates_keys_inner should have already removed any NA
     // values
-    table_info* ret_table =
+    std::shared_ptr<table_info> ret_table =
         drop_duplicates_table_inner(shuf_table, num_keys, keep, 1, is_parallel,
                                     false, /*drop_duplicates_dict=*/true);
-    delete_table(shuf_table);
-    // returning table
     return ret_table;
 }
 
@@ -1599,44 +1555,53 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
  * @param dropna: Should NA be included in the final table
  * @return the vector of pointers to be used.
  */
-table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
-                                  int64_t num_keys, int64_t keep, bool dropna,
-                                  bool drop_local_first) {
+std::shared_ptr<table_info> drop_duplicates_table(
+    std::shared_ptr<table_info> in_table, bool is_parallel, int64_t num_keys,
+    int64_t keep, bool dropna, bool drop_local_first) {
+    // serial case
+    if (!is_parallel) {
+        return drop_duplicates_table_inner(in_table, num_keys, keep, 1,
+                                           is_parallel, dropna,
+                                           /*drop_duplicates_dict=*/true);
+    }
+    // parallel case
+    // pre reduction of duplicates
+    std::shared_ptr<table_info> red_table;
+    if (drop_local_first) {
+        red_table = drop_duplicates_table_inner(in_table, num_keys, keep, 2,
+                                                is_parallel, dropna,
+                                                /*drop_duplicates_dict=*/false);
+    } else {
+        red_table = in_table;
+    }
+    // shuffling of values
+    std::shared_ptr<table_info> shuf_table =
+        shuffle_table(red_table, num_keys, is_parallel);
+    // no need to decref since shuffle_table() steals a reference
+    if (drop_local_first) {
+        red_table.reset();
+    }
+    // reduction after shuffling
+    // We don't drop NA values again because the first
+    // drop_duplicates_table_inner should have already handled this
+    if (drop_local_first)
+        dropna = false;
+    std::shared_ptr<table_info> ret_table = drop_duplicates_table_inner(
+        shuf_table, num_keys, keep, 1, is_parallel, dropna,
+        /*drop_duplicates_dict=*/true);
+    // returning table
+    return ret_table;
+}
+
+table_info* drop_duplicates_table_py_entry(table_info* in_table,
+                                           bool is_parallel, int64_t num_keys,
+                                           int64_t keep, bool dropna,
+                                           bool drop_local_first) {
     try {
-        // serial case
-        if (!is_parallel) {
-            return drop_duplicates_table_inner(in_table, num_keys, keep, 1,
-                                               is_parallel, dropna,
-                                               /*drop_duplicates_dict=*/true);
-        }
-        // parallel case
-        // pre reduction of duplicates
-        table_info* red_table;
-        if (drop_local_first) {
-            red_table = drop_duplicates_table_inner(
-                in_table, num_keys, keep, 2, is_parallel, dropna,
-                /*drop_duplicates_dict=*/false);
-        } else {
-            red_table = in_table;
-        }
-        // shuffling of values
-        table_info* shuf_table =
-            shuffle_table(red_table, num_keys, is_parallel);
-        // no need to decref since shuffle_table() steals a reference
-        if (drop_local_first) {
-            delete_table(red_table);
-        }
-        // reduction after shuffling
-        // We don't drop NA values again because the first
-        // drop_duplicates_table_inner should have already handled this
-        if (drop_local_first)
-            dropna = false;
-        table_info* ret_table = drop_duplicates_table_inner(
-            shuf_table, num_keys, keep, 1, is_parallel, dropna,
-            /*drop_duplicates_dict=*/true);
-        delete_table(shuf_table);
-        // returning table
-        return ret_table;
+        std::shared_ptr<table_info> out_table = drop_duplicates_table(
+            std::shared_ptr<table_info>(in_table), is_parallel, num_keys, keep,
+            dropna, drop_local_first);
+        return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -1644,12 +1609,14 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
 }
 
 // Note: union_tables steals a reference and generates a new output.
-table_info* union_tables_inner(table_info** in_table, int64_t num_tables,
-                               bool drop_duplicates, bool is_parallel) {
+std::shared_ptr<table_info> union_tables_inner(
+    std::vector<std::shared_ptr<table_info>> in_table, int64_t num_tables,
+    bool drop_duplicates, bool is_parallel) {
     tracing::Event ev("union_tables", is_parallel);
     // Drop duplicates locally first. This won't do a shuffle yet because we
     // only want to do 1 shuffle.
-    std::vector<table_info*> locally_processed_table(num_tables);
+    std::vector<std::shared_ptr<table_info>> locally_processed_table(
+        num_tables);
 
     // All tables have the same number of columns and all columns are keys
     int64_t num_keys = in_table[0]->ncols();
@@ -1660,9 +1627,7 @@ table_info* union_tables_inner(table_info** in_table, int64_t num_tables,
         for (int i = 0; i < num_tables; i++) {
             locally_processed_table[i] = drop_duplicates_table_inner(
                 in_table[i], num_keys, 0, 1, false, false, false);
-            // drop_duplicates_table_inner steals a reference on the arrays
-            // but doesn't delete the input table.
-            delete_table(in_table[i]);
+            in_table[i]->columns.clear();
         }
         ev_drop_duplicates.finalize();
     } else {
@@ -1675,14 +1640,16 @@ table_info* union_tables_inner(table_info** in_table, int64_t num_tables,
     // for types.
     tracing::Event ev_unify_dicts("union_tables_unify_dictionaries",
                                   is_parallel);
-    table_info* base_table = locally_processed_table[0];
+    std::shared_ptr<table_info> base_table = locally_processed_table[0];
     // Optimize unify dictionaries for two arrays (common case)
     if (num_tables == 2) {
         for (int j = 0; j < num_keys; j++) {
             if (base_table->columns[j]->arr_type == bodo_array_type::DICT) {
                 // Unify all of the dictionaries.
-                array_info* arr1 = locally_processed_table[0]->columns[j];
-                array_info* arr2 = locally_processed_table[1]->columns[j];
+                std::shared_ptr<array_info> arr1 =
+                    locally_processed_table[0]->columns[j];
+                std::shared_ptr<array_info> arr2 =
+                    locally_processed_table[1]->columns[j];
                 // Ensure we have global/unique data for the dictionary.
                 make_dictionary_global_and_unique(arr1, is_parallel);
                 make_dictionary_global_and_unique(arr2, is_parallel);
@@ -1693,11 +1660,12 @@ table_info* union_tables_inner(table_info** in_table, int64_t num_tables,
         for (int j = 0; j < num_keys; j++) {
             if (base_table->columns[j]->arr_type == bodo_array_type::DICT) {
                 // Unify all of the dictionaries.
-                std::vector<array_info*> dict_arrs(num_tables);
+                std::vector<std::shared_ptr<array_info>> dict_arrs(num_tables);
                 std::vector<bool> is_parallels(num_tables);
                 for (int i = 0; i < num_tables; i++) {
                     // Ensure we have global/unique data for the dictionary.
-                    array_info* arr = locally_processed_table[i]->columns[j];
+                    std::shared_ptr<array_info> arr =
+                        locally_processed_table[i]->columns[j];
                     make_dictionary_global_and_unique(arr, is_parallel);
                     dict_arrs[i] = arr;
                     is_parallels[i] = is_parallel;
@@ -1710,16 +1678,14 @@ table_info* union_tables_inner(table_info** in_table, int64_t num_tables,
 
     // Shuffle the tables
     tracing::Event ev_shuffle("union_table_shuffle", is_parallel);
-    std::vector<table_info*> shuffled_tables(num_tables);
+    std::vector<std::shared_ptr<table_info>> shuffled_tables(num_tables);
     if (is_parallel && drop_duplicates) {
         // Shuffle the tables. We don't need to shuffle the tables
         // if we aren't dropping duplicates.
         for (int i = 0; i < num_tables; i++) {
             shuffled_tables[i] =
                 shuffle_table(locally_processed_table[i], num_keys, true);
-            // no need to decref since shuffle_table() steals a reference
-            // but we need to delete the table
-            delete_table(locally_processed_table[i]);
+            clear_all_cols_if_last_table_ref(locally_processed_table[i]);
         }
     } else {
         for (int i = 0; i < num_tables; i++) {
@@ -1731,18 +1697,16 @@ table_info* union_tables_inner(table_info** in_table, int64_t num_tables,
     // Concatenate all of the tables. Note concat_tables decrefs
     // the input tables.
     tracing::Event ev_concat("union_table_concat", is_parallel);
-    table_info* concatenated_table = concat_tables(shuffled_tables);
+    std::shared_ptr<table_info> concatenated_table =
+        concat_tables(shuffled_tables);
     ev_concat.finalize();
-    table_info* out_table;
+    std::shared_ptr<table_info> out_table;
     if (drop_duplicates) {
         tracing::Event ev_drop_duplicates("union_tables_drop_duplicates_local",
                                           is_parallel);
         // Drop any duplicates in the concatenated tables
         out_table = drop_duplicates_table_inner(concatenated_table, num_keys, 0,
                                                 1, false, false, false);
-        // drop_duplicates_table_inner steals a reference on the arrays
-        // but doesn't delete the input table.
-        delete_table(concatenated_table);
         ev_drop_duplicates.finalize();
     } else {
         out_table = concatenated_table;
@@ -1751,11 +1715,16 @@ table_info* union_tables_inner(table_info** in_table, int64_t num_tables,
     return out_table;
 }
 
-table_info* union_tables(table_info** in_table, int64_t num_tables,
+table_info* union_tables(table_info** in_tables, int64_t num_tables,
                          bool drop_duplicates, bool is_parallel) {
     try {
-        return union_tables_inner(in_table, num_tables, drop_duplicates,
-                                  is_parallel);
+        std::vector<std::shared_ptr<table_info>> in_tables_vec;
+        for (int64_t i = 0; i < num_tables; i++) {
+            in_tables_vec.push_back(std::shared_ptr<table_info>(in_tables[i]));
+        }
+        std::shared_ptr<table_info> out_table = union_tables_inner(
+            in_tables_vec, num_tables, drop_duplicates, is_parallel);
+        return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -1841,9 +1810,9 @@ void sample_ints_permute(int64_t n_samp, int64_t n_total, std::mt19937& gen,
 /**
  * Inner implementation of parallel sample_table
  */
-table_info* sample_table_inner_parallel(table_info* in_table, int64_t n,
-                                        double frac, bool replace,
-                                        int64_t random_state) {
+std::shared_ptr<table_info> sample_table_inner_parallel(
+    std::shared_ptr<table_info> in_table, int64_t n, double frac, bool replace,
+    int64_t random_state) {
     int64_t n_local = in_table->nrows();
     int n_pes = 0;
     int myrank = 0;
@@ -1997,16 +1966,17 @@ table_info* sample_table_inner_parallel(table_info* in_table, int64_t n,
     }
 
     // Retrieve the output table from sampled indices
-    table_info* tab_out = RetrieveTable(in_table, ListIdxChosen, -1);
+    std::shared_ptr<table_info> tab_out =
+        RetrieveTable(std::move(in_table), ListIdxChosen, -1);
     return tab_out;
 }
 
 /**
  * Inner implementation of sequential sample_table
  */
-table_info* sample_table_inner_sequential(table_info* in_table, int64_t n,
-                                          double frac, bool replace,
-                                          int64_t random_state) {
+std::shared_ptr<table_info> sample_table_inner_sequential(
+    std::shared_ptr<table_info> in_table, int64_t n, double frac, bool replace,
+    int64_t random_state) {
     // Total number of rows
     int64_t n_total = in_table->nrows();
 
@@ -2053,19 +2023,26 @@ table_info* sample_table_inner_sequential(table_info* in_table, int64_t n,
     }
 
     // Retrieve the output table from sampled indices
-    table_info* tab_out = RetrieveTable(in_table, ListIdxChosen, -1);
+    std::shared_ptr<table_info> tab_out =
+        RetrieveTable(std::move(in_table), ListIdxChosen, -1);
     return tab_out;
 }
 
-table_info* sample_table(table_info* in_table, int64_t n, double frac,
-                         bool replace, int64_t random_state, bool parallel) {
+table_info* sample_table_py_entry(table_info* in_table, int64_t n, double frac,
+                                  bool replace, int64_t random_state,
+                                  bool parallel) {
     try {
         if (parallel) {
-            return sample_table_inner_parallel(in_table, n, frac, replace,
-                                               random_state);
+            std::shared_ptr<table_info> out_table = sample_table_inner_parallel(
+                std::shared_ptr<table_info>(in_table), n, frac, replace,
+                random_state);
+            return new table_info(*out_table);
         } else {
-            return sample_table_inner_sequential(in_table, n, frac, replace,
-                                                 random_state);
+            std::shared_ptr<table_info> out_table =
+                sample_table_inner_sequential(
+                    std::shared_ptr<table_info>(in_table), n, frac, replace,
+                    random_state);
+            return new table_info(*out_table);
         }
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -2083,9 +2060,10 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
  * @param[out] out_arr output array of bools specifying whether the pattern
  *                      matched for corresponding in_arr element
  */
-void get_search_regex(array_info* in_arr, const bool case_sensitive,
-                      const bool match_beginning, char const* const pat,
-                      array_info* out_arr) {
+void get_search_regex(std::shared_ptr<array_info> in_arr,
+                      const bool case_sensitive, const bool match_beginning,
+                      char const* const pat,
+                      std::shared_ptr<array_info> out_arr) {
     tracing::Event ev("get_search_regex");
     // See:
     // https://www.boost.org/doc/libs/1_76_0/boost/xpressive/regex_constants.hpp
@@ -2136,23 +2114,19 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
         // building the output boolean array by indexing into this
         // result.
 
-        array_info* dict_arr = in_arr->child_arrays[0];
+        std::shared_ptr<array_info> dict_arr = in_arr->child_arrays[0];
 
         // Allocate boolean array to store output of get_search_regex
         // on the dictionary (dict_arr)
-        array_info* dict_arr_out =
+        std::shared_ptr<array_info> dict_arr_out =
             alloc_nullable_array(dict_arr->length, Bodo_CTypes::_BOOL, 0);
 
         // Compute recursively on the dictionary
         // (dict_arr; which is just a string array).
-        // We incref `dict_arr_out` and `dict_arr` since they'll be decrefed
-        // when we call this function recursively
-        incref_array(dict_arr);
-        incref_array(dict_arr_out);
         get_search_regex(dict_arr, case_sensitive, match_beginning, pat,
                          dict_arr_out);
 
-        array_info* indices_arr = in_arr->child_arrays[1];
+        std::shared_ptr<array_info> indices_arr = in_arr->child_arrays[1];
 
         // Iterate over the indices, and assign values to the output
         // boolean array from dict_arr_out.
@@ -2171,15 +2145,23 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
             out_arr->set_null_bit(iRow, bit);
         }
         ev.add_attribute("local_num_match", num_match);
-        // Free the output of computation on dict_arr
-        delete_info_decref_array(dict_arr_out);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "array in_arr type should be string");
     }
-    // decref in_arr/out_arr generated in get_search_regex
-    decref_array(out_arr);
-    decref_array(in_arr);
+}
+
+void get_search_regex_py_entry(array_info* in_arr, const bool case_sensitive,
+                               const bool match_beginning,
+                               char const* const pat, array_info* out_arr) {
+    try {
+        get_search_regex(std::shared_ptr<array_info>(in_arr), case_sensitive,
+                         match_beginning, pat,
+                         std::shared_ptr<array_info>(out_arr));
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 /**
@@ -2194,13 +2176,13 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
  * @param start_idx The starting index to compute for the array slice.
  * @param end_idx The ending index to compute for the array slice (not
  * inclusive).
- * @return array_info* An output array of replaced strings the same length as
- * end_idx - start_idx. Elements not included in the slice are not included in
- * the output.
+ * @return std::shared_ptr<array_info> An output array of replaced strings the
+ * same length as end_idx - start_idx. Elements not included in the slice are
+ * not included in the output.
  */
-array_info* get_replace_regex_slice(array_info* in_arr, char const* const pat,
-                                    char const* replacement, size_t start_idx,
-                                    size_t end_idx) {
+std::shared_ptr<array_info> get_replace_regex_slice(
+    std::shared_ptr<array_info> in_arr, char const* const pat,
+    char const* replacement, size_t start_idx, size_t end_idx) {
     // See:
     // https://www.boost.org/doc/libs/1_76_0/boost/xpressive/regex_constants.hpp
     boost::xpressive::regex_constants::syntax_option_type flag =
@@ -2258,7 +2240,8 @@ array_info* get_replace_regex_slice(array_info* in_arr, char const* const pat,
     }
     // Allocate the output array. We add 1 because regex_replace
     // may insert a null terminator
-    array_info* out_arr = alloc_string_array(out_arr_len, num_chars, 0);
+    std::shared_ptr<array_info> out_arr =
+        alloc_string_array(out_arr_len, num_chars, 0);
     offset_t* const out_data2 = reinterpret_cast<offset_t*>(out_arr->data2());
     // Initialize the first offset to 0
     out_data2[0] = 0;
@@ -2282,9 +2265,13 @@ array_info* get_replace_regex_slice(array_info* in_arr, char const* const pat,
     return out_arr;
 }
 
-array_info* get_replace_regex(array_info* in_arr, char const* const pat,
-                              char const* replacement, const bool is_parallel) {
-    array_info* out_arr = nullptr;
+array_info* get_replace_regex_py_entry(array_info* p_in_arr,
+                                       char const* const pat,
+                                       char const* replacement,
+                                       const bool is_parallel) {
+    std::shared_ptr<array_info> in_arr = std::shared_ptr<array_info>(p_in_arr);
+    std::shared_ptr<array_info> out_arr = nullptr;
+
     if (in_arr->arr_type == bodo_array_type::STRING) {
         out_arr = get_replace_regex_slice(in_arr, pat, replacement, 0,
                                           in_arr->length);
@@ -2301,14 +2288,14 @@ array_info* get_replace_regex(array_info* in_arr, char const* const pat,
         // by recursing on the dictionary (info1)
         // (which is presumably much smaller), and then
         // copying the null bitmap and indices.
-        array_info* dict_arr = in_arr->child_arrays[0];
-        array_info* indices_arr = in_arr->child_arrays[1];
+        std::shared_ptr<array_info> dict_arr = in_arr->child_arrays[0];
+        std::shared_ptr<array_info> indices_arr = in_arr->child_arrays[1];
 
         // We use a special path for large dictionaries that are global and
         // called in parallel.
         bool use_parallel_path = is_parallel && in_arr->has_global_dictionary &&
                                  dict_arr->length >= LOCAL_COMPUTE_THRESHOLD;
-        array_info* new_dict;
+        std::shared_ptr<array_info> new_dict;
         if (use_parallel_path) {
             // Compute your local slice of the dictionary.
             size_t rank = dist_get_rank();
@@ -2316,33 +2303,34 @@ array_info* get_replace_regex(array_info* in_arr, char const* const pat,
             size_t start_idx = dist_get_start(dict_arr->length, nranks, rank);
             size_t end_idx = dist_get_end(dict_arr->length, nranks, rank);
             // Compute the length with just your chunk.
-            array_info* dict_slice = get_replace_regex_slice(
+            std::shared_ptr<array_info> dict_slice = get_replace_regex_slice(
                 dict_arr, pat, replacement, start_idx, end_idx);
             // Wrap the dictionary in a table so we can do an allgatherv.
-            table_info* dict_table = new table_info();
+            std::shared_ptr<table_info> dict_table =
+                std::make_shared<table_info>();
             dict_table->columns.push_back(dict_slice);
-            table_info* gathered_table =
+            std::shared_ptr<table_info> gathered_table =
                 gather_table(dict_table, 1, true, true);
             new_dict = gathered_table->columns[0];
-            // Delete the tables and free the original slice
-            delete dict_table;
-            delete gathered_table;
         } else {
             // Just recurse on the dictionary locally
             new_dict = get_replace_regex_slice(dict_arr, pat, replacement, 0,
                                                dict_arr->length);
         }
-        array_info* new_indices = copy_array(indices_arr);
-        out_arr = new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
-                                 in_arr->length, {}, {new_dict, new_indices}, 0,
-                                 0, 0, in_arr->has_global_dictionary,
-                                 false,  // Note replace can create collisions.
-                                 false);
+        std::shared_ptr<array_info> new_indices = copy_array(indices_arr);
+        out_arr = std::make_shared<array_info>(
+            bodo_array_type::DICT, Bodo_CTypes::STRING, in_arr->length,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>({new_dict, new_indices}),
+            0, 0, 0, in_arr->has_global_dictionary,
+            false,  // Note replace can create collisions.
+            false);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "array in_arr type should be string");
     }
-    // decref in_arr generated in get_replace_regex
-    decref_array(in_arr);
-    return out_arr;
+    if (out_arr != nullptr) {
+        return new array_info(*out_arr);
+    }
+    return nullptr;
 }

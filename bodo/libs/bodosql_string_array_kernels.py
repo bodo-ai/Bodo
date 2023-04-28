@@ -1166,7 +1166,7 @@ def repeat_util(arr, repeats):
 
     out_dtype = bodo.string_array_type
 
-    # NOTE: we can cause duplicate values in hte case that repeats == 0 (everything goes to empty str)
+    # NOTE: we can cause duplicate values in the case that repeats == 0 (everything goes to empty str)
     return gen_vectorized(
         arg_names,
         arg_types,

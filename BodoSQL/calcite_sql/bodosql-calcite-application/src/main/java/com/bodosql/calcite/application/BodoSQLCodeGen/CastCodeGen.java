@@ -25,30 +25,30 @@ public class CastCodeGen {
       String arg,
       RelDataType inputType,
       RelDataType outputType,
-      boolean outputScalar,
-      boolean useDateRuntime) {
+      boolean outputScalar) {
     StringBuilder codeBuilder = new StringBuilder();
     SqlTypeName inputTypeName = inputType.getSqlTypeName();
     SqlTypeName outputTypeName = outputType.getSqlTypeName();
     switch (outputTypeName) {
       case CHAR:
       case VARCHAR:
-        codeBuilder.append("bodo.libs.bodosql_array_kernels.to_char(").append(arg);
-        if (inputTypeName == SqlTypeName.DATE) {
-          codeBuilder.append(", treat_timestamp_as_date = True");
-        }
-        codeBuilder.append(")");
+        codeBuilder.append("bodo.libs.bodosql_array_kernels.to_char(").append(arg).append(")");
         break;
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         String tzStr = ((TZAwareSqlType) outputType).getTZInfo().getPyZone();
         // TZ-Aware data needs special handling
         switch (inputTypeName) {
           case TIMESTAMP:
-          case DATE:
-            // Both date and timestamp use the same kernel because the input
-            // data is a tz-naive timestamp
             codeBuilder
                 .append("bodo.libs.bodosql_array_kernels.cast_tz_naive_to_tz_aware(")
+                .append(arg)
+                .append(", ")
+                .append(tzStr)
+                .append(")");
+            break;
+          case DATE:
+            codeBuilder
+                .append("bodo.libs.bodosql_array_kernels.cast_date_to_tz_aware(")
                 .append(arg)
                 .append(", ")
                 .append(tzStr)
@@ -70,10 +70,8 @@ public class CastCodeGen {
         }
         break;
       case DATE:
-        if (useDateRuntime) {
-          codeBuilder.append("bodo.libs.bodosql_array_kernels.to_date(").append(arg).append(", None)");
-          break;
-        }
+        codeBuilder.append("bodo.libs.bodosql_array_kernels.to_date(").append(arg).append(", None)");
+        break;
       case TIMESTAMP:
         // If we cast from tz-aware to naive there is special handling. Otherwise, we
         // fall back to the default case.
@@ -91,7 +89,7 @@ public class CastCodeGen {
       default:
         StringBuilder asTypeBuilder = new StringBuilder();
         SqlTypeName typeName = outputType.getSqlTypeName();
-        String dtype = sqlTypenameToPandasTypename(typeName, outputScalar, useDateRuntime);
+        String dtype = sqlTypenameToPandasTypename(typeName, outputScalar);
         if (outputScalar) {
           asTypeBuilder.append(dtype).append("(").append(arg).append(")");
         } else {

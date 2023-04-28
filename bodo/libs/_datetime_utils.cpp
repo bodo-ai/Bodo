@@ -104,3 +104,20 @@ int64_t days_to_yearsdays(int64_t* days_) {
     *days_ = days;
     return year + 2000;
 }
+
+void get_month_day(int64_t year, int64_t days, int64_t* month, int64_t* day) {
+    const int* month_lengths;
+    int i;
+
+    month_lengths = days_per_month_table[is_leapyear(year)];
+
+    for (i = 0; i < 12; ++i) {
+        if (days < month_lengths[i]) {
+            *month = i + 1;
+            *day = days + 1;
+            return;
+        } else {
+            days -= month_lengths[i];
+        }
+    }
+}
