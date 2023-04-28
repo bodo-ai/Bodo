@@ -6020,6 +6020,8 @@ SqlTypeNameSpec CharacterTypeName(Span s) :
         )
     |
         <VARCHAR> { s.add(this); sqlTypeName = SqlTypeName.VARCHAR; }
+    |
+        <TEXT> { s.add(this); sqlTypeName = SqlTypeName.VARCHAR; }
     )
     precision = PrecisionOpt()
     [
@@ -8326,6 +8328,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < TABLE_NAME: "TABLE_NAME" >
 |   < TABLESAMPLE: "TABLESAMPLE" >
 |   < TEMPORARY: "TEMPORARY" >
+|   < TEXT: "TEXT" >
 |   < THEN: "THEN" >
 |   < TIES: "TIES" >
 |   < TIME: "TIME" >
