@@ -530,6 +530,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return new Expr.Raw(
             getSingleArgNumericFnInfo(
                 fnOperation.getOperator().toString(), operands.get(0).emit()));
+      case GREATEST:
+      case LEAST:
+        return generateLeastGreatestCode(fnOperation.getOperator().toString(), operands);
+
       case MOD:
         return new Expr.Raw(
             getDoubleArgNumericFnInfo(
@@ -911,10 +915,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             if (operands.size() == 2) {
               unit = standardizeTimeUnit(fnName, operands.get(1).emit(), dateTimeExprType);
               if (unit.equals("day") || TIME_PART_UNITS.contains(unit))
-                throw new BodoSQLCodegenException(operands.get(1).emit() + " is not a valid time unit for " + fnName);
+                throw new BodoSQLCodegenException(
+                    operands.get(1).emit() + " is not a valid time unit for " + fnName);
               return generateLastDayCode(operands.get(0).emit(), unit);
             }
-            assert  operands.size() == 1;
+            assert operands.size() == 1;
             // the default time unit is month
             return generateLastDayCode(operands.get(0).emit(), "month");
           case "NEXT_DAY":

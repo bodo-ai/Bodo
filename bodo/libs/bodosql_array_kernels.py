@@ -235,4 +235,4 @@ broadcasted_fixed_arg_functions = {
 }
 
 
-broadcasted_variadic_functions = {"coalesce", "decode"}
+broadcasted_variadic_functions = {"coalesce", "decode", "greatest", "least"}

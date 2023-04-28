@@ -1598,21 +1598,19 @@ class DistributedAnalysis:
         if (
             func_name in broadcasted_variadic_functions
             and func_mod == "bodo.libs.bodosql_array_kernels"
-        ):
-            # Note: this will fail if the tuple argument is not constant,
-            # but this should never happen because we control code generation
-            elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
-            assert (
-                elems is not None
-            ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
+        ) and not is_overload_constant_tuple(self.typemap[rhs.args[0].name]):
+                elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
+                assert (
+                    elems is not None
+                ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
 
-            arrays = [lhs]
-            for arg in elems:
-                if is_array_typ(self.typemap[arg.name]):
-                    arrays.append(arg.name)
-            if len(arrays) > 1:
-                self._meet_several_array_dists(arrays, array_dists)
-            return
+                arrays = [lhs]
+                for arg in elems:
+                    if is_array_typ(self.typemap[arg.name]):
+                        arrays.append(arg.name)
+                if len(arrays) > 1:
+                    self._meet_several_array_dists(arrays, array_dists)
+                return
 
         if fdef == ("bodosql_case_kernel", ""):
             # This is a kernel we generate to avoid inlining case statements
