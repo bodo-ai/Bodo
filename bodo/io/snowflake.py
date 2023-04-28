@@ -21,7 +21,6 @@ from bodo.io.helpers import (
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
-from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
@@ -131,6 +130,7 @@ INT_BITSIZE_TO_ARROW_DATATYPE = {
     4: pa.int32(),
     8: pa.int64(),
 }
+STRING_TYPE_CODE = 2
 
 
 def gen_snowflake_schema(column_names, column_datatypes):  # pragma: no cover
@@ -456,7 +456,9 @@ def get_schema_from_metadata(
     sql_query: str,
     is_select_query: bool,
     is_table_input: bool,
-) -> Tuple[List[pa.Field], List, List[int], List[pa.DataType]]:  # pragma: no cover
+) -> Tuple[
+    List[pa.Field], List, List[bool], List[int], List[pa.DataType]
+]:  # pragma: no cover
     """
     Determine the Arrow schema and Bodo types of the query output
     The approach is described in a Confluence Doc:
@@ -472,6 +474,7 @@ def get_schema_from_metadata(
         pa_fields: List of PyArrow Fields for Each Column
             Contains source column name, type, and nullability
         col_types: List of Output Bodo Types for Each Column
+        check_dict_encoding: Should we check dictionary encoding for this column?
         unsupported_columns: Output Column Names with Unsupported Types
             Bodo can't read the column in but should still recognize it for
             other uses, like column pruning
@@ -488,10 +491,16 @@ def get_schema_from_metadata(
 
     arrow_fields: List[pa.Field] = []  # Equivalent PyArrow Fields
     col_names_to_check: List[str] = []  # Columns to get typeof metadata for
+    check_dict_encoding: List[
+        bool
+    ] = []  # Should we check dictionary encoding for this type.
     col_idxs_to_check: List[int] = []  # Index of columns to get typeof metadata
     for i, field_meta in enumerate(query_field_metadata):
         dtype = TYPE_CODE_TO_ARROW_TYPE[field_meta.type_code](field_meta, tz)
         arrow_fields.append(pa.field(field_meta.name, dtype, field_meta.is_nullable))
+        # Only check dictionary encoding for STRING columns, not other columns
+        # that we load as strings.
+        check_dict_encoding.append(field_meta.type_code == STRING_TYPE_CODE)
         if pa.types.is_int64(dtype):
             col_names_to_check.append(field_meta.name)
             col_idxs_to_check.append(i)
@@ -551,7 +560,13 @@ def get_schema_from_metadata(
             # Store the unsupported arrow type for future error messages
             unsupported_arrow_types.append(field.type)
 
-    return arrow_fields, col_types, unsupported_columns, unsupported_arrow_types
+    return (
+        arrow_fields,
+        col_types,
+        check_dict_encoding,
+        unsupported_columns,
+        unsupported_arrow_types,
+    )
 
 
 def _get_table_row_count(cursor, table_name):
@@ -721,14 +736,15 @@ def get_schema(
     (
         pa_fields,
         col_types,
+        check_dict_encoding,
         unsupported_columns,
         unsupported_arrow_types,
     ) = get_schema_from_metadata(cursor, sql_query, is_select_query, is_table_input)
 
     str_as_dict_cols = _bodo_read_as_dict if _bodo_read_as_dict else []
     str_col_name_to_ind = {}
-    for i, t in enumerate(col_types):
-        if t == string_array_type:
+    for i, check_dict_encoding in enumerate(check_dict_encoding):
+        if check_dict_encoding:
             str_col_name_to_ind[pa_fields[i].name] = i
 
     # Map the snowflake original column name to the name that
