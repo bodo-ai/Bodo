@@ -115,19 +115,21 @@ inline void skew_eval(double& result, uint64_t count, double m1, double m2,
         double sum = m1 / count;
         double numerator =
             m3 - 3.0 * m2 * sum + 2.0 * count * std::pow(sum, 3.0);
-        double denominator = m2 - sum * m1;
+        double denominator = std::pow(m2 - sum * m1, 1.5);
         // If the numerator is zero, or the denominator is very close to zero,
         // then the skew should be set to zero to avoid floating point
-        // arithmetic errors. The threshold for when to count the denominator
-        // as nearly-zero is based on the sigmoid of the logarithm of the
-        // second power-sum, thus ensuring that the threshold is always small,
-        // but becomes especially small when the values involved are tiny.
-        if (numerator == 0.0 ||
-            std::abs(denominator) < 0.1 / (1.0 + std::exp(-std::log(m2)))) {
+        // arithmetic errors. These constants were derived from trial and error
+        // to correctly flag values that should be zero without causing any of
+        // the other tests to be falsely flagged just because they are near
+        // zero.
+        if (numerator == 0.0 || std::abs(denominator) < std::pow(10.0, -14.0) ||
+            isnan(denominator) ||
+            std::log2(std::abs(denominator)) - std::log2(std::abs(numerator)) <
+                -20) {
             result = 0.0;
         } else {
             double s = ((count * std::pow((count - 1), 1.5) / (count - 2)) *
-                        numerator / std::pow(denominator, 1.5));
+                        numerator / denominator);
             result = s / (count - 1);
         }
     }
@@ -156,20 +158,23 @@ inline void kurt_eval(double& result, uint64_t count, double m1, double m2,
         double fm = (m4 - 4 * m3 * sum + 6 * m2 * std::pow(sum, 2.0) -
                      3 * count * std::pow(sum, 4.0));
         double sm = m2 - sum * m1;
+        double numerator = count * (count + 1) * (count - 1) * fm;
+        double denominator = (count - 2) * (count - 3) * std::pow(sm, 2.0);
         // If the numerator is zero, or the denominator is very close to zero,
         // then the kurtosis should be set to zero to avoid floating point
-        // arithmetic errors. The threshold for when to count the denominator
-        // as nearly-zero is based on the sigmoid of the logarithm of the
-        // second power-sum, thus ensuring that the threshold is always small,
-        // but becomes especially small when the values involved are tiny.
-        if (fm == 0.0 || std::abs(sm) < 0.1 / (1.0 + std::exp(-std::log(m2)))) {
+        // arithmetic errors. These constants were derived from trial and error
+        // to correctly flag values that should be zero without causing any of
+        // the other tests to be falsely flagged just because they are near
+        // zero.
+        if (numerator == 0.0 || std::abs(denominator) < std::pow(10.0, -14.0) ||
+            isnan(denominator) ||
+            std::log2(std::abs(denominator)) - std::log2(std::abs(numerator)) <
+                -20) {
             result = 0.0;
         } else {
             double adj =
                 3 * std::pow(count - 1, 2.0) / ((count - 2) * (count - 3));
-            double numer = count * (count + 1) * (count - 1) * fm;
-            double denom = (count - 2) * (count - 3) * std::pow(sm, 2.0);
-            double s = (count - 1) * (numer / denom - adj);
+            double s = (count - 1) * (numerator / denominator - adj);
             result = s / (count - 1);
         }
     }
