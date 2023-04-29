@@ -10,10 +10,10 @@ from numba.core import types
 from numba.extending import overload, register_jitable
 
 import bodo
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs.float_arr_ext import FloatDtype, FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.utils.typing import decode_if_dict_array
-from bodo.hiframes.time_ext import TimeArrayType
 
 
 # TODO[BE-476]: refactor dataframe column filtering
@@ -178,6 +178,7 @@ def _get_type_min_value_overload(dtype):
 def _get_date_min_value():  # pragma: no cover
     return datetime.date(datetime.MINYEAR, 1, 1)
 
+
 @register_jitable
 def _get_time_min_value():  # pragma: no cover
     return bodo.Time()
@@ -285,12 +286,18 @@ def compute_skew(first_moment, second_moment, third_moment, count):  # pragma: n
         return np.nan
     mu = first_moment / count
     numerator = third_moment - 3 * second_moment * mu + 2 * count * mu**3
-    denominator = second_moment - mu * first_moment
-    s = (
-        (count * (count - 1) ** (1.5) / (count - 2))
-        * numerator
-        / (denominator ** (1.5))
-    )
+    denominator = (second_moment - mu * first_moment) ** 1.5
+    # If the denominator is deemed sufficiently close to zero, return zero by default.
+    # These constants were derived from trial and error to correctly flag values
+    # that should be zero without causing any of the other tests to be falsely
+    # flagged just because they are near zero.
+    if (
+        numerator == 0.0
+        or np.abs(denominator) < 1e-14
+        or np.log2(np.abs(denominator)) - np.log2(np.abs(numerator)) < -20
+    ):
+        return 0.0
+    s = (count * (count - 1) ** (1.5) / (count - 2)) * numerator / (denominator)
     s = s / (count - 1)
     return s
 
@@ -309,9 +316,19 @@ def compute_kurt(
         - 3 * count * mu**4
     )
     m2 = second_moment - mu * first_moment
-    adj = 3 * (count - 1) ** 2 / ((count - 2) * (count - 3))
     numer = count * (count + 1) * (count - 1) * m4
     denom = (count - 2) * (count - 3) * m2**2
+    # If the denominator is deemed sufficiently close to zero, return zero by default.
+    # These constants were derived from trial and error to correctly flag values
+    # that should be zero without causing any of the other tests to be falsely
+    # flagged just because they are near zero.
+    if (
+        numer == 0.0
+        or np.abs(denom) < 1e-14
+        or np.log2(np.abs(denom)) - np.log2(np.abs(numer)) < -20
+    ):
+        return 0.0
+    adj = 3 * (count - 1) ** 2 / ((count - 2) * (count - 3))
     s = (count - 1) * (numer / denom - adj)
     s = s / (count - 1)
     return s
