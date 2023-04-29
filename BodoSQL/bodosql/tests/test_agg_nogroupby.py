@@ -770,8 +770,10 @@ def test_single_value_error():
 @pytest.mark.parametrize(
     "agg_cols",
     [
-        pytest.param("AD", id="fast_tests"),
-        pytest.param("BCEFGHIJKL", id="slow_tests", marks=pytest.mark.skip),
+        pytest.param("ADG", id="fast_tests_a"),
+        pytest.param("BCE", id="slow_tests_b"),
+        pytest.param("FHI", id="slow_tests_a", marks=pytest.mark.slow),
+        pytest.param("JKL", id="slow_tests_b", marks=pytest.mark.slow),
     ],
 )
 def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
