@@ -252,7 +252,7 @@ int64_t pq_write(
         cur_str += len;
     }
 
-    auto pool = ::arrow::default_memory_pool();
+    auto pool = bodo::BufferPool::DefaultPtr();
 
     // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
     // columns
@@ -286,7 +286,10 @@ int64_t pq_write(
 
             // Skip expected string types since they can be dictionary encoded
             if (!array_type->Equals(arrow_type)) {
-                auto res = arrow::compute::Cast(*columns[i].get(), arrow_type);
+                auto res =
+                    arrow::compute::Cast(*columns[i].get(), arrow_type,
+                                         arrow::compute::CastOptions::Safe(),
+                                         bodo::buffer_exec_context());
 
                 if (!res.ok()) {
                     std::string err_msg =

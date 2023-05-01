@@ -187,7 +187,7 @@ char* array_info::null_bitmask() const {
 std::shared_ptr<arrow::Array> to_arrow(std::shared_ptr<array_info> arr) {
     std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    bodo_array_to_arrow(::arrow::default_memory_pool(), arr, &arrow_arr,
+    bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), arr, &arrow_arr,
                         false /*convert_timedelta_to_int64*/, "", time_unit,
                         false /*downcast_time_ns_to_us*/);
     return arrow_arr;

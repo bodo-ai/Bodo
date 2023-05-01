@@ -1,9 +1,10 @@
 // Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-#include "_bodo_to_arrow.h"
 #include <arrow/compute/api.h>
 #include <cassert>
+
 #include "_array_utils.h"
+#include "_bodo_to_arrow.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it. If it is ok, get value using ValueOrDie
@@ -507,7 +508,8 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         int64_t in_num_bytes = array->length * siztype;
         std::shared_ptr<arrow::Buffer> out_buffer =
             std::make_shared<arrow::Buffer>((uint8_t *)array->data1(),
-                                            in_num_bytes);
+                                            in_num_bytes,
+                                            bodo::buffer_memory_manager());
 
         // set arrow bit mask using category index values (-1 for nulls)
         int64_t null_count_ = 0;
@@ -612,7 +614,7 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
         std::shared_ptr<array_info> arr = table->columns[i];
         arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
         auto arrow_type = bodo_array_to_arrow(
-            ::arrow::default_memory_pool(), arr, &arrow_arrs[i],
+            bodo::BufferPool::DefaultPtr(), arr, &arrow_arrs[i],
             false /*convert_timedelta_to_int64*/, "", time_unit,
             false /*downcast_time_ns_to_us*/);
         schema_vector.push_back(
@@ -942,7 +944,9 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
         // layout
         case arrow::Type::STRING: {
             static_assert(OFFSET_BITWIDTH == 64);
-            auto res = arrow::compute::Cast(*arrow_arr, arrow::large_utf8());
+            auto res = arrow::compute::Cast(*arrow_arr, arrow::large_utf8(),
+                                            arrow::compute::CastOptions::Safe(),
+                                            bodo::buffer_exec_context());
             std::shared_ptr<arrow::Array> casted_arr;
             CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
             return arrow_string_binary_array_to_bodo(
@@ -972,7 +976,9 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
         case arrow::Type::LIST: {
             static_assert(OFFSET_BITWIDTH == 64);
             auto res = arrow::compute::Cast(
-                *arrow_arr, arrow::large_list(arrow_arr->type()->field(0)));
+                *arrow_arr, arrow::large_list(arrow_arr->type()->field(0)),
+                arrow::compute::CastOptions::Safe(),
+                bodo::buffer_exec_context());
             std::shared_ptr<arrow::Array> casted_arr;
             CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
             return arrow_list_array_to_bodo(
