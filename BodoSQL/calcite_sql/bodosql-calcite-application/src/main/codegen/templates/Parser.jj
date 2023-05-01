@@ -6012,16 +6012,15 @@ SqlTypeNameSpec CharacterTypeName(Span s) :
 }
 {
     (
-        (<CHARACTER> | <CHAR>) { s.add(this); }
+        (<CHARACTER> | <CHAR> | <NCHAR>) { s.add(this); }
         (
             <VARYING> { sqlTypeName = SqlTypeName.VARCHAR; }
         |
             { sqlTypeName = SqlTypeName.CHAR; }
         )
     |
-        <VARCHAR> { s.add(this); sqlTypeName = SqlTypeName.VARCHAR; }
-    |
-        <TEXT> { s.add(this); sqlTypeName = SqlTypeName.VARCHAR; }
+        (<VARCHAR> | <TEXT> | <STRING> | <NVARCHAR> | <NVARCHAR2>)
+        { s.add(this); sqlTypeName = SqlTypeName.VARCHAR; }
     )
     precision = PrecisionOpt()
     [
@@ -8086,6 +8085,8 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < NULLS: "NULLS" >
 |   < NUMBER: "NUMBER" >
 |   < NUMERIC: "NUMERIC" >
+|   < NVARCHAR: "NVARCHAR" >
+|   < NVARCHAR2: "NVARCHAR2" >
 |   < OBJECT: "OBJECT" >
 |   < OCCURRENCES_REGEX: "OCCURRENCES_REGEX" >
 |   < OCTET_LENGTH: "OCTET_LENGTH" >
@@ -8309,6 +8310,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < STDDEV_POP: "STDDEV_POP" >
 |   < STDDEV_SAMP: "STDDEV_SAMP" >
 |   < STREAM: "STREAM" >
+|   < STRING: "STRING" >
 |   < STRING_AGG: "STRING_AGG" >
 |   < STRUCTURE: "STRUCTURE" >
 |   < STYLE: "STYLE" >
