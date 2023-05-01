@@ -15,7 +15,6 @@ jobs:
   timeoutInMinutes: 360
   pool: ScalingVMSet
   strategy:
-    maxParallel: 11
     matrix:
       ${{ insert }}: ${{ parameters.matrix }}
 
