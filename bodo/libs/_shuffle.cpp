@@ -1097,7 +1097,7 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
                    MPI_COMM_WORLD);
     size_t siz_out = (n_rows_out + 7) >> 3;
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-        arrow::AllocateBuffer(siz_out);
+        arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
     if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
@@ -1144,7 +1144,7 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_offset_buffer(
                    MPI_COMM_WORLD);
     size_t siz_out = sizeof(offset_t) * (n_rows_out + 1);
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-        arrow::AllocateBuffer(siz_out);
+        arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
     if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
@@ -1240,7 +1240,7 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
                        recv_disp, mpi_typ_null, MPI_COMM_WORLD);
         size_t siz_out = (n_rows_out + 7) >> 3;
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-            arrow::AllocateBuffer(siz_out);
+            arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
         if (!maybe_buffer.ok()) {
             Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
             return nullptr;
@@ -1269,7 +1269,7 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
         // Allocating returning arrays
         size_t siz_out = siztype * n_rows_out;
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-            arrow::AllocateBuffer(siz_out);
+            arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
         if (!maybe_buffer.ok()) {
             Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
             return nullptr;
@@ -1316,7 +1316,7 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     char* send_char = new char[n_chars_send_tot];
     size_t siz_out = sizeof(char) * n_chars_recv_tot;
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-        arrow::AllocateBuffer(siz_out);
+        arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
     if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
@@ -2212,7 +2212,7 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_bitmap_buffer(int64_t n_rows,
     int n_bytes = (n_rows + 7) >> 3;
     size_t siz_out = n_bytes;
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-        arrow::AllocateBuffer(siz_out);
+        arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
     if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
@@ -2235,7 +2235,7 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_offsets_buffer(int64_t n_rows,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     size_t siz_out = sizeof(offset_t) * (n_rows + 1);
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-        arrow::AllocateBuffer(siz_out);
+        arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
     if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
@@ -2273,7 +2273,7 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_primitive_buffer(
         siz_out = siz_typ * n_rows;
     }
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-        arrow::AllocateBuffer(siz_out);
+        arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
     if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
@@ -2308,7 +2308,7 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_string_buffer(
     //
     size_t siz_out = n_chars;
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-        arrow::AllocateBuffer(siz_out);
+        arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
     if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
@@ -2691,7 +2691,7 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr,
     if (myrank == mpi_root || all_gather) {
         size_t siz_out = sizeof(offset_t) * (n_rows_tot + 1);
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-            arrow::AllocateBuffer(siz_out);
+            arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
         if (!maybe_buffer.ok()) {
             throw std::runtime_error(
                 "gather_arrow_offset_buffer: allocation error");
@@ -2747,7 +2747,7 @@ std::shared_ptr<arrow::Buffer> gather_arrow_bitmap_buffer(T const& arr,
     if (myrank == mpi_root || all_gather) {
         size_t siz_out = (n_rows_tot + 7) >> 3;
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-            arrow::AllocateBuffer(siz_out);
+            arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
         if (!maybe_buffer.ok()) {
             Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
             return nullptr;
@@ -2787,7 +2787,7 @@ std::shared_ptr<arrow::Buffer> gather_arrow_string_buffer(
     if (myrank == mpi_root || all_gather) {
         size_t siz_out = n_char_tot;
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-            arrow::AllocateBuffer(siz_out);
+            arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
         if (!maybe_buffer.ok()) {
             Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
             return nullptr;
@@ -2857,7 +2857,7 @@ std::shared_ptr<arrow::Buffer> gather_arrow_primitive_buffer(
         if (myrank == mpi_root || all_gather) {
             size_t siz_out = (n_char_tot + 7) >> 3;
             arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-                arrow::AllocateBuffer(siz_out);
+                arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
             if (!maybe_buffer.ok()) {
                 Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
                 return nullptr;
@@ -2872,7 +2872,7 @@ std::shared_ptr<arrow::Buffer> gather_arrow_primitive_buffer(
         if (myrank == mpi_root || all_gather) {
             size_t siz_out = n_char_tot;
             arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
-                arrow::AllocateBuffer(siz_out);
+                arrow::AllocateBuffer(siz_out, bodo::BufferPool::DefaultPtr());
             if (!maybe_buffer.ok()) {
                 Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
                 return nullptr;

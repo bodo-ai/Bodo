@@ -13,14 +13,16 @@
 
 /**
  * @brief Arrow buffer that holds a reference to a Bodo meminfo and
- * decrefs/deallocates if necessary. Alternative to Arrow's PoolBuffer:
+ * decrefs/deallocates if necessary to Bodo's BufferPool.
+ * Alternative to Arrow's PoolBuffer:
  * https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/memory_pool.cc#L838
  */
 class BodoBuffer : public arrow::MutableBuffer {
    public:
     BodoBuffer(uint8_t *data, const int64_t size, NRT_MemInfo *meminfo_,
                bool incref = true)
-        : MutableBuffer(data, size), meminfo(meminfo_) {
+        : MutableBuffer(data, size, bodo::buffer_memory_manager()),
+          meminfo(meminfo_) {
         if (incref) {
             incref_meminfo(meminfo);
         }

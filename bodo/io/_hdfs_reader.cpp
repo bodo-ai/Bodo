@@ -2,14 +2,15 @@
 #include <Python.h>
 #include <iostream>
 
+#include <arrow/filesystem/filesystem.h>
+#include <arrow/filesystem/hdfs.h>
+#include <arrow/io/hdfs.h>
+#include <arrow/io/interfaces.h>
+#include <arrow/result.h>
+#include <arrow/status.h>
+
 #include "../libs/_bodo_common.h"
 #include "_bodo_file_reader.h"
-#include "arrow/filesystem/filesystem.h"
-#include "arrow/filesystem/hdfs.h"
-#include "arrow/io/hdfs.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
 
 #define CHECK(expr, msg)                                          \
     if (!(expr)) {                                                \
@@ -79,7 +80,9 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
     options.ConfigureReplication(0);
     options.ConfigureBufferSize(0);
     options.ConfigureBlockSize(0);
-    hdfs_fs = arrow::fs::HadoopFileSystem::Make(options).ValueOrDie();
+    hdfs_fs =
+        arrow::fs::HadoopFileSystem::Make(options, bodo::buffer_io_context())
+            .ValueOrDie();
 
     is_hdfs_initialized = true;
     return hdfs_fs;
@@ -121,7 +124,8 @@ class HdfsFileReader : public SingleFileReader {
 
         fs = get_hdfs_fs(fname);
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
-            ::arrow::fs::FileSystemFromUri(fname, &path);
+            ::arrow::fs::FileSystemFromUri(fname, bodo::buffer_io_context(),
+                                           &path);
         // open file
         result = fs->OpenInputFile(path);
         CHECK_ARROW_AND_ASSIGN(result, "HdfsFileSystem::OpenInputFile",

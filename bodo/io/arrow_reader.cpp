@@ -419,7 +419,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
                 return out_array;
             }
             arrow::Result<std::shared_ptr<arrow::Array>> res =
-                arrow::Concatenate(arrays, arrow::default_memory_pool());
+                arrow::Concatenate(arrays, bodo::BufferPool::DefaultPtr());
             std::shared_ptr<arrow::Array> concat_res;
             CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
             out_array = arrow_array_to_bodo(concat_res);
@@ -822,7 +822,7 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
         // again to our own buffers in
         // info_to_array https://bodo.atlassian.net/browse/BE-1426
         out_arrow_array =
-            arrow::Concatenate(arrays, arrow::default_memory_pool())
+            arrow::Concatenate(arrays, bodo::BufferPool::DefaultPtr())
                 .ValueOrDie();
         arrays.clear();  // memory of each array will be freed now
 
@@ -1174,7 +1174,9 @@ std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
                 // should be safe to compare.
                 // (https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4NK5arrow8DataType9bit_widthEv)
 
-                auto res = arrow::compute::Cast(col, exp_type);
+                auto res = arrow::compute::Cast(
+                    col, exp_type, arrow::compute::CastOptions::Safe(),
+                    bodo::buffer_exec_context());
                 // TODO: Use std::format after fixing C++ compiler errors
                 CHECK_ARROW(res.status(),
                             "Unable to upcast from " + col->type()->ToString() +

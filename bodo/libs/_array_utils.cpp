@@ -619,7 +619,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             // sizes are not known in advance)
             std::unique_ptr<arrow::ArrayBuilder> builder;
             std::shared_ptr<arrow::Array> in_arrow_array = to_arrow(in_arr);
-            (void)arrow::MakeBuilder(arrow::default_memory_pool(),
+            (void)arrow::MakeBuilder(bodo::BufferPool::DefaultPtr(),
                                      in_arrow_array->type(), &builder);
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
@@ -954,7 +954,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // sizes are not known in advance)
         std::unique_ptr<arrow::ArrayBuilder> builder;
         std::shared_ptr<arrow::Array> in_arr_typ = to_arrow(arr1);
-        (void)arrow::MakeBuilder(arrow::default_memory_pool(),
+        (void)arrow::MakeBuilder(bodo::BufferPool::DefaultPtr(),
                                  in_arr_typ->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
