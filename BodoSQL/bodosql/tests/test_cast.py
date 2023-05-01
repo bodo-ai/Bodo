@@ -116,8 +116,13 @@ def test_numeric_to_str(basic_df, spark_info, use_sf_cast_syntax, memory_leak_ch
 
 @pytest.fixture(
     params=[
-        "VARCHAR",
+        pytest.param("VARCHAR", marks=pytest.mark.slow),
         "TEXT",
+        "STRING",
+        pytest.param("NVARCHAR", marks=pytest.mark.slow),
+        pytest.param("NVARCHAR2", marks=pytest.mark.slow),
+        pytest.param("CHAR VARYING", marks=pytest.mark.slow),
+        "NCHAR VARYING",
     ]
 )
 def cast_str_typename(request):
