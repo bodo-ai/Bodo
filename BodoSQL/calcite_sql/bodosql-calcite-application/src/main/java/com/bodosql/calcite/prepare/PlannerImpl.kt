@@ -34,7 +34,6 @@ import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.Iterables
 import org.apache.calcite.avatica.util.Casing
-import org.apache.calcite.avatica.util.Quoting
 import org.apache.calcite.config.NullCollation
 import org.apache.calcite.jdbc.CalciteSchema
 import org.apache.calcite.plan.*
