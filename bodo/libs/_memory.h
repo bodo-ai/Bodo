@@ -2,6 +2,8 @@
 #ifndef BODO_MEMORY_INCLUDED
 #define BODO_MEMORY_INCLUDED
 
+#include <arrow/compute/api.h>
+#include <arrow/io/api.h>
 #include <arrow/memory_pool.h>
 #include <iostream>
 
@@ -232,7 +234,7 @@ class SizeClass {
     int64_t findUnmappedFrame() noexcept;
 };
 
-class BufferPool : public ::arrow::MemoryPool {
+class BufferPool final : public ::arrow::MemoryPool {
    public:
     /* ------ Functions arrow::MemoryPool that we override ------ */
 
@@ -324,6 +326,10 @@ class BufferPool : public ::arrow::MemoryPool {
         static std::shared_ptr<BufferPool> pool_(new BufferPool());
         return pool_;
     }
+
+    /// @brief Simple wrapper for getting a pointer to the BufferPool singleton
+    /// @return Pointer to Singleton BufferPool
+    static BufferPool* DefaultPtr() { return BufferPool::Default().get(); }
 
     /// Override the copy constructor and = operator as per the
     /// singleton pattern.
@@ -468,6 +474,26 @@ class BufferPool : public ::arrow::MemoryPool {
      */
     inline void zero_padding(uint8_t* ptr, size_t size, size_t capacity);
 };
+
+/// Helper Functions for using BufferPool in Arrow
+
+/**
+ * @brief Construct an Arrow ExecContext for Compute Functions using the
+ * underlying Bodo BufferPool.
+ */
+::arrow::compute::ExecContext* buffer_exec_context();
+
+/**
+ * @brief Construct an Arrow IOContext for IO Operations using the
+ * underlying Bodo BufferPool.
+ */
+::arrow::io::IOContext buffer_io_context();
+
+/**
+ * @brief Construct an Arrow MemoryManager that allocates using the
+ * underlying Bodo BufferPool.
+ */
+std::shared_ptr<::arrow::MemoryManager> buffer_memory_manager();
 
 }  // namespace bodo
 

@@ -8,13 +8,6 @@
 using arrow::Type;
 using parquet::ParquetFileReader;
 
-#define CHECK_ARROW(expr, msg)                                                 \
-    if (!(expr.ok())) {                                                        \
-        std::string err_msg = std::string("Error in arrow parquet reader: ") + \
-                              msg + " " + expr.ToString();                     \
-        throw std::runtime_error(err_msg);                                     \
-    }
-
 // -------- Helper functions --------
 
 /**

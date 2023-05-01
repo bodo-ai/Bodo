@@ -25,6 +25,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
 #include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
 #include "_bodo_file_reader.h"
@@ -1090,7 +1091,7 @@ class MemReader : public FileReader {
 
         arrow::Result<std::shared_ptr<arrow::io::CompressedInputStream>>
             istream_result = arrow::io::CompressedInputStream::Make(
-                codec.get(), raw_istream);
+                codec.get(), raw_istream, bodo::BufferPool::DefaultPtr());
         CHECK_ARROW(istream_result, "read_compressed_file",
                     "arrow::io::CompressedInputStream::Make")
         std::shared_ptr<arrow::io::CompressedInputStream> istream =
