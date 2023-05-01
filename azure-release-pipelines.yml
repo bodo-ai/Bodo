@@ -6,9 +6,10 @@ trigger:
 
 pr: none
 
+
 #Currently nightly can take up to ~12 hours to run. 9PM is a good time to start.
 schedules:
-- cron: "0 20 0 * MON-FRI"
+- cron: "0 20 * * MON-FRI"
   displayName: 'Weekdays Daily midnight build'
   branches:
     include:
