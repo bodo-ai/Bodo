@@ -196,6 +196,7 @@ broadcasted_fixed_arg_functions = {
     "strcmp",
     "strtok",
     "substring",
+    "substring_suffix",
     "substring_index",
     "subtract_numeric",
     "tan",

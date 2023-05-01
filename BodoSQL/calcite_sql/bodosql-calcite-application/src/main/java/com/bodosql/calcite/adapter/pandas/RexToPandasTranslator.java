@@ -36,13 +36,11 @@ import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.*;
@@ -100,8 +98,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   @Override
   public Expr visitLiteral(RexLiteral literal) {
-    String code =
-        LiteralCodeGen.generateLiteralCode(literal, false, visitor);
+    String code = LiteralCodeGen.generateLiteralCode(literal, false, visitor);
     return new Expr.Raw(code);
   }
 
@@ -402,9 +399,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             == BodoSQLExprType.ExprType.SCALAR;
     List<Expr> args = visitList(operation.operands);
     Expr child = args.get(0);
-    String exprCode =
-        generateCastCode(
-            child.emit(), inputType, outputType, outputScalar);
+    String exprCode = generateCastCode(child.emit(), inputType, outputType, outputScalar);
     return new Expr.Raw(exprCode);
   }
 
@@ -422,20 +417,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     // node.operands contains
     //  * String to perform the substring operation on
     //  * start index
-    //  * substring length
+    //  * substring length (optional)
     //  All of these values can be both scalars and columns
-    assert node.operands.size() == 3;
-    List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>(node.operands.size());
-    for (RexNode operand_node : node.operands) {
-      exprTypes.add(
-          visitor.exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operand_node, nodeId)));
-    }
+    // NOTE: check on number of arguments happen in generateSubstringInfo
     List<Expr> operands = visitList(node.operands);
-    String fnName = node.getOperator().getName();
-    String code =
-        getThreeArgStringFnInfo(
-            fnName, operands.get(0).emit(), operands.get(1).emit(), operands.get(2).emit());
-    return new Expr.Raw(code);
+    return generateSubstringInfo(operands);
   }
 
   protected Expr visitGenericFuncOp(RexCall fnOperation) {
@@ -663,13 +649,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 throw new BodoSQLCodegenException("Cannot add/subtract days from TIME");
               }
               Set<SqlTypeName> DATE_INTERVAL_TYPES =
-                  Sets.immutableEnumSet(SqlTypeName.INTERVAL_YEAR_MONTH,
+                  Sets.immutableEnumSet(
+                      SqlTypeName.INTERVAL_YEAR_MONTH,
                       SqlTypeName.INTERVAL_YEAR,
                       SqlTypeName.INTERVAL_MONTH,
                       SqlTypeName.INTERVAL_WEEK,
                       SqlTypeName.INTERVAL_DAY);
-              boolean is_date_interval = DATE_INTERVAL_TYPES.contains(
-                  fnOperation.getOperands().get(1).getType().getSqlTypeName());
+              boolean is_date_interval =
+                  DATE_INTERVAL_TYPES.contains(
+                      fnOperation.getOperands().get(1).getType().getSqlTypeName());
               Expr arg0 = operands.get(0);
               Expr arg1 = operands.get(1);
               // Cast arg0 to from string to timestamp, if needed
@@ -687,8 +675,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 arg0 = new Expr.Raw(casted_expr);
               }
               // add/minus a date interval to a date object should return a date object
-              if (is_date_interval &&
-                  getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.DATE) {
+              if (is_date_interval
+                  && getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.DATE) {
                 if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
                   arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
                 }
@@ -1089,7 +1077,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "SPLIT_PART":
           case "REPLACE":
           case "MID":
-          case "SUBSTR":
           case "SUBSTRING_INDEX":
           case "TRANSLATE3":
             if (operands.size() != 3) {
@@ -1101,6 +1088,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                     operands.get(0).emit(),
                     operands.get(1).emit(),
                     operands.get(2).emit()));
+          case "SUBSTR":
+            return generateSubstringInfo(operands);
           case "INSERT":
             return generateInsert(operands);
           case "POSITION":
@@ -1246,8 +1235,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     @Override
     public Expr visitLiteral(RexLiteral literal) {
-      String code =
-          LiteralCodeGen.generateLiteralCode(literal, true, visitor);
+      String code = LiteralCodeGen.generateLiteralCode(literal, true, visitor);
       return new Expr.Raw(code);
     }
 
@@ -1258,8 +1246,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
       List<Expr> args = visitList(operation.operands);
       Expr child = args.get(0);
-      String exprCode =
-          generateCastCode(child.emit(), inputType, outputType, true);
+      String exprCode = generateCastCode(child.emit(), inputType, outputType, true);
       return new Expr.Raw(exprCode);
     }
 
