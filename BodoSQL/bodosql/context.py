@@ -93,7 +93,12 @@ class SqlTypeEnum(Enum):
     String = 18
     Binary = 19
     Categorical = 20
-    Unsupported = 21
+    # Note Array, Object, and Variant are currently unused
+    # on the Python side but this enum is updated to be consistent.
+    Array = 21
+    Json_Object = 22
+    Variant = 23
+    Unsupported = 24
 
 
 # Scalar dtypes for supported Bodo Arrays
