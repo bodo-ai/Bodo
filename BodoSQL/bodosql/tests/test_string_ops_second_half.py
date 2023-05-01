@@ -699,6 +699,46 @@ def test_substring(query, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize("func", ["SUBSTR", "SUBSTRING"])
+def test_substring_suffix(func, spark_info, memory_leak_check):
+    """Test SUBSTR/SUBSTRING with 2 arguments only where length is optional"""
+    query = f"SELECT {func}(S, I) FROM table1"
+    df = {
+        "table1": pd.DataFrame(
+            {
+                "S": pd.Series(
+                    [
+                        "a bc def ghij",
+                        "kl mnopq r",
+                        "st uv wx yz",
+                        "a e i o u y",
+                        "alphabet",
+                        "soup",
+                        None,
+                        "",
+                        "Ɨ Ø ƀ",
+                        "ǖ ǘ ǚ ǜ",
+                        "± × ÷ √",
+                        "Ŋ ŋ",
+                    ]
+                ),
+                "I": pd.Series(
+                    [None, -1, 1, -10, 5, 0, 2, 6, None, 10, -5, 4],
+                    dtype=pd.Int32Dtype(),
+                ),
+            }
+        )
+    }
+    check_query(
+        query,
+        df,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+    )
+
+
 def test_length(bodosql_string_types, spark_info, memory_leak_check):
     query = "SELECT LENGTH(A) as OUT1 FROM table1"
     check_query(

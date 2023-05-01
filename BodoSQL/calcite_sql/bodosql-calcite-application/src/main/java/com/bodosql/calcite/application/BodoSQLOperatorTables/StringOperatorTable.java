@@ -5,8 +5,6 @@ import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTabl
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
-
-import net.snowflake.client.jdbc.internal.google.type.TimeOfDayOrBuilder;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.type.*;
@@ -89,8 +87,12 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          // What Input Types does the function accept. CHAR_INT_INT
-          OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          // What Input Types does the function accept. CHAR_INT_INT or CHAR_INT (length is
+          // optional)
+          OperandTypes.or(
+              OperandTypes.family(
+                  SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+              OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER)),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
@@ -441,10 +443,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER,
           ReturnTypes.VARCHAR_2000_NULLABLE,
           null,
-          argumentRange(
-                  1, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
-          SqlFunctionCategory.STRING
-      );
+          argumentRange(1, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
+          SqlFunctionCategory.STRING);
 
   public static final SqlFunction RTRIM =
       new SqlFunction(
@@ -452,10 +452,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER,
           ReturnTypes.VARCHAR_2000_NULLABLE,
           null,
-          argumentRange(
-                  1, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
-          SqlFunctionCategory.STRING
-      );
+          argumentRange(1, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
+          SqlFunctionCategory.STRING);
 
   public static final SqlFunction SUBSTRING_INDEX =
       new SqlFunction(

@@ -2008,6 +2008,45 @@ def test_substring(args, memory_leak_check):
     )
 
 
+@pytest.mark.slow
+def test_substring_suffix(memory_leak_check):
+    """Test substring_suffix kernel"""
+    arr = pd.Series(
+        pd.array(
+            [
+                "alphabet soup is 🟥🟧🟨🟩🟦🟪",
+                "so very very delicious",
+                "aaeaaeieaaeioiea",
+                "alpha beta gamma delta epsilon",
+                None,
+                "foo",
+                "bar",
+            ]
+        )
+    )
+    start = pd.Series(pd.array([5, -5, 3, -8, 10, 20, 1]))
+
+    def impl(arr, start):
+        return pd.Series(bodo.libs.bodosql_array_kernels.substring_suffix(arr, start))
+
+    # Simulates SUBSTRING on a single row
+    def substring_scalar_fn(elem, start):
+        if pd.isna(elem) or pd.isna(start):
+            return None
+        elif start > 0:
+            start -= 1
+        return elem[start:]
+
+    substring_answer = vectorized_sol((arr, start), substring_scalar_fn, object)
+    check_func(
+        impl,
+        (arr, start),
+        py_output=substring_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.parametrize(
     "args",
     [
