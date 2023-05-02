@@ -7,10 +7,11 @@ Note: Because Spark does not contain timezones we cannot
 compart with SparkSQL for correctness
 """
 import pandas as pd
-
+import pytest
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.slow
 def test_select(memory_leak_check):
     """
     Test a simple select statement with a table including

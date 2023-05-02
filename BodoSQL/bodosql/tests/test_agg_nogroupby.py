@@ -257,6 +257,7 @@ def test_count_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_count_string(bodosql_string_types, spark_info, memory_leak_check):
     """test various count queries on string data."""
     check_query(
@@ -392,7 +393,11 @@ def test_max_literal(basic_df, spark_info, memory_leak_check):
     [
         pytest.param("SELECT COUNT_IF(A) FROM table1", id="bool_col"),
         pytest.param("SELECT COUNT_IF(B = 'B') FROM table1", id="string_match"),
-        pytest.param("SELECT COUNT_IF(C % 2 = 1) FROM table1", id="int_cond"),
+        pytest.param(
+            "SELECT COUNT_IF(C % 2 = 1) FROM table1",
+            id="int_cond",
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_count_if(query, spark_info, memory_leak_check):
@@ -441,6 +446,7 @@ def test_having(bodosql_numeric_types, comparison_ops, spark_info, memory_leak_c
     )
 
 
+@pytest.mark.slow
 def test_max_bool(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     Simple test to ensure that max is working on boolean types
@@ -734,6 +740,7 @@ def test_single_value2(spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_single_value_error():
     """Make sure Calcite's SINGLE_VALUE Agg implementation raises an error for input
     with more than one value

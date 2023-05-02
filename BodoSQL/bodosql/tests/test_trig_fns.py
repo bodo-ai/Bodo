@@ -138,6 +138,7 @@ def test_double_op_trig_fns_scalars(
     )
 
 
+@pytest.mark.slow
 def test_pi(basic_df, spark_info, memory_leak_check):
     """tests that the pi fn is working"""
     query = "SELECT A, PI from table1"

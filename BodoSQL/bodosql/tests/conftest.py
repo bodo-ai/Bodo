@@ -487,9 +487,9 @@ def bodosql_boolean_types(request):
 @pytest.fixture(
     params=[
         "2011-01-01",
-        "1971-02-02",
+        pytest.param("1971-02-02", marks=pytest.mark.slow),
         "2021-03-03",
-        "2004-12-07",
+        pytest.param("2004-12-07", marks=pytest.mark.slow),
         "2007-01-01 03:30:00",
     ]
 )
@@ -1778,10 +1778,10 @@ def timeadd_dataframe():
 @pytest.fixture(
     params=[
         "hour",
-        "minute",
+        pytest.param("minute", marks=pytest.mark.slow),
         "second",
         "millisecond",
-        "microsecond",
+        pytest.param("microsecond", marks=pytest.mark.slow),
         "nanosecond",
     ]
 )

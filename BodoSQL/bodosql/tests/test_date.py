@@ -350,6 +350,7 @@ def test_datediff_date_columns_time_units(
     )
 
 
+@pytest.mark.slow
 def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_check):
     """
     Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF with date columns and date units behaves as expected

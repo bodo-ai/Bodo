@@ -17,13 +17,19 @@ from bodo.tests.utils import SeriesOptTestPipeline, gen_nonascii_list
 @pytest.fixture(
     params=[
         # TODO: Float literals (Spark outputs decimal type, not float)
-        pytest.param((1.3, -3124.2, 0.0, 314.1), id="float_literals"),
+        pytest.param(
+            (1.3, -3124.2, 0.0, 314.1), id="float_literals", marks=pytest.mark.slow
+        ),
         # Integer literals
-        (341, -3, 0, 3443),
+        pytest.param((341, -3, 0, 3443), id="integer_literals", marks=pytest.mark.slow),
         # Boolean literals
         (True, False, False, True),
         # String literals
-        ("'hello'", "'world'", "'goodbye'", "'spark'"),
+        pytest.param(
+            ("'hello'", "'world'", "'goodbye'", "'spark'"),
+            id="string_literals",
+            marks=pytest.mark.slow,
+        ),
         # TODO: Timestamp Literals (Cannot properly compare with Spark)
         pytest.param(
             (
@@ -223,6 +229,7 @@ def test_case_no_else_clause_columns(basic_df, spark_info, memory_leak_check):
     check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
 
 
+@pytest.mark.slow
 def test_tz_aware_case_null(representative_tz, memory_leak_check):
     """
     Tests a case statement using a column + NULL on tz-aware timestamp

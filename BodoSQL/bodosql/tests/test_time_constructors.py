@@ -98,6 +98,7 @@ def to_time_fn(request):
                 ),
             ),
             id="timestamp_ntz",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -186,7 +187,11 @@ def to_time_invalid_data():
 
 
 @pytest.mark.parametrize(
-    "use_case", [pytest.param(False, id="no_case"), pytest.param(True, id="with_case")]
+    "use_case",
+    [
+        pytest.param(False, id="no_case", marks=pytest.mark.slow),
+        pytest.param(True, id="with_case"),
+    ],
 )
 def test_to_time_valid(to_time_fn, to_time_valid_data, use_case, memory_leak_check):
     ctx, result = to_time_valid_data
@@ -200,7 +205,11 @@ def test_to_time_valid(to_time_fn, to_time_valid_data, use_case, memory_leak_che
 
 
 @pytest.mark.parametrize(
-    "use_case", [pytest.param(False, id="no_case"), pytest.param(True, id="with_case")]
+    "use_case",
+    [
+        pytest.param(False, id="no_case", marks=pytest.mark.slow),
+        pytest.param(True, id="with_case"),
+    ],
 )
 def test_to_time_invalid(to_time_fn, to_time_invalid_data, use_case):
     ctx, answer = to_time_invalid_data
@@ -271,6 +280,7 @@ def time_from_parts_fn(request):
                 "H, M, S",
             ),
             id="three_args",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -344,7 +354,7 @@ def time_from_parts_data(request):
 @pytest.mark.parametrize(
     "use_case",
     [
-        pytest.param(False, id="no_case"),
+        pytest.param(False, id="no_case", marks=pytest.mark.slow),
         pytest.param(True, id="with_case"),
     ],
 )

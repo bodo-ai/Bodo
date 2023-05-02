@@ -125,9 +125,9 @@ def over_clause_bounds(request):
             ],
             id="VARIANCE_POP",
         ),
-        pytest.param("FIRST_VALUE", id="FIRST_VALUE"),
+        pytest.param("FIRST_VALUE", marks=pytest.mark.slow, id="FIRST_VALUE"),
         pytest.param("LAST_VALUE", id="LAST_VALUE"),
-        pytest.param("ANY_VALUE", id="ANY_VALUE"),
+        pytest.param("ANY_VALUE", marks=pytest.mark.slow, id="ANY_VALUE"),
     ]
 )
 def numeric_agg_funcs_subset(request):
@@ -145,10 +145,10 @@ def numeric_agg_funcs_subset(request):
             ),
             id="MIN",
         ),
-        pytest.param("COUNT", id="COUNT"),
+        pytest.param("COUNT", id="COUNT", marks=pytest.mark.slow),
         pytest.param("COUNT(*)", id="COUNT(*)"),
         pytest.param("FIRST_VALUE", id="FIRST_VALUE"),
-        pytest.param("LAST_VALUE", id="LAST_VALUE"),
+        pytest.param("LAST_VALUE", id="LAST_VALUE", marks=pytest.mark.slow),
     ]
 )
 def non_numeric_agg_funcs_subset(request):
@@ -156,6 +156,7 @@ def non_numeric_agg_funcs_subset(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_QUALIFY_no_bounds(bodosql_numeric_types, spark_info, memory_leak_check):
     """
     A test to ensure qualify works for window functions that do not have specified bounds
@@ -615,6 +616,7 @@ def test_QUALIFY_eval_order_GROUP_BY_HAVING(spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_QUALIFY_eval_order_DISTINCT(spark_info, memory_leak_check):
 
     """Ensures that DISTINCT is evaluated after QUALIFY"""
@@ -699,6 +701,7 @@ def test_QUALIFY_eval_order_LIMIT(spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_QUALIFY_nested_queries(spark_info, memory_leak_check):
     """stress test to ensure that qualify works with nested subqueries"""
 
