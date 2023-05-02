@@ -36,7 +36,7 @@ def contains(arr, pattern):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.contains",
-                ["arr", "contains"],
+                ["arr", "pattern"],
                 i,
             )
 
