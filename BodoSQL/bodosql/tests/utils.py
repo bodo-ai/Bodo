@@ -82,6 +82,8 @@ def check_query(
     use_dict_encoded_strings: Optional[bool] = None,
     is_out_distributed: bool = True,
     check_typing_issues: bool = True,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query by comparing SparkSQL
@@ -220,6 +222,10 @@ def check_query(
             Default True.
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
@@ -383,6 +389,8 @@ def check_query(
             expected_output,
             optimize_calcite_plan,
             convert_nullable_bodosql,
+            atol=atol,
+            rtol=rtol,
         )
 
     check_query_jit(
@@ -402,6 +410,8 @@ def check_query(
         use_dict_encoded_strings,
         is_out_distributed=is_out_distributed,
         check_typing_issues=check_typing_issues,
+        atol=atol,
+        rtol=rtol,
     )
 
     result = dict()
@@ -444,6 +454,8 @@ def check_query_jit(
     use_dict_encoded_strings,
     is_out_distributed,
     check_typing_issues,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -484,6 +496,10 @@ def check_query_jit(
             format for testing.
             If None, tests both formats if input arguments have string arrays.
 
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
+
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
     """
@@ -513,6 +529,8 @@ def check_query_jit(
                 optimize_calcite_plan,
                 convert_nullable_bodosql,
                 check_typing_issues,
+                atol,
+                rtol,
             )
         if run_jit_1D:
             check_query_jit_1D(
@@ -527,6 +545,8 @@ def check_query_jit(
                 convert_nullable_bodosql,
                 is_out_distributed,
                 check_typing_issues,
+                atol,
+                rtol,
             )
         if run_jit_1DVar:
             check_query_jit_1DVar(
@@ -541,6 +561,8 @@ def check_query_jit(
                 convert_nullable_bodosql,
                 is_out_distributed,
                 check_typing_issues,
+                atol,
+                rtol,
             )
     finally:
         bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
@@ -565,6 +587,8 @@ def check_query_jit(
             use_dict_encoded_strings=use_dict_encoded_strings,
             is_out_distributed=is_out_distributed,
             check_typing_issues=check_typing_issues,
+            atol=atol,
+            rtol=rtol,
         )
 
     # test dict-encoded string type if there is any string array in input
@@ -591,6 +615,8 @@ def check_query_jit(
             use_dict_encoded_strings=True,
             is_out_distributed=is_out_distributed,
             check_typing_issues=check_typing_issues,
+            atol=atol,
+            rtol=rtol,
         )
 
 
@@ -604,6 +630,8 @@ def check_query_python(
     expected_output,
     optimize_calcite_plan,
     convert_nullable_bodosql,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -629,6 +657,10 @@ def check_query_python(
         expected_output: The expected result of running the query.
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
     """
     bc = bodosql.BodoSQLContext(dataframe_dict)
     if optimize_calcite_plan:
@@ -645,6 +677,8 @@ def check_query_python(
         False,
         "Sequential Python Test Failed",
         convert_nullable_bodosql,
+        atol=atol,
+        rtol=rtol,
     )
 
 
@@ -659,6 +693,8 @@ def check_query_jit_seq(
     optimize_calcite_plan,
     convert_nullable_bodosql,
     check_typing_issues,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -688,6 +724,10 @@ def check_query_jit_seq(
 
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
     """
     bodosql_output = _run_jit_query(
         query,
@@ -707,6 +747,8 @@ def check_query_jit_seq(
         False,
         "Sequential JIT Test Failed",
         convert_nullable_bodosql,
+        atol=atol,
+        rtol=rtol,
     )
 
 
@@ -722,6 +764,8 @@ def check_query_jit_1D(
     convert_nullable_bodosql,
     is_out_distributed,
     check_typing_issues,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -751,6 +795,10 @@ def check_query_jit_1D(
 
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
     """
     bodosql_output = _run_jit_query(
         query,
@@ -772,6 +820,8 @@ def check_query_jit_1D(
         is_out_distributed,
         "1D Parallel JIT Test Failed",
         convert_nullable_bodosql,
+        atol=atol,
+        rtol=rtol,
     )
 
 
@@ -787,6 +837,8 @@ def check_query_jit_1DVar(
     convert_nullable_bodosql,
     is_out_distributed,
     check_typing_issues,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -816,6 +868,10 @@ def check_query_jit_1DVar(
 
         check_typing_issues: raise an error if there is a typing issue for input args.
         Runs bodo typing on arguments and converts warnings to errors.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
     """
     bodosql_output = _run_jit_query(
         query,
@@ -837,6 +893,8 @@ def check_query_jit_1DVar(
         is_out_distributed,
         "1DVar Parallel JIT Test Failed",
         convert_nullable_bodosql,
+        atol=atol,
+        rtol=rtol,
     )
 
 
@@ -946,6 +1004,8 @@ def _check_query_equal(
     is_out_distributed,
     failure_message,
     convert_nullable_bodosql,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     """
     Evaluates the BodoSQL output against the expected output.
@@ -968,6 +1028,10 @@ def _check_query_equal(
             occurs.
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
+
+        atol: absolute tolerance used for approximately-equal calculations
+
+        rtol: relative tolerance used for approximately-equal calculations
 
     """
     # convert pyarrow string data to regular object arrays to avoid dtype errors
@@ -1004,7 +1068,12 @@ def _check_query_equal(
     # only rank 0 should check if gatherv() called on output
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            bodosql_output, expected_output, check_dtype, convert_nullable_bodosql
+            bodosql_output,
+            expected_output,
+            check_dtype,
+            convert_nullable_bodosql,
+            atol=atol,
+            rtol=rtol,
         )
     n_passed = reduce_sum(passed)
     assert n_passed == n_ranks, failure_message
@@ -1015,6 +1084,8 @@ def _test_equal_guard(
     expected_output,
     check_dtype,
     convert_nullable_bodosql,
+    atol: float = 1e-08,
+    rtol: float = 1e-05,
 ):
     passed = 1
     try:
@@ -1022,7 +1093,12 @@ def _test_equal_guard(
         if convert_nullable_bodosql:
             bodosql_output = convert_nullable_object(bodosql_output)
         pd.testing.assert_frame_equal(
-            bodosql_output, expected_output, check_dtype, check_column_type=False
+            bodosql_output,
+            expected_output,
+            check_dtype,
+            check_column_type=False,
+            rtol=rtol,
+            atol=atol,
         )
     except Exception as e:
         print(e)

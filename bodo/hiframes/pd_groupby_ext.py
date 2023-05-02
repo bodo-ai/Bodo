@@ -1466,7 +1466,6 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             self.context,
             numba.core.registry.cpu_target.target_context,
         )[0]
-    
 
     @bound_function("groupby.std", no_unliteral=True)
     def resolve_std(self, grp, args, kws):
@@ -1478,7 +1477,6 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             self.context,
             numba.core.registry.cpu_target.target_context,
         )[0]
-
 
     @bound_function("groupby.prod", no_unliteral=True)
     def resolve_prod(self, grp, args, kws):

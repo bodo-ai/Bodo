@@ -51,26 +51,6 @@ int compare_list_string(std::vector<std::pair<std::string, bool>> const& v1,
     }
 }
 
-/**
- * @brief Convert the given value to a double.
- *
- * @tparam T The input type.
- * @tparam dtype The underlying dtype of the input type.
- * @param val The value to convert
- * @return Val as a double.
- */
-template <typename T, int dtype>
-inline typename std::enable_if<!is_decimal<dtype>::value, double>::type
-to_double(T const& val) {
-    return static_cast<double>(val);
-}
-
-template <typename T, int dtype>
-inline typename std::enable_if<is_decimal<dtype>::value, double>::type
-to_double(T const& val) {
-    return decimal_to_double(val);
-}
-
 // Template definitions used by multiple aggregate functions
 
 /**

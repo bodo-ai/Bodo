@@ -1547,6 +1547,10 @@ class DistributedAnalysis:
             # quantile doesn't affect input's distribution
             return
 
+        if fdef == ("approx_percentile", "bodo.libs.array_kernels"):
+            # quantile doesn't affect input's distribution
+            return
+
         if fdef == ("nunique", "bodo.libs.array_kernels"):
             # nunique doesn't affect input's distribution
             return

@@ -301,6 +301,14 @@ public final class NumericOperatorTable implements SqlOperatorTable {
       SqlBasicAggFunction.create(
           "CORR", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.NUMERIC_NUMERIC);
 
+  public static final SqlAggFunction APPROX_PERCENTILE =
+      SqlBasicAggFunction.create(
+              "APPROX_PERCENTILE",
+              SqlKind.OTHER_FUNCTION,
+              ReturnTypes.DOUBLE_NULLABLE,
+              OperandTypes.NUMERIC_NUMERIC)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
   public static final SqlAggFunction MEDIAN =
       SqlBasicAggFunction.create(
               "MEDIAN", SqlKind.MEDIAN, ReturnTypes.ARG0_NULLABLE_IF_EMPTY, OperandTypes.NUMERIC)
@@ -384,6 +392,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           ACOSH,
           ASINH,
           ATANH,
+          APPROX_PERCENTILE,
           COSH,
           SINH,
           TANH,

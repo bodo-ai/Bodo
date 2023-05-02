@@ -775,6 +775,50 @@ def test_single_value_error():
 
 
 @pytest.mark.parametrize(
+    "data, quantiles",
+    [
+        pytest.param("A", (0.1, 0.25, 0.3, 0.5, 0.6, 0.75, 0.9), id="linear"),
+        pytest.param("B", (0.01, 0.1, 0.2, 0.4, 0.6, 0.8, 0.9, 0.99), id="uniform"),
+        pytest.param("C", (0.15, 0.35, 0.45, 0.5, 0.55, 0.65, 0.85), id="gaussian"),
+    ],
+)
+def test_approx_percentile(data, quantiles, memory_leak_check):
+    """Test APPROX_PERCENTILE"""
+    calculations = [f"APPROX_PERCENTILE({data}, {q})" for q in quantiles]
+    query = f"select {', '.join(calculations)} FROM table1"
+
+    n = 10000
+    np.random.seed(100)
+    unif = np.round(np.random.uniform(0, 1000, n))
+    gaus = np.random.normal(100, 30, n)
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(list(range(n)), dtype=pd.Int32Dtype()),
+            "B": pd.Series(
+                [None if i % 7 == 3 else unif[i] for i in range(n)],
+                dtype=pd.Int32Dtype(),
+            ),
+            "C": pd.Series(gaus, dtype=np.float64),
+        }
+    )
+    expected_output = pd.DataFrame(
+        {i: df[data].quantile(q) for i, q in enumerate(quantiles)}, index=np.arange(1)
+    )
+
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        expected_output=expected_output,
+        check_names=False,
+        check_dtype=False,
+        is_out_distributed=False,
+        atol=0.01,
+        rtol=0.35,
+    )
+
+
+@pytest.mark.parametrize(
     "agg_cols",
     [
         pytest.param("AD", id="fast_tests_a"),

@@ -686,6 +686,32 @@ def get_valid_entries_from_date_offset(
     return loc_vars["impl"]
 
 
+############################ approx_percentile ################################
+
+
+def approx_percentile(A, q, parallel=False):  # pragma: no cover
+    pass
+
+
+ll.add_symbol(
+    "approx_percentile_py_entrypt",
+    quantile_alg.approx_percentile_py_entrypt,
+)
+
+_approx_percentile_ = types.ExternalFunction(
+    "approx_percentile_py_entrypt",
+    types.float64(bodo.libs.array.array_info_type, types.float64, types.bool_),
+)
+
+
+@numba.njit
+def approx_percentile(arr, percentile, parallel=False):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    result = _approx_percentile_(arr_info, percentile, parallel)
+    check_and_propagate_cpp_exception()
+    return result
+
+
 ################################ quantile ####################################
 
 
