@@ -599,6 +599,79 @@ class BodoSQLContext:
         if failed:
             raise BodoError(msg)
 
+    def validate_query_compiles(self, sql, params_dict=None):
+        """
+        Verifies BodoSQL can fully compile the query in Bodo.
+        """
+        try:
+            compiled_cpu_dispatcher = self._compile(sql, params_dict)
+            compiles_flag = True
+        except Exception as e:
+            print(e)
+            compiles_flag = False
+
+        return compiles_flag
+
+    def _compile(self, sql, params_dict=None):
+        """compiles the query in Bodo."""
+        optimizePlan = True
+        import bodosql
+
+        if params_dict is None:
+            params_dict = dict()
+
+        func_text, lowered_globals = self._convert_to_pandas(
+            sql, optimizePlan, params_dict
+        )
+
+        glbls = {
+            "np": np,
+            "pd": pd,
+            "bodosql": bodosql,
+            "re": re,
+            "bodo": bodo,
+            "ColNamesMetaType": bodo.utils.typing.ColNamesMetaType,
+            "MetaType": bodo.utils.typing.MetaType,
+            "numba": numba,
+            "time": time,
+            "datetime": datetime,
+            "pd": pd,
+        }
+
+        glbls.update(lowered_globals)
+        return self._functext_compile(func_text, params_dict, glbls)
+
+    def _functext_compile(self, func_text, params_dict, glbls):
+        """
+        Helper function for _compile, that compiles the function text.
+        This is mostly separated out for testing purposes.
+        """
+
+        arg_types = []
+        for table_arg in self.tables.values():
+            arg_types.append(bodo.typeof(table_arg))
+
+        for param_arg in params_dict.values():
+            arg_types.append(bodo.typeof(param_arg))
+
+        sig = tuple(arg_types)
+
+        loc_vars = {}
+        exec(
+            func_text,
+            glbls,
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+
+        dispatcher = bodo.jit(
+            sig,
+            args_maybe_distributed=False,
+            returns_maybe_distributed=False,
+        )(impl)
+
+        return dispatcher
+
     def validate_query(self, sql):
         """
         Verifies BodoSQL can compute query,
