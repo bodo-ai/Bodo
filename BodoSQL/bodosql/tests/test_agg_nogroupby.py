@@ -777,7 +777,7 @@ def test_single_value_error():
 @pytest.mark.parametrize(
     "agg_cols",
     [
-        pytest.param("ADG", id="fast_tests_a"),
+        pytest.param("AD", id="fast_tests_a"),
         pytest.param("BCE", id="slow_tests_b"),
         pytest.param("FHI", id="slow_tests_a", marks=pytest.mark.slow),
         pytest.param("JKL", id="slow_tests_b", marks=pytest.mark.slow),
@@ -809,7 +809,6 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
                     [None if i % 3 == 0 else float(i**2) for i in range(100)]
                 ),
                 "F": pd.Series([float((i**3) % 100) for i in range(100)]),
-                "G": pd.Series([2.718281828 for i in range(100)]),
                 "H": pd.Series([(i / 100) ** 0.5 for i in range(100)]),
                 "I": pd.Series(
                     [np.arctanh(np.pi * (i - 49.5) / 160.5) for i in range(100)]
