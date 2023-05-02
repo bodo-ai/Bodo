@@ -65,6 +65,26 @@ def test_contains(args, memory_leak_check):
     )
 
 
+def test_contains_optional(memory_leak_check):
+    """Test the optional code path for contains."""
+
+    def impl(A, pattern, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = pattern if flag1 else None
+        return bodo.libs.bodosql_array_kernels.contains(arg0, arg1)
+
+    A = "mean"
+    pattern = "e"
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            py_output = True if flag0 and flag1 else None
+            check_func(
+                impl,
+                (A, pattern, flag0, flag1),
+                py_output=py_output,
+            )
+
+
 @pytest.mark.parametrize(
     "n",
     [
