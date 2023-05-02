@@ -85,7 +85,6 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
             // than just group count 0, but I am just leaving it at no grouping
             // for now.
             return Aggregate.isSimple(aggregate)
-                    && aggregate.aggCallList.isNotEmpty()
                     && aggregate.aggCallList.all { agg ->
                 SUPPORTED_AGGREGATES.contains(agg.aggregation.kind)
             }
