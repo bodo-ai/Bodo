@@ -75,6 +75,7 @@ def test_multicol_null_pivot(basic_df, spark_info, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_tz_aware_pivot(memory_leak_check):
     """
     Tests for using an aggregation function that outputs

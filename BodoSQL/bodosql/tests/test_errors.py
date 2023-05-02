@@ -874,6 +874,7 @@ def test_qualify_no_window_err(memory_leak_check):
         impl(table1)
 
 
+@pytest.mark.slow
 def test_lag_respect_nulls_no_window():
     """Tests LEAD/LAG with RESPECT NULLS but no OVER clause
     This correctly validates in Calcite, so we have to handle it in our codegen.

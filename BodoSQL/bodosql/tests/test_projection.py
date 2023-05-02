@@ -143,6 +143,7 @@ def test_select_all_datetime(bodosql_datetime_types, spark_info, memory_leak_che
     check_query(query, bodosql_datetime_types, spark_info, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_select_all_interval(bodosql_interval_types, spark_info, memory_leak_check):
     """
     Simplest query possible on timedelta types.
@@ -165,6 +166,7 @@ def test_select_all_boolean(bodosql_boolean_types, spark_info, memory_leak_check
     check_query(query, bodosql_boolean_types, spark_info, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_select_all_string(bodosql_string_types, spark_info, memory_leak_check):
     """
     Simplest query possible on string tables.

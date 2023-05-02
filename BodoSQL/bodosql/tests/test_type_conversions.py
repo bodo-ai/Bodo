@@ -79,6 +79,7 @@ def test_interval_numeric_column_casting(
     check_query(query, bodosql_interval_types, spark_info, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_varchar_to_numeric_cast(
     sql_numeric_typestrings, spark_info, memory_leak_check
 ):

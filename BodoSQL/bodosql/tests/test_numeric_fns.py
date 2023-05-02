@@ -76,22 +76,24 @@ def bodosql_conv_df(request):
 
 @pytest.fixture(
     params=[
-        ("ABS", "ABS", "mixed_ints"),
+        pytest.param(("ABS", "ABS", "mixed_ints"), marks=pytest.mark.slow),
         ("ABS", "ABS", "mixed_floats"),
         ("CEIL", "CEIL", "mixed_floats"),
-        ("CBRT", "CBRT", "mixed_floats"),
+        pytest.param(("CBRT", "CBRT", "mixed_floats"), marks=pytest.mark.slow),
         ("CBRT", "CBRT", "mixed_ints"),
-        ("FACTORIAL", "FACTORIAL", "positive_ints"),
+        pytest.param(
+            ("FACTORIAL", "FACTORIAL", "positive_ints"), marks=pytest.mark.slow
+        ),
         ("FLOOR", "FLOOR", "mixed_floats"),
-        ("SIGN", "SIGN", "mixed_floats"),
+        pytest.param(("SIGN", "SIGN", "mixed_floats"), marks=pytest.mark.slow),
         ("SIGN", "SIGN", "mixed_ints"),
         # the second argument to POW for SQUARE (2) is provided below
-        ("SQUARE", "POW", "mixed_floats"),
+        pytest.param(("SQUARE", "POW", "mixed_floats"), marks=pytest.mark.slow),
         ("SQUARE", "POW", "mixed_ints"),
     ]
     + [(x, x, "positive_floats") for x in ["LOG10", "LOG2", "LN", "EXP", "SQRT"]]
     + [
-        ("LOG", "LOG10", "positive_floats"),
+        pytest.param(("LOG", "LOG10", "positive_floats"), marks=pytest.mark.slow),
     ]
     # currently, behavior for log(0) differs from sparks behavior, see BS-374
     # + [(x, x, "negative_floats") for x in ["LOG10", "LOG2", "LN", "EXP", "SQRT"]]
@@ -107,13 +109,22 @@ def single_op_numeric_fn_info(request):
 @pytest.fixture(
     params=[
         ("MOD", "MOD", "mixed_floats", "mixed_floats"),
-        ("MOD", "MOD", "mixed_ints", "mixed_ints"),
+        pytest.param(
+            ("MOD", "MOD", "mixed_ints", "mixed_ints"), marks=pytest.mark.slow
+        ),
         ("MOD", "MOD", "mixed_ints", "mixed_floats"),
-        ("MOD", "MOD", "unsigned_int64s", "unsigned_int32s"),
+        pytest.param(
+            ("MOD", "MOD", "unsigned_int64s", "unsigned_int32s"), marks=pytest.mark.slow
+        ),
         ("POW", "POW", "positive_floats", "mixed_floats"),
-        ("POWER", "POWER", "positive_floats", "mixed_floats"),
+        pytest.param(
+            ("POWER", "POWER", "positive_floats", "mixed_floats"),
+            marks=pytest.mark.slow,
+        ),
         ("POW", "POW", "mixed_floats", "mixed_ints"),
-        ("POW", "POW", "mixed_floats", "mixed_floats"),
+        pytest.param(
+            ("POW", "POW", "mixed_floats", "mixed_floats"), marks=pytest.mark.slow
+        ),
     ]
 )
 def double_op_numeric_fn_info(request):
@@ -187,9 +198,13 @@ def test_double_op_numeric_fns_cols(
     "query_args",
     [
         pytest.param(("A", "B", "C", "D"), id="all_vector"),
-        pytest.param(("A", "-2", "12", "20"), id="vector_scalar"),
+        pytest.param(
+            ("A", "-2", "12", "20"), id="vector_scalar", marks=pytest.mark.slow
+        ),
         pytest.param(("20", "B", "C", "D"), id="scalar_vector"),
-        pytest.param(("0.5", "-0.5", "2", "12"), id="all_scalar"),
+        pytest.param(
+            ("0.5", "-0.5", "2", "12"), id="all_scalar", marks=pytest.mark.slow
+        ),
     ],
 )
 def test_width_bucket_cols(query_args, spark_info, memory_leak_check):
@@ -238,7 +253,9 @@ def test_width_bucket_scalars(spark_info, memory_leak_check):
     [
         pytest.param(("A", "B", "C", "D"), id="all_vector"),
         pytest.param(
-            ("A", "142.78966505413766", "3.7502297731338663", "D"), id="scalar_vector"
+            ("A", "142.78966505413766", "3.7502297731338663", "D"),
+            id="scalar_vector",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -319,6 +336,7 @@ def test_haversine_cols(query_args, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_haversine_scalars(spark_info, memory_leak_check):
     ctx = {
         "table0": pd.DataFrame(
@@ -564,8 +582,12 @@ def test_conv_scalars(bodosql_conv_df, spark_info, memory_leak_check):
     [
         pytest.param("SELECT LOG(A, B) FROM table1", id="all_vector"),
         pytest.param("SELECT LOG(A, 2.0) FROM table1", id="vector_scalar"),
-        pytest.param("SELECT LOG(100, B) FROM table1", id="scalar_vector"),
-        pytest.param("SELECT LOG(72.0, 2.0) FROM table1", id="all_scalar"),
+        pytest.param(
+            "SELECT LOG(100, B) FROM table1", id="scalar_vector", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            "SELECT LOG(72.0, 2.0) FROM table1", id="all_scalar", marks=pytest.mark.slow
+        ),
     ],
 )
 def test_log_hybrid(query, spark_info, memory_leak_check):
@@ -594,10 +616,10 @@ def test_log_hybrid(query, spark_info, memory_leak_check):
 @pytest.mark.parametrize(
     "args",
     [
-        pytest.param(("A", "B"), id="all_vector"),
+        pytest.param(("A", "B"), id="all_vector", marks=pytest.mark.slow),
         pytest.param(("A", "0.0"), id="vector_scalar"),
         pytest.param(("100", "B"), id="scalar_vector"),
-        pytest.param(("72.0", "0.0"), id="all_scalar"),
+        pytest.param(("72.0", "0.0"), id="all_scalar", marks=pytest.mark.slow),
     ],
 )
 def test_div0_cols(args, spark_info, memory_leak_check):
@@ -672,16 +694,16 @@ def test_div0_scalars(spark_info):
 @pytest.mark.parametrize(
     "value, expected_output",
     [
-        pytest.param("1", 1, id="int"),
+        pytest.param("1", 1, id="int", marks=pytest.mark.slow),
         pytest.param("1.0", 1, id="float"),
         pytest.param("'1.23456789'", 1, id="str"),
-        pytest.param("NULL", None, id="null"),
+        pytest.param("NULL", None, id="null", marks=pytest.mark.slow),
     ],
 )
 @pytest.mark.parametrize(
     "use_case",
     [
-        False,
+        pytest.param(False, marks=pytest.mark.slow),
         True,
     ],
 )
@@ -830,6 +852,7 @@ def test_to_number_invalid(fn_name, invalid_str):
                 ),
             ),
             id="floats-no_scale",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (

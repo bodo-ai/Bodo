@@ -557,15 +557,15 @@ def cmp_op(request):
 @pytest.fixture(
     params=[
         "quarter",
-        "yyyy",
+        pytest.param("yyyy", marks=pytest.mark.slow),
         "week",
-        "mm",
+        pytest.param("mm", marks=pytest.mark.slow),
         "days",
-        "hour",
+        pytest.param("hour", marks=pytest.mark.slow),
         "minute",
-        "S",
+        pytest.param("S", marks=pytest.mark.slow),
         "ms",
-        "us",
+        pytest.param("us", marks=pytest.mark.slow),
         "nsecond",
     ]
 )
@@ -623,11 +623,11 @@ def time_df():
     params=[
         "quarter",
         "yyy",
-        "MONTH",
+        pytest.param("MONTH", marks=pytest.mark.slow),
         "mon",
         "WEEK",
-        "wk",
-        "DAY",
+        pytest.param("wk", marks=pytest.mark.slow),
+        pytest.param("DAY", marks=pytest.mark.slow),
         "dd",
     ]
 )
@@ -642,13 +642,13 @@ def day_part_strings(request):
 @pytest.fixture(
     params=[
         "HOUR",
-        "hr",
-        "MINUTE",
+        pytest.param("hr", marks=pytest.mark.slow),
+        pytest.param("MINUTE", marks=pytest.mark.slow),
         "min",
         "SECOND",
         "ms",
-        "microsecond",
-        "usec",
+        pytest.param("microsecond", marks=pytest.mark.slow),
+        pytest.param("usec", marks=pytest.mark.slow),
         "nanosecs",
     ]
 )

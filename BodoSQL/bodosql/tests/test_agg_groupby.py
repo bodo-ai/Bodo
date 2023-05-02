@@ -264,6 +264,7 @@ def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_
     )
 
 
+@pytest.mark.slow
 def test_having_repeat_interval(bodosql_interval_types, spark_info, memory_leak_check):
     """test having clause in datetime queries"""
     check_query(
@@ -341,6 +342,7 @@ def test_groupby_numeric_scalars(basic_df, spark_info, memory_leak_check):
     check_query(query, basic_df, spark_info, check_names=False)
 
 
+@pytest.mark.slow
 def test_groupby_datetime_types(bodosql_datetime_types, spark_info, memory_leak_check):
     """
     Simple test to ensure that groupby and max are working on datetime types
@@ -838,6 +840,7 @@ def test_boolor_agg(args, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_boolor_agg_output_type(memory_leak_check):
     """Test boolor_agg to verify the output type is boolean"""
     query = """WITH TEMP AS(SELECT boolor_agg(A) as agg_A, B FROM table1 GROUP BY B)
@@ -937,6 +940,7 @@ def test_count_tz_aware(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_any_value_tz_aware(memory_leak_check):
     """
     Test any_value on a tz-aware timestamp column
@@ -996,6 +1000,7 @@ def test_tz_aware_key(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_tz_aware_having(memory_leak_check):
     """
     Test having with tz-aware values.

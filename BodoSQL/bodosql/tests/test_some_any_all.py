@@ -44,6 +44,7 @@ def test_some_any_all_numeric_non_null_tuples(
     )
 
 
+@pytest.mark.slow
 def test_some_any_all_string_non_null_tuples(
     bodosql_string_types, some_any_all, comparison_ops, spark_info, memory_leak_check
 ):
@@ -136,6 +137,7 @@ def test_some_any_all_like_not_like_non_null_tuples(
     )
 
 
+@pytest.mark.slow
 def test_some_any_all_null_tuples(
     bodosql_nullable_numeric_types,
     some_any_all,

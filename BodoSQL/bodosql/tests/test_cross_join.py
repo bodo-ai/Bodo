@@ -33,6 +33,7 @@ def test_cross_join_simpl(basic_df, spark_info, broadcast: bool, memory_leak_che
         )
 
 
+@pytest.mark.slow
 def test_nested_cross_join(join_dataframes, spark_info, memory_leak_check):
     """tests that nested cross joins work properly with all types,
     and with nullable values in one or more tables"""

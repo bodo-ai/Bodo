@@ -23,8 +23,8 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels i
     "precision",
     [
         0,
-        3,
-        6,
+        pytest.param(3, marks=pytest.mark.slow),
+        pytest.param(6, marks=pytest.mark.slow),
         9,
     ],
 )
@@ -226,6 +226,7 @@ def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
                 ]
             ),
             id="date_sub-interval_scalar",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT TI + Interval '3' hours FROM table1",
@@ -252,6 +253,7 @@ def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
                 ]
             ),
             id="subtraction-timedelta_array",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -345,14 +347,23 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
             "TIMEADD('mon', 6, T)",
             'Unsupported unit for TIMEADD with TIME input: "mon"',
             id="timeadd-month",
+            marks=pytest.mark.slow,
         ),
         # TIMESTAMPADD / DATE_ADD / ADDATE will cause an error at the calcite level
         # due to a type mismatch so BodoSQL will not control the error message created
-        pytest.param("TIMESTAMPADD(WEEK, -1, T)", "", id="timestampadd-week"),
-        pytest.param("DATE_ADD(10, T)", "", id="date_add-day"),
-        pytest.param("ADDATE(13, T)", "", id="addate-day"),
         pytest.param(
-            "DATE_SUB(T, 1)", "Cannot add/subtract days from TIME", id="date_sub-day"
+            "TIMESTAMPADD(WEEK, -1, T)",
+            "",
+            id="timestampadd-week",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param("DATE_ADD(10, T)", "", id="date_add-day"),
+        pytest.param("ADDATE(13, T)", "", id="addate-day", marks=pytest.mark.slow),
+        pytest.param(
+            "DATE_SUB(T, 1)",
+            "Cannot add/subtract days from TIME",
+            id="date_sub-day",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "SUBDATE(T, 2)", "Cannot add/subtract days from TIME", id="subdate-day"
@@ -366,6 +377,7 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
             "TIMEDIFF('wy', T, T)",
             'Unsupported unit for TIMEDIFF with TIME input: "wy"',
             id="timediff-week",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "TIMESTAMPDIFF(DAY, T, T)",
@@ -503,6 +515,7 @@ def test_datediff_time_day_part_handling(time_df, day_part_strings, memory_leak_
         )
 
 
+@pytest.mark.slow
 def test_max_time_types(time_df, memory_leak_check):
     """
     Simple test to ensure that max is working on time types
