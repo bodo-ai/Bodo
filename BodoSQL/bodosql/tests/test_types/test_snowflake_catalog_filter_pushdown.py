@@ -2107,7 +2107,7 @@ def test_nonregex_string_match_functions(
             check_dtype=False,
         )
 
-        check_logger_msg(stream, f"Columns loaded ['date_col']")
+        check_logger_msg(stream, f"Columns loaded ['a']")
         check_logger_msg(stream, "Filter pushdown successfully performed")
         check_logger_msg(stream, sql_func)
 
