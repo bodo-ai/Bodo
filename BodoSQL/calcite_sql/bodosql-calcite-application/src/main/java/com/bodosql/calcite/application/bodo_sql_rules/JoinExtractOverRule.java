@@ -15,13 +15,14 @@ public class JoinExtractOverRule extends AbstractJoinExtractOverRule {
 
   @Value.Immutable
   public interface Config extends AbstractJoinExtractOverRule.Config {
-    Config DEFAULT =
+    JoinExtractOverRule.Config DEFAULT =
         ImmutableJoinExtractOverRule.Config.of()
             .withOperandSupplier(
                 b ->
                     b.operand(LogicalJoin.class)
                         .predicate(join -> RexOver.containsOver(join.getCondition()))
-                        .anyInputs());
+                        .anyInputs())
+            .as(JoinExtractOverRule.Config.class);
 
     @Override
     default JoinExtractOverRule toRule() {

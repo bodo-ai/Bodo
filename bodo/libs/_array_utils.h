@@ -995,4 +995,24 @@ inline void restore_col_order(
     table->columns = new_columns;
 }
 
+/**
+ * @brief Convert the given value to a double.
+ *
+ * @tparam T The input type.
+ * @tparam dtype The underlying dtype of the input type.
+ * @param val The value to convert
+ * @return Val as a double.
+ */
+template <typename T, int dtype>
+inline typename std::enable_if<!is_decimal<dtype>::value, double>::type
+to_double(T const& val) {
+    return static_cast<double>(val);
+}
+
+template <typename T, int dtype>
+inline typename std::enable_if<is_decimal<dtype>::value, double>::type
+to_double(T const& val) {
+    return decimal_to_double(val);
+}
+
 #endif  // _ARRAY_UTILS_H_INCLUDED
