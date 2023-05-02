@@ -1828,6 +1828,13 @@ class DistributedPass:
             )
             return nodes + compile_func_single_block(f, rhs.args, assign.target, self)
 
+        if fdef == (
+            "approx_percentile",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
         if fdef == ("nunique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):

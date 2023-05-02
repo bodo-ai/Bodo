@@ -11,6 +11,7 @@
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_bodo_tdigest.h"
 #include "_distributed.h"
 
 #define root 0
@@ -42,6 +43,9 @@ double quantile_float(T *data, int64_t local_size, double quantile,
 
 double quantile_dispatch(void *data, int64_t local_size, double quantile,
                          double at, int type_enum, bool parallel);
+
+double approx_percentile_py_entrypt(array_info *arr_raw, double percentile,
+                                    bool parallel);
 
 /** Compute the median of the series.
     @param arr: The array_info used for the computation
@@ -85,6 +89,7 @@ PyMODINIT_FUNC PyInit_quantile_alg(void) {
     SetAttrStringFromVoidPtr(m, median_series_computation_py_entry);
     SetAttrStringFromVoidPtr(m, autocorr_series_computation_py_entry);
     SetAttrStringFromVoidPtr(m, compute_series_monotonicity_py_entry);
+    SetAttrStringFromVoidPtr(m, approx_percentile_py_entrypt);
 
     return m;
 }
@@ -1082,5 +1087,100 @@ void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;
+    }
+}
+
+/** Helper function for approx_percentile that does the main calculation.
+ *
+ * TODO: make this function able to take in multiple percentile values and
+ * calculate all of them at once by re-using the same t-digest intermediary
+ * calculations.
+ *
+ * @param data the bodo array whose percentile is being approximated
+ * @param size the size of the array
+ * @param percentile the percentile value being sought (e.g. 0.5=median)
+ * @param parallel whether this is ocurring across multiple ranks
+ * @return the approximate percentile value as a double
+ */
+template <typename T, int dtype>
+double approx_percentile_T(std::shared_ptr<array_info> arr, double percentile,
+                           bool parallel) {
+    /* TODO: investigate adjusting the hyperparameters for speed, memory and
+     * accuracy. Each rank likely needs to have the same values.
+     */
+    TDigest td(/*delta*/ 100, /*buffer_size*/ 500);
+    tracing::Event ev("approx_percentile_T", parallel);
+    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
+        for (uint64_t i = 0; i < arr->length; i++) {
+            if (GetBit(null_bitmask, i)) {
+                double val_double = to_double<T, dtype>(getv<T>(arr, i));
+                td.NanAdd(val_double);
+            }
+        }
+    } else {
+        for (uint64_t i = 0; i < arr->length; i++) {
+            double val_double = to_double<T, dtype>(getv<T>(arr, i));
+            td.NanAdd(val_double);
+        }
+    }
+    if (parallel)
+        td.MPI_Merge();
+    return td.Quantile(percentile, parallel);
+}
+
+/** Calculates the approximate percentile of an array using PyArrow's t-digest
+ * implementation.
+ *
+ * @param arr_raw the bodo array whose percentile is being approximated
+ * @param percentile the percentile value being sought (e.g. 0.5=median)
+ * @param parallel whether the operation is being done in parallel or not
+ * @return the approximate percentile value as a double
+ */
+double approx_percentile_py_entrypt(array_info *arr_raw, double percentile,
+                                    bool parallel) {
+    try {
+        std::shared_ptr<array_info> arr(arr_raw);
+        switch (arr->dtype) {
+            case Bodo_CTypes::INT8:
+                return approx_percentile_T<int8_t, Bodo_CTypes::INT8>(
+                    arr, percentile, parallel);
+            case Bodo_CTypes::_BOOL:
+            case Bodo_CTypes::UINT8:
+                return approx_percentile_T<uint8_t, Bodo_CTypes::UINT8>(
+                    arr, percentile, parallel);
+            case Bodo_CTypes::INT16:
+                return approx_percentile_T<int16_t, Bodo_CTypes::INT16>(
+                    arr, percentile, parallel);
+            case Bodo_CTypes::UINT16:
+                return approx_percentile_T<uint16_t, Bodo_CTypes::UINT16>(
+                    arr, percentile, parallel);
+            case Bodo_CTypes::INT32:
+                return approx_percentile_T<int32_t, Bodo_CTypes::INT32>(
+                    arr, percentile, parallel);
+            case Bodo_CTypes::UINT32:
+                return approx_percentile_T<uint32_t, Bodo_CTypes::UINT32>(
+                    arr, percentile, parallel);
+            case Bodo_CTypes::INT64:
+                return approx_percentile_T<int64_t, Bodo_CTypes::INT64>(
+                    arr, percentile, parallel);
+            case Bodo_CTypes::UINT64:
+                return approx_percentile_T<uint64_t, Bodo_CTypes::UINT64>(
+                    arr, percentile, parallel);
+            case Bodo_CTypes::FLOAT32:
+                return approx_percentile_T<float, Bodo_CTypes::FLOAT32>(
+                    arr, percentile, parallel);
+            case Bodo_CTypes::FLOAT64:
+                return approx_percentile_T<double, Bodo_CTypes::FLOAT64>(
+                    arr, percentile, parallel);
+            default:
+                throw std::runtime_error(
+                    "_quantile_alg.cpp::approx_percentile_py_entrypt:"
+                    " unknown "
+                    "approx_percentile data type");
+        }
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
     }
 }

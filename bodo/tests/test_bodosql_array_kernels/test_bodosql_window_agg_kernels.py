@@ -51,6 +51,91 @@ def nullable_float_arr_maker(L, to_null, to_nan):
     return pd.Series(A)
 
 
+def uniform_distribution(n, seed):
+    """Generates an array of random points in a uniform distribution
+
+    Args:
+        n (integer): the number of points to generate
+        seed (integer): the starting seed for the generation
+
+    Returns:
+        np.ndarray[float64]: array of floats in a uniform distribbution
+    """
+    np.random.seed(seed)
+    return np.random.uniform(0, 1000, n)
+
+
+def gaussian_distribution(n, seed):
+    """Generates an array of random points in a gaussian distribution
+
+    Args:
+        n (integer): the number of points to generate
+        seed (integer): the starting seed for the generation
+
+    Returns:
+        np.ndarray[float64]: array of floats in a gaussian distribbution
+    """
+    np.random.seed(seed)
+    return np.random.normal(75, 15, n)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(pd.Series([math.tan(i) for i in range(30000)]), id="tangent"),
+        pytest.param(
+            pd.Series([i for i in range(30000)], dtype=pd.Int32Dtype()),
+            id="linear_no_null",
+        ),
+        pytest.param(
+            pd.Series(
+                [None if i**0.5 == int(i**0.5) else i for i in range(90000)],
+                dtype=pd.Int32Dtype(),
+            ),
+            id="linear_null",
+        ),
+        pytest.param(pd.Series([i**0.5 for i in range(100000)]), id="root_no_nan"),
+        pytest.param(
+            pd.Series([np.nan if i % 7 == 0 else i**0.5 for i in range(100000)]),
+            id="root_nan",
+        ),
+        pytest.param(pd.Series(uniform_distribution(30000, 42)), id="uniform"),
+        pytest.param(pd.Series(gaussian_distribution(30000, 42)), id="gaussian"),
+    ],
+)
+def test_approx_percentile(data, memory_leak_check):
+    def impl(arr):
+        return (
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.001),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.01),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.1),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.25),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.42),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.5),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.63),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.75),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.9),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.99),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.999),
+        )
+
+    percentiles = [0.001, 0.01, 0.1, 0.25, 0.42, 0.5, 0.63, 0.75, 0.9, 0.99, 0.999]
+    exact_answer = tuple([float(data.quantile(perc)) for perc in percentiles])
+    # There are no strong accuracy guarantees for the t-digest quantile approximation
+    # algorithm, so the best we can do is compare to the exact answer using
+    # a somewhat large relative & absolute tolerance.
+    check_func(
+        impl,
+        (data,),
+        py_output=exact_answer,
+        is_out_distributed=False,
+        check_dtype=False,
+        reset_index=True,
+        atol=0.01,
+        rtol=0.35,
+    )
+
+
 @pytest.mark.parametrize(
     "args",
     [

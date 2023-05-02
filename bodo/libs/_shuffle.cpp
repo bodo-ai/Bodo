@@ -65,15 +65,6 @@ mpi_comm_info::mpi_comm_info(std::vector<std::shared_ptr<array_info>>& _arrays)
     }
 }
 
-template <class T>
-static void calc_disp(std::vector<T>& disps, std::vector<T> const& counts) {
-    size_t n = counts.size();
-    disps[0] = 0;
-    for (size_t i = 1; i < n; i++) {
-        disps[i] = disps[i - 1] + counts[i - 1];
-    }
-}
-
 /**
  * @brief Template used to handle the unmatchable rows in
  * mpi_comm_info::set_counts. This is used in two cases:
