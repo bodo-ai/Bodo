@@ -604,13 +604,17 @@ class BodoSQLContext:
         Verifies BodoSQL can fully compile the query in Bodo.
         """
         try:
+            t1 = time.time()
             compiled_cpu_dispatcher = self._compile(sql, params_dict)
+            compile_time = time.time() - t1
             compiles_flag = True
+            error_message = "No error"
         except Exception as e:
-            print(e)
+            compile_time = time.time() - t1
             compiles_flag = False
+            error_message = e.msg
 
-        return compiles_flag
+        return compiles_flag, compile_time, error_message
 
     def _compile(self, sql, params_dict=None):
         """compiles the query in Bodo."""
