@@ -612,7 +612,7 @@ class BodoSQLContext:
         except Exception as e:
             compile_time = time.time() - t1
             compiles_flag = False
-            error_message = e.msg
+            error_message = repr(e)
 
         return compiles_flag, compile_time, error_message
 
