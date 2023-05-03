@@ -31,6 +31,7 @@ import com.bodosql.calcite.plan.CostFactory
 import com.bodosql.calcite.rel.metadata.PandasRelMdParallelism
 import com.bodosql.calcite.rel.metadata.PandasRelMdSize
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
+import com.bodosql.calcite.sql.validate.implicit.BodoTypeCoercionImpl
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.Iterables
 import org.apache.calcite.avatica.util.Casing
@@ -109,6 +110,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                         .withNamedParamTableName(config.namedParamTableName)
                         .withDefaultNullCollation(NullCollation.LOW)
                         .withCallRewrite(false)
+                        .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
                 )
                 .costFactory(CostFactory())
                 // Override the list of standard trait definitions we are interested in.
