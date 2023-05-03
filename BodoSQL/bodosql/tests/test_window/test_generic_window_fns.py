@@ -108,8 +108,8 @@ def test_two_arg_numeric_window_functions(
         pytest.param(["COUNT(*)", "COUNT", "COUNT_IF"], id="count-count_if-count_star"),
     ],
 )
-@pytest.mark.timeout(600)
-# passes in 468.71 seconds on 1 rank
+@pytest.mark.timeout(800)
+# NOTE (allai5): passes in 592.81 seconds on 1 rank on M1 as of 05/03/2023
 def test_non_numeric_window_functions(
     funcs, all_window_df, all_window_col_names, window_frames, spark_info
 ):

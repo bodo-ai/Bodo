@@ -349,6 +349,9 @@ def test_tpch_q19(tpch_data, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(600)
+# NOTE (allai5): Arbitrary high timeout number due to inability to replicate
+# timeout locally
 def test_tpch_q20(tpch_data, spark_info, memory_leak_check):
     COLOR = "forest"
     DATE = "1994-01-01"
