@@ -620,10 +620,11 @@ def test_fail_validate_also_fails_compile(query, request, memory_leak_check):
         }
     )
 
+    (compiles_flag, _compile_time, _error_message) = bc.validate_query_compiles(query)
     if not "invalid" in request.node.name:
-        assert bc.validate_query_compiles(query)
+        assert compiles_flag
     else:
-        assert not bc.validate_query_compiles(query)
+        assert not compiles_flag
 
 
 @pytest.mark.parametrize(
