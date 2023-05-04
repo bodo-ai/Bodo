@@ -688,9 +688,7 @@ def overload_pd_timestamp(
             tzinfo=None,
         ):  # pragma: no cover
 
-            year = ts_input.year
-            month = ts_input.month
-            day = ts_input.day
+            year, month, day = ts_input._ymd
 
             return compute_val_for_timestamp(
                 year,
@@ -1880,8 +1878,9 @@ def overload_to_datetime(
                 val = iNaT
                 if not bodo.libs.array_kernels.isna(arg_a, i):
                     data = arg_a[i]
+                    year, month, day = data._ymd
                     val = bodo.hiframes.pd_timestamp_ext.npy_datetimestruct_to_datetime(
-                        data.year, data.month, data.day, 0, 0, 0, 0
+                        year, month, day, 0, 0, 0, 0
                     )
                 B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val)
             return bodo.hiframes.pd_index_ext.init_datetime_index(B, None)
@@ -2093,18 +2092,19 @@ def overload_to_datetime(
     # datetime.date input. This ignores other fields and just returns value wrapped
     # in a timestamp
     if arg_a == bodo.hiframes.datetime_date_ext.datetime_date_type:
+
         def impl_date(
-                arg_a,
-                errors="raise",
-                dayfirst=False,
-                yearfirst=False,
-                utc=None,
-                format=None,
-                exact=True,
-                unit=None,
-                infer_datetime_format=False,
-                origin="unix",
-                cache=True,
+            arg_a,
+            errors="raise",
+            dayfirst=False,
+            yearfirst=False,
+            utc=None,
+            format=None,
+            exact=True,
+            unit=None,
+            infer_datetime_format=False,
+            origin="unix",
+            cache=True,
         ):  # pragma: no cover
             return pd.Timestamp(arg_a)
 
@@ -2130,7 +2130,9 @@ def overload_to_datetime(
         return impl_np_datetime
 
     # TODO: input Type of a dataframe
-    raise_bodo_error(f"pd.to_datetime(): cannot convert data type {arg_a}")  # pragma: no cover
+    raise_bodo_error(
+        f"pd.to_datetime(): cannot convert data type {arg_a}"
+    )  # pragma: no cover
 
 
 @overload(pd.to_timedelta, inline="always", no_unliteral=True)
@@ -2316,22 +2318,38 @@ def create_timestamp_cmp_op_overload(op):
             tz_literal = lhs.tz
             # Compare using date to handle timezones
 
-            return lambda lhs, rhs: op(
-                lhs,
-                # Convert the date to the same tz timestamp.
-                pd.Timestamp(rhs, tz=tz_literal),
-            )
+            if tz_literal is None:
+                # Fast path for timezone-naive case: simply compare
+                # integers (ns).
+                return lambda lhs, rhs: op(
+                    lhs.value,
+                    bodo.hiframes.datetime_date_ext.cast_datetime_date_to_int_ns(rhs),
+                )  # pragma: no cover
+            else:
+                return lambda lhs, rhs: op(
+                    lhs,
+                    # Convert the date to the same tz timestamp.
+                    pd.Timestamp(rhs, tz=tz_literal),
+                )  # pragma: no cover
 
         # datetime.date, Timestamp
         if lhs == bodo.hiframes.datetime_date_ext.datetime_date_type and isinstance(
             rhs, PandasTimestampType
         ):
             tz_literal = rhs.tz
-            return lambda lhs, rhs: op(
-                # Convert the date to the same tz timestamp.
-                pd.Timestamp(lhs, tz=tz_literal),
-                rhs,
-            )
+            if tz_literal is None:
+                # Fast path for timezone-naive case: simply compare
+                # integers (ns).
+                return lambda lhs, rhs: op(
+                    bodo.hiframes.datetime_date_ext.cast_datetime_date_to_int_ns(lhs),
+                    rhs.value,
+                )  # pragma: no cover
+            else:
+                return lambda lhs, rhs: op(
+                    # Convert the date to the same tz timestamp.
+                    pd.Timestamp(lhs, tz=tz_literal),
+                    rhs,
+                )  # pragma: no cover
 
         # Timestamp/Timestamp
         if isinstance(lhs, PandasTimestampType) and isinstance(
