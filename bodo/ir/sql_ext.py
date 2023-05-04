@@ -5,11 +5,12 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 import numba
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import pyarrow as pa
 from llvmlite import ir as lir
@@ -60,18 +61,53 @@ if bodo.utils.utils.has_pyarrow():
 MPI_ROOT = 0
 
 
+class SnowflakeReadParams(NamedTuple):
+    """Common inputs into snowflake reader functions."""
+
+    snowflake_dict_cols_array: npt.NDArray[np.int32]
+    nullable_cols_array: npt.NDArray[np.int32]
+
+    @classmethod
+    def from_column_information(
+        cls,
+        out_used_cols: list[int],
+        col_typs: list[Any],
+        index_column_name: Optional[str],
+        index_column_type: Any,
+    ):
+        """Construct a SnowflakeReaderParams from the IR parameters"""
+        col_indices_map = {c: i for i, c in enumerate(out_used_cols)}
+        snowflake_dict_cols = [
+            col_indices_map[i]
+            for i in out_used_cols
+            if col_typs[i] == dict_str_arr_type
+        ]
+
+        nullable_cols = [int(is_nullable(col_typs[i])) for i in out_used_cols]
+        # Handle if we need to append an index
+        if index_column_name:
+            nullable_cols.append(int(is_nullable(index_column_type)))
+        snowflake_dict_cols_array = np.array(snowflake_dict_cols, dtype=np.int32)
+        nullable_cols_array = np.array(nullable_cols, dtype=np.int32)
+
+        return cls(
+            snowflake_dict_cols_array=snowflake_dict_cols_array,
+            nullable_cols_array=nullable_cols_array,
+        )
+
+
 class SqlReader(ir.Stmt):
     def __init__(
         self,
         sql_request: str,
         connection: str,
-        df_out,
-        df_colnames,
-        out_vars,
+        df_out: str,
+        df_colnames: List[str],
+        out_vars: List[ir.Var],
         out_types,
         converted_colnames: List[str],
         db_type: str,
-        loc,
+        loc: ir.Loc,
         unsupported_columns: List[str],
         unsupported_arrow_types: List[pa.DataType],
         is_select_query: bool,
@@ -200,7 +236,13 @@ def remove_iceberg_prefix(con: str) -> str:
 
 
 def remove_dead_sql(
-    sql_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+    sql_node: SqlReader,
+    lives_no_aliases,
+    lives,
+    arg_aliases,
+    alias_map,
+    func_ir,
+    typemap,
 ):
     """
     Regular Dead Code elimination function for the SQLReader Node.
@@ -1075,6 +1117,58 @@ def req_limit(sql_request):
         return None
 
 
+def prune_columns(
+    col_names: List[str],
+    col_typs: List[Any],
+    out_used_cols: List[int],
+    index_column_name: Optional[str],
+    index_column_type,
+):
+    """Prune the columns to only those that are used in the snowflake reader."""
+    used_col_names = [col_names[i] for i in out_used_cols]
+    used_col_types = [col_typs[i] for i in out_used_cols]
+    if index_column_name:
+        used_col_names.append(index_column_name)
+        used_col_types.append(index_column_type)
+
+    return used_col_names, used_col_types
+
+
+def prune_snowflake_select(
+    used_col_names: list[str], pyarrow_schema: pa.Schema, converted_colnames: list[str]
+) -> pa.Schema:
+    """Prune snowflake select columns to only cover selected columns.
+
+    Throws an error if the column is not found.
+    """
+    selected_fields = []
+    for col_name in used_col_names:
+        source_name = convert_col_name(col_name, converted_colnames)
+        idx = pyarrow_schema.get_field_index(source_name)
+        # If idx is -1, couldn't find a schema field with name `source_name`
+        if idx < 0:
+            raise BodoError(
+                f"SQLReader Snowflake: Column {source_name} is not in source schema"
+            )
+        selected_fields.append(pyarrow_schema.field(idx))
+    return pa.schema(selected_fields)
+
+
+def map_snowflake_columns(
+    col_names: List[str], out_used_cols: List[int]
+) -> npt.NDArray[np.int64]:
+    """Generate a list of snowflake column indices corresponding to each of the selected column names."""
+    idx = []
+    j = 0
+    for i in range(len(col_names)):
+        if j < len(out_used_cols) and i == out_used_cols[j]:
+            idx.append(j)
+            j += 1
+        else:
+            idx.append(-1)
+    return np.array(idx, dtype=np.int64)
+
+
 def _gen_sql_reader_py(
     col_names: List[str],
     col_typs: List[Any],
@@ -1139,11 +1233,13 @@ def _gen_sql_reader_py(
     call_id = next_label()
 
     # Prune the columns to only those that are used.
-    used_col_names = [col_names[i] for i in out_used_cols]
-    used_col_types = [col_typs[i] for i in out_used_cols]
-    if index_column_name:
-        used_col_names.append(index_column_name)
-        used_col_types.append(index_column_type)
+    used_col_names, used_col_types = prune_columns(
+        col_names=col_names,
+        col_typs=col_typs,
+        out_used_cols=out_used_cols,
+        index_column_name=index_column_name,
+        index_column_type=index_column_type,
+    )
 
     # See old method in Confluence (Search "multiple_access_by_block")
     # This is a more advanced downloading procedure. It downloads data in an
@@ -1327,31 +1423,18 @@ def _gen_sql_reader_py(
         # Filter the schema by selected columns only
         # Only need to prune columns for SELECT queries
         if is_select_query:
-            selected_fields = []
-            for col_name in used_col_names:
-                source_name = convert_col_name(col_name, converted_colnames)
-                idx = pyarrow_schema.get_field_index(source_name)
-                # If idx is -1, couldn't find a schema field with name `source_name`
-                if idx < 0:
-                    raise BodoError(
-                        f"SQLReader Snowflake: Column {source_name} is not in source schema"
-                    )
-                selected_fields.append(pyarrow_schema.field(idx))
-            pyarrow_schema = pa.schema(selected_fields)
+            pyarrow_schema = prune_snowflake_select(
+                used_col_names=used_col_names,
+                pyarrow_schema=pyarrow_schema,
+                converted_colnames=converted_colnames,
+            )
 
-        col_indices_map = {c: i for i, c in enumerate(out_used_cols)}
-        snowflake_dict_cols = [
-            col_indices_map[i]
-            for i in out_used_cols
-            if col_typs[i] == dict_str_arr_type
-        ]
-
-        nullable_cols = [int(is_nullable(col_typs[i])) for i in out_used_cols]
-        # Handle if we need to append an index
-        if index_column_name:
-            nullable_cols.append(int(is_nullable(index_column_type)))
-        snowflake_dict_cols_array = np.array(snowflake_dict_cols, dtype=np.int32)
-        nullable_cols_array = np.array(nullable_cols, dtype=np.int32)
+        params: SnowflakeReadParams = SnowflakeReadParams.from_column_information(
+            out_used_cols=out_used_cols,
+            col_typs=col_typs,
+            index_column_name= index_column_name,
+            index_column_type=index_column_type,
+        )
         # Track the total number of rows for loading 0 columns. If we load any
         # data this is garbage.
         func_text += (
@@ -1363,10 +1446,10 @@ def _gen_sql_reader_py(
             f"    {parallel},\n"
             f"    {is_independent},\n"
             f"    pyarrow_schema_{call_id},\n"
-            f"    {len(nullable_cols_array)},\n"
+            f"    {len(params.nullable_cols_array)},\n"
             f"    nullable_cols_array.ctypes,\n"
             f"    snowflake_dict_cols_array.ctypes,\n"
-            f"    {len(snowflake_dict_cols_array)},\n"
+            f"    {len(params.snowflake_dict_cols_array)},\n"
             f"    total_rows_np.ctypes,\n"
             f"    {is_select_query and len(used_col_names) == 0},\n"
             f"    {is_select_query},\n"
@@ -1385,18 +1468,15 @@ def _gen_sql_reader_py(
         else:
             # There is no index to load
             func_text += "  index_var = None\n"
-        if not is_dead_table:
+        if is_dead_table:
+            # We only load the index as the table is dead.
+            func_text += "  table_var = None\n"
+        else:
             # Map each logical column in the table to its location
             # in the input SQL table
-            idx = []
-            j = 0
-            for i in range(len(col_names)):
-                if j < len(out_used_cols) and i == out_used_cols[j]:
-                    idx.append(j)
-                    j += 1
-                else:
-                    idx.append(-1)
-            table_idx = np.array(idx, dtype=np.int64)
+            table_idx = map_snowflake_columns(
+                col_names=col_names, out_used_cols=out_used_cols
+            )
             func_text += f"  table_var = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
             if len(out_used_cols) == 0:
                 if index_column_name:
@@ -1407,10 +1487,6 @@ def _gen_sql_reader_py(
                 else:
                     # Set the table length using the total rows if don't load any columns
                     func_text += f"  table_var = set_table_len(table_var, local_rows)\n"
-
-        else:
-            # We only load the index as the table is dead.
-            func_text += "  table_var = None\n"
         func_text += "  delete_table(out_table)\n"
         func_text += "  ev.finalize()\n"
         func_text += "  return (total_rows, table_var, index_var, None, None)\n"
@@ -1522,8 +1598,8 @@ def _gen_sql_reader_py(
             {
                 "np": np,
                 "snowflake_read_py_entry": _snowflake_read,
-                "nullable_cols_array": nullable_cols_array,
-                "snowflake_dict_cols_array": snowflake_dict_cols_array,
+                "nullable_cols_array": params.nullable_cols_array,
+                "snowflake_dict_cols_array": params.snowflake_dict_cols_array,
             }
         )
     else:
