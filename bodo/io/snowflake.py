@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import traceback
 import warnings
@@ -129,6 +130,7 @@ INT_BITSIZE_TO_ARROW_DATATYPE = {
     2: pa.int16(),
     4: pa.int32(),
     8: pa.int64(),
+    16: pa.decimal128(38, 0),
 }
 STRING_TYPE_CODE = 2
 
@@ -539,7 +541,9 @@ def get_schema_from_metadata(
 
                 idx = col_idxs_to_check[i]
                 # Parse output NUMBER(__,_)[SBx] to get the byte width x
-                byte_size = int(typing_info[-2])
+                byte_size = int(
+                    re.search("NUMBER\(\d+,\d+\)\[SB(\d+)\]", typing_info).group(1)
+                )
                 out_type = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
                 arrow_fields[idx] = arrow_fields[idx].with_type(out_type)
 
