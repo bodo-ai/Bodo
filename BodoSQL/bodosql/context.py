@@ -5,6 +5,7 @@ import time
 import warnings
 from enum import Enum
 from typing import List, Optional, Tuple, Union
+import traceback
 
 import numba
 import numpy as np
@@ -610,9 +611,12 @@ class BodoSQLContext:
             compiles_flag = True
             error_message = "No error"
         except Exception as e:
+            stack_trace = traceback.format_exc()
             compile_time = time.time() - t1
             compiles_flag = False
             error_message = repr(e)
+            if os.environ.get("NUMBA_DEVELOPER_MODE", False):
+                error_message = error_message + "\n" + stack_trace
 
         return compiles_flag, compile_time, error_message
 
