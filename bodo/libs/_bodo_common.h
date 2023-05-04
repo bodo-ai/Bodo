@@ -637,7 +637,7 @@ std::shared_ptr<array_info> create_dict_string_array(
  */
 
 template <typename T>
-inline T& getv(std::shared_ptr<array_info> arr, size_t idx) {
+inline T& getv(const std::shared_ptr<array_info>& arr, size_t idx) {
     return ((T*)arr->data1())[idx];
 }
 

@@ -333,7 +333,7 @@ class GeneralUdfColSet : public UdfColSet {
      * Fill in the input table for general UDF cfunc. See udf_general_fn
      * and aggregate.py::gen_general_udf_cb for more information.
      */
-    void fill_in_columns(std::shared_ptr<table_info> general_in_table,
+    void fill_in_columns(const std::shared_ptr<table_info>& general_in_table,
                          const grouping_info& grp_info) const;
 };
 
@@ -459,7 +459,7 @@ class HeadColSet : public BasicColSet {
 
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
-    void set_head_row_list(std::vector<int64_t> row_list);
+    void set_head_row_list(std::vector<int64_t>& row_list);
 
    private:
     std::vector<int64_t> head_row_list;

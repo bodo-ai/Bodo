@@ -412,8 +412,6 @@ class GroupbyPipeline {
         // Add key-sort column and index to col_sets
         // to apply head_computation on them as well.
         if (head_op && return_index) {
-            std::vector<std::shared_ptr<array_info>> input_cols;
-            input_cols.push_back(index_col);
             // index-column
             col_sets.push_back(
                 makeColSet({index_col}, index_col, Bodo_FTypes::head,
@@ -1128,7 +1126,7 @@ class GroupbyPipeline {
                     new_key_col->set_null_bit(j, bit);
                 }
             }
-            out_table->columns.push_back(new_key_col);
+            out_table->columns.push_back(std::move(new_key_col));
         }
     }
 
