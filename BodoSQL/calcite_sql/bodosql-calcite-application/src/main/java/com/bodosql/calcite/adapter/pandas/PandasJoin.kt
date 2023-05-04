@@ -44,6 +44,7 @@ class PandasJoin(
         joinType: JoinRelType,
         semiJoinDone: Boolean
     ): Join {
+        assert(PandasJoinRule.isValidNode(conditionExpr))
         return PandasJoin(cluster, traitSet, left, right, conditionExpr, joinType, rebalanceOutput)
     }
 
