@@ -246,6 +246,11 @@ def check_func(
     ):
         run_seq = False
 
+    # Avoid testing 1D on CI to run faster. It's not likely to fail independent of
+    # 1D_Var.
+    if not only_1D and not numba.core.config.DEVELOPER_MODE:
+        run_1D = False
+
     # convert float input to nullable float to test new nullable float functionality
     if convert_to_nullable_float and bodo.libs.float_arr_ext._use_nullable_float:
         args = _convert_float_to_nullable_float(args)
