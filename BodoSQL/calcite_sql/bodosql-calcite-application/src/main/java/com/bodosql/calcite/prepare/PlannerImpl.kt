@@ -22,6 +22,8 @@
  */
 package com.bodosql.calcite.prepare
 
+import com.bodosql.calcite.adapter.pandas.PandasJoin
+import com.bodosql.calcite.adapter.pandas.PandasJoinRule
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
@@ -148,7 +150,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
         }
 
         @JvmField
-        val RULE_SET: List<RelOptRule> = listOf(
+        val HEURISTIC_RULE_SET: List<RelOptRule> = listOf(
             /*
             Planner rule that, given a Project node that merely returns its input, converts the node into its child.
             */
@@ -321,6 +323,75 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
             MinRowNumberFilterRule.Config.DEFAULT.toRule(),
             RexSimplificationRule.Config.DEFAULT.toRule(),
         )
+
+        private val FILTER_INTO_JOIN_RULE: RelOptRule =
+            FilterJoinRule.FilterIntoJoinRule.FilterIntoJoinRuleConfig.DEFAULT
+                .withPredicate { join, _, exp ->
+                    when (join) {
+                        is PandasJoin -> PandasJoinRule.isValidNode(exp)
+                        else -> true
+                    }
+                }
+                .toRule()
+
+        @JvmField
+        val MINIMAL_VOLCANO_RULE_SET: List<RelOptRule> = Iterables.concat(
+            PandasRules.rules(),
+            listOf(
+                // Extract the join condition to the filter rule to allow invalid join
+                // conditions to be utilized.
+                JoinConditionToFilterRule.Config.DEFAULT.toRule(),
+                /*
+                Rule that tries to push filter expressions into a join condition and into the inputs of the join.
+                */
+                FILTER_INTO_JOIN_RULE,
+                /*
+                Rule that applies moves any filters that depend on a single table before the join in
+                which they occur.
+                */
+                FilterJoinRule.JoinConditionPushRule.JoinConditionPushRuleConfig.DEFAULT.toRule(),
+            )
+        ).toList()
+
+        @JvmField
+        val VOLCANO_RULE_SET: List<RelOptRule> = Iterables.concat(
+            MINIMAL_VOLCANO_RULE_SET,
+            // When testing the new volcano planner, place rules from the heuristic planner
+            // here in order to validate that it produces a better plan.
+            // Previously, we were just including all heuristic planner rules. But, that
+            // was causing problems since sometimes rules need to be included to get volcano
+            // planner to work correctly and sometimes they're for optimization and the volcano
+            // planner itself doesn't really differentiate these.
+            // For that reason, this list is now separate so we can have rules that run
+            // with the volcano planner with the heuristic planner and we can have rules
+            // that run with only the complete set.
+            listOf(
+                ProjectUnaliasedRemoveRule.Config.DEFAULT.toRule(),
+                FilterMergeRuleNoWindow.Config.DEFAULT.toRule(),
+                DependencyCheckingProjectMergeRule.Config.DEFAULT.toRule(),
+                FilterAggregateTransposeRuleNoWindow.Config.DEFAULT.toRule(),
+                AggregateJoinRemoveRule.Config.DEFAULT.toRule(),
+                AggregateJoinTransposeRule.Config.EXTENDED.toRule(),
+                AliasPreservingProjectJoinTransposeRule.Config.DEFAULT.toRule(),
+                BodoSQLReduceExpressionsRule.FilterReduceExpressionsRule.FilterReduceExpressionsRuleConfig.DEFAULT.toRule(),
+                BodoSQLReduceExpressionsRule.ProjectReduceExpressionsRule.ProjectReduceExpressionsRuleConfig.DEFAULT.toRule(),
+                JoinPushTransitivePredicatesRule.Config.DEFAULT.toRule(),
+                AggregateRemoveRule.Config.DEFAULT.toRule(),
+                AggregateJoinJoinRemoveRule.Config.DEFAULT.toRule(),
+                AliasPreservingAggregateProjectMergeRule.Config.DEFAULT.toRule(),
+                ProjectAggregateMergeRule.Config.DEFAULT.toRule(),
+                FilterProjectTransposeNoCaseRule.Config.DEFAULT.toRule(),
+                InnerJoinRemoveRule.Config.DEFAULT.toRule(),
+                JoinReorderConditionRule.Config.DEFAULT.toRule(),
+                LogicalFilterReorderConditionRule.Config.DEFAULT.toRule(),
+                LimitProjectTransposeRule.Config.DEFAULT.toRule(),
+                ProjectionSubcolumnEliminationRule.Config.DEFAULT.toRule(),
+                FilterExtractCaseRule.Config.DEFAULT.toRule(),
+                ProjectFilterProjectColumnEliminationRule.Config.DEFAULT.toRule(),
+                MinRowNumberFilterRule.Config.DEFAULT.toRule(),
+                RexSimplificationRule.Config.DEFAULT.toRule(),
+            )
+        ).toList()
     }
 
     override fun createCatalogReader(): CalciteCatalogReader {
@@ -348,30 +419,36 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
      * removes the correlation nodes that it produces.
      */
     private class SubQueryRemoveProgram : Program by Programs.sequence(
-        Programs.of(HepProgram.builder()
-            .addRuleCollection(
-                listOf(
-                    SubQueryRemoveRule.Config.FILTER.toRule(),
-                    SubQueryRemoveRule.Config.PROJECT.toRule(),
-                    SubQueryRemoveRule.Config.JOIN.toRule(),
-                    JoinExtractOverRule.Config.DEFAULT.toRule(),
-                ),
-            )
-            .build(),
+        Programs.of(
+            HepProgram.builder()
+                .addRuleCollection(
+                    listOf(
+                        SubQueryRemoveRule.Config.FILTER.toRule(),
+                        SubQueryRemoveRule.Config.PROJECT.toRule(),
+                        SubQueryRemoveRule.Config.JOIN.toRule(),
+                        JoinExtractOverRule.Config.DEFAULT.toRule(),
+                    ),
+                )
+                .build(),
             true,
-            ChainedRelMetadataProvider.of(listOf(
-                // Inject information about the number of ranks
-                // for Pandas queries as the parallelism attribute.
-                ReflectiveRelMetadataProvider.reflectiveSource(
-                    // TODO(jsternberg): Just using 2 as a default until
-                    // we add a way to inject that from the caller.
-                    PandasRelMdParallelism(2),
-                    BuiltInMetadata.Parallelism.Handler::class.java),
-                ReflectiveRelMetadataProvider.reflectiveSource(
-                    PandasRelMdSize(),
-                    BuiltInMetadata.Size.Handler::class.java),
-                DefaultRelMetadataProvider.INSTANCE,
-            ))),
+            ChainedRelMetadataProvider.of(
+                listOf(
+                    // Inject information about the number of ranks
+                    // for Pandas queries as the parallelism attribute.
+                    ReflectiveRelMetadataProvider.reflectiveSource(
+                        // TODO(jsternberg): Just using 2 as a default until
+                        // we add a way to inject that from the caller.
+                        PandasRelMdParallelism(2),
+                        BuiltInMetadata.Parallelism.Handler::class.java
+                    ),
+                    ReflectiveRelMetadataProvider.reflectiveSource(
+                        PandasRelMdSize(),
+                        BuiltInMetadata.Size.Handler::class.java
+                    ),
+                    DefaultRelMetadataProvider.INSTANCE,
+                )
+            )
+        ),
         DecorrelateProgram(),
     )
 
@@ -400,13 +477,15 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
      */
     private class HepStandardProgram(optimize: Boolean = true) : Program by Programs.sequence(
         if (optimize) {
-            HepOptimizerProgram(RULE_SET)
+            HepOptimizerProgram(HEURISTIC_RULE_SET)
         } else {
             // No-op program that returns itself.
             Program { _, rel, _, _, _ -> rel }
         },
         SnowflakeTraitAdder(),
-        RuleSetProgram(PandasRules.rules()),
+        // Includes minimal set of rules to produce a valid plan.
+        // This is a subset of the heuristic rule set.
+        RuleSetProgram(MINIMAL_VOLCANO_RULE_SET),
         DecorateAttributesProgram(),
         MergeRelProgram(),
     )
@@ -418,10 +497,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
         // When the HepStandardProgram is removed entirely, we would add the
         // convention when the SnowflakeTableScan is created instead of here.
         SnowflakeTraitAdder(),
-        RuleSetProgram(Iterables.concat(
-            if (optimize) RULE_SET else listOf(),
-            PandasRules.rules(),
-        )),
+        RuleSetProgram(if (optimize) VOLCANO_RULE_SET else MINIMAL_VOLCANO_RULE_SET),
         // TODO(jsternberg): This can likely be adapted and integrated directly with
         // the VolcanoPlanner, but that hasn't been done so leave this here.
         DecorateAttributesProgram(),
@@ -490,15 +566,19 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
             materializations: List<RelOptMaterialization>,
             lattices: List<RelOptLattice>
         ): RelNode {
-            val metadataProvider = ChainedRelMetadataProvider.of(listOf(
-                ReflectiveRelMetadataProvider.reflectiveSource(
-                    PandasRelMdParallelism(2),
-                    BuiltInMetadata.Parallelism.Handler::class.java),
-                ReflectiveRelMetadataProvider.reflectiveSource(
-                    PandasRelMdSize(),
-                    BuiltInMetadata.Size.Handler::class.java),
-                DefaultRelMetadataProvider.INSTANCE,
-            ))
+            val metadataProvider = ChainedRelMetadataProvider.of(
+                listOf(
+                    ReflectiveRelMetadataProvider.reflectiveSource(
+                        PandasRelMdParallelism(2),
+                        BuiltInMetadata.Parallelism.Handler::class.java
+                    ),
+                    ReflectiveRelMetadataProvider.reflectiveSource(
+                        PandasRelMdSize(),
+                        BuiltInMetadata.Size.Handler::class.java
+                    ),
+                    DefaultRelMetadataProvider.INSTANCE,
+                )
+            )
             rel.cluster.invalidateMetadataQuery()
             rel.cluster.metadataProvider = metadataProvider
             return program.run(planner, rel, requiredOutputTraits, materializations, lattices)
@@ -517,7 +597,8 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
      */
     private class DecorateAttributesProgram : Program by Programs.hep(
         listOf(PandasRules.PANDAS_JOIN_REBALANCE_OUTPUT_RULE),
-        true, DefaultRelMetadataProvider.INSTANCE)
+        true, DefaultRelMetadataProvider.INSTANCE
+    )
 
     /**
      * Merges relational nodes that have identical digests.
