@@ -769,7 +769,7 @@ inline bool does_keys_have_nulls(
 inline bool does_row_has_nulls(
     std::vector<std::shared_ptr<array_info>> const& key_cols,
     int64_t const& i) {
-    for (auto key_col : key_cols) {
+    for (auto& key_col : key_cols) {
         if (key_col->arr_type == bodo_array_type::CATEGORICAL) {
             std::vector<char> vectNaN = RetrieveNaNentry(key_col->dtype);
             size_t siztype = numpy_item_size[key_col->dtype];

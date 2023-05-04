@@ -1370,8 +1370,8 @@ void apply_to_column_nullable(
  * mapping.
  */
 template <typename T, int ftype, int dtype>
-void apply_to_column(std::shared_ptr<array_info> in_col,
-                     std::shared_ptr<array_info> out_col,
+void apply_to_column(const std::shared_ptr<array_info>& in_col,
+                     const std::shared_ptr<array_info>& out_col,
                      std::vector<std::shared_ptr<array_info>>& aux_cols,
                      const grouping_info& grp_info) {
     switch (in_col->arr_type) {
@@ -1401,8 +1401,8 @@ void apply_to_column(std::shared_ptr<array_info> in_col,
     }
 }
 
-void do_apply_to_column(std::shared_ptr<array_info> in_col,
-                        std::shared_ptr<array_info> out_col,
+void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
+                        const std::shared_ptr<array_info>& out_col,
                         std::vector<std::shared_ptr<array_info>>& aux_cols,
                         const grouping_info& grp_info, int ftype) {
     // macro to reduce code duplication

@@ -22,8 +22,8 @@
  * @param grp_info Grouping information relating rows to the proper group.
  * @param ftype The aggregate function to apply
  */
-void do_apply_to_column(std::shared_ptr<array_info> in_col,
-                        std::shared_ptr<array_info> out_col,
+void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
+                        const std::shared_ptr<array_info>& out_col,
                         std::vector<std::shared_ptr<array_info>>& aux_cols,
                         const grouping_info& grp_info, int ftype);
 
