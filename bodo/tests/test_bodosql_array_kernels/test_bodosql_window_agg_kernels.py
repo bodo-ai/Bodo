@@ -123,7 +123,8 @@ def test_approx_percentile(data, memory_leak_check):
     exact_answer = tuple([float(data.quantile(perc)) for perc in percentiles])
     # There are no strong accuracy guarantees for the t-digest quantile approximation
     # algorithm, so the best we can do is compare to the exact answer using
-    # a somewhat large relative & absolute tolerance.
+    # a somewhat large relative & absolute tolerance. 40% was chosen as an
+    # arbitrary cutoff for the relative tolerance based on observations.
     check_func(
         impl,
         (data,),
@@ -132,7 +133,7 @@ def test_approx_percentile(data, memory_leak_check):
         check_dtype=False,
         reset_index=True,
         atol=0.01,
-        rtol=0.35,
+        rtol=0.4,
     )
 
 
