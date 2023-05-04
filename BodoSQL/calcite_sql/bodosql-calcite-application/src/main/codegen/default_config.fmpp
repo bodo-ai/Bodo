@@ -317,6 +317,7 @@ parser: {
     "SUBSTITUTE"
     "TABLE_NAME"
     "TEMPORARY"
+    "TEXT"
     "TIES"
     "TIMESTAMP"
     "TIMESTAMPADD"
