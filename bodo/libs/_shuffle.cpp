@@ -777,7 +777,7 @@ void drop_duplicates_local_dictionary(std::shared_ptr<array_info> dict_array,
     if (dict_array->has_deduped_local_dictionary) {
         return;
     }
-    update_local_dictionary_remove_duplicates(dict_array, false,
+    update_local_dictionary_remove_duplicates(std::move(dict_array), false,
                                               sort_dictionary_if_modified);
 }
 
@@ -805,7 +805,7 @@ void convert_local_dictionary_to_global(std::shared_ptr<array_info> dict_array,
         // is_parallel=True implementation.
         return;
     }
-    update_local_dictionary_remove_duplicates(dict_array, true,
+    update_local_dictionary_remove_duplicates(std::move(dict_array), true,
                                               sort_dictionary_if_modified);
 }
 
@@ -814,7 +814,8 @@ void make_dictionary_global_and_unique(std::shared_ptr<array_info> dict_array,
                                        bool sort_dictionary_if_modified) {
     convert_local_dictionary_to_global(dict_array, is_parallel,
                                        sort_dictionary_if_modified);
-    drop_duplicates_local_dictionary(dict_array, sort_dictionary_if_modified);
+    drop_duplicates_local_dictionary(std::move(dict_array),
+                                     sort_dictionary_if_modified);
 }
 
 // shuffle_array

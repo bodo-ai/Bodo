@@ -23,8 +23,8 @@
  * @param use_sql_rules: If true, use SQL rules for null handling. If false, use
  * Pandas rules.
  */
-void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
-                                      int ftype, bool use_sql_rules) {
+void aggfunc_output_initialize_kernel(
+    const std::shared_ptr<array_info>& out_col, int ftype, bool use_sql_rules) {
     // Generate an error message for unsupported paths that includes the name
     // of the function and the dtype.
     std::string error_msg = std::string("unsupported aggregate function: ") +
@@ -410,8 +410,8 @@ void aggfunc_output_initialize_kernel(std::shared_ptr<array_info> out_col,
     }
 }
 
-void aggfunc_output_initialize(std::shared_ptr<array_info> out_col, int ftype,
-                               bool use_sql_rules) {
+void aggfunc_output_initialize(const std::shared_ptr<array_info>& out_col,
+                               int ftype, bool use_sql_rules) {
     aggfunc_output_initialize_kernel(out_col, ftype, use_sql_rules);
 }
 

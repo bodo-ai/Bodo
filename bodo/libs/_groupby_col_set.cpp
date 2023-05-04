@@ -669,7 +669,7 @@ GeneralUdfColSet::GeneralUdfColSet(std::shared_ptr<array_info> in_col,
 GeneralUdfColSet::~GeneralUdfColSet() {}
 
 void GeneralUdfColSet::fill_in_columns(
-    std::shared_ptr<table_info> general_in_table,
+    const std::shared_ptr<table_info>& general_in_table,
     const grouping_info& grp_info) const {
     std::shared_ptr<array_info> in_col = this->in_col;
     std::vector<std::vector<int64_t>> group_rows(grp_info.num_groups);
@@ -852,7 +852,7 @@ void HeadColSet::alloc_update_columns(
 void HeadColSet::update(const std::vector<grouping_info>& grp_infos) {
     head_computation(this->in_col, this->update_cols[0], head_row_list);
 }
-void HeadColSet::set_head_row_list(std::vector<int64_t> row_list) {
+void HeadColSet::set_head_row_list(std::vector<int64_t>& row_list) {
     head_row_list = row_list;
 }
 
