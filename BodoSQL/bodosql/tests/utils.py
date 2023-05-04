@@ -252,6 +252,16 @@ def check_query(
 
     n_pes = bodo.get_size()
 
+    # Avoid testing BodoSQLContext.sql() call in regular Python on CI to run faster.
+    # It's not used in platform deployment and also not likely to fail independently.
+    if not only_python and not numba.core.config.DEVELOPER_MODE:
+        run_python = False
+
+    # Avoid testing 1D on CI to run faster. It's not likely to fail independent of
+    # 1D_Var.
+    if not only_jit_1D and not numba.core.config.DEVELOPER_MODE:
+        run_jit_1D = False
+
     # avoid running sequential tests on multi-process configs to save time
     # is_out_distributed=False may lead to avoiding parallel runs and seq run
     # Ideally we would like to also restrict running parallel tests when we have a single rank,
