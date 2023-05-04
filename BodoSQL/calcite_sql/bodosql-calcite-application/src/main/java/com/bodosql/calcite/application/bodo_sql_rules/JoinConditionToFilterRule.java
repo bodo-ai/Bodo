@@ -50,6 +50,12 @@ public class JoinConditionToFilterRule extends RelRule<JoinConditionToFilterRule
     // Descriptions of classes to match. The rule matches any node, b,
     // so long as its type is Join, and it contains an OR in the
     // condition.
+    //
+    // Only matches join conditions that are inner joins. This is because
+    // the pattern of pulling the join condition into a filter only works
+    // with inner joins since there's no way for filter to add a column
+    // with null values for the right side of the join after the join
+    // has been performed.
     JoinConditionToFilterRule.Config DEFAULT =
         ImmutableJoinConditionToFilterRule.Config.of()
             .withOperandSupplier(
