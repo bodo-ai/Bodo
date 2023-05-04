@@ -1023,6 +1023,31 @@ def test_datetime_date_strftime(memory_leak_check):
     check_func(impl, (date, "%Y"))
 
 
+def test_datetime_date_getattr(memory_leak_check):
+    """
+    Test getting attributes from datetime.date object in Bodo
+    """
+
+    def test_year(dt_obj):
+        return dt_obj.year
+
+    def test_month(dt_obj):
+        return dt_obj.month
+
+    def test_day(dt_obj):
+        return dt_obj.day
+
+    def test_ymd(dt_obj):
+        return dt_obj._ymd
+
+    dt_obj = datetime.date(2020, 1, 4)
+    check_func(test_year, (dt_obj,))
+    check_func(test_month, (dt_obj,))
+    check_func(test_day, (dt_obj,))
+    # _ymd is a Bodo only attribute, so we need to provide the py_output
+    check_func(test_ymd, (dt_obj,), py_output=(2020, 1, 4))
+
+
 @pytest.fixture(
     params=[
         # Float values
