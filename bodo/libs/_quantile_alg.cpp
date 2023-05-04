@@ -1181,6 +1181,6 @@ double approx_percentile_py_entrypt(array_info *arr_raw, double percentile,
         }
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return 0.0;
     }
 }

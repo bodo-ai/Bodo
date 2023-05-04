@@ -3,6 +3,8 @@
 Implements a number of array kernels that handling casting functions for BodoSQL
 """
 
+import datetime
+
 import numba
 import numpy as np
 import pandas as pd
@@ -213,17 +215,27 @@ def create_date_cast_util(func, error_on_fail):
             )
 
             scalar_text += "else:\n"
+            # Fast paths for regular date formats
             scalar_text += (
-                "   was_successful, tmp_val = pd_to_datetime_error_checked(arg0)\n"
+                "   was_successful, tmp_val = to_date_auto_error_checked(arg0)\n"
             )
+            # Slower paths to accept timestamp values. Its unclear to exact rules that
+            # are supported by Snowflake here.
             scalar_text += "   if not was_successful:\n"
-            scalar_text += f"      {error_str}\n"
+            scalar_text += "     was_successful, tmp_timestamp_value = pd_to_datetime_error_checked(arg0)\n"
+            scalar_text += "     tmp_val = tmp_timestamp_value.date()\n"
+            scalar_text += "   if not was_successful:\n"
+            scalar_text += f"        {error_str}\n"
             scalar_text += "   else:\n"
-            scalar_text += f"      res[i] = {unbox_str}(tmp_val.date())\n"
+            scalar_text += f"      res[i] = tmp_val\n"
 
-        # If a tz-aware timestamp, construct a tz-naive timestamp with the same date
+        # For date just assign equality
+        elif is_valid_date_arg(conversionVal):
+            scalar_text = f"res[i] = arg0\n"
+
+        # If a tz-aware timestamp, extract the date
         elif is_valid_tz_aware_datetime_arg(conversionVal):
-            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day).date())\n"
+            scalar_text = f"res[i] = arg0.date()\n"
 
         # If a non-tz timestamp/datetime, round it down to the nearest day
         elif is_valid_datetime_or_date_arg(conversionVal):
@@ -244,6 +256,7 @@ def create_date_cast_util(func, error_on_fail):
             "to_date_error_checked": to_date_error_checked,
             "pd_to_datetime_error_checked": pd_to_datetime_error_checked,
             "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
+            "to_date_auto_error_checked": to_date_auto_error_checked,
         }
         return gen_vectorized(
             arg_names,
@@ -332,7 +345,7 @@ def create_timestamp_cast_util(func, error_on_fail):
     (i.e. 0 = seconds, 3 = milliseconds, 6 = microseconds, 9 = nanoseconds)
 
     Returns an overload that accepts 3 arguments: the value to be converted
-    (a series or scalar of mulitiple possible types), and two literals.
+    (a series or scalar of multiple possible types), and two literals.
     The first is a format string for cases where the input is a string. The second
     is a time zone for the output data.
 
@@ -965,6 +978,8 @@ def pd_to_datetime_error_checked(
     # YYYY-M-DD
     # YYYY-M-D
     # YYYY-MM-D
+    # Return a default value to avoid optional types.
+    default_value = pd.Timestamp(year=1970, month=1, day=1)
     if val is not None:
         # account for case where val has a time component by finding everything
         # before the first character that is not a digit/dash/slash
@@ -979,13 +994,13 @@ def pd_to_datetime_error_checked(
         if len(date_comp) == 8 or len(date_comp) == 9:
             # 8/9 characters: must be YYYY-M-D, YYYY-M-DD or YYYY-M-DD
             if date_comp.count("-") != 2:
-                return (False, None)
+                return (False, default_value)
         elif len(date_comp) == 10:
             # 10 characters: must be YYYY-MM-DD or YYYY/MM/DD
             if ~((date_comp.count("/") == 2) ^ (date_comp.count("-") == 2)):
-                return (False, None)
+                return (False, default_value)
         else:
-            return (False, None)
+            return (False, default_value)
 
     with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
@@ -1036,6 +1051,134 @@ def to_date_error_checked(val, format):  # pragma: no cover
             ret_val = tmp
 
     return (success_flag, ret_val)
+
+
+@register_jitable
+def to_date_strings_conversion(year_str, month_str, day_str):  # pragma: no cover
+    """
+    Convert a year string, month string, and day string to an output date type.
+    Return a tuple of (success_flag, output_date), where if success_flag is False,
+    then the output date is garbage and the date is invalid to avoid trigger an
+    exception.
+
+    Args:
+        val (types.unicode_type): An input string to convert to a date.
+
+    Returns:
+        types.Tuple(types.bool_, bodo.datetime_date_type): A tuple of where the conversion
+        was a success and the resulting date. If the success is false the date is garbage.
+    """
+    # Initialize date_val for an invalid value.
+    date_val = datetime.date(1970, 1, 1)
+    if (
+        len(day_str) > 2
+        or len(month_str) > 2
+        or len(year_str) > 4
+        or not (year_str.isdigit() and month_str.isdigit() and day_str.isdigit())
+    ):
+        return (False, date_val)
+    # convert the values to numbers
+    year = int(year_str)
+    month = int(month_str)
+    day = int(day_str)
+    # Validate now to avoid exceptions
+    # Other than negative years, we don't need to check the year
+    # because its not strictly defined.
+    if year < 0:
+        return (False, date_val)
+    # Check the month
+    if month < 1 or month > 12:
+        return (False, date_val)
+    max_day = bodo.hiframes.pd_timestamp_ext.get_days_in_month(year, month)
+    # Day must be within the range of the month
+    if day < 1 or day > max_day:
+        return (False, date_val)
+    # We have a valid date, so return it.
+    return (True, datetime.date(year, month, day))
+
+
+@register_jitable
+def to_date_auto_error_checked(val):  # pragma: no cover
+    """
+    Converts a string to a date type based on the auto parsing format
+    for Snowflake.
+
+    https://docs.snowflake.com/en/user-guide/date-time-input-output#date-formats
+
+    Snowflake allows multiple different inputs to satisfy format values.
+    https://docs.snowflake.com/en/user-guide/date-time-input-output#using-the-correct-number-of-digits-with-format-elements
+
+    Snowflake seems to allow checking additional Timestamp formats and then truncating those to
+    date. As a result we use this as a fast path and fallback to the Timestamp conversion if
+    we can't parse.
+
+    Return a tuple of (success_flag, output_date), where if success_flag is False,
+    then the output date is garbage and the date is invalid to avoid trigger an
+    exception.
+
+    Args:
+        val (types.unicode_type): An input string to convert to a date.
+
+    Returns:
+        types.Tuple(types.bool_, bodo.datetime_date_type): A tuple of where the conversion
+        was a success and the resulting date. If the success is false the date is garbage.
+    """
+    is_valid = False
+    # Initialize date_val for returning the final value.
+    date_val = datetime.date(1970, 1, 1)
+    # Map the month name to the month number. We keep this as a
+    # string for helper functions.
+    month_map = {
+        "jan": "1",
+        "feb": "2",
+        "mar": "3",
+        "apr": "4",
+        "may": "5",
+        "jun": "6",
+        "jul": "7",
+        "aug": "8",
+        "sep": "9",
+        "oct": "10",
+        "nov": "11",
+        "dec": "12",
+    }
+    if "-" in val:
+        parts = val.split("-")
+        if len(parts) != 3:
+            return (is_valid, date_val)
+        month_part = parts[1]
+        if month_part.isdigit():
+            # This must be year, month, day path.
+            year_part = parts[0]
+            day_part = parts[2]
+            is_valid, date_val = to_date_strings_conversion(
+                year_part, month_part, day_part
+            )
+        else:
+            year_part = parts[2]
+            day_part = parts[0]
+            month_part = month_part.lower()
+            if month_part in month_map:
+                # This must be the day, month name, year path.
+                month_digit = month_map[month_part]
+                is_valid, date_val = to_date_strings_conversion(
+                    year_part, month_digit, day_part
+                )
+            else:
+                # This is invalid
+                return (is_valid, date_val)
+
+    else:
+        parts = val.split("/")
+        if len(parts) != 3:
+            return (is_valid, date_val)
+        # This is day, month, year
+        month_part = parts[0]
+        day_part = parts[1]
+        year_part = parts[2]
+        is_valid, date_val = to_date_strings_conversion(year_part, month_part, day_part)
+
+    return (is_valid, date_val)
 
 
 def cast_tz_naive_to_tz_aware(arr, tz):  # pragma: no cover
