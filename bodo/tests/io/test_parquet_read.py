@@ -6,6 +6,7 @@ import os
 import random
 import re
 import shutil
+import string
 
 import numba
 import numpy as np
@@ -33,7 +34,7 @@ from bodo.tests.utils import (
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
 )
-from bodo.utils.testing import ensure_clean
+from bodo.utils.testing import ensure_clean, ensure_clean2
 from bodo.utils.typing import BodoError, BodoWarning
 
 nullable_float_marker = pytest.mark.skipif(
@@ -237,6 +238,68 @@ def test_read_parquet_large_string_array(memory_leak_check):
             return df
 
         check_func(impl, (fname,))
+
+
+@pytest.mark.weekly
+def test_read_parquet_vv_large_string_array(memory_leak_check):
+    """
+    Test that when reading a parquet dataset with total string length
+    (and offsets) greater than Int32, the concatenate functionality
+    works as expected. In particular, this is to protect against
+    regressions to https://bodo.atlassian.net/browse/BSE-308.
+    """
+
+    def generate_random_string(length):
+        # Get all the ASCII letters in lowercase
+        letters = string.ascii_lowercase
+        # Randomly choose characters from letters for the given length of the string.
+        # We tile 1M at a time to speed up creation. In our use case
+        # this should still have sufficient randomness.
+        tile_size = 1_000_000
+        random_string = "".join(
+            f"{random.choice(letters)}" * tile_size for i in range(length // tile_size)
+        )
+        return random_string
+
+    table = pa.table(
+        [
+            pa.array(
+                [
+                    # Generate a very large string.
+                    # This can safely be different on every rank.
+                    # This is just under INT32.MAX. Having 2 of
+                    # these is enough to trigger the error.
+                    generate_random_string(2_147_400_000),
+                ],
+                type=pa.large_string(),
+            ),
+        ],
+        names=["A"],
+    )
+
+    import os
+
+    fname = "vv_large_str_eg.pq"
+    with ensure_clean2(fname):
+        if bodo.get_rank() == 0:
+            # Create folder
+            os.mkdir(fname, mode=0o777)
+        bodo.barrier()
+        # Write 2 files on each rank (minimum required to reproduce the issue).
+        # Writing a single file with >INT32.MAX bytes was causing some issues in write_table,
+        # so instead we can write the same value twice in separate files. During the read,
+        # this will read them as "one" dataset and hence allow us to reproduce
+        # the issue.
+        for i in range(2):
+            pq.write_table(table, os.path.join(fname, f"part{bodo.get_rank()}-{i}.pq"))
+        bodo.barrier()
+
+        def impl(path):
+            df = pd.read_parquet(path)
+            return df
+
+        # Verify that it runs without error
+        bodo.jit(impl)(fname)
 
 
 # TODO [BE-1424]: Add memory_leak_check when bugs are resolved.
