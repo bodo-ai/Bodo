@@ -629,23 +629,28 @@ def create_cmp_op_overload_arr(op):
             return impl
 
         # Tz-Aware timestamp + Tz-Naive timestamp
-        elif isinstance(lhs, DatetimeArrayType) and (
-            isinstance(rhs, types.Array) and rhs.dtype == bodo.datetime64ns
-        ):
-            raise BodoError(
-                f"{numba.core.utils.OPERATORS_TO_BUILTINS[op]} with two Timestamps requires both Timestamps share the same timezone. "
-                + f"Argument 0 has timezone {lhs.tz} and argument 1 is timezone-naive. "
-                + "To compare these values please convert to timezone naive with ts.tz_convert(None)."
-            )
-        # Tz-Naive timestamp + Tz-Aware timestamp
         elif (
-            isinstance(lhs, types.Array) and lhs.dtype == bodo.datetime64ns
-        ) and isinstance(rhs, DatetimeArrayType):
-            raise BodoError(
-                f"{numba.core.utils.OPERATORS_TO_BUILTINS[op]} with two Timestamps requires both Timestamps share the same timezone. "
-                + f"Argument 0 is timezone-naive and argument 1 has timezone {rhs.tz}. "
-                + "To compare these values please convert to timezone naive with ts.tz_convert(None)."
-            )
+            isinstance(lhs, DatetimeArrayType)
+            and (isinstance(rhs, types.Array) and rhs.dtype == bodo.datetime64ns)
+        ) or (
+            (isinstance(lhs, types.Array) and lhs.dtype == bodo.datetime64ns)
+            and isinstance(rhs, DatetimeArrayType)
+        ):
+
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(lhs)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(
+                        lhs, i
+                    ) or bodo.libs.array_kernels.isna(rhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = op(lhs[i], rhs[i])
+                return out_arr
+
+            return impl
 
     return overload_datetime_arr_cmp
 

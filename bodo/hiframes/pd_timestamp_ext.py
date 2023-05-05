@@ -2355,26 +2355,47 @@ def create_timestamp_cmp_op_overload(op):
         if isinstance(lhs, PandasTimestampType) and isinstance(
             rhs, PandasTimestampType
         ):
-            if lhs.tz != rhs.tz:
+            if lhs.tz == rhs.tz:
+                return lambda lhs, rhs: op(lhs.value, rhs.value)
+            elif lhs.tz is None:
+                return lambda lhs, rhs: op(lhs.value, rhs.tz_localize(None).value)
+            elif rhs.tz is None:
+                return lambda lhs, rhs: op(lhs.tz_localize(None).value, rhs.value)
+            else:
+                # TODO: Support comparison operator between timestamps with different time-zone
                 raise BodoError(
                     f"{numba.core.utils.OPERATORS_TO_BUILTINS[op]} with two Timestamps requires both Timestamps share the same timezone. "
                     + f"Argument 0 has timezone {lhs.tz} and argument 1 has timezone {rhs.tz}. "
                     + "To compare these values please convert to timezone naive with ts.tz_convert(None)."
                 )
 
-            return lambda lhs, rhs: op(lhs.value, rhs.value)
+        # Timestamp/dt64 scalar
+        if isinstance(lhs, PandasTimestampType) and rhs == bodo.datetime64ns:
+            if lhs.tz is not None:
+                return lambda lhs, rhs: op(
+                    bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                        lhs.tz_localize(None).value
+                    ),
+                    rhs,
+                )  # pragma: no cover
+            else:
+                return lambda lhs, rhs: op(
+                    bodo.hiframes.pd_timestamp_ext.integer_to_dt64(lhs.value), rhs
+                )  # pragma: no cover
 
-        # Timestamp/dt64
-        if lhs == pd_timestamp_tz_naive_type and rhs == bodo.datetime64ns:
-            return lambda lhs, rhs: op(
-                bodo.hiframes.pd_timestamp_ext.integer_to_dt64(lhs.value), rhs
-            )  # pragma: no cover
-
-        # dt64/Timestamp
-        if lhs == bodo.datetime64ns and rhs == pd_timestamp_tz_naive_type:
-            return lambda lhs, rhs: op(
-                lhs, bodo.hiframes.pd_timestamp_ext.integer_to_dt64(rhs.value)
-            )  # pragma: no cover
+        # dt64 scalar/Timestamp
+        if lhs == bodo.datetime64ns and isinstance(rhs, PandasTimestampType):
+            if rhs.tz is not None:
+                return lambda lhs, rhs: op(
+                    lhs,
+                    bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                        rhs.tz_localize(None).value
+                    ),
+                )  # pragma: no cover
+            else:
+                return lambda lhs, rhs: op(
+                    lhs, bodo.hiframes.pd_timestamp_ext.integer_to_dt64(rhs.value)
+                )  # pragma: no cover
 
     return overload_date_timestamp_cmp
 
