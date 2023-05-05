@@ -641,3 +641,81 @@ def test_date_compare_datetime64(date_datetime64_comparison_args, memory_leak_ch
         check_names=False,
         expected_output=pd.DataFrame({"output": answer}),
     )
+
+
+@pytest.fixture
+def tz_aware_tz_naive_comparison_args(comparison_query_args):
+    cmp_op, use_case = comparison_query_args
+    data = [
+        None,
+        pd.Timestamp("2010-01-17", tz="US/Pacific"),
+        pd.Timestamp("2011-02-26 03:36:01", tz="US/Pacific"),
+        pd.Timestamp("2012-05-09 16:43:16.123456", tz="US/Pacific"),
+        pd.Timestamp("2013-10-22 02:32:21.987654321", tz="US/Pacific"),
+        pd.Timestamp("2010-02-03 01:15:12.501000", tz="US/Pacific"),
+    ]
+    A = pd.Series(data * 6)
+    b = []
+    for elem in data:
+        b += [pd.Timestamp(elem).tz_localize(None)] * 6
+    B = pd.Series(b)
+    if use_case:
+        ctx = {"table1": pd.DataFrame({"B": B, "A": A})}
+    else:
+        ctx = {"table1": pd.DataFrame({"A": A, "B": B})}
+    row_funcs = {
+        "=": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else x[0].tz_localize(None) == x[1].tz_localize(None),
+        "<>": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else x[0].tz_localize(None) != x[1].tz_localize(None),
+        "!=": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else x[0].tz_localize(None) != x[1].tz_localize(None),
+        "<": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else x[0].tz_localize(None) < x[1].tz_localize(None),
+        "<=": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else x[0].tz_localize(None) <= x[1].tz_localize(None),
+        ">": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else x[0].tz_localize(None) > x[1].tz_localize(None),
+        ">=": lambda x: None
+        if pd.isna(x[0]) or pd.isna(x[1])
+        else x[0].tz_localize(None) >= x[1].tz_localize(None),
+        "<=>": lambda x: True
+        if pd.isna(x[0]) and pd.isna(x[1])
+        else (
+            False
+            if pd.isna(x[0]) or pd.isna(x[1])
+            else x[0].tz_localize(None) == x[1].tz_localize(None)
+        ),
+    }
+    answer = ctx["table1"].apply(row_funcs[cmp_op], axis=1)
+    return cmp_op, use_case, ctx, answer
+
+
+def test_tz_aware_compare_tz_naive(
+    tz_aware_tz_naive_comparison_args, memory_leak_check
+):
+    """
+    Checks that comparison operator works correctly between tz_aware
+    timestamps and tz_naive timestamps
+    """
+    cmp_op, use_case, ctx, answer = tz_aware_tz_naive_comparison_args
+    if cmp_op == "<=>":
+        # <=> operator requires that both sides must be of the same type
+        return
+    if use_case:
+        query = f"SELECT CASE WHEN (B {cmp_op} A) IS NULL THEN NULL ELSE B {cmp_op} A END from table1"
+    else:
+        query = f"SELECT A {cmp_op} B from table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=pd.DataFrame({"output": answer}),
+    )
