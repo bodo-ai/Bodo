@@ -1230,8 +1230,8 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
     }
 }
 
-bool TestEqualColumn(std::shared_ptr<array_info> arr1, int64_t pos1,
-                     std::shared_ptr<array_info> arr2, int64_t pos2,
+bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
+                     const std::shared_ptr<array_info>& arr2, int64_t pos2,
                      bool is_na_equal) {
     if (arr1->arr_type == bodo_array_type::STRUCT ||
         arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
@@ -1279,8 +1279,9 @@ bool TestEqualColumn(std::shared_ptr<array_info> arr1, int64_t pos1,
                     "TestEqualColumn: don't know if arrays have unified "
                     "dictionary");
             }
-            arr1 = arr1->child_arrays[1];
-            arr2 = arr2->child_arrays[1];
+            // Recursively call on the indices
+            return TestEqualColumn(arr1->child_arrays[1], pos1,
+                                   arr2->child_arrays[1], pos2, is_na_equal);
         }
         // NULLABLE case. We need to consider the bitmask and the values.
         bool bit1 = arr1->get_null_bit(pos1);
@@ -1400,9 +1401,9 @@ bool TestEqualColumn(std::shared_ptr<array_info> arr1, int64_t pos1,
 };
 
 int KeyComparisonAsPython_Column(bool const& na_position_bis,
-                                 std::shared_ptr<array_info> arr1,
+                                 const std::shared_ptr<array_info>& arr1,
                                  size_t const& iRow1,
-                                 std::shared_ptr<array_info> arr2,
+                                 const std::shared_ptr<array_info>& arr2,
                                  size_t const& iRow2) {
     if (arr1->arr_type == bodo_array_type::STRUCT ||
         arr1->arr_type == bodo_array_type::ARRAY_ITEM) {

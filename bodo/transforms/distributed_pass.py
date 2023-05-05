@@ -242,7 +242,7 @@ class DistributedPass:
             deadcode_eliminated = False
             # If dead columns are pruned, run dead code elimination until there are no changes
             if deadcode_elim_can_make_changes:
-                # We extend numba's dead code eleminiation, through both remove_dead_extensions and in numba_compat.
+                # We extend numba's dead code elimination, through both remove_dead_extensions and in numba_compat.
                 # So we can use their remove_dead
                 while remove_dead(
                     self.func_ir.blocks,
@@ -252,7 +252,7 @@ class DistributedPass:
                 ):
                     deadcode_eliminated |= True
             # If we eliminated dead code, run these two passes again, and mark that we may need to
-            # rerun typing pass to perfrom filter pushdown
+            # rerun typing pass to perform filter pushdown
             flag = deadcode_eliminated
 
         # transform
