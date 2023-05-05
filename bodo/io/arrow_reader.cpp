@@ -443,11 +443,38 @@ class StringBuilder : public TableBuilder::BuilderColumn {
     StringBuilder() {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
-        // XXX hopefully keeping the string arrays around doesn't prevent other
-        // intermediate Arrow arrays and tables from being deleted when not
-        // needed anymore
-        arrays.insert(arrays.end(), chunked_arr->chunks().begin(),
-                      chunked_arr->chunks().end());
+        // Reserve some space up front in case of multiple chunks.
+        arrays.reserve(arrays.size() + chunked_arr->chunks().size());
+        for (const std::shared_ptr<arrow::Array>& chunk :
+             chunked_arr->chunks()) {
+            if (chunk->type_id() == arrow::Type::STRING) {
+                static_assert(OFFSET_BITWIDTH == 64);
+                // Convert 32-bit offset array to 64-bit offset array to match
+                // Bodo data layout. This avoids overflow errors during the
+                // Concatenate step in get_output.
+                ::arrow::Result<std::shared_ptr<::arrow::Array>> res =
+                    arrow::compute::Cast(*chunk, arrow::large_utf8(),
+                                         arrow::compute::CastOptions::Safe(),
+                                         bodo::buffer_exec_context());
+                std::shared_ptr<arrow::Array> casted_arr;
+                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+                arrays.push_back(std::move(casted_arr));
+            } else if (chunk->type_id() == arrow::Type::BINARY) {
+                static_assert(OFFSET_BITWIDTH == 64);
+                // Convert 32-bit offset array to 64-bit offset array to match
+                // Bodo data layout. This avoids overflow errors during the
+                // Concatenate step in get_output.
+                ::arrow::Result<std::shared_ptr<::arrow::Array>> res =
+                    arrow::compute::Cast(*chunk, arrow::large_binary(),
+                                         arrow::compute::CastOptions::Safe(),
+                                         bodo::buffer_exec_context());
+                std::shared_ptr<arrow::Array> casted_arr;
+                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+                arrays.push_back(std::move(casted_arr));
+            } else {  // LARGE_STRING or LARGE_BINARY
+                arrays.push_back(chunk);
+            }
+        }
     }
 
     virtual std::shared_ptr<array_info> get_output() {
@@ -458,7 +485,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                 return out_array;
             }
             arrow::Result<std::shared_ptr<arrow::Array>> res =
-                arrow::Concatenate(arrays, arrow::default_memory_pool());
+                arrow::Concatenate(arrays, bodo::BufferPool::DefaultPtr());
             std::shared_ptr<arrow::Array> concat_res;
             CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
             out_array = arrow_array_to_bodo(concat_res);
