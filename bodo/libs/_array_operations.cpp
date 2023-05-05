@@ -842,8 +842,8 @@ const std::vector<std::vector<int64_t>> compute_destinations_for_interval(
  * the rows in the input table.
  */
 std::shared_ptr<uint32_t[]> compute_destinations_for_point_table(
-    std::shared_ptr<table_info> table, std::shared_ptr<array_info> bounds_arr,
-    int n_pes, bool parallel) {
+    std::shared_ptr<table_info> table,
+    const std::shared_ptr<array_info>& bounds_arr, int n_pes, bool parallel) {
     tracing::Event ev("compute_destinations_for_point_table", parallel);
     uint64_t n_local = table->nrows();
     // We call them hashes for consistency, but in this case, they're actually
@@ -1011,7 +1011,10 @@ std::shared_ptr<table_info> sort_table_for_interval_join(
     ev.add_attribute("is_table_point_side", is_table_point_side);
     ev.add_attribute("table_len_local", table->nrows());
 
+    // Set the sort order to ascending for all columns.
     int64_t asc[2] = {1, 1};
+    // Set the NaNs as last. This is done so intervals are strict
+    // subsets in case we encounter Floats. NA values will be ignored.
     int64_t na_pos[2] = {1, 1};
 
     std::shared_ptr<table_info> local_sort_table;
@@ -1144,7 +1147,10 @@ sort_both_tables_for_interval_join(std::shared_ptr<table_info> table_1,
     // 1. Sort the tables locally
     //
 
+    // Set the sort order to ascending for all columns.
     int64_t asc[2] = {1, 1};
+    // Set the NaNs as last. This is done so intervals are strict
+    // subsets in case we encounter Floats. NA values will be ignored.
     int64_t na_pos[2] = {1, 1};
 
     // sort_values_table_local will decref all arrays in table_1

@@ -276,13 +276,13 @@ std::shared_ptr<table_info> RetrieveTable(
  *
  * @param arr1 the first column for the comparison
  * @param iRow1 the row of the first key
- * @param arr2 the second columne for the comparison
+ * @param arr2 the second column for the comparison
  * @param iRow2 the row of the second key
  * @param is_na_equal should na values be considered equal
  * @return True if they are equal and false otherwise.
  */
-bool TestEqualColumn(const std::shared_ptr<array_info> arr1, int64_t pos1,
-                     const std::shared_ptr<array_info> arr2, int64_t pos2,
+bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
+                     const std::shared_ptr<array_info>& arr2, int64_t pos2,
                      bool is_na_equal);
 
 /* This function test if two rows of two arrow columns (which may or may not be
@@ -672,9 +672,9 @@ bool KeyComparisonAsPython(
     size_t const& shift_key2, size_t const& iRow2, int64_t* na_position);
 
 int KeyComparisonAsPython_Column(bool const& na_position_bis,
-                                 std::shared_ptr<array_info> arr1,
+                                 const std::shared_ptr<array_info>& arr1,
                                  size_t const& iRow1,
-                                 std::shared_ptr<array_info> arr2,
+                                 const std::shared_ptr<array_info>& arr2,
                                  size_t const& iRow2);
 
 /**
@@ -876,10 +876,10 @@ std::shared_ptr<array_info> concat_arrays(
  * @param arr2 Array for the end of the interval
  * @param idx Index to check
  */
-inline bool within_bounds_of_rank(std::shared_ptr<array_info> bounds_arr,
+inline bool within_bounds_of_rank(const std::shared_ptr<array_info>& bounds_arr,
                                   uint32_t rank, int n_pes,
-                                  std::shared_ptr<array_info> arr1,
-                                  std::shared_ptr<array_info> arr2,
+                                  const std::shared_ptr<array_info>& arr1,
+                                  const std::shared_ptr<array_info>& arr2,
                                   uint64_t idx) {
     // na_position_bis is true in our case since asc = true and na_last = true
     // which means that na_bis = (!na_last) ^ asc = true
@@ -902,9 +902,9 @@ inline bool within_bounds_of_rank(std::shared_ptr<array_info> bounds_arr,
  * @param strict Whether to consider [A, A] to be a bad interval
  * @return If the interval [arr1[idx], arr2[idx]] is bad
  */
-inline bool is_bad_interval(std::shared_ptr<array_info> arr1,
-                            std::shared_ptr<array_info> arr2, uint64_t idx,
-                            bool strict = true) {
+inline bool is_bad_interval(const std::shared_ptr<array_info>& arr1,
+                            const std::shared_ptr<array_info>& arr2,
+                            uint64_t idx, bool strict = true) {
     auto comp = KeyComparisonAsPython_Column(true, arr1, idx, arr2, idx);
     // strict == true: comp == -1 (A > B) or comp == 0 (A == B)
     // strict == false: comp == -1 (A > B)

@@ -399,6 +399,9 @@ class Join(ir.Stmt):
             name_right = right_keys[iKey]
             vect_same_key.append(name_left == name_right)
         self.vect_same_key = vect_same_key
+        # Store information if we select the optimized point interval
+        # join implementation.
+        self.point_interval_join_info: Optional[Tuple[bool, str, str, str]] = None
 
     @property
     def has_live_left_table_var(self):
@@ -1889,6 +1892,24 @@ def join_distributed_run(
         # cross join passes batches of input to condition function
         compute_in_batch=not join_node.left_keys,
     )
+    # Determine if we have a point in interval join
+    join_node.point_interval_join_info: Optional[Tuple[bool, str, str, str]] = guard(
+        _get_interval_join_info,
+        join_node,
+        left_col_nums,
+        right_col_nums,
+        left_other_types,
+        right_other_types,
+        left_physical_to_logical_list,
+        right_physical_to_logical_list,
+    )
+    if join_node.point_interval_join_info is not None:
+        # If we have the point in interval join we can discard the
+        # general join condition because the entire implementation
+        # will be in C++. While we have compiled the general join condition
+        # this will avoid storing it in join_gen_cond_cfunc.
+        join_node.gen_cond_expr = ""
+        general_cond_cfunc = None
 
     # TODO: Update asof to use table format.
     if join_node.how == "asof":
@@ -2478,18 +2499,7 @@ def _gen_join_cpp_call(
     # single-element numpy array to return number of global rows from C++
     func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
 
-    # pattern match point in interval joins
-    point_interval_join_info: Optional[Tuple[bool, str, str, str]] = guard(
-        _get_interval_join_info,
-        join_node,
-        left_col_nums,
-        right_col_nums,
-        left_other_types,
-        right_other_types,
-        left_physical_to_logical_list,
-        right_physical_to_logical_list,
-    )
-    if point_interval_join_info is not None:
+    if join_node.point_interval_join_info is not None:
         left_col_types = [left_other_types[k] for k in left_col_nums]
         right_col_types = [right_other_types[k] for k in right_col_nums]
         check_cross_join_coltypes(left_col_types, right_col_types)
@@ -2505,29 +2515,29 @@ def _gen_join_cpp_call(
             )
             # TODO: Add more information about the type of join and relevant columns in logging level 2
 
-        if point_interval_join_info[
+        if join_node.point_interval_join_info[
             0
         ]:  # i.e. point is on the left side and interval is on the right side
-            # point_interval_join_info[2,3] are the column names, right_var_map gives us the logical location,
+            # join_node.point_interval_join_info[2,3] are the column names, right_var_map gives us the logical location,
             # and then we map it to the physical location using right_logical_physical_map
             start_col_id_interval_side = right_logical_physical_map[
-                join_node.right_var_map[point_interval_join_info[2]]
+                join_node.right_var_map[join_node.point_interval_join_info[2]]
             ]
             end_col_id_interval_side = right_logical_physical_map[
-                join_node.right_var_map[point_interval_join_info[3]]
+                join_node.right_var_map[join_node.point_interval_join_info[3]]
             ]
             point_col_id_point_side = left_logical_physical_map[
-                join_node.left_var_map[point_interval_join_info[1]]
+                join_node.left_var_map[join_node.point_interval_join_info[1]]
             ]
         else:  # i.e. vice-versa
             start_col_id_interval_side = left_logical_physical_map[
-                join_node.left_var_map[point_interval_join_info[2]]
+                join_node.left_var_map[join_node.point_interval_join_info[2]]
             ]
             end_col_id_interval_side = left_logical_physical_map[
-                join_node.left_var_map[point_interval_join_info[3]]
+                join_node.left_var_map[join_node.point_interval_join_info[3]]
             ]
             point_col_id_point_side = right_logical_physical_map[
-                join_node.right_var_map[point_interval_join_info[1]]
+                join_node.right_var_map[join_node.point_interval_join_info[1]]
             ]
 
         func_text += (
@@ -2539,11 +2549,11 @@ def _gen_join_cpp_call(
             f"{join_node.is_left}, "
             f"{join_node.is_right}, "
             # Is point on the left side
-            f"{point_interval_join_info[0]}, "
+            f"{join_node.point_interval_join_info[0]}, "
             # Does the point need to be strictly greater than the interval start
-            f"{point_interval_join_info[4]}, "
+            f"{join_node.point_interval_join_info[4]}, "
             # Does the point need to be strictly less than the interval end
-            f"{point_interval_join_info[5]}, "
+            f"{join_node.point_interval_join_info[5]}, "
             # Column ID of point column on point side in point in interval join.
             f"{point_col_id_point_side}, "
             # Column ID of start column on interval side in point in interval join.
@@ -2553,11 +2563,6 @@ def _gen_join_cpp_call(
             f"key_in_output.ctypes, "
             f"use_nullable_arr_type.ctypes, "
             f"{join_node.rebalance_output_if_skewed}, "
-            f"cfunc_cond, "
-            f"left_table_cond_columns.ctypes, "
-            f"{len(left_col_nums)}, "
-            f"right_table_cond_columns.ctypes, "
-            f"{len(right_col_nums)}, "
             f"total_rows_np.ctypes)\n"
         )
 

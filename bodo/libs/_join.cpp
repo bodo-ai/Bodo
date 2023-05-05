@@ -2848,18 +2848,50 @@ table_info* cross_join_table(
     }
 }
 
-bool is_point_right_of_interval_start(
-    std::shared_ptr<array_info> left_interval_col, const size_t& int_idx,
-    std::shared_ptr<array_info> point_col, const size_t& point_idx,
+/**
+ * @brief Check if an array contains a NA value according
+ * to SQL rules at a given index.
+ *
+ * TODO: Template on array_type + move to a helper function if/when its used
+ * in more places.
+ *
+ */
+inline bool isna_sql(const std::shared_ptr<array_info>& arr,
+                     const size_t& idx) {
+    if (arr->null_bitmask() != nullptr && !arr->get_null_bit(idx)) {
+        return true;
+    }
+    // Datetime still uses a NaT value. TODO: Remove.
+    if (arr->dtype == Bodo_CTypes::DATETIME) {
+        int64_t* dt64_arr = (int64_t*)arr->data1();
+        return dt64_arr[idx] == std::numeric_limits<int64_t>::min();
+    }
+    return false;
+}
+
+inline bool is_point_right_of_interval_start(
+    const std::shared_ptr<array_info>& left_interval_col, const size_t& int_idx,
+    const std::shared_ptr<array_info>& point_col, const size_t& point_idx,
     bool strictly_right) {
-    if (point_col->null_bitmask() != nullptr &&
-        !point_col->get_null_bit((size_t)point_idx)) {
+    if (isna_sql(point_col, point_idx)) {
         return false;
     }
 
     auto comp = KeyComparisonAsPython_Column(true, left_interval_col, int_idx,
                                              point_col, point_idx);
     return strictly_right ? comp > 0 : comp >= 0;
+}
+
+inline bool is_point_left_of_interval_end(
+    const std::shared_ptr<array_info>& right_interval_col,
+    const size_t& int_idx, const std::shared_ptr<array_info>& point_col,
+    const size_t& point_idx, bool strictly_left) {
+    // Note: No need to check if Point is NA because we will have already
+    // skipped it in is_point_right_of_interval_start.
+
+    auto comp = KeyComparisonAsPython_Column(true, right_interval_col, int_idx,
+                                             point_col, point_idx);
+    return strictly_left ? comp < 0 : comp <= 0;
 }
 
 /**
@@ -2892,18 +2924,18 @@ bool is_point_right_of_interval_start(
  * <= r
  * @param is_strict_start_cond In the join condition, is the point required to
  * be strictly right of the left interval? True when l < p, false when l <= p
- * @param point_left Is the point table the left table? Required when passing
- * idxs to cond_func
+ * @param is_strict_end_cond In the join condition, is the point required to
+ * be strictly left of the right interval? True when p < r, false when p <= r
  * @return A pair of vectors of indexes to the left and right table
- * repesenting the output
+ * representing the output
  */
 std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
     std::shared_ptr<table_info> interval_table,
-    std::shared_ptr<table_info> point_table, cond_expr_fn_batch_t cond_func,
-    uint64_t interval_start_col_id, uint64_t interval_end_col_id,
-    uint64_t point_col_id, int curr_rank, int n_pes, bool interval_parallel,
-    bool point_parallel, bool is_point_outer, bool is_strict_contained,
-    bool is_strict_start_cond, bool point_left) {
+    std::shared_ptr<table_info> point_table, uint64_t interval_start_col_id,
+    uint64_t interval_end_col_id, uint64_t point_col_id, int curr_rank,
+    int n_pes, bool interval_parallel, bool point_parallel, bool is_point_outer,
+    bool is_strict_contained, bool is_strict_start_cond,
+    bool is_strict_end_cond) {
     tracing::Event ev("interval_merge", interval_parallel || point_parallel);
 
     // When the point side is empty, the output will be empty regardless of
@@ -2912,8 +2944,6 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
     // side is not, the output won't be empty in case of a point-outer join
     // (it'll be the point table plus nulls for all the columns from the
     // interval side).
-    // This was added to avoid problems with batch_n_rows computation
-    // (undefined behavior)
     if (point_table->nrows() == 0) {
         ev.add_attribute("out_num_rows", 0);
         ev.add_attribute("out_num_inner_rows", 0);
@@ -2927,50 +2957,11 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
     auto [point_arr_infos, point_col_data, point_col_null] =
         get_gen_cond_data_ptrs(point_table);
 
-    auto interval_arr_infos_ptr = interval_arr_infos.data();
-    auto interval_col_data_ptr = interval_col_data.data();
-    auto interval_col_null_ptr = interval_col_null.data();
-    auto point_arr_infos_ptr = point_arr_infos.data();
-    auto point_col_data_ptr = point_col_data.data();
-    auto point_col_null_ptr = point_col_null.data();
-
-    // Prebuild the condition function by partial application
-    // Makes actual join loop simpler to read
-    // TODO: Does this impact performance? Assuming C++ compiler
-    //       can recognize and undo this during compilation
-    std::function<void(int64_t, int64_t, int64_t, uint8_t*)> inner_cond_func;
-    if (point_left) {
-        inner_cond_func = [&cond_func, interval_arr_infos_ptr,
-                           point_arr_infos_ptr, interval_col_data_ptr,
-                           point_col_data_ptr, interval_col_null_ptr,
-                           point_col_null_ptr](
-                              int64_t interval_idx, int64_t point_start_idx,
-                              int64_t point_end_idx, uint8_t* match_arr) {
-            cond_func(point_arr_infos_ptr, interval_arr_infos_ptr,
-                      point_col_data_ptr, interval_col_data_ptr,
-                      point_col_null_ptr, interval_col_null_ptr, match_arr,
-                      point_start_idx, point_end_idx, interval_idx,
-                      interval_idx + 1 /*+1 so that it's not an empty loop*/);
-        };
-    } else {
-        inner_cond_func = [&cond_func, interval_arr_infos_ptr,
-                           point_arr_infos_ptr, interval_col_data_ptr,
-                           point_col_data_ptr, interval_col_null_ptr,
-                           point_col_null_ptr](
-                              int64_t interval_idx, int64_t point_start_idx,
-                              int64_t point_end_idx, uint8_t* match_arr) {
-            cond_func(interval_arr_infos_ptr, point_arr_infos_ptr,
-                      interval_col_data_ptr, point_col_data_ptr,
-                      interval_col_null_ptr, point_col_null_ptr, match_arr,
-                      interval_idx,
-                      interval_idx + 1 /*+1 so that it's not an empty loop*/,
-                      point_start_idx, point_end_idx);
-        };
-    }
-
-    // Start Col of Interval Table and Point Col
+    // Start Col of Interval Table, End Col of Interval Table and Point Col
     std::shared_ptr<array_info> left_inter_col =
         interval_table->columns[interval_start_col_id];
+    std::shared_ptr<array_info> right_inter_col =
+        interval_table->columns[interval_end_col_id];
     std::shared_ptr<array_info> point_col = point_table->columns[point_col_id];
 
     // Rows of the Output Joined Table
@@ -2992,21 +2983,23 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
         throw std::runtime_error("interval_join_table: batch_size_bytes <= 0");
     }
 
-    // Since we iterate on the point side (with the interval side constant),
-    // we use the point table size for batch size calculation.
-    // XXX We can technically do it based on the one column instead of
-    // the whole table since we're guaranteed that only one column is involved
-    // in the general join condition.
-    uint64_t n_batches = (uint64_t)std::ceil(
-        table_local_memory_size(point_table) / (double)batch_size_bytes);
-    uint64_t batch_n_rows =
-        (uint64_t)std::ceil(point_table->nrows() / (double)n_batches);
-    uint64_t n_bytes_match = (batch_n_rows + 7) >> 3;
-    uint8_t* match_arr = new uint8_t[n_bytes_match];
-
     uint64_t point_pos = 0;
+    // Keep track of the previous end for values with the same start
+    // interval. We sort ties by the end interval in Ascending order, so
+    // any entries with the same start value can skip some additional checks.
+    // prev_point_pos_end is the first not matched value.
+    uint64_t prev_point_pos_end = 0;
     for (uint64_t interval_pos = 0; interval_pos < interval_table->nrows();
          interval_pos++) {
+        // Skip intervals that contain NA values, resetting prev_point_pos_end.
+        if (isna_sql(left_inter_col, interval_pos) ||
+            isna_sql(right_inter_col, interval_pos)) {
+            // Skip intervals that contain NA values, resetting
+            // prev_point_pos_end.
+            prev_point_pos_end = point_pos;
+            continue;
+        }
+
         // Find first row in the point table thats in the interval
         while (point_pos < point_table->nrows() &&
                !is_point_right_of_interval_start(left_inter_col, interval_pos,
@@ -3017,37 +3010,47 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
         if (point_pos >= point_table->nrows())
             break;
 
+        // Starting location for the current interval. If the
+        // start is the same as the previous interval we can skip
+        // ahead.
+        uint64_t start_point_pos = point_pos;
+        // Check if the intervals start at the same point and the previous
+        // interval had any matches.
+        if (interval_pos != 0 && prev_point_pos_end > point_pos) {
+            // Note: We don't need NA to match because NA should never have
+            // matched any entries.
+            bool start_equal =
+                TestEqualColumn(left_inter_col, interval_pos, left_inter_col,
+                                interval_pos - 1, false);
+            if (start_equal) {
+                for (uint64_t i = point_pos; i < prev_point_pos_end; i++) {
+                    joined_interval_idxs.push_back(interval_pos);
+                    joined_point_idxs.push_back(i);
+                    // Note we don't need to update point_matched_rows because
+                    // these values have already matched.
+                }
+                start_point_pos = prev_point_pos_end;
+            }
+        }
+
         // Because tables are sorted, a consecutive range of rows in point table
         // will fit in the interval.
         // Thus, we loop and match all until outside of interval. Then reset.
-        // For best efficiency, we do this in batches. If during a batch, we
-        // encounter any non-matches, we break out of the loop.
-        for (uint64_t point_batch_start = point_pos;
-             point_batch_start < point_table->nrows();
-             point_batch_start += batch_n_rows) {
-            uint64_t point_batch_end = std::min(
-                point_batch_start + batch_n_rows, point_table->nrows());
-
-            inner_cond_func(interval_pos, point_batch_start, point_batch_end,
-                            match_arr);
-            // Whether or not to break out of the loop. We can break as soon
-            // as we see a not-matching point.
-            bool found_not_match = false;
-            int64_t match_ind = 0;
-            for (uint64_t i = point_batch_start; i < point_batch_end; i++) {
-                bool match = GetBit(match_arr, match_ind++);
-                if (match) {
-                    joined_interval_idxs.push_back(interval_pos);
-                    joined_point_idxs.push_back(i);
-                    if (is_point_outer) {
-                        SetBitTo(point_matched_rows.data(), i, true);
-                    }
-                } else {
-                    found_not_match = true;
-                    break;
+        for (uint64_t curr_point = start_point_pos;
+             curr_point < point_table->nrows(); curr_point++) {
+            bool match = is_point_left_of_interval_end(
+                right_inter_col, interval_pos, point_col, curr_point,
+                is_strict_end_cond);
+            if (match) {
+                joined_interval_idxs.push_back(interval_pos);
+                joined_point_idxs.push_back(curr_point);
+                if (is_point_outer) {
+                    SetBitTo(point_matched_rows.data(), curr_point, true);
                 }
-            }
-            if (found_not_match) {
+            } else {
+                // Update where we had our first !match to skip checks on
+                // future iterations.
+                prev_point_pos_end = curr_point;
                 break;
             }
         }
@@ -3076,10 +3079,7 @@ table_info* interval_join_table(
     bool strict_start, bool strict_end, uint64_t point_col_id,
     uint64_t interval_start_col_id, uint64_t interval_end_col_id,
     bool* key_in_output, int64_t* use_nullable_arr_type,
-    bool rebalance_if_skewed, cond_expr_fn_batch_t cond_func,
-    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
-    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
-    uint64_t* num_rows_ptr) {
+    bool rebalance_if_skewed, uint64_t* num_rows_ptr) {
     try {
         std::shared_ptr<table_info> left_table =
             std::shared_ptr<table_info>(in_left_table);
@@ -3187,10 +3187,10 @@ table_info* interval_join_table(
         ev_sort.finalize();
 
         auto [interval_idxs, point_idxs] = interval_merge(
-            sorted_interval_table, sorted_point_table, cond_func,
-            interval_start_col_id, interval_end_col_id, point_col_id, myrank,
-            n_pes, interval_table_parallel, point_table_parallel,
-            is_outer_point, strict_contained, strict_start, is_left_point);
+            sorted_interval_table, sorted_point_table, interval_start_col_id,
+            interval_end_col_id, point_col_id, myrank, n_pes,
+            interval_table_parallel, point_table_parallel, is_outer_point,
+            strict_contained, strict_start, strict_end);
 
         std::shared_ptr<table_info> sorted_left_table, sorted_right_table;
         std::vector<int64_t> left_idxs, right_idxs;
@@ -3208,8 +3208,7 @@ table_info* interval_join_table(
         std::shared_ptr<table_info> out_table = create_out_table(
             std::move(sorted_left_table), std::move(sorted_right_table),
             left_idxs, right_idxs, key_in_output, use_nullable_arr_type,
-            cond_func_left_columns, cond_func_left_column_len,
-            cond_func_right_columns, cond_func_right_column_len);
+            nullptr, 0, nullptr, 0);
 
         // Check for skew if BodoSQL suggested we should
         if (rebalance_if_skewed && (left_parallel || right_parallel)) {

@@ -179,7 +179,6 @@ void iceberg_pq_write(const char *table_data_loc,
         // and create the transform columns.
         PyObject *sort_order_iter = PyObject_GetIter(sort_order);
         PyObject *sort_order_field_tuple;
-        int i = 0;
         while ((sort_order_field_tuple = PyIter_Next(sort_order_iter))) {
             // PyTuple_GetItem returns borrowed reference, no need to decref
             PyObject *col_idx_py = PyTuple_GetItem(sort_order_field_tuple, 0);
@@ -223,7 +222,6 @@ void iceberg_pq_write(const char *table_data_loc,
             transform_cols.push_back(transform_col);
 
             Py_DECREF(sort_order_field_tuple);
-            i++;
         }
         Py_DECREF(sort_order_iter);
 
