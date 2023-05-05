@@ -1,6 +1,7 @@
 # Example usage: python -u BodoSQLWrapper.py -c creds.json -f query.sql
 # To see all options, run: python -u BodoSQLWrapper.py --help
 
+
 import argparse
 import json
 import time
@@ -20,7 +21,6 @@ def run_sql_query(
     query_str, bc, pq_out_filename, sf_out_table_name, sf_write_conn, print_output
 ):
     """Boilerplate function to execute a query string.
-
     Args:
         query_str (str): Query text to execute
         bc (bodosql.BodoSQLContext): BodoSQLContext to use for query execution.
@@ -51,6 +51,13 @@ def run_sql_query(
 
 
 def main(args):
+
+    # Throw an error in the case that the use supplied both only_test_compiles, and an argument that
+    # requires a full run
+    if args.only_test_compiles:
+        assert not (
+            args.sf_out_table_loc or args.trace or args.print_output
+        ), "args.only_test_compiles should not be passed with print_output, sf_out_table_loc, trace, or sf_out_table_loc."
 
     # Read in the query text from the file
     with open(args.filename, "r") as f:
@@ -89,6 +96,7 @@ def main(args):
         plan_text = bc.generate_plan(sql_text)
         if bodo.get_rank() == 0:
             with open(args.generate_plan_filename, "w") as f:
+                f.write(str(bodo.__version__) + "\n\n")
                 f.write(plan_text)
             print("Saved Plan to: ", args.generate_plan_filename)
 
@@ -97,38 +105,50 @@ def main(args):
         pandas_text = bc.convert_to_pandas(sql_text)
         if bodo.get_rank() == 0:
             with open(args.pandas_out_filename, "w") as f:
+                f.write("#" + str(bodo.__version__) + "\n\n")
                 f.write(pandas_text)
             print("Saved Pandas Version to: ", args.pandas_out_filename)
 
-    sf_write_conn = ""
-    sf_out_table_name = ""
-    if args.sf_out_table_loc:
-        params = {"warehouse": bsql_catalog.warehouse}
-        db, schema, sf_out_table_name = (
-            args.sf_out_table_loc.split(".") if args.sf_out_table_loc else ("", "", "")
+    if args.only_test_compiles:
+        (compiles_flag, compile_time, error_message) = bc.validate_query_compiles(
+            sql_text
         )
-        sf_write_conn = f"snowflake://{bsql_catalog.username}:{bsql_catalog.password}@{bsql_catalog.account}/{db}/{schema}?{urlencode(params)}"
-    print_output = False
-    if args.print_output:
-        print_output = True
+        assert (
+            compiles_flag
+        ), f"Query failed to compile with error message: {error_message}"
+        print(f"Query compiled in {compile_time} seconds.")
+    else:
+        sf_write_conn = ""
+        sf_out_table_name = ""
+        if args.sf_out_table_loc:
+            params = {"warehouse": bsql_catalog.warehouse}
+            db, schema, sf_out_table_name = (
+                args.sf_out_table_loc.split(".")
+                if args.sf_out_table_loc
+                else ("", "", "")
+            )
+            sf_write_conn = f"snowflake://{bsql_catalog.username}:{bsql_catalog.password}@{bsql_catalog.account}/{db}/{schema}?{urlencode(params)}"
+        print_output = False
+        if args.print_output:
+            print_output = True
 
-    # Run the query
-    if args.trace:
-        tracing.start()
-    t0 = time.time()
-    run_sql_query(
-        sql_text,
-        bc,
-        args.pq_out_filename if args.pq_out_filename else "",
-        sf_out_table_name,
-        sf_write_conn,
-        print_output,
-    )
-    bodo.barrier()
-    if args.trace:
-        tracing.dump(fname=args.trace)
-    if bodo.get_rank() == 0:
-        print("Total (compilation + execution) time:", time.time() - t0)
+        # Run the query
+        if args.trace:
+            tracing.start()
+        t0 = time.time()
+        run_sql_query(
+            sql_text,
+            bc,
+            args.pq_out_filename if args.pq_out_filename else "",
+            sf_out_table_name,
+            sf_write_conn,
+            print_output,
+        )
+        bodo.barrier()
+        if args.trace:
+            tracing.dump(fname=args.trace)
+        if bodo.get_rank() == 0:
+            print("Total (compilation + execution) time:", time.time() - t0)
 
 
 if __name__ == "__main__":
@@ -192,8 +212,15 @@ if __name__ == "__main__":
         "-u",
         "--print_output",
         required=False,
-        action='store_true',
+        action="store_true",
         help="Optional: If provided, the result will printed to std. Useful when testing and don't necessarily want to save results.",
+    )
+
+    parser.add_argument(
+        "--only_test_compiles",
+        required=False,
+        action="store_true",
+        help="Optional: If provided, will only attempt to compile the query, instead of running it end to end.\nIncompatible with print_output, sf_out_table_loc, trace, and sf_out_table_loc.",
     )
 
     args = parser.parse_args()
