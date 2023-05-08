@@ -5838,7 +5838,7 @@ SqlTypeNameSpec SqlTypeName3(Span s) :
 }
 {
     (
-        (<DECIMAL> | <DEC> | <NUMERIC>) { s.add(this); sqlTypeName = SqlTypeName.DECIMAL; }
+        (<DECIMAL> | <DEC> | <NUMERIC> | <NUMBER>) { s.add(this); sqlTypeName = SqlTypeName.DECIMAL; }
     |
         <ANY> { s.add(this); sqlTypeName = SqlTypeName.ANY; }
     )
