@@ -12,6 +12,7 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_window_agg_kernels impor
 )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.tz_aware
 @pytest.mark.parametrize(

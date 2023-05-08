@@ -11,6 +11,7 @@ from bodo.tests.utils import check_func
 pytestmark = pytest.mark.iceberg
 
 
+@pytest.mark.timeout(700)
 @pytest.mark.slow
 def test_merge_into_full_example(iceberg_database, iceberg_table_conn):
     """

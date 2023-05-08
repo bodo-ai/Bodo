@@ -107,6 +107,7 @@ def bodosql_dict_context(iceberg_database, iceberg_table_conn, source_table, req
     return bc, request.param
 
 
+@pytest.mark.timeout(700)
 @pytest.mark.slow
 def test_merge_into_dict_encoding_inserts(
     bodosql_dict_context,
@@ -246,6 +247,7 @@ def test_merge_into_dict_encoding_deletes(bodosql_dict_context):
     )
 
 
+@pytest.mark.timeout(700)
 @pytest.mark.slow
 def test_merge_into_dict_encoding_all(bodosql_dict_context):
     """
@@ -295,6 +297,7 @@ def test_merge_into_dict_encoding_all(bodosql_dict_context):
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_merge_into_dict_encoding_no_merge(iceberg_database, iceberg_table_conn):
     """

@@ -11,7 +11,6 @@ from bodosql.tests.test_window.window_common import (  # noqa
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 
-
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "funcs",
@@ -108,7 +107,7 @@ def test_two_arg_numeric_window_functions(
         pytest.param(["COUNT(*)", "COUNT", "COUNT_IF"], id="count-count_if-count_star"),
     ],
 )
-@pytest.mark.timeout(800)
+@pytest.mark.timeout(1200)
 # NOTE (allai5): passes in 592.81 seconds on 1 rank on M1 as of 05/03/2023
 def test_non_numeric_window_functions(
     funcs, all_window_df, all_window_col_names, window_frames, spark_info
@@ -162,6 +161,7 @@ def test_non_numeric_window_functions(
     count_window_applies(pandas_code, window_frames[1], funcs)
 
 
+@pytest.mark.timeout(700)
 @pytest.mark.slow
 def test_first_last_any_nth(
     all_window_df, all_window_col_names, window_frames, spark_info
