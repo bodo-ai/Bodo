@@ -482,7 +482,6 @@ def get_schema_from_metadata(
             other uses, like column pruning
         unsupported_arrow_types: Arrow Types of Each Unsupported Column
     """
-
     # Get Snowflake Metadata for Query
     # Use it to determine the general / broad Snowflake types
     # The actual Arrow result may use smaller types for columns (initially int64, use int8)
@@ -647,7 +646,11 @@ def _detect_column_dict_encoding(
     if is_table_input and total_rows is not None:
         check_res = execute_query(
             cursor,
-            f"show tables like '{sql_query}'",
+            # Note we need both like and starts with because in this context
+            # like is case-insensitive but starts with is case-sensitive. Since they
+            # are exactly the same this will only match the exact query.
+            # See https://bodo.atlassian.net/browse/BSE-277 for why this is necessary.
+            f"show tables like '{sql_query}' starts with '{sql_query}'",
             timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT,
         )
         if check_res is None or not check_res.fetchall():
