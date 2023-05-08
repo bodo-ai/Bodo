@@ -43,12 +43,14 @@ def test_cast_str_to_numeric(
     spark_query1 = "SELECT CAST('5' AS INT)"
     spark_query2 = "SELECT CAST('-3' AS INT)"
     spark_query3 = "SELECT CAST('5.2' AS FLOAT)"
+    spark_query4 = "SELECT CAST('23.1204' AS DOUBLE)"
     if use_sf_cast_syntax:
         query1 = "SELECT '5'::INT"
         query2 = "SELECT '-3'::INT"
         query3 = "SELECT '5.2'::FLOAT"
+        query4 = "SELECT '23.1204'::NUMBER(38, 4)"
     else:
-        (query1, query2, query3) = (spark_query1, spark_query2, spark_query3)
+        (query1, query2, query3, query4) = (spark_query1, spark_query2, spark_query3, spark_query4)
     check_query(
         query1,
         basic_df,
@@ -70,6 +72,14 @@ def test_cast_str_to_numeric(
         basic_df,
         spark_info,
         equivalent_spark_query=spark_query3,
+        check_names=False,
+        check_dtype=False,
+    )
+    check_query(
+        query4,
+        basic_df,
+        spark_info,
+        equivalent_spark_query=spark_query4,
         check_names=False,
         check_dtype=False,
     )
