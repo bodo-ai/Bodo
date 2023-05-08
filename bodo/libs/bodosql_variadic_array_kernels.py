@@ -6,11 +6,15 @@ number of arguments
 
 from numba.core import types
 from numba.extending import overload
+import numpy as np
+import pandas as pd
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     get_common_scalar_dtype,
+    get_overload_const_list,
+    is_overload_constant_list,
     is_str_arr_type,
     raise_bodo_error,
 )
@@ -807,3 +811,73 @@ def overload_greatest_util(A):
         an array containing the largest value of the input array
     """
     return least_greatest_codegen(A, is_greatest=True)
+
+
+def row_number(df, by_cols, ascending, na_position):  # pragma: no cover
+    return
+
+
+@overload(row_number, no_unliteral=True, inline="always")
+def overload_row_number(df, by, ascending, na_position):
+    """Performs the ROW_NUMBER operation on a DataFrame based on the sorting
+       parameters provided. The result is returned as a DataFrame containing
+       a single column called ROW_NUMBER due to constraints in how the code
+       generation for window functions is currently handled.
+
+    Args:
+        df (pd.DataFrame): the DataFrame whose row ordinals are being sought
+        by (constant List[str]): list of column names to sort by
+        ascending (constant List[bool]): list indicating which columns to sort
+        in ascending versus descending order
+        na_position (constant List[str]): list of "first" or "last" values
+        indicating which of the columns should have nulls placed first or last
+
+    Returns:
+        pd.DataFrame: a DataFrame with a single column ROW_NUMBER indicating
+        what row number each row of the original DataFrame would be located
+        in (1-indexed) if it were sorted bby the parameters provided.
+    """
+    if (
+        not is_overload_constant_list(by)
+        or not is_overload_constant_list(ascending)
+        or not is_overload_constant_list(na_position)
+    ):  # pragma: no cover
+        raise_bodo_error(
+            "row_number by, ascending and na_position arguments must be constant lists"
+        )
+    by_list = get_overload_const_list(by)
+    asc_list = get_overload_const_list(ascending)
+    na_list = get_overload_const_list(na_position)
+    func_text = "def impl(df, by, ascending, na_position):\n"
+    cols = ", ".join([f"df['{col}'].values" for col in by_list])
+    func_text += "   n = len(df)\n"
+    func_text += (
+        "   index_2 = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)\n"
+    )
+    func_text += f"   df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe(({cols},), index_2, __col_name_meta_value_1)\n"
+    func_text += f"   df3 = df2.sort_values(by={by_list}, ascending={asc_list}, na_position={na_list})\n"
+    func_text += "   rows = np.arange(1, n+1)\n"
+    func_text += (
+        "   index_3 = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df3)\n"
+    )
+    func_text += "   df4 = bodo.hiframes.pd_dataframe_ext.init_dataframe((rows,), index_3, __col_name_meta_value_2)\n"
+    func_text += "   return df4.sort_index()\n"
+
+    __col_name_meta_value_1 = bodo.utils.typing.ColNamesMetaType(tuple(by_list))
+    __col_name_meta_value_2 = bodo.utils.typing.ColNamesMetaType(("ROW_NUMBER",))
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "np": np,
+            "pd": pd,
+            "__col_name_meta_value_1": __col_name_meta_value_1,
+            "__col_name_meta_value_2": __col_name_meta_value_2,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+
+    return impl
