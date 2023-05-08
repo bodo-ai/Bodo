@@ -1552,9 +1552,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     RexWindow window = windows.get(0);
 
     if (window.partitionKeys.size() == 0) {
-      throw new BodoSQLCodegenException(
-          "BODOSQL currently requires a partition column when handling windowed aggregation"
-              + " functions");
+      for (String name : names) {
+        if (!name.equals("ROW_NUMBER")) {
+          throw new BodoSQLCodegenException(
+              "BODOSQL currently requires a partition column when handling windowed aggregation"
+                  + " functions, except for ROW_NUMBER()");
+        }
+      }
     }
 
     for (int i = 1; i < windows.size(); i++) {
@@ -1772,9 +1776,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
       StringBuilder grpbyExpr = new StringBuilder(".groupby(").append(groupbyCols.toString());
       grpbyExpr.append(", as_index=False, dropna=False, _is_bodosql=True)");
       groupedColExpr.append(grpbyExpr);
-    } else {
-      throw new BodoSQLCodegenException(
-          "Error, cannot currently perform windowed aggregation without a partition clause");
     }
 
     List<RelDataType> typs = new ArrayList<>();
@@ -1833,8 +1834,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
       outputExpr.append(groupedColExpr).append(".apply(").append(fn_name).append(")");
 
     } else {
-      throw new BodoSQLCodegenException(
-          "Error, cannot currently perform windowed aggregation without a partition clause");
+      // Currently the only supported function without a partition is row_number,
+      // so the only thing returned will be a single Series containing the
+      // output, then each column that needs to access it do so in the form "[:]"
+      outputExpr
+          .append("bodo.libs.bodosql_array_kernels.row_number(")
+          .append(groupedColExpr)
+          .append(", ")
+          .append(sortString.toString())
+          .append(", ")
+          .append(ascendingString.toString())
+          .append(", ")
+          .append(NAPositionString.toString())
+          .append(")");
+      outputColList = new ArrayList<String>();
+      for (int i = 0; i < aggOperations.size(); i++) {
+        outputColList.add("ROW_NUMBER");
+      }
     }
 
     return new Pair<>(outputExpr.toString(), outputColList);

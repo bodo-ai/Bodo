@@ -1214,3 +1214,51 @@ def test_least_greatest_optional(func, args, answers, request, memory_leak_check
                 check_dtype=False,
                 reset_index=True,
             )
+
+
+@pytest.mark.parametrize(
+    "test",
+    [
+        pytest.param(0, id="test_a"),
+        pytest.param(1, id="test_b"),
+        pytest.param(2, id="test_c"),
+    ],
+)
+def test_row_number(test, memory_leak_check):
+    def impl1(df):
+        return bodo.libs.bodosql_array_kernels.row_number(
+            df, ["A", "B"], [True, False], ["first", "last"]
+        )
+
+    def impl2(df):
+        return bodo.libs.bodosql_array_kernels.row_number(df, ["C"], [True], ["first"])
+
+    def impl3(df):
+        return bodo.libs.bodosql_array_kernels.row_number(
+            df, ["B", "C"], [False, True], ["last", "last"]
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([1, None, 0, 5] * 4, dtype=pd.Int32Dtype()).values,
+            "B": pd.Series([2, 8, None, 4], dtype=pd.Int32Dtype()).repeat(4).values,
+            "C": [str(i) for i in range(16)],
+        }
+    )
+
+    res1 = pd.Series([11, 3, 7, 15, 9, 1, 5, 13, 12, 4, 8, 16, 10, 2, 6, 14])
+    res2 = pd.Series([1, 2, 9, 10, 11, 12, 13, 14, 15, 16, 3, 4, 5, 6, 7, 8])
+    res3 = pd.Series([9, 10, 11, 12, 1, 2, 3, 4, 15, 16, 13, 14, 5, 6, 7, 8])
+
+    impls = [impl1, impl2, impl3]
+    results = [res1, res2, res3]
+
+    impl = impls[test]
+    res = results[test]
+    check_func(
+        impl,
+        (df,),
+        py_output=pd.DataFrame({"ROW_NUMBER": res}),
+        check_dtype=False,
+        reset_index=True,
+    )

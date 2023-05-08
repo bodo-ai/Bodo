@@ -2685,7 +2685,8 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
 (if there is an `#!sql ORDER BY` clause).
 !!! note
     `#!sql RANGE BETWEEN` is not currently supported.
-    Currently, BodoSQL supports the following Window functions:
+    
+Currently, BodoSQL supports the following Window functions:
 
 !!!note
     If a window frame contains `NaN` values, the output may diverge from Snowflake's
@@ -2931,6 +2932,9 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
 
     Compute an increasing row number (starting at 1) for each
     row. This function cannot be used with `#!sql ROWS BETWEEN`.
+
+!!! note
+    This window function is supported without a partition.
 
 
 #### CONDITIONAL_TRUE_EVENT
