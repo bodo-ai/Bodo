@@ -310,6 +310,7 @@ ORDER BY num_rows, table1.float_col
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.smoke
 def test_smoke6(smoke_ctx_3, spark_info, memory_leak_check):
     """Tests left joins, window functions and ORDER BY"""

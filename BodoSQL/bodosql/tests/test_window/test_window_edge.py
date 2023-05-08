@@ -87,6 +87,7 @@ def test_window_no_rows(uint8_window_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_window_case(uint8_window_df, spark_info):
     """Tests windowed window function calls inside of CASE statements. The

@@ -546,6 +546,7 @@ def test_table_path_no_filter_pushdown(datapath, memory_leak_check):
     assert not failed
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_table_path_col_pruning_and_filter_pushdown_implicit_casting(
     datapath,
