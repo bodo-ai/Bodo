@@ -280,9 +280,10 @@ std::shared_ptr<table_info> RetrieveTable(
  * @param is_na_equal should na values be considered equal
  * @return True if they are equal and false otherwise.
  */
-bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
-                     const std::shared_ptr<array_info>& arr2, int64_t pos2,
-                     bool is_na_equal);
+bool TestEqualColumn(const std::shared_ptr<const array_info>& arr1,
+                     int64_t pos1,
+                     const std::shared_ptr<const array_info>& arr2,
+                     int64_t pos2, bool is_na_equal);
 
 /* This function test if two rows of two arrow columns (which may or may not be
  * the same) are equal, greater or lower than the other.
