@@ -669,8 +669,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
         return nullptr;
     }
     size_t siz = idx_arr->length;
-    return RetrieveArray_SingleColumn_F(in_arr, (int64_t*)idx_arr->data1(), siz,
-                                        use_nullable_arr);
+    return RetrieveArray_SingleColumn_F(
+        std::move(in_arr), (int64_t*)idx_arr->data1(), siz, use_nullable_arr);
 }
 
 std::shared_ptr<array_info> RetrieveArray_TwoColumns(
@@ -1230,9 +1230,10 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
     }
 }
 
-bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
-                     const std::shared_ptr<array_info>& arr2, int64_t pos2,
-                     bool is_na_equal) {
+bool TestEqualColumn(const std::shared_ptr<const array_info>& arr1,
+                     int64_t pos1,
+                     const std::shared_ptr<const array_info>& arr2,
+                     int64_t pos2, bool is_na_equal) {
     if (arr1->arr_type == bodo_array_type::STRUCT ||
         arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
         // TODO: Handle is_na_equal in Arrow arrays
@@ -1679,8 +1680,9 @@ bool KeyComparisonAsPython(
  * have sentinel nulls are supported.
  */
 template <Bodo_CTypes::CTypeEnum DType>
-requires(NullSentinelDtype<DType>) void fill_null_bitmask_numpy(
-    uint8_t* bitmask, const std::shared_ptr<array_info> arr) {
+    requires(NullSentinelDtype<DType>)
+void fill_null_bitmask_numpy(uint8_t* bitmask,
+                             const std::shared_ptr<array_info> arr) {
     using T = typename dtype_to_type<DType>::type;
     T* data = (T*)(arr->data1());
     for (size_t i = 0; i < arr->length; i++) {

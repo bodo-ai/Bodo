@@ -120,14 +120,14 @@ void shift_computation(std::shared_ptr<array_info> arr,
  * @param[out] m3_col_out The second moment output column.
  * @param[in] grp_info The grouping information.
  */
-void skew_combine(std::shared_ptr<array_info> count_col_in,
-                  std::shared_ptr<array_info> m1_col_in,
-                  std::shared_ptr<array_info> m2_col_in,
-                  std::shared_ptr<array_info> m3_col_in,
-                  std::shared_ptr<array_info> count_col_out,
-                  std::shared_ptr<array_info> m1_col_out,
-                  std::shared_ptr<array_info> m2_col_out,
-                  std::shared_ptr<array_info> m3_col_out,
+void skew_combine(const std::shared_ptr<array_info>& count_col_in,
+                  const std::shared_ptr<array_info>& m1_col_in,
+                  const std::shared_ptr<array_info>& m2_col_in,
+                  const std::shared_ptr<array_info>& m3_col_in,
+                  const std::shared_ptr<array_info>& count_col_out,
+                  const std::shared_ptr<array_info>& m1_col_out,
+                  const std::shared_ptr<array_info>& m2_col_out,
+                  const std::shared_ptr<array_info>& m3_col_out,
                   grouping_info const& grp_info);
 
 // Kurtosis
@@ -146,16 +146,16 @@ void skew_combine(std::shared_ptr<array_info> count_col_in,
  * @param[out] m3_col_out The second moment output column.
  * @param[in] grp_info The grouping information.
  */
-void kurt_combine(std::shared_ptr<array_info> count_col_in,
-                  std::shared_ptr<array_info> m1_col_in,
-                  std::shared_ptr<array_info> m2_col_in,
-                  std::shared_ptr<array_info> m3_col_in,
-                  std::shared_ptr<array_info> m4_col_in,
-                  std::shared_ptr<array_info> count_col_out,
-                  std::shared_ptr<array_info> m1_col_out,
-                  std::shared_ptr<array_info> m2_col_out,
-                  std::shared_ptr<array_info> m3_col_out,
-                  std::shared_ptr<array_info> m4_col_out,
+void kurt_combine(const std::shared_ptr<array_info>& count_col_in,
+                  const std::shared_ptr<array_info>& m1_col_in,
+                  const std::shared_ptr<array_info>& m2_col_in,
+                  const std::shared_ptr<array_info>& m3_col_in,
+                  const std::shared_ptr<array_info>& m4_col_in,
+                  const std::shared_ptr<array_info>& count_col_out,
+                  const std::shared_ptr<array_info>& m1_col_out,
+                  const std::shared_ptr<array_info>& m2_col_out,
+                  const std::shared_ptr<array_info>& m3_col_out,
+                  const std::shared_ptr<array_info>& m4_col_out,
                   grouping_info const& grp_info);
 
 // Variance
@@ -172,12 +172,12 @@ void kurt_combine(std::shared_ptr<array_info> count_col_in,
  * @param[out] m2_col_out The mean^2 output column.
  * @param[in] grp_info The grouping information.
  */
-void var_combine(std::shared_ptr<array_info> count_col_in,
-                 std::shared_ptr<array_info> mean_col_in,
-                 std::shared_ptr<array_info> m2_col_in,
-                 std::shared_ptr<array_info> count_col_out,
-                 std::shared_ptr<array_info> mean_col_out,
-                 std::shared_ptr<array_info> m2_col_out,
+void var_combine(const std::shared_ptr<array_info>& count_col_in,
+                 const std::shared_ptr<array_info>& mean_col_in,
+                 const std::shared_ptr<array_info>& m2_col_in,
+                 const std::shared_ptr<array_info>& count_col_out,
+                 const std::shared_ptr<array_info>& mean_col_out,
+                 const std::shared_ptr<array_info>& m2_col_out,
                  grouping_info const& grp_info);
 
 // NUNIQUE

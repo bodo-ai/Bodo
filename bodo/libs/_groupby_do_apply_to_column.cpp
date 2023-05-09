@@ -110,8 +110,8 @@ void apply_to_column_list_string(std::shared_ptr<array_info> in_col,
  */
 template <int ftype>
 inline bool idx_func_valid_group(int64_t i_grp, size_t row_num,
-                                 std::shared_ptr<array_info> in_col,
-                                 std::shared_ptr<array_info> index_pos) {
+                                 const std::shared_ptr<array_info>& in_col,
+                                 const std::shared_ptr<array_info>& index_pos) {
     switch (ftype) {
         case Bodo_FTypes::idxmax_na_first:
         case Bodo_FTypes::idxmin_na_first:
@@ -139,8 +139,8 @@ inline bool idx_func_valid_group(int64_t i_grp, size_t row_num,
  * @return false Should the NA input path be taken?
  */
 template <int ftype>
-inline bool idx_func_take_non_na_path(size_t row_num,
-                                      std::shared_ptr<array_info> in_col) {
+inline bool idx_func_take_non_na_path(
+    size_t row_num, const std::shared_ptr<array_info>& in_col) {
     switch (ftype) {
         case Bodo_FTypes::idxmax_na_first:
         case Bodo_FTypes::idxmin_na_first:
