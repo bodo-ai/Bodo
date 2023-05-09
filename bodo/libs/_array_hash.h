@@ -373,8 +373,8 @@ class ElementComparator {
    public:
     // Store data pointers to avoid extra struct access in performance critical
     // code
-    ElementComparator(std::shared_ptr<array_info> arr1_,
-                      std::shared_ptr<array_info> arr2_) {
+    ElementComparator(const std::shared_ptr<array_info>& arr1_,
+                      const std::shared_ptr<array_info>& arr2_) {
         // Store the index data for dict encoded arrays since index comparison
         // is enough in case of unified dictionaries. Only use when the
         // dictionaries are the same (and are deduped since otherwise the index
@@ -390,24 +390,25 @@ class ElementComparator {
                 throw std::runtime_error(
                     "ElementComparator: Dictionary is not deduplicated.");
             }
-            arr1_ = arr1_->child_arrays[1];
-            arr2_ = arr2_->child_arrays[1];
+            this->arr1 = arr1_->child_arrays[1];
+            this->arr2 = arr2_->child_arrays[1];
+        } else {
+            this->arr1 = arr1_;
+            this->arr2 = arr2_;
         }
-        this->arr1 = arr1_;
-        this->arr2 = arr2_;
-        this->data_ptr_1 = arr1_->data1();
-        this->data_ptr_2 = arr2_->data1();
-        this->null_bitmask_1 = (uint8_t*)arr1_->null_bitmask();
-        this->null_bitmask_2 = (uint8_t*)arr2_->null_bitmask();
+        this->data_ptr_1 = this->arr1->data1();
+        this->data_ptr_2 = this->arr2->data1();
+        this->null_bitmask_1 = (uint8_t*)this->arr1->null_bitmask();
+        this->null_bitmask_2 = (uint8_t*)this->arr2->null_bitmask();
     }
 
     // Numpy arrays with nullable dtypes (float, datetime/timedelta)
     // NAs equal case
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
-    requires(ArrType == bodo_array_type::NUMPY && NullSentinelDtype<DType> &&
-             is_na_equal) constexpr bool
-    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        requires(ArrType == bodo_array_type::NUMPY &&
+                 NullSentinelDtype<DType> && is_na_equal)
+    constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
         T* data1 = (T*)this->data_ptr_1;
         T* data2 = (T*)this->data_ptr_2;
@@ -421,9 +422,9 @@ class ElementComparator {
     // NAs not equal case
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
-    requires(ArrType == bodo_array_type::NUMPY && NullSentinelDtype<DType> &&
-             !is_na_equal) constexpr bool
-    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        requires(ArrType == bodo_array_type::NUMPY &&
+                 NullSentinelDtype<DType> && !is_na_equal)
+    constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
         T* data1 = (T*)this->data_ptr_1;
         T* data2 = (T*)this->data_ptr_2;
@@ -438,9 +439,8 @@ class ElementComparator {
     // 'is_na_equal' doesn't matter.
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal = true>
-    requires(ArrType == bodo_array_type::NUMPY &&
-             !NullSentinelDtype<DType>) constexpr bool
-    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        requires(ArrType == bodo_array_type::NUMPY && !NullSentinelDtype<DType>)
+    constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
         T* data1 = (T*)this->data_ptr_1;
         T* data2 = (T*)this->data_ptr_2;
@@ -451,10 +451,9 @@ class ElementComparator {
     // NAs equal case:
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
-    requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
-             DType != Bodo_CTypes::CTypeEnum::_BOOL &&
-             is_na_equal) constexpr bool
-    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
+                 DType != Bodo_CTypes::CTypeEnum::_BOOL && is_na_equal)
+    constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
         T* data1 = (T*)this->data_ptr_1;
         T* data2 = (T*)this->data_ptr_2;
@@ -468,9 +467,9 @@ class ElementComparator {
     // NAs not equal case:
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
-    requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
-             DType != Bodo_CTypes::_BOOL && !is_na_equal) constexpr bool
-    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
+                 DType != Bodo_CTypes::_BOOL && !is_na_equal)
+    constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
         T* data1 = (T*)this->data_ptr_1;
         T* data2 = (T*)this->data_ptr_2;
@@ -485,9 +484,9 @@ class ElementComparator {
     // NA equal case:
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
-    requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
-             DType == Bodo_CTypes::_BOOL && is_na_equal) constexpr bool
-    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
+                 DType == Bodo_CTypes::_BOOL && is_na_equal)
+    constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         bool val1 = GetBit((uint8_t*)this->data_ptr_1, iRowA);
         bool val2 = GetBit((uint8_t*)this->data_ptr_2, iRowB);
         bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
@@ -498,10 +497,9 @@ class ElementComparator {
     // NAs not equal case:
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
-    requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
-             DType == Bodo_CTypes::CTypeEnum::_BOOL &&
-             !is_na_equal) constexpr bool
-    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        requires(ArrType == bodo_array_type::NULLABLE_INT_BOOL &&
+                 DType == Bodo_CTypes::CTypeEnum::_BOOL && !is_na_equal)
+    constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         bool val1 = GetBit((uint8_t*)this->data_ptr_1, iRowA);
         bool val2 = GetBit((uint8_t*)this->data_ptr_2, iRowB);
         bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
@@ -513,8 +511,8 @@ class ElementComparator {
     // NAs equal case:
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
-    requires(ArrType == bodo_array_type::DICT && is_na_equal) constexpr bool
-    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        requires(ArrType == bodo_array_type::DICT && is_na_equal)
+    constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = DICT_INDEX_C_TYPE;
         T* data1 = (T*)this->data_ptr_1;
         T* data2 = (T*)this->data_ptr_2;
@@ -528,8 +526,8 @@ class ElementComparator {
     // NAs not equal case:
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
-    requires(ArrType == bodo_array_type::DICT && !is_na_equal) constexpr bool
-    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        requires(ArrType == bodo_array_type::DICT && !is_na_equal)
+    constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = DICT_INDEX_C_TYPE;
         T* data1 = (T*)this->data_ptr_1;
         T* data2 = (T*)this->data_ptr_2;
@@ -543,10 +541,10 @@ class ElementComparator {
     // generic comparator, fall back to runtime type checks with TestEqualColumn
     template <bodo_array_type::arr_type_enum ArrType,
               Bodo_CTypes::CTypeEnum DType, bool is_na_equal>
-    requires(ArrType != bodo_array_type::NUMPY &&
-             ArrType != bodo_array_type::NULLABLE_INT_BOOL &&
-             ArrType != bodo_array_type::DICT) constexpr bool
-    operator()(const int64_t iRowA, const int64_t iRowB) const {
+        requires(ArrType != bodo_array_type::NUMPY &&
+                 ArrType != bodo_array_type::NULLABLE_INT_BOOL &&
+                 ArrType != bodo_array_type::DICT)
+    constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         return TestEqualColumn(this->arr1, iRowA, this->arr2, iRowB,
                                is_na_equal);
     }
@@ -776,7 +774,7 @@ class JoinKeysEqualComparatorTwoKeys {
 template <typename Functor, typename... Ts>
 inline constexpr decltype(auto) type_dispatcher(
     bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
-    const bool is_na_equal, Functor f, Ts&&... args) {
+    const bool is_na_equal, Functor& f, Ts&&... args) {
 #ifndef DISPATCH_CASE
 #define DISPATCH_CASE(ARRAY_TYPE, DTYPE)                            \
     case DTYPE: {                                                   \
@@ -925,25 +923,46 @@ inline constexpr decltype(auto) type_dispatcher(
  */
 class KeysEqualComparator {
    public:
+    using cmp_func_t =
+        std::function<bool(const int64_t, const int64_t, const int64_t)>;
+
     KeysEqualComparator(const int64_t n_keys,
                         const std::shared_ptr<table_info> table,
                         const bool is_na_equal)
-        : n_keys{n_keys}, table{table}, is_na_equal(is_na_equal) {}
+        : n_keys{n_keys}, table{std::move(table)}, is_na_equal(is_na_equal) {
+        // Create all the ElementComparator instances up front.
+        this->cmps.reserve(n_keys);
+        for (int64_t key_i = 0; key_i < n_keys; key_i++) {
+            this->cmps.emplace_back(table->columns[key_i],
+                                    table->columns[key_i]);
+        }
+
+        this->equal_elements = [=, this](const int64_t key_i,
+                                         const int64_t iRowA,
+                                         const int64_t iRowB) {
+            const std::shared_ptr<array_info>& arr =
+                this->table->columns[key_i];
+            return type_dispatcher(arr->arr_type, arr->dtype, this->is_na_equal,
+                                   this->cmps[key_i], iRowA, iRowB);
+        };
+    }
 
     bool operator()(const int64_t iRowA, const int64_t iRowB) const noexcept {
-        auto equal_elements = [=, this](std::shared_ptr<array_info> arr) {
-            return type_dispatcher(arr->arr_type, arr->dtype, this->is_na_equal,
-                                   ElementComparator{arr, arr}, iRowA, iRowB);
-        };
-
-        return std::all_of(table->columns.cbegin(),
-                           table->columns.cbegin() + n_keys, equal_elements);
+        for (int64_t key_i = 0; key_i < n_keys; key_i++) {
+            bool is_equal = this->equal_elements(key_i, iRowA, iRowB);
+            if (!is_equal) {
+                return false;
+            }
+        }
+        return true;
     }
 
    private:
     const int64_t n_keys;
     const std::shared_ptr<table_info> table;
     const bool is_na_equal;
+    cmp_func_t equal_elements;
+    std::vector<ElementComparator> cmps;
 };
 
 // ----- Simple C++ Cache for LIKE kernel dict-encoding case --------
