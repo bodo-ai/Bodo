@@ -312,12 +312,12 @@ void VarStdColSet::alloc_combine_columns(
 }
 
 void VarStdColSet::combine(const grouping_info& grp_info) {
-    std::shared_ptr<array_info> count_col_in = this->update_cols[0];
-    std::shared_ptr<array_info> mean_col_in = this->update_cols[1];
-    std::shared_ptr<array_info> m2_col_in = this->update_cols[2];
-    std::shared_ptr<array_info> count_col_out = this->combine_cols[1];
-    std::shared_ptr<array_info> mean_col_out = this->combine_cols[2];
-    std::shared_ptr<array_info> m2_col_out = this->combine_cols[3];
+    const std::shared_ptr<array_info>& count_col_in = this->update_cols[0];
+    const std::shared_ptr<array_info>& mean_col_in = this->update_cols[1];
+    const std::shared_ptr<array_info>& m2_col_in = this->update_cols[2];
+    const std::shared_ptr<array_info>& count_col_out = this->combine_cols[1];
+    const std::shared_ptr<array_info>& mean_col_out = this->combine_cols[2];
+    const std::shared_ptr<array_info>& m2_col_out = this->combine_cols[3];
     aggfunc_output_initialize(count_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(mean_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count, use_sql_rules);
@@ -439,14 +439,14 @@ void SkewColSet::alloc_combine_columns(
 }
 
 void SkewColSet::combine(const grouping_info& grp_info) {
-    std::shared_ptr<array_info> count_col_in = this->update_cols[0];
-    std::shared_ptr<array_info> m1_col_in = this->update_cols[1];
-    std::shared_ptr<array_info> m2_col_in = this->update_cols[2];
-    std::shared_ptr<array_info> m3_col_in = this->update_cols[3];
-    std::shared_ptr<array_info> count_col_out = this->combine_cols[1];
-    std::shared_ptr<array_info> m1_col_out = this->combine_cols[2];
-    std::shared_ptr<array_info> m2_col_out = this->combine_cols[3];
-    std::shared_ptr<array_info> m3_col_out = this->combine_cols[4];
+    const std::shared_ptr<array_info>& count_col_in = this->update_cols[0];
+    const std::shared_ptr<array_info>& m1_col_in = this->update_cols[1];
+    const std::shared_ptr<array_info>& m2_col_in = this->update_cols[2];
+    const std::shared_ptr<array_info>& m3_col_in = this->update_cols[3];
+    const std::shared_ptr<array_info>& count_col_out = this->combine_cols[1];
+    const std::shared_ptr<array_info>& m1_col_out = this->combine_cols[2];
+    const std::shared_ptr<array_info>& m2_col_out = this->combine_cols[3];
+    const std::shared_ptr<array_info>& m3_col_out = this->combine_cols[4];
     aggfunc_output_initialize(count_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(m1_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count, use_sql_rules);
@@ -571,16 +571,16 @@ void KurtColSet::alloc_combine_columns(
 }
 
 void KurtColSet::combine(const grouping_info& grp_info) {
-    std::shared_ptr<array_info> count_col_in = this->update_cols[0];
-    std::shared_ptr<array_info> m1_col_in = this->update_cols[1];
-    std::shared_ptr<array_info> m2_col_in = this->update_cols[2];
-    std::shared_ptr<array_info> m3_col_in = this->update_cols[3];
-    std::shared_ptr<array_info> m4_col_in = this->update_cols[4];
-    std::shared_ptr<array_info> count_col_out = this->combine_cols[1];
-    std::shared_ptr<array_info> m1_col_out = this->combine_cols[2];
-    std::shared_ptr<array_info> m2_col_out = this->combine_cols[3];
-    std::shared_ptr<array_info> m3_col_out = this->combine_cols[4];
-    std::shared_ptr<array_info> m4_col_out = this->combine_cols[5];
+    const std::shared_ptr<array_info>& count_col_in = this->update_cols[0];
+    const std::shared_ptr<array_info>& m1_col_in = this->update_cols[1];
+    const std::shared_ptr<array_info>& m2_col_in = this->update_cols[2];
+    const std::shared_ptr<array_info>& m3_col_in = this->update_cols[3];
+    const std::shared_ptr<array_info>& m4_col_in = this->update_cols[4];
+    const std::shared_ptr<array_info>& count_col_out = this->combine_cols[1];
+    const std::shared_ptr<array_info>& m1_col_out = this->combine_cols[2];
+    const std::shared_ptr<array_info>& m2_col_out = this->combine_cols[3];
+    const std::shared_ptr<array_info>& m3_col_out = this->combine_cols[4];
+    const std::shared_ptr<array_info>& m4_col_out = this->combine_cols[5];
     aggfunc_output_initialize(count_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(m1_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count, use_sql_rules);
@@ -724,13 +724,13 @@ void NUniqueColSet::update(const std::vector<grouping_info>& grp_infos) {
         // table
         aggfunc_output_initialize(this->update_cols[0], Bodo_FTypes::sum,
                                   use_sql_rules);  // zero initialize
-        nunique_computation(input_col, this->update_cols[0],
+        nunique_computation(std::move(input_col), this->update_cols[0],
                             grp_infos[my_nunique_table->id], dropna,
                             is_parallel);
     } else {
         // use default grouping_info
-        nunique_computation(input_col, this->update_cols[0], grp_infos[0],
-                            dropna, is_parallel);
+        nunique_computation(std::move(input_col), this->update_cols[0],
+                            grp_infos[0], dropna, is_parallel);
     }
 }
 
@@ -938,20 +938,21 @@ std::unique_ptr<BasicColSet> makeColSet(
     }
     switch (ftype) {
         case Bodo_FTypes::udf:
-            colset =
-                new UdfColSet(in_cols[0], do_combine, udf_table, udf_table_idx,
-                              udf_n_redvars[n_udf], use_sql_rules);
+            colset = new UdfColSet(in_cols[0], do_combine, std::move(udf_table),
+                                   udf_table_idx, udf_n_redvars[n_udf],
+                                   use_sql_rules);
             break;
         case Bodo_FTypes::gen_udf:
-            colset = new GeneralUdfColSet(in_cols[0], udf_table, udf_table_idx,
-                                          use_sql_rules);
+            colset = new GeneralUdfColSet(in_cols[0], std::move(udf_table),
+                                          udf_table_idx, use_sql_rules);
             break;
         case Bodo_FTypes::median:
             colset = new MedianColSet(in_cols[0], skipna, use_sql_rules);
             break;
         case Bodo_FTypes::nunique:
-            colset = new NUniqueColSet(in_cols[0], skipna, nunique_table,
-                                       do_combine, is_parallel, use_sql_rules);
+            colset =
+                new NUniqueColSet(in_cols[0], skipna, std::move(nunique_table),
+                                  do_combine, is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::cumsum:
         case Bodo_FTypes::cummin:

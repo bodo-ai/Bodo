@@ -467,7 +467,7 @@ void head_computation(std::shared_ptr<array_info> arr,
                       std::shared_ptr<array_info> out_arr,
                       const std::vector<int64_t>& row_list) {
     std::shared_ptr<array_info> updated_col =
-        RetrieveArray_SingleColumn(arr, row_list);
+        RetrieveArray_SingleColumn(std::move(arr), row_list);
     *out_arr = std::move(*updated_col);
 }
 
@@ -642,17 +642,17 @@ void shift_computation(std::shared_ptr<array_info> arr,
     }
     // 2. Retrieve column and put it in update_cols
     std::shared_ptr<array_info> updated_col =
-        RetrieveArray_SingleColumn(arr, row_list);
+        RetrieveArray_SingleColumn(std::move(arr), row_list);
     *out_arr = std::move(*updated_col);
 }
 
 // Variance
-void var_combine(std::shared_ptr<array_info> count_col_in,
-                 std::shared_ptr<array_info> mean_col_in,
-                 std::shared_ptr<array_info> m2_col_in,
-                 std::shared_ptr<array_info> count_col_out,
-                 std::shared_ptr<array_info> mean_col_out,
-                 std::shared_ptr<array_info> m2_col_out,
+void var_combine(const std::shared_ptr<array_info>& count_col_in,
+                 const std::shared_ptr<array_info>& mean_col_in,
+                 const std::shared_ptr<array_info>& m2_col_in,
+                 const std::shared_ptr<array_info>& count_col_out,
+                 const std::shared_ptr<array_info>& mean_col_out,
+                 const std::shared_ptr<array_info>& m2_col_out,
                  grouping_info const& grp_info) {
     for (size_t i = 0; i < count_col_in->length; i++) {
         // Var always has null compute columns even
@@ -690,14 +690,14 @@ void var_combine(std::shared_ptr<array_info> count_col_in,
 }
 
 // Skew
-void skew_combine(std::shared_ptr<array_info> count_col_in,
-                  std::shared_ptr<array_info> m1_col_in,
-                  std::shared_ptr<array_info> m2_col_in,
-                  std::shared_ptr<array_info> m3_col_in,
-                  std::shared_ptr<array_info> count_col_out,
-                  std::shared_ptr<array_info> m1_col_out,
-                  std::shared_ptr<array_info> m2_col_out,
-                  std::shared_ptr<array_info> m3_col_out,
+void skew_combine(const std::shared_ptr<array_info>& count_col_in,
+                  const std::shared_ptr<array_info>& m1_col_in,
+                  const std::shared_ptr<array_info>& m2_col_in,
+                  const std::shared_ptr<array_info>& m3_col_in,
+                  const std::shared_ptr<array_info>& count_col_out,
+                  const std::shared_ptr<array_info>& m1_col_out,
+                  const std::shared_ptr<array_info>& m2_col_out,
+                  const std::shared_ptr<array_info>& m3_col_out,
                   grouping_info const& grp_info) {
     for (size_t i = 0; i < count_col_in->length; i++) {
         if (count_col_in->get_null_bit(i)) {
@@ -728,16 +728,16 @@ void skew_combine(std::shared_ptr<array_info> count_col_in,
 }
 
 // Kurtosis
-void kurt_combine(std::shared_ptr<array_info> count_col_in,
-                  std::shared_ptr<array_info> m1_col_in,
-                  std::shared_ptr<array_info> m2_col_in,
-                  std::shared_ptr<array_info> m3_col_in,
-                  std::shared_ptr<array_info> m4_col_in,
-                  std::shared_ptr<array_info> count_col_out,
-                  std::shared_ptr<array_info> m1_col_out,
-                  std::shared_ptr<array_info> m2_col_out,
-                  std::shared_ptr<array_info> m3_col_out,
-                  std::shared_ptr<array_info> m4_col_out,
+void kurt_combine(const std::shared_ptr<array_info>& count_col_in,
+                  const std::shared_ptr<array_info>& m1_col_in,
+                  const std::shared_ptr<array_info>& m2_col_in,
+                  const std::shared_ptr<array_info>& m3_col_in,
+                  const std::shared_ptr<array_info>& m4_col_in,
+                  const std::shared_ptr<array_info>& count_col_out,
+                  const std::shared_ptr<array_info>& m1_col_out,
+                  const std::shared_ptr<array_info>& m2_col_out,
+                  const std::shared_ptr<array_info>& m3_col_out,
+                  const std::shared_ptr<array_info>& m4_col_out,
                   grouping_info const& grp_info) {
     for (size_t i = 0; i < count_col_in->length; i++) {
         if (count_col_in->get_null_bit(i)) {

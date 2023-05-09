@@ -465,7 +465,7 @@ std::shared_ptr<table_info> sort_values_table(
     // Want to keep dead keys only when we will perform a shuffle operation
     // later in the function
     std::shared_ptr<table_info> local_sort = sort_values_table_local(
-        in_table, n_key_t, vect_ascending, na_position,
+        std::move(in_table), n_key_t, vect_ascending, na_position,
         (parallel && n_total != 0) ? nullptr : dead_keys, parallel);
 
     if (!parallel) {

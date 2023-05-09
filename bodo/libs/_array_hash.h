@@ -373,8 +373,8 @@ class ElementComparator {
    public:
     // Store data pointers to avoid extra struct access in performance critical
     // code
-    ElementComparator(const std::shared_ptr<array_info>& arr1_,
-                      const std::shared_ptr<array_info>& arr2_) {
+    ElementComparator(const std::shared_ptr<const array_info>& arr1_,
+                      const std::shared_ptr<const array_info>& arr2_) {
         // Store the index data for dict encoded arrays since index comparison
         // is enough in case of unified dictionaries. Only use when the
         // dictionaries are the same (and are deduped since otherwise the index
@@ -550,8 +550,8 @@ class ElementComparator {
     }
 
    private:
-    std::shared_ptr<array_info> arr1;
-    std::shared_ptr<array_info> arr2;
+    std::shared_ptr<const array_info> arr1;
+    std::shared_ptr<const array_info> arr2;
     const char* data_ptr_1;
     const char* data_ptr_2;
     const uint8_t* null_bitmask_1;
@@ -629,8 +629,8 @@ template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
           bool is_na_equal>
 class JoinKeysEqualComparatorOneKey {
    public:
-    JoinKeysEqualComparatorOneKey(const std::shared_ptr<array_info> arr1,
-                                  const std::shared_ptr<array_info> arr2)
+    JoinKeysEqualComparatorOneKey(const std::shared_ptr<array_info>& arr1,
+                                  const std::shared_ptr<array_info>& arr2)
         : cmp_arr1(arr1, arr1),
           cmp_arr2(arr2, arr2),
           cmp_arr1_arr2(arr1, arr2),
@@ -685,10 +685,10 @@ template <bodo_array_type::arr_type_enum ArrType1,
           Bodo_CTypes::CTypeEnum DType2, bool is_na_equal>
 class JoinKeysEqualComparatorTwoKeys {
    public:
-    JoinKeysEqualComparatorTwoKeys(const std::shared_ptr<array_info> t1_k1,
-                                   const std::shared_ptr<array_info> t1_k2,
-                                   const std::shared_ptr<array_info> t2_k1,
-                                   const std::shared_ptr<array_info> t2_k2)
+    JoinKeysEqualComparatorTwoKeys(const std::shared_ptr<array_info>& t1_k1,
+                                   const std::shared_ptr<array_info>& t1_k2,
+                                   const std::shared_ptr<array_info>& t2_k1,
+                                   const std::shared_ptr<array_info>& t2_k2)
         : cmp_k1_t1(t1_k1, t1_k1),
           cmp_k1_t2(t2_k1, t2_k1),
           cmp_k1_t1_t2(t1_k1, t2_k1),

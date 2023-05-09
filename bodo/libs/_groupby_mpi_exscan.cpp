@@ -58,7 +58,7 @@ int determine_groupby_strategy(std::shared_ptr<table_info> in_table,
     // than just MPI_Exscan.
     bool has_non_arithmetic_type = false;
     for (uint64_t i = num_keys; i < in_table->ncols() - index_i; i++) {
-        std::shared_ptr<array_info> oper_col = in_table->columns[i];
+        const std::shared_ptr<array_info>& oper_col = in_table->columns[i];
         if (oper_col->arr_type != bodo_array_type::NUMPY &&
             oper_col->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
             has_non_arithmetic_type = true;
@@ -92,7 +92,7 @@ std::shared_ptr<array_info> compute_categorical_index(
     bool key_dropna) {
     tracing::Event ev("compute_categorical_index", is_parallel);
     for (int64_t i_key = 0; i_key < num_keys; i_key++) {
-        std::shared_ptr<array_info> a = in_table->columns[i_key];
+        const std::shared_ptr<array_info>& a = in_table->columns[i_key];
         if (a->arr_type == bodo_array_type::DICT) {
             make_dictionary_global_and_unique(a, is_parallel);
         }
@@ -218,7 +218,7 @@ void mpi_exscan_computation_numpy_T(
         GetTentry<T>(RetrieveNaNentry((Bodo_CTypes::CTypeEnum)dtype).data());
     Tkey miss_idx = -1;
     for (int j = start; j != end; j++) {
-        std::shared_ptr<array_info> work_col = out_arrs[j];
+        const std::shared_ptr<array_info>& work_col = out_arrs[j];
         int ftype = ftypes[j];
         auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
@@ -273,7 +273,7 @@ void mpi_exscan_computation_numpy_T(
         }
     }
     for (int j = start; j != end; j++) {
-        std::shared_ptr<array_info> work_col = out_arrs[j];
+        const std::shared_ptr<array_info>& work_col = out_arrs[j];
         int ftype = ftypes[j];
         // For skipdropna:
         //   The cumulative is never a NaN. The sum therefore works
@@ -360,7 +360,7 @@ void mpi_exscan_computation_nullable_T(
     std::shared_ptr<array_info> in_col = in_table->columns[k + num_keys];
     Tkey miss_idx = -1;
     for (int j = start; j != end; j++) {
-        std::shared_ptr<array_info> work_col = out_arrs[j];
+        const std::shared_ptr<array_info>& work_col = out_arrs[j];
         int ftype = ftypes[j];
         auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
@@ -479,15 +479,15 @@ void mpi_exscan_computation_T(
     std::shared_ptr<array_info> cat_column,
     std::shared_ptr<table_info> in_table, int64_t num_keys, int64_t k,
     int* ftypes, int* func_offsets, bool is_parallel, bool skipdropna) {
-    std::shared_ptr<array_info> in_col = in_table->columns[k + num_keys];
+    const std::shared_ptr<array_info>& in_col = in_table->columns[k + num_keys];
     if (in_col->arr_type == bodo_array_type::NUMPY) {
         return mpi_exscan_computation_numpy_T<Tkey, T, dtype>(
-            out_arrs, cat_column, in_table, num_keys, k, ftypes, func_offsets,
-            is_parallel, skipdropna);
+            out_arrs, std::move(cat_column), in_table, num_keys, k, ftypes,
+            func_offsets, is_parallel, skipdropna);
     } else {
         return mpi_exscan_computation_nullable_T<Tkey, T, dtype>(
-            out_arrs, cat_column, in_table, num_keys, k, ftypes, func_offsets,
-            is_parallel, skipdropna);
+            out_arrs, std::move(cat_column), in_table, num_keys, k, ftypes,
+            func_offsets, is_parallel, skipdropna);
     }
 }
 
@@ -520,7 +520,7 @@ std::shared_ptr<table_info> mpi_exscan_computation_Tkey(
     int k = 0;
     for (uint64_t i = num_keys; i < in_table->ncols() - return_index_i;
          i++, k++) {
-        std::shared_ptr<array_info> col = in_table->columns[i];
+        const std::shared_ptr<array_info>& col = in_table->columns[i];
         int start = func_offsets[k];
         int end = func_offsets[k + 1];
         for (int j = start; j != end; j++) {
@@ -529,7 +529,7 @@ std::shared_ptr<table_info> mpi_exscan_computation_Tkey(
                             col->num_categories);
             int ftype = ftypes[j];
             aggfunc_output_initialize(out_col, ftype, use_sql_rules);
-            out_arrs.push_back(out_col);
+            out_arrs.push_back(std::move(out_col));
         }
     }
     // Since each column can have different data type and MPI_Exscan can only do
@@ -583,8 +583,8 @@ std::shared_ptr<table_info> mpi_exscan_computation(
     if (dtype == CTYPE) {                                                      \
         return mpi_exscan_computation_Tkey<                                    \
             typename dtype_to_type<CTYPE>::type>(                              \
-            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel, \
-            skipdropna, return_key, return_index, use_sql_rules);              \
+            std::move(cat_column), in_table, num_keys, ftypes, func_offsets,   \
+            is_parallel, skipdropna, return_key, return_index, use_sql_rules); \
     }
 #endif
     MPI_EXSCAN_COMPUTATION_CALL(Bodo_CTypes::INT8)
