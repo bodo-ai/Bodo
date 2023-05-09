@@ -609,6 +609,7 @@ class GroupbyPipeline {
             update_table->columns.push_back(
                 copy_array(in_table->columns.back()));
         }
+
         if (n_udf > 0) {
             int n_gen_udf = gen_udf_col_sets.size();
             if (n_udf > n_gen_udf) {
@@ -946,15 +947,15 @@ class GroupbyPipeline {
      * @return std::tuple<std::shared_ptr<array_info>, int64_t> Tuple of the
      * column and the row containing the group.
      */
-    std::tuple<std::shared_ptr<array_info>, int64_t> find_key_for_group(
+    std::tuple<std::shared_ptr<array_info>&, int64_t> find_key_for_group(
         int64_t group,
         const std::vector<std::shared_ptr<table_info>>& from_tables,
         int64_t key_col_idx) {
         for (size_t k = 0; k < grp_infos.size(); k++) {
             int64_t key_row = grp_infos[k].group_to_first_row[group];
             if (key_row >= 0) {
-                std::shared_ptr<array_info> key_col =
-                    (*from_tables[k])[key_col_idx];
+                std::shared_ptr<array_info>& key_col =
+                    from_tables[k]->columns[key_col_idx];
                 return {key_col, key_row};
             }
         }
@@ -966,11 +967,12 @@ class GroupbyPipeline {
      * Allocate and fill key columns, based on grouping info. It uses the
      * values of key columns from from_table to populate out_table.
      */
-    void alloc_init_keys(std::vector<std::shared_ptr<table_info>> from_tables,
-                         std::shared_ptr<table_info> out_table) {
+    void alloc_init_keys(
+        const std::vector<std::shared_ptr<table_info>>& from_tables,
+        const std::shared_ptr<table_info>& out_table) {
         int64_t key_row = 0;
         for (int64_t i = 0; i < num_keys; i++) {
-            std::shared_ptr<array_info> key_col = (*from_tables[0])[i];
+            std::shared_ptr<array_info>& key_col = from_tables[0]->columns[i];
             std::shared_ptr<array_info> new_key_col = nullptr;
             if (key_col->arr_type == bodo_array_type::NUMPY ||
                 key_col->arr_type == bodo_array_type::CATEGORICAL ||
@@ -1007,7 +1009,7 @@ class GroupbyPipeline {
                 }
             }
             if (key_col->arr_type == bodo_array_type::DICT) {
-                std::shared_ptr<array_info> key_indices =
+                std::shared_ptr<array_info>& key_indices =
                     key_col->child_arrays[1];
                 std::shared_ptr<array_info> new_key_indices =
                     alloc_array(num_groups, -1, -1, key_indices->arr_type,
