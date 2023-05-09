@@ -3752,11 +3752,7 @@ List<Object> Expression2(ExprContext exprContext) :
             (
                 // Special case for "IN", because RHS of "IN" is the only place
                 // that an expression-list is allowed ("exp IN (exp1, exp2)").
-
-                // In default calcite, this is LR(2). We need this to be at least LR(3)
-                // else we get conflicts due to .... NOT LIKE <Const string> vs NOT LIKE SOME
-                // (checkNonQueryExpression doesn't have any tokens, just java code that does some debug asserts)
-                LOOKAHEAD(3) {
+                LOOKAHEAD(2) {
                     checkNonQueryExpression(exprContext);
                 }
                 (
@@ -3774,42 +3770,6 @@ List<Object> Expression2(ExprContext exprContext) :
                         <ANY> { op = SqlStdOperatorTable.some(k); }
                     |
                         <ALL> { op = SqlStdOperatorTable.all(k); }
-                    )
-                |
-                    <LIKE>
-                    (
-                        <SOME> { op = SqlStdOperatorTable.SOME_LIKE; }
-                    |
-                        <ANY> { op = SqlStdOperatorTable.SOME_LIKE; }
-                    |
-                        <ALL> { op = SqlStdOperatorTable.ALL_LIKE; }
-                    )
-                |
-                    <NOT> <LIKE>
-                    (
-                        <SOME> { op = SqlStdOperatorTable.SOME_NOT_LIKE; }
-                    |
-                        <ANY> { op = SqlStdOperatorTable.SOME_NOT_LIKE; }
-                    |
-                        <ALL> { op = SqlStdOperatorTable.ALL_NOT_LIKE; }
-                    )
-                |
-                    <ILIKE>
-                    (
-                        <SOME> { op = SqlStdOperatorTable.SOME_ILIKE; }
-                    |
-                        <ANY> { op = SqlStdOperatorTable.SOME_ILIKE; }
-                    |
-                        <ALL> { op = SqlStdOperatorTable.ALL_ILIKE; }
-                    )
-                |
-                    <NOT> <ILIKE>
-                    (
-                        <SOME> { op = SqlStdOperatorTable.SOME_NOT_ILIKE; }
-                    |
-                        <ANY> { op = SqlStdOperatorTable.SOME_NOT_ILIKE; }
-                    |
-                        <ALL> { op = SqlStdOperatorTable.ALL_NOT_ILIKE; }
                     )
                 )
                 { s.clear().add(this); }
@@ -3860,6 +3820,55 @@ List<Object> Expression2(ExprContext exprContext) :
                     list.addAll(list3);
                     list3.clear();
                 }
+            |
+                // Handle LIKE ANY and variations.
+                // We need this to be at least LR(2) to determine if this is LIKE ANY/ALL
+                // or if this is just LIKE.
+                LOOKAHEAD(2) {
+                    checkNonQueryExpression(exprContext);
+                }
+                (
+                    <LIKE>
+                    (
+                        <ANY> { op = SqlBodoOperatorTable.ANY_LIKE; }
+                    |
+                        <ALL> { op = SqlBodoOperatorTable.ALL_LIKE; }
+                    )
+                |
+                    <ILIKE>
+                    (
+                        <ANY> { op = SqlBodoOperatorTable.ANY_ILIKE; }
+                    |
+                        <ALL> { op = SqlBodoOperatorTable.ALL_ILIKE; }
+                    )
+                )
+                { s.clear().add(this); }
+                nodeList = ParenthesizedQueryOrCommaList(ExprContext.ACCEPT_NONCURSOR)
+                {
+                    list.add(new SqlParserUtil.ToTreeListItem(op, s.pos()));
+                    s.add(nodeList);
+                    // special case for stuff like IN (s1 UNION s2)
+                    if (nodeList.size() == 1) {
+                        SqlNode item = nodeList.get(0);
+                        if (item.isA(SqlKind.QUERY)) {
+                            list.add(item);
+                        } else {
+                            list.add(nodeList);
+                        }
+                    } else {
+                        list.add(nodeList);
+                    }
+                }
+                [
+                    LOOKAHEAD(2)
+                    <ESCAPE> e = Expression3(ExprContext.ACCEPT_SUB_QUERY) {
+                        s.clear().add(this);
+                        list.add(
+                            new SqlParserUtil.ToTreeListItem(
+                                SqlStdOperatorTable.ESCAPE, s.pos()));
+                        list.add(e);
+                    }
+                ]
             |
                 LOOKAHEAD(2) {
                     checkNonQueryExpression(exprContext);
