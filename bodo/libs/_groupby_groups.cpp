@@ -33,8 +33,8 @@ static void get_group_info_loop(
     grouping_info& grp_info, const bool key_drop_nulls, const int64_t nrows,
     bool is_parallel) {
     tracing::Event ev("get_group_info_loop", is_parallel);
-    std::vector<int64_t>& group_to_first_row = grp_info.group_to_first_row;
-    std::vector<int64_t>& row_to_group = grp_info.row_to_group;
+    bodo::vector<int64_t>& group_to_first_row = grp_info.group_to_first_row;
+    bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
     // Start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values recorded in grp_info go from
     // 0 to num_groups - 1)
@@ -163,20 +163,20 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
 
         // macro to reduce code duplication
 #ifndef GROUPBY_INFO_IMPL_1_KEY
-#define GROUPBY_INFO_IMPL_1_KEY(ARRAY_TYPE, DTYPE)                        \
-    if (arr_type == ARRAY_TYPE && dtype == DTYPE) {                       \
-        using KeyType = KeysEqualComparatorOneKey<ARRAY_TYPE, DTYPE,      \
-                                                  /*is_na_equal=*/true>;  \
-        KeyType equal_fct{arr};                                           \
-        using rh_flat_t =                                                 \
-            UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable, \
-                                KeyType>;                                 \
-        rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);          \
-        get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table,    \
-                            key_cols, hashes, nunique_hashes,             \
-                            check_for_null_keys, key_dropna,              \
-                            UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);  \
-        return;                                                           \
+#define GROUPBY_INFO_IMPL_1_KEY(ARRAY_TYPE, DTYPE)                       \
+    if (arr_type == ARRAY_TYPE && dtype == DTYPE) {                      \
+        using KeyType = KeysEqualComparatorOneKey<ARRAY_TYPE, DTYPE,     \
+                                                  /*is_na_equal=*/true>; \
+        KeyType equal_fct{arr};                                          \
+        using rh_flat_t =                                                \
+            bodo::unord_map_container<int64_t, int64_t,                  \
+                                      HashLookupIn32bitTable, KeyType>;  \
+        rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);         \
+        get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table,   \
+                            key_cols, hashes, nunique_hashes,            \
+                            check_for_null_keys, key_dropna,             \
+                            UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel); \
+        return;                                                          \
     }
 #endif
 
@@ -207,8 +207,8 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
                                        DTYPE2, /*is_na_equal=*/true>;      \
         KeyType equal_fct{arr1, arr2};                                     \
         using rh_flat_t =                                                  \
-            UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable,  \
-                                KeyType>;                                  \
+            bodo::unord_map_container<int64_t, int64_t,                    \
+                                      HashLookupIn32bitTable, KeyType>;    \
         rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);           \
         get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table,     \
                             key_cols, hashes, nunique_hashes,              \
@@ -273,8 +273,8 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
     KeysEqualComparator equal_fct{n_keys, table, /*is_na_equal=*/true};
 
     using rh_flat_t =
-        UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable,
-                            KeysEqualComparator>;
+        bodo::unord_map_container<int64_t, int64_t, HashLookupIn32bitTable,
+                                  KeysEqualComparator>;
     rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);
     get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table, key_cols,
                         hashes, nunique_hashes, check_for_null_keys, key_dropna,
@@ -319,7 +319,7 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
     grp_info.next_row_in_group.reserve(max_rows);
     grp_info.next_row_in_group.resize(table->nrows(), -1);
     grp_info.group_to_first_row.reserve(nunique_hashes * 1.1);
-    std::vector<int64_t> active_group_repr;
+    bodo::vector<int64_t> active_group_repr;
     active_group_repr.reserve(nunique_hashes * 1.1);
 
     // TODO Incorporate or adapt other optimizations from `get_group_info`
@@ -331,7 +331,7 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
     // in the map (but note that the group values recorded in grp_info go from
     // 0 to num_groups - 1)
     int64_t next_group = 1;
-    UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash>
+    bodo::unord_map_container<multi_col_key, int64_t, multi_col_key_hash>
         key_to_group;
     key_to_group.reserve(nunique_hashes);
     for (uint64_t i = 0; i < table->nrows(); i++) {
@@ -460,7 +460,7 @@ static int64_t get_groupby_labels_loop(
     // To not duplicate code, we put the common portion of the loop in
     // MAIN_LOOP_BODY macro
 
-    std::vector<std::vector<int64_t>> group_rows;
+    bodo::vector<bodo::vector<int64_t>> group_rows;
 
 #define MAIN_LOOP_BODY                                                      \
     int64_t& group = key_to_group[i]; /* this inserts 0 into the map if key \
@@ -587,8 +587,8 @@ int64_t get_groupby_labels(std::shared_ptr<table_info> table,
 
     const bool check_for_null_keys = true;
     using rh_flat_t =
-        UNORD_MAP_CONTAINER<int64_t, int64_t, HashLookupIn32bitTable,
-                            KeyEqualLookupIn32bitTable>;
+        bodo::unord_map_container<int64_t, int64_t, HashLookupIn32bitTable,
+                                  KeyEqualLookupIn32bitTable>;
     rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);
     return get_groupby_labels_impl(
         key_to_group_rh_flat, ev, out_labels, sort_idx, table, key_cols, hashes,

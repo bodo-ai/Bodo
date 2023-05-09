@@ -5,6 +5,7 @@
 #include <arrow/compute/api.h>
 #include <arrow/io/api.h>
 #include <arrow/memory_pool.h>
+#include <arrow/stl_allocator.h>
 #include <iostream>
 
 // TODO Tell the compiler that the branch is unlikely.
@@ -474,6 +475,82 @@ class BufferPool final : public ::arrow::MemoryPool {
      */
     inline void zero_padding(uint8_t* ptr, size_t size, size_t capacity);
 };
+
+/// Helper Tools for using BufferPool in STL Containers
+/// Based on ::arrow::stl::allocator class. We did not extend from that
+/// class due to buggy behavior when the destructor was being called
+/// too early.
+
+template <class T>
+class STLBufferPoolAllocator {
+   public:
+    using value_type = T;
+    using is_always_equal = std::true_type;
+
+    template <class U>
+    struct rebind {
+        using other = STLBufferPoolAllocator<U>;
+    };
+
+    STLBufferPoolAllocator() noexcept = default;
+
+    template <class U>
+    STLBufferPoolAllocator(const STLBufferPoolAllocator<U>& rhs) noexcept {
+        (void)rhs;
+    }
+
+    ~STLBufferPoolAllocator() = default;
+
+    STLBufferPoolAllocator(const STLBufferPoolAllocator& other) = default;
+    STLBufferPoolAllocator(STLBufferPoolAllocator&& other) = default;
+    STLBufferPoolAllocator& operator=(const STLBufferPoolAllocator& other) =
+        default;
+    STLBufferPoolAllocator& operator=(STLBufferPoolAllocator&& other) = default;
+
+    T* address(T& r) const noexcept { return std::addressof(r); }
+
+    const T* address(const T& r) const noexcept { return std::addressof(r); }
+
+    template <class U>
+    inline bool operator==(const STLBufferPoolAllocator<U>& rhs) {
+        return true;
+    }
+
+    template <class U>
+    inline bool operator!=(const STLBufferPoolAllocator<U>& rhs) {
+        return false;
+    }
+
+    T* allocate(size_t n) {
+        uint8_t* data;
+        ::arrow::Status s =
+            bodo::BufferPool::DefaultPtr()->Allocate(n * sizeof(T), &data);
+        if (!s.ok()) {
+            throw std::bad_alloc();
+        }
+        return reinterpret_cast<T*>(data);
+    }
+
+    void deallocate(T* p, size_t n) {
+        bodo::BufferPool::DefaultPtr()->Free(reinterpret_cast<uint8_t*>(p),
+                                             n * sizeof(T));
+    }
+
+    size_t size_max() const noexcept { return size_t(-1) / sizeof(T); }
+
+    template <class U, class... Args>
+    void construct(U* p, Args&&... args) {
+        new (reinterpret_cast<void*>(p)) U(std::forward<Args>(args)...);
+    }
+
+    template <class U>
+    void destroy(U* p) {
+        p->~U();
+    }
+};
+
+template <typename T>
+using vector = std::vector<T, STLBufferPoolAllocator<T>>;
 
 /// Helper Functions for using BufferPool in Arrow
 

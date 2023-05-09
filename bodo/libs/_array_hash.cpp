@@ -2,6 +2,7 @@
 #include "_array_hash.h"
 #include <Python.h>
 #include <arrow/api.h>
+#include <span>
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
@@ -169,10 +170,10 @@ static void combine_hash_array_list_string(
         // have less than 256 characters)
         offset_t len2 = end_index_offset - start_index_offset;
         // This vectors encodes the length of the strings
-        std::vector<char> V(len2);
+        bodo::vector<char> V(len2);
         // This vector encodes the bitmask of the strings and the bitmask of the
         // list itself
-        std::vector<char> V2(len2 + 1);
+        bodo::vector<char> V2(len2 + 1);
         for (size_t j = 0; j < len2; j++) {
             offset_t n_chars = data_offsets[start_index_offset + j + 1] -
                                data_offsets[start_index_offset + j];
@@ -229,10 +230,10 @@ static void hash_array_list_string(
         // have less than 256 characters)
         offset_t len2 = end_index_offset - start_index_offset;
         // This vectors encodes the length of the strings
-        std::vector<char> V(len2);
+        bodo::vector<char> V(len2);
         // This vector encodes the bitmask of the strings and the bitmask of the
         // list itself
-        std::vector<char> V2(len2 + 1);
+        bodo::vector<char> V2(len2 + 1);
         for (size_t j = 0; j < len2; j++) {
             offset_t n_chars = data_offsets[start_index_offset + j + 1] -
                                data_offsets[start_index_offset + j];
@@ -331,7 +332,7 @@ static void hash_array_string(std::unique_ptr<uint32_t[]>& out_hashes,
  */
 template <typename T>
 void apply_arrow_offset_hash(std::unique_ptr<uint32_t[]>& out_hashes,
-                             std::vector<offset_t> const& list_offsets,
+                             const std::span<const offset_t> list_offsets,
                              size_t n_rows, T const& input_array,
                              bool use_murmurhash = false) {
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
@@ -360,7 +361,7 @@ void apply_arrow_offset_hash(std::unique_ptr<uint32_t[]>& out_hashes,
  */
 template <typename T>
 void apply_arrow_bitmask_hash(std::unique_ptr<uint32_t[]>& out_hashes,
-                              std::vector<offset_t> const& list_offsets,
+                              const std::span<const offset_t> list_offsets,
                               size_t n_rows, T const& input_array) {
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         uint8_t val = 0;
@@ -387,7 +388,7 @@ void apply_arrow_bitmask_hash(std::unique_ptr<uint32_t[]>& out_hashes,
  */
 void apply_arrow_string_hashes(
     std::unique_ptr<uint32_t[]>& out_hashes,
-    std::vector<offset_t> const& list_offsets, size_t const& n_rows,
+    const std::span<const offset_t> list_offsets, size_t const& n_rows,
 #if OFFSET_BITWIDTH == 32
     std::shared_ptr<arrow::StringArray> const& input_array) {
 #else
@@ -420,7 +421,7 @@ void apply_arrow_string_hashes(
  */
 void apply_arrow_numeric_hash(
     std::unique_ptr<uint32_t[]>& out_hashes,
-    std::vector<offset_t> const& list_offsets, size_t const& n_rows,
+    const std::span<const offset_t> list_offsets, size_t const& n_rows,
     std::shared_ptr<arrow::PrimitiveArray> const& primitive_array) {
     std::shared_ptr<arrow::DataType> type = primitive_array->type();
     if (type->id() == arrow::Type::BOOL) {
@@ -460,7 +461,7 @@ void apply_arrow_numeric_hash(
  * @param input_array: the input array put in argument.
  */
 void hash_arrow_array(std::unique_ptr<uint32_t[]>& out_hashes,
-                      std::vector<offset_t> const& list_offsets,
+                      const std::span<const offset_t> list_offsets,
                       size_t const& n_rows,
                       std::shared_ptr<arrow::Array> const& input_array) {
 #if OFFSET_BITWIDTH == 32
@@ -473,7 +474,7 @@ void hash_arrow_array(std::unique_ptr<uint32_t[]>& out_hashes,
             std::dynamic_pointer_cast<arrow::LargeListArray>(input_array);
 #endif
         apply_arrow_offset_hash(out_hashes, list_offsets, n_rows, list_array);
-        std::vector<offset_t> list_offsets_out(n_rows + 1);
+        bodo::vector<offset_t> list_offsets_out(n_rows + 1);
         for (size_t i_row = 0; i_row <= n_rows; i_row++)
             list_offsets_out[i_row] =
                 list_array->value_offset(list_offsets[i_row]);
@@ -536,7 +537,7 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
     // XXX: assumes nullable array data for nulls is always consistent
     if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM) {
-        std::vector<offset_t> list_offsets(n_rows + 1);
+        bodo::vector<offset_t> list_offsets(n_rows + 1);
         for (offset_t i = 0; i <= n_rows; i++)
             list_offsets[i] = i;
         for (offset_t i = 0; i < n_rows; i++)
@@ -793,7 +794,7 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
     // TODO: general dispatcher
     if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM) {
-        std::vector<offset_t> list_offsets(n_rows + 1);
+        bodo::vector<offset_t> list_offsets(n_rows + 1);
         for (offset_t i = 0; i <= n_rows; i++) {
             list_offsets[i] = i;
         }
@@ -1400,11 +1401,11 @@ void ensure_dicts_can_unify(std::vector<std::shared_ptr<array_info>>& arrs,
  * @param arrs[in] The arrays that may need to be inserted.
  * @param hashes[in] The vector where hashes will be inserted.
  * @param stored_arrs[in] The vector where arrays will be inserted
- * @return UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t>* A
- * pointer to the heap allocated hashmap.
+ * @return bodo::unord_map_container<std::pair<size_t, size_t>, dict_indices_t>*
+ * A pointer to the heap allocated hashmap.
  */
-UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t, HashMultiArray,
-                    MultiArrayInfoEqual>*
+bodo::unord_map_container<std::pair<size_t, size_t>, dict_indices_t,
+                          HashMultiArray, MultiArrayInfoEqual>*
 create_several_array_hashmap(
     std::vector<std::shared_ptr<array_info>>& arrs,
     std::vector<std::shared_ptr<uint32_t[]>>& hashes,
@@ -1413,17 +1414,15 @@ create_several_array_hashmap(
     // dictionary
     HashMultiArray hash_fct{hashes};
     MultiArrayInfoEqual equal_fct{stored_arrs};
-    UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
-                        HashMultiArray, MultiArrayInfoEqual>*
-        dict_value_to_unified_index =
-            new UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
-                                    HashMultiArray, MultiArrayInfoEqual>(
-                {}, hash_fct, equal_fct);
+    auto* dict_value_to_unified_index =
+        new bodo::unord_map_container<std::pair<size_t, size_t>, dict_indices_t,
+                                      HashMultiArray, MultiArrayInfoEqual>(
+            {}, hash_fct, equal_fct);
     // Estimate how much to reserve. We could get an accurate
     // estimate with hyperloglog but it seems unnecessary for this use case.
     // For now we reserve initial capacity as the max size of any of the
     // dictionaries.
-    std::vector<size_t> lengths(arrs.size());
+    bodo::vector<size_t> lengths(arrs.size());
     for (size_t i = 0; i < arrs.size(); i++) {
         lengths[i] = arrs[i]->child_arrays[0]->length;
     }
@@ -1450,8 +1449,8 @@ create_several_array_hashmap(
  * @param[in] hash_seed Seed for hashing
  */
 void insert_initial_dict_to_multiarray_hashmap(
-    UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
-                        HashMultiArray, MultiArrayInfoEqual>*
+    bodo::unord_map_container<std::pair<size_t, size_t>, dict_indices_t,
+                              HashMultiArray, MultiArrayInfoEqual>*
         dict_value_to_unified_index,
     std::vector<std::shared_ptr<uint32_t[]>>& hashes,
     std::vector<std::shared_ptr<array_info>>& stored_arrs,
@@ -1496,14 +1495,15 @@ void insert_initial_dict_to_multiarray_hashmap(
  * @param[in] arr_num What number array being inserted is this?
  * @param[in] hash_seed Seed for hashing
  */
+template <typename Alloc>
 void insert_new_dict_to_multiarray_hashmap(
-    UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
-                        HashMultiArray, MultiArrayInfoEqual>*
+    bodo::unord_map_container<std::pair<size_t, size_t>, dict_indices_t,
+                              HashMultiArray, MultiArrayInfoEqual>*
         dict_value_to_unified_index,
     std::vector<std::shared_ptr<uint32_t[]>>& hashes,
     std::vector<std::shared_ptr<array_info>>& stored_arrs,
-    std::vector<dict_indices_t>& arr_index_map,
-    std::vector<std::vector<dict_indices_t>*>& unique_indices_all_arrs,
+    std::vector<dict_indices_t, Alloc>& arr_index_map,
+    std::vector<bodo::vector<dict_indices_t>*>& unique_indices_all_arrs,
     std::shared_ptr<array_info> dict, offset_t const* const offsets,
     const size_t len, dict_indices_t& next_index, size_t& n_chars,
     size_t arr_num, const uint32_t hash_seed) {
@@ -1515,8 +1515,7 @@ void insert_new_dict_to_multiarray_hashmap(
     stored_arrs.push_back(dict);
     // Create a vector to store the indices of the unique strings in the
     // current arr.
-    std::vector<dict_indices_t>* unique_indices =
-        new std::vector<dict_indices_t>();
+    auto* unique_indices = new bodo::vector<dict_indices_t>();
     // Store the mapping of indices for this array
     // Insert the dictionary values
     for (size_t j = 0; j < len; j++) {
@@ -1547,8 +1546,9 @@ void insert_new_dict_to_multiarray_hashmap(
  * @param arr_index_map Mapping from the indices in this array to the indices
  * in the new dictionary.
  */
-void replace_dict_arr_indices(std::shared_ptr<array_info> arr,
-                              std::vector<dict_indices_t>& arr_index_map) {
+void replace_dict_arr_indices(
+    std::shared_ptr<array_info> arr,
+    const std::span<const dict_indices_t> arr_index_map) {
     // Update the indices for this array. If there is only one reference to
     // the dict_array remaining we can update the array inplace without
     // allocating a new array.
@@ -1581,10 +1581,8 @@ void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
     // Create the hash table. We will dynamically fill the vector of
     // hashes and dictionaries as we go.
     const uint32_t hash_seed = SEED_HASH_JOIN;
-    UNORD_MAP_CONTAINER<std::pair<size_t, size_t>, dict_indices_t,
-                        HashMultiArray, MultiArrayInfoEqual>*
-        dict_value_to_unified_index =
-            create_several_array_hashmap(arrs, hashes, stored_arrs);
+    auto* dict_value_to_unified_index =
+        create_several_array_hashmap(arrs, hashes, stored_arrs);
 
     // The first dictionary will always be entirely included in the output
     // unified dictionary.
@@ -1598,7 +1596,7 @@ void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
 
     // Keep track of the unique indices for each array. We will use this to
     // build the final dictionary. We will omit the base dictionary.
-    std::vector<std::vector<dict_indices_t>*> unique_indices_all_arrs;
+    std::vector<bodo::vector<dict_indices_t>*> unique_indices_all_arrs;
 
     for (size_t i = 1; i < arrs.size(); i++) {
         // Process the dictionaries 1 at a time. To do this we always insert
@@ -1628,7 +1626,7 @@ void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
         // Add the elements for the ith array.
         const size_t curr_len = static_cast<size_t>(curr_dict->length);
         // Store the mapping of indices for this array
-        std::vector<dict_indices_t> arr_index_map(curr_len);
+        bodo::vector<dict_indices_t> arr_index_map(curr_len);
 
         insert_new_dict_to_multiarray_hashmap(
             dict_value_to_unified_index, hashes, stored_arrs, arr_index_map,
@@ -1669,7 +1667,7 @@ void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
     // copy strings from arr1 into new_dict
     memcpy(new_dict->data1(), base_dict->data1(), cur_offset);
     for (size_t i = 0; i < unique_indices_all_arrs.size(); i++) {
-        std::vector<dict_indices_t>*& arr_unique_indices =
+        bodo::vector<dict_indices_t>*& arr_unique_indices =
             unique_indices_all_arrs[i];
         // Load the relevant array. This is the i+1 array we stored for the
         // hashmap because we skip the base array.
@@ -1712,7 +1710,7 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
     const size_t arr2_dictionary_len =
         static_cast<size_t>(arr2->child_arrays[0]->length);
     // this vector will be used to map old indices to new ones
-    std::vector<dict_indices_t> arr2_index_map(arr2_dictionary_len);
+    bodo::vector<dict_indices_t> arr2_index_map(arr2_dictionary_len);
 
     const uint32_t hash_seed = SEED_HASH_JOIN;
     std::unique_ptr<uint32_t[]> arr1_hashes =
@@ -1731,10 +1729,9 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
     HashDict hash_fct{arr1_dictionary_len, arr1_hashes, arr2_hashes};
     KeyEqualDict equal_fct{arr1_dictionary_len, arr1->child_arrays[0],
                            arr2->child_arrays[0] /*, is_na_equal*/};
-    UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict,
-                        KeyEqualDict>* dict_value_to_unified_index =
-        new UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict, KeyEqualDict>(
-            {}, hash_fct, equal_fct);
+    auto* dict_value_to_unified_index =
+        new bodo::unord_map_container<size_t, dict_indices_t, HashDict,
+                                      KeyEqualDict>({}, hash_fct, equal_fct);
     // Size of new dictionary could end up as large as
     // arr1_dictionary_len + arr2_dictionary_len. We could get an accurate
     // estimate with hyperloglog but it seems unnecessary for this use case.
@@ -1745,7 +1742,7 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
     // this vector stores indices of the strings in arr2 that will be
     // part of the unified dictionary. All of array 1's strings will always
     // be part of the unified dictionary.
-    std::vector<size_t> arr2_unique_strs;
+    bodo::vector<size_t> arr2_unique_strs;
     arr2_unique_strs.reserve(arr2_dictionary_len);
 
     offset_t const* const arr1_str_offsets =

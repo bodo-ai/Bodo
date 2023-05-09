@@ -733,8 +733,8 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
     // str_to_ind maps string to its new index, new offset in the new
     // dictionary array. the 0th offset maps to 0.
     // Supports access with string_view. See comments for string_hash.
-    UNORD_MAP_CONTAINER<std::string, std::pair<int32_t, uint64_t>, string_hash,
-                        std::equal_to<>>
+    bodo::unord_map_container<std::string, std::pair<int32_t, uint64_t>,
+                              string_hash, std::equal_to<>>
         str_to_ind;
     int64_t count = 0;  // cumulative counter, used for reindexing the unique
                         // strings in the inner dict array

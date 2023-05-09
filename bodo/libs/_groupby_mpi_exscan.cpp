@@ -134,8 +134,8 @@ std::shared_ptr<array_info> compute_categorical_index(
                                          n_rows_full};
     HashEqualComputeCategoricalIndex equal_fct{num_keys, n_rows_full,
                                                &concat_column};
-    UNORD_MAP_CONTAINER<size_t, size_t, HashComputeCategoricalIndex,
-                        HashEqualComputeCategoricalIndex>
+    bodo::unord_map_container<size_t, size_t, HashComputeCategoricalIndex,
+                              HashEqualComputeCategoricalIndex>
         entSet({}, hash_fct, equal_fct);
     for (size_t iRow = 0; iRow < size_t(n_rows_full); iRow++) {
         entSet[iRow] = iRow;
@@ -195,7 +195,7 @@ void mpi_exscan_computation_numpy_T(
     int end = func_offsets[k + 1];
     int n_oper = end - start;
     int64_t max_row_idx = cat_column->num_categories;
-    std::vector<T> cumulative(max_row_idx * n_oper);
+    bodo::vector<T> cumulative(max_row_idx * n_oper);
     for (int j = start; j != end; j++) {
         int ftype = ftypes[j];
         T value_init = -1;  // Dummy value set to avoid a compiler warning
@@ -212,7 +212,7 @@ void mpi_exscan_computation_numpy_T(
             cumulative[i_row + max_row_idx * (j - start)] = value_init;
         }
     }
-    std::vector<T> cumulative_recv = cumulative;
+    bodo::vector<T> cumulative_recv = cumulative;
     std::shared_ptr<array_info> in_col = in_table->columns[k + num_keys];
     T nan_value =
         GetTentry<T>(RetrieveNaNentry((Bodo_CTypes::CTypeEnum)dtype).data());
@@ -332,7 +332,7 @@ void mpi_exscan_computation_nullable_T(
     int end = func_offsets[k + 1];
     int n_oper = end - start;
     int64_t max_row_idx = cat_column->num_categories;
-    std::vector<T> cumulative(max_row_idx * n_oper);
+    bodo::vector<T> cumulative(max_row_idx * n_oper);
     for (int j = start; j != end; j++) {
         int ftype = ftypes[j];
         T value_init = -1;  // Dummy value set to avoid a compiler warning
@@ -349,13 +349,13 @@ void mpi_exscan_computation_nullable_T(
             cumulative[i_row + max_row_idx * (j - start)] = value_init;
         }
     }
-    std::vector<T> cumulative_recv = cumulative;
-    std::vector<uint8_t> cumulative_mask, cumulative_mask_recv;
+    bodo::vector<T> cumulative_recv = cumulative;
+    bodo::vector<uint8_t> cumulative_mask, cumulative_mask_recv;
     // If we use skipdropna then we do not need to keep track of
     // the previous values
     if (!skipdropna) {
-        cumulative_mask = std::vector<uint8_t>(max_row_idx * n_oper, 0);
-        cumulative_mask_recv = std::vector<uint8_t>(max_row_idx * n_oper, 0);
+        cumulative_mask = bodo::vector<uint8_t>(max_row_idx * n_oper, 0);
+        cumulative_mask_recv = bodo::vector<uint8_t>(max_row_idx * n_oper, 0);
     }
     std::shared_ptr<array_info> in_col = in_table->columns[k + num_keys];
     Tkey miss_idx = -1;

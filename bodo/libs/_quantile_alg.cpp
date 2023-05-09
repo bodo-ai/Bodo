@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <iostream>
 #include <random>
+#include <span>
 #include <vector>
 #include "mpi.h"
 
@@ -16,19 +17,19 @@
 
 #define root 0
 
-template <class T>
-std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T> &my_array,
+template <class T, typename Alloc>
+std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T, Alloc> my_array,
                                              int64_t total_size, int myrank,
                                              int n_pes, int64_t k,
                                              int type_enum);
 
-template <class T>
-T small_get_nth_parallel(std::vector<T> &my_array, int64_t total_size,
+template <class T, typename Alloc>
+T small_get_nth_parallel(std::vector<T, Alloc> my_array, int64_t total_size,
                          int myrank, int n_pes, int64_t k, int type_enum);
 
-template <class T>
-T get_nth_parallel(std::vector<T> &my_array, int64_t k, int myrank, int n_pes,
-                   int type_enum);
+template <class T, typename Alloc>
+T get_nth_parallel(std::vector<T, Alloc> my_array, int64_t k, int myrank,
+                   int n_pes, int type_enum);
 
 double quantile_sequential(void *data, int64_t local_size, double quantile,
                            int type_enum);
@@ -172,8 +173,8 @@ double quantile_dispatch(void *data, int64_t local_size, double quantile,
     return -1.0;
 }
 
-template <class T>
-double get_nth_q(std::vector<T> &my_array, int64_t local_size, int64_t k,
+template <class T, typename Alloc>
+double get_nth_q(std::vector<T, Alloc> my_array, int64_t local_size, int64_t k,
                  int type_enum, int myrank, int n_pes, bool parallel) {
     // get nth element and store in res pointer
     // assuming NA values of floats are already removed
@@ -187,6 +188,7 @@ double get_nth_q(std::vector<T> &my_array, int64_t local_size, int64_t k,
         if (k >= local_size) {
             k = local_size - 1;
         }
+        // Modifies array in place
         std::nth_element(my_array.begin(), my_array.begin() + k,
                          my_array.end());
         val = my_array[k];
@@ -200,7 +202,7 @@ double quantile_int(T *data, int64_t local_size, double at, int type_enum,
     int64_t k1 = (int64_t)at;
     int64_t k2 = k1 + 1;
     double fraction = at - (double)k1;
-    std::vector<T> my_array(data, data + local_size);
+    bodo::vector<T> my_array(data, data + local_size);
 
     int myrank, n_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -221,7 +223,7 @@ double quantile_float(T *data, int64_t local_size, double quantile,
     int myrank, n_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    std::vector<T> my_array(data, data + local_size);
+    bodo::vector<T> my_array(data, data + local_size);
     // delete NaNs
     my_array.erase(std::remove_if(std::begin(my_array), std::end(my_array),
                                   [](T d) { return std::isnan(d); }),
@@ -247,9 +249,9 @@ double quantile_float(T *data, int64_t local_size, double quantile,
     return res1 + (res2 - res1) * fraction;
 }
 
-template <class T>
-T get_nth_parallel(std::vector<T> &my_array, int64_t k, int myrank, int n_pes,
-                   int type_enum) {
+template <class T, typename Alloc>
+T get_nth_parallel(std::vector<T, Alloc> my_array, int64_t k, int myrank,
+                   int n_pes, int type_enum) {
     int64_t local_size = my_array.size();
     int64_t total_size;
     MPI_Allreduce(&local_size, &total_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
@@ -295,7 +297,7 @@ T get_nth_parallel(std::vector<T> &my_array, int64_t k, int myrank, int n_pes,
         // []----*---o----*-----]
         assert(l0_num < k);
 
-        std::vector<T> new_my_array;
+        bodo::vector<T> new_my_array;
         int64_t new_k = k;
 
         int64_t new_ind = 0;
@@ -339,8 +341,8 @@ T get_nth_parallel(std::vector<T> &my_array, int64_t k, int myrank, int n_pes,
     return (T)-1.0;
 }
 
-template <class T>
-std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T> &my_array,
+template <class T, typename Alloc>
+std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T, Alloc> my_array,
                                              int64_t total_size, int myrank,
                                              int n_pes, int64_t k,
                                              int type_enum) {
@@ -360,7 +362,7 @@ std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T> &my_array,
     }
     /* select sample */
     // get total sample size;
-    std::vector<T> all_sample_vec;
+    bodo::vector<T> all_sample_vec;
     int *rcounts = new int[n_pes];
     int *displs = new int[n_pes];
     int total_sample_size = 0;
@@ -408,17 +410,18 @@ std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T> &my_array,
     return std::make_pair(k1_val, k2_val);
 }
 
-template <class T>
-T small_get_nth_parallel(std::vector<T> &my_array, int64_t total_size,
+template <class T, typename Alloc>
+T small_get_nth_parallel(std::vector<T, Alloc> my_array, int64_t total_size,
                          int myrank, int n_pes, int64_t k, int type_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     T res;
     int my_data_size = my_array.size();
     int total_data_size = 0;
-    std::vector<T> all_data_vec;
+    bodo::vector<T> all_data_vec;
 
     // no need to gather data if only 1 processor
     if (n_pes == 1) {
+        // In place modifies the array
         std::nth_element(my_array.begin(), my_array.begin() + k,
                          my_array.end());
         res = my_array[k];
@@ -477,13 +480,13 @@ struct local_global_stat_nan {
  */
 template <class T, int dtype>
 inline typename std::enable_if<!is_decimal<dtype>::value, void>::type
-collecting_non_nan_entries(std::vector<T> &my_array,
+collecting_non_nan_entries(bodo::vector<T> &my_array,
                            std::shared_ptr<array_info> arr,
                            local_global_stat_nan const &e_stat) {
     if (e_stat.loc_nb_miss == 0) {
         // Remark: The data is indeed copied in that case as well.
         T *data = (T *)arr->data1();
-        my_array = std::vector<T>(data, data + e_stat.loc_nb_ok);
+        my_array = bodo::vector<T>(data, data + e_stat.loc_nb_ok);
     } else {
         if (arr->arr_type == bodo_array_type::NUMPY) {
             for (size_t i_row = 0; i_row < arr->length; i_row++) {
@@ -517,7 +520,7 @@ collecting_non_nan_entries(std::vector<T> &my_array,
  */
 template <class T, int dtype>
 inline typename std::enable_if<is_decimal<dtype>::value, void>::type
-collecting_non_nan_entries(std::vector<T> &my_array,
+collecting_non_nan_entries(bodo::vector<T> &my_array,
                            std::shared_ptr<array_info> arr,
                            local_global_stat_nan const &e_stat) {
     for (size_t i_row = 0; i_row < arr->length; i_row++) {
@@ -537,8 +540,8 @@ collecting_non_nan_entries(std::vector<T> &my_array,
     ---
     Two algorithms depending on serial or not.
  */
-template <class T, int dtype>
-T get_nth(std::vector<T> &my_array, int64_t k, bool parallel) {
+template <class T, int dtype, typename Alloc>
+T get_nth(std::vector<T, Alloc> my_array, int64_t k, bool parallel) {
     if (parallel) {
         int myrank, n_pes;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -618,18 +621,18 @@ local_global_stat_nan nb_entries_global(std::shared_ptr<array_info> arr,
     If the total number of entries is even then return the average of two middle
    entries
  */
-template <typename T, int dtype>
-void median_series_computation_eff(double *res, std::vector<T> &my_array,
+template <typename T, int dtype, typename Alloc>
+void median_series_computation_eff(double *res, std::vector<T, Alloc> my_array,
                                    bool parallel, int64_t glob_nb_ok) {
     if (glob_nb_ok % 2 == 1) {
         int kMid = glob_nb_ok / 2;
-        T eVal = get_nth<T, dtype>(my_array, kMid, parallel);
+        T eVal = get_nth<T, dtype, Alloc>(my_array, kMid, parallel);
         *res = double(eVal);
     } else {
         int kMid1 = glob_nb_ok / 2;
         int kMid2 = kMid1 - 1;
-        T eVal1 = get_nth<T, dtype>(my_array, kMid1, parallel);
-        T eVal2 = get_nth<T, dtype>(my_array, kMid2, parallel);
+        T eVal1 = get_nth<T, dtype, Alloc>(my_array, kMid1, parallel);
+        T eVal2 = get_nth<T, dtype, Alloc>(my_array, kMid2, parallel);
         *res = (double(eVal1) + double(eVal2)) / 2;
     }
 }
@@ -656,15 +659,17 @@ void median_series_computation_T(double *res, std::shared_ptr<array_info> arr,
         *res = std::nan("");
         return;
     }
-    std::vector<T> my_array;
+    bodo::vector<T> my_array;
     collecting_non_nan_entries<T, dtype>(my_array, arr, e_stat);
     int64_t glob_nb_ok = e_stat.glob_nb_ok;
     if (dtype == Bodo_CTypes::DECIMAL)
-        median_series_computation_eff<T, Bodo_CTypes::FLOAT64>(
+        median_series_computation_eff<T, Bodo_CTypes::FLOAT64,
+                                      bodo::STLBufferPoolAllocator<T>>(
             res, my_array, parallel, glob_nb_ok);
     else
-        median_series_computation_eff<T, dtype>(res, my_array, parallel,
-                                                glob_nb_ok);
+        median_series_computation_eff<T, dtype,
+                                      bodo::STLBufferPoolAllocator<T>>(
+            res, my_array, parallel, glob_nb_ok);
 }
 
 /** Compute the median of the series.
@@ -762,7 +767,7 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
     // previous and next. We stop when ListPrevSizes[r-1] + ... +
     // ListPrevSizes[r-k] <= lag on all nodes. For the nodes of rank 0 the
     // vectors are smaller of course.
-    std::vector<size_t> ListPrevSizes, ListNextSizes;
+    bodo::vector<size_t> ListPrevSizes, ListNextSizes;
     size_t loc_nrows = arr->length;
     MPI_Datatype mpi_row_typ = MPI_LONG_LONG_INT;
     using T_row_typ = long;

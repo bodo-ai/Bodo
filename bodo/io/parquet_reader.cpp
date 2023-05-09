@@ -4,6 +4,7 @@
 // functionality that is specific to reading parquet datasets
 
 #include "parquet_reader.h"
+#include <span>
 
 using arrow::Type;
 using parquet::ParquetFileReader;
@@ -70,7 +71,7 @@ static void fill_input_file_name_col_indices(int32_t val, char* data,
  * @param offsets : offsets buffer in the underlying array_info
  */
 static void fill_input_file_name_col_dict(
-    const std::vector<std::string>& file_paths, const std::string& prefix,
+    const std::span<const std::string> file_paths, const std::string& prefix,
     char* data, char* offsets) {
     offset_t* col_offsets = (offset_t*)offsets;
     for (size_t i = 0; i < file_paths.size(); i++) {

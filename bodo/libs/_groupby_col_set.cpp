@@ -672,7 +672,7 @@ void GeneralUdfColSet::fill_in_columns(
     const std::shared_ptr<table_info>& general_in_table,
     const grouping_info& grp_info) const {
     std::shared_ptr<array_info> in_col = this->in_col;
-    std::vector<std::vector<int64_t>> group_rows(grp_info.num_groups);
+    bodo::vector<bodo::vector<int64_t>> group_rows(grp_info.num_groups);
     // get the rows in each group
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = grp_info.row_to_group[i];
@@ -852,7 +852,8 @@ void HeadColSet::alloc_update_columns(
 void HeadColSet::update(const std::vector<grouping_info>& grp_infos) {
     head_computation(this->in_col, this->update_cols[0], head_row_list);
 }
-void HeadColSet::set_head_row_list(std::vector<int64_t>& row_list) {
+
+void HeadColSet::set_head_row_list(bodo::vector<int64_t>& row_list) {
     head_row_list = row_list;
 }
 
