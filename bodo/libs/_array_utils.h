@@ -117,10 +117,9 @@ DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
 
 // select dtypes that can have sentinel nulls
 template <Bodo_CTypes::CTypeEnum DType>
-concept NullSentinelDtype = ((DType == Bodo_CTypes::FLOAT32) ||
-                             (DType == Bodo_CTypes::FLOAT64) ||
-                             (DType == Bodo_CTypes::DATETIME) ||
-                             (DType == Bodo_CTypes::TIMEDELTA));
+concept NullSentinelDtype =
+    ((DType == Bodo_CTypes::FLOAT32) || (DType == Bodo_CTypes::FLOAT64) ||
+     (DType == Bodo_CTypes::DATETIME) || (DType == Bodo_CTypes::TIMEDELTA));
 
 // ------------------------------------------------
 
@@ -347,8 +346,8 @@ inline bool TestEqual(std::vector<std::shared_ptr<array_info>> const& columns,
  * @param is_na_equal Are NA values considered equal
  * @return True if they are equal and false otherwise.
  */
-inline bool TestEqualJoin(const std::shared_ptr<table_info> table1,
-                          const std::shared_ptr<table_info> table2,
+inline bool TestEqualJoin(const std::shared_ptr<table_info>& table1,
+                          const std::shared_ptr<table_info>& table2,
                           size_t const& iRow1, size_t const& iRow2,
                           size_t const& n_key, bool is_na_equal) {
     // iteration over the list of key for the comparison.
@@ -767,9 +766,9 @@ inline bool does_keys_have_nulls(
 }
 
 inline bool does_row_has_nulls(
-    std::vector<std::shared_ptr<array_info>> const& key_cols,
+    const std::vector<std::shared_ptr<array_info>>& key_cols,
     int64_t const& i) {
-    for (auto& key_col : key_cols) {
+    for (const auto& key_col : key_cols) {
         if (key_col->arr_type == bodo_array_type::CATEGORICAL) {
             std::vector<char> vectNaN = RetrieveNaNentry(key_col->dtype);
             size_t siztype = numpy_item_size[key_col->dtype];

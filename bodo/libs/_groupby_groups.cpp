@@ -29,7 +29,7 @@
  */
 template <typename T>
 static void get_group_info_loop(
-    T& key_to_group, std::vector<std::shared_ptr<array_info>>& key_cols,
+    T& key_to_group, const std::vector<std::shared_ptr<array_info>>& key_cols,
     grouping_info& grp_info, const bool key_drop_nulls, const int64_t nrows,
     bool is_parallel) {
     tracing::Event ev("get_group_info_loop", is_parallel);
@@ -92,14 +92,13 @@ static void get_group_info_loop(
  * @param is_parallel Is the implementation parallel?
  */
 template <typename Map>
-void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
-                         grouping_info& grp_info,
-                         std::shared_ptr<table_info> const table,
-                         std::vector<std::shared_ptr<array_info>>& key_cols,
-                         std::shared_ptr<uint32_t[]>& hashes,
-                         const size_t nunique_hashes,
-                         const bool check_for_null_keys, const bool key_dropna,
-                         const double load_factor, bool is_parallel) {
+void get_group_info_impl(
+    Map& key_to_group, tracing::Event& ev, grouping_info& grp_info,
+    std::shared_ptr<table_info> const table,
+    const std::vector<std::shared_ptr<array_info>>& key_cols,
+    std::shared_ptr<uint32_t[]>& hashes, const size_t nunique_hashes,
+    const bool check_for_null_keys, const bool key_dropna,
+    const double load_factor, bool is_parallel) {
     tracing::Event ev_alloc("get_group_info_alloc", is_parallel);
     key_to_group.max_load_factor(load_factor);
     key_to_group.reserve(nunique_hashes);
