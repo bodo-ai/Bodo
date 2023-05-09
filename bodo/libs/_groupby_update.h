@@ -51,7 +51,7 @@ void cumulative_computation(std::shared_ptr<array_info> arr,
  */
 void head_computation(std::shared_ptr<array_info> arr,
                       std::shared_ptr<array_info> out_arr,
-                      const std::vector<int64_t>& row_list);
+                      const bodo::vector<int64_t>& row_list);
 
 // NGROUP
 

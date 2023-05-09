@@ -594,8 +594,8 @@ std::shared_ptr<array_info> alloc_dict_string_array(
  * the vector of strings.
  */
 std::shared_ptr<array_info> create_string_array(
-    std::vector<uint8_t> const& null_bitmap,
-    std::vector<std::string> const& list_string);
+    bodo::vector<uint8_t> const& null_bitmap,
+    bodo::vector<std::string> const& list_string);
 
 /**
  * @brief Create an array of list of strings,
@@ -610,8 +610,8 @@ std::shared_ptr<array_info> create_string_array(
  * constructed from the vector.
  */
 std::shared_ptr<array_info> create_list_string_array(
-    std::vector<uint8_t> const& null_bitmap,
-    std::vector<std::vector<std::pair<std::string, bool>>> const&
+    bodo::vector<uint8_t> const& null_bitmap,
+    bodo::vector<bodo::vector<std::pair<std::string, bool>>> const&
         list_list_pair);
 
 /**
@@ -673,7 +673,7 @@ struct mpi_comm_info {
     // hash_to_rank() once during shuffle. Also stores the result of filtering
     // rows with bloom filters (removed rows have dest == -1), so that we only
     // query the filter once.
-    std::vector<int> row_dest;
+    bodo::vector<int> row_dest;
     // true if using a bloom filter to discard rows before shuffling
     bool filtered = false;
 

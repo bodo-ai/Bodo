@@ -3,6 +3,7 @@
 #ifndef _GROUPBY_AGG_FUNCS_H_INCLUDED
 #define _GROUPBY_AGG_FUNCS_H_INCLUDED
 
+#include <span>
 #include "_array_utils.h"
 #include "_groupby_ftypes.h"
 /**
@@ -22,8 +23,9 @@
  * @param v2 The second list of strings.
  * @return -1 if v1 < v2, 0 if v1=v2 and 1 if v1 > v2
  */
-int compare_list_string(std::vector<std::pair<std::string, bool>> const& v1,
-                        std::vector<std::pair<std::string, bool>> const& v2) {
+int compare_list_string(
+    const std::span<const std::pair<std::string, bool>> v1,
+    const std::span<const std::pair<std::string, bool>> v2) {
     size_t len1 = v1.size();
     size_t len2 = v2.size();
     size_t minlen = len1;
@@ -126,8 +128,9 @@ struct aggliststring {
      * @param[in,out] first input value, and holds the result
      * @param[in] second input value.
      */
-    static void apply(std::vector<std::pair<std::string, bool>>& v1,
-                      std::vector<std::pair<std::string, bool>>& v2) {}
+    template <typename Alloc1, typename Alloc2>
+    static void apply(std::vector<std::pair<std::string, bool>, Alloc1>& v1,
+                      std::vector<std::pair<std::string, bool>, Alloc2>& v2) {}
 };
 
 // sum
@@ -162,8 +165,10 @@ inline static void bool_sum(int64_t& v1, bool& v2) {
 
 template <>
 struct aggliststring<Bodo_FTypes::sum> {
-    inline static void apply(std::vector<std::pair<std::string, bool>>& v1,
-                             std::vector<std::pair<std::string, bool>>& v2) {
+    template <typename Alloc1, typename Alloc2>
+    inline static void apply(
+        std::vector<std::pair<std::string, bool>, Alloc1>& v1,
+        std::vector<std::pair<std::string, bool>, Alloc2>& v2) {
         v1.insert(v1.end(), v2.begin(), v2.end());
     }
 };
@@ -209,8 +214,10 @@ struct aggdict<Bodo_FTypes::min> {
 
 template <>
 struct aggliststring<Bodo_FTypes::min> {
-    inline static void apply(std::vector<std::pair<std::string, bool>>& v1,
-                             std::vector<std::pair<std::string, bool>>& v2) {
+    template <typename Alloc1, typename Alloc2>
+    inline static void apply(
+        std::vector<std::pair<std::string, bool>, Alloc1>& v1,
+        std::vector<std::pair<std::string, bool>, Alloc2>& v2) {
         if (compare_list_string(v1, v2) == 1) {
             v1 = v2;
         }
@@ -270,8 +277,10 @@ struct aggdict<Bodo_FTypes::max> {
 
 template <>
 struct aggliststring<Bodo_FTypes::max> {
-    inline static void apply(std::vector<std::pair<std::string, bool>>& v1,
-                             std::vector<std::pair<std::string, bool>>& v2) {
+    template <typename Alloc1, typename Alloc2>
+    inline static void apply(
+        std::vector<std::pair<std::string, bool>, Alloc1>& v1,
+        std::vector<std::pair<std::string, bool>, Alloc2>& v2) {
         if (compare_list_string(v1, v2) == -1) {
             v1 = v2;
         }
@@ -529,8 +538,10 @@ struct aggstring<Bodo_FTypes::last> {
 
 template <>
 struct aggliststring<Bodo_FTypes::last> {
-    inline static void apply(std::vector<std::pair<std::string, bool>>& v1,
-                             std::vector<std::pair<std::string, bool>>& v2) {
+    template <typename Alloc1, typename Alloc2>
+    inline static void apply(
+        std::vector<std::pair<std::string, bool>, Alloc1>& v1,
+        std::vector<std::pair<std::string, bool>, Alloc2>& v2) {
         v1 = v2;
     }
 };

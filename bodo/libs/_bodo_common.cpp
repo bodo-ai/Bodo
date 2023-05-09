@@ -329,12 +329,12 @@ std::shared_ptr<array_info> alloc_dict_string_array(
 }
 
 std::shared_ptr<array_info> create_string_array(
-    std::vector<uint8_t> const& null_bitmap,
-    std::vector<std::string> const& list_string) {
+    bodo::vector<uint8_t> const& null_bitmap,
+    bodo::vector<std::string> const& list_string) {
     size_t len = list_string.size();
     // Calculate the number of characters for allocating the string.
     size_t nb_char = 0;
-    std::vector<std::string>::const_iterator iter = list_string.begin();
+    bodo::vector<std::string>::const_iterator iter = list_string.begin();
     for (size_t i_grp = 0; i_grp < len; i_grp++) {
         if (GetBit(null_bitmap.data(), i_grp)) {
             nb_char += iter->size();
@@ -366,18 +366,18 @@ std::shared_ptr<array_info> create_string_array(
 }
 
 std::shared_ptr<array_info> create_list_string_array(
-    std::vector<uint8_t> const& null_bitmap,
-    std::vector<std::vector<std::pair<std::string, bool>>> const&
+    bodo::vector<uint8_t> const& null_bitmap,
+    bodo::vector<bodo::vector<std::pair<std::string, bool>>> const&
         list_list_pair) {
     size_t len = list_list_pair.size();
     // Determining the number of characters in output.
     size_t nb_string = 0;
     size_t nb_char = 0;
-    std::vector<std::vector<std::pair<std::string, bool>>>::const_iterator
+    bodo::vector<bodo::vector<std::pair<std::string, bool>>>::const_iterator
         iter = list_list_pair.begin();
     for (size_t i_grp = 0; i_grp < len; i_grp++) {
         if (GetBit(null_bitmap.data(), i_grp)) {
-            std::vector<std::pair<std::string, bool>> e_list = *iter;
+            bodo::vector<std::pair<std::string, bool>> e_list = *iter;
             nb_string += e_list.size();
             for (auto& e_str : e_list) {
                 nb_char += e_str.first.size();
@@ -408,7 +408,7 @@ std::shared_ptr<array_info> create_list_string_array(
         new_out_col->set_null_bit(i_grp, bit);
         index_offsets_o[i_grp] = pos_index;
         if (bit) {
-            std::vector<std::pair<std::string, bool>> e_list = *iter;
+            bodo::vector<std::pair<std::string, bool>> e_list = *iter;
             offset_t n_string = e_list.size();
             for (offset_t i_str = 0; i_str < n_string; i_str++) {
                 std::string& estr = e_list[i_str].first;

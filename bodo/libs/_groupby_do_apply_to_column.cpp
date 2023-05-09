@@ -52,7 +52,7 @@ void apply_to_column_list_string(std::shared_ptr<array_info> in_col,
         return;
     }
     size_t num_groups = grp_info.num_groups;
-    std::vector<std::vector<std::pair<std::string, bool>>> ListListPair(
+    bodo::vector<bodo::vector<std::pair<std::string, bool>>> ListListPair(
         num_groups);
     char* data_i = in_col->data1();
     offset_t* index_offsets_i = (offset_t*)in_col->data3();
@@ -60,7 +60,7 @@ void apply_to_column_list_string(std::shared_ptr<array_info> in_col,
     uint8_t* sub_null_bitmask_i = (uint8_t*)in_col->sub_null_bitmask();
     // Computing the strings used in output.
     uint64_t n_bytes = (num_groups + 7) >> 3;
-    std::vector<uint8_t> Vmask(n_bytes, 0);
+    bodo::vector<uint8_t> Vmask(n_bytes, 0);
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = get_group_for_row(grp_info, i);
         if ((i_grp != -1) && in_col->get_null_bit(i)) {
@@ -70,7 +70,7 @@ void apply_to_column_list_string(std::shared_ptr<array_info> in_col,
             offset_t start_offset = index_offsets_i[i];
             offset_t end_offset = index_offsets_i[i + 1];
             offset_t len = end_offset - start_offset;
-            std::vector<std::pair<std::string, bool>> LStrB(len);
+            bodo::vector<std::pair<std::string, bool>> LStrB(len);
             for (offset_t i = 0; i < len; i++) {
                 offset_t len_str = data_offsets_i[start_offset + i + 1] -
                                    data_offsets_i[start_offset + i];
@@ -227,7 +227,7 @@ void apply_sum_to_column_string(std::shared_ptr<array_info> in_col,
     memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
 
     // find offsets for each output string
-    std::vector<offset_t> str_offsets(num_groups + 1, 0);
+    bodo::vector<offset_t> str_offsets(num_groups + 1, 0);
     char* data_i = in_col->data1();
     offset_t* offsets_i = (offset_t*)in_col->data2();
     char* data_o = out_arr->data1();
@@ -277,8 +277,8 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
                             const grouping_info& grp_info) {
     size_t num_groups = grp_info.num_groups;
     size_t n_bytes = (num_groups + 7) >> 3;
-    std::vector<uint8_t> V(n_bytes, 0);
-    std::vector<std::string> ListString(num_groups);
+    bodo::vector<uint8_t> V(n_bytes, 0);
+    bodo::vector<std::string> ListString(num_groups);
     char* data_i = in_col->data1();
     offset_t* offsets_i = (offset_t*)in_col->data2();
     switch (ftype) {
@@ -395,7 +395,7 @@ void apply_sum_to_column_dict(std::shared_ptr<array_info> in_col,
     // and find offsets for each output string
     // every string has a start and end offset so len(offsets) == (len(data) +
     // 1)
-    std::vector<offset_t> str_offsets(num_groups + 1, 0);
+    bodo::vector<offset_t> str_offsets(num_groups + 1, 0);
     char* data_i = in_col->child_arrays[0]->data1();
     offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2();
     for (size_t i = 0; i < in_col->length; i++) {
@@ -455,8 +455,8 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
         // Allocate the indices. Count and sum don't use this array.
         indices_arr = alloc_nullable_array(num_groups, Bodo_CTypes::INT32, 0);
     }
-    std::vector<uint8_t> V(n_bytes,
-                           0);  // bitmask to mark if group's been updated
+    bodo::vector<uint8_t> V(n_bytes,
+                            0);  // bitmask to mark if group's been updated
     char* data_i = in_col->child_arrays[0]->data1();
     offset_t* offsets_i = (offset_t*)in_col->child_arrays[0]->data2();
     switch (ftype) {
@@ -589,7 +589,7 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
     // Start at 1 since 0 is is returned by the hashmap if data needs to be
     // inserted.
     int32_t k = 1;
-    UNORD_MAP_CONTAINER<int32_t, int32_t>
+    bodo::unord_map_container<int32_t, int32_t>
         old_to_new;  // Maps old index to new index
     old_to_new.reserve(num_groups);
     for (size_t i = 0; i < num_groups; i++) {
@@ -610,8 +610,8 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
     // Create new dict string array from map
     size_t n_dict = old_to_new.size();
     n_bytes = (n_dict + 7) >> 3;
-    std::vector<uint8_t> bitmask_vec(n_bytes, 0);
-    std::vector<std::string> ListString(n_dict);
+    bodo::vector<uint8_t> bitmask_vec(n_bytes, 0);
+    bodo::vector<std::string> ListString(n_dict);
     for (auto& it : old_to_new) {
         offset_t start_offset = offsets_i[it.first];
         offset_t end_offset = offsets_i[it.first + 1];
@@ -697,7 +697,7 @@ void apply_to_column_categorical(std::shared_ptr<array_info> in_col,
         }
         case Bodo_FTypes::first: {
             int64_t n_bytes = ((out_col->length + 7) >> 3);
-            std::vector<uint8_t> bitmask_vec(n_bytes, 0);
+            bodo::vector<uint8_t> bitmask_vec(n_bytes, 0);
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 T val = getv<T>(in_col, i);
@@ -879,7 +879,7 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
         }
         case Bodo_FTypes::first: {
             int64_t n_bytes = ((out_col->length + 7) >> 3);
-            std::vector<uint8_t> bitmask_vec(n_bytes, 0);
+            bodo::vector<uint8_t> bitmask_vec(n_bytes, 0);
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 T val = getv<T>(in_col, i);

@@ -522,9 +522,9 @@ class GroupbyPipeline {
 
    private:
     int64_t compute_head_row_list(grouping_info const& grp_info,
-                                  std::vector<int64_t>& head_row_list) {
+                                  bodo::vector<int64_t>& head_row_list) {
         // keep track of how many rows found per group so far.
-        std::vector<int64_t> nrows_per_grp(grp_info.num_groups);
+        bodo::vector<int64_t> nrows_per_grp(grp_info.num_groups);
         int64_t count = 0;  // how many rows found so far
         uint64_t iRow = 0;  // index looping over all rows
         for (iRow = 0; iRow < in_table->nrows(); iRow++) {
@@ -572,7 +572,7 @@ class GroupbyPipeline {
         grp_info.mode = 1;
         num_groups = grp_info.num_groups;
         int64_t update_col_len = num_groups;
-        std::vector<int64_t> head_row_list;
+        bodo::vector<int64_t> head_row_list;
         if (head_op) {
             update_col_len = compute_head_row_list(grp_infos[0], head_row_list);
         }
