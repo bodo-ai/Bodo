@@ -2610,6 +2610,96 @@ def test_date_from_parts(construct_date_data, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "unit, arr0, arr1, answer",
+    [
+        pytest.param(
+            "day",
+            pd.Series(
+                [
+                    datetime.date(y, m, d)
+                    for y, m, d in [
+                        (2021, 1, 1),
+                        (2021, 11, 1),
+                        (2022, 7, 4),
+                        (2024, 3, 1),
+                        (2024, 12, 31),
+                    ]
+                ]
+            ),
+            pd.Series(
+                [
+                    pd.Timestamp(s)
+                    for s in [
+                        "2020-1-1",
+                        "2021-10-31 11:59:00",
+                        "2022-7-4 1:00:25",
+                        "2023-2-28",
+                        "2024-3-14",
+                    ]
+                ]
+            ),
+            pd.Series([-366, -1, 0, -367, -292]),
+            id="day-date-timestamp",
+        ),
+        pytest.param(
+            "hour",
+            pd.Series(
+                [
+                    pd.Timestamp(s)
+                    for s in [
+                        "2020-1-30 12:30:00",
+                        "2021-2-20 6:59:00.250999",
+                        "2022-3-20 0:59:59.999999999",
+                        None,
+                        "2025-1-1",
+                    ]
+                ]
+            ),
+            pd.Series(
+                [
+                    datetime.date(y, m, d)
+                    for y, m, d in [
+                        (2020, 1, 30),
+                        (2021, 2, 25),
+                        (2022, 3, 20),
+                        (2023, 4, 15),
+                        (2024, 5, 10),
+                    ]
+                ]
+            ),
+            pd.Series([-12, 114, 0, None, -5664], dtype=pd.Int32Dtype()),
+            id="hour-timestamp-date",
+        ),
+    ],
+)
+def test_date_diff_upcasting(unit, arr0, arr1, answer, memory_leak_check):
+    """
+    Tests several diff_xxx kernels with combinations of date and timestamp
+    values.
+    """
+
+    def impl_day(arg0, arg1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.diff_day(arg0, arg1))
+
+    def impl_hour(arg0, arg1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.diff_hour(arg0, arg1))
+
+    impls = {
+        "day": impl_day,
+        "hour": impl_hour,
+    }
+    impl = impls[unit]
+
+    check_func(
+        impl,
+        (arr0, arr1),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 def test_add_interval_optional(memory_leak_check):
     def impl(tz_naive_ts, tz_aware_ts, int_val, flag0, flag1):
         arg0 = tz_naive_ts if flag0 else None

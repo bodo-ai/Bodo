@@ -505,7 +505,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     String expr;
     String strExpr;
-    DatetimeFnCodeGen.DateTimeType dateTimeExprType;
+    DatetimeFnCodeGen.DateTimeType dateTimeExprType1;
+    DatetimeFnCodeGen.DateTimeType dateTimeExprType2;
     boolean isTime;
     boolean isDate;
     String unit;
@@ -528,17 +529,20 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 operands.get(1).emit()));
       case TIMESTAMP_ADD:
         // Uses Calcite parser, accepts both quoted and unquoted time units
-        dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(2));
-        unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
+        dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(2));
+        unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
         assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
         return new Expr.Raw(generateSnowflakeDateAddCode(operands, unit));
       case TIMESTAMP_DIFF:
         assert operands.size() == 3;
-        dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-        if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
+        dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
+        dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(2));
+        if ((dateTimeExprType1 == DatetimeFnCodeGen.DateTimeType.TIME)
+            != (dateTimeExprType2 == DatetimeFnCodeGen.DateTimeType.TIME)) {
           throw new BodoSQLCodegenException(
-              "Invalid type of arguments to TIMESTAMPDIFF: arg1 and arg2 must be the same type.");
-        unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
+              "Invalid type of arguments to TIMESTAMPDIFF: cannot mix date/timestamp with time.");
+        }
+        unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
         return generateDateDiffFnInfo(unit, operands.get(1), operands.get(2));
       case TRIM:
         assert operands.size() == 3;
@@ -626,8 +630,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
             // Otherwise, fall back to the normal DATEADD. TIMEADD and TIMESTAMPADD are aliases.
             if (operands.size() == 3) {
-              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(2));
-              unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
+              dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(2));
+              unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
               assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
               return new Expr.Raw(generateSnowflakeDateAddCode(operands, unit));
             }
@@ -694,31 +698,35 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             if (operands.size() == 2) {
               arg1 = operands.get(1);
               arg2 = operands.get(0);
-              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-              if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(0)))
-                throw new BodoSQLCodegenException(
-                    "Invalid type of arguments to DATEDIFF: arg0 and arg1 must be the same type.");
+              dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(0));
+              dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(1));
             } else if (operands.size() == 3) { // this is the Snowflake option
               unit = operands.get(0).emit();
               arg1 = operands.get(1);
               arg2 = operands.get(2);
-              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-              if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
-                throw new BodoSQLCodegenException(
-                    "Invalid type of arguments to DATEDIFF: arg1 and arg2 must be the same type.");
+              dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
+              dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(2));
             } else {
               throw new BodoSQLCodegenException(
                   "Invalid number of arguments to DATEDIFF: must be 2 or 3.");
             }
-            unit = standardizeTimeUnit(fnName, unit, dateTimeExprType);
+            if ((dateTimeExprType1 == DateTimeType.TIME)
+                != (dateTimeExprType2 == DateTimeType.TIME)) {
+              throw new BodoSQLCodegenException(
+                  "Invalid type of arguments to DATEDIFF: cannot mix date/timestamp with time.");
+            }
+            unit = standardizeTimeUnit(fnName, unit, dateTimeExprType1);
             return generateDateDiffFnInfo(unit, arg1, arg2);
           case "TIMEDIFF":
             assert operands.size() == 3;
-            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-            if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
+            dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
+            dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(2));
+            if ((dateTimeExprType1 == DateTimeType.TIME)
+                != (dateTimeExprType2 == DateTimeType.TIME)) {
               throw new BodoSQLCodegenException(
-                  "Invalid type of arguments to TIMEDIFF: arg1 and arg2 must be the same type.");
-            unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
+                  "Invalid type of arguments to TIMEDIFF: cannot mix date/timestamp with time.");
+            }
+            unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
             arg1 = operands.get(1);
             arg2 = operands.get(2);
             return generateDateDiffFnInfo(unit, arg1, arg2);
@@ -897,11 +905,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             return getSingleArgDatetimeFnInfo(fnName, operands.get(0).emit());
           case "LAST_DAY":
-            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(0));
-            if (dateTimeExprType == DateTimeType.TIME)
+            dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(0));
+            if (dateTimeExprType1 == DateTimeType.TIME)
               throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             if (operands.size() == 2) {
-              unit = standardizeTimeUnit(fnName, operands.get(1).emit(), dateTimeExprType);
+              unit = standardizeTimeUnit(fnName, operands.get(1).emit(), dateTimeExprType1);
               if (unit.equals("day") || TIME_PART_UNITS.contains(unit))
                 throw new BodoSQLCodegenException(
                     operands.get(1).emit() + " is not a valid time unit for " + fnName);
@@ -1102,8 +1110,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "INITCAP":
             return generateInitcapInfo(operands);
           case "DATE_TRUNC":
-            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-            unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
+            dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
+            unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
             return generateDateTruncCode(unit, operands.get(1));
           case "MICROSECOND":
           case "SECOND":

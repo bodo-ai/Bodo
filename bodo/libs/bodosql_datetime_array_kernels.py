@@ -1330,9 +1330,19 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
             scalar_text += "arg1 = pd.Timestamp(arg1)\n"
         elif is_valid_time_arg(arr0):
             assert is_valid_time_arg(arr1) or is_overload_none(arr1)
-        elif is_valid_date_arg(arr0):
-            assert is_valid_date_arg(arr1) or is_overload_none(arr1)
+        # If both arguments are dates, upcast them to timestamps
+        elif is_valid_date_arg(arr0) and (
+            is_valid_date_arg(arr1) or is_overload_none(arr1)
+        ):
             scalar_text += "arg0 = pd.Timestamp(arg0)\n"
+            scalar_text += "arg1 = pd.Timestamp(arg1)\n"
+        # If one argument is a date and the other is a timestamp, upcast the
+        # date to a timestamp
+        elif is_valid_date_arg(arr0) and is_valid_tz_naive_datetime_arg(arr1):
+            scalar_text += "arg0 = pd.Timestamp(arg0)\n"
+            scalar_text += "arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
+        elif is_valid_tz_naive_datetime_arg(arr0) and is_valid_date_arg(arr1):
+            scalar_text += "arg0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
             scalar_text += "arg1 = pd.Timestamp(arg1)\n"
         else:
             verify_datetime_arg_allow_tz(arr0, "diff_" + unit, "arr0")
