@@ -63,13 +63,27 @@ boolean_col = pd.Series(
     [None if math.tan(i) < 0 else math.sin(i) > -0.1 for i in range(window_col_size)],
     dtype=pd.BooleanDtype(),
 )
+
+
+def make_str(i, j):
+    chars = (
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        + "abcdefghijklmnopqrstuvwxyz"
+        + " \t\n01234567890!@#$%^&*()"
+        + "¡™£¢∞§¶•ªºπ🐍"
+    )
+    res = ""
+    for _ in range(j):
+        res += chars[i % len(chars)]
+        i *= 75
+        i += 74
+        i %= 2**16 + 1
+    return res
+
+
 string_col = pd.Series(
     [
-        None
-        if math.sin(i) < -0.8
-        else "".join(
-            "AEIOU!🐍\n∞π"[round(math.tan(i) + j) % 10] for j in range(4 ** (i % 4))
-        )
+        None if math.sin(i) < -0.8 else make_str(i, abs(round(3 * math.tan(i))))
         for i in range(window_col_size)
     ]
 )

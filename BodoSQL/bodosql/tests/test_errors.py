@@ -801,33 +801,6 @@ def test_multi_table_colname_jit(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_string_row_min_max_error(bodosql_string_types, memory_leak_check):
-    """tests that row functions with unsupported types raises an error"""
-
-    def impl_max(df):
-        query = "SELECT MAX(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) from table1"
-        bc = bodosql.BodoSQLContext({"table1": df})
-        return bc.sql(query)
-
-    def impl_min(df):
-        query = "SELECT MIN(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) from table1"
-        bc = bodosql.BodoSQLContext({"table1": df})
-        return bc.sql(query)
-
-    with pytest.raises(
-        BodoError,
-        match=r".*Windowed aggregation function MAX not supported for SQL type VARCHAR.*",
-    ):
-        impl_max(bodosql_string_types["table1"])
-
-    with pytest.raises(
-        BodoError,
-        match=r".*Windowed aggregation function MIN not supported for SQL type VARCHAR.*",
-    ):
-        impl_min(bodosql_string_types["table1"])
-
-
-@pytest.mark.slow
 def test_qualify_no_groupby_err(memory_leak_check):
     """tests that a reasonable error is thrown when using non grouped expressions in window functions"""
     table1 = pd.DataFrame(
