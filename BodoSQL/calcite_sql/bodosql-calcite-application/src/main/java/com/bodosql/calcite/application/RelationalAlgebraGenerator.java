@@ -24,6 +24,7 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.type.*;
 import org.apache.calcite.tools.*;
+import org.apache.calcite.util.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,9 +130,7 @@ public class RelationalAlgebraGenerator {
    *     gets stored in the {@link #planner}
    */
   public RelationalAlgebraGenerator(
-      BodoSqlSchema newSchema,
-      String namedParamTableName,
-      int verboseLevel) {
+      BodoSqlSchema newSchema, String namedParamTableName, int verboseLevel) {
     this.catalog = null;
     this.verboseLevel = verboseLevel;
     System.setProperty("calcite.default.charset", "UTF-8");
@@ -239,6 +238,24 @@ public class RelationalAlgebraGenerator {
       throw new SqlValidationException(sql, e);
     }
     return validatedSqlNode;
+  }
+
+  public Pair<SqlNode, RelDataType> validateQueryAndGetType(String sql)
+      throws SqlSyntaxException, SqlValidationException {
+    if (this.parseNode == null) {
+      parseQuery(sql);
+    }
+    SqlNode parseNode = this.parseNode;
+    // Clear the parseNode because we will advance the planner
+    this.parseNode = null;
+    Pair<SqlNode, RelDataType> validatedSqlNodeAndType;
+    try {
+      validatedSqlNodeAndType = planner.validateAndGetType(parseNode);
+    } catch (ValidationException e) {
+      planner.close();
+      throw new SqlValidationException(sql, e);
+    }
+    return validatedSqlNodeAndType;
   }
 
   public RelNode getNonOptimizedRelationalAlgebra(String sql, boolean closePlanner)
