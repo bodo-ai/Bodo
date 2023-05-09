@@ -295,7 +295,8 @@ class Obfuscator(ast.NodeTransformer):
 
     def obfuscate_local(self, name):
         """The obfuscation that uses random function.
-        It is made sure that no collision happens and that reserved words are not used."""
+        It is made sure that no collision happens and that reserved words are not used.
+        """
         while True:
             newname = random_string(3, 5) + "__" + random_string(3, 5)
             if (
@@ -474,6 +475,8 @@ class Obfuscator(ast.NodeTransformer):
                 for target in x.targets:
                     # variables occurring in class definition need to be fixed
                     self.insert_fixed_names(self.retrieve_assigned_name(target))
+            elif isinstance(x, ast.AnnAssign):
+                self.insert_fixed_names(self.retrieve_assigned_name(x.target))
             self.visit(x)
         return node
 
