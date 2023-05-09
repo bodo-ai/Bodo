@@ -3,6 +3,7 @@
 #define _ARRAY_UTILS_H_INCLUDED
 
 #include <set>
+#include <span>
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
 #include "hyperloglog.hpp"
@@ -21,6 +22,7 @@
 #include <unordered_set>
 #define UNORD_MAP_CONTAINER std::unordered_map
 #define UNORD_SET_CONTAINER std::unordered_set
+#define UNORD_HASH std::hash
 #endif
 
 #ifdef USE_TSL_ROBIN
@@ -36,6 +38,7 @@
 #include <include/tsl/robin_set.h>
 #define UNORD_MAP_CONTAINER tsl::robin_map
 #define UNORD_SET_CONTAINER tsl::robin_set
+#define UNORD_HASH std::hash
 #endif
 
 #ifdef USE_TSL_SPARSE
@@ -44,12 +47,14 @@
 #include <include/tsl/sparse_set.h>
 #define UNORD_MAP_CONTAINER tsl::sparse_map
 #define UNORD_SET_CONTAINER tsl::sparse_set
+#define UNORD_HASH std::hash
 #endif
 
 #ifdef USE_TSL_HOPSCOTCH
 #include <include/tsl/hopscotch_set.h>
 #define UNORD_MAP_CONTAINER tsl::hopscotch_map
 #define UNORD_SET_CONTAINER tsl::hopscotch_set
+#define UNORD_HASH std::hash
 #endif
 
 #ifdef USE_ANKERL
@@ -57,6 +62,7 @@
 #include "ankerl/unordered_dense.h"
 #define UNORD_MAP_CONTAINER ankerl::unordered_dense::map
 #define UNORD_SET_CONTAINER ankerl::unordered_dense::set
+#define UNORD_HASH ankerl::unordered_dense::hash
 #endif
 
 #ifdef USE_ROBIN_HOOD_FLAT
@@ -64,6 +70,7 @@
 #include "robin_hood.h"
 #define UNORD_MAP_CONTAINER robin_hood::unordered_flat_map
 #define UNORD_SET_CONTAINER robin_hood::unordered_flat_set
+#define UNORD_HASH robin_hood::hash
 #endif
 
 #ifdef USE_ROBIN_HOOD_NODE
@@ -71,7 +78,21 @@
 #include "robin_hood.h"
 #define UNORD_MAP_CONTAINER robin_hood::unordered_node_map
 #define UNORD_SET_CONTAINER robin_hood::unordered_node_set
+#define UNORD_HASH robin_hood::hash
 #endif
+
+namespace bodo {
+template <typename Key, typename T, typename Hash = UNORD_HASH<Key>,
+          class KeyEqual = std::equal_to<Key>>
+using unord_map_container =
+    UNORD_MAP_CONTAINER<Key, T, Hash, KeyEqual,
+                        bodo::STLBufferPoolAllocator<std::pair<Key, T>>>;
+
+template <typename Key, typename Hash = UNORD_HASH<Key>,
+          class KeyEqual = std::equal_to<Key>>
+using unord_set_container =
+    UNORD_SET_CONTAINER<Key, Hash, KeyEqual, bodo::STLBufferPoolAllocator<Key>>;
+}  // namespace bodo
 
 // ------------------------------------------------
 
@@ -208,15 +229,15 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
  *
  * @param arr1: the first column
  * @param arr2: the second column
- * @param short_write_idxs is the vector of indices in the short table
- * @param long_write_idxs is the vector of indices in the long table
+ * @param short_write_idxs is the span of indices in the short table
+ * @param long_write_idxs is the span of indices in the long table
  * @return one column of the table output.
  */
 std::shared_ptr<array_info> RetrieveArray_TwoColumns(
     std::shared_ptr<array_info> const& arr1,
     std::shared_ptr<array_info> const& arr2,
-    std::vector<int64_t> const& short_write_idxs,
-    std::vector<int64_t> const& long_write_idxs);
+    const std::span<const int64_t> short_write_idxs,
+    const std::span<const int64_t> long_write_idxs);
 
 /** This function returns the column with the rows with the rows given in
  * "ListIdx"
@@ -227,7 +248,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
  * @return one array
  */
 std::shared_ptr<array_info> RetrieveArray_SingleColumn(
-    std::shared_ptr<array_info> in_arr, std::vector<int64_t> const& ListIdx,
+    std::shared_ptr<array_info> in_arr, const std::span<const int64_t> ListIdx,
     bool use_nullable_arr = false);
 
 /** This function uses the combinatorial information computed in the
@@ -253,7 +274,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
  */
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    std::vector<int64_t> const& ListIdx, int const& n_cols_arg = -1);
+    const std::span<const int64_t> ListIdx, int const& n_cols_arg = -1);
 
 /**
  * @brief select rows and columns in input table specified by list of indices
@@ -266,7 +287,7 @@ std::shared_ptr<table_info> RetrieveTable(
  */
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    std::vector<int64_t> const& rowInds, std::vector<size_t> const& colInds);
+    const std::span<const int64_t> rowInds, std::vector<size_t> const& colInds);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
@@ -920,10 +941,10 @@ inline bool is_bad_interval(const std::shared_ptr<array_info>& arr1,
  * @param total_size Total length of all the vectors.
  * @return std::vector<T> Flattened vector.
  */
-template <typename T>
-inline std::vector<T> flatten(std::vector<std::vector<T>> const& vec,
-                              uint64_t total_size) {
-    std::vector<T> flattened;
+template <typename T, typename S, typename V>
+inline std::vector<T, S> flatten(std::vector<std::vector<T, S>, V> const& vec,
+                                 uint64_t total_size) {
+    std::vector<T, S> flattened;
     flattened.reserve(total_size);
     for (auto const& v : vec) {
         flattened.insert(flattened.end(), v.begin(), v.end());

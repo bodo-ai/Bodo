@@ -459,10 +459,10 @@ class HeadColSet : public BasicColSet {
 
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
-    void set_head_row_list(std::vector<int64_t>& row_list);
+    void set_head_row_list(bodo::vector<int64_t>& row_list);
 
    private:
-    std::vector<int64_t> head_row_list;
+    bodo::vector<int64_t> head_row_list;
 };
 
 /**

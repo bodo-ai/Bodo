@@ -390,8 +390,8 @@ void iceberg_pq_write(const char *table_data_loc,
         const uint32_t seed = SEED_HASH_PARTITION;
         std::shared_ptr<uint32_t[]> hashes =
             hash_keys(transform_cols, seed, is_parallel);
-        UNORD_MAP_CONTAINER<multi_col_key, partition_write_info,
-                            multi_col_key_hash>
+        bodo::unord_map_container<multi_col_key, partition_write_info,
+                                  multi_col_key_hash>
             key_to_partition;
 
         new_table->num_keys = transform_cols.size();

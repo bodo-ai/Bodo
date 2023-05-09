@@ -553,7 +553,7 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
     numpy_arr_payload offsets_payload =
         allocate_numpy_payload(n + 1, Bodo_CType_offset);
     offset_t* offsets = (offset_t*)offsets_payload.data;
-    std::vector<const char*> tmp_store(n);
+    bodo::vector<const char*> tmp_store(n);
     size_t len = 0;
     for (Py_ssize_t i = 0; i < n; ++i) {
         offsets[i] = len;
