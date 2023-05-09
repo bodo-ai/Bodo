@@ -971,10 +971,7 @@ def verify_date_arg(arg, f_name, a_name):  # pragma: no cover
 
     raises: BodoError if the argument is not a datetime, datetime column, or NULL
     """
-    if not (
-        is_overload_none(arg)
-        or is_valid_date_arg(arg)
-    ):
+    if not (is_overload_none(arg) or is_valid_date_arg(arg)):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a date, date column, or null object"
         )
@@ -1228,6 +1225,7 @@ def gen_windowed(
     empty_block=None,
     num_args=1,
     propagate_nan=True,
+    extra_globals=None,
 ):
     """Creates an impl for a window frame function that accumulates some value
     as elements enter and exit a window that starts/ends some number of indices
@@ -1535,6 +1533,8 @@ def gen_windowed(
     func_text += "   return res"
 
     loc_vars = {}
+    if extra_globals is None:
+        extra_globals = {}
     exec(
         func_text,
         {
@@ -1543,6 +1543,7 @@ def gen_windowed(
             "np": np,
             "out_dtype": out_dtype,
             "pd": pd,
+            **extra_globals,
         },
         loc_vars,
     )

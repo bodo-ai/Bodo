@@ -99,7 +99,6 @@ def test_two_arg_numeric_window_functions(
     count_window_applies(pandas_code, window_frames[1], ["COVAR_SAMP", "COVAR_POP"])
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "funcs",
     [
@@ -114,7 +113,10 @@ def test_non_numeric_window_functions(
 ):
     """Tests min, max, count, count(*) and count_if with various combinations of
     window frames to test correctness and fusion"""
+    # Convert the spark input to tz-naive bc it can't handle timezones
+    convert_columns_tz_naive = ["TZ"]
     selects = []
+    convert_columns_bytearray = []
     for i in range(len(funcs)):
         if funcs[i] == "COUNT(*)":
             selects.append(
@@ -122,13 +124,6 @@ def test_non_numeric_window_functions(
             )
         else:
             for j, col in enumerate(all_window_col_names):
-                # Skip min/max if the datatype is string
-                # [BE-780]/[BE-2116]/[BE-4033]: fix this
-                if (
-                    funcs[i] in ("MIN", "MAX")
-                    and all_window_df["table1"][col].dtype.kind == "O"
-                ):
-                    continue
                 # Skip count_if if the datatype is not a boolean
                 if (
                     funcs[i] == "COUNT_IF"
@@ -136,10 +131,12 @@ def test_non_numeric_window_functions(
                 ):
                     continue
                 selects.append(
-                    f"{funcs[i]}({col}) OVER ({window_frames[0][(i+j) % len(window_frames[0])]})"
+                    f"{funcs[i]}({col}) OVER ({window_frames[0][(i+j) % len(window_frames[0])]}) AS C_{i}_{j}"
                 )
-    # Convert the spark input to tz-naive bc it can't handle timezones
-    convert_columns_tz_naive = ["TZ"]
+                # If taking the min/max of a binary column, add the output to
+                # the list of conversion columns
+                if col == "BI" and funcs[i] in ("MIN", "MAX"):
+                    convert_columns_bytearray.append(f"C_{i}_{j}")
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
     spark_query = get_equivalent_spark_agg_query(query)
     # TODO: Generate an expected output instead so we properly support TZ-Aware
@@ -154,6 +151,7 @@ def test_non_numeric_window_functions(
         return_codegen=True,
         only_jit_1DVar=True,
         convert_columns_tz_naive=convert_columns_tz_naive,
+        convert_columns_bytearray=convert_columns_bytearray,
     )["pandas_code"]
 
     # Verify that fusion is working correctly. The term window_frames[1] refers
