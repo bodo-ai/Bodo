@@ -1922,8 +1922,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *     relational expression.
    */
   public RexNodeVisitorInfo visitLiteralScan(RexLiteral node, boolean isSingleRow) {
-    String literal = generateLiteralCode(node, isSingleRow, this);
-    return new RexNodeVisitorInfo(literal);
+    Expr literal = generateLiteralCode(node, isSingleRow, this);
+    return new RexNodeVisitorInfo(literal.emit());
   }
 
   /**
@@ -2186,6 +2186,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
   }
 
+  private static Variable NODE_STRING = new Variable("node_string");
+
   /**
    * Adds code to the generated python that logs a simple message that tells the user the node being
    * executed has finished, and prints the execution time. Only works if verboseLevel is set to 1 or
@@ -2202,21 +2204,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // interested in)
       String nodeStr = Arrays.stream(RelOptUtil.toString(node).split("\n")).findFirst().get();
 
-      this.generatedCode
-          .append(getBodoIndent())
-          .append("node_string = ")
-          .append("'''")
-          .append(nodeStr)
-          .append("'''\n");
-      String msgString =
-          new StringBuilder(getBodoIndent())
-              .append(
-                  "bodo.user_logging.log_message('RELNODE_TIMING', f'''Execution time for RelNode"
-                      + " {node_string}: {time.time() - t_")
-              .append(node_id)
-              .append("}''')\n")
-              .toString();
-      this.generatedCode.append(msgString);
+      Op nodeString = new Op.Assign(
+          NODE_STRING,
+          new Expr.TripleQuotedString(nodeStr));
+      this.generatedCode.add(nodeString);
+      Op logMessageCall = new Op.Stmt(
+          new Expr.Call("bodo.user_logging.log_message",
+              new Expr.StringLiteral("RELNODE_TIMING"),
+              new Expr.Raw("f'''Execution time for RelNode {node_string}: {time.time() - t_" + node_id + "}'''")
+          ));
+      this.generatedCode.add(logMessageCall);
     }
   }
 

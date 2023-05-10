@@ -1008,7 +1008,7 @@ public class WindowAggCodeGen {
 
     // Default shift amount is 1
     Expr shiftAmount = new Expr.IntegerLiteral(1);
-    Expr fillValue = new Expr.None();
+    Expr fillValue = Expr.None.INSTANCE;
 
     // If there are 2 (or 3) arguments, use the 2nd argument to extract the shift amount
     if (num_arguments >= 2) {
