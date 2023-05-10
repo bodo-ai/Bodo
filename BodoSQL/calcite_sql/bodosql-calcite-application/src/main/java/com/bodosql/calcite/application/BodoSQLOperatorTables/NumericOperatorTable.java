@@ -10,6 +10,7 @@ import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlOperandTypeInference;
 import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.util.Optionality;
 
@@ -286,8 +287,10 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction SINH = SqlLibraryOperators.SINH;
   public static final SqlFunction TANH = SqlLibraryOperators.TANH;
 
-  public static final SqlFunction GREATEST = SqlLibraryOperators.GREATEST;
-  public static final SqlFunction LEAST = SqlLibraryOperators.LEAST;
+  public static final SqlFunction GREATEST =
+      new SqlLeastGreatestFunction("GREATEST", SqlKind.GREATEST);
+
+  public static final SqlFunction LEAST = new SqlLeastGreatestFunction("LEAST", SqlKind.LEAST);
 
   public static final SqlBasicAggFunction VARIANCE_POP =
       SqlBasicAggFunction.create(
@@ -458,5 +461,26 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   @Override
   public List<SqlOperator> getOperatorList() {
     return functionList;
+  }
+
+  private static class SqlLeastGreatestFunction extends SqlFunction {
+    public SqlLeastGreatestFunction(String name, SqlKind kind) {
+      super(
+          name,
+          kind,
+          ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE),
+          null,
+          OperandTypes.SAME_VARIADIC,
+          SqlFunctionCategory.SYSTEM);
+    }
+
+    @Override
+    public @Nullable SqlOperator reverse() {
+      if (getKind() == SqlKind.GREATEST) {
+        return LEAST;
+      } else {
+        return GREATEST;
+      }
+    }
   }
 }
