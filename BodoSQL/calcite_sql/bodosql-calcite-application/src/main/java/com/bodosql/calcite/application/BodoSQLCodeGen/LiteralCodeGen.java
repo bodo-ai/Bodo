@@ -1,10 +1,10 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.Utils.Utils.escapePythonQuotes;
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.ir.Expr;
 import com.google.common.collect.Range;
 import java.math.BigDecimal;
 import java.util.Calendar;
@@ -29,11 +29,9 @@ public class LiteralCodeGen {
    *     statements)
    * @return The code generated that matches the Literal.
    */
-  public static String generateLiteralCode(
+  public static Expr generateLiteralCode(
       RexLiteral node, boolean isSingleRow, PandasCodeGenVisitor visitor) {
-    StringBuilder codeBuilder = new StringBuilder();
     SqlTypeName typeName = node.getType().getSqlTypeName();
-    String out = "";
     // TODO: Add more types here
     switch (node.getTypeName()) {
       case NULL:
@@ -71,14 +69,12 @@ public class LiteralCodeGen {
           case REAL:
           case DOUBLE:
           case DECIMAL:
-            codeBuilder.append("None");
-            break;
+            return Expr.None.INSTANCE;
           default:
             throw new BodoSQLCodegenException(
                 "Internal Error: Calcite Plan Produced an Unsupported Null Literal Type: "
                     + typeName);
         }
-        break;
       case SARG:
         StringBuilder literalList = new StringBuilder("[");
 
@@ -116,38 +112,29 @@ public class LiteralCodeGen {
           throw new BodoSQLCodegenException(
               "Internal Error: Attempted to generate a Sarg literal within a case statement.");
         } else {
-          String globalVal = visitor.lowerAsGlobal(arrayExpr);
-          codeBuilder.append(globalVal);
+          return new Expr.Raw(visitor.lowerAsGlobal(arrayExpr));
         }
-        break;
 
       default:
         // TODO: investigate if this is the correct default value
         switch (typeName) {
           case TINYINT:
-            codeBuilder.append("np.int8(" + node.getValue().toString() + ")");
-            break;
+            return new Expr.Raw("np.int8(" + node.getValue().toString() + ")");
           case SMALLINT:
-            codeBuilder.append("np.int16(" + node.getValue().toString() + ")");
-            break;
+            return new Expr.Raw("np.int16(" + node.getValue().toString() + ")");
           case INTEGER:
-            codeBuilder.append("np.int32(" + node.getValue().toString() + ")");
-            break;
+            return new Expr.Raw("np.int32(" + node.getValue().toString() + ")");
           case BIGINT:
-            codeBuilder.append("np.int64(" + node.getValue().toString() + ")");
-            break;
+            return new Expr.Raw("np.int64(" + node.getValue().toString() + ")");
           case FLOAT:
-            codeBuilder.append("np.float32(" + node.getValue().toString() + ")");
-            break;
+            return new Expr.Raw("np.float32(" + node.getValue().toString() + ")");
           case REAL:
           case DOUBLE:
           case DECIMAL:
-            codeBuilder.append("np.float64(" + node.getValue().toString() + ")");
-            break;
+            return new Expr.Raw("np.float64(" + node.getValue().toString() + ")");
             // TODO: Determine why this case exists
           case SYMBOL:
-            codeBuilder.append(node.getValue().toString());
-            break;
+            return new Expr.Raw(node.getValue().toString());
           case DATE:
             // TODO:[BE-4593]Stop calcite from converting DATE literal
             {
@@ -156,29 +143,22 @@ public class LiteralCodeGen {
               // Month is 0-indexed in GregorianCalendar
               int month = calendar.get(Calendar.MONTH) + 1;
               int day = calendar.get(Calendar.DAY_OF_MONTH);
-              codeBuilder.append(String.format("datetime.date(%d, %d, %d)", year, month, day));
-              break;
+              return new Expr.Raw(String.format("datetime.date(%d, %d, %d)", year, month, day));
             }
           case CHAR:
           case VARCHAR:
-            codeBuilder.append(
-                makeQuoted(
-                    escapePythonQuotes(
-                        node.getValue2()
-                            .toString()))); // extract value without specific sql type info.
-            break;
+            // extract value without specific sql type info.
+            return new Expr.StringLiteral(node.getValue2().toString());
           case TIMESTAMP:
             {
               GregorianCalendar calendar = (GregorianCalendar) node.getValue();
               // TODO: How do we represent microseconds and nanoseconds?
               long nanoseconds = calendar.getTimeInMillis() * 1000 * 1000;
-              codeBuilder.append(String.format("pd.Timestamp(%d)", nanoseconds));
-              break;
+              return new Expr.Raw(String.format("pd.Timestamp(%d)", nanoseconds));
             }
           case BOOLEAN:
             String boolName = node.toString();
-            codeBuilder.append(boolName.substring(0, 1).toUpperCase() + boolName.substring(1));
-            break;
+            return new Expr.Raw(boolName.substring(0, 1).toUpperCase() + boolName.substring(1));
             /* according to https://calcite.apache.org/javadocAggregate/org/apache/calcite/rex/RexLiteral.html,
             INTERVAL_YEAR/YEAR_MONTH/MONTH are measured in months, and everything else is measured in miliseconds
              */
@@ -195,8 +175,7 @@ public class LiteralCodeGen {
           case INTERVAL_DAY:
             // Value is given in milliseconds in these cases
             String milliseconds = node.getValue().toString();
-            codeBuilder.append("pd.Timedelta(milliseconds=" + milliseconds + ")");
-            break;
+            return new Expr.Raw("pd.Timedelta(milliseconds=" + milliseconds + ")");
           case INTERVAL_YEAR:
           case INTERVAL_MONTH:
           case INTERVAL_YEAR_MONTH:
@@ -204,14 +183,12 @@ public class LiteralCodeGen {
             // May later refactor this code to create DateOffsets, for now
             // causes an error
             String months = node.getValue().toString();
-            codeBuilder.append("pd.DateOffset(months=" + months + ")");
-            break;
+            return new Expr.Raw("pd.DateOffset(months=" + months + ")");
           default:
             throw new BodoSQLCodegenException(
                 "Internal Error: Calcite Plan Produced an Unsupported Literal Type");
         }
     }
-    return codeBuilder.toString();
   }
 
   /**

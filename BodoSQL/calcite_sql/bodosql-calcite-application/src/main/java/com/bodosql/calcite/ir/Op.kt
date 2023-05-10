@@ -21,6 +21,14 @@ interface Op {
     }
 
     /**
+     * Represents an expression without a return value.
+     * @param expr Expression to evaluate.
+     */
+    data class Stmt(val expr: Expr) : Op {
+        override fun emit(doc: Doc) = doc.write(expr.emit())
+    }
+
+    /**
      * Represents an if operation with an optional else case
      * for bodies with a single line.
      */

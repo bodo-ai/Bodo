@@ -11,7 +11,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateDatePart;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.LikeCodeGen.generateLikeCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateTryToNumberCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.generatePostfixOpCode;
@@ -98,8 +97,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   @Override
   public Expr visitLiteral(RexLiteral literal) {
-    String code = LiteralCodeGen.generateLiteralCode(literal, false, visitor);
-    return new Expr.Raw(code);
+    return LiteralCodeGen.generateLiteralCode(literal, false, visitor);
   }
 
   @Override
@@ -279,31 +277,39 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     // as its second operand. If there is an escape value it will
     // be the third value, although it is not required and only supported
     // for LIKE and ILIKE
-    String opName = node.getOperator().getName();
+    SqlLikeOperator op = (SqlLikeOperator) node.getOperator();
     List<RexNode> operands = node.getOperands();
-    RexNode colIndex = operands.get(0);
-    Expr arg = colIndex.accept(this);
-    String argCode = arg.emit();
     RexNode patternNode = operands.get(1);
 
     // The regular expression functions only support literal patterns
-    if ((opName.equals("REGEXP") || opName.equals("RLIKE"))
-        && !(patternNode instanceof RexLiteral)) {
-      throw new BodoSQLCodegenException(
-          String.format("%s Error: Pattern must be a string literal", opName));
+    boolean patternRegex = false;
+    if (op.getKind() == SqlKind.REGEXP || op.getKind() == SqlKind.RLIKE) {
+      if (!(patternNode instanceof RexLiteral)) {
+        throw new BodoSQLCodegenException(
+            String.format("%s Error: Pattern must be a string literal", op.getName()));
+      }
+      patternRegex = true;
     }
+
+    Expr arg = operands.get(0).accept(this);
     Expr pattern = patternNode.accept(this);
-    String sqlPattern = pattern.emit();
-    // If escape is missing use the empty string.
-    String sqlEscape = "''";
+    Expr escape;
     if (operands.size() == 3) {
-      RexNode escapeNode = operands.get(2);
-      Expr escape = escapeNode.accept(this);
-      sqlEscape = escape.emit();
+      escape = operands.get(2).accept(this);
+    } else {
+      escape = new Expr.StringLiteral("");
     }
-    /* Assumption: Typing in LIKE requires this to be a string type. */
-    String likeCode = generateLikeCode(opName, argCode, sqlPattern, sqlEscape);
-    return new Expr.Raw(likeCode);
+
+    if (patternRegex) {
+      return new Expr.Call("bodo.libs.bodosql_array_kernels.regexp_like",
+          arg, pattern, new Expr.StringLiteral(""));
+    } else {
+      return new Expr.Call("bodo.libs.bodosql_array_kernels.like_kernel",
+          arg, pattern, escape,
+          // Use the opposite. The python call is for case insensitivity while
+          // our boolean is for case sensitivity so they are opposites.
+          new Expr.BooleanLiteral(!op.isCaseSensitive()));
+    }
   }
 
   protected Expr visitCaseOp(RexCall node) {
@@ -1243,8 +1249,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     @Override
     public Expr visitLiteral(RexLiteral literal) {
-      String code = LiteralCodeGen.generateLiteralCode(literal, true, visitor);
-      return new Expr.Raw(code);
+      return LiteralCodeGen.generateLiteralCode(literal, true, visitor);
     }
 
     @Override
