@@ -206,13 +206,13 @@ public class CondOpCodeGen {
       Expr.Tuple inputData = new Expr.Tuple(inputDataArgs);
       // TODO: Move global generation to the Module.Builder + change the return types to Variables
       Expr.TripleQuotedString initBody =
-          new Expr.TripleQuotedString(new Expr.Raw(initModule.build().emit(1)));
+          new Expr.TripleQuotedString(initModule.build().emit(1));
       Expr.Raw initGlobal = new Expr.Raw(pdVisitorClass.lowerAsMetaType(initBody.emit()));
       // have to use triple quotes here since the body can contain " or '. We use indent level 2
       // since
       // This is embedded inside a for loop.
       Expr.TripleQuotedString loopBody =
-          new Expr.TripleQuotedString(new Expr.Raw(innerBuilder.build().emit(2)));
+          new Expr.TripleQuotedString(innerBuilder.build().emit(2));
       Expr.Raw bodyGlobal = new Expr.Raw(pdVisitorClass.lowerAsGlobal(loopBody.emit()));
 
       Expr.Raw outputArrayTypeGlobal =
