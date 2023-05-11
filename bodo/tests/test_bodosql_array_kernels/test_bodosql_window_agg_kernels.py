@@ -309,6 +309,24 @@ def window_refsol(S, lower, upper, func, use_nans=False):
             )
             if func == "count":
                 result = len(elems)
+            elif func == "boolor":
+                result = (
+                    None
+                    if len(elems) == 0
+                    else len(list(filter(lambda x: bool(x), elems))) > 0
+                )
+            elif func == "booland":
+                result = (
+                    None
+                    if len(elems) == 0
+                    else len(list(filter(lambda x: bool(x), elems))) == len(elems)
+                )
+            elif func == "boolxor":
+                result = (
+                    None
+                    if len(elems) == 0
+                    else len(list(filter(lambda x: bool(x), elems))) == 1
+                )
             elif use_nans and ("nan" in map(str, elems)):
                 result = np.nan
             elif func == "sum":
@@ -337,12 +355,13 @@ def window_refsol(S, lower, upper, func, use_nans=False):
             elif func == "stddev_samp":
                 result = None if len(elems) <= 1 else np.std(elems, ddof=1)
         if use_nans:
+            default = False if func.startswith("bool") else 0.0
             if result is None:
                 to_null.append(i)
-                L.append(0.0)
+                L.append(default)
             elif result is np.nan:
                 to_nan.append(i)
-                L.append(0.0)
+                L.append(default)
             else:
                 L.append(result)
         else:
@@ -666,6 +685,9 @@ def window_kernel_two_arg_data():
         "var_samp",
         "stddev_pop",
         "stddev_samp",
+        "boolor",
+        "booland",
+        "boolxor",
     ],
 )
 def test_windowed_kernels_numeric(
@@ -717,6 +739,21 @@ def test_windowed_kernels_numeric(
             bodo.libs.bodosql_array_kernels.windowed_stddev_samp(S, lower, upper)
         )
 
+    def impl10(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_boolor(S, lower, upper)
+        )
+
+    def impl11(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_booland(S, lower, upper)
+        )
+
+    def impl12(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_boolxor(S, lower, upper)
+        )
+
     S = window_kernel_numeric_data[dataset]
 
     implementations = {
@@ -729,6 +766,9 @@ def test_windowed_kernels_numeric(
         "var_samp": impl7,
         "stddev_pop": impl8,
         "stddev_samp": impl9,
+        "boolor": impl10,
+        "booland": impl11,
+        "boolxor": impl12,
     }
     impl = implementations[func]
 

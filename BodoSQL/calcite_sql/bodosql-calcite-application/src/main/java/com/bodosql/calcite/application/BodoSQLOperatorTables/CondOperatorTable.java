@@ -331,9 +331,29 @@ public class CondOperatorTable implements SqlOperatorTable {
               OperandTypes.or(OperandTypes.BOOLEAN, OperandTypes.NUMERIC))
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
+  // The same as BOOLAND_AGG except that it returns true if all of the inputs are true
+  public static final SqlAggFunction BOOLAND_AGG =
+      SqlBasicAggFunction.create(
+              "BOOLAND_AGG",
+              SqlKind.OTHER,
+              ReturnTypes.BOOLEAN_NULLABLE,
+              OperandTypes.or(OperandTypes.BOOLEAN, OperandTypes.NUMERIC))
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
+  // The same as BOOLAND_AGG except that it returns true if exactly one of the inputs  is are true
+  public static final SqlAggFunction BOOLXOR_AGG =
+      SqlBasicAggFunction.create(
+              "BOOLXOR_AGG",
+              SqlKind.OTHER,
+              ReturnTypes.BOOLEAN_NULLABLE,
+              OperandTypes.or(OperandTypes.BOOLEAN, OperandTypes.NUMERIC))
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           BOOLOR_AGG,
+          BOOLAND_AGG,
+          BOOLXOR_AGG,
           CONDITIONAL_TRUE_EVENT,
           COUNT_IF,
           CONDITIONAL_CHANGE_EVENT,

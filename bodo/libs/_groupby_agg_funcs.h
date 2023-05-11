@@ -86,6 +86,30 @@ struct bool_aggfunc {
 };
 
 /**
+ * This template is used for boolxor_agg.
+ */
+template <typename T, int dtype, typename Enable = void>
+struct boolxor_agg {
+    /**
+     * Aggregation function for boolxor_agg. The goal is to
+     * count the number of non-null occurrences and the number of true
+     * occurrences.
+     *
+     * @param[in] arr: array of input values
+     * @param[in,out] one_arr: boolean array indicating which groups have 1+
+     * nonzero observations
+     * @param[in,out] two_arr: boolean array indicating which groups have 2+
+     * nonzero observations
+     * @param[in] idx: index of the array that is being accessed
+     * @param[in] i_grp: index of the corresponding group
+     */
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             const std::shared_ptr<array_info>& one_arr,
+                             const std::shared_ptr<array_info>&, int64_t idx,
+                             int64_t i_grp);
+};
+
+/**
  * This template is used for common string functions that both take
  * in strings and output a string (e.g. sum, min, max)
  */
@@ -493,7 +517,7 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
                     typename std::enable_if<is_decimal<dtype>::value>::type> {
     /**
      * Aggregation function for boolor_agg. Note this implementation
-     * handles both integer and floating point data.
+     * handles decimal data.
      *
      * @param[in,out] arr The array holding the current aggregation info. This
      * is necessary because nullable booleans have 1 bit per boolean
@@ -505,6 +529,49 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
                              int64_t idx, T& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         v1 = v1 || ((decimal_to_double(v2)) != 0.0);
+        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+    }
+};
+
+// booland_agg
+
+template <typename T, int dtype>
+struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg,
+                    typename std::enable_if<!is_decimal<dtype>::value>::type> {
+    /**
+     * Aggregation function for booland_agg. Note this implementation
+     * handles both integer and floating point data.
+     *
+     * @param[in,out] arr The array holding the current aggregation info. This
+     * is necessary because nullable booleans have 1 bit per boolean
+     * @param idx The index to load/store for array.
+     * @param v2 other input value.
+     */
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             int64_t idx, T& v2) {
+        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        v1 = (v1 && (v2 != 0));
+        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+    }
+};
+
+template <typename T, int dtype>
+struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg,
+                    typename std::enable_if<is_decimal<dtype>::value>::type> {
+    /**
+     * Aggregation function for booland_agg. Note this implementation
+     * handles decimal data data.
+     *
+     * @param[in,out] arr The array holding the current aggregation info. This
+     * is necessary because nullable booleans have 1 bit per boolean
+     * @param idx The index to load/store for array.
+     * @param v2 other input value.
+     */
+    // TODO: Compare decimal directly?
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             int64_t idx, T& v2) {
+        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        v1 = v1 && ((decimal_to_double(v2)) != 0.0);
         SetBitTo((uint8_t*)arr->data1(), idx, v1);
     }
 };
@@ -687,6 +754,35 @@ struct kurt_agg {
         }
     }
 };
+
+// boolxor_agg
+
+template <typename T, int dtype>
+struct boolxor_agg<T, dtype> {
+    /**
+     * Aggregation function for boolxor_agg. The goal is to
+     * count the number of non-null occurrences and the number of true
+     * occurrences.
+     *
+     * @param T: input value
+     * @param[in,out] one_arr: boolean array indicating which groups have 1+
+     * nonzero observations
+     * @param[in,out] two_arr: boolean array indicating which groups have 2+
+     * nonzero observations
+     * @param[in] i_grp: index of the corresponding group
+     */
+    inline static void apply(const T val,
+                             const std::shared_ptr<array_info>& one_arr,
+                             const std::shared_ptr<array_info>& two_arr,
+                             int64_t i_grp) {
+        if (val != 0) {
+            bool old_one = GetBit((uint8_t*)one_arr->data1(), i_grp);
+            SetBitTo((uint8_t*)one_arr->data1(), i_grp, true);
+            SetBitTo((uint8_t*)two_arr->data1(), i_grp, old_one);
+        }
+    }
+};
+
 // Non inlined operations over multiple columns
 
 /**

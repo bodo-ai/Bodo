@@ -45,15 +45,17 @@ void aggfunc_output_initialize_kernel(
             if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
                 ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last ||
                 ftype == Bodo_FTypes::boolor_agg ||
+                ftype == Bodo_FTypes::booland_agg ||
+                ftype == Bodo_FTypes::boolxor_agg ||
                 ftype == Bodo_FTypes::mean || ftype == Bodo_FTypes::var ||
                 ftype == Bodo_FTypes::var_pop ||
                 ftype == Bodo_FTypes::std_pop ||
                 ftype == Bodo_FTypes::kurtosis || ftype == Bodo_FTypes::skew ||
                 ftype == Bodo_FTypes::std || ftype == Bodo_FTypes::median) {
                 // if input is all nulls, max, min, first, last, kurtosis, skew,
-                // or boolor_agg, the output will be null. We null initialize
-                // median, mean, var, and std as well since we always output
-                // a nullable float at this time.
+                // boolor_agg, boolxor_agg or booland_agg, the output will be null. 
+                // We null initialize or median, mean, var, and std as well since we
+                // always output a nullable float at this time.
                 init_val = false;
             } else {
                 init_val = true;
@@ -104,6 +106,11 @@ void aggfunc_output_initialize_kernel(
         }
     }
     switch (ftype) {
+        case Bodo_FTypes::booland_agg: {
+            InitializeBitMask((uint8_t*)out_col->data1(), out_col->length,
+                            true);
+            return;
+        }
         case Bodo_FTypes::prod:
             switch (out_col->dtype) {
                 case Bodo_CTypes::_BOOL:
@@ -450,6 +457,8 @@ void get_groupby_output_dtype(int ftype,
             }
             return;
         case Bodo_FTypes::boolor_agg:
+        case Bodo_FTypes::booland_agg:
+        case Bodo_FTypes::boolxor_agg:
             array_type = bodo_array_type::NULLABLE_INT_BOOL;
             dtype = Bodo_CTypes::_BOOL;
             return;
