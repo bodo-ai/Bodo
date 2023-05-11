@@ -241,6 +241,60 @@ void IdxMinMaxColSet::combine(const grouping_info& grp_info) {
     this->combine_cols.pop_back();
 }
 
+BoolXorColSet::BoolXorColSet(std::shared_ptr<array_info> in_col, int ftype,
+                             bool combine_step, bool use_sql_rules)
+    : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
+
+BoolXorColSet::~BoolXorColSet() {}
+
+void BoolXorColSet::alloc_update_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    std::shared_ptr<array_info> one_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::_BOOL, 0, 0);
+    std::shared_ptr<array_info> two_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::_BOOL, 0, 0);
+    aggfunc_output_initialize(one_col, this->ftype, use_sql_rules);
+    aggfunc_output_initialize(two_col, this->ftype, use_sql_rules);
+    out_cols.push_back(one_col);
+    out_cols.push_back(two_col);
+    this->update_cols.push_back(one_col);
+    this->update_cols.push_back(two_col);
+}
+
+void BoolXorColSet::update(const std::vector<grouping_info>& grp_infos) {
+    std::vector<std::shared_ptr<array_info>> aux_cols = {this->update_cols[1]};
+    do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
+                       grp_infos[0], this->ftype);
+}
+
+void BoolXorColSet::combine(const grouping_info& grp_info) {
+    std::shared_ptr<array_info> one_col_in = this->update_cols[0];
+    std::shared_ptr<array_info> two_col_in = this->update_cols[1];
+    std::shared_ptr<array_info> one_col_out = this->combine_cols[0];
+    std::shared_ptr<array_info> two_col_out = this->combine_cols[1];
+    aggfunc_output_initialize(one_col_out, Bodo_FTypes::boolxor_agg,
+                              use_sql_rules);
+    aggfunc_output_initialize(two_col_out, Bodo_FTypes::boolxor_agg,
+                              use_sql_rules);
+    boolxor_combine(one_col_in, two_col_in, one_col_out, two_col_out, grp_info);
+}
+
+void BoolXorColSet::eval(const grouping_info& grp_info) {
+    std::vector<std::shared_ptr<array_info>>* mycols;
+    if (this->combine_step) {
+        mycols = &this->combine_cols;
+    } else {
+        mycols = &this->update_cols;
+    }
+    // Perform the evaluation step with one_col used as the output column
+    // and two_col as the aux column
+    std::vector<std::shared_ptr<array_info>> aux_cols = {mycols->at(1)};
+    do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+                       Bodo_FTypes::boolxor_eval);
+}
+
 VarStdColSet::VarStdColSet(std::shared_ptr<array_info> in_col, int ftype,
                            bool combine_step, bool use_sql_rules)
     : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
@@ -963,6 +1017,10 @@ std::unique_ptr<BasicColSet> makeColSet(
             break;
         case Bodo_FTypes::mean:
             colset = new MeanColSet(in_cols[0], do_combine, use_sql_rules);
+            break;
+        case Bodo_FTypes::boolxor_agg:
+            colset =
+                new BoolXorColSet(in_cols[0], ftype, do_combine, use_sql_rules);
             break;
         case Bodo_FTypes::var_pop:
         case Bodo_FTypes::std_pop:

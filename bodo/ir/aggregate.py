@@ -273,6 +273,8 @@ supported_agg_funcs = [
     "kurtosis",
     "skew",
     "boolor_agg",
+    "booland_agg",
+    "boolxor_agg",
     "count_if",
     "udf",
     "gen_udf",
@@ -351,9 +353,16 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 5
         func.ncols_post_shuffle = 6
         return func
-    if func_name in {"first", "last", "boolor_agg", "count_if"}:
-        # We don't have a function definition for first/last/boolor_agg/count_if, and it is not needed
-        # for the groupby C++ codepath, so we just use a dummy object.
+    elif func_name in {"boolxor_agg"}:
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        func.ncols_pre_shuffle = 2
+        func.ncols_post_shuffle = 3
+        return func
+    if func_name in {"first", "last", "boolor_agg", "booland_agg", "count_if"}:
+        # We don't have a function definition for first/last/boolor_agg/booland_agg/count_if,
+        # and it is not needed for the groupby C++ codepath, so we just use a dummy object.
         # Also NOTE: Series last and df.groupby.last() are different operations
         func = pytypes.SimpleNamespace()
         func.ftype = func_name

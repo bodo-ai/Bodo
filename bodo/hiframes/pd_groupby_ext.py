@@ -367,14 +367,14 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     ) and isinstance(in_dtype, (Decimal128Type, types.Integer, types.Float)):
         # TODO: Only make the output nullable if the input is nullable?
         return to_nullable_type(dtype_to_array_type(types.float64)), "ok"
-    elif func_name == "boolor_agg":
+    elif func_name in {"boolor_agg", "booland_agg", "boolxor_agg"}:
         if isinstance(
             in_dtype, (Decimal128Type, types.Integer, types.Float, types.Boolean)
         ):
             return bodo.boolean_array_type, "ok"
         return (
             None,
-            f"For boolor_agg, only columns of type integer, float, Decimal, or boolean type are allowed",
+            f"For {func_name}, only columns of type integer, float, Decimal, or boolean type are allowed",
         )
     elif func_name == "count_if":
         if in_dtype == types.boolean:

@@ -1005,7 +1005,8 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             }
             break;
         }
-        case Bodo_FTypes::boolor_agg: {
+        case Bodo_FTypes::boolor_agg:
+        case Bodo_FTypes::booland_agg: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
@@ -1016,6 +1017,20 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
                                                              val2);
                         out_col->set_null_bit(i_grp, true);
                     }
+                }
+            }
+            break;
+        }
+        case Bodo_FTypes::boolxor_agg: {
+            std::shared_ptr<array_info> one_col = out_col;
+            std::shared_ptr<array_info> two_col = aux_cols[0];
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = get_group_for_row(grp_info, i);
+                if (i_grp != -1) {
+                    T val = getv<T>(in_col, i);
+                    boolxor_agg<T, dtype>::apply(val, one_col, two_col, i_grp);
+                    one_col->set_null_bit(i_grp, true);
+                    two_col->set_null_bit(i_grp, true);
                 }
             }
             break;
@@ -1073,6 +1088,7 @@ void apply_to_column_nullable(
         case Bodo_FTypes::std_eval:                 \
         case Bodo_FTypes::skew_eval:                \
         case Bodo_FTypes::kurt_eval:                \
+        case Bodo_FTypes::boolxor_eval:             \
             break;                                  \
         default:                                    \
             i_grp = get_group_for_row(grp_info, i); \
@@ -1088,6 +1104,9 @@ void apply_to_column_nullable(
         case Bodo_FTypes::mean_eval:                                        \
             valid_group =                                                   \
                 in_col->get_null_bit(i) && getv<uint64_t>(in_col, i) > 0;   \
+            break;                                                          \
+        case Bodo_FTypes::boolxor_eval:                                     \
+            valid_group = aux_cols[0]->get_null_bit(i);                     \
             break;                                                          \
         case Bodo_FTypes::var_pop_eval:                                     \
         case Bodo_FTypes::std_pop_eval:                                     \
@@ -1211,6 +1230,10 @@ void apply_to_column_nullable(
             aux_cols[3]->set_null_bit(i_grp, true);                            \
             aux_cols[4]->set_null_bit(i_grp, true);                            \
             break;                                                             \
+        case Bodo_FTypes::boolxor_eval:                                        \
+            boolxor_eval(out_col, aux_cols[0], i);                             \
+            out_col->set_null_bit(i, true);                                    \
+            break;                                                             \
         case Bodo_FTypes::mean_eval:                                           \
             mean_eval(getv<double>(out_col, i), getv<uint64_t>(in_col, i));    \
             out_col->set_null_bit(i, true);                                    \
@@ -1287,6 +1310,7 @@ void apply_to_column_nullable(
             out_col->set_null_bit(i_grp, true);                                \
             break;                                                             \
         case Bodo_FTypes::boolor_agg:                                          \
+        case Bodo_FTypes::booland_agg:                                         \
             if (dtype == Bodo_CTypes::_BOOL) {                                 \
                 bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
                 bool_aggfunc<bool, dtype, ftype>::apply(out_col, i_grp,        \
@@ -1296,6 +1320,19 @@ void apply_to_column_nullable(
                                                      getv<T>(in_col, i));      \
             }                                                                  \
             out_col->set_null_bit(i_grp, true);                                \
+            break;                                                             \
+        case Bodo_FTypes::boolxor_agg:                                         \
+            if (dtype == Bodo_CTypes::_BOOL) {                                 \
+                bool data_bit = GetBit((uint8_t*)in_col->data1(), i);          \
+                boolxor_agg<bool, dtype>::apply(data_bit, out_col,             \
+                                                aux_cols[0], i_grp);           \
+            } else {                                                           \
+                T val = getv<T>(in_col, i);                                    \
+                boolxor_agg<T, dtype>::apply(val, out_col, aux_cols[0],        \
+                                             i_grp);                           \
+            }                                                                  \
+            out_col->set_null_bit(i_grp, true);                                \
+            aux_cols[0]->set_null_bit(i_grp, true);                            \
             break;                                                             \
         case Bodo_FTypes::count_if: {                                          \
             bool data_bit = GetBit((uint8_t*)in_col->data1(), i);              \
@@ -1846,6 +1883,36 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolor_agg, Bodo_CTypes::FLOAT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolor_agg, Bodo_CTypes::DECIMAL)
             break;
+        case Bodo_FTypes::booland_agg:
+            // BOOLAND_AGG
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::_BOOL)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::INT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::UINT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::INT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::UINT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::INT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::UINT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::INT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::UINT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::FLOAT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::FLOAT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::booland_agg, Bodo_CTypes::DECIMAL)
+            break;
+        case Bodo_FTypes::boolxor_agg:
+            // BOOLXOR_AGG
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::_BOOL)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::INT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::UINT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::INT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::UINT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::INT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::UINT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::INT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::UINT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::FLOAT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::FLOAT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::DECIMAL)
+            break;
         case Bodo_FTypes::mean_eval:
             // EVAL step for MEAN. This transforms each group from several
             // arrays to the final single array output. Note we don't care about
@@ -1856,6 +1923,17 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             return apply_to_column<double, Bodo_FTypes::mean_eval,
                                    Bodo_CTypes::FLOAT64>(in_col, out_col,
                                                          aux_cols, grp_info);
+
+        case Bodo_FTypes::boolxor_eval:
+            // EVAL step for BOOLXOR_AGG. This transforms each group from
+            // several arrays to the final single array output. Note we don't
+            // care about the input types here as the supported types are always
+            // hard coded.
+            // TODO: Move elsewhere? Every row is processed instead of reduce
+            // to groups.
+            return apply_to_column<bool, Bodo_FTypes::boolxor_eval,
+                                   Bodo_CTypes::_BOOL>(in_col, out_col,
+                                                       aux_cols, grp_info);
         case Bodo_FTypes::var_pop_eval:
             // EVAL step for VAR_POP. This transforms each group from several
             // arrays to the final single array output. Note we don't care about

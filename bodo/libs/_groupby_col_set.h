@@ -211,6 +211,27 @@ class IdxMinMaxColSet : public BasicColSet {
 };
 
 /**
+ * @brief Colset for boolxor_agg
+ *
+ */
+class BoolXorColSet : public BasicColSet {
+   public:
+    BoolXorColSet(std::shared_ptr<array_info> in_col, int ftype,
+                  bool combine_step, bool use_sql_rules);
+
+    virtual ~BoolXorColSet();
+
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+
+    virtual void update(const std::vector<grouping_info>& grp_infos);
+
+    virtual void combine(const grouping_info& grp_info);
+
+    virtual void eval(const grouping_info& grp_info);
+};
+
+/**
  * @brief Colset for Variance and Standard deviation operations.
  *
  */

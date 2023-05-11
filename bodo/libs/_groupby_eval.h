@@ -142,7 +142,7 @@ inline void skew_eval(double& result, uint64_t count, double m1, double m2,
  * for more information. Precise formula taken from
  * https://github.com/pandas-dev/pandas/blob/7187e675002fe88e639b8c9c62a8625a1dd1235b/pandas/core/nanops.py
  *
- * @param[in,out] stores the calculated skew
+ * @param[in,out] stores the calculated kurtosis
  * @param count: number of observations
  * @param m1: the sum of elmements (precursor to the first moment)
  * @param m2: the sum of squares of elements (precursor to the second moment)
@@ -178,6 +178,22 @@ inline void kurt_eval(double& result, uint64_t count, double m1, double m2,
             result = s / (count - 1);
         }
     }
+}
+
+/**
+ * Perform final evaluation step for boolxor_agg, which returns outputs if
+ * exactly one element is nonzero, or NULL if all of the elements are NULL
+ *
+ * @param[in, out] one: true if 1+ entries are non-zero, later becomes the
+ * output column
+ * @param[in] two: true if 2+ entries are non-zero
+ * @param i: the index that the evaluation is being done on
+ */
+inline void boolxor_eval(const std::shared_ptr<array_info>& one,
+                         const std::shared_ptr<array_info>& two, int64_t i) {
+    bool one_bit = GetBit((uint8_t*)one->data1(), i);
+    bool two_bit = GetBit((uint8_t*)two->data1(), i);
+    SetBitTo((uint8_t*)one->data1(), i, one_bit && !two_bit);
 }
 
 #endif  // _GROUPBY_EVAL_H_INCLUDED

@@ -180,6 +180,25 @@ void var_combine(const std::shared_ptr<array_info>& count_col_in,
                  const std::shared_ptr<array_info>& m2_col_out,
                  grouping_info const& grp_info);
 
+// Boolxor
+
+/**
+ * @brief Compute the boolxor_agg update function for combining
+ * the result of local reductions on each rank.
+ *
+ * @param[in] one_col_in The input column for if there is 1+ non-zero entries
+ * @param[in] two_col_in The input column for if there are 2+ non-zero entries
+ * @param[out] one_col_out The output column for if there is 1+ non-zero entries
+ * @param[out] two_col_out The output column for if there are 2+ non-zero
+ * entries
+ * @param[in] grp_info The grouping information.
+ */
+void boolxor_combine(const std::shared_ptr<array_info>& one_col_in,
+                     const std::shared_ptr<array_info>& two_col_in,
+                     const std::shared_ptr<array_info>& one_col_out,
+                     const std::shared_ptr<array_info>& two_col_out,
+                     grouping_info const& grp_info);
+
 // NUNIQUE
 
 /**
