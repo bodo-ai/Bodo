@@ -5247,7 +5247,8 @@ TimeUnit TimeUnit() :
 TimeUnit TimestampInterval() :
 {}
 {
-    <FRAC_SECOND> { return TimeUnit.MICROSECOND; }
+    <MILLISECOND> { return TimeUnit.MILLISECOND; }
+|   <FRAC_SECOND> { return TimeUnit.MICROSECOND; }
 |   <MICROSECOND> { return TimeUnit.MICROSECOND; }
 |   <NANOSECOND> { return TimeUnit.NANOSECOND; }
 |   <SQL_TSI_FRAC_SECOND> { return TimeUnit.NANOSECOND; }
@@ -6928,6 +6929,50 @@ SqlCall TimestampAddFunctionCall() :
     SqlNode node;
 }
 {
+    <DATEADD> { s = span(); }
+    <LPAREN>
+    (
+        (
+            e = StringLiteral() {
+                args = startList(e);
+            }
+        |
+            interval = TimestampInterval() {
+                args = startList(SqlLiteral.createSymbol(interval, getPos()));
+            }
+        )
+        <COMMA>
+        e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    |
+        e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args = startList(e); }
+    )
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <RPAREN> {
+        return DatetimeOperatorTable.DATEADD.createCall(
+            s.end(this), args);
+    }
+|
+    <TIMEADD> { s = span(); }
+    <LPAREN>
+    (
+        e = StringLiteral() {
+            args = startList(e);
+        }
+    |
+        interval = TimestampInterval() {
+            args = startList(SqlLiteral.createSymbol(interval, getPos()));
+        }
+    )
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <RPAREN> {
+        return DatetimeOperatorTable.TIMEADD.createCall(
+            s.end(this), args);
+    }
+|
     <TIMESTAMPADD> { s = span(); }
     <LPAREN>
     (
@@ -6961,6 +7006,50 @@ SqlCall TimestampDiffFunctionCall() :
     SqlNode node;
 }
 {
+    <DATEDIFF> { s = span(); }
+    <LPAREN>
+    (
+      (
+          e = StringLiteral() {
+              args = startList(e);
+          }
+      |
+          interval = TimestampInterval() {
+              args = startList(SqlLiteral.createSymbol(interval, getPos()));
+          }
+      )
+      <COMMA>
+      e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    |
+      e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args = startList(e); }
+    )
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <RPAREN> {
+        return DatetimeOperatorTable.DATEDIFF.createCall(
+            s.end(this), args);
+    }
+|
+    <TIMEDIFF> { s = span(); }
+    <LPAREN>
+    (
+        e = StringLiteral() {
+            args = startList(e);
+        }
+    |
+        interval = TimestampInterval() {
+            args = startList(SqlLiteral.createSymbol(interval, getPos()));
+        }
+    )
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <RPAREN> {
+        return DatetimeOperatorTable.TIMEDIFF.createCall(
+            s.end(this), args);
+    }
+|
     <TIMESTAMPDIFF> { s = span(); }
     <LPAREN>
     (
@@ -7853,6 +7942,8 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < DATA: "DATA" >
 |   < DATABASE: "DATABASE" >
 |   < DATE: "DATE" >
+|   < DATEADD: "DATEADD">
+|   < DATEDIFF: "DATEDIFF">
 |   < DATETIME_INTERVAL_CODE: "DATETIME_INTERVAL_CODE" >
 |   < DATETIME_INTERVAL_PRECISION: "DATETIME_INTERVAL_PRECISION" >
 |   < DAY: "DAY" >
@@ -8343,6 +8434,8 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < THEN: "THEN" >
 |   < TIES: "TIES" >
 |   < TIME: "TIME" >
+|   < TIMEADD: "TIMEADD" >
+|   < TIMEDIFF: "TIMEDIFF" >
 |   < TIMESTAMP: "TIMESTAMP" >
 |   < TIMESTAMP_NTZ: "TIMESTAMP_NTZ" >
 |   < TIMESTAMPADD: "TIMESTAMPADD" >
