@@ -558,7 +558,6 @@ gen_objmode_method_overload(ReMatchType, "end", re.Match.end, "int64")
 
 @overload_method(ReMatchType, "span", no_unliteral=True)
 def overload_match_span(m, group=0):
-
     # span() returns a tuple of int
     types.tuple_int64_2 = types.Tuple([types.int64, types.int64])
 

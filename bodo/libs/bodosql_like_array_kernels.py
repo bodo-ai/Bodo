@@ -559,9 +559,9 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
         # since we can't compute directly on dictionaries.
         prefix_code += "arr_indices = arr._indices\n"
         # We use a cache defined in C++ for better performance due to Numba dictionaries not being the most performant.
-        # Set the reserved size of the hashmap to min(dict_size(arr) * dict_size(python_pattern_arr), len(arr))
+        # Set the reserved size of the hashmap to min(dict_size(arr) * size(python_pattern_arr), len(arr))
         # to reduce re-allocations as much as possible.
-        prefix_code += "cache_reserve_size = min(len(arr._data) * len(python_pattern_arr._data), len(arr_indices))\n"
+        prefix_code += "cache_reserve_size = min(len(arr._data) * len(python_pattern_arr), len(arr_indices))\n"
         prefix_code += "idx_cache = alloc_like_kernel_cache(cache_reserve_size)\n"
         # Add corresponding suffix code to deallocate the cache at the end.
         if suffix_code is None:

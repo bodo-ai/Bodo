@@ -989,7 +989,8 @@ int64_t re_escape_length_kind2(char* pattern, int64_t length) {
         int16_t char_val = *((int16_t*)(pattern) + i);
         // All the escaped characters fit in 1 byte.
         if (char_val < 0xff) {
-            num_escapes += int(escapes.contains(pattern[i]));
+            char to_check = (char)char_val;
+            num_escapes += int(escapes.contains(to_check));
         }
     }
     return length + num_escapes;
@@ -1011,7 +1012,8 @@ int64_t re_escape_length_kind4(char* pattern, int64_t length) {
         // All the escaped characters fit in 1 byte.
         if (char_val < 0xff) {
             // Count the number of escapes.
-            num_escapes += int(escapes.contains(pattern[i]));
+            char to_check = (char)char_val;
+            num_escapes += int(escapes.contains(to_check));
         }
     }
     return length + num_escapes;
