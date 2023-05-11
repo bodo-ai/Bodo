@@ -3098,7 +3098,7 @@ def get_chunk_bounds(A):  # pragma: no cover
 
 
 @overload(get_chunk_bounds, jit_options={"cache": True})
-def get_chunk_bounds_overload(A):
+def get_chunk_bounds_overload(A, parallel=False):
     """get chunk boundary value (last element) of array A for each rank and make it
     available on all ranks.
     For example, given A data on rank 0 [1, 4, 6], and on rank 1 [7, 8, 11],
@@ -3120,7 +3120,12 @@ def get_chunk_bounds_overload(A):
     if not (isinstance(A, types.Array) and isinstance(A.dtype, types.Integer)):
         raise BodoError("get_chunk_bounds() only supports Numpy int input currently.")
 
-    def impl(A):  # pragma: no cover
+    def impl(A, parallel=False):  # pragma: no cover
+        if not parallel:
+            # In the replicated case this is expected to be a NO-OP. This path exists
+            # to avoid MPI calls in case we cannot optimize out this funciton for some reason.
+            return np.empty(0, np.int64)
+
         n_pes = get_size()
         all_bounds = np.empty(n_pes, np.int64)
         all_empty = np.empty(n_pes, np.int8)

@@ -265,11 +265,9 @@ def do_delta_merge_with_target_py_wrapper(target_df, delta_df):
         False,
     ],
 )
-def test_do_delta_merge_with_target_dist(args, use_table_format, memory_leak_check):
+def test_do_delta_merge_with_target(args, use_table_format, memory_leak_check):
     """
     Tests our helper functions used in the distributed MERGE INTO case.
-    The distributed tests are separated from the replicated tests due to a memory
-    leak in sort with _bodo_chunk_bounds: https://bodo.atlassian.net/browse/BE-3775
     """
     target_df, delta_df = args
     expected_output = delta_merge_equiv(target_df, delta_df)
@@ -281,100 +279,6 @@ def test_do_delta_merge_with_target_dist(args, use_table_format, memory_leak_che
         reset_index=True,
         sort_output=True,
         check_dtype=False,
-        only_1DVar=True,
-        use_table_format=use_table_format,
-    )
-    check_func(
-        do_delta_merge_with_target_py_wrapper,
-        (target_df, delta_df),
-        py_output=expected_output,
-        reset_index=True,
-        sort_output=True,
-        check_dtype=False,
-        only_1D=True,
-        use_table_format=use_table_format,
-    )
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "args",
-    [
-        pytest.param(
-            (
-                base_df_int,
-                delta_df_int,
-            ),
-            id="base_df_int_with_delta_df_int",
-        ),
-        pytest.param(
-            (
-                base_df_int,
-                delete_everything_and_insert_some_stuff_df_int,
-            ),
-            id="base_df_int_with_delete_all_and_insert_df_int",
-        ),
-        pytest.param(
-            (
-                base_df_int,
-                delete_everything_df_int,
-            ),
-            id="base_df_int_with_delete_everything_df_int",
-        ),
-        pytest.param(
-            (
-                base_df_string,
-                delta_df_string,
-            ),
-            id="base_df_string_with_delta_df_string",
-        ),
-        pytest.param(
-            (
-                base_df_string,
-                delete_everything_and_insert_some_stuff_df_string,
-            ),
-            id="base_df_string_with_delete_all_and_insert_df_string",
-        ),
-        pytest.param(
-            (
-                base_df_string,
-                delete_everything_df_string,
-            ),
-            id="base_df_string_with_delete_everything_df_string",
-        ),
-        pytest.param(
-            (
-                stress_test_base_df,
-                stress_test_delta_df,
-            ),
-            id="stress_test_df",
-        ),
-    ],
-)
-@pytest.mark.parametrize(
-    "use_table_format",
-    [
-        True,
-        False,
-    ],
-)
-def test_do_delta_merge_with_target_seq(args, use_table_format):
-    """
-    Tests our helper functions used in the replicated MERGE INTO case.
-    The distributed tests are separated from the replicated tests due to a memory
-    leak in sort with _bodo_chunk_bounds: https://bodo.atlassian.net/browse/BE-3775
-    """
-    target_df, delta_df = args
-    expected_output = delta_merge_equiv(target_df, delta_df)
-
-    check_func(
-        do_delta_merge_with_target_py_wrapper,
-        (target_df, delta_df),
-        py_output=expected_output,
-        reset_index=True,
-        sort_output=True,
-        check_dtype=False,
-        only_seq=True,
         use_table_format=use_table_format,
     )
 
