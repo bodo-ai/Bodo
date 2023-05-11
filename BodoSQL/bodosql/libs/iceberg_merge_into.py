@@ -21,6 +21,7 @@ UPDATE_ENUM = 2
 ROW_ID_COL_NAME = "_bodo_row_id"
 MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change"
 
+
 # We can't have this function be inlined, as it would break our filter pushdown,
 # Since we explicitly check for this function in typing pass
 # We don't need to explicitly provide never since never is the default (https://numba.pydata.org/numba-doc/latest/developer/inlining.html)
@@ -28,7 +29,7 @@ MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change"
 @bodo.jit(inline="never")
 def do_delta_merge_with_target(target_df, delta_df):  # pragma: no cover
     """
-    This function takes two dataframes, a target df and a delta_df. It
+    This function takes two DataFrames, a target df and a delta_df. It
     then applies the changes found in the delta table to the target df.
 
     This function is steps 6 through 8 in the overall COW design:
