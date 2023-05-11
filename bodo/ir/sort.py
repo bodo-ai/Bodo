@@ -498,6 +498,13 @@ def sort_distributed_run(
             ):
                 parallel = False
 
+    if not parallel:
+        # If we have a replicated call remove sort_node._bodo_chunk_bounds, which
+        # is only valid for distributed calls. When dead code elimination runs at
+        # the end of distributed pass this should optimize out the _bodo_chunk_bounds
+        # variable if it exists.
+        sort_node._bodo_chunk_bounds = None
+
     # copy arrays when not inplace
     nodes = []
     if not sort_node.inplace:
