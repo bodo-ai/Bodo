@@ -4,10 +4,10 @@ Implements array kernels that are specific to BodoSQL which have a variable
 number of arguments
 """
 
-from numba.core import types
-from numba.extending import overload
 import numpy as np
 import pandas as pd
+from numba.core import types
+from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
@@ -248,7 +248,6 @@ def overload_coalesce_util(A):
 
     dead_offset = 0
     for i in range(len(A)):
-
         # If A[i] is NULL or comes after a scalar, it can be skipped
         if i in dead_cols:
             dead_offset += 1
@@ -414,7 +413,6 @@ def decode_util(A):
     # Loop over every argument that is being compared with the first argument
     # to see if they match. A[i+1] is the corresponding output argument.
     for i in range(1, len(A) - 1, 2):
-
         # The start of each conditional
         cond = "if" if len(scalar_text) == 0 else "elif"
 
@@ -855,13 +853,20 @@ def overload_row_number(df, by, ascending, na_position):
         "   index_2 = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)\n"
     )
     func_text += f"   df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe(({cols},), index_2, __col_name_meta_value_1)\n"
+    # Calculate the "bounds" for each ranks. It's really just a cumulative sum of
+    # the length of the chunks on all the ranks. We will later use this to shuffle
+    # data back as part of 'sort_index'.
+    func_text += f"   index_bounds = bodo.libs.distributed_api.get_chunk_bounds(bodo.utils.conversion.coerce_to_array(df2.index))\n"
     func_text += f"   df3 = df2.sort_values(by={by_list}, ascending={asc_list}, na_position={na_list})\n"
     func_text += "   rows = np.arange(1, n+1)\n"
     func_text += (
         "   index_3 = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df3)\n"
     )
     func_text += "   df4 = bodo.hiframes.pd_dataframe_ext.init_dataframe((rows,), index_3, __col_name_meta_value_2)\n"
-    func_text += "   return df4.sort_index()\n"
+    # Sort by index. Use the "bounds" calculated earlier to make sure that
+    # the ranks receive the right data (corresponding to the lengths in the
+    # input dataframe).
+    func_text += "   return df4.sort_index(_bodo_chunk_bounds=index_bounds)\n"
 
     __col_name_meta_value_1 = bodo.utils.typing.ColNamesMetaType(tuple(by_list))
     __col_name_meta_value_2 = bodo.utils.typing.ColNamesMetaType(("ROW_NUMBER",))
