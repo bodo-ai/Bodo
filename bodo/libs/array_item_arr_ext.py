@@ -883,7 +883,6 @@ def array_item_arr_getitem_array(arr, ind):
 
     # bool arr indexing.
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
-
         data_arr_type = arr.dtype
 
         def impl_bool(arr, ind):  # pragma: no cover
@@ -923,7 +922,6 @@ def array_item_arr_getitem_array(arr, ind):
     # ind arr indexing
     # TODO: avoid code duplication
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
-
         data_arr_type = arr.dtype
 
         def impl_int(arr, ind):  # pragma: no cover
