@@ -92,6 +92,8 @@ MPI_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
 max_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Max.value)
 min_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Min.value)
+or_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_Or.value)
+and_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
 
 
 def isna(arr, i):  # pragma: no cover
@@ -3118,6 +3120,99 @@ def repeat_like(A, dist_like_arr):
 
     def impl(A, dist_like_arr):  # pragma: no cover
         return bodo.libs.array_kernels.repeat_kernel(A, len(dist_like_arr))
+
+    return impl
+
+
+@numba.generated_jit
+def boolor_agg(A, parallel=False):
+    """Performs the BOOLOR_AGG operation on an array
+
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+
+    Returns:
+        boolean: None if the array is all-null, otherwise True if there is
+                 at least one non-null entry.
+    """
+
+    def impl(A, parallel=False):  # pragma: no cover
+        result = False
+        non_null = False
+        for i in range(len(A)):
+            if not bodo.libs.array_kernels.isna(A, i):
+                non_null = True
+                if bool(A[i]):
+                    result = True
+                    break
+        if parallel:
+            non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)
+            result = bodo.libs.distributed_api.dist_reduce(result, or_op)
+        if non_null:
+            return result
+        return None
+
+    return impl
+
+
+@numba.generated_jit
+def booland_agg(A, parallel=False):
+    """Performs the BOOLAND_AGG operation on an array
+
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+
+    Returns:
+        boolean: None if the array is all-null, otherwise True if every non-null
+                 entry is also non-zero
+    """
+
+    def impl(A, parallel=False):  # pragma: no cover
+        result = True
+        non_null = False
+        for i in range(len(A)):
+            if not bodo.libs.array_kernels.isna(A, i):
+                non_null = True
+                if not bool(A[i]):
+                    result = False
+                    break
+        if parallel:
+            non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)
+            result = bodo.libs.distributed_api.dist_reduce(result, and_op)
+        if non_null:
+            return result
+        return None
+
+    return impl
+
+
+@numba.generated_jit
+def boolxor_agg(A, parallel=False):  # pragma: no cover
+    """Performs the BOOLXOR_AGG operation on an array
+
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+
+    Returns:
+        boolean: None if the array is all-null, otherwise True if there is
+                 at exactly one non-null entry.
+    """
+
+    def impl(A, parallel=False):  # pragma: no cover
+        count = 0
+        non_null = False
+        for i in range(len(A)):
+            if not bodo.libs.array_kernels.isna(A, i):
+                non_null = True
+                count += np.int64(bool(A[i]))
+                if count > 1:
+                    break
+        if parallel:
+            non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)
+            count = bodo.libs.distributed_api.dist_reduce(count, sum_op)
+        if non_null:
+            return count == 1
+        return None
 
     return impl
 

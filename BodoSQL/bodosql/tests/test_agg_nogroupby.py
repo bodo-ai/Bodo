@@ -892,3 +892,65 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
         check_dtype=False,
         is_out_distributed=False,
     )
+
+
+@pytest.mark.parametrize(
+    "func, results",
+    [
+        pytest.param(
+            "BOOLOR_AGG", [None, False, True, True, True] * 2, id="boolor_agg"
+        ),
+        pytest.param(
+            "BOOLAND_AGG", [None, False, False, True, True] * 2, id="booland_agg"
+        ),
+        pytest.param(
+            "BOOLXOR_AGG", [None, False, True, False, True] * 2, id="boolxor_agg"
+        ),
+    ],
+)
+def test_boolor_booland_boolxor_agg(func, results, memory_leak_check):
+    """Tests the BOOLOR_AGG, BOOLAND_AGG and BOOLXOR_AGG functions"""
+    selects = ", ".join([f"{func}({col})" for col in "ABCDEFGHIJ"])
+    query = f"SELECT {selects} FROM table1"
+    # Datasets designed to exhibit different distributions, thus producing myriad
+    # cases of kurtosis and skew calculations
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                # All null (int32)
+                "A": pd.Series([None] * 5, dtype=pd.Int32Dtype()),
+                # All zero (int32)
+                "B": pd.Series([0] * 5, dtype=pd.Int32Dtype()),
+                # One nonzero (int32)
+                "C": pd.Series([0, 0, 1, 0, 0], dtype=pd.Int32Dtype()),
+                # All nonzero (int32)
+                "D": pd.Series([i + 1 for i in range(5)], dtype=pd.Int32Dtype()),
+                # One nonzero, rest null (int32)
+                "E": pd.Series([None] * 4 + [-1], dtype=pd.Int32Dtype()),
+                # All null (float64)
+                "F": pd.Series([None] * 5, dtype=np.float64),
+                # All zero (float64)
+                "G": pd.Series([0.0] * 5, dtype=np.float64),
+                # One nonzero (float64)
+                "H": pd.Series([0, 0, -1.0, 0, 0], dtype=np.float64),
+                # All nonzero (float64)
+                "I": pd.Series([np.tan(i + 1) for i in range(5)], dtype=np.float64),
+                # One nonzero, rest null (float64)
+                "J": pd.Series([2.71828] + [None] * 4, dtype=np.float64),
+            }
+        )
+    }
+
+    answer = pd.DataFrame(
+        {i: agg_res for i, agg_res in enumerate(results)}, index=np.arange(1)
+    )
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+        is_out_distributed=False,
+    )

@@ -755,3 +755,78 @@ def test_kurtosis_skew(memory_leak_check):
 
     # Verify that fusion is working correctly.
     count_window_applies(pandas_code, 1, ["KURTOSIS", "SKEW"])
+
+
+def test_bool_agg(memory_leak_check):
+    """Tests the boolean aggregation functions"""
+    window_calls = [
+        ("BOOLOR_AGG", "A", "2 PRECEDING", "CURRENT ROW"),
+        ("BOOLAND_AGG", "B", "2 PRECEDING", "CURRENT ROW"),
+        ("BOOLXOR_AGG", "A", "2 PRECEDING", "CURRENT ROW"),
+        ("BOOLOR_AGG", "B", "CURRENT ROW", "1 FOLLOWING"),
+        ("BOOLAND_AGG", "A", "CURRENT ROW", "1 FOLLOWING"),
+        ("BOOLXOR_AGG", "B", "CURRENT ROW", "1 FOLLOWING"),
+    ]
+    selects = []
+    for func, col, lower, upper in window_calls:
+        selects.append(
+            f"{func}({col}) OVER (PARTITION BY P ORDER BY O ROWS BETWEEN {lower} AND {upper})"
+        )
+    query = f"SELECT {', '.join(selects)} FROM table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [None, 1, 0, None, 2, 3, 0, None], dtype=pd.Int32Dtype()
+                ),
+                "B": pd.Series(
+                    [None, True, False, None, True, True, False, None],
+                    dtype=pd.BooleanDtype(),
+                ),
+                "P": [pd.Timestamp("2023-1-1")] * 8,
+                "O": list(range(8)),
+            }
+        )
+    }
+    answer = pd.DataFrame(
+        {
+            0: pd.Series(
+                [None, True, True, True, True, True, True, True],
+                dtype=pd.BooleanDtype(),
+            ),
+            1: pd.Series(
+                [None, True, False, False, False, True, False, False],
+                dtype=pd.BooleanDtype(),
+            ),
+            2: pd.Series(
+                [None, True, True, True, True, False, False, True],
+                dtype=pd.BooleanDtype(),
+            ),
+            3: pd.Series(
+                [True, True, False, True, True, True, False, None],
+                dtype=pd.BooleanDtype(),
+            ),
+            4: pd.Series(
+                [True, False, False, True, True, False, False, None],
+                dtype=pd.BooleanDtype(),
+            ),
+            5: pd.Series(
+                [True, True, False, True, False, True, False, None],
+                dtype=pd.BooleanDtype(),
+            ),
+        }
+    )
+
+    pandas_code = check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        sort_output=False,
+        expected_output=answer,
+        return_codegen=True,
+    )["pandas_code"]
+
+    # Verify that fusion is working correctly.
+    count_window_applies(pandas_code, 1, ["BOOLOR_AGG", "BOOLAND_AGG", "BOOLXOR_AGG"])

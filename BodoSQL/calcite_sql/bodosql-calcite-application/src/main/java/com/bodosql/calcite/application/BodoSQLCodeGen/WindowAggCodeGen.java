@@ -83,6 +83,9 @@ public class WindowAggCodeGen {
     windowOptimizedKernels.add("STDDEV");
     windowOptimizedKernels.add("STDDEV_SAMP");
     windowOptimizedKernels.add("STDDEV_POP");
+    windowOptimizedKernels.add("BOOLOR_AGG");
+    windowOptimizedKernels.add("BOOLAND_AGG");
+    windowOptimizedKernels.add("BOOLXOR_AGG");
     windowOptimizedKernels.add("MIN");
     windowOptimizedKernels.add("MAX");
 
@@ -111,6 +114,9 @@ public class WindowAggCodeGen {
     windowCodeExpressions.put("VAR_SAMP", "windowed_var_samp");
     windowCodeExpressions.put("VARIANCE_POP", "windowed_var_pop");
     windowCodeExpressions.put("VAR_POP", "windowed_var_pop");
+    windowCodeExpressions.put("BOOLOR_AGG", "windowed_boolor");
+    windowCodeExpressions.put("BOOLAND_AGG", "windowed_booland");
+    windowCodeExpressions.put("BOOLXOR_AGG", "windowed_boolxor");
     windowCodeExpressions.put("MIN", "windowed_min");
     windowCodeExpressions.put("MAX", "windowed_max");
 

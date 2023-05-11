@@ -751,91 +751,193 @@ def test_any_value(args, spark_info, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query, res",
     [
-        (
-            """SELECT boolor_agg(A) as agg_A, boolor_agg(C) as agg_C FROM table1 GROUP BY B""",
-            {
-                "table1": pd.DataFrame(
-                    {
-                        "A": pd.Series(
-                            [
-                                None,
-                                None,
-                                None,
-                                None,
-                                0,
-                                0,
-                                0,
-                                0,
-                                -1,
-                                0,
-                                0,
-                                0,
-                                None,
-                                1,
-                                None,
-                                0,
-                                1234,
-                                None,
-                                -1232,
-                                None,
-                            ],
-                            dtype=pd.Int64Dtype,
-                        ),
-                        "C": pd.Series(
-                            [
-                                np.NaN,
-                                np.NaN,
-                                np.NaN,
-                                np.NaN,
-                                0.0,
-                                0.0,
-                                0.0,
-                                0.0,
-                                -0.00001,
-                                0,
-                                0,
-                                0,
-                                np.NaN,
-                                112312.0,
-                                np.NaN,
-                                0,
-                                1237891.4,
-                                np.NaN,
-                                -523.32,
-                                np.NaN,
-                            ],
-                            dtype=float,
-                        ),
-                        "B": [0] * 4 + [1] * 4 + [2] * 4 + [3] * 4 + [None] * 4,
-                    }
-                )
-            },
-            pd.DataFrame(
-                {
-                    "agg_A": pd.Series(
-                        [None, False, True, True, True], dtype="boolean"
-                    ),
-                    "agg_C": pd.Series(
-                        [None, False, True, True, True], dtype="boolean"
-                    ),
-                }
-            ),
+        pytest.param(
+            "SELECT boolor_agg(I) FROM table1 GROUP BY G",
+            [None, False, True, True, True, True, True],
+            id="boolor_agg-int",
+        ),
+        pytest.param(
+            "SELECT boolor_agg(B) FROM table1 GROUP BY G",
+            [None, False, True, True, True, True, True],
+            id="boolor_agg-bool",
+        ),
+        pytest.param(
+            "SELECT boolor_agg(F) FROM table1 GROUP BY G",
+            [None, False, True, True, True, True, True],
+            id="boolor_agg-float",
+        ),
+        pytest.param(
+            "SELECT booland_agg(I) FROM table1 GROUP BY G",
+            [None, False, False, False, True, True, True],
+            id="booland_agg-int",
+        ),
+        pytest.param(
+            "SELECT booland_agg(B) FROM table1 GROUP BY G",
+            [None, False, False, False, True, True, True],
+            id="booland_agg-bool",
+        ),
+        pytest.param(
+            "SELECT booland_agg(F) FROM table1 GROUP BY G",
+            [None, False, False, False, True, True, True],
+            id="booloand_agg-float",
+        ),
+        pytest.param(
+            "SELECT boolxor_agg(I) FROM table1 GROUP BY G",
+            [None, False, True, True, False, True, False],
+            id="boolxor_agg-int",
+        ),
+        pytest.param(
+            "SELECT boolxor_agg(B) FROM table1 GROUP BY G",
+            [None, False, True, True, False, True, False],
+            id="boolxor_agg-bool",
+        ),
+        pytest.param(
+            "SELECT boolxor_agg(F) FROM table1 GROUP BY G",
+            [None, False, True, True, False, True, False],
+            id="boolxor_agg-float",
         ),
     ],
 )
-def test_boolor_agg(args, memory_leak_check):
-    """Tests boolor_agg. This is done separately from existing aggregation tests, as
-    we need specific inputs to stress this function"""
+def test_boolor_booland_boolxor_agg(query, res, memory_leak_check):
+    """Tests boolor_agg, booland_agg and boolxor_agg. These is done separately
+    from existing aggregation tests, as we need specific inputs to stress this function"""
 
-    query, ctx, expected_output = args
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "I": pd.Series(
+                    [
+                        # Group 0: all NULL
+                        None,
+                        None,
+                        None,
+                        None,
+                        # Group 1: all zero
+                        0,
+                        0,
+                        0,
+                        0,
+                        # Group 2: one nonzero
+                        -1,
+                        0,
+                        0,
+                        0,
+                        # Group 3: two null, one zero, one nonzero
+                        None,
+                        1,
+                        None,
+                        0,
+                        # Group 4: two null, two nonzero
+                        1234,
+                        None,
+                        -1232,
+                        None,
+                        # Group 5: three null, one nonzero
+                        2048,
+                        None,
+                        None,
+                        None,
+                        # Group 6: all nonzero
+                        3,
+                        1,
+                        4,
+                        1,
+                    ],
+                    dtype=pd.Int64Dtype(),
+                ),
+                "B": pd.Series(
+                    [
+                        # Group 0: all NULL
+                        None,
+                        None,
+                        None,
+                        None,
+                        # Group 1: all false
+                        False,
+                        False,
+                        False,
+                        False,
+                        # Group 2: one true
+                        True,
+                        False,
+                        False,
+                        False,
+                        # Group 3: two null, one true
+                        None,
+                        True,
+                        None,
+                        False,
+                        # Group 4: two null, two true
+                        True,
+                        None,
+                        True,
+                        None,
+                        # Group 5: three null, one true
+                        None,
+                        True,
+                        None,
+                        None,
+                        # Group 6: all true
+                        True,
+                        True,
+                        True,
+                        True,
+                    ],
+                    dtype=pd.BooleanDtype(),
+                ),
+                "F": pd.array(
+                    [
+                        # Group 0: all NULL
+                        None,
+                        None,
+                        None,
+                        None,
+                        # Group 1: all zero
+                        0,
+                        0,
+                        0,
+                        0,
+                        # Group 2: one nonzero
+                        1.0,
+                        0,
+                        0,
+                        0,
+                        # Group 3: two null, one zero, one nonzero
+                        None,
+                        36.0,
+                        None,
+                        0.0,
+                        # Group 4: two null, two nonzero
+                        2.0,
+                        None,
+                        None,
+                        0.718281828,
+                        # Group 5: three null, one nonzero
+                        None,
+                        None,
+                        3.1415926,
+                        None,
+                        # Group 6: all nonzero
+                        10.0,
+                        1.01,
+                        -0.1,
+                        1.11,
+                    ]
+                ),
+                "G": pd.Series(list(range(7))).repeat(4).values,
+            }
+        )
+    }
+    expected_output = pd.DataFrame({0: pd.Series(res, dtype="boolean")})
 
     check_query(
         query,
         ctx,
-        None,  # Spark info
+        None,
         check_dtype=False,
+        check_names=False,
         expected_output=expected_output,
     )
 

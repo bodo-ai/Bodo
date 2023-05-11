@@ -62,6 +62,8 @@ public class AggCodeGen {
     equivalentPandasNameMethodMap.put("KURTOSIS", "kurtosis");
     equivalentPandasNameMethodMap.put("SKEW", "skew");
     equivalentHelperFnMap.put("BOOLOR_AGG", "boolor_agg");
+    equivalentHelperFnMap.put("BOOLAND_AGG", "booland_agg");
+    equivalentHelperFnMap.put("BOOLXOR_AGG", "boolxor_agg");
     // Calcite's SINGLE_VALUE returns input if it has only one value, otherwise raises an error
     // https://github.com/apache/calcite/blob/f14cf4c32b9079984a988bbad40230aa6a59b127/core/src/main/java/org/apache/calcite/sql/fun/SqlSingleValueAggFunction.java#L36
     equivalentHelperFnMap.put(
@@ -149,17 +151,22 @@ public class AggCodeGen {
       // If the aggregation function is ANY_VALUE, manually alter syntax
       // to use brackets
       if (aggFunc.equals("iloc")) {
-        aggString.append(seriesBuilder);
-        aggString.append(".iloc[0]");
+        aggString.append(seriesBuilder).append(".iloc[0]");
       } else if (aggFunc.equals("np.var")) {
-        aggString.append(seriesBuilder);
-        aggString.append(".var(ddof=0)");
+        aggString.append(seriesBuilder).append(".var(ddof=0)");
       } else if (aggFunc.equals("np.std")) {
-        aggString.append(seriesBuilder);
-        aggString.append(".std(ddof=0)");
+        aggString.append(seriesBuilder).append(".std(ddof=0)");
       } else if (aggFunc.equals("count_if")) {
-        aggString.append(seriesBuilder);
-        aggString.append(".sum()");
+        aggString.append(seriesBuilder).append(".sum()");
+      } else if (aggFunc.equals("boolor_agg")
+          || aggFunc.equals("booland_agg")
+          || aggFunc.equals("boolxor_agg")) {
+        aggString
+            .append("bodo.libs.array_kernels.")
+            .append(aggFunc)
+            .append("(")
+            .append(seriesBuilder)
+            .append(".values)");
       } else if (aggFunc.equals("approx_percentile")) {
         assertWithErrMsg(a.getArgList().size() == 2, "APPROX_PERCENTILE requires two arguments");
         // Currently, the scalar float argument is converted into a column. To

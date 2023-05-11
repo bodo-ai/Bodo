@@ -164,6 +164,70 @@ def windowed_sum(S, lower_bound, upper_bound):
     )
 
 
+def windowed_boolor(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def windowed_booland(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def windowed_boolxor(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def make_windowed_bool_aggfunc(func, cond):
+    def overload_fn(S, lower_bound, upper_bound):
+        verify_int_float_arg(S, func, S)
+        if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
+            raise_bodo_error("Input must be an array type")
+
+        calculate_block = f"res[i] = {cond}"
+
+        constant_block = "in_window = 0\n"
+        constant_block += "true_count = 0\n"
+        constant_block += "for i in range(len(arr0)):\n"
+        constant_block += "  if not bodo.libs.array_kernels.isna(arr0, i):\n"
+        constant_block += "    in_window += 1\n"
+        constant_block += "    true_count += int(bool(arr0[i]))\n"
+        constant_block += f"constant_value = {cond}"
+
+        setup_block = "true_count = 0"
+
+        enter_block = "true_count += int(bool(elem0))"
+
+        exit_block = "true_count -= int(bool(elem0))"
+
+        out_dtype = bodo.boolean_array_type
+
+        return gen_windowed(
+            calculate_block,
+            out_dtype,
+            constant_block=constant_block,
+            setup_block=setup_block,
+            enter_block=enter_block,
+            exit_block=exit_block,
+            propagate_nan=False,
+        )
+
+    return overload_fn
+
+
+def _install_windowed_bool_aggfuncs():
+    overload(windowed_boolor)(
+        make_windowed_bool_aggfunc("boolor_agg", "true_count > 0")
+    )
+    overload(windowed_booland)(
+        make_windowed_bool_aggfunc("booland_agg", "true_count == in_window")
+    )
+    overload(windowed_boolxor)(
+        make_windowed_bool_aggfunc("boolor_agg", "true_count == 1")
+    )
+
+
+_install_windowed_bool_aggfuncs()
+
+
 @numba.generated_jit(nopython=True)
 def windowed_count(S, lower_bound, upper_bound):
     if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover

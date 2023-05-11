@@ -1555,6 +1555,18 @@ class DistributedAnalysis:
             # nunique doesn't affect input's distribution
             return
 
+        if fdef == ("boolor_agg", "bodo.libs.array_kernels"):
+            # boolor_agg doesn't affect input's distribution
+            return
+
+        if fdef == ("booland_agg", "bodo.libs.array_kernels"):
+            # booland_agg doesn't affect input's distribution
+            return
+
+        if fdef == ("boolxor_agg", "bodo.libs.array_kernels"):
+            # boolxor_agg doesn't affect input's distribution
+            return
+
         if fdef == ("series_str_dt64_astype", "bodo.hiframes.pd_timestamp_ext"):
             # LHS should match RHS
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
@@ -1603,18 +1615,18 @@ class DistributedAnalysis:
             func_name in broadcasted_variadic_functions
             and func_mod == "bodo.libs.bodosql_array_kernels"
         ) and not is_overload_constant_tuple(self.typemap[rhs.args[0].name]):
-                elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
-                assert (
-                    elems is not None
-                ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
+            elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
+            assert (
+                elems is not None
+            ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
 
-                arrays = [lhs]
-                for arg in elems:
-                    if is_array_typ(self.typemap[arg.name]):
-                        arrays.append(arg.name)
-                if len(arrays) > 1:
-                    self._meet_several_array_dists(arrays, array_dists)
-                return
+            arrays = [lhs]
+            for arg in elems:
+                if is_array_typ(self.typemap[arg.name]):
+                    arrays.append(arg.name)
+            if len(arrays) > 1:
+                self._meet_several_array_dists(arrays, array_dists)
+            return
 
         if fdef == ("bodosql_case_kernel", ""):
             # This is a kernel we generate to avoid inlining case statements

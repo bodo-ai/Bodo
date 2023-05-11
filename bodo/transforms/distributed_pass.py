@@ -1812,6 +1812,15 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return
 
+        if (
+            fdef[0] in {"boolor_agg", "booland_agg", "boolxor_agg"}
+            and fdef[1] == "bodo.libs.array_kernels"
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            arr = rhs.args[0]
+            f = eval(f"lambda A: bodo.libs.array_kernels.{fdef[0]}(A, True)")
+            return compile_func_single_block(f, rhs.args, assign.target, self)
+
         if fdef == (
             "quantile",
             "bodo.libs.array_kernels",

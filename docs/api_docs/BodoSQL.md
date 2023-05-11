@@ -1452,8 +1452,25 @@ numeric types
 -   `#!sql BOOLOR_AGG`
 
     Compute the logical OR of the boolean value of every input
-    in a group. This is supported for numeric and boolean types.
-    Currently, this requires a `#!sql GROUP BY` clause.
+    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if there is at least 1 non-zero entry. This is supported for 
+    numeric and boolean types.
+
+#### BOOLAND_AGG
+-   `#!sql BOOLAND_AGG`
+
+    Compute the logical AND of the boolean value of every input
+    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if all non-`#!sql NULL` entries are also non-zero. This is supported for 
+    numeric and boolean types.
+
+#### BOOLXOR_AGG
+-   `#!sql BOOLXOR_AGG`
+
+    Returns `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if exactly one non-`#!sql NULL` entry is also non-zero (this is
+    counterintuitive to how the logical XOR is normally thought of). This is 
+    supported for numeric and boolean types.
 
 All aggregate functions have the syntax:
 
@@ -2813,6 +2830,27 @@ Currently, BodoSQL supports the following Window functions:
 
     Compute the skew over the window, or `NULL` if the window contains fewer
     than 4 non-`NULL` entries.
+
+
+#### BOOLOR_AGG
+-   `#!sql BOOLOR_AGG`
+
+    Outputs `#!sql true` if there is at least 1 non-zero` element in the
+    window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
+
+
+#### BOOLAND_AGG
+-   `#!sql BOOLAND_AGG`
+
+    Outputs `#!sql true` if every element in the window that is non-`#!sql NULL`
+    is also non-zero, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
+
+
+#### BOOLXOR_AGG
+-   `#!sql BOOLXOR_AGG`
+
+    Outputs `#!sql true` if there is at exactly 1 non-zero element in the
+    window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
 
 
 #### LEAD

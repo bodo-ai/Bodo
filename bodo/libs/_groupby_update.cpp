@@ -30,6 +30,7 @@ static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
     {Bodo_FTypes::last, Bodo_FTypes::last},
     {Bodo_FTypes::nunique, Bodo_FTypes::sum},  // used in nunique_mode = 2
     {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg},
+    {Bodo_FTypes::booland_agg, Bodo_FTypes::booland_agg},
     {Bodo_FTypes::count_if, Bodo_FTypes::sum}};
 
 int get_combine_func(int update_ftype) { return combine_funcs[update_ftype]; }
@@ -685,6 +686,36 @@ void var_combine(const std::shared_ptr<array_info>& count_col_in,
             count_col_out->set_null_bit(i, true);
             mean_col_out->set_null_bit(i, true);
             m2_col_out->set_null_bit(i, true);
+        }
+    }
+}
+
+// boolxor_agg
+void boolxor_combine(const std::shared_ptr<array_info>& one_col_in,
+                     const std::shared_ptr<array_info>& two_col_in,
+                     const std::shared_ptr<array_info>& one_col_out,
+                     const std::shared_ptr<array_info>& two_col_out,
+                     grouping_info const& grp_info) {
+    for (size_t i = 0; i < one_col_in->length; i++) {
+        if (one_col_in->get_null_bit(i)) {
+            int64_t group_num = grp_info.row_to_group[i];
+
+            // Fetch the input data
+            bool one_in = GetBit((uint8_t*)one_col_in->data1(), i);
+            bool two_in = GetBit((uint8_t*)two_col_in->data1(), i);
+
+            // Get the existing group values
+            bool one_out = GetBit((uint8_t*)one_col_out->data1(), group_num);
+            bool two_out = GetBit((uint8_t*)two_col_out->data1(), group_num);
+            two_out = two_out || two_in || (one_in && one_out);
+
+            // Update the group values.
+            one_out = one_out || one_in;
+            SetBitTo((uint8_t*)one_col_out->data1(), group_num, one_out);
+            SetBitTo((uint8_t*)two_col_out->data1(), group_num, two_out);
+            // Set all the null bits to true.
+            one_col_out->set_null_bit(group_num, true);
+            two_col_out->set_null_bit(group_num, true);
         }
     }
 }
