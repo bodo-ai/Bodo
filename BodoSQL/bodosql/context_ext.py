@@ -370,12 +370,14 @@ def _gen_pd_func_text_and_lowered_globals(
                     bodo_sql_context_type.catalog_type.get_java_object(),
                     schema,
                     NAMED_PARAM_TABLE_NAME,
+                    bodo.bodosql_use_streaming_plan,
                     verbose_level,
                 )
             else:
                 generator = RelationalAlgebraGeneratorClass(
                     schema,
                     NAMED_PARAM_TABLE_NAME,
+                    bodo.bodosql_use_streaming_plan,
                     verbose_level,
                 )
         except Exception as e:
