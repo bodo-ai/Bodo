@@ -1474,7 +1474,7 @@ def dateadd_df():
         ),
         pytest.param(
             (
-                "TIMEADD({!r}, col_int, col_dt)",
+                "TIMEADD({!s}, col_int, col_dt)",
                 ["hour", "minute", "second"],
                 pd.DataFrame(
                     {
@@ -1538,7 +1538,7 @@ def dateadd_df():
         ),
         pytest.param(
             (
-                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!r}, -25, col_dt) END",
+                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!s}, -25, col_dt) END",
                 ["year", "month", "week", "day"],
                 pd.DataFrame(
                     {
@@ -1609,7 +1609,7 @@ def dateadd_df():
         ),
         pytest.param(
             (
-                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!r}, -25, col_dt) END",
+                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!s}, -25, col_dt) END",
                 ["millisecond", "microsecond", "nanosecond"],
                 pd.DataFrame(
                     {
@@ -1697,7 +1697,7 @@ def dateadd_date_df():
     params=[
         pytest.param(
             (
-                "DATEADD({!r}, col_int, col_dt)",
+                "DATEADD({!s}, col_int, col_dt)",
                 ["year", "quarter", "month", "week", "day"],
                 pd.DataFrame(
                     {
@@ -1775,7 +1775,7 @@ def dateadd_date_df():
         ),
         pytest.param(
             (
-                "TIMESTAMPADD({!r}, col_int, col_dt)",
+                "TIMESTAMPADD({!s}, col_int, col_dt)",
                 ["millisecond", "microsecond", "nanosecond"],
                 pd.DataFrame(
                     {
@@ -1849,10 +1849,11 @@ def dateadd_date_df():
                     }
                 ),
             ),
+            id="case-date_units",
         ),
         pytest.param(
             (
-                "CASE WHEN col_int < 0 THEN TIMESTAMP '1999-12-31' else TIMESTAMPADD({!r}, -25, col_dt) END",
+                "CASE WHEN col_int < 0 THEN TIMESTAMP '1999-12-31' else TIMESTAMPADD({!s}, -25, col_dt) END",
                 ["hour", "minute", "second"],
                 pd.DataFrame(
                     {
