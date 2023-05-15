@@ -34,6 +34,7 @@ import com.bodosql.calcite.rel.metadata.PandasRelMdParallelism
 import com.bodosql.calcite.rel.metadata.PandasRelMdSize
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
 import com.bodosql.calcite.sql.validate.implicit.BodoTypeCoercionImpl
+import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.Iterables
 import org.apache.calcite.avatica.util.Casing
@@ -66,14 +67,28 @@ import org.apache.calcite.sql2rel.RelDecorrelator
 import org.apache.calcite.sql2rel.SqlToRelConverter
 import org.apache.calcite.sql2rel.StandardConvertletTable
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig
-import org.apache.calcite.tools.*
+import org.apache.calcite.tools.FrameworkConfig
+import org.apache.calcite.tools.Frameworks
+import org.apache.calcite.tools.Program
+import org.apache.calcite.tools.Programs
 
 class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config)) {
     private val defaultSchemas = config.defaultSchemas
-    private val namedParamTableName = config.namedParamTableName
 
     companion object {
         private fun frameworkConfig(config: Config): FrameworkConfig {
+            // Override the list of standard trait definitions we are interested in.
+            // This determines what traits are physically possible for us to process.
+            // We override this to include only the convention trait because we
+            // haven't yet ensured the collation trait is properly supported
+            // and will always yield possible plans.
+            // We'll probably want to re-enable the collation trait at that time,
+            // but there's no point in potentially failing a plan for a trait we
+            // don't care about.
+            val traitDefs: MutableList<RelTraitDef<out RelTrait>> = mutableListOf(ConventionTraitDef.INSTANCE)
+            if (config.useStreaming) {
+                traitDefs.add(BatchingPropertyTraitDef.INSTANCE)
+            }
             return Frameworks.newConfigBuilder()
                 .operatorTable(
                     SqlOperatorTables.chain(
@@ -115,17 +130,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                         .withTypeCoercionFactory(BodoTypeCoercionImpl.FACTORY)
                 )
                 .costFactory(CostFactory())
-                // Override the list of standard trait definitions we are interested in.
-                // This determines what traits are physically possible for us to process.
-                // We override this to include only the convention trait because we
-                // haven't yet ensured the collation trait is properly supported
-                // and will always yield possible plans.
-                // We'll probably want to re-enable the collation trait at that time,
-                // but there's no point in potentially failing a plan for a trait we
-                // don't care about.
-                .traitDefs(
-                    ConventionTraitDef.INSTANCE
-                )
+                .traitDefs(traitDefs)
                 .programs(
                     // We create a new program each time we construct a new planner.
                     // This is because calcite 1.30.0's hep program is not threadsafe
@@ -412,6 +417,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
         val defaultSchemas: List<SchemaPlus>,
         val typeSystem: RelDataTypeSystem,
         val namedParamTableName: String,
+        val useStreaming: Boolean,
     )
 
     /**
@@ -596,7 +602,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
      * runtime checks.
      */
     private class DecorateAttributesProgram : Program by Programs.hep(
-        listOf(PandasRules.PANDAS_JOIN_REBALANCE_OUTPUT_RULE),
+        listOf(PandasRules.PANDAS_JOIN_STREAMING_REBALANCE_OUTPUT_RULE, PandasRules.PANDAS_JOIN_BATCH_REBALANCE_OUTPUT_RULE),
         true, DefaultRelMetadataProvider.INSTANCE
     )
 

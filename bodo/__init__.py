@@ -347,3 +347,5 @@ COMPLEX_CASE_THRESHOLD = 100
 from bodo.libs.memory import set_default_buffer_pool_as_arrow_memory_pool
 
 set_default_buffer_pool_as_arrow_memory_pool()
+# Flag to track if we should use the streaming plan in BodoSQL
+bodosql_use_streaming_plan = False

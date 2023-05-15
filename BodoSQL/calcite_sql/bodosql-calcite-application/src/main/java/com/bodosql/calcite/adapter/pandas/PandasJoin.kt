@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Module
+import com.bodosql.calcite.traits.BatchingProperty
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSet
 import org.apache.calcite.plan.RelOptCluster
@@ -64,7 +65,7 @@ class PandasJoin(
     companion object {
         fun create(left: RelNode, right: RelNode, condition: RexNode, joinType: JoinRelType): PandasJoin {
             val cluster = left.cluster
-            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION)
+            val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)
             return PandasJoin(cluster, traitSet, left, right, condition, joinType)
         }
     }

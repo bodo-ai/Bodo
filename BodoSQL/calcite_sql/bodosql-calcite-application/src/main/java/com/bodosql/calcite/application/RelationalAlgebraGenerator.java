@@ -64,6 +64,9 @@ public class RelationalAlgebraGenerator {
   /** Store the typesystem being used to access timezone info during Pandas codegen */
   private final RelDataTypeSystem typeSystem;
 
+  /** Should the generated plan/code use streaming? * */
+  private final boolean useStreaming;
+
   /** The Bodo verbose level. This is used to control code generated and/or compilation info. * */
   private final int verboseLevel;
 
@@ -108,9 +111,12 @@ public class RelationalAlgebraGenerator {
    * the Planner member variables.
    */
   public void setupPlanner(
-      List<SchemaPlus> defaultSchemas, String namedParamTableName, RelDataTypeSystem typeSystem) {
+      List<SchemaPlus> defaultSchemas,
+      String namedParamTableName,
+      RelDataTypeSystem typeSystem,
+      Boolean useStreaming) {
     PlannerImpl.Config config =
-        new PlannerImpl.Config(defaultSchemas, typeSystem, namedParamTableName);
+        new PlannerImpl.Config(defaultSchemas, typeSystem, namedParamTableName, useStreaming);
     try {
       this.planner = new PlannerImpl(config);
     } catch (Exception e) {
@@ -130,8 +136,9 @@ public class RelationalAlgebraGenerator {
    *     gets stored in the {@link #planner}
    */
   public RelationalAlgebraGenerator(
-      BodoSqlSchema newSchema, String namedParamTableName, int verboseLevel) {
+      BodoSqlSchema newSchema, String namedParamTableName, boolean useStreaming, int verboseLevel) {
     this.catalog = null;
+    this.useStreaming = useStreaming;
     this.verboseLevel = verboseLevel;
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
@@ -143,7 +150,7 @@ public class RelationalAlgebraGenerator {
             });
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
     this.typeSystem = typeSystem;
-    setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
+    setupPlanner(defaultSchemas, namedParamTableName, typeSystem, useStreaming);
   }
 
   /**
@@ -155,8 +162,10 @@ public class RelationalAlgebraGenerator {
       BodoSQLCatalog catalog,
       BodoSqlSchema newSchema,
       String namedParamTableName,
+      boolean useStreaming,
       int verboseLevel) {
     this.catalog = catalog;
+    this.useStreaming = useStreaming;
     this.verboseLevel = verboseLevel;
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
@@ -204,7 +213,7 @@ public class RelationalAlgebraGenerator {
     BodoTZInfo tzInfo = catalog.getDefaultTimezone();
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem(tzInfo);
     this.typeSystem = typeSystem;
-    setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
+    setupPlanner(defaultSchemas, namedParamTableName, typeSystem, useStreaming);
   }
 
   /**
