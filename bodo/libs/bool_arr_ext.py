@@ -424,7 +424,6 @@ def box_bool_arr(typ, val, c):
 
 @lower_constant(BooleanArrayType)
 def lower_constant_bool_arr(context, builder, typ, pyval):
-
     n = len(pyval)
     nbytes = (n + 7) >> 3
     data_arr = np.empty(nbytes, np.uint8)
@@ -713,7 +712,6 @@ def bool_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-
         if types.unliteral(val) == types.bool_:
 
             def impl_scalar(A, idx, val):  # pragma: no cover
@@ -733,7 +731,6 @@ def bool_arr_setitem(A, idx, val):
 
     # array of int indices
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
-
         if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(
             val
         ):
@@ -775,7 +772,6 @@ def bool_arr_setitem(A, idx, val):
 
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-
         # Note this is a largely inlined implementation of array_setitem_bool_index.
         # We don't reuse the code because the "set" semantics are different.
 
@@ -924,7 +920,6 @@ def overload_bool_sum(A):
 
 @overload_method(BooleanArrayType, "astype", no_unliteral=True)
 def overload_bool_arr_astype(A, dtype, copy=True):
-
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
         raise_bodo_error(
@@ -932,7 +927,7 @@ def overload_bool_arr_astype(A, dtype, copy=True):
         )
 
     # same dtype case
-    if dtype == types.bool_:
+    if dtype in (types.bool_, boolean_dtype):
         # copy=False
         if is_overload_false(copy):
             return lambda A, dtype, copy=True: A
@@ -1213,7 +1208,6 @@ def overload_unique(A):
 def bool_arr_ind_getitem(A, ind):
     # getitem for Numpy arrays indexed by BooleanArray
     if ind == boolean_array_type and isinstance(A, types.Array):
-
         _dtype = A.dtype
 
         def impl(A, ind):  # pragma: no cover
@@ -1257,7 +1251,6 @@ def cast_np_bool_arr_to_bool_arr(context, builder, fromty, toty, val):
 def overload_np_array_setitem_bool_arr(A, idx, val):
     """Support setitem of Arrays with boolean_array_type"""
     if isinstance(A, types.Array) and idx == boolean_array_type:
-
         if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(
             val
         ):
