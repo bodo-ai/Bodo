@@ -27,6 +27,7 @@ data: {
     # List of additional classes and packages to import.
     # Example: "org.apache.calcite.sql.*", "java.util.List".
     imports: [
+      "com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable",
       "com.bodosql.calcite.sql.SqlBodoCreateTable",
       "com.bodosql.calcite.sql.ddl.SqlDropTable",
       "com.bodosql.calcite.sql.fun.SqlBodoOperatorTable",
