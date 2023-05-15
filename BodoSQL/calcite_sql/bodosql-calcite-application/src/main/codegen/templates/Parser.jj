@@ -5797,7 +5797,7 @@ SqlTypeNameSpec SqlTypeName1(Span s) :
     |
         ( <INTEGER> | <INT> ) { s.add(this); sqlTypeName = SqlTypeName.INTEGER; }
     |
-        <TINYINT> { s.add(this); sqlTypeName = SqlTypeName.TINYINT; }
+        ( <TINYINT> | <BYTEINT>) { s.add(this); sqlTypeName = SqlTypeName.TINYINT; }
     |
         <SMALLINT> { s.add(this); sqlTypeName = SqlTypeName.SMALLINT; }
     |
@@ -5808,7 +5808,7 @@ SqlTypeNameSpec SqlTypeName1(Span s) :
         <DOUBLE> { s.add(this); }
         [ <PRECISION> ] { sqlTypeName = SqlTypeName.DOUBLE; }
     |
-        <FLOAT> { s.add(this); sqlTypeName = SqlTypeName.FLOAT; }
+        ( <FLOAT> | <FLOAT4> | <FLOAT8> ) { s.add(this); sqlTypeName = SqlTypeName.FLOAT; }
     )
     {
         return new SqlBasicTypeNameSpec(sqlTypeName, s.end(this));
@@ -6082,7 +6082,7 @@ SqlTypeNameSpec DateTimeTypeName() :
         return new SqlBasicTypeNameSpec(typeName, precision, s.end(this));
     }
 |
-    <TIMESTAMP_NTZ> {
+    (<TIMESTAMP_NTZ> | <DATETIME>) {
         s = span();
         precision = PrecisionOpt();
         typeName = SqlTypeName.TIMESTAMP;
@@ -7769,6 +7769,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < BOTH: "BOTH" >
 |   < BREADTH: "BREADTH" >
 |   < BY: "BY" >
+|   < BYTEINT: "BYTEINT" >
 |   < C: "C" >
 |   < CALL: "CALL" >
 |   < CALLED: "CALLED" >
@@ -7853,6 +7854,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < DATA: "DATA" >
 |   < DATABASE: "DATABASE" >
 |   < DATE: "DATE" >
+|   < DATETIME: "DATETIME" >
 |   < DATETIME_INTERVAL_CODE: "DATETIME_INTERVAL_CODE" >
 |   < DATETIME_INTERVAL_PRECISION: "DATETIME_INTERVAL_PRECISION" >
 |   < DAY: "DAY" >
@@ -7927,6 +7929,8 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < FIRST: "FIRST" >
 |   < FIRST_VALUE: "FIRST_VALUE">
 |   < FLOAT: "FLOAT" >
+|   < FLOAT4: "FLOAT4" >
+|   < FLOAT8: "FLOAT8" >
 |   < FLOOR: "FLOOR" >
 |   < FOLLOWING: "FOLLOWING" >
 |   < FOR: "FOR" >
