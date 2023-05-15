@@ -242,7 +242,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             id="year",
         ),
         pytest.param(
-            "SELECT TIMEDIFF(QUARTER, TO_DATE('2022-06-30'), TO_DATE('2000-01-01'))",
+            "SELECT TIMEDIFF('QUARTER', TO_DATE('2022-06-30'), TO_DATE('2000-01-01'))",
             pd.DataFrame({"A": pd.Series([-89])}),
             id="quarter",
         ),
@@ -252,7 +252,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             id="month",
         ),
         pytest.param(
-            "SELECT DATEDIFF(WEEK, TO_DATE('2010-01-01'), TO_DATE('2022-12-31'))",
+            "SELECT DATEDIFF('WEEK', TO_DATE('2010-01-01'), TO_DATE('2022-12-31'))",
             pd.DataFrame({"A": pd.Series([678])}),
             id="week",
         ),
@@ -262,7 +262,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             id="day",
         ),
         pytest.param(
-            "SELECT DATEDIFF(HOUR, TO_DATE('2020-01-01'), TO_DATE('2022-06-30'))",
+            "SELECT DATEDIFF('HOUR', TO_DATE('2020-01-01'), TO_DATE('2022-06-30'))",
             pd.DataFrame({"A": pd.Series([21864])}),
             id="hour",
         ),
@@ -272,7 +272,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             id="minute",
         ),
         pytest.param(
-            "SELECT TIMESTAMPDIFF(SECOND, TO_DATE('2022-06-30'), TO_DATE('2020-01-01'))",
+            "SELECT TIMESTAMPDIFF('SECOND', TO_DATE('2022-06-30'), TO_DATE('2020-01-01'))",
             pd.DataFrame({"A": pd.Series([-78710400])}),
             id="second",
         ),
@@ -282,7 +282,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             id="millisecond",
         ),
         pytest.param(
-            "SELECT TIMEDIFF(MICROSECOND, TO_DATE('2022-12-31'), TO_DATE('2010-01-01'))",
+            "SELECT TIMEDIFF('MICROSECOND', TO_DATE('2022-12-31'), TO_DATE('2010-01-01'))",
             pd.DataFrame({"A": pd.Series([-410140800000000])}),
             id="microsecond",
         ),
