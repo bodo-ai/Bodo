@@ -138,7 +138,6 @@ def decode_if_dict_array_overload(A):
     if isinstance(A, types.List):
 
         def impl(A):  # pragma: no cover
-
             n = 0
             for a in A:
                 n += 1
@@ -351,6 +350,7 @@ types.FilenameType = FilenameType  # type: ignore
 # allow passing different file names to compiled code (note that if
 # data model is literal the file name would be part of the binary code)
 # see test_pq_cache_print
+
 
 # datamodel
 @register_model(types.FilenameType)
@@ -1291,6 +1291,7 @@ class MetaType(types.Type):
 
 
 register_model(MetaType)(models.OpaqueModel)
+
 
 # A subclass of MetaType that is used to pass around column names
 # This has no differences with MetaType, it exists purely to make the code more readable
@@ -2483,7 +2484,9 @@ def get_castable_arr_dtype(arr_type: types.Type):
     """
     if isinstance(arr_type, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
         cast_typ = arr_type.get_pandas_scalar_type_instance.name
-    elif arr_type in (bodo.boolean_array_type, bodo.dict_str_arr_type) or isinstance(
+    elif arr_type == bodo.boolean_array_type:
+        cast_typ = bodo.libs.bool_arr_ext.boolean_dtype
+    elif arr_type == bodo.dict_str_arr_type or isinstance(
         arr_type, bodo.DatetimeArrayType
     ):
         cast_typ = arr_type
