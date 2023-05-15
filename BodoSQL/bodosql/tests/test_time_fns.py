@@ -349,9 +349,11 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
             id="timeadd-month",
             marks=pytest.mark.slow,
         ),
+        # TIMESTAMPADD / DATE_ADD / ADDATE will cause an error at the calcite level
+        # due to a type mismatch so BodoSQL will not control the error message created
         pytest.param(
             "TIMESTAMPADD(WEEK, -1, T)",
-            "Unsupported unit for TIMESTAMPADD with TIME input: WEEK",
+            "",
             id="timestampadd-week",
             marks=pytest.mark.slow,
         ),
@@ -367,8 +369,8 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
             "SUBDATE(T, 2)", "Cannot add/subtract days from TIME", id="subdate-day"
         ),
         pytest.param(
-            "DATEDIFF(QUARTER, T, T)",
-            "Unsupported unit for DATEDIFF with TIME input: QUARTER",
+            "DATEDIFF('QUARTER', T, T)",
+            'Unsupported unit for DATEDIFF with TIME input: "QUARTER"',
             id="datediff-quarter",
         ),
         pytest.param(
@@ -397,7 +399,7 @@ def test_timeadd_timediff_invalid_units(timeadd_dataframe, calculation, error_ms
     "query, expected_output",
     [
         pytest.param(
-            "SELECT DATEDIFF(HOUR, TO_TIME('10:10:10'), TO_TIME('22:33:33'))",
+            "SELECT DATEDIFF('HOUR', TO_TIME('10:10:10'), TO_TIME('22:33:33'))",
             pd.DataFrame({"A": pd.Series([12])}),
             id="hour",
         ),
@@ -407,7 +409,7 @@ def test_timeadd_timediff_invalid_units(timeadd_dataframe, calculation, error_ms
             id="minute",
         ),
         pytest.param(
-            "SELECT TIMESTAMPDIFF(SECOND, TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
+            "SELECT TIMESTAMPDIFF('SECOND', TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
             pd.DataFrame({"A": pd.Series([-37408])}),
             id="second",
         ),
@@ -417,7 +419,7 @@ def test_timeadd_timediff_invalid_units(timeadd_dataframe, calculation, error_ms
             id="millisecond",
         ),
         pytest.param(
-            "SELECT TIMEDIFF(MICROSECOND, TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
+            "SELECT TIMEDIFF('MICROSECOND', TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
             pd.DataFrame({"A": pd.Series([-37408000000])}),
             id="microsecond",
         ),

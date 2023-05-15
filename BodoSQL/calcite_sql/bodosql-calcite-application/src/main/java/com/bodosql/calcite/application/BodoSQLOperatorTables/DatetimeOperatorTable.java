@@ -56,12 +56,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
     // Determine if the output is nullable.
     boolean nullable = isOutputNullableCompile(operandTypes);
     RelDataTypeFactory typeFactory = binding.getTypeFactory();
+
     RelDataType datetimeType = operandTypes.get(2);
-    String unit;
-    if (operandTypes.get(0).getSqlTypeName().equals(SqlTypeName.SYMBOL))
-      unit = ((SqlCallBinding) binding).operand(0).toString();
-    else
-      unit = binding.getOperandLiteralValue(0, String.class);
+    String unit = binding.getOperandLiteralValue(0, String.class);
     unit = standardizeTimeUnit(fnName, unit, DateTimeType.TIMESTAMP);
     // TODO: refactor standardizeTimeUnit function to change the third argument to SqlTypeName
     RelDataType returnType;
@@ -97,12 +94,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
     RelDataType datetimeType = operandTypes.get(0);
     RelDataType returnType;
 
-    if (operandTypes.get(1).getSqlTypeName().equals(SqlTypeName.INTEGER)) {
+    if (operandTypes.get(1).equals(OperandTypes.INTEGER)) {
       // when the second argument is integer, it is equivalent to adding day interval
       if (datetimeType.getSqlTypeName().equals(SqlTypeName.DATE))
         returnType = binding.getTypeFactory().createSqlType(SqlTypeName.DATE);
-      else if (datetimeType instanceof TZAwareSqlType)
-        returnType = datetimeType;
       else
         returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
     }
@@ -152,7 +147,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           OperandTypes.or(
               OperandTypes.sequence(
                   "DATEADD(UNIT, VALUE, DATETIME)",
-                  OperandTypes.ANY,
+                  OperandTypes.STRING,
                   OperandTypes.INTEGER,
                   OperandTypes.DATETIME),
               OperandTypes.sequence(
@@ -169,7 +164,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           OperandTypes.sequence(
               "TIMEADD(UNIT, VALUE, TIME)",
-              OperandTypes.ANY,
+              OperandTypes.STRING,
               OperandTypes.INTEGER,
               OperandTypes.DATETIME),
           SqlFunctionCategory.TIMEDATE);
@@ -617,8 +612,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
                   OperandTypes.DATETIME,
                   OperandTypes.DATETIME),
               OperandTypes.sequence(
-                  "DATEDIFF(UNIT, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
-                  OperandTypes.ANY,
+                  "DATEDIFF(CHARACTER, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
+                  OperandTypes.CHARACTER,
                   OperandTypes.DATETIME,
                   OperandTypes.DATETIME)),
           // What group of functions does this fall into?
@@ -636,8 +631,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           OperandTypes.sequence(
-              "DATEDIFF(UNIT, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
-              OperandTypes.ANY,
+              "DATEDIFF(CHARACTER, TIMESTAMP/DATE/TIME, TIMESTAMP/DATE/TIME)",
+              OperandTypes.CHARACTER,
               OperandTypes.DATETIME,
               OperandTypes.DATETIME),
           // What group of functions does this fall into?
