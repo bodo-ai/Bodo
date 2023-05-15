@@ -129,6 +129,17 @@ class BodoTypeInference(PartialTypeInference):
         # Flag to indicate if some optimizations should be rerun once dead code
         # elimination has completed for possible further optimization.
         rerun_after_dce = True
+
+        # Counter to keep track of the number of iterations that have passed without
+        # a change to the IR.
+        num_iterations_without_change = 0
+        # Constant. Since updating the typemap doesn't count as a change,
+        # there are situations where we may need several iterations
+        # before everything is fully typed and we actually see a change
+        # Therefore, whenever a transformation is required,
+        # we attempt to run typing transforms this many times
+        # before aborting.
+        num_iterations_without_change_before_abort = 2
         while True:
             try:
                 # set global partial typing flag, see comment above
@@ -162,12 +173,23 @@ class BodoTypeInference(PartialTypeInference):
                 tried_unrolling,
             )
             ran_transform = True
-            prev_needs_transform = needs_transform
+
             changed, needs_transform, tried_unrolling = typing_transforms_pass.run()
+            num_iterations_without_change = (
+                0 if changed else num_iterations_without_change + 1
+            )
+
             rerun_after_dce = typing_transforms_pass.rerun_after_dce
             # transform pass has failed if transform was needed but IR is not changed.
             # This avoids infinite loop, see [BE-140]
-            if prev_needs_transform and needs_transform and not changed:
+            # We're adding one additional iteration, in order to handle a possible
+            # edgecase where a run of typing transforms does not change the IR, but
+            # updates types
+            if (
+                num_iterations_without_change
+                > num_iterations_without_change_before_abort
+                and not changed
+            ):
                 break
             # can't be typed if IR not changed
             if not changed and not needs_transform:
@@ -1113,11 +1135,17 @@ class TypingTransforms:
 
             # For BoundFunction's, we need to check if the original bounded value
             # is a filter var, so add it to stmt_vars
-            if is_call_assign(stmt) and isinstance(
-                self.typemap[stmt.value.func.name], types.BoundFunction
-            ):
-                def_loc = get_definition(self.func_ir, stmt.value.func)
-                stmt_vars.update(v.name for v in def_loc.list_vars())
+            if is_call_assign(stmt):
+                # This is tested in test_snowflake_filter_pushdown_edgecase,
+                # which doesn't run on PR CI, so the pragma is needed
+                if stmt.value.func.name not in self.typemap:  # pragma: no cover
+                    self.needs_transform = True
+                    raise GuardException
+                elif isinstance(
+                    self.typemap[stmt.value.func.name], types.BoundFunction
+                ):
+                    def_loc = get_definition(self.func_ir, stmt.value.func)
+                    stmt_vars.update(v.name for v in def_loc.list_vars())
 
             # Otherwise, if the stmt uses a filter var and the filter_var is
             # not immutable, assume that all vars are involved and must be filter_var's
@@ -1769,6 +1797,7 @@ class TypingTransforms:
         df_col_names = (
             read_node.df_colnames if is_sql else read_node.original_df_colnames
         )
+
         # similar to DNF normalization in Sympy:
         # https://github.com/sympy/sympy/blob/da5cd290017814e6100859e5a3f289b3eda4ca6c/sympy/logic/boolalg.py#L1565
         # Or case: call recursively on arguments and concatenate
@@ -1838,7 +1867,6 @@ class TypingTransforms:
 
             # And case: distribute Or over And to normalize if needed
             if self._is_and_filter_pushdown(index_def, func_ir):
-
                 # rhs is Or
                 # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
                 if self._is_or_filter_pushdown(rhs_def, func_ir):
@@ -2570,7 +2598,6 @@ class TypingTransforms:
             # creates a new dataframe and replaces the old variable, only possible if
             # df.index dominates the df creation due to type stability
             if inst.attr == "index":
-
                 # check control flow error
                 df_var = inst.target
                 err_msg = "DataFrame.index: setting dataframe index"
@@ -2697,7 +2724,6 @@ class TypingTransforms:
             "_test_sql_unoptimized",
             "convert_to_pandas",
         ):  # pragma: no cover
-
             # Try import BodoSQL and check the type
             try:  # pragma: no cover
                 from bodosql.context_ext import BodoSQLContextType
@@ -3063,7 +3089,7 @@ class TypingTransforms:
         if df_type is None:
             return [assign]
         # cannot transform yet if argument type is not available yet
-        for (_, kw_val) in rhs.kws:
+        for _, kw_val in rhs.kws:
             if self.typemap.get(kw_val.name, None) is None:
                 return [assign]
 
@@ -3114,8 +3140,7 @@ class TypingTransforms:
         # For each of the arguments not already handled in the optimized codepath,
         # Perform the sequence of setitems on the copied dataframe,
         # updating cur_df_var each iteration.
-        for (kw_name, kw_val) in kws_list[first_lambda_idx:]:
-
+        for kw_name, kw_val in kws_list[first_lambda_idx:]:
             if isinstance(self.typemap.get(kw_val.name), types.Dispatcher):
                 # handles lambda fns, and passed JIT functions
                 # put the setitem value is as the output of an apply on the current dataframe
@@ -3755,7 +3780,10 @@ class TypingTransforms:
 
             msg = "When initializng a series with a dictionary, the keys should be constant strings or constant ints"
 
-            (tuples, new_nodes,) = bodo.utils.transform._convert_const_key_dict(
+            (
+                tuples,
+                new_nodes,
+            ) = bodo.utils.transform._convert_const_key_dict(
                 rhs.args, self.func_ir, data_arg_def, msg, lhs.scope, lhs.loc
             )
             val_tup_var = tuples[0]
@@ -4379,8 +4407,7 @@ class TypingTransforms:
         """
         kws = dict(rhs.kws)
         nodes = []
-        for (arg_no, arg_name) in func_args:
-
+        for arg_no, arg_name in func_args:
             var = get_call_expr_arg(func_name, rhs.args, kws, arg_no, arg_name, "")
             # skip if argument not specified or literal already
             if var == "":
@@ -5318,7 +5345,6 @@ class TypingTransforms:
                 )
             )
         elif index_call_name == ("is_in", "bodo.libs.bodosql_array_kernels"):
-
             # In the case that we're hadling the bodsql is_in array kernel, we expect arg1 to be
             # an array. We need to rerun type inference if we don't have the type yet
             arg1_arr_type = self.typemap.get(index_def.args[1].name, None)
