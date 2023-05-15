@@ -2,10 +2,10 @@ import datetime
 import os
 import re
 import time
+import traceback
 import warnings
 from enum import Enum
 from typing import List, Optional, Tuple, Union
-import traceback
 
 import numba
 import numpy as np
@@ -744,7 +744,6 @@ class BodoSQLContext:
         return added_defs + pd_code
 
     def _setup_named_params(self, params_dict):
-
         assert (
             bodo.get_rank() == 0
         ), "_setup_named_params should only be called on rank 0."
@@ -774,7 +773,6 @@ class BodoSQLContext:
             # but it's nice to have for debugging purposes so things don't hang
             # if we make any changes that could lead to a runtime error.
             try:
-
                 if params_dict is None:
                     params_dict = dict()
 
@@ -1009,11 +1007,13 @@ class BodoSQLContext:
                 self.catalog.get_java_object(),
                 self.schema,
                 NAMED_PARAM_TABLE_NAME,
+                bodo.bodosql_use_streaming_plan,
                 verbose_level,
             )
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
             NAMED_PARAM_TABLE_NAME,
+            bodo.bodosql_use_streaming_plan,
             verbose_level,
         )
         return generator

@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
@@ -17,7 +18,7 @@ class PandasTableScanRule private constructor(config: Config) : ConverterRule(co
 
     override fun convert(rel: RelNode): RelNode {
         val scan = rel as LogicalTableScan
-        val traitSet = rel.traitSet.replace(PandasRel.CONVENTION)
+        val traitSet = rel.traitSet.replace(PandasRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)
         return PandasTableScan(rel.cluster, traitSet, scan.table!!)
     }
 }
