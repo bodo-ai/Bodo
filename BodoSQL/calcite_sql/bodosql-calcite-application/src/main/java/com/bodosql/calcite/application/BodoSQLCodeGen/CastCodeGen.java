@@ -124,9 +124,11 @@ public class CastCodeGen {
       codeBuilder.append("try_to_date(").append(arg).append(", None)");
       break;
     case DECIMAL:
+    case INTEGER:
       codeBuilder.append("try_to_number(").append(arg).append(")");
       break;
     case DOUBLE:
+    case FLOAT:
       codeBuilder.append("try_to_double(").append(arg).append(", None)");
       break;
     case TIME:
