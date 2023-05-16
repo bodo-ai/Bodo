@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.generateBinOpCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateTryCastCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
@@ -40,6 +41,8 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+
+import org.apache.calcite.avatica.SqlType;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.*;
@@ -122,6 +125,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       return visitCaseOp(call);
     } else if (call.getOperator() instanceof SqlCastFunction) {
       return visitCastScan(call);
+    } else if (call.getOperator() instanceof BodoSqlTryCastFunction) {
+      return visitTryCastScan(call);
     } else if (call.getOperator() instanceof SqlExtractFunction) {
       return visitExtractScan(call);
     } else if (call.getOperator() instanceof SqlSubstringFunction) {
@@ -406,6 +411,18 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     List<Expr> args = visitList(operation.operands);
     Expr child = args.get(0);
     String exprCode = generateCastCode(child.emit(), inputType, outputType, outputScalar);
+    return new Expr.Raw(exprCode);
+  }
+
+  protected Expr visitTryCastScan(RexCall operation) {
+    RelDataType inputType = operation.operands.get(0).getType();
+    if (!SqlTypeName.CHAR_TYPES.contains(inputType.getSqlTypeName()))
+      throw new BodoSQLCodegenException("TRY_CAST only supports casting from strings.");
+    RelDataType outputType = operation.getType();
+
+    List<Expr> args = visitList(operation.operands);
+    Expr child = args.get(0);
+    String exprCode = generateTryCastCode(child.emit(), outputType);
     return new Expr.Raw(exprCode);
   }
 
