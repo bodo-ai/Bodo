@@ -196,6 +196,7 @@ public class ExprTypeVisitor {
           "TRIM",
           "TRUNC",
           "TRUNCATE",
+          "TRY_CAST",
           "TRY_TO_BINARY",
           "TRY_TO_BOOLEAN",
           "TRY_TO_DATE",
