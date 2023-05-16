@@ -796,11 +796,27 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
         ),
         pytest.param(
             (
+                "FLOAT",
+                pd.Series(["-435.392", None, "-999", "1rfw43te", "0.0001"] * 4),
+                pd.Series([-435.392, None, -999.0, None, 0.0001] * 4),
+            ),
+            id="FLOAT",
+        ),
+        pytest.param(
+            (
                 "NUMBER",
                 pd.Series(["734", "-103", "105+106", "58.47", None] * 4),
                 pd.Series([734, -103, None, 58, None] * 4),
             ),
             id="NUMBER",
+        ),
+        pytest.param(
+            (
+                "INTEGER",
+                pd.Series(["0", "-49.36", "1999-12-31", None, "482"] * 4),
+                pd.Series([0, -49, None, None, 482] * 4),
+            ),
+            id="INTEGER",
         ),
         pytest.param(
             (
