@@ -1,12 +1,14 @@
 package com.bodosql.calcite.ir
 
+import com.bodosql.calcite.application.BodoSQLCodegenException
 import org.apache.calcite.rel.RelNode
+import java.util.*
 
 /**
  * Module is the top level compilation unit for code generation.
  * @param main The main function for this module.
  */
-class Module(private val main: List<Op>) {
+class Module(private val frame: Frame) {
 
     /**
      * Emits the code for the module.
@@ -14,27 +16,27 @@ class Module(private val main: List<Op>) {
      */
     fun emit(level: Int = 0): String {
         val doc = Doc(level = level)
-        for (item in main) {
-            item.emit(doc)
-        }
+        frame.emit(doc)
         return doc.toString()
     }
 
     /**
      * Builder is used to construct a new module.
      */
-    class Builder(val symbolTable: SymbolTable) {
-        constructor() : this(symbolTable = SymbolTable())
-        constructor(builder: Builder) : this(symbolTable = builder.symbolTable)
+    class Builder(val symbolTable: SymbolTable, private val functionFrame: Frame) {
+        constructor() : this(symbolTable = SymbolTable(), functionFrame = Frame())
+        constructor(builder: Builder) : this(symbolTable = builder.symbolTable, functionFrame = Frame())
 
-        private val code: MutableList<Op> = mutableListOf()
+        private var activeFrame: Frame = functionFrame
+
+        private var parentFrames: Stack<Frame> = Stack()
 
         /**
-         * Adds the operation to the end of the module.
-         * @param op Operation to add to the module.
+         * Adds the operation to the end of the active Frame.
+         * @param op Operation to add to the active Frame.
          */
         fun add(op: Op) {
-            code.add(op)
+            activeFrame.add(op)
         }
 
         /**
@@ -47,16 +49,7 @@ class Module(private val main: List<Op>) {
          * @param
          */
         fun append(code: String): Builder {
-            // If the last operation is an Op.Code,
-            // append directly to that.
-            val op = this.code.lastOrNull()
-            if (op != null && op is Op.Code) {
-                op.append(code)
-                return this
-            }
-
-            // Otherwise, create a new Op.Code.
-            this.code.add(Op.Code(code))
+            activeFrame.append(code)
             return this
         }
 
@@ -74,7 +67,27 @@ class Module(private val main: List<Op>) {
          * @return The built module.
          */
         fun build(): Module {
-            return Module(code.toList())
+            return Module(functionFrame)
+        }
+
+        /**
+         * Updates a builder to create a new activeFrame.
+         */
+        fun startFrame() {
+            parentFrames.add(activeFrame)
+            activeFrame = Frame()
+        }
+
+        /**
+         * Terminates the current active frame and returns it.
+         */
+        fun endFrame() : Frame {
+            if (parentFrames.empty()) {
+                throw BodoSQLCodegenException("Attempting to end a Frame when there are 0 remaining parent frames.")
+            }
+            val res = activeFrame
+            activeFrame = parentFrames.pop()
+            return res
         }
     }
 }
