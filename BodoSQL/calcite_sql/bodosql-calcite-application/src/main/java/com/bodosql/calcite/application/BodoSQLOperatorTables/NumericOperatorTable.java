@@ -1,17 +1,23 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
+
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
+import org.apache.calcite.sql.fun.SqlCoalesceFunction;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SameOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlOperandTypeInference;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
+import org.apache.calcite.sql.validate.implicit.TypeCoercion;
 import org.apache.calcite.util.Optionality;
 
 public final class NumericOperatorTable implements SqlOperatorTable {
@@ -470,7 +476,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           kind,
           ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE),
           null,
-          OperandTypes.SAME_VARIADIC,
+          LeastGreatestOperandTypeChecker.INSTANCE,
           SqlFunctionCategory.SYSTEM);
     }
 
@@ -480,6 +486,31 @@ public final class NumericOperatorTable implements SqlOperatorTable {
         return LEAST;
       } else {
         return GREATEST;
+      }
+    }
+
+    private static class LeastGreatestOperandTypeChecker extends SameOperandTypeChecker {
+      public LeastGreatestOperandTypeChecker() {
+        super(-1);
+      }
+
+      public static LeastGreatestOperandTypeChecker INSTANCE = new LeastGreatestOperandTypeChecker();
+
+      @Override
+      public boolean checkOperandTypes(SqlCallBinding callBinding, boolean throwOnFailure) {
+        if (callBinding.isTypeCoercionEnabled()) {
+          TypeCoercion typeCoercion = callBinding.getValidator().getTypeCoercion();
+          List<RelDataType> operandTypes = callBinding.collectOperandTypes();
+          RelDataType type = typeCoercion.getWiderTypeFor(operandTypes, true);
+          if (null != type) {
+            ArrayList<SqlTypeFamily> expectedFamilies = new ArrayList<>();
+            for (int i = 0; i < operandTypes.size(); i++) {
+              expectedFamilies.add(type.getSqlTypeName().getFamily());
+            }
+            typeCoercion.builtinFunctionCoercion(callBinding, operandTypes, expectedFamilies);
+          }
+        }
+        return super.checkOperandTypes(callBinding, throwOnFailure);
       }
     }
   }
