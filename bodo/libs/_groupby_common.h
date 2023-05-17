@@ -18,8 +18,8 @@
  * @param[in] ftype The function type
  * @param[in] use_sql_rules Are we using SQL rules?
  */
-void aggfunc_output_initialize(std::shared_ptr<array_info> out_col, int ftype,
-                               bool use_sql_rules);
+void aggfunc_output_initialize(const std::shared_ptr<array_info>& out_col,
+                               int ftype, bool use_sql_rules);
 
 /**
  * @brief Returns the array type and dtype required for output columns based on

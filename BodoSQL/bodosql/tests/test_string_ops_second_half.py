@@ -464,6 +464,7 @@ def test_strcmp(args, spark_info, memory_leak_check):
         pytest.param(
             ("SELECT RTRIMMED_LENGTH((A)) FROM table1"),
             id="vector-no_case",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             ("SELECT CASE WHEN RTRIMMED_LENGTH((A)) > 0 THEN 1 ELSE 0 END FROM table1"),
@@ -480,6 +481,7 @@ def test_strcmp(args, spark_info, memory_leak_check):
                 "SELECT CASE WHEN RTRIMMED_LENGTH(('   Alphabet  Soup Is \\tDelicious   ')) > 0 THEN 1 ELSE 0 END FROM table1"
             ),
             id="scalar-case",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -589,6 +591,7 @@ def test_strcmp_nonascii(args, spark_info, memory_leak_check):
                 pd.DataFrame(["12,345.68"] * 16),
             ),
             id="FORMAT_all_scalar",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -699,6 +702,46 @@ def test_substring(query, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize("func", ["SUBSTR", "SUBSTRING"])
+def test_substring_suffix(func, spark_info, memory_leak_check):
+    """Test SUBSTR/SUBSTRING with 2 arguments only where length is optional"""
+    query = f"SELECT {func}(S, I) FROM table1"
+    df = {
+        "table1": pd.DataFrame(
+            {
+                "S": pd.Series(
+                    [
+                        "a bc def ghij",
+                        "kl mnopq r",
+                        "st uv wx yz",
+                        "a e i o u y",
+                        "alphabet",
+                        "soup",
+                        None,
+                        "",
+                        "Ɨ Ø ƀ",
+                        "ǖ ǘ ǚ ǜ",
+                        "± × ÷ √",
+                        "Ŋ ŋ",
+                    ]
+                ),
+                "I": pd.Series(
+                    [None, -1, 1, -10, 5, 0, 2, 6, None, 10, -5, 4],
+                    dtype=pd.Int32Dtype(),
+                ),
+            }
+        )
+    }
+    check_query(
+        query,
+        df,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+    )
+
+
 def test_length(bodosql_string_types, spark_info, memory_leak_check):
     query = "SELECT LENGTH(A) as OUT1 FROM table1"
     check_query(
@@ -747,6 +790,7 @@ def test_length_binary(bodosql_binary_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_reverse_binary(bodosql_binary_types, spark_info, memory_leak_check):
     query = "SELECT REVERSE(A) as OUT1 FROM table1"
     expected_output1 = pd.DataFrame(
@@ -765,6 +809,7 @@ def test_reverse_binary(bodosql_binary_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_substring_binary(bodosql_binary_types, spark_info, memory_leak_check):
     query = "SELECT SUBSTR(A, 2, 3) as OUT1 FROM table1"
     check_query(
@@ -802,6 +847,7 @@ def test_substring_binary(bodosql_binary_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_left_right_binary(bodosql_binary_types, spark_info, memory_leak_check):
     query1 = "SELECT LEFT(B,3) as OUT1, RIGHT(B,3) as OUT2 FROM table1"
     query2 = "SELECT LEFT(A,10) as OUT1, RIGHT(C,10) as OUT2 FROM table1"
@@ -890,6 +936,7 @@ def test_lpad_rpad_binary(bodosql_binary_types, spark_info, memory_leak_check):
             "str_table",
             pd.DataFrame({0: [False] * 3 + [True] * 6}),
             id="startswith-strings",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             True,
@@ -912,6 +959,7 @@ def test_lpad_rpad_binary(bodosql_binary_types, spark_info, memory_leak_check):
                 {0: [False, True, False, True, False, True, True, False, False]}
             ),
             id="endswith-binary",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -997,6 +1045,7 @@ def test_startswith_endswith(
                 }
             ),
             id="inject_delete-strings",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "INSERT(A, B, C, D)",
@@ -1014,6 +1063,7 @@ def test_startswith_endswith(
                 }
             ),
             id="replace-binary",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "INSERT(A, E, F, G)",
@@ -1135,6 +1185,7 @@ def test_insert(calculation, table, answer, case, spark_info, memory_leak_check)
         pytest.param(
             "POSITION(A, B)",
             id="position_normal-2_args",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "POSITION(A IN B)",
@@ -1147,6 +1198,7 @@ def test_insert(calculation, table, answer, case, spark_info, memory_leak_check)
         pytest.param(
             "CHARINDEX(A, B)",
             id="charindex-2_args",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "CHARINDEX(A, B, C)",

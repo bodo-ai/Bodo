@@ -407,3 +407,23 @@ def test_to_numpy(memory_leak_check):
         return A.to_numpy()
 
     check_func(impl, (arr,))
+
+
+def test_arr_astype_same(memory_leak_check):
+    """Test BooleanArray.astype(pd.BooleanDtype()) is supported."""
+
+    def impl(A):
+        return A.astype(pd.BooleanDtype())
+
+    arr = pd.array([True] * 10 + [False] * 10, dtype="boolean")
+    check_func(impl, (arr,))
+
+
+def test_series_astype_same(memory_leak_check):
+    """Test BooleanSeries.astype(pd.BooleanDtype()) is supported."""
+
+    def impl(S):
+        return S.astype(pd.BooleanDtype())
+
+    S = pd.Series([True] * 10 + [False] * 10, dtype="boolean")
+    check_func(impl, (S,))

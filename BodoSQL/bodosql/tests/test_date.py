@@ -242,7 +242,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             id="year",
         ),
         pytest.param(
-            "SELECT TIMEDIFF('QUARTER', TO_DATE('2022-06-30'), TO_DATE('2000-01-01'))",
+            "SELECT TIMEDIFF(QUARTER, TO_DATE('2022-06-30'), TO_DATE('2000-01-01'))",
             pd.DataFrame({"A": pd.Series([-89])}),
             id="quarter",
         ),
@@ -252,7 +252,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             id="month",
         ),
         pytest.param(
-            "SELECT DATEDIFF('WEEK', TO_DATE('2010-01-01'), TO_DATE('2022-12-31'))",
+            "SELECT DATEDIFF(WEEK, TO_DATE('2010-01-01'), TO_DATE('2022-12-31'))",
             pd.DataFrame({"A": pd.Series([678])}),
             id="week",
         ),
@@ -262,7 +262,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             id="day",
         ),
         pytest.param(
-            "SELECT DATEDIFF('HOUR', TO_DATE('2020-01-01'), TO_DATE('2022-06-30'))",
+            "SELECT DATEDIFF(HOUR, TO_DATE('2020-01-01'), TO_DATE('2022-06-30'))",
             pd.DataFrame({"A": pd.Series([21864])}),
             id="hour",
         ),
@@ -272,7 +272,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             id="minute",
         ),
         pytest.param(
-            "SELECT TIMESTAMPDIFF('SECOND', TO_DATE('2022-06-30'), TO_DATE('2020-01-01'))",
+            "SELECT TIMESTAMPDIFF(SECOND, TO_DATE('2022-06-30'), TO_DATE('2020-01-01'))",
             pd.DataFrame({"A": pd.Series([-78710400])}),
             id="second",
         ),
@@ -282,7 +282,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             id="millisecond",
         ),
         pytest.param(
-            "SELECT TIMEDIFF('MICROSECOND', TO_DATE('2022-12-31'), TO_DATE('2010-01-01'))",
+            "SELECT TIMEDIFF(MICROSECOND, TO_DATE('2022-12-31'), TO_DATE('2010-01-01'))",
             pd.DataFrame({"A": pd.Series([-410140800000000])}),
             id="microsecond",
         ),
@@ -350,6 +350,7 @@ def test_datediff_date_columns_time_units(
     )
 
 
+@pytest.mark.slow
 def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_check):
     """
     Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF with date columns and date units behaves as expected
@@ -384,6 +385,75 @@ def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_
         check_names=False,
         check_dtype=False,
         expected_output=output,
+    )
+
+
+@pytest.mark.parametrize(
+    "func, unit, answer",
+    [
+        pytest.param(
+            "DATEDIFF",
+            "'day'",
+            pd.Series([31, None, -1, 1, 0], dtype=pd.Int32Dtype()),
+            id="datediff-day",
+        ),
+        pytest.param(
+            "TIMEDIFF",
+            "'hour'",
+            pd.Series([748, None, -4, 24, 0], dtype=pd.Int32Dtype()),
+            id="timediff-hour",
+        ),
+        pytest.param(
+            "TIMESTAMPDIFF",
+            "'month'",
+            pd.Series([1, None, -1, 1, 0], dtype=pd.Int32Dtype()),
+            id="timestampdiff-month",
+        ),
+    ],
+)
+def test_datediff_upcasting(func, unit, answer, memory_leak_check):
+    """
+    Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF with a mix of DATE and
+    TIMESTAMP values works as expected
+    """
+    query = f"SELECT {func}({unit}, A, B) FROM table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        datetime.date(y, m, d)
+                        for y, m, d in [
+                            (2023, 5, 1),
+                            (2026, 6, 30),
+                            (2023, 1, 1),
+                            (1999, 12, 31),
+                            (2025, 7, 4),
+                        ]
+                    ]
+                ),
+                "B": pd.Series(
+                    [
+                        pd.Timestamp(s)
+                        for s in [
+                            "2023-6-1 4:30:15.250999",
+                            None,
+                            "2022-12-31 20:59:00",
+                            "2000-1-1",
+                            "2025-7-4",
+                        ]
+                    ]
+                ),
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=pd.DataFrame({0: answer}),
     )
 
 

@@ -1617,3 +1617,122 @@ def test_dict_encoded_small_table(memory_leak_check):
         with set_logging_stream(logger, 1):
             check_func(impl, (query, conn), py_output=new_df)
             check_logger_msg(stream, f"Columns ['a'] using dictionary encoding")
+
+
+def test_snowflake_filter_pushdown_edgecase(memory_leak_check):
+    """
+    Test that filter pushdown works for an edge case
+    
+    (https://github.com/Bodo-inc/customer-sample-code/blob/2c34f3195ab9e6db26931669c2ae81d2402526e5/120_queries/queries/q011.sql)
+    """
+
+    @bodo.jit(inline="never")
+    def no_op(df):
+        return df
+
+    def impl_should_not_do_filter_pushdown(conn):
+        df7 = pd.read_sql(
+            "DATES_FILTERPUSHDOWN_TEST_TABLE", conn, _bodo_is_table_input=True
+        )
+        df5 = df7.loc[
+            :,
+            [
+                "full_date",
+            ],
+        ]
+        df5 = df5.rename(
+            columns={
+                "full_date": "FULL_DATE",
+            },
+            copy=False,
+        )
+        df16 = df7[
+            (pd.notna(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df7, 1)))
+        ]
+        # Add a "use" of df5
+        no_op(df5)
+        return df16
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    check_func(
+        impl_should_not_do_filter_pushdown,
+        (conn,),
+        check_dtype=False,
+        reset_index=True,
+        py_output=pd.DataFrame(
+            {
+                "full_date": [pd.to_datetime("2023-05-05")],
+                "other_column": [2.0],
+            }
+        ),
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_should_not_do_filter_pushdown)(conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['full_date', 'other_column']")
+        # Check for filter pushdown
+        check_logger_no_msg(stream, "Filter pushdown successfully performed")
+
+
+@pytest.mark.skip(
+    reason="This test should do filter pushdown, but it's currently failing. See: https://bodo.atlassian.net/browse/BSE-336"
+)
+def test_snowflake_filter_pushdown_edgecase_2(memory_leak_check):
+    """
+    Test that filter pushdown works for a specific edge case
+    
+    Originally, this would throw a compile time error in the filter pushdown code.
+    """
+
+    def impl_should_do_filter_pushdown(conn):
+        df7 = pd.read_sql(
+            "DATES_FILTERPUSHDOWN_TEST_TABLE", conn, _bodo_is_table_input=True
+        )
+        df5 = df7.loc[
+            :,
+            [
+                "full_date",
+            ],
+        ]
+        df5 = df5.rename(
+            columns={
+                "full_date": "FULL_DATE",
+            },
+            copy=False,
+        )
+        df16 = df7[
+            (pd.notna(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df7, 1)))
+        ]
+        return df16
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    check_func(
+        impl_should_do_filter_pushdown,
+        (conn,),
+        check_dtype=False,
+        reset_index=True,
+        py_output=pd.DataFrame(
+            {
+                "full_date": [pd.to_datetime("2023-05-05")],
+                "other_column": [2.0],
+            }
+        ),
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_should_do_filter_pushdown)(conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['full_date', 'other_column']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")

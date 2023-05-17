@@ -1,51 +1,110 @@
 package com.bodosql.calcite.application;
 
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.FilterCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SampleCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.*;
-import static com.bodosql.calcite.application.JoinCondVisitor.*;
-import static com.bodosql.calcite.application.Utils.AggHelpers.*;
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.concatDataFrames;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeNoAgg;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeNoGroupBy;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeWithGroupBy;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateApplyCodeWithGroupBy;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.FilterCodeGen.generateFilterCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.generateJoinCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.generateLiteralCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.generateLogicalValuesCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.generateLocCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.generateProjectCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.generateProjectedDataframe;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.generateRenameCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SampleCodeGen.generateRowSampleCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SampleCodeGen.generateSampleCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.generateExceptCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.generateIntersectCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.generateUnionCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.generateSortCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getAscendingExpr;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getNAPositionStringLiteral;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.generateOptimizedEngineKernelCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.generateWindowedAggFn;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.revertSortColumnName;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.usesOptimizedEngineKernel;
+import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
+import static com.bodosql.calcite.application.Utils.AggHelpers.aggContainsFilter;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
+import static com.bodosql.calcite.application.Utils.Utils.isSnowflakeCatalogTable;
+import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
+import static com.bodosql.calcite.application.Utils.Utils.sqlTypenameToPandasTypename;
 
-import com.bodosql.calcite.adapter.pandas.*;
+import com.bodosql.calcite.adapter.pandas.PandasAggregate;
+import com.bodosql.calcite.adapter.pandas.PandasFilter;
+import com.bodosql.calcite.adapter.pandas.PandasIntersect;
+import com.bodosql.calcite.adapter.pandas.PandasJoin;
+import com.bodosql.calcite.adapter.pandas.PandasMinus;
+import com.bodosql.calcite.adapter.pandas.PandasProject;
+import com.bodosql.calcite.adapter.pandas.PandasRel;
+import com.bodosql.calcite.adapter.pandas.PandasRowSample;
+import com.bodosql.calcite.adapter.pandas.PandasSample;
+import com.bodosql.calcite.adapter.pandas.PandasSort;
+import com.bodosql.calcite.adapter.pandas.PandasTableCreate;
+import com.bodosql.calcite.adapter.pandas.PandasTableModify;
+import com.bodosql.calcite.adapter.pandas.PandasTableScan;
+import com.bodosql.calcite.adapter.pandas.PandasTargetTableScan;
+import com.bodosql.calcite.adapter.pandas.PandasUnion;
+import com.bodosql.calcite.adapter.pandas.PandasValues;
+import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
-import com.bodosql.calcite.application.bodo_sql_rules.*;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
-import com.bodosql.calcite.ir.*;
+import com.bodosql.calcite.ir.Dataframe;
+import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
+import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
+import com.bodosql.calcite.traits.CombineStreamsExchange;
+import com.bodosql.calcite.traits.SeparateStreamExchange;
 import com.google.common.collect.ImmutableList;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Stack;
+import java.util.TreeMap;
 import kotlin.jvm.functions.Function0;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
-import org.apache.calcite.rel.core.*;
-import org.apache.calcite.rel.hint.*;
-import org.apache.calcite.rel.logical.*;
-import org.apache.calcite.rel.type.*;
-import org.apache.calcite.rex.*;
+import org.apache.calcite.rel.core.Aggregate;
+import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.calcite.rel.core.Correlate;
+import org.apache.calcite.rel.core.Filter;
+import org.apache.calcite.rel.core.Intersect;
+import org.apache.calcite.rel.core.Minus;
+import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.core.Sort;
+import org.apache.calcite.rel.core.TableModify;
+import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.core.Union;
+import org.apache.calcite.rel.core.Values;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexOver;
+import org.apache.calcite.rex.RexWindow;
+import org.apache.calcite.rex.RexWindowBound;
 import org.apache.calcite.schema.Schema;
-import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -282,6 +341,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   @Override
   public void visit(RelNode node, int ordinal, RelNode parent) {
+    // Skip exchange nodes for now. They need to be implemented.
+    while (node instanceof CombineStreamsExchange || node instanceof SeparateStreamExchange) {
+      // TODO: Actually implement
+      node = node.getInput(0);
+    }
+
     // If we have a SnowflakeToPandasConverter that directly
     // wraps a TableScan, let's extract it so we can use
     // visitTableScan.
@@ -1552,9 +1617,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     RexWindow window = windows.get(0);
 
     if (window.partitionKeys.size() == 0) {
-      throw new BodoSQLCodegenException(
-          "BODOSQL currently requires a partition column when handling windowed aggregation"
-              + " functions");
+      for (String name : names) {
+        if (!name.equals("ROW_NUMBER")) {
+          throw new BodoSQLCodegenException(
+              "BODOSQL currently requires a partition column when handling windowed aggregation"
+                  + " functions, except for ROW_NUMBER()");
+        }
+      }
     }
 
     for (int i = 1; i < windows.size(); i++) {
@@ -1772,9 +1841,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
       StringBuilder grpbyExpr = new StringBuilder(".groupby(").append(groupbyCols.toString());
       grpbyExpr.append(", as_index=False, dropna=False, _is_bodosql=True)");
       groupedColExpr.append(grpbyExpr);
-    } else {
-      throw new BodoSQLCodegenException(
-          "Error, cannot currently perform windowed aggregation without a partition clause");
     }
 
     List<RelDataType> typs = new ArrayList<>();
@@ -1833,8 +1899,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
       outputExpr.append(groupedColExpr).append(".apply(").append(fn_name).append(")");
 
     } else {
-      throw new BodoSQLCodegenException(
-          "Error, cannot currently perform windowed aggregation without a partition clause");
+      // Currently the only supported function without a partition is row_number,
+      // so the only thing returned will be a single Series containing the
+      // output, then each column that needs to access it do so in the form "[:]"
+      outputExpr
+          .append("bodo.libs.bodosql_array_kernels.row_number(")
+          .append(groupedColExpr)
+          .append(", ")
+          .append(sortString.toString())
+          .append(", ")
+          .append(ascendingString.toString())
+          .append(", ")
+          .append(NAPositionString.toString())
+          .append(")");
+      outputColList = new ArrayList<String>();
+      for (int i = 0; i < aggOperations.size(); i++) {
+        outputColList.add("ROW_NUMBER");
+      }
     }
 
     return new Pair<>(outputExpr.toString(), outputColList);
@@ -1906,8 +1987,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *     relational expression.
    */
   public RexNodeVisitorInfo visitLiteralScan(RexLiteral node, boolean isSingleRow) {
-    String literal = generateLiteralCode(node, isSingleRow, this);
-    return new RexNodeVisitorInfo(literal);
+    Expr literal = generateLiteralCode(node, isSingleRow, this);
+    return new RexNodeVisitorInfo(literal.emit());
   }
 
   /**
@@ -2123,6 +2204,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     nodeStack.add(node);
     while (!nodeStack.isEmpty()) {
       RelNode n = nodeStack.pop();
+
+      // We skip CombineStreamsExchange and SeparateStreamExchange for now because they
+      // don't generate code yet.
+      while (n instanceof CombineStreamsExchange || n instanceof SeparateStreamExchange) {
+        // TODO: Actually implement
+        n = n.getInput(0);
+      }
+
       // SnowflakeToPandasConverter is weird and this should be removed
       // once we refactor the code generation logic for direct table reads.
       // Since this node typically represents an SQL call, we never actually
@@ -2170,6 +2259,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
   }
 
+  private static Variable NODE_STRING = new Variable("node_string");
+
   /**
    * Adds code to the generated python that logs a simple message that tells the user the node being
    * executed has finished, and prints the execution time. Only works if verboseLevel is set to 1 or
@@ -2186,21 +2277,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // interested in)
       String nodeStr = Arrays.stream(RelOptUtil.toString(node).split("\n")).findFirst().get();
 
-      this.generatedCode
-          .append(getBodoIndent())
-          .append("node_string = ")
-          .append("'''")
-          .append(nodeStr)
-          .append("'''\n");
-      String msgString =
-          new StringBuilder(getBodoIndent())
-              .append(
-                  "bodo.user_logging.log_message('RELNODE_TIMING', f'''Execution time for RelNode"
-                      + " {node_string}: {time.time() - t_")
-              .append(node_id)
-              .append("}''')\n")
-              .toString();
-      this.generatedCode.append(msgString);
+      Op nodeString = new Op.Assign(NODE_STRING, new Expr.TripleQuotedString(nodeStr));
+      this.generatedCode.add(nodeString);
+      Op logMessageCall =
+          new Op.Stmt(
+              new Expr.Call(
+                  "bodo.user_logging.log_message",
+                  new Expr.StringLiteral("RELNODE_TIMING"),
+                  new Expr.Raw(
+                      "f'''Execution time for RelNode {node_string}: {time.time() - t_"
+                          + node_id
+                          + "}'''")));
+      this.generatedCode.add(logMessageCall);
     }
   }
 

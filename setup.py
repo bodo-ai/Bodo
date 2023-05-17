@@ -3,9 +3,9 @@ import sys
 import os
 import glob
 import platform
+from typing import Any, Dict
 from setuptools import Extension, find_packages, setup
 from Cython.Build import cythonize
-
 
 import numpy.distutils.misc_util as np_misc
 
@@ -81,11 +81,6 @@ else:
     if is_win:
         PREFIX_DIR += "\Library"
 
-try:
-    import pyarrow  # noqa
-except ImportError:
-    pass
-
 
 try:
     import h5py  # noqa
@@ -93,12 +88,10 @@ except ImportError:
     # currently, due to cross compilation, the import fails.
     # building the extension modules still works though.
     # TODO: resolve issue with h5py import
-    _has_h5py = False or is_m1_mac
     h5py_version = None
 else:
     # NOTE: conda-forge does not have MPI-enabled hdf5 for Windows yet
     # TODO: make sure the available hdf5 library is MPI-enabled automatically
-    _has_h5py = not is_win
     h5py_version = h5py.version.hdf5_version_tuple[1]
 
 
@@ -131,7 +124,7 @@ if develop_mode:
 
 # Use a single C-extension for all of Bodo
 # Copying ind, lid, eca, and ela to avoid aliasing, as we continue to append
-ext_metadata = dict(
+ext_metadata: Dict[str, Any] = dict(
     name="bodo.ext",
     sources=[],
     depends=[],
@@ -157,6 +150,8 @@ if is_win:
     # use Microsoft MPI on Windows
     mpi_libs = ["msmpi"]
     if os.environ.get("BUILD_PIP", "") == "1":
+        import pyarrow
+
         # building pip package, need to set additional include and library paths
         pyarrow_dirname = os.path.dirname(pyarrow.__file__)
         ext_metadata["include_dirs"].append(os.path.join(pyarrow_dirname, "include"))
@@ -227,6 +222,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_array_operations.cpp",
     "bodo/libs/_array_utils.cpp",
     "bodo/libs/_bodo_common.cpp",
+    "bodo/libs/_bodo_tdigest.cpp",
     "bodo/libs/_bodo_to_arrow.cpp",
     "bodo/libs/_datetime_ext.cpp",
     "bodo/libs/_datetime_utils.cpp",
@@ -263,6 +259,7 @@ ext_metadata["depends"] += [
     "bodo/libs/_array_operations.h",
     "bodo/libs/_array_utils.h",
     "bodo/libs/_bodo_common.h",
+    "bodo/libs/_bodo_tdigest.h",
     "bodo/libs/_bodo_to_arrow.h",
     "bodo/libs/_datetime_utils.h",
     "bodo/libs/_decimal_ext.h",
@@ -399,6 +396,8 @@ elif install_mode:
     _cython_ext_mods = [
         f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f not in pyx_builtins
     ]
+else:
+    _cython_ext_mods = []
 
 
 setup(
@@ -450,7 +449,7 @@ setup(
             "mpi4py_mpich==3.1.2",
         ]
     ),
-    extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},
+    extras_require={"HDF5": ["h5py"]},
     cmdclass=versioneer.get_cmdclass(),
     ext_modules=(
         [bodo_ext]

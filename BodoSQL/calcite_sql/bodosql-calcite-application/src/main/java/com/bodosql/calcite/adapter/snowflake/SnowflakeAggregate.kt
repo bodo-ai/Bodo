@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
 import com.bodosql.calcite.table.CatalogTableImpl
+import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
@@ -43,7 +44,7 @@ class SnowflakeAggregate private constructor(
             groupSet: ImmutableBitSet, groupSets: List<ImmutableBitSet>?, aggCalls: List<AggregateCall>,
             catalogTable: CatalogTableImpl
         ): SnowflakeAggregate {
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION)
+            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)
             return SnowflakeAggregate(cluster, newTraitSet, input, groupSet, groupSets, aggCalls, catalogTable)
         }
     }

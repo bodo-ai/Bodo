@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import traceback
 import warnings
@@ -129,6 +130,7 @@ INT_BITSIZE_TO_ARROW_DATATYPE = {
     2: pa.int16(),
     4: pa.int32(),
     8: pa.int64(),
+    16: pa.decimal128(38, 0),
 }
 STRING_TYPE_CODE = 2
 
@@ -480,7 +482,6 @@ def get_schema_from_metadata(
             other uses, like column pruning
         unsupported_arrow_types: Arrow Types of Each Unsupported Column
     """
-
     # Get Snowflake Metadata for Query
     # Use it to determine the general / broad Snowflake types
     # The actual Arrow result may use smaller types for columns (initially int64, use int8)
@@ -539,7 +540,9 @@ def get_schema_from_metadata(
 
                 idx = col_idxs_to_check[i]
                 # Parse output NUMBER(__,_)[SBx] to get the byte width x
-                byte_size = int(typing_info[-2])
+                byte_size = int(
+                    re.search("NUMBER\(\d+,\d+\)\[SB(\d+)\]", typing_info).group(1)
+                )
                 out_type = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
                 arrow_fields[idx] = arrow_fields[idx].with_type(out_type)
 
@@ -643,7 +646,11 @@ def _detect_column_dict_encoding(
     if is_table_input and total_rows is not None:
         check_res = execute_query(
             cursor,
-            f"show tables like '{sql_query}'",
+            # Note we need both like and starts with because in this context
+            # like is case-insensitive but starts with is case-sensitive. Since they
+            # are exactly the same this will only match the exact query.
+            # See https://bodo.atlassian.net/browse/BSE-277 for why this is necessary.
+            f"show tables like '{sql_query}' starts with '{sql_query}'",
             timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT,
         )
         if check_res is None or not check_res.fetchall():

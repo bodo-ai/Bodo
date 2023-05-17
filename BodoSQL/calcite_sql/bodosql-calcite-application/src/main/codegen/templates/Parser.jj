@@ -3752,11 +3752,7 @@ List<Object> Expression2(ExprContext exprContext) :
             (
                 // Special case for "IN", because RHS of "IN" is the only place
                 // that an expression-list is allowed ("exp IN (exp1, exp2)").
-
-                // In default calcite, this is LR(2). We need this to be at least LR(3)
-                // else we get conflicts due to .... NOT LIKE <Const string> vs NOT LIKE SOME
-                // (checkNonQueryExpression doesn't have any tokens, just java code that does some debug asserts)
-                LOOKAHEAD(3) {
+                LOOKAHEAD(2) {
                     checkNonQueryExpression(exprContext);
                 }
                 (
@@ -3774,42 +3770,6 @@ List<Object> Expression2(ExprContext exprContext) :
                         <ANY> { op = SqlStdOperatorTable.some(k); }
                     |
                         <ALL> { op = SqlStdOperatorTable.all(k); }
-                    )
-                |
-                    <LIKE>
-                    (
-                        <SOME> { op = SqlStdOperatorTable.SOME_LIKE; }
-                    |
-                        <ANY> { op = SqlStdOperatorTable.SOME_LIKE; }
-                    |
-                        <ALL> { op = SqlStdOperatorTable.ALL_LIKE; }
-                    )
-                |
-                    <NOT> <LIKE>
-                    (
-                        <SOME> { op = SqlStdOperatorTable.SOME_NOT_LIKE; }
-                    |
-                        <ANY> { op = SqlStdOperatorTable.SOME_NOT_LIKE; }
-                    |
-                        <ALL> { op = SqlStdOperatorTable.ALL_NOT_LIKE; }
-                    )
-                |
-                    <ILIKE>
-                    (
-                        <SOME> { op = SqlStdOperatorTable.SOME_ILIKE; }
-                    |
-                        <ANY> { op = SqlStdOperatorTable.SOME_ILIKE; }
-                    |
-                        <ALL> { op = SqlStdOperatorTable.ALL_ILIKE; }
-                    )
-                |
-                    <NOT> <ILIKE>
-                    (
-                        <SOME> { op = SqlStdOperatorTable.SOME_NOT_ILIKE; }
-                    |
-                        <ANY> { op = SqlStdOperatorTable.SOME_NOT_ILIKE; }
-                    |
-                        <ALL> { op = SqlStdOperatorTable.ALL_NOT_ILIKE; }
                     )
                 )
                 { s.clear().add(this); }
@@ -3860,6 +3820,55 @@ List<Object> Expression2(ExprContext exprContext) :
                     list.addAll(list3);
                     list3.clear();
                 }
+            |
+                // Handle LIKE ANY and variations.
+                // We need this to be at least LR(2) to determine if this is LIKE ANY/ALL
+                // or if this is just LIKE.
+                LOOKAHEAD(2) {
+                    checkNonQueryExpression(exprContext);
+                }
+                (
+                    <LIKE>
+                    (
+                        <ANY> { op = SqlBodoOperatorTable.ANY_LIKE; }
+                    |
+                        <ALL> { op = SqlBodoOperatorTable.ALL_LIKE; }
+                    )
+                |
+                    <ILIKE>
+                    (
+                        <ANY> { op = SqlBodoOperatorTable.ANY_ILIKE; }
+                    |
+                        <ALL> { op = SqlBodoOperatorTable.ALL_ILIKE; }
+                    )
+                )
+                { s.clear().add(this); }
+                nodeList = ParenthesizedQueryOrCommaList(ExprContext.ACCEPT_NONCURSOR)
+                {
+                    list.add(new SqlParserUtil.ToTreeListItem(op, s.pos()));
+                    s.add(nodeList);
+                    // special case for stuff like IN (s1 UNION s2)
+                    if (nodeList.size() == 1) {
+                        SqlNode item = nodeList.get(0);
+                        if (item.isA(SqlKind.QUERY)) {
+                            list.add(item);
+                        } else {
+                            list.add(nodeList);
+                        }
+                    } else {
+                        list.add(nodeList);
+                    }
+                }
+                [
+                    LOOKAHEAD(2)
+                    <ESCAPE> e = Expression3(ExprContext.ACCEPT_SUB_QUERY) {
+                        s.clear().add(this);
+                        list.add(
+                            new SqlParserUtil.ToTreeListItem(
+                                SqlStdOperatorTable.ESCAPE, s.pos()));
+                        list.add(e);
+                    }
+                ]
             |
                 LOOKAHEAD(2) {
                     checkNonQueryExpression(exprContext);
@@ -4720,7 +4729,7 @@ SqlNode StringLiteral() :
         }
     )
     {
-        p = SqlParserUtil.parseString(token.image);
+        p = SqlBodoParserUtil.parseString(token.image);
         try {
             literal = SqlLiteral.createCharString(p, charSet, getPos());
         } catch (java.nio.charset.UnsupportedCharsetException e) {
@@ -4739,7 +4748,7 @@ SqlNode StringLiteral() :
         LOOKAHEAD(1)
         <QUOTED_STRING>
         {
-            p = SqlParserUtil.parseString(token.image);
+            p = SqlBodoParserUtil.parseString(token.image);
             try {
                 literal = SqlLiteral.createCharString(p, charSet, getPos());
             } catch (java.nio.charset.UnsupportedCharsetException e) {
@@ -4757,7 +4766,7 @@ SqlNode StringLiteral() :
                 throw SqlUtil.newContextException(getPos(),
                     RESOURCE.unicodeEscapeUnexpected());
             }
-            String s = SqlParserUtil.parseString(token.image);
+            String s = SqlBodoParserUtil.parseString(token.image);
             unicodeEscapeChar = SqlParserUtil.checkUnicodeEscapeChar(s);
         }
     ]
@@ -5238,7 +5247,8 @@ TimeUnit TimeUnit() :
 TimeUnit TimestampInterval() :
 {}
 {
-    <FRAC_SECOND> { return TimeUnit.MICROSECOND; }
+    <MILLISECOND> { return TimeUnit.MILLISECOND; }
+|   <FRAC_SECOND> { return TimeUnit.MICROSECOND; }
 |   <MICROSECOND> { return TimeUnit.MICROSECOND; }
 |   <NANOSECOND> { return TimeUnit.NANOSECOND; }
 |   <SQL_TSI_FRAC_SECOND> { return TimeUnit.NANOSECOND; }
@@ -5362,7 +5372,7 @@ void IdentifierSegment(List<String> names, List<SqlParserPos> positions) :
         }
         [
             <UESCAPE> <QUOTED_STRING> {
-                String s = SqlParserUtil.parseString(token.image);
+                String s = SqlBodoParserUtil.parseString(token.image);
                 unicodeEscapeChar = SqlParserUtil.checkUnicodeEscapeChar(s);
             }
         ]
@@ -5457,7 +5467,7 @@ SqlIdentifier SimpleIdentifierFromStringLiteral() :
         if (!this.conformance.allowCharLiteralAlias()) {
             throw SqlUtil.newContextException(getPos(), RESOURCE.charLiteralAliasNotValid());
         }
-        final String s = SqlParserUtil.parseString(token.image);
+        final String s = SqlBodoParserUtil.parseString(token.image);
         return new SqlIdentifier(s, getPos());
     }
 }
@@ -5788,7 +5798,7 @@ SqlTypeNameSpec SqlTypeName1(Span s) :
     |
         ( <INTEGER> | <INT> ) { s.add(this); sqlTypeName = SqlTypeName.INTEGER; }
     |
-        <TINYINT> { s.add(this); sqlTypeName = SqlTypeName.TINYINT; }
+        ( <TINYINT> | <BYTEINT>) { s.add(this); sqlTypeName = SqlTypeName.TINYINT; }
     |
         <SMALLINT> { s.add(this); sqlTypeName = SqlTypeName.SMALLINT; }
     |
@@ -5799,7 +5809,7 @@ SqlTypeNameSpec SqlTypeName1(Span s) :
         <DOUBLE> { s.add(this); }
         [ <PRECISION> ] { sqlTypeName = SqlTypeName.DOUBLE; }
     |
-        <FLOAT> { s.add(this); sqlTypeName = SqlTypeName.FLOAT; }
+        ( <FLOAT> | <FLOAT4> | <FLOAT8> ) { s.add(this); sqlTypeName = SqlTypeName.FLOAT; }
     )
     {
         return new SqlBasicTypeNameSpec(sqlTypeName, s.end(this));
@@ -5838,7 +5848,7 @@ SqlTypeNameSpec SqlTypeName3(Span s) :
 }
 {
     (
-        (<DECIMAL> | <DEC> | <NUMERIC>) { s.add(this); sqlTypeName = SqlTypeName.DECIMAL; }
+        (<DECIMAL> | <DEC> | <NUMERIC> | <NUMBER>) { s.add(this); sqlTypeName = SqlTypeName.DECIMAL; }
     |
         <ANY> { s.add(this); sqlTypeName = SqlTypeName.ANY; }
     )
@@ -6012,14 +6022,15 @@ SqlTypeNameSpec CharacterTypeName(Span s) :
 }
 {
     (
-        (<CHARACTER> | <CHAR>) { s.add(this); }
+        (<CHARACTER> | <CHAR> | <NCHAR>) { s.add(this); }
         (
             <VARYING> { sqlTypeName = SqlTypeName.VARCHAR; }
         |
             { sqlTypeName = SqlTypeName.CHAR; }
         )
     |
-        <VARCHAR> { s.add(this); sqlTypeName = SqlTypeName.VARCHAR; }
+        (<VARCHAR> | <TEXT> | <STRING> | <NVARCHAR> | <NVARCHAR2>)
+        { s.add(this); sqlTypeName = SqlTypeName.VARCHAR; }
     )
     precision = PrecisionOpt()
     [
@@ -6072,7 +6083,7 @@ SqlTypeNameSpec DateTimeTypeName() :
         return new SqlBasicTypeNameSpec(typeName, precision, s.end(this));
     }
 |
-    <TIMESTAMP_NTZ> {
+    (<TIMESTAMP_NTZ> | <DATETIME>) {
         s = span();
         precision = PrecisionOpt();
         typeName = SqlTypeName.TIMESTAMP;
@@ -6184,6 +6195,18 @@ SqlNode BuiltinFunctionCall() :
         )
         <RPAREN> {
             return SqlStdOperatorTable.CAST.createCall(s.end(this), args);
+        }
+    |
+        <TRY_CAST> { s = span(); }
+        <LPAREN> e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args = startList(e); }
+        <AS>
+        (
+            dt = DataType() { args.add(dt); }
+        |
+            <INTERVAL> e = IntervalQualifier() { args.add(e); }
+        )
+        <RPAREN> {
+            return SqlStdOperatorTable.TRY_CAST.createCall(s.end(this), args);
         }
     |
         <EXTRACT> {
@@ -6918,6 +6941,50 @@ SqlCall TimestampAddFunctionCall() :
     SqlNode node;
 }
 {
+    <DATEADD> { s = span(); }
+    <LPAREN>
+    (
+        (
+            e = StringLiteral() {
+                args = startList(e);
+            }
+        |
+            interval = TimestampInterval() {
+                args = startList(SqlLiteral.createSymbol(interval, getPos()));
+            }
+        )
+        <COMMA>
+        e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    |
+        e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args = startList(e); }
+    )
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <RPAREN> {
+        return DatetimeOperatorTable.DATEADD.createCall(
+            s.end(this), args);
+    }
+|
+    <TIMEADD> { s = span(); }
+    <LPAREN>
+    (
+        e = StringLiteral() {
+            args = startList(e);
+        }
+    |
+        interval = TimestampInterval() {
+            args = startList(SqlLiteral.createSymbol(interval, getPos()));
+        }
+    )
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <RPAREN> {
+        return DatetimeOperatorTable.TIMEADD.createCall(
+            s.end(this), args);
+    }
+|
     <TIMESTAMPADD> { s = span(); }
     <LPAREN>
     (
@@ -6951,6 +7018,50 @@ SqlCall TimestampDiffFunctionCall() :
     SqlNode node;
 }
 {
+    <DATEDIFF> { s = span(); }
+    <LPAREN>
+    (
+      (
+          e = StringLiteral() {
+              args = startList(e);
+          }
+      |
+          interval = TimestampInterval() {
+              args = startList(SqlLiteral.createSymbol(interval, getPos()));
+          }
+      )
+      <COMMA>
+      e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    |
+      e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args = startList(e); }
+    )
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <RPAREN> {
+        return DatetimeOperatorTable.DATEDIFF.createCall(
+            s.end(this), args);
+    }
+|
+    <TIMEDIFF> { s = span(); }
+    <LPAREN>
+    (
+        e = StringLiteral() {
+            args = startList(e);
+        }
+    |
+        interval = TimestampInterval() {
+            args = startList(SqlLiteral.createSymbol(interval, getPos()));
+        }
+    )
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <COMMA>
+    e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+    <RPAREN> {
+        return DatetimeOperatorTable.TIMEDIFF.createCall(
+            s.end(this), args);
+    }
+|
     <TIMESTAMPDIFF> { s = span(); }
     <LPAREN>
     (
@@ -7759,6 +7870,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < BOTH: "BOTH" >
 |   < BREADTH: "BREADTH" >
 |   < BY: "BY" >
+|   < BYTEINT: "BYTEINT" >
 |   < C: "C" >
 |   < CALL: "CALL" >
 |   < CALLED: "CALLED" >
@@ -7843,6 +7955,9 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < DATA: "DATA" >
 |   < DATABASE: "DATABASE" >
 |   < DATE: "DATE" >
+|   < DATEADD: "DATEADD">
+|   < DATEDIFF: "DATEDIFF">
+|   < DATETIME: "DATETIME" >
 |   < DATETIME_INTERVAL_CODE: "DATETIME_INTERVAL_CODE" >
 |   < DATETIME_INTERVAL_PRECISION: "DATETIME_INTERVAL_PRECISION" >
 |   < DAY: "DAY" >
@@ -7917,6 +8032,8 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < FIRST: "FIRST" >
 |   < FIRST_VALUE: "FIRST_VALUE">
 |   < FLOAT: "FLOAT" >
+|   < FLOAT4: "FLOAT4" >
+|   < FLOAT8: "FLOAT8" >
 |   < FLOOR: "FLOOR" >
 |   < FOLLOWING: "FOLLOWING" >
 |   < FOR: "FOR" >
@@ -8084,6 +8201,8 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < NULLS: "NULLS" >
 |   < NUMBER: "NUMBER" >
 |   < NUMERIC: "NUMERIC" >
+|   < NVARCHAR: "NVARCHAR" >
+|   < NVARCHAR2: "NVARCHAR2" >
 |   < OBJECT: "OBJECT" >
 |   < OCCURRENCES_REGEX: "OCCURRENCES_REGEX" >
 |   < OCTET_LENGTH: "OCTET_LENGTH" >
@@ -8307,6 +8426,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < STDDEV_POP: "STDDEV_POP" >
 |   < STDDEV_SAMP: "STDDEV_SAMP" >
 |   < STREAM: "STREAM" >
+|   < STRING: "STRING" >
 |   < STRING_AGG: "STRING_AGG" >
 |   < STRUCTURE: "STRUCTURE" >
 |   < STYLE: "STYLE" >
@@ -8326,9 +8446,12 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < TABLE_NAME: "TABLE_NAME" >
 |   < TABLESAMPLE: "TABLESAMPLE" >
 |   < TEMPORARY: "TEMPORARY" >
+|   < TEXT: "TEXT" >
 |   < THEN: "THEN" >
 |   < TIES: "TIES" >
 |   < TIME: "TIME" >
+|   < TIMEADD: "TIMEADD" >
+|   < TIMEDIFF: "TIMEDIFF" >
 |   < TIMESTAMP: "TIMESTAMP" >
 |   < TIMESTAMP_NTZ: "TIMESTAMP_NTZ" >
 |   < TIMESTAMPADD: "TIMESTAMPADD" >
@@ -8358,6 +8481,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < TRIM_ARRAY: "TRIM_ARRAY" >
 |   < TRUE: "TRUE" >
 |   < TRUNCATE: "TRUNCATE" >
+|   < TRY_CAST: "TRY_CAST" >
 |   < TUMBLE: "TUMBLE" >
 |   < TYPE: "TYPE" >
 |   < UESCAPE: "UESCAPE" >
@@ -8529,7 +8653,7 @@ void NonReservedKeyWord2of3() :
 // which use single-quote as the escape character.
 <DEFAULT, DQID, BTID> TOKEN :
 {
-    < QUOTED_STRING: <QUOTE> ( (~["'"]) | ("''"))* <QUOTE> >
+    < QUOTED_STRING: <QUOTE> (("\\" ~[]) | (~["'","\\"]) | ("''"))* <QUOTE> >
 |
     < PREFIXED_STRING_LITERAL: ("_" <CHARSETNAME> | "N") <QUOTED_STRING> >
 |

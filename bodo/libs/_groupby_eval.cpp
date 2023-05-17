@@ -56,7 +56,7 @@ void copy_string_values_transform(std::shared_ptr<array_info> update_col,
     int64_t n_chars = 0;
     int64_t nRowOut = update_col->length;
     // Store size of data per row
-    std::vector<offset_t> ListSizes(nRowOut);
+    bodo::vector<offset_t> ListSizes(nRowOut);
     offset_t* in_offsets = (offset_t*)tmp_col->data2();
     char* in_data1 = tmp_col->data1();
     // 1. Determine needed length (total number of characters)

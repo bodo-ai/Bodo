@@ -23,10 +23,10 @@
    needed.
  */
 struct grouping_info {
-    std::vector<int64_t> row_to_group;
-    std::vector<int64_t> group_to_first_row;
-    std::vector<int64_t> next_row_in_group;
-    std::vector<int64_t> list_missing;
+    bodo::vector<int64_t> row_to_group;
+    bodo::vector<int64_t> group_to_first_row;
+    bodo::vector<int64_t> next_row_in_group;
+    bodo::vector<int64_t> list_missing;
     std::shared_ptr<table_info> dispatch_table = nullptr;
     std::shared_ptr<table_info> dispatch_info = nullptr;
     size_t num_groups;

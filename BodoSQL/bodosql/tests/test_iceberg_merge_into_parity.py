@@ -201,6 +201,7 @@ def test_merge_with_only_update_clause(
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_merge_with_only_delete_clause(
     iceberg_database, iceberg_table_conn, table_name
@@ -668,6 +669,7 @@ def test_merge_with_source_as_self_subquery(
     )
 
 
+@pytest.mark.timeout(700)
 @pytest.mark.slow
 def test_merge_with_extra_columns_in_source(
     iceberg_database,

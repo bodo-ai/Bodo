@@ -78,7 +78,8 @@ class Sort(ir.Stmt):
                 output array. Can be set per key. Defaults to "last".
             _bodo_chunk_bounds (ir.Var|None): parallel chunk bounds for data
                 redistribution during the parallel algorithm (optional).
-                Currently only used for Iceberg MERGE INTO and with _bodo_interval_sort.
+                Currently only used for Iceberg MERGE INTO, window functions without
+                partitions (e.g. ROW_NUMBER) and with _bodo_interval_sort.
             _bodo_interval_sort (bool): Use sort_table_for_interval_join instead of regular
                 sort_values. This is only exposed for internal testing purposes.
                 When this is true, _bodo_chunk_bounds must not be None and be of length
@@ -496,6 +497,13 @@ def sort_distributed_run(
                 and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
             ):
                 parallel = False
+
+    if not parallel:
+        # If we have a replicated call remove sort_node._bodo_chunk_bounds, which
+        # is only valid for distributed calls. When dead code elimination runs at
+        # the end of distributed pass this should optimize out the _bodo_chunk_bounds
+        # variable if it exists.
+        sort_node._bodo_chunk_bounds = None
 
     # copy arrays when not inplace
     nodes = []

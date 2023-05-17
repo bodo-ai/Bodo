@@ -23,8 +23,8 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels i
     "precision",
     [
         0,
-        3,
-        6,
+        pytest.param(3, marks=pytest.mark.slow),
+        pytest.param(6, marks=pytest.mark.slow),
         9,
     ],
 )
@@ -226,6 +226,7 @@ def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
                 ]
             ),
             id="date_sub-interval_scalar",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT TI + Interval '3' hours FROM table1",
@@ -252,6 +253,7 @@ def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
                 ]
             ),
             id="subtraction-timedelta_array",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -345,27 +347,35 @@ def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_che
             "TIMEADD('mon', 6, T)",
             'Unsupported unit for TIMEADD with TIME input: "mon"',
             id="timeadd-month",
+            marks=pytest.mark.slow,
         ),
-        # TIMESTAMPADD / DATE_ADD / ADDATE will cause an error at the calcite level
-        # due to a type mismatch so BodoSQL will not control the error message created
-        pytest.param("TIMESTAMPADD(WEEK, -1, T)", "", id="timestampadd-week"),
-        pytest.param("DATE_ADD(10, T)", "", id="date_add-day"),
-        pytest.param("ADDATE(13, T)", "", id="addate-day"),
         pytest.param(
-            "DATE_SUB(T, 1)", "Cannot add/subtract days from TIME", id="date_sub-day"
+            "TIMESTAMPADD(WEEK, -1, T)",
+            "Invalid time unit input for TIMESTAMPADD: When arg2 is a time, the specified time unit must be smaller than day",
+            id="timestampadd-week",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param("DATE_ADD(10, T)", "", id="date_add-day"),
+        pytest.param("ADDATE(13, T)", "", id="addate-day", marks=pytest.mark.slow),
+        pytest.param(
+            "DATE_SUB(T, 1)",
+            "Cannot add/subtract days from TIME",
+            id="date_sub-day",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "SUBDATE(T, 2)", "Cannot add/subtract days from TIME", id="subdate-day"
         ),
         pytest.param(
-            "DATEDIFF('QUARTER', T, T)",
-            'Unsupported unit for DATEDIFF with TIME input: "QUARTER"',
+            "DATEDIFF(QUARTER, T, T)",
+            "Unsupported unit for DATEDIFF with TIME input: QUARTER",
             id="datediff-quarter",
         ),
         pytest.param(
             "TIMEDIFF('wy', T, T)",
             'Unsupported unit for TIMEDIFF with TIME input: "wy"',
             id="timediff-week",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "TIMESTAMPDIFF(DAY, T, T)",
@@ -387,7 +397,7 @@ def test_timeadd_timediff_invalid_units(timeadd_dataframe, calculation, error_ms
     "query, expected_output",
     [
         pytest.param(
-            "SELECT DATEDIFF('HOUR', TO_TIME('10:10:10'), TO_TIME('22:33:33'))",
+            "SELECT DATEDIFF(HOUR, TO_TIME('10:10:10'), TO_TIME('22:33:33'))",
             pd.DataFrame({"A": pd.Series([12])}),
             id="hour",
         ),
@@ -397,7 +407,7 @@ def test_timeadd_timediff_invalid_units(timeadd_dataframe, calculation, error_ms
             id="minute",
         ),
         pytest.param(
-            "SELECT TIMESTAMPDIFF('SECOND', TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
+            "SELECT TIMESTAMPDIFF(SECOND, TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
             pd.DataFrame({"A": pd.Series([-37408])}),
             id="second",
         ),
@@ -407,7 +417,7 @@ def test_timeadd_timediff_invalid_units(timeadd_dataframe, calculation, error_ms
             id="millisecond",
         ),
         pytest.param(
-            "SELECT TIMEDIFF('MICROSECOND', TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
+            "SELECT TIMEDIFF(MICROSECOND, TO_TIME('22:33:33'), TO_TIME('12:10:05'))",
             pd.DataFrame({"A": pd.Series([-37408000000])}),
             id="microsecond",
         ),
@@ -503,6 +513,7 @@ def test_datediff_time_day_part_handling(time_df, day_part_strings, memory_leak_
         )
 
 
+@pytest.mark.slow
 def test_max_time_types(time_df, memory_leak_check):
     """
     Simple test to ensure that max is working on time types

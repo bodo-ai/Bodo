@@ -1225,3 +1225,33 @@ def test_tz_aware_series_getitem(memory_leak_check):
     check_func(impl_iloc, (S,))
     check_func(impl_loc, (S,))
     check_func(impl_regular, (S,))
+
+
+def test_bool_aggfuncs(memory_leak_check):
+    def impl(S):
+        return (
+            bodo.libs.array_kernels.boolor_agg(S.values),
+            bodo.libs.array_kernels.booland_agg(S.values),
+            bodo.libs.array_kernels.boolxor_agg(S.values),
+        )
+
+    test_cases = [
+        (pd.Series([None] * 20, dtype=pd.Int32Dtype()), (None, None, None)),
+        (pd.Series([0] * 50, dtype=pd.Int32Dtype()), (False, False, False)),
+        (
+            pd.Series([i + 1 for i in range(20)], dtype=pd.Int32Dtype()),
+            (True, True, False),
+        ),
+        (
+            pd.Series([2 if i == 20 else 0 for i in range(40)], dtype=pd.Int32Dtype()),
+            (True, False, True),
+        ),
+        (
+            pd.Series(
+                [1 if i == 17 else None for i in range(32)], dtype=pd.Int32Dtype()
+            ),
+            (True, True, True),
+        ),
+    ]
+    for data, res in test_cases:
+        check_func(impl, (data,), py_output=res, is_out_distributed=False)

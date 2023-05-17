@@ -388,7 +388,7 @@ public class ProjectionSubcolumnEliminationRule
               .getRexBuilder()
               .makeCast(callNode.getType(), newOperands.get(0));
         } else {
-          return builder.call(callNode.getOperator(), newOperands);
+          return callNode.clone(callNode.getType(), newOperands);
         }
       }
     }

@@ -7,6 +7,7 @@ import pytest
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.slow
 def test_filter_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     """test filter queries"""
 
@@ -96,6 +97,7 @@ def test_filter_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_filter_null_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     """test is null on numeric columns"""
     query1 = "select A,C from table1 where A is NULL"
@@ -199,6 +201,7 @@ def test_filter_boolean_3(bodosql_boolean_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_filter_boolean_4(bodosql_boolean_types, spark_info, memory_leak_check):
     check_query(
         "select A,C from table1 where A = C",

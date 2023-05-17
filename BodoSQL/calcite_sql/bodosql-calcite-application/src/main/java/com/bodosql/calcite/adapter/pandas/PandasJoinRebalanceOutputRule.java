@@ -1,12 +1,15 @@
 package com.bodosql.calcite.adapter.pandas;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
-import com.google.common.collect.*;
-import org.apache.calcite.plan.*;
-import org.apache.calcite.rel.*;
-import org.apache.calcite.rel.rules.*;
-import org.apache.calcite.rex.*;
-import org.immutables.value.*;
+import com.bodosql.calcite.traits.SeparateStreamExchange;
+import com.google.common.collect.ImmutableList;
+import javax.annotation.Nullable;
+import org.apache.calcite.plan.RelOptRuleCall;
+import org.apache.calcite.plan.RelRule;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.rules.TransformationRule;
+import org.apache.calcite.rex.RexNode;
+import org.immutables.value.Value;
 
 /**
  * Planner rule that recognizes 1-2 {@link org.apache.calcite.rel.core.Project} on top of a {@link
@@ -19,23 +22,19 @@ import org.immutables.value.*;
  * instead look at the node count to estimate based on number of iterations over the data.
  */
 @BodoSQLStyleImmutable
-@Value.Enclosing
-public class PandasJoinRebalanceOutputRule extends RelRule<PandasJoinRebalanceOutputRule.Config>
-    implements TransformationRule {
+public abstract class PandasJoinRebalanceOutputRule<C extends PandasJoinRebalanceOutputRule.Config>
+    extends RelRule<C> implements TransformationRule {
 
   // The threshold for the estimated number of non-trivial nodes encountered.
-  final double nodeCountThreshold = 4.5;
+  static final double nodeCountThreshold = 4.5;
 
-  /** Creates an PandasJoinRebalanceOutputRule. */
-  protected PandasJoinRebalanceOutputRule(PandasJoinRebalanceOutputRule.Config config) {
+  protected PandasJoinRebalanceOutputRule(C config) {
     super(config);
   }
 
-  @Override
-  public void onMatch(RelOptRuleCall call) {
-    PandasProject project = call.rel(0);
-    PandasJoin join = call.rel(1);
-
+  @Nullable
+  public static RelNode generateNewProject(
+      PandasProject project, PandasJoin join, boolean containStreamSeparate) {
     // Determine the node count for the projection.
     int totalNodeCount = 0;
     for (RexNode projCol : project.getProjects()) {
@@ -50,36 +49,128 @@ public class PandasJoinRebalanceOutputRule extends RelRule<PandasJoinRebalanceOu
     // Check if we have seen enough compute to consider a rebalance.
     if (totalNodeCount > nodeCountThreshold) {
       RelNode newJoin = join.withRebalanceOutput(true);
-      RelNode newProject = project.copy(project.getTraitSet(), ImmutableList.of(newJoin));
-      call.transformTo(newProject);
+      RelNode input = newJoin;
+      if (containStreamSeparate) {
+        input =
+            new SeparateStreamExchange(
+                project.getInput().getCluster(), project.getInput().getTraitSet(), newJoin);
+      }
+      RelNode newProject = project.copy(project.getTraitSet(), ImmutableList.of(input));
+      return newProject;
+    }
+    return null;
+  }
+
+  /**
+   * Implementation for when the Project has the Streaming physical trait (no RexOver()). In this
+   * case because Join currently outputs single batch there will be a SeparateStreamExchange that we
+   * must look past.
+   */
+  public static class PandasJoinRebalanceStreamingProjectionRule
+      extends PandasJoinRebalanceOutputRule<
+          PandasJoinRebalanceStreamingProjectionRule
+              .PandasJoinRebalanceStreamingProjectionRuleConfig> {
+    /** Creates a PandasJoinRebalanceStreamingProjectionRule. */
+    protected PandasJoinRebalanceStreamingProjectionRule(
+        PandasJoinRebalanceStreamingProjectionRuleConfig config) {
+      super(config);
+    }
+
+    @Override
+    public void onMatch(RelOptRuleCall call) {
+      PandasProject project = call.rel(0);
+      PandasJoin join = call.rel(2);
+      RelNode output = generateNewProject(project, join, true);
+      if (output != null) {
+        call.transformTo(output);
+      }
+    }
+
+    /** Rule configuration. */
+    @Value.Immutable
+    public interface PandasJoinRebalanceStreamingProjectionRuleConfig extends RelRule.Config {
+      PandasJoinRebalanceStreamingProjectionRuleConfig DEFAULT_CONFIG =
+          com.bodosql.calcite.adapter.pandas
+              .ImmutablePandasJoinRebalanceStreamingProjectionRuleConfig.of()
+              .withOperandFor(PandasProject.class, SeparateStreamExchange.class, PandasJoin.class)
+              .as(PandasJoinRebalanceStreamingProjectionRuleConfig.class);
+
+      @Override
+      default PandasJoinRebalanceStreamingProjectionRule toRule() {
+        return new PandasJoinRebalanceStreamingProjectionRule(this);
+      }
+
+      /** Defines an operand tree with three classes. */
+      default PandasJoinRebalanceStreamingProjectionRule.Config withOperandFor(
+          Class<? extends PandasProject> projectClass,
+          Class<? extends SeparateStreamExchange> separateStreamClass,
+          Class<? extends PandasJoin> joinClass) {
+        return withOperandSupplier(
+                b0 ->
+                    b0.operand(projectClass)
+                        .oneInput(
+                            b1 ->
+                                b1.operand(separateStreamClass)
+                                    .oneInput(
+                                        b2 ->
+                                            b2.operand(joinClass)
+                                                .predicate(f -> !f.getRebalanceOutput())
+                                                .anyInputs())))
+            .as(PandasJoinRebalanceStreamingProjectionRule.Config.class);
+      }
     }
   }
 
-  /** Rule configuration. */
-  @Value.Immutable
-  public interface Config extends RelRule.Config {
-    PandasJoinRebalanceOutputRule.Config DEFAULT =
-        ImmutablePandasJoinRebalanceOutputRule.Config.of()
-            .withOperandFor(PandasProject.class, PandasJoin.class);
-
-    @Override
-    default PandasJoinRebalanceOutputRule toRule() {
-      return new PandasJoinRebalanceOutputRule(this);
+  /**
+   * Implementation for when the Project has the Single-Batch physical trait (contains RexOver()).
+   * In this case because Join currently outputs single batch the two nodes will be back to back.
+   */
+  public static class PandasJoinRebalanceBatchProjectionRule
+      extends PandasJoinRebalanceOutputRule<
+          PandasJoinRebalanceBatchProjectionRule.PandasJoinRebalanceBatchProjectionRuleConfig> {
+    /** Creates a PandasJoinRebalanceBatchProjectionRule. */
+    protected PandasJoinRebalanceBatchProjectionRule(
+        PandasJoinRebalanceBatchProjectionRuleConfig config) {
+      super(config);
     }
 
-    /** Defines an operand tree with two classes. */
-    // Note we require a logical join because a generic Join doesn't support hints
-    default PandasJoinRebalanceOutputRule.Config withOperandFor(
-        Class<? extends PandasProject> projectClass, Class<? extends PandasJoin> joinClass) {
-      return withOperandSupplier(
-              b0 ->
-                  b0.operand(projectClass)
-                      .oneInput(
-                          b1 ->
-                              b1.operand(joinClass)
-                                  .predicate(f -> !f.getRebalanceOutput())
-                                  .anyInputs()))
-          .as(PandasJoinRebalanceOutputRule.Config.class);
+    @Override
+    public void onMatch(RelOptRuleCall call) {
+      PandasProject project = call.rel(0);
+      PandasJoin join = call.rel(1);
+      RelNode output = generateNewProject(project, join, false);
+      if (output != null) {
+        call.transformTo(output);
+      }
+    }
+
+    /** Rule configuration. */
+    @Value.Immutable
+    public interface PandasJoinRebalanceBatchProjectionRuleConfig extends RelRule.Config {
+      PandasJoinRebalanceBatchProjectionRuleConfig DEFAULT_CONFIG =
+          com.bodosql.calcite.adapter.pandas.ImmutablePandasJoinRebalanceBatchProjectionRuleConfig
+              .of()
+              .withOperandFor(PandasProject.class, PandasJoin.class)
+              .as(PandasJoinRebalanceBatchProjectionRuleConfig.class);
+
+      @Override
+      default PandasJoinRebalanceBatchProjectionRule toRule() {
+        return new PandasJoinRebalanceBatchProjectionRule(this);
+      }
+
+      /** Defines an operand tree with two classes. */
+      default PandasJoinRebalanceStreamingProjectionRule.Config withOperandFor(
+          Class<? extends PandasProject> projectClass, Class<? extends PandasJoin> joinClass) {
+        return withOperandSupplier(
+                b0 ->
+                    b0.operand(projectClass)
+                        .oneInput(
+                            b1 ->
+                                b1.operand(joinClass)
+                                    .predicate(f -> !f.getRebalanceOutput())
+                                    .anyInputs()))
+            .as(PandasJoinRebalanceStreamingProjectionRule.Config.class);
+      }
     }
   }
 }

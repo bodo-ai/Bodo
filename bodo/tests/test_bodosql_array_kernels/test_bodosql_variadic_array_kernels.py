@@ -1030,3 +1030,235 @@ def test_coalesce_date_timestamp(args, answer, memory_leak_check):
     exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
     impl = impl_vars["impl"]
     check_func(impl, args, py_output=answer, reset_index=True)
+
+
+@pytest.mark.parametrize("func", ["least", "greatest"])
+@pytest.mark.parametrize(
+    "args, answers",
+    [
+        pytest.param((1, -2, 3), (-2, 3), id="integer-scalars"),
+        pytest.param(
+            (1.0, None, -1.0),
+            (None, None),
+            id="floats-null-scalars",
+        ),
+        pytest.param(
+            (None, "d", ""),
+            (None, None),
+            id="strings-null-scalars",
+        ),
+        pytest.param(
+            (
+                pd.Series([1, 0, None, -1, -1] * 6),
+                pd.Series([None, -100, 100, 2, 5] * 6),
+                3,
+            ),
+            (
+                pd.Series([None, -100, None, -1, -1] * 6),
+                pd.Series([None, 3, None, 3, 5] * 6),
+            ),
+            id="integers-null-mix",
+        ),
+        pytest.param(
+            (
+                pd.Series(["abc", "asdf10", None, None, "00000"] * 3),
+                "Ã",
+                pd.Series(["@#$#@!", "`12`~", "`12`", "AAAAA", "Å"] * 3),
+            ),
+            (
+                pd.Series(["@#$#@!", "`12`~", None, None, "00000"] * 3),
+                pd.Series(["Ã", "Ã", None, None, "Å"] * 3),
+            ),
+            id="strings-null-mix",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        pd.Timestamp("2022-02-14"),
+                        pd.Timestamp("2022-02-15"),
+                        pd.Timestamp("2032-02-14"),
+                    ]
+                    * 5
+                ),
+                pd.Timestamp("2017-08-17"),
+                pd.Series(
+                    [
+                        pd.Timestamp("2012-02-14"),
+                        pd.Timestamp("2032-02-15"),
+                        pd.Timestamp("2022-02-14"),
+                    ]
+                    * 5
+                ),
+            ),
+            (
+                pd.Series(
+                    [
+                        pd.Timestamp("2012-02-14"),
+                        pd.Timestamp("2017-08-17"),
+                        pd.Timestamp("2017-08-17"),
+                    ]
+                    * 5
+                ),
+                pd.Series(
+                    [
+                        pd.Timestamp("2022-02-14"),
+                        pd.Timestamp("2032-02-15"),
+                        pd.Timestamp("2032-02-14"),
+                    ]
+                    * 5
+                ),
+            ),
+            id="timestamp-mix",
+        ),
+        pytest.param(
+            (
+                pd.Timestamp("2023-08-17", tz="Poland"),
+                pd.Timestamp("2013-08-17", tz="Poland"),
+                pd.Timestamp("2003-08-17", tz="Poland"),
+            ),
+            (
+                pd.Timestamp("2003-08-17", tz="Poland"),
+                pd.Timestamp("2023-08-17", tz="Poland"),
+            ),
+            id="tz-aware-timestamp-scalars",
+        ),
+    ],
+)
+def test_least_greatest(func, args, answers, request, memory_leak_check):
+    """
+    Tests the least and greatest variadic bodosql kernels with a mix
+    of columns and scalars, with string, integer, float, timestamp data with null values.
+    """
+    is_scalar = "scalar" in request.node.name
+
+    expected_output = answers[0] if func == "least" else answers[1]
+
+    n_args = len(args)
+    args_str = ", ".join(f"A{i}" for i in range(n_args))
+    test_impl = f"def impl({args_str}):\n"
+
+    if is_scalar:
+        test_impl += f"  return bodo.libs.bodosql_array_kernels.{func}(({args_str}))"
+    else:
+        test_impl += (
+            f"  return pd.Series(bodo.libs.bodosql_array_kernels.{func}(({args_str})))"
+        )
+    impl_vars = {}
+    exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
+    impl = impl_vars["impl"]
+
+    check_func(
+        impl,
+        args,
+        py_output=expected_output,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize("func", ["least", "greatest"])
+@pytest.mark.parametrize(
+    "args, answers",
+    [
+        pytest.param(
+            (-100, 1000),
+            (-100, 1000),
+            id="integer-scalars",
+        ),
+        pytest.param(
+            (-12.11111, 10000.0),
+            (-12.11111, 10000.0),
+            id="floats-scalars",
+        ),
+        pytest.param(
+            ("abc", "1230123"),
+            ("1230123", "abc"),
+            id="strings-scalars",
+        ),
+        pytest.param(
+            (pd.Timestamp("2022-08-17"), pd.Timestamp("2000-08-17")),
+            (pd.Timestamp("2000-08-17"), pd.Timestamp("2022-08-17")),
+            id="timestamp-scalars",
+        ),
+    ],
+)
+def test_least_greatest_optional(func, args, answers, request, memory_leak_check):
+    """
+    Tests the least and greatest variadic bodosql kernels with
+    optional types, using string, numeric, and timestamp data.
+    """
+
+    def least_impl(arg1, arg2, flag1, flag2):
+        A = arg1 if flag1 else None
+        B = arg2 if flag2 else None
+        return bodo.libs.bodosql_array_kernels.least((A, B))
+
+    def greatest_impl(arg1, arg2, flag1, flag2):
+        A = arg1 if flag1 else None
+        B = arg2 if flag2 else None
+        return bodo.libs.bodosql_array_kernels.greatest((A, B))
+
+    arg1, arg2 = args
+    impl = least_impl if func == "least" else greatest_impl
+
+    for flag1 in [True, False]:
+        for flag2 in [True, False]:
+            if not (flag1 and flag2):
+                answer = None
+            else:
+                answer = answers[0] if func == "least" else answers[1]
+            check_func(
+                impl,
+                (arg1, arg2, flag1, flag2),
+                py_output=answer,
+                check_dtype=False,
+                reset_index=True,
+            )
+
+
+@pytest.mark.parametrize(
+    "test",
+    [
+        pytest.param(0, id="test_a"),
+        pytest.param(1, id="test_b"),
+        pytest.param(2, id="test_c"),
+    ],
+)
+def test_row_number(test, memory_leak_check):
+    def impl1(df):
+        return bodo.libs.bodosql_array_kernels.row_number(
+            df, ["A", "B"], [True, False], ["first", "last"]
+        )
+
+    def impl2(df):
+        return bodo.libs.bodosql_array_kernels.row_number(df, ["C"], [True], ["first"])
+
+    def impl3(df):
+        return bodo.libs.bodosql_array_kernels.row_number(
+            df, ["B", "C"], [False, True], ["last", "last"]
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([1, None, 0, 5] * 4, dtype=pd.Int32Dtype()).values,
+            "B": pd.Series([2, 8, None, 4], dtype=pd.Int32Dtype()).repeat(4).values,
+            "C": [str(i) for i in range(16)],
+        }
+    )
+
+    res1 = pd.Series([11, 3, 7, 15, 9, 1, 5, 13, 12, 4, 8, 16, 10, 2, 6, 14])
+    res2 = pd.Series([1, 2, 9, 10, 11, 12, 13, 14, 15, 16, 3, 4, 5, 6, 7, 8])
+    res3 = pd.Series([9, 10, 11, 12, 1, 2, 3, 4, 15, 16, 13, 14, 5, 6, 7, 8])
+
+    impls = [impl1, impl2, impl3]
+    results = [res1, res2, res3]
+
+    impl = impls[test]
+    res = results[test]
+    check_func(
+        impl,
+        (df,),
+        py_output=pd.DataFrame({"ROW_NUMBER": res}),
+        check_dtype=False,
+        reset_index=True,
+    )

@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
@@ -18,8 +19,8 @@ class PandasAggregateRule private constructor(config: Config) : ConverterRule(co
 
     override fun convert(rel: RelNode): RelNode {
         val agg = rel as Aggregate
-        val traitSet = rel.cluster.traitSet().replace(PandasRel.CONVENTION)
-        return PandasAggregate(rel.cluster, traitSet, convert(agg.input, traitSet),
+        val traitSet = rel.cluster.traitSet().replace(PandasRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)
+        return PandasAggregate(rel.cluster, traitSet, convert(agg.input, traitSet.replace(BatchingProperty.SINGLE_BATCH)),
             agg.groupSet, agg.groupSets, agg.aggCallList)
     }
 }

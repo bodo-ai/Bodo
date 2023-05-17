@@ -95,8 +95,7 @@ public class Utils {
    * @param outputScalar Should the output generate a type for converting scalars.
    * @return The pandas type
    */
-  public static String sqlTypenameToPandasTypename(
-      SqlTypeName typeName, boolean outputScalar) {
+  public static String sqlTypenameToPandasTypename(SqlTypeName typeName, boolean outputScalar) {
     String dtype;
     switch (typeName) {
       case BOOLEAN:

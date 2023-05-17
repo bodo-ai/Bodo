@@ -313,6 +313,7 @@ def test_zeroifnull(spark_info, memory_leak_check):
                 ),
             ),
             id="regr_valy_all_vector",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -322,6 +323,7 @@ def test_zeroifnull(spark_info, memory_leak_check):
                 ),
             ),
             id="regr_valx_vector_scalar",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -349,6 +351,7 @@ def test_zeroifnull(spark_info, memory_leak_check):
                 ),
             ),
             id="regr_valy_case",
+            marks=pytest.mark.slow,
         ),
     ],
 )

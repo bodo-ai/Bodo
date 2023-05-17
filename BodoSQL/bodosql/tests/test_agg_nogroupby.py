@@ -257,6 +257,7 @@ def test_count_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_count_string(bodosql_string_types, spark_info, memory_leak_check):
     """test various count queries on string data."""
     check_query(
@@ -392,7 +393,11 @@ def test_max_literal(basic_df, spark_info, memory_leak_check):
     [
         pytest.param("SELECT COUNT_IF(A) FROM table1", id="bool_col"),
         pytest.param("SELECT COUNT_IF(B = 'B') FROM table1", id="string_match"),
-        pytest.param("SELECT COUNT_IF(C % 2 = 1) FROM table1", id="int_cond"),
+        pytest.param(
+            "SELECT COUNT_IF(C % 2 = 1) FROM table1",
+            id="int_cond",
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_count_if(query, spark_info, memory_leak_check):
@@ -441,6 +446,7 @@ def test_having(bodosql_numeric_types, comparison_ops, spark_info, memory_leak_c
     )
 
 
+@pytest.mark.slow
 def test_max_bool(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     Simple test to ensure that max is working on boolean types
@@ -734,6 +740,7 @@ def test_single_value2(spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_single_value_error():
     """Make sure Calcite's SINGLE_VALUE Agg implementation raises an error for input
     with more than one value
@@ -768,10 +775,57 @@ def test_single_value_error():
 
 
 @pytest.mark.parametrize(
+    "data, quantiles",
+    [
+        pytest.param("A", (0.1, 0.25, 0.3, 0.5, 0.6, 0.75, 0.9), id="linear"),
+        pytest.param("B", (0.01, 0.1, 0.2, 0.4, 0.6, 0.8, 0.9, 0.99), id="uniform"),
+        pytest.param("C", (0.15, 0.35, 0.45, 0.5, 0.55, 0.65, 0.85), id="gaussian"),
+    ],
+)
+def test_approx_percentile(data, quantiles, memory_leak_check):
+    """Test APPROX_PERCENTILE"""
+    calculations = [f"APPROX_PERCENTILE({data}, {q})" for q in quantiles]
+    query = f"select {', '.join(calculations)} FROM table1"
+
+    n = 10000
+    np.random.seed(100)
+    unif = np.round(np.random.uniform(0, 1000, n))
+    gaus = np.random.normal(100, 30, n)
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(list(range(n)), dtype=pd.Int32Dtype()),
+            "B": pd.Series(
+                [None if i % 7 == 3 else unif[i] for i in range(n)],
+                dtype=pd.Int32Dtype(),
+            ),
+            "C": pd.Series(gaus, dtype=np.float64),
+        }
+    )
+    expected_output = pd.DataFrame(
+        {i: df[data].quantile(q) for i, q in enumerate(quantiles)}, index=np.arange(1)
+    )
+    # 40% was chosen as an arbitrary cutoff for the relative tolerance based on
+    # observations of the test data outputs.
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        expected_output=expected_output,
+        check_names=False,
+        check_dtype=False,
+        is_out_distributed=False,
+        atol=0.01,
+        rtol=0.4,
+    )
+
+
+@pytest.mark.parametrize(
     "agg_cols",
     [
-        pytest.param("AD", id="fast_tests"),
-        pytest.param("BCEFGHIJKL", id="slow_tests", marks=pytest.mark.skip),
+        pytest.param("AD", id="fast_tests_a"),
+        pytest.param("BCE", id="slow_tests_b"),
+        pytest.param("FHI", id="slow_tests_a", marks=pytest.mark.slow),
+        pytest.param("JKL", id="slow_tests_b", marks=pytest.mark.slow),
     ],
 )
 def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
@@ -800,7 +854,6 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
                     [None if i % 3 == 0 else float(i**2) for i in range(100)]
                 ),
                 "F": pd.Series([float((i**3) % 100) for i in range(100)]),
-                "G": pd.Series([2.718281828 for i in range(100)]),
                 "H": pd.Series([(i / 100) ** 0.5 for i in range(100)]),
                 "I": pd.Series(
                     [np.arctanh(np.pi * (i - 49.5) / 160.5) for i in range(100)]
@@ -829,6 +882,68 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
         return result
 
     answer = kurt_skew_refsol(agg_cols)
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+        is_out_distributed=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "func, results",
+    [
+        pytest.param(
+            "BOOLOR_AGG", [None, False, True, True, True] * 2, id="boolor_agg"
+        ),
+        pytest.param(
+            "BOOLAND_AGG", [None, False, False, True, True] * 2, id="booland_agg"
+        ),
+        pytest.param(
+            "BOOLXOR_AGG", [None, False, True, False, True] * 2, id="boolxor_agg"
+        ),
+    ],
+)
+def test_boolor_booland_boolxor_agg(func, results, memory_leak_check):
+    """Tests the BOOLOR_AGG, BOOLAND_AGG and BOOLXOR_AGG functions"""
+    selects = ", ".join([f"{func}({col})" for col in "ABCDEFGHIJ"])
+    query = f"SELECT {selects} FROM table1"
+    # Datasets designed to exhibit different distributions, thus producing myriad
+    # cases of kurtosis and skew calculations
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                # All null (int32)
+                "A": pd.Series([None] * 5, dtype=pd.Int32Dtype()),
+                # All zero (int32)
+                "B": pd.Series([0] * 5, dtype=pd.Int32Dtype()),
+                # One nonzero (int32)
+                "C": pd.Series([0, 0, 1, 0, 0], dtype=pd.Int32Dtype()),
+                # All nonzero (int32)
+                "D": pd.Series([i + 1 for i in range(5)], dtype=pd.Int32Dtype()),
+                # One nonzero, rest null (int32)
+                "E": pd.Series([None] * 4 + [-1], dtype=pd.Int32Dtype()),
+                # All null (float64)
+                "F": pd.Series([None] * 5, dtype=np.float64),
+                # All zero (float64)
+                "G": pd.Series([0.0] * 5, dtype=np.float64),
+                # One nonzero (float64)
+                "H": pd.Series([0, 0, -1.0, 0, 0], dtype=np.float64),
+                # All nonzero (float64)
+                "I": pd.Series([np.tan(i + 1) for i in range(5)], dtype=np.float64),
+                # One nonzero, rest null (float64)
+                "J": pd.Series([2.71828] + [None] * 4, dtype=np.float64),
+            }
+        )
+    }
+
+    answer = pd.DataFrame(
+        {i: agg_res for i, agg_res in enumerate(results)}, index=np.arange(1)
+    )
 
     check_query(
         query,

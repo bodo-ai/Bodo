@@ -389,6 +389,7 @@ def test_date_arithmetic(bodosql_date_types, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_date_arithmetic_case(bodosql_date_types, memory_leak_check):
     """Tests +/- on date columns with integers inside a case statement (to check
     the return type). This is supported in Snowflake for
@@ -417,6 +418,7 @@ def test_date_arithmetic_case(bodosql_date_types, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_subtraction_between_dates(bodosql_date_types, memory_leak_check):
     """Tests - on two date columns. The output in SQL is an integer."""
     query = "select A - B as col1 from table1"

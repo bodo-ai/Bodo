@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
@@ -18,10 +19,12 @@ class PandasProjectRule private constructor(config: Config) : ConverterRule(conf
 
     override fun convert(rel: RelNode): RelNode {
         val project = rel as Project
+        val containsOver = project.containsOver()
+        val batchProperty = if (containsOver) BatchingProperty.SINGLE_BATCH else BatchingProperty.STREAMING
         return PandasProject.create(
             convert(project.input,
                 project.input.traitSet
-                    .replace(PandasRel.CONVENTION)),
+                    .replace(PandasRel.CONVENTION).replace(batchProperty)),
             project.projects,
             project.rowType)
     }

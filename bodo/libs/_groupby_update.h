@@ -51,7 +51,7 @@ void cumulative_computation(std::shared_ptr<array_info> arr,
  */
 void head_computation(std::shared_ptr<array_info> arr,
                       std::shared_ptr<array_info> out_arr,
-                      const std::vector<int64_t>& row_list);
+                      const bodo::vector<int64_t>& row_list);
 
 // NGROUP
 
@@ -120,14 +120,14 @@ void shift_computation(std::shared_ptr<array_info> arr,
  * @param[out] m3_col_out The second moment output column.
  * @param[in] grp_info The grouping information.
  */
-void skew_combine(std::shared_ptr<array_info> count_col_in,
-                  std::shared_ptr<array_info> m1_col_in,
-                  std::shared_ptr<array_info> m2_col_in,
-                  std::shared_ptr<array_info> m3_col_in,
-                  std::shared_ptr<array_info> count_col_out,
-                  std::shared_ptr<array_info> m1_col_out,
-                  std::shared_ptr<array_info> m2_col_out,
-                  std::shared_ptr<array_info> m3_col_out,
+void skew_combine(const std::shared_ptr<array_info>& count_col_in,
+                  const std::shared_ptr<array_info>& m1_col_in,
+                  const std::shared_ptr<array_info>& m2_col_in,
+                  const std::shared_ptr<array_info>& m3_col_in,
+                  const std::shared_ptr<array_info>& count_col_out,
+                  const std::shared_ptr<array_info>& m1_col_out,
+                  const std::shared_ptr<array_info>& m2_col_out,
+                  const std::shared_ptr<array_info>& m3_col_out,
                   grouping_info const& grp_info);
 
 // Kurtosis
@@ -146,16 +146,16 @@ void skew_combine(std::shared_ptr<array_info> count_col_in,
  * @param[out] m3_col_out The second moment output column.
  * @param[in] grp_info The grouping information.
  */
-void kurt_combine(std::shared_ptr<array_info> count_col_in,
-                  std::shared_ptr<array_info> m1_col_in,
-                  std::shared_ptr<array_info> m2_col_in,
-                  std::shared_ptr<array_info> m3_col_in,
-                  std::shared_ptr<array_info> m4_col_in,
-                  std::shared_ptr<array_info> count_col_out,
-                  std::shared_ptr<array_info> m1_col_out,
-                  std::shared_ptr<array_info> m2_col_out,
-                  std::shared_ptr<array_info> m3_col_out,
-                  std::shared_ptr<array_info> m4_col_out,
+void kurt_combine(const std::shared_ptr<array_info>& count_col_in,
+                  const std::shared_ptr<array_info>& m1_col_in,
+                  const std::shared_ptr<array_info>& m2_col_in,
+                  const std::shared_ptr<array_info>& m3_col_in,
+                  const std::shared_ptr<array_info>& m4_col_in,
+                  const std::shared_ptr<array_info>& count_col_out,
+                  const std::shared_ptr<array_info>& m1_col_out,
+                  const std::shared_ptr<array_info>& m2_col_out,
+                  const std::shared_ptr<array_info>& m3_col_out,
+                  const std::shared_ptr<array_info>& m4_col_out,
                   grouping_info const& grp_info);
 
 // Variance
@@ -172,13 +172,32 @@ void kurt_combine(std::shared_ptr<array_info> count_col_in,
  * @param[out] m2_col_out The mean^2 output column.
  * @param[in] grp_info The grouping information.
  */
-void var_combine(std::shared_ptr<array_info> count_col_in,
-                 std::shared_ptr<array_info> mean_col_in,
-                 std::shared_ptr<array_info> m2_col_in,
-                 std::shared_ptr<array_info> count_col_out,
-                 std::shared_ptr<array_info> mean_col_out,
-                 std::shared_ptr<array_info> m2_col_out,
+void var_combine(const std::shared_ptr<array_info>& count_col_in,
+                 const std::shared_ptr<array_info>& mean_col_in,
+                 const std::shared_ptr<array_info>& m2_col_in,
+                 const std::shared_ptr<array_info>& count_col_out,
+                 const std::shared_ptr<array_info>& mean_col_out,
+                 const std::shared_ptr<array_info>& m2_col_out,
                  grouping_info const& grp_info);
+
+// Boolxor
+
+/**
+ * @brief Compute the boolxor_agg update function for combining
+ * the result of local reductions on each rank.
+ *
+ * @param[in] one_col_in The input column for if there is 1+ non-zero entries
+ * @param[in] two_col_in The input column for if there are 2+ non-zero entries
+ * @param[out] one_col_out The output column for if there is 1+ non-zero entries
+ * @param[out] two_col_out The output column for if there are 2+ non-zero
+ * entries
+ * @param[in] grp_info The grouping information.
+ */
+void boolxor_combine(const std::shared_ptr<array_info>& one_col_in,
+                     const std::shared_ptr<array_info>& two_col_in,
+                     const std::shared_ptr<array_info>& one_col_out,
+                     const std::shared_ptr<array_info>& two_col_out,
+                     grouping_info const& grp_info);
 
 // NUNIQUE
 

@@ -791,9 +791,15 @@ def cmp_timestamp_or_date(lhs, rhs):
         lhs, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
     ) and isinstance(rhs, bodo.hiframes.pd_timestamp_ext.PandasTimestampType)
 
-    # Timestamp + dt64 must be timezone naive
-    ts_and_dt64 = lhs == pd_timestamp_tz_naive_type and rhs == bodo.datetime64ns
-    dt64_and_ts = rhs == pd_timestamp_tz_naive_type and lhs == bodo.datetime64ns
+    # Timestamp + dt64
+    ts_and_dt64 = (
+        isinstance(lhs, bodo.hiframes.pd_timestamp_ext.PandasTimestampType)
+        and rhs == bodo.datetime64ns
+    )
+    dt64_and_ts = (
+        isinstance(rhs, bodo.hiframes.pd_timestamp_ext.PandasTimestampType)
+        and lhs == bodo.datetime64ns
+    )
 
     return ts_and_date or date_and_ts or ts_and_ts or ts_and_dt64 or dt64_and_ts
 

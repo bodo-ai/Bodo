@@ -1083,17 +1083,18 @@ def test_interval_join_detection(memory_leak_check):
             (
                 pd.DataFrame(
                     {
-                        "P": np.array([1.21, 2.37, np.NaN] * 3),
-                        "E": np.array(
-                            [np.NaN, -1.0, 2.4, np.NaN, 6.0, 7.3, 1.1, np.NaN, np.NaN]
+                        "P": pd.array([1.21, 2.37, None] * 3, dtype="Float64"),
+                        "E": pd.array(
+                            [None, -1.0, 2.4, None, 6.0, 7.3, 1.1, None, None],
+                            dtype="Float64",
                         ),
                         "G": ["some", "string", "."] * 3,
                     }
                 ),
                 pd.DataFrame(
                     {
-                        "A": np.array([1.0, 2.0, 3.0, 4.0] * 5),
-                        "B": np.array([1.1, 2.2, 3.3, 4.4, 5.5] * 4),
+                        "A": pd.array([1.0, 2.0, 3.0, 4.0] * 5, dtype="Float64"),
+                        "B": pd.array([1.1, 2.2, 3.3, 4.4, 5.5] * 4, dtype="Float64"),
                     }
                 ),
             ),

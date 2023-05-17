@@ -3,6 +3,7 @@
 #define _ARRAY_UTILS_H_INCLUDED
 
 #include <set>
+#include <span>
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
 #include "hyperloglog.hpp"
@@ -21,6 +22,7 @@
 #include <unordered_set>
 #define UNORD_MAP_CONTAINER std::unordered_map
 #define UNORD_SET_CONTAINER std::unordered_set
+#define UNORD_HASH std::hash
 #endif
 
 #ifdef USE_TSL_ROBIN
@@ -36,6 +38,7 @@
 #include <include/tsl/robin_set.h>
 #define UNORD_MAP_CONTAINER tsl::robin_map
 #define UNORD_SET_CONTAINER tsl::robin_set
+#define UNORD_HASH std::hash
 #endif
 
 #ifdef USE_TSL_SPARSE
@@ -44,12 +47,14 @@
 #include <include/tsl/sparse_set.h>
 #define UNORD_MAP_CONTAINER tsl::sparse_map
 #define UNORD_SET_CONTAINER tsl::sparse_set
+#define UNORD_HASH std::hash
 #endif
 
 #ifdef USE_TSL_HOPSCOTCH
 #include <include/tsl/hopscotch_set.h>
 #define UNORD_MAP_CONTAINER tsl::hopscotch_map
 #define UNORD_SET_CONTAINER tsl::hopscotch_set
+#define UNORD_HASH std::hash
 #endif
 
 #ifdef USE_ANKERL
@@ -57,6 +62,7 @@
 #include "ankerl/unordered_dense.h"
 #define UNORD_MAP_CONTAINER ankerl::unordered_dense::map
 #define UNORD_SET_CONTAINER ankerl::unordered_dense::set
+#define UNORD_HASH ankerl::unordered_dense::hash
 #endif
 
 #ifdef USE_ROBIN_HOOD_FLAT
@@ -64,6 +70,7 @@
 #include "robin_hood.h"
 #define UNORD_MAP_CONTAINER robin_hood::unordered_flat_map
 #define UNORD_SET_CONTAINER robin_hood::unordered_flat_set
+#define UNORD_HASH robin_hood::hash
 #endif
 
 #ifdef USE_ROBIN_HOOD_NODE
@@ -71,7 +78,21 @@
 #include "robin_hood.h"
 #define UNORD_MAP_CONTAINER robin_hood::unordered_node_map
 #define UNORD_SET_CONTAINER robin_hood::unordered_node_set
+#define UNORD_HASH robin_hood::hash
 #endif
+
+namespace bodo {
+template <typename Key, typename T, typename Hash = UNORD_HASH<Key>,
+          class KeyEqual = std::equal_to<Key>>
+using unord_map_container =
+    UNORD_MAP_CONTAINER<Key, T, Hash, KeyEqual,
+                        bodo::STLBufferPoolAllocator<std::pair<Key, T>>>;
+
+template <typename Key, typename Hash = UNORD_HASH<Key>,
+          class KeyEqual = std::equal_to<Key>>
+using unord_set_container =
+    UNORD_SET_CONTAINER<Key, Hash, KeyEqual, bodo::STLBufferPoolAllocator<Key>>;
+}  // namespace bodo
 
 // ------------------------------------------------
 
@@ -117,10 +138,9 @@ DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
 
 // select dtypes that can have sentinel nulls
 template <Bodo_CTypes::CTypeEnum DType>
-concept NullSentinelDtype = ((DType == Bodo_CTypes::FLOAT32) ||
-                             (DType == Bodo_CTypes::FLOAT64) ||
-                             (DType == Bodo_CTypes::DATETIME) ||
-                             (DType == Bodo_CTypes::TIMEDELTA));
+concept NullSentinelDtype =
+    ((DType == Bodo_CTypes::FLOAT32) || (DType == Bodo_CTypes::FLOAT64) ||
+     (DType == Bodo_CTypes::DATETIME) || (DType == Bodo_CTypes::TIMEDELTA));
 
 // ------------------------------------------------
 
@@ -209,15 +229,15 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
  *
  * @param arr1: the first column
  * @param arr2: the second column
- * @param short_write_idxs is the vector of indices in the short table
- * @param long_write_idxs is the vector of indices in the long table
+ * @param short_write_idxs is the span of indices in the short table
+ * @param long_write_idxs is the span of indices in the long table
  * @return one column of the table output.
  */
 std::shared_ptr<array_info> RetrieveArray_TwoColumns(
     std::shared_ptr<array_info> const& arr1,
     std::shared_ptr<array_info> const& arr2,
-    std::vector<int64_t> const& short_write_idxs,
-    std::vector<int64_t> const& long_write_idxs);
+    const std::span<const int64_t> short_write_idxs,
+    const std::span<const int64_t> long_write_idxs);
 
 /** This function returns the column with the rows with the rows given in
  * "ListIdx"
@@ -228,7 +248,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
  * @return one array
  */
 std::shared_ptr<array_info> RetrieveArray_SingleColumn(
-    std::shared_ptr<array_info> in_arr, std::vector<int64_t> const& ListIdx,
+    std::shared_ptr<array_info> in_arr, const std::span<const int64_t> ListIdx,
     bool use_nullable_arr = false);
 
 /** This function uses the combinatorial information computed in the
@@ -254,7 +274,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
  */
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    std::vector<int64_t> const& ListIdx, int const& n_cols_arg = -1);
+    const std::span<const int64_t> ListIdx, int const& n_cols_arg = -1);
 
 /**
  * @brief select rows and columns in input table specified by list of indices
@@ -267,7 +287,7 @@ std::shared_ptr<table_info> RetrieveTable(
  */
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    std::vector<int64_t> const& rowInds, std::vector<size_t> const& colInds);
+    const std::span<const int64_t> rowInds, std::vector<size_t> const& colInds);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
@@ -276,14 +296,15 @@ std::shared_ptr<table_info> RetrieveTable(
  *
  * @param arr1 the first column for the comparison
  * @param iRow1 the row of the first key
- * @param arr2 the second columne for the comparison
+ * @param arr2 the second column for the comparison
  * @param iRow2 the row of the second key
  * @param is_na_equal should na values be considered equal
  * @return True if they are equal and false otherwise.
  */
-bool TestEqualColumn(const std::shared_ptr<array_info> arr1, int64_t pos1,
-                     const std::shared_ptr<array_info> arr2, int64_t pos2,
-                     bool is_na_equal);
+bool TestEqualColumn(const std::shared_ptr<const array_info>& arr1,
+                     int64_t pos1,
+                     const std::shared_ptr<const array_info>& arr2,
+                     int64_t pos2, bool is_na_equal);
 
 /* This function test if two rows of two arrow columns (which may or may not be
  * the same) are equal, greater or lower than the other.
@@ -347,8 +368,8 @@ inline bool TestEqual(std::vector<std::shared_ptr<array_info>> const& columns,
  * @param is_na_equal Are NA values considered equal
  * @return True if they are equal and false otherwise.
  */
-inline bool TestEqualJoin(const std::shared_ptr<table_info> table1,
-                          const std::shared_ptr<table_info> table2,
+inline bool TestEqualJoin(const std::shared_ptr<table_info>& table1,
+                          const std::shared_ptr<table_info>& table2,
                           size_t const& iRow1, size_t const& iRow2,
                           size_t const& n_key, bool is_na_equal) {
     // iteration over the list of key for the comparison.
@@ -672,9 +693,9 @@ bool KeyComparisonAsPython(
     size_t const& shift_key2, size_t const& iRow2, int64_t* na_position);
 
 int KeyComparisonAsPython_Column(bool const& na_position_bis,
-                                 std::shared_ptr<array_info> arr1,
+                                 const std::shared_ptr<array_info>& arr1,
                                  size_t const& iRow1,
-                                 std::shared_ptr<array_info> arr2,
+                                 const std::shared_ptr<array_info>& arr2,
                                  size_t const& iRow2);
 
 /**
@@ -767,9 +788,9 @@ inline bool does_keys_have_nulls(
 }
 
 inline bool does_row_has_nulls(
-    std::vector<std::shared_ptr<array_info>> const& key_cols,
+    const std::vector<std::shared_ptr<array_info>>& key_cols,
     int64_t const& i) {
-    for (auto key_col : key_cols) {
+    for (const auto& key_col : key_cols) {
         if (key_col->arr_type == bodo_array_type::CATEGORICAL) {
             std::vector<char> vectNaN = RetrieveNaNentry(key_col->dtype);
             size_t siztype = numpy_item_size[key_col->dtype];
@@ -876,10 +897,10 @@ std::shared_ptr<array_info> concat_arrays(
  * @param arr2 Array for the end of the interval
  * @param idx Index to check
  */
-inline bool within_bounds_of_rank(std::shared_ptr<array_info> bounds_arr,
+inline bool within_bounds_of_rank(const std::shared_ptr<array_info>& bounds_arr,
                                   uint32_t rank, int n_pes,
-                                  std::shared_ptr<array_info> arr1,
-                                  std::shared_ptr<array_info> arr2,
+                                  const std::shared_ptr<array_info>& arr1,
+                                  const std::shared_ptr<array_info>& arr2,
                                   uint64_t idx) {
     // na_position_bis is true in our case since asc = true and na_last = true
     // which means that na_bis = (!na_last) ^ asc = true
@@ -902,9 +923,9 @@ inline bool within_bounds_of_rank(std::shared_ptr<array_info> bounds_arr,
  * @param strict Whether to consider [A, A] to be a bad interval
  * @return If the interval [arr1[idx], arr2[idx]] is bad
  */
-inline bool is_bad_interval(std::shared_ptr<array_info> arr1,
-                            std::shared_ptr<array_info> arr2, uint64_t idx,
-                            bool strict = true) {
+inline bool is_bad_interval(const std::shared_ptr<array_info>& arr1,
+                            const std::shared_ptr<array_info>& arr2,
+                            uint64_t idx, bool strict = true) {
     auto comp = KeyComparisonAsPython_Column(true, arr1, idx, arr2, idx);
     // strict == true: comp == -1 (A > B) or comp == 0 (A == B)
     // strict == false: comp == -1 (A > B)
@@ -920,10 +941,10 @@ inline bool is_bad_interval(std::shared_ptr<array_info> arr1,
  * @param total_size Total length of all the vectors.
  * @return std::vector<T> Flattened vector.
  */
-template <typename T>
-inline std::vector<T> flatten(std::vector<std::vector<T>> const& vec,
-                              uint64_t total_size) {
-    std::vector<T> flattened;
+template <typename T, typename S, typename V>
+inline std::vector<T, S> flatten(std::vector<std::vector<T, S>, V> const& vec,
+                                 uint64_t total_size) {
+    std::vector<T, S> flattened;
     flattened.reserve(total_size);
     for (auto const& v : vec) {
         flattened.insert(flattened.end(), v.begin(), v.end());
@@ -993,6 +1014,26 @@ inline void restore_col_order(
     }
     table->columns.clear();
     table->columns = new_columns;
+}
+
+/**
+ * @brief Convert the given value to a double.
+ *
+ * @tparam T The input type.
+ * @tparam dtype The underlying dtype of the input type.
+ * @param val The value to convert
+ * @return Val as a double.
+ */
+template <typename T, int dtype>
+inline typename std::enable_if<!is_decimal<dtype>::value, double>::type
+to_double(T const& val) {
+    return static_cast<double>(val);
+}
+
+template <typename T, int dtype>
+inline typename std::enable_if<is_decimal<dtype>::value, double>::type
+to_double(T const& val) {
+    return decimal_to_double(val);
 }
 
 #endif  // _ARRAY_UTILS_H_INCLUDED

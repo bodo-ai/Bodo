@@ -6,9 +6,11 @@ trigger:
 
 pr: none
 
-#Currently nightly can take up to ~12 hours to run. 9PM is a good time to start.
+
+#Currently nightly can take up to ~12 hours to run. 1 AM is a good time to start.
+# (Note that this is in UTC time, so 1AM UTC is 8PM EST)
 schedules:
-- cron: "0 0 20 * MON-FRI"
+- cron: "0 1 * * MON-FRI"
   displayName: 'Weekdays Daily midnight build'
   branches:
     include:
@@ -136,136 +138,267 @@ stages:
       caching_test: false
       PYTHON_VERSION: 3.10
       matrix:
-        BODO_1P_1_OF_11:
+        BODO_1P_1_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1of11 and not weekly
+          PYTEST_MARKER: bodo_1of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_1P_2_OF_11:
+        BODO_1P_2_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_2of11 and not weekly
+          PYTEST_MARKER: bodo_2of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_1P_3_OF_11:
+        BODO_1P_3_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3of11 and not weekly
+          PYTEST_MARKER: bodo_3of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_1P_4_OF_11:
+        BODO_1P_4_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_4of11 and not weekly
+          PYTEST_MARKER: bodo_4of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_1P_5_OF_11:
+        BODO_1P_5_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5of11 and not weekly
+          PYTEST_MARKER: bodo_5of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_1P_6_OF_11:
+        BODO_1P_6_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_6of11 and not weekly
+          PYTEST_MARKER: bodo_6of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_1P_7_OF_11:
+        BODO_1P_7_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_7of11 and not weekly
+          PYTEST_MARKER: bodo_7of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_1P_8_OF_11:
+        BODO_1P_8_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_8of11 and not weekly
+          PYTEST_MARKER: bodo_8of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_1P_9_OF_11:
+        BODO_1P_9_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_9of11 and not weekly
+          PYTEST_MARKER: bodo_9of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_1P_10_OF_11:
+        BODO_1P_10_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_9of11 and not weekly
+          PYTEST_MARKER: bodo_10of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_1P_11_OF_11:
+        BODO_1P_11_OF_22:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_9of11 and not weekly
+          PYTEST_MARKER: bodo_11of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_1_OF_15:
+        BODO_1P_12_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_12of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_1P_13_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_13of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_1P_14_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_14of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_1P_15_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_15of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_1P_16_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_16of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_1P_17_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_17of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_1P_18_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_18of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_1P_19_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_19of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_1P_20_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_20of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_1P_21_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_21of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_1P_22_OF_22:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_22of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_1_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1of15 and not weekly
+          PYTEST_MARKER: bodo_1of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_2_OF_15:
+        BODO_2P_2_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_2of15 and not weekly
+          PYTEST_MARKER: bodo_2of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_3_OF_15:
+        BODO_2P_3_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3of15 and not weekly
+          PYTEST_MARKER: bodo_3of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_4_OF_15:
+        BODO_2P_4_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_4of15 and not weekly
+          PYTEST_MARKER: bodo_4of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_5_OF_15:
+        BODO_2P_5_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5of15 and not weekly
+          PYTEST_MARKER: bodo_5of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_6_OF_15:
+        BODO_2P_6_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_6of15 and not weekly
+          PYTEST_MARKER: bodo_6of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_7_OF_15:
+        BODO_2P_7_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_7of15 and not weekly
+          PYTEST_MARKER: bodo_7of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_8_OF_15:
+        BODO_2P_8_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_8of15 and not weekly
+          PYTEST_MARKER: bodo_8of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_9_OF_15:
+        BODO_2P_9_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_9of15 and not weekly
+          PYTEST_MARKER: bodo_9of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_10_OF_15:
+        BODO_2P_10_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_10of15 and not weekly
+          PYTEST_MARKER: bodo_10of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_11_OF_15:
+        BODO_2P_11_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_11of15 and not weekly
+          PYTEST_MARKER: bodo_11of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_12_OF_15:
+        BODO_2P_12_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_12of15 and not weekly
+          PYTEST_MARKER: bodo_12of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_13_OF_15:
+        BODO_2P_13_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_13of15 and not weekly
+          PYTEST_MARKER: bodo_13of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_14_OF_15:
+        BODO_2P_14_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_14of15 and not weekly
+          PYTEST_MARKER: bodo_14of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODO_2P_15_OF_15:
+        BODO_2P_15_OF_30:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_15of15 and not weekly
+          PYTEST_MARKER: bodo_15of30 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_16_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_16of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_17_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_17of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_18_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_18of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_19_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_19of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_20_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_20of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_21_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_21of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_22_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_22of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_23_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_23of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_24_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_24of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_25_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_25of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_26_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_26of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_27_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_27of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_28_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_28of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_29_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_29of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODO_2P_30_OF_30:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_30of30 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+
 
 
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
@@ -296,74 +429,143 @@ stages:
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
       matrix:
-        BODOSQL_1P_1_OF_6:
+        BODOSQL_1P_1_OF_12:
           NP: 1
-          PYTEST_MARKER: bodosql_1of6 and not weekly
+          PYTEST_MARKER: bodosql_1of12 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_1P_2_OF_6:
+        BODOSQL_1P_2_OF_12:
           NP: 1
-          PYTEST_MARKER: bodosql_2of6 and not weekly
+          PYTEST_MARKER: bodosql_2of12 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_1P_3_OF_6:
+        BODOSQL_1P_3_OF_12:
           NP: 1
-          PYTEST_MARKER: bodosql_3of6 and not weekly
+          PYTEST_MARKER: bodosql_3of12 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_1P_4_OF_6:
+        BODOSQL_1P_4_OF_12:
           NP: 1
-          PYTEST_MARKER: bodosql_4of6 and not weekly
+          PYTEST_MARKER: bodosql_4of12 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_1P_5_OF_6:
+        BODOSQL_1P_5_OF_12:
           NP: 1
-          PYTEST_MARKER: bodosql_5of6 and not weekly
+          PYTEST_MARKER: bodosql_5of12 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_1P_6_OF_6:
+        BODOSQL_1P_6_OF_12:
           NP: 1
-          PYTEST_MARKER: bodosql_6of6 and not weekly
+          PYTEST_MARKER: bodosql_6of12 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_1_OF_11:
+        BODOSQL_1P_7_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_7of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_8_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_8of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_9_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_9of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_10_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_10of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_11_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_11of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_1P_12_OF_12:
+          NP: 1
+          PYTEST_MARKER: bodosql_12of12 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_1_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_1of11 and not weekly
+          PYTEST_MARKER: bodosql_1of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_2_OF_11:
+        BODOSQL_2P_2_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_2of11 and not weekly
+          PYTEST_MARKER: bodosql_2of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_3_OF_11:
+        BODOSQL_2P_3_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_3of11 and not weekly
+          PYTEST_MARKER: bodosql_3of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_4_OF_11:
+        BODOSQL_2P_4_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_4of11 and not weekly
+          PYTEST_MARKER: bodosql_4of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_5_OF_11:
+        BODOSQL_2P_5_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_5of11 and not weekly
+          PYTEST_MARKER: bodosql_5of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_6_OF_11:
+        BODOSQL_2P_6_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_6of11 and not weekly
+          PYTEST_MARKER: bodosql_6of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_7_OF_11:
+        BODOSQL_2P_7_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_7of11 and not weekly
+          PYTEST_MARKER: bodosql_7of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_8_OF_11:
+        BODOSQL_2P_8_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_8of11 and not weekly
+          PYTEST_MARKER: bodosql_8of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_9_OF_11:
+        BODOSQL_2P_9_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_9of11 and not weekly
+          PYTEST_MARKER: bodosql_9of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_10_OF_11:
+        BODOSQL_2P_10_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_10of11 and not weekly
+          PYTEST_MARKER: bodosql_10of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
-        BODOSQL_2P_11_OF_11:
+        BODOSQL_2P_11_OF_22:
           NP: 2
-          PYTEST_MARKER: bodosql_11of11 and not weekly
+          PYTEST_MARKER: bodosql_11of22 and not weekly
           BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_12_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_12of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_13_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_13of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_14_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_14of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_15_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_15of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_16_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_16of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_17_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_17of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_18_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_18of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_19_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_19of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_20_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_20of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_21_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_21of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+        BODOSQL_2P_22_OF_22:
+          NP: 2
+          PYTEST_MARKER: bodosql_22of22 and not weekly
+          BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: true
+
 
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:

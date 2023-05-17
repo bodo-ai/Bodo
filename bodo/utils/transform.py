@@ -265,6 +265,8 @@ no_side_effect_call_tuples = {
     (bodo.libs.array_item_arr_ext.pre_alloc_array_item_array,),
     ("dist_reduce", "distributed_api", "libs", bodo),
     (bodo.libs.distributed_api.dist_reduce,),
+    ("get_chunk_bounds", "distributed_api", "libs", bodo),
+    (bodo.libs.distributed_api.get_chunk_bounds,),
     ("pre_alloc_string_array", "str_arr_ext", "libs", bodo),
     (bodo.libs.str_arr_ext.pre_alloc_string_array,),
     ("pre_alloc_binary_array", "binary_arr_ext", "libs", bodo),
@@ -1376,7 +1378,7 @@ def extract_keyvals_from_struct_map(f_ir, build_map, loc, scope, typemap=None):
     keys = []
     key_strs = []
     values = []
-    for (k, v) in build_map.items:
+    for k, v in build_map.items:
         k_str = find_const(f_ir, k)
         require(isinstance(k_str, str))
         key_strs.append(k_str)

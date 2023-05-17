@@ -1,16 +1,23 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
+
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
+import org.apache.calcite.sql.fun.SqlCoalesceFunction;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SameOperandTypeChecker;
 import org.apache.calcite.sql.type.SqlOperandTypeInference;
 import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
+import org.apache.calcite.sql.validate.implicit.TypeCoercion;
 import org.apache.calcite.util.Optionality;
 
 public final class NumericOperatorTable implements SqlOperatorTable {
@@ -286,8 +293,10 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction SINH = SqlLibraryOperators.SINH;
   public static final SqlFunction TANH = SqlLibraryOperators.TANH;
 
-  public static final SqlFunction GREATEST = SqlLibraryOperators.GREATEST;
-  public static final SqlFunction LEAST = SqlLibraryOperators.LEAST;
+  public static final SqlFunction GREATEST =
+      new SqlLeastGreatestFunction("GREATEST", SqlKind.GREATEST);
+
+  public static final SqlFunction LEAST = new SqlLeastGreatestFunction("LEAST", SqlKind.LEAST);
 
   public static final SqlBasicAggFunction VARIANCE_POP =
       SqlBasicAggFunction.create(
@@ -300,6 +309,14 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlBasicAggFunction CORR =
       SqlBasicAggFunction.create(
           "CORR", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.NUMERIC_NUMERIC);
+
+  public static final SqlAggFunction APPROX_PERCENTILE =
+      SqlBasicAggFunction.create(
+              "APPROX_PERCENTILE",
+              SqlKind.OTHER_FUNCTION,
+              ReturnTypes.DOUBLE_NULLABLE,
+              OperandTypes.NUMERIC_NUMERIC)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
 
   public static final SqlAggFunction MEDIAN =
       SqlBasicAggFunction.create(
@@ -384,6 +401,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           ACOSH,
           ASINH,
           ATANH,
+          APPROX_PERCENTILE,
           COSH,
           SINH,
           TANH,
@@ -449,5 +467,51 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   @Override
   public List<SqlOperator> getOperatorList() {
     return functionList;
+  }
+
+  private static class SqlLeastGreatestFunction extends SqlFunction {
+    public SqlLeastGreatestFunction(String name, SqlKind kind) {
+      super(
+          name,
+          kind,
+          ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE),
+          null,
+          LeastGreatestOperandTypeChecker.INSTANCE,
+          SqlFunctionCategory.SYSTEM);
+    }
+
+    @Override
+    public @Nullable SqlOperator reverse() {
+      if (getKind() == SqlKind.GREATEST) {
+        return LEAST;
+      } else {
+        return GREATEST;
+      }
+    }
+
+    private static class LeastGreatestOperandTypeChecker extends SameOperandTypeChecker {
+      public LeastGreatestOperandTypeChecker() {
+        super(-1);
+      }
+
+      public static LeastGreatestOperandTypeChecker INSTANCE = new LeastGreatestOperandTypeChecker();
+
+      @Override
+      public boolean checkOperandTypes(SqlCallBinding callBinding, boolean throwOnFailure) {
+        if (callBinding.isTypeCoercionEnabled()) {
+          TypeCoercion typeCoercion = callBinding.getValidator().getTypeCoercion();
+          List<RelDataType> operandTypes = callBinding.collectOperandTypes();
+          RelDataType type = typeCoercion.getWiderTypeFor(operandTypes, true);
+          if (null != type) {
+            ArrayList<SqlTypeFamily> expectedFamilies = new ArrayList<>();
+            for (int i = 0; i < operandTypes.size(); i++) {
+              expectedFamilies.add(type.getSqlTypeName().getFamily());
+            }
+            typeCoercion.builtinFunctionCoercion(callBinding, operandTypes, expectedFamilies);
+          }
+        }
+        return super.checkOperandTypes(callBinding, throwOnFailure);
+      }
+    }
   }
 }

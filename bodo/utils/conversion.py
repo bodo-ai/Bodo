@@ -150,7 +150,6 @@ def overload_coerce_to_ndarray(
 
     # list/UniTuple
     if isinstance(data, (types.List, types.UniTuple)):
-
         # If we have an optional type, extract the underlying type
         elem_type = data.dtype
         if isinstance(elem_type, types.Optional):
@@ -204,7 +203,6 @@ def overload_coerce_to_ndarray(
     # TODO: make sure scalar is a Numpy dtype
 
     if not is_overload_none(scalar_to_arr_len):
-
         if isinstance(data, Decimal128Type):
             precision = data.precision
             scale = data.scale
@@ -279,7 +277,6 @@ def overload_coerce_to_ndarray(
             return impl_ts
 
         if isinstance(data, bodo.hiframes.time_ext.TimeType):
-
             precision = data.precision
 
             def impl_ts(
@@ -672,7 +669,6 @@ def overload_coerce_to_array(
     if isinstance(data, types.List) and isinstance(
         data.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
     ):
-
         # Currently only support tz naive. Need an allocation function.
         bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
             data, "coerce_to_array()"
@@ -981,7 +977,6 @@ def overload_fix_arr_dtype(
                 n = len(data)
                 A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
                 for j in numba.parfors.parfor.internal_prange(n):
-
                     if bodo.libs.array_kernels.isna(data, j):
                         bodo.libs.array_kernels.setna(A, j)
                     else:
@@ -1004,7 +999,6 @@ def overload_fix_arr_dtype(
                 n = len(data)
                 A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
                 for j in numba.parfors.parfor.internal_prange(n):
-
                     if bodo.libs.array_kernels.isna(data, j):
                         if nan_to_str:
                             A[j] = "NaT"
@@ -1029,7 +1023,6 @@ def overload_fix_arr_dtype(
                 n = len(data)
                 A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
                 for j in numba.parfors.parfor.internal_prange(n):
-
                     if bodo.libs.array_kernels.isna(data, j):
                         if nan_to_str:
                             A[j] = "nan"
@@ -1049,7 +1042,6 @@ def overload_fix_arr_dtype(
         def impl_cat_dtype(
             data, new_dtype, copy=None, nan_to_str=True, from_series=False
         ):  # pragma: no cover
-
             n = len(data)
             numba.parfors.parfor.init_prange()
             label_dict = (
@@ -1082,7 +1074,6 @@ def overload_fix_arr_dtype(
         def impl_category(
             data, new_dtype, copy=None, nan_to_str=True, from_series=False
         ):  # pragma: no cover
-
             # find categories in data, droping na
             cats = bodo.libs.array_kernels.unique(data, dropna=True)
             # sort categories to match Pandas behavior
@@ -1130,6 +1121,8 @@ def overload_fix_arr_dtype(
             isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype)
             and data.dtype == nb_dtype.dtype
         )
+    elif data == bodo.boolean_array_type:
+        same_typ = nb_dtype == boolean_dtype
     elif bodo.utils.utils.is_array_typ(nb_dtype, False):
         same_typ = data == nb_dtype
     else:
@@ -1299,7 +1292,6 @@ def overload_fix_arr_dtype(
 
     # Datetime64 case
     if nb_dtype == bodo.datetime64ns:
-
         if data.dtype == bodo.string_type:
             # Support String Arrays using objmode
             def impl_str(
@@ -1347,7 +1339,6 @@ def overload_fix_arr_dtype(
 
     # Timedelta64 case
     if nb_dtype == bodo.timedelta64ns:
-
         if data.dtype == bodo.string_type:
             # Support String Arrays using objmode
             def impl_str(

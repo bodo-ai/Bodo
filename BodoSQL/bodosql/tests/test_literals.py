@@ -121,6 +121,7 @@ def test_mysql_timestamp_literal(basic_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_date_literal(basic_df, spark_info, memory_leak_check):
     """
     tests that the date keyword is correctly parsed/converted to timestamp by BodoSQL
@@ -251,6 +252,7 @@ def test_binary_literals(basic_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_integer_literals(basic_df, spark_info, memory_leak_check):
     """
     tests that integer literals are correctly parsed by BodoSQL
@@ -270,6 +272,7 @@ def test_integer_literals(basic_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_float_literals(basic_df, spark_info, memory_leak_check):
     """
     tests that float literals are correctly parsed by BodoSQL
@@ -289,6 +292,7 @@ def test_float_literals(basic_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_timestamp_null_literal(basic_df, spark_info, memory_leak_check):
     """
     tests that timestamp literals are correctly parsed by BodoSQL

@@ -9,6 +9,7 @@ import pytest
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.slow
 def test_null_then(bodosql_nullable_numeric_types, spark_info, memory_leak_check):
     """tests a case statement that always evaluates to true propagates
     null values correctly."""
@@ -70,6 +71,7 @@ def test_null_else(bodosql_nullable_numeric_types, spark_info, memory_leak_check
     )
 
 
+@pytest.mark.slow
 def test_null_else_handled(
     bodosql_nullable_numeric_types, spark_info, memory_leak_check
 ):
@@ -105,6 +107,7 @@ def test_null_else_multicolumn(
     )
 
 
+@pytest.mark.slow
 def test_null_when(bodosql_nullable_numeric_types, spark_info, memory_leak_check):
     """tests a case statement where when may have null values is handled properly."""
     query = "Select Case WHEN A > 2 THEN B ELSE C END FROM table1"
@@ -187,6 +190,7 @@ def test_null_when_or(bodosql_nullable_numeric_types, spark_info, memory_leak_ch
     )
 
 
+@pytest.mark.slow
 def test_null_when_and(bodosql_nullable_numeric_types, spark_info, memory_leak_check):
     """tests a case statement where when may have null values using or is handled properly."""
     query = "Select Case WHEN A > 2 AND B < 6 THEN B ELSE C END FROM table1"
@@ -258,6 +262,7 @@ def test_null_scalars_cast(basic_df, spark_info, scalar_values, memory_leak_chec
     )
 
 
+@pytest.mark.slow
 def test_null_literal_then_else(major_types_nullable, memory_leak_check):
     """
     Tests passing a null literal to a case statement for each major type.
