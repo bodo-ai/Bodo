@@ -16,6 +16,7 @@ import pandas as pd
 from numba.core import ir, ir_utils, types
 from numba.core.compiler_machinery import register_pass
 from numba.core.extending import register_jitable
+from numba.core.inline_closurecall import inline_closure_call
 from numba.core.ir_utils import (
     GuardException,
     compute_cfg_from_blocks,
@@ -45,11 +46,14 @@ from bodo.ir.filter import supported_arrow_funcs_map, supported_funcs_map
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (
+    ReplaceFunc,
     compile_func_single_block,
     container_update_method_names,
     get_call_expr_arg,
     get_const_value_inner,
+    replace_func,
     set_call_expr_arg,
+    update_locs,
     update_node_list_definitions,
 )
 from bodo.utils.typing import (
@@ -393,8 +397,6 @@ class TypingTransforms:
         self.rerun_after_dce = False
 
     def run(self):
-        # XXX: the block structure shouldn't change in this pass since labels
-        # are used in analysis (e.g. df creation points in rhs_labels)
         blocks = self.func_ir.blocks
         topo_order = find_topo_order(blocks)
         self._updated_containers, self._equiv_vars = _find_updated_containers(
@@ -403,8 +405,9 @@ class TypingTransforms:
         for label in topo_order:
             block = blocks[label]
             self._working_body = []
-            for inst in block.body:
+            for i, inst in enumerate(block.body):
                 self._replace_vars(inst)
+
                 out_nodes = [inst]
                 self.curr_loc = inst.loc
 
@@ -419,7 +422,16 @@ class TypingTransforms:
                     self.rhs_labels[inst.value] = label
                     out_nodes = self._run_assign(inst, label)
 
+                if isinstance(out_nodes, ReplaceFunc):
+                    self._handle_inline_func(out_nodes, inst, i, block)
+                    # We use block labels in this pass (rhs_labels for finding df definition dominators)
+                    # so need to start over when block structure changes.
+                    # Returning tried_unrolling=False since control flow changes and need
+                    # to try again.
+                    return True, self.needs_transform, False
+
                 self._working_body.extend(out_nodes)
+
                 update_node_list_definitions(out_nodes, self.func_ir)
                 for inst in out_nodes:
                     if is_assign(inst):
@@ -442,6 +454,51 @@ class TypingTransforms:
         mini_dce(self.func_ir)
 
         return self.changed, self.needs_transform, self.tried_unrolling
+
+    def _handle_inline_func(
+        self, replacement_func, orig_inst, orig_inst_idx, cur_block
+    ):
+        """
+        Helper function used to handle ReplaceFunc nodes in run().
+        This is largely copied from the code that handles this in series pass.
+
+        Handles inlining the call, appending the remaining instructions in the
+        current block to the working body, and then updating the current block body
+        """
+
+        # Replace inst.value with a call with target args
+        # as expected by inline_closure_call (the only supported format is ir.Call).
+        # orig_inst is replaced anyways so it is ok to change it.
+        orig_inst.value = ir.Expr.call(
+            ir.Var(cur_block.scope, mk_unique_var("dummy"), orig_inst.loc),
+            replacement_func.args,
+            (),
+            orig_inst.loc,
+        )
+
+        # Update block body with nodes that are processed already (_working_body)
+        cur_block.body = self._working_body + cur_block.body[orig_inst_idx:]
+
+        # use callee_validator mechanism to run untyped pass as a workaround
+        def run_untyped_pass(new_ir):
+            untyped_pass = bodo.transforms.untyped_pass.UntypedPass(
+                new_ir, self.typingctx, replacement_func.arg_types, {}, {}, self.flags
+            )
+            untyped_pass.run()
+
+        callee_blocks, _ = inline_closure_call(
+            self.func_ir,
+            replacement_func.glbls,
+            cur_block,
+            len(self._working_body),
+            replacement_func.func,
+            callee_validator=run_untyped_pass,
+        )
+        for c_block in callee_blocks.values():
+            c_block.loc = self.curr_loc
+            update_locs(c_block.body, self.curr_loc)
+
+        self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
 
     def _run_assign(self, assign, label):
         rhs = assign.value
@@ -2723,6 +2780,7 @@ class TypingTransforms:
             "sql",
             "_test_sql_unoptimized",
             "convert_to_pandas",
+            "__gen_control_flow_fn",
         ):  # pragma: no cover
             # Try import BodoSQL and check the type
             try:  # pragma: no cover
@@ -4099,6 +4157,7 @@ class TypingTransforms:
             return None
 
         sql_context_type = determine_bodosql_context_type(sql_context_var)
+
         if sql_context_type is None:
             # cannot transform yet if type is not available yet
             return [assign]
@@ -4171,23 +4230,35 @@ class TypingTransforms:
             ) = bodosql.context_ext._gen_pd_func_str_for_query(
                 sql_context_type, sql_str, keys, value_typs
             )
+        elif func_name == "__gen_control_flow_fn":
+            """This is a temporary function that should only exist until
+            we've merged streaming into the main branch, and then should
+            be removed, along with overload_test_sql_control_flow in
+            BodoSQL/bodosql/context_ext.py
+            """
+            fn_txt, fn_arg = guard(find_build_tuple, self.func_ir, rhs.args[0])
+            func_text = get_overload_const_str(self.typemap[fn_txt.name])
+            values = [fn_arg]
+            loc_vars = {}
+            exec(
+                func_text,
+                {},
+                loc_vars,
+            )
+            impl = loc_vars["impl"]
+            additional_globals_to_lower = {}
 
         self.changed = True
         # BodoSQL generates df.columns setattr, which needs another transform to work
         # (See BodoSQL #189)
         self.needs_transform = True
-        block_body = compile_func_single_block(
+
+        return replace_func(
+            self,
             impl,
             [sql_context_var] + values,
-            assign.target,
-            self,
-            infer_types=False,
-            run_untyped_pass=True,
-            flags=self.flags,
-            replace_globals=False,
             extra_globals=additional_globals_to_lower,
         )
-        return block_body
 
     def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):
         """Convert call argument to tuple if it is a constant list"""
@@ -4977,6 +5048,7 @@ class TypingTransforms:
                 {"func_ir": self.func_ir, "locals": self.locals}
             )
         )
+
         self.changed = True
 
     def _get_enclosing_loop(self, var, label, cfg):

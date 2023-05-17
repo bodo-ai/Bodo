@@ -181,7 +181,7 @@ class DistributedDiagnostics:
 
         # trace diag info
         print()
-        for (l, loc) in self.diag_info:
+        for l, loc in self.diag_info:
             print(l)
             if loc is not None:
                 print(loc.strformat())
@@ -725,7 +725,7 @@ class DistributedAnalysis:
         )
         par_index_var = parfor.loop_nests[0].index_variable.name
 
-        for (arr, index, _) in array_accesses:
+        for arr, index, _ in array_accesses:
             # XXX sometimes copy propagation doesn't work for parfor indices
             # so see if the index has a single variable definition and use it
             # e.g. test_to_numeric
@@ -1134,9 +1134,7 @@ class DistributedAnalysis:
             return
 
         if func_mod in ("sklearn.metrics._regression", "sklearn.metrics"):
-
             if func_name in {"mean_squared_error", "mean_absolute_error", "r2_score"}:
-
                 self._set_REP(
                     lhs, array_dists, f"output of {func_name} is REP", rhs.loc
                 )
@@ -1667,7 +1665,6 @@ class DistributedAnalysis:
                 return
 
         if fdef == ("is_in", "bodo.libs.bodosql_array_kernels"):
-
             # Case 1: DIST DIST -> DIST, is_parallel=True
             # Case 2: REP  REP  -> REP, is_parallel=False
             # Case 3: DIST REP  -> DIST, is_parallel=False
@@ -3628,7 +3625,6 @@ class DistributedAnalysis:
                 mod = str(self.typemap[mod.name])
             fname = mod + "." + name
         if len(arrs) > 0:
-
             info = (
                 "Distributed analysis set '{}' as replicated due "
                 "to call to function '{}' (unsupported function or usage)"

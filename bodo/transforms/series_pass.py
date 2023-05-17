@@ -1014,7 +1014,6 @@ class SeriesPass:
                 and (typ1 == datetime_timedelta_type or is_timedelta64_series_typ(typ1))
             )
         ):
-
             impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
                 typ1, typ2
             )
@@ -1484,7 +1483,6 @@ class SeriesPass:
             and len(rhs.args) == 1
             and isinstance(self.typemap[rhs.args[0].name], SeriesType)
         ):
-
             impl = getattr(bodo.hiframes.series_impl, "overload_series_" + func_name)(
                 self.typemap[rhs.args[0].name]
             )
@@ -1504,7 +1502,6 @@ class SeriesPass:
                 (IntegerArrayType, FloatingArrayType, BooleanArrayType),
             )
         ):
-
             impl = getattr(bodo.libs.array_kernels, "overload_array_" + func_name)(
                 self.typemap[rhs.args[0].name]
             )
@@ -2016,7 +2013,6 @@ class SeriesPass:
             )
 
         if fdef == ("Series", "pandas"):
-
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 
@@ -2598,7 +2594,6 @@ class SeriesPass:
             return [assign]
 
         if fdef == ("val_isin_dummy", "bodo.hiframes.pd_dataframe_ext"):
-
             func_text = (
                 ""
                 "def impl(S, vals):\n"
@@ -2617,7 +2612,6 @@ class SeriesPass:
             return replace_func(self, loc_vars["impl"], rhs.args)
 
         if fdef == ("val_notin_dummy", "bodo.hiframes.pd_dataframe_ext"):
-
             func_text = (
                 ""
                 "def impl(S, vals):\n"
@@ -2693,7 +2687,6 @@ class SeriesPass:
 
         # dummy count loop to support len of group in agg UDFs
         if fdef == ("dummy_agg_count", "bodo.ir.aggregate"):
-
             func_text = (
                 ""
                 "def impl_agg_c(A):\n"
@@ -2985,7 +2978,6 @@ class SeriesPass:
         """
         np_ufunc = getattr(np, ufunc_name)
         if np_ufunc.nin == 1:
-
             func_text = (
                 ""
                 "def impl(S):\n"
@@ -3004,7 +2996,6 @@ class SeriesPass:
             )
         elif np_ufunc.nin == 2:
             if isinstance(self.typemap[args[0].name], SeriesType):
-
                 func_text = (
                     ""
                     "def impl(S1, S2):\n"
@@ -3437,7 +3428,6 @@ class SeriesPass:
 
         # dictionary input case
         if isinstance(func_type, types.DictType):
-
             func_text = (
                 ""
                 "def impl(A, index, name, d):\n"
@@ -3614,7 +3604,6 @@ class SeriesPass:
         """inline implementation for rolling_corr/cov functions"""
 
         if func_name == "rolling_corr":
-
             func_text = (
                 ""
                 "def rolling_corr_impl(arr, other, win, minp, center):\n"
@@ -3633,7 +3622,6 @@ class SeriesPass:
             return replace_func(self, loc_vars["rolling_corr_impl"], rhs.args)
 
         if func_name == "rolling_cov":
-
             func_text = (
                 ""
                 "def rolling_cov_impl(arr, other, w, minp, center):\n"
