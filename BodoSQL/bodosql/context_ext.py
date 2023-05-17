@@ -460,18 +460,22 @@ def _gen_pd_func_and_glbls_for_query(
         bodo_sql_context_type, sql_str, param_keys, param_values
     )
 
+    glbls = {
+        "pd": pd,
+        "np": np,
+        "bodo": bodo,
+        "re": re,
+        "bodosql": bodosql,
+        "time": time,
+        "datetime": datetime,
+    }
+
+    glbls.update(glblsToLower)
+
     loc_vars = {}
     exec(
         func_text,
-        {
-            "pd": pd,
-            "np": np,
-            "bodo": bodo,
-            "re": re,
-            "bodosql": bodosql,
-            "time": time,
-            "datetime": datetime,
-        },
+        glbls,
         loc_vars,
     )
     impl = loc_vars["impl"]
@@ -564,5 +568,18 @@ def overload_test_sql_unoptimized(bodo_sql_context, sql_str):
     """BodoSQLContextType._test_sql_unoptimized() should be handled in bodo typing pass since the
     generated code cannot be handled in regular overloads
     (requires Bodo's untyped pass and typing pass)
+    """
+    bodo.utils.typing.raise_bodo_error("Invalid BodoSQLContext.sql() call")
+
+
+@overload_method(
+    BodoSQLContextType, "__gen_control_flow_fn", inline="always", no_unliteral=True
+)
+def overload_test_sql_control_flow(bodo_sql_context, fn_to_inline):
+    """
+    This is a temporary function that should only exist until
+    we've merged streaming into the main branch, and then should
+    be removed, along with test_bodosql_inline_control_flow in
+    BodoSQL/bodosql/tests/test_types/test_bodosql_context.py
     """
     bodo.utils.typing.raise_bodo_error("Invalid BodoSQLContext.sql() call")
