@@ -187,7 +187,7 @@ def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
@@ -262,7 +262,7 @@ def test_cyclic_alias(join_dataframes, spark_info, memory_leak_check):
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
@@ -308,7 +308,7 @@ def test_col_aliased_to_tablename(join_dataframes, spark_info, memory_leak_check
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
@@ -353,7 +353,7 @@ def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
@@ -398,7 +398,7 @@ def test_multitable_renamed_projection(join_dataframes, spark_info, memory_leak_
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
@@ -459,7 +459,7 @@ def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
@@ -496,24 +496,66 @@ def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
         convert_columns_bytearray=convert_columns_bytearray2,
     )
 
+
+@pytest.mark.slow
 def test_unreserved_kw(spark_info, memory_leak_check):
-    """ Test that language/lead/user/method/rank 
-    """
-    query = 'SELECT t.LANGUAGE, t.LEAD, t.USER, t.METHOD, t.RANK AS A FROM table1 t'
+    """Test that language/lead/user/method/rank"""
+    query = "SELECT t.LANGUAGE, t.LEAD, t.USER, t.METHOD, t.RANK AS A FROM table1 t"
     check_query(
         query,
-        {"table1": pd.DataFrame({"LANGUAGE": ["A", "B", "C", "D", "E"],
-        "LEAD": ["A", "B", "C", "D", "E"],
-        "USER": ["A", "B", "C", "D", "E"],
-        "METHOD": ["A", "B", "C", "D", "E"],
-        "RANK": ["A", "B", "C", "D", "E"]
-                                 })},
+        {
+            "table1": pd.DataFrame(
+                {
+                    "LANGUAGE": ["A", "B", "C", "D", "E"],
+                    "LEAD": ["A", "B", "C", "D", "E"],
+                    "USER": ["A", "B", "C", "D", "E"],
+                    "METHOD": ["A", "B", "C", "D", "E"],
+                    "RANK": ["A", "B", "C", "D", "E"],
+                }
+            )
+        },
         spark_info,
-        expected_output = pd.DataFrame({"A": ["A", "B", "C", "D", "E"],
-        "LEAD": ["A", "B", "C", "D", "E"],
-        "USER": ["A", "B", "C", "D", "E"],
-        "METHOD": ["A", "B", "C", "D", "E"],
-        "RANK": ["A", "B", "C", "D", "E"]
-        }),
+        expected_output=pd.DataFrame(
+            {
+                "A": ["A", "B", "C", "D", "E"],
+                "LEAD": ["A", "B", "C", "D", "E"],
+                "USER": ["A", "B", "C", "D", "E"],
+                "METHOD": ["A", "B", "C", "D", "E"],
+                "RANK": ["A", "B", "C", "D", "E"],
+            }
+        ),
+        check_names=False,
+    )
+
+
+@pytest.mark.slow
+def test_unreserved_kw_pt2(spark_info, memory_leak_check):
+    """Test that "OUT", "FILTER", "CONDITION", "TRANSLATION", "POSITION"
+    can be columns
+    """
+    query = "SELECT t.OUT, t.FILTER, t.CONDITION, t.TRANSLATION, t.POSITION AS A FROM table1 t"
+    check_query(
+        query,
+        {
+            "table1": pd.DataFrame(
+                {
+                    "OUT": ["A", "B", "C", "D", "E"],
+                    "FILTER": ["A", "B", "C", "D", "E"],
+                    "CONDITION": ["A", "B", "C", "D", "E"],
+                    "TRANSLATION": ["A", "B", "C", "D", "E"],
+                    "POSITION": ["A", "B", "C", "D", "E"],
+                }
+            )
+        },
+        spark_info,
+        expected_output=pd.DataFrame(
+            {
+                "OUT": ["A", "B", "C", "D", "E"],
+                "FILTER": ["A", "B", "C", "D", "E"],
+                "CONDITION": ["A", "B", "C", "D", "E"],
+                "TRANSLATION": ["A", "B", "C", "D", "E"],
+                "POSITION": ["A", "B", "C", "D", "E"],
+            }
+        ),
         check_names=False,
     )
