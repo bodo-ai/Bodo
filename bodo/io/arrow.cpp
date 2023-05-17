@@ -5,6 +5,12 @@
 
 #include <Python.h>
 #include "../libs/_bodo_common.h"
+#include "arrow_reader.h"
+
+table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
+                                       uint64_t* total_rows_out);
+
+void arrow_reader_del_py_entry(ArrowReader* reader);
 
 // --------- functions defined in parquet_reader.cpp ---------
 table_info* pq_read_py_entry(
@@ -34,6 +40,13 @@ table_info* snowflake_read_py_entry(
     PyObject* arrow_schema, int64_t n_fields, int32_t* _is_nullable,
     int32_t* _str_as_dict_cols, int32_t num_str_as_dict_cols,
     int64_t* total_nrows, bool _only_length_query, bool _is_select_query);
+
+ArrowReader* snowflake_reader_init_py_entry(
+    const char* query, const char* conn, bool parallel, bool is_independent,
+    PyObject* arrow_schema, int64_t n_fields, int32_t* _is_nullable,
+    int32_t num_str_as_dict_cols, int32_t* _str_as_dict_cols,
+    int64_t* total_nrows, bool _only_length_query, bool _is_select_query,
+    int64_t batch_size);
 
 // --------- functions defined in parquet_write.cpp ---------
 int64_t pq_write_py_entry(const char* _path_name, table_info* table,
@@ -75,6 +88,9 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     SetAttrStringFromVoidPtr(m, iceberg_pq_write_py_entry);
     SetAttrStringFromVoidPtr(m, pq_write_partitioned_py_entry);
     SetAttrStringFromVoidPtr(m, snowflake_read_py_entry);
+    SetAttrStringFromVoidPtr(m, snowflake_reader_init_py_entry);
+    SetAttrStringFromVoidPtr(m, arrow_reader_read_py_entry);
+    SetAttrStringFromVoidPtr(m, arrow_reader_del_py_entry);
 
     return m;
 }

@@ -553,6 +553,23 @@ def get_table_data(typingctx, table_type, ind_typ):
 @intrinsic
 def del_column(typingctx, table_type, ind_typ):
     """Decrement the reference count by 1 for the columns in a table."""
+    from bodo.io.arrow_reader import ArrowReaderType
+
+    # Right now in TableColumnDelPass, we treat ArrowReaderType as a TableType
+    # in order to perform column pruning for streaming IO. However, when the
+    # ArrowReaderType is used outside of the streaming loop (to call C++
+    # delete, for example), TableColumnDelPass adds del_column calls for dead
+    # columns after the loop. Current hacky solution is to have del_column be
+    # a no-op in this case
+    # TODO: Properly track and handle operator objects in TableColumnDelPass
+    if isinstance(table_type, ArrowReaderType):  # pragma: no cover
+        sig = types.void(table_type, ind_typ)
+
+        def codegen(context, builder, sig, args):
+            return
+
+        return sig, codegen
+
     assert isinstance(table_type, TableType), "Can only delete columns from a table"
     assert isinstance(ind_typ, types.TypeRef) and isinstance(
         ind_typ.instance_type, MetaType
@@ -1099,7 +1116,6 @@ def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
     """
 
     def codegen(context, builder, sig, args):
-
         table_arg, used_col_set = args
         pyapi = context.get_python_api(builder)
 
@@ -1686,7 +1702,6 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     for cur_output_table_offset in range(
         len(logical_string_array_idxs) + len(logical_dic_enc_string_array_idxs)
     ):
-
         if cur_str_ary_idx == len(logical_string_array_idxs):
             # We've already assigned all the string columns
             dict_enc_string_array_physical_offset_in_output_block.append(

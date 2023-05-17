@@ -729,8 +729,10 @@ struct table_info {
     table_info() {}
     explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns)
         : columns(_columns) {}
-    uint64_t nrows() const { return columns[0]->length; }
     uint64_t ncols() const { return columns.size(); }
+    uint64_t nrows() const {
+        return this->ncols() == 0 ? 0 : columns[0]->length;
+    }
     std::shared_ptr<array_info> operator[](size_t idx) { return columns[idx]; }
     const std::shared_ptr<array_info> operator[](size_t idx) const {
         return columns[idx];

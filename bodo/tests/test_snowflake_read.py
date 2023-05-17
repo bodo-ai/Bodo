@@ -9,6 +9,8 @@ import os
 import re
 from typing import TYPE_CHECKING
 
+import numba
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -17,6 +19,7 @@ from numba.core import types
 
 import bodo
 import bodo.io.snowflake
+from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,
@@ -31,7 +34,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.typing import BodoWarning
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from pytest_mock import MockerFixture
 
 
@@ -1559,7 +1562,9 @@ def test_snowflake_zero_cols(memory_leak_check):
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        bodo.jit(test_impl_index)(query, conn)
+        bodo.jit((numba.types.literal(query), numba.types.literal(conn)))(
+            test_impl_index
+        )
         # Check that we only load the index.
         check_logger_msg(stream, "Columns loaded ['l_orderkey']")
 
@@ -1619,6 +1624,203 @@ def test_dict_encoded_small_table(memory_leak_check):
             check_logger_msg(stream, f"Columns ['a'] using dictionary encoding")
 
 
+def test_batched_read_agg(memory_leak_check):
+    """
+    Test a simple use of batched Snowflake reads by
+    getting the max of a column
+    """
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "l_orderkey",
+            "l_partkey",
+            "l_suppkey",
+            "l_linenumber",
+            "l_quantity",
+            "l_extendedprice",
+            "l_discount",
+            "l_tax",
+            "l_returnflag",
+            "l_linestatus",
+            "l_shipdate",
+            "l_commitdate",
+            "l_receiptdate",
+            "l_shipinstruct",
+            "l_shipmode",
+            "l_comment",
+        )
+    )
+
+    def impl(conn):
+        total_max = 0
+
+        reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
+        while True:
+            table, is_last = read_arrow_next(reader)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (table,), index_var, col_meta
+            )
+            df = df[(df["l_orderkey"] > 10)]
+            # Perform more compute in between to see caching speedup
+            local_max = df["l_partkey"].max()
+            if local_max > total_max:
+                total_max = local_max
+
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            if is_last_global:
+                break
+
+        arrow_reader_del(reader)
+        return total_max
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(impl, (conn,), py_output=200000)
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+        check_logger_msg(stream, "Columns loaded ['l_partkey']")
+
+
+def test_batched_read_only_len(memory_leak_check):
+    """
+    Test shape pushdown with batched Snowflake reads
+    """
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "l_orderkey",
+            "l_partkey",
+            "l_suppkey",
+            "l_linenumber",
+            "l_quantity",
+            "l_extendedprice",
+            "l_discount",
+            "l_tax",
+            "l_returnflag",
+            "l_linestatus",
+            "l_shipdate",
+            "l_commitdate",
+            "l_receiptdate",
+            "l_shipinstruct",
+            "l_shipmode",
+            "l_comment",
+        )
+    )
+
+    def impl(conn):
+        total_len = 0
+
+        reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
+        while True:
+            table, is_last = read_arrow_next(reader)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (table,), index_var, col_meta
+            )
+            total_len += len(df)
+
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            if is_last_global:
+                break
+
+        arrow_reader_del(reader)
+        return total_len
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(impl, (conn,), py_output=6001215)
+        check_logger_msg(stream, "Columns loaded []")
+
+
+@pytest.mark.skip(
+    reason="[BSE-394] Limit Pushdown with batched reads is current failing"
+)
+def test_batched_read_limit_pushdown_query(memory_leak_check):
+    """
+    Test shape pushdown with batched Snowflake reads
+    """
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "l_orderkey",
+            "l_partkey",
+            "l_suppkey",
+            "l_linenumber",
+            "l_quantity",
+            "l_extendedprice",
+            "l_discount",
+            "l_tax",
+            "l_returnflag",
+            "l_linestatus",
+            "l_shipdate",
+            "l_commitdate",
+            "l_receiptdate",
+            "l_shipinstruct",
+            "l_shipmode",
+            "l_comment",
+        )
+    )
+
+    def impl(conn):
+        total_sum = 0
+
+        reader = pd.read_sql("SELECT * FROM LINEITEM ORDER BY L_PARTKEY LIMIT 100", conn, _bodo_chunksize=4000)  # type: ignore
+        while True:
+            table, is_last = read_arrow_next(reader)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (table,), index_var, col_meta
+            )
+            total_sum += df["l_partkey"].sum()
+
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            if is_last_global:
+                break
+
+        arrow_reader_del(reader)
+        return total_sum
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    # Python Computation
+    py_sum = pd.read_sql(
+        "SELECT L_PARTKEY FROM LINEITEM ORDER BY L_PARTKEY LIMIT 100", conn
+    )["l_partkey"].sum()
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(impl, (conn,), py_output=py_sum)
+        check_logger_msg(stream, "Columns loaded ['l_partkey']")
+
+
 def test_snowflake_filter_pushdown_edgecase(memory_leak_check):
     """
     Test that filter pushdown works for an edge case
@@ -1633,7 +1835,7 @@ def test_snowflake_filter_pushdown_edgecase(memory_leak_check):
     def impl_should_not_do_filter_pushdown(conn):
         df7 = pd.read_sql(
             "DATES_FILTERPUSHDOWN_TEST_TABLE", conn, _bodo_is_table_input=True
-        )
+        )  # type: ignore
         df5 = df7.loc[
             :,
             [
@@ -1693,7 +1895,7 @@ def test_snowflake_filter_pushdown_edgecase_2(memory_leak_check):
     def impl_should_do_filter_pushdown(conn):
         df7 = pd.read_sql(
             "DATES_FILTERPUSHDOWN_TEST_TABLE", conn, _bodo_is_table_input=True
-        )
+        )  # type: ignore
         df5 = df7.loc[
             :,
             [

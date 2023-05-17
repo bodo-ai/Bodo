@@ -28,7 +28,7 @@ from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning, is_str_arr_type
 
 # Imports for typechecking
-if TYPE_CHECKING:  # pragma: no cover  Built-in Python Attribute. False during runtime
+if TYPE_CHECKING:  # pragma: no cover
     from snowflake.connector import SnowflakeConnection
     from snowflake.connector.cursor import ResultMetadata, SnowflakeCursor
     from snowflake.connector.result_batch import JSONResultBatch, ResultBatch
@@ -978,7 +978,6 @@ def get_dataset(
         # We need to actually submit a Snowflake query
         if bodo.get_rank() == 0 or is_independent:
             # Execute query
-            cur = conn.cursor()
             ev_query = tracing.Event("execute_query", is_parallel=False)
             ev_query.add_attribute("query", query)
             cur = conn.cursor()
@@ -1501,7 +1500,6 @@ def connect_and_get_upload_info(conn_str: str):
                         "AWS_DEFAULT_REGION": upload_info["region"],
                     }
                 elif location_type == "AZURE":
-
                     # We cannot upload directly to ADLS unless this package is installed,
                     # so check that first.
                     bodo_azurefs_sas_token_provider_installed = False

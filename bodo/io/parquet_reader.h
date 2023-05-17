@@ -1,13 +1,13 @@
 // Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-// Implementation of ParquetReader (subclass of ArrowDataframeReader) with
+// Implementation of ParquetReader (subclass of ArrowReader) with
 // functionality that is specific to reading parquet datasets
 
 #include "arrow_reader.h"
 #include "parquet/api/reader.h"
 #include "parquet/arrow/reader.h"
 
-class ParquetReader : public ArrowDataframeReader {
+class ParquetReader : public ArrowReader {
    public:
     /**
      * Initialize ParquetReader.
@@ -18,8 +18,8 @@ class ParquetReader : public ArrowDataframeReader {
                   PyObject* pyarrow_schema, int64_t _tot_rows_to_read,
                   std::set<int> _selected_fields, std::vector<bool> is_nullable,
                   bool _input_file_name_col, bool _use_hive = true)
-        : ArrowDataframeReader(_parallel, pyarrow_schema, _tot_rows_to_read,
-                               _selected_fields, is_nullable),
+        : ArrowReader(_parallel, pyarrow_schema, _tot_rows_to_read,
+                      _selected_fields, is_nullable),
           dnf_filters(_dnf_filters),
           expr_filters(_expr_filters),
           path(_path),
@@ -40,7 +40,7 @@ class ParquetReader : public ArrowDataframeReader {
                         int32_t* _selected_part_cols,
                         int32_t num_partition_cols) {
         // initialize reader
-        ArrowDataframeReader::init_arrow_reader(
+        ArrowReader::init_arrow_reader(
             {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols},
             false);
 
@@ -87,7 +87,7 @@ class ParquetReader : public ArrowDataframeReader {
 
     virtual PyObject* get_dataset() override;
 
-    virtual void read_all(TableBuilder& builder) override;
+    virtual std::tuple<table_info*, bool, uint64_t> read_inner() override;
 
     // Prefix to add to each of the file paths (only used for input_file_name)
     std::string prefix;

@@ -10,6 +10,7 @@ import itertools
 import datetime
 import pandas as pd
 import numpy as np
+from typing import Optional, Any
 
 import numba
 from numba.core import ir, ir_utils, types
@@ -782,7 +783,10 @@ class UntypedPass:
 
         if isinstance(arg_def, ir.Expr) and arg_def.op == "build_map":
             msg = "DataFrame column names should be constant strings or ints"
-            (tup_vars, new_nodes,) = bodo.utils.transform._convert_const_key_dict(
+            (
+                tup_vars,
+                new_nodes,
+            ) = bodo.utils.transform._convert_const_key_dict(
                 self.args,
                 self.func_ir,
                 arg_def,
@@ -845,7 +849,10 @@ class UntypedPass:
         if not is_expr(arg_def, "build_map"):
             raise BodoError(msg)
 
-        (tup_vars, new_nodes,) = bodo.utils.transform._convert_const_key_dict(
+        (
+            tup_vars,
+            new_nodes,
+        ) = bodo.utils.transform._convert_const_key_dict(
             self.args,
             self.func_ir,
             arg_def,
@@ -859,7 +866,7 @@ class UntypedPass:
         new_nodes.append(assign)
         return new_nodes
 
-    def _handle_pd_read_sql(self, assign, lhs, rhs, label):
+    def _handle_pd_read_sql(self, assign, lhs: ir.Var, rhs: ir.Expr, label):
         """transform pd.read_sql calls"""
         # schema: pd.read_sql(sql, con, index_col=None,
         # coerce_float=True, params=None, parse_dates=None,
@@ -883,6 +890,27 @@ class UntypedPass:
         index_col = self._get_const_arg(
             "read_sql", rhs.args, kws, 2, "index_col", rhs.loc, default=-1
         )
+        # If defined, perform batched reads on the table
+        # Only supported for Snowflake tables
+        # Note that we don't want to use Pandas chunksize, since it returns an iterator
+        chunksize: Optional[int] = self._get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            10e4,
+            "_bodo_chunksize",
+            rhs.loc,
+            use_default=True,
+            default=None,
+            typ="int",
+        )
+        if chunksize is not None and (
+            not isinstance(chunksize, int) or chunksize < 1
+        ):  # pragma: no cover
+            raise BodoError(
+                "pd.read_sql() '_bodo_chunksize' must be a constant integer >= 1."
+            )
+
         # Users can use this to specify what columns should be read in as
         # dictionary-encoded string arrays. This is in addition
         # to whatever columns bodo determines should be read in
@@ -918,14 +946,14 @@ class UntypedPass:
         # columns = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 6, "columns", rhs.loc, default=""
         # )
-        # chunksize = get_call_expr_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
 
         # SUPPORTED:
         # sql is supported since it is fundamental
         # con is supported since it is fundamental but only as a string
         # index_col is supported since setting the index is something useful.
+        # _bodo_chunksize is supported to enable batched reads for Snowflake
         # UNSUPPORTED:
-        # chunksize is unsupported because it is a different API and it makes for a different usage of pd.read_sql
+        # chunksize is unsupported but can easily be extended from _bodo_chunksize
         # columns   is unsupported because selecting columns could actually be done in SQL.
         # parse_dates is unsupported because it requires remapping which subset of loaded columns should be updated.
         #        and needs to be implemented with snowflake.
@@ -935,6 +963,7 @@ class UntypedPass:
             "sql",
             "con",
             "index_col",
+            "_bodo_chunksize",
             "_bodo_read_as_dict",
             "_bodo_is_table_input",
         )
@@ -966,6 +995,10 @@ class UntypedPass:
             _bodo_is_table_input,
             self._is_independent,
         )
+        if chunksize is not None and db_type != "snowflake":  # pragma: no cover
+            raise BodoError(
+                "pd.read_sql(): The `chunksize` argument is only supported for Snowflake table reads"
+            )
 
         index_ind = None
         index_col_name = None
@@ -983,6 +1016,33 @@ class UntypedPass:
             # Remove the index column from the table.
             columns.remove(index_col_name)
             out_types.remove(index_arr_typ)
+
+        data_args = ["table_val", "idx_arr_val"]
+
+        if index_ind is not None:
+            # Convert the output array to index
+            index_arg = f"bodo.utils.conversion.convert_to_index({data_args[1]}, {index_col_name!r})"
+            index_type = bodo.utils.typing.index_typ_from_dtype_name_arr(
+                index_arr_typ.dtype, index_col_name, index_arr_typ
+            )
+        else:
+            # generate RangeIndex as default index
+            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
+            index_type = RangeIndexType(None)
+
+        # Create the output DataFrameType. This will be lowered as a Typeref for use with TableFormat
+        df_type = DataFrameType(
+            tuple(out_types),
+            index_type,
+            tuple(columns),
+            is_table_format=True,
+        )
+        col_meta = ColNamesMetaType(df_type.columns)
+
+        if chunksize is not None:  # pragma: no cover
+            out_types = [bodo.io.arrow_reader.ArrowReaderType(columns, out_types)]
+            # Create a new temp var so this is always exactly one variable
+            data_arrs = [ir.Var(lhs.scope, mk_unique_var("arrow_iterator"), lhs.loc)]
 
         nodes = [
             sql_ext.SqlReader(
@@ -1006,48 +1066,30 @@ class UntypedPass:
                 False,  # is_merge_into
                 types.none,  # file_list_type
                 types.none,  # snapshot_id_type
+                chunksize,
             )
         ]
 
-        data_args = ["table_val", "idx_arr_val"]
-
-        if index_ind is not None:
-            # Convert the output array to index
-            index_arg = f"bodo.utils.conversion.convert_to_index({data_args[1]}, {index_col_name!r})"
-            index_type = bodo.utils.typing.index_typ_from_dtype_name_arr(
-                index_arr_typ.dtype, index_col_name, index_arr_typ
-            )
+        if chunksize is not None:  # pragma: no cover
+            nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
         else:
-            # generate RangeIndex as default index
-            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
-            index_type = RangeIndexType(None)
+            # TODO: Pull out to helper function for most IO functions (except Iceberg)
+            func_text = (
+                f"def _init_df({data_args[0]}, {data_args[1]}):\n"
+                f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(\n"
+                f"    ({data_args[0]},), {index_arg}, __col_name_meta_value_pd_read_sql\n"
+                f"  )\n"
+            )
+            loc_vars = {}
+            exec(func_text, {}, loc_vars)
+            _init_df = loc_vars["_init_df"]
 
-        # Create the output DataFrameType. This will be lowered as a Typeref for use with TableFormat
-        df_type = DataFrameType(
-            tuple(out_types),
-            index_type,
-            tuple(columns),
-            is_table_format=True,
-        )
-
-        func_text = f"def _init_df({data_args[0]}, {data_args[1]}):\n"
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_pd_read_sql)\n"
-        loc_vars = {}
-        exec(
-            func_text,
-            {},
-            loc_vars,
-        )
-        _init_df = loc_vars["_init_df"]
-
-        nodes += compile_func_single_block(
-            _init_df,
-            data_arrs,
-            lhs,
-            extra_globals={
-                "__col_name_meta_value_pd_read_sql": ColNamesMetaType(df_type.columns)
-            },
-        )
+            nodes += compile_func_single_block(
+                _init_df,
+                data_arrs,
+                lhs,
+                extra_globals={"__col_name_meta_value_pd_read_sql": col_meta},
+            )
         return nodes
 
     def _handle_pd_read_excel(self, assign, lhs, rhs, label):
@@ -2538,10 +2580,10 @@ class UntypedPass:
         loc,
         *,
         default=None,
-        err_msg=None,
-        typ=None,
-        use_default=False,
-    ):
+        err_msg: Optional[str] = None,
+        typ: Optional[str] = None,
+        use_default: bool = False,
+    ) -> Any:
         """Get constant value for a function call argument. Raise error if the value is
         not constant.
         """
@@ -2628,7 +2670,6 @@ class UntypedPass:
             ):
                 flag = "distributed"
             elif ret_name in self.metadata["replicated"]:
-
                 flag = "replicated"
             else:
                 flag = "threaded"
@@ -2688,7 +2729,6 @@ class UntypedPass:
 
     def _gen_replace_dist_return(self, var, flag):
         if flag == "distributed":
-
             func_text = (
                 ""
                 "def f(_dist_arr):\n"
@@ -2696,7 +2736,6 @@ class UntypedPass:
             )
 
         elif flag == "replicated":
-
             func_text = (
                 ""
                 "def f(_rep_arr):\n"
@@ -2704,7 +2743,6 @@ class UntypedPass:
             )
 
         elif flag == "threaded":
-
             func_text = (
                 ""
                 "def f(_threaded_arr):\n"

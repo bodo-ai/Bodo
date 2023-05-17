@@ -311,7 +311,6 @@ def csv_distributed_run(
     )
     if csv_node.chunksize is not None:
         # parallel read flag
-        parallel = False
         # Add debug info about column pruning. Chunksize doesn't yet prune
         # any columns.
         if bodo.user_logging.get_verbose_level() >= 1:
@@ -336,13 +335,9 @@ def csv_distributed_run(
                     dict_encoded_cols,
                 )
 
-        if array_dists is not None:
-            # Parallel flag for iterator is based on the single var.
-            iterator_varname = csv_node.out_vars[0].name
-            parallel = array_dists[iterator_varname] in (
-                distributed_pass.Distribution.OneD,
-                distributed_pass.Distribution.OneD_Var,
-            )
+        parallel = bodo.ir.connector.is_chunked_connector_table_parallel(
+            csv_node, array_dists, "CSVReader"
+        )
 
         # Iterator Case
 

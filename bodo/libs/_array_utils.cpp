@@ -2280,7 +2280,8 @@ void DEBUG_PrintSetOfColumn(
     DEBUG_PrintVectorArrayInfo(os, ListArr);
 }
 
-void DEBUG_PrintTable(std::ostream& os, std::shared_ptr<table_info> table) {
+void DEBUG_PrintTable(std::ostream& os,
+                      const std::shared_ptr<const table_info>& table) {
     DEBUG_PrintSetOfColumn(os, table->columns);
 }
 

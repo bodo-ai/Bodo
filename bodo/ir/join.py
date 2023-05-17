@@ -69,7 +69,7 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import _remove_prefix, alloc_arr_tup, is_null_pointer
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 
@@ -938,7 +938,11 @@ def join_table_column_use(
     # get output's uses
     if join_node.has_live_out_table_var:
         out_table_var = join_node.get_out_table_var()
-        (used_cols, use_all, cannot_del_cols,) = _compute_table_column_uses(
+        (
+            used_cols,
+            use_all,
+            cannot_del_cols,
+        ) = _compute_table_column_uses(
             out_table_var.name, table_col_use_map, equiv_vars
         )
     else:
@@ -949,7 +953,6 @@ def join_table_column_use(
         )
 
     if join_node.has_live_left_table_var:
-
         left_table = join_node.left_vars[0].name
 
         (
@@ -960,7 +963,6 @@ def join_table_column_use(
 
         # skip if input already uses all columns or cannot delete the table
         if not (orig_use_all or orig_cannot_del_cols):
-
             # Map the used columns from output to left
             left_used_cols = set(
                 [
@@ -990,7 +992,6 @@ def join_table_column_use(
             )
 
     if join_node.has_live_right_table_var:
-
         right_table = join_node.right_vars[0].name
 
         (
@@ -1001,7 +1002,6 @@ def join_table_column_use(
 
         # skip if input already uses all columns or cannot delete the table
         if not (orig_use_all or orig_cannot_del_cols):
-
             # Map the used columns from output to right
             right_used_cols = set(
                 [
@@ -2342,6 +2342,7 @@ def _gen_join_cpp_call(
     """
     Generate the code need to compute a hash join in C++
     """
+
     # In some case the column in output has a type different from the one in input.
     # TODO: Unify those type changes between all cases.
     def needs_typechange(in_type, need_nullable, is_same_key):

@@ -4,7 +4,16 @@ Common IR extension functions for connectors such as CSV, Parquet and JSON reade
 """
 import sys
 from collections import defaultdict
-from typing import Dict, List, Literal, Sequence, Set, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    List,
+    Literal,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 import numba
 import pandas as pd
@@ -13,6 +22,7 @@ from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 
 import bodo
 from bodo.hiframes.table import TableType
+from bodo.io.arrow_reader import ArrowReaderType
 from bodo.ir.filter import Filter, supported_arrow_funcs_map
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import get_live_column_nums_block
@@ -24,6 +34,9 @@ from bodo.utils.utils import (
     is_array_typ,
 )
 
+if TYPE_CHECKING:  # pragma: no cover
+    from numba.core.typeinfer import TypeInferer
+
 
 def connector_array_analysis(node, equiv_set, typemap, array_analysis):
     post = []
@@ -34,7 +47,7 @@ def connector_array_analysis(node, equiv_set, typemap, array_analysis):
 
     # If we have a csv chunksize the variables don't refer to the data,
     # so we skip this step.
-    if node.connector_typ == "csv" and node.chunksize is not None:
+    if node.connector_typ in ("csv", "sql") and node.chunksize is not None:
         return [], []
 
     # create correlations for output arrays
@@ -98,7 +111,8 @@ def connector_distributed_analysis(node, array_dists):
         array_dists[v.name] = out_dist
 
 
-def connector_typeinfer(node, typeinferer):
+# TODO: Should have common connector interface
+def connector_typeinfer(node, typeinferer: "TypeInferer"):
     """
     Set the typing constraints for various connector nodes.
     This is used for showing type dependencies. As a result,
@@ -124,6 +138,10 @@ def connector_typeinfer(node, typeinferer):
             typeinferer.lock_type(
                 node.out_vars[1].name, node.index_column_typ, loc=node.loc
             )
+        return
+
+    if node.connector_typ == "sql" and node.chunksize is not None:
+        typeinferer.lock_type(node.out_vars[0].name, node.out_types[0], loc=node.loc)
         return
 
     if node.connector_typ in ("parquet", "sql"):
@@ -469,9 +487,12 @@ def base_connector_remove_dead_columns(
     This is mapped to the used columns during distributed pass.
     """
     table_var_name = node.out_vars[0].name
+
+    # Arrow reader is equivalent to tables for column elimination purposes
     assert isinstance(
-        typemap[table_var_name], TableType
-    ), f"{nodename} Node Table must be a TableType"
+        typemap[table_var_name], (TableType, ArrowReaderType)
+    ), f"{nodename} Node Table must be a TableType or ArrowReaderMetaType"
+
     # if possible_cols == [] then the table is dead and we are only loading
     # the index. See 'remove_dead_sql' or 'remove_dead_pq' for examples.
     if possible_cols:
@@ -514,7 +535,7 @@ def base_connector_remove_dead_columns(
                 node.out_used_cols = list(sorted(used_columns))
                 # Return that this table was updated
 
-    """We return flase in all cases, as no changes performed in the file will allow for dead code elimination to do work."""
+    """We return false in all cases, as no changes performed in the file will allow for dead code elimination to do work."""
     return False
 
 
@@ -543,6 +564,25 @@ def is_connector_table_parallel(node, array_dists, typemap, node_name):
                 Distribution.OneD_Var,
             )
         ), f"{node_name} data/index parallelization does not match"
+    return parallel
+
+
+def is_chunked_connector_table_parallel(node, array_dists, node_name):
+    """
+    Returns if the parallel implementation should be used for
+    a connector that returns an iterator
+    """
+    assert (
+        node.chunksize is not None
+    ), f"is_chunked_connector_table_parallel: {node_name} must be a connector with a chunksize"
+
+    parallel = False
+    if array_dists is not None:
+        iterator_varname = node.out_vars[0].name
+        parallel = array_dists[iterator_varname] in (
+            Distribution.OneD,
+            Distribution.OneD_Var,
+        )
     return parallel
 
 
