@@ -41,10 +41,10 @@ from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
     cpp_table_to_py_data,
-    cross_join_table,
     delete_table,
     hash_join_table,
     interval_join_table,
+    nested_loop_join_table,
     py_data_to_cpp_table,
 )
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
@@ -1976,7 +1976,7 @@ def join_distributed_run(
             "parallel_asof_comm": parallel_asof_comm,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "cross_join_table": cross_join_table,
+            "nested_loop_join_table": nested_loop_join_table,
             "interval_join_table": interval_join_table,
             "hash_join_table": hash_join_table,
             "delete_table": delete_table,
@@ -2576,7 +2576,7 @@ def _gen_join_cpp_call(
         check_cross_join_coltypes(left_col_types, right_col_types)
 
         func_text += (
-            f"    out_table = cross_join_table("
+            f"    out_table = nested_loop_join_table("
             "table_left, "
             "table_right, "
             f"{left_parallel}, "
