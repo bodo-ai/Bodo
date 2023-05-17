@@ -93,7 +93,7 @@ ll.add_symbol("get_shuffle_info", array_ext.get_shuffle_info)
 ll.add_symbol("delete_shuffle_info", array_ext.delete_shuffle_info)
 ll.add_symbol("reverse_shuffle_table", array_ext.reverse_shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
-ll.add_symbol("cross_join_table", array_ext.cross_join_table)
+ll.add_symbol("nested_loop_join_table", array_ext.nested_loop_join_table)
 ll.add_symbol("interval_join_table", array_ext.interval_join_table)
 ll.add_symbol(
     "drop_duplicates_table_py_entry", array_ext.drop_duplicates_table_py_entry
@@ -227,7 +227,6 @@ def array_to_info_codegen(context, builder, sig, args):
         arr_type = _get_map_arr_data_type(arr_type)
 
     if isinstance(arr_type, ArrayItemArrayType):
-
         payload = _get_array_item_arr_payload(context, builder, arr_type, in_arr)
         inner_arr = payload.data
         inner_arr_info = array_to_info_codegen(
@@ -2149,7 +2148,7 @@ def hash_join_table(
 
 
 @intrinsic
-def cross_join_table(
+def nested_loop_join_table(
     typingctx,
     left_table_t,
     right_table_t,
@@ -2170,8 +2169,10 @@ def cross_join_table(
     """
     Call cpp function for cross join of two tables.
     """
-    assert left_table_t == table_type, "cross_join_table: cpp table type expected"
-    assert right_table_t == table_type, "cross_join_table: cpp table type expected"
+    assert left_table_t == table_type, "nested_loop_join_table: cpp table type expected"
+    assert (
+        right_table_t == table_type
+    ), "nested_loop_join_table: cpp table type expected"
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -2195,7 +2196,7 @@ def cross_join_table(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="cross_join_table"
+            builder.module, fnty, name="nested_loop_join_table"
         )
         ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -2795,7 +2796,6 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
         bodo.timedelta64ns,
         types.bool_,
     ]:
-
         # Note: PandasDatetimeTZDtype is not the return type for scalar data.
         # In C++ the data is just a datetime64ns
         if isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
@@ -3040,7 +3040,6 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
             bodo.datetime64ns,
             bodo.timedelta64ns,
         ] or isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
-
             # Note: PandasDatetimeTZDtype is not the return type for scalar data.
             # In C++ the data is just a datetime64ns
             if isinstance(

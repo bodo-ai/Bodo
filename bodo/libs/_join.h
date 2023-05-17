@@ -132,7 +132,7 @@ table_info* hash_join_table(
     uint64_t* num_rows_ptr);
 
 /**
- * @brief cross join two tables (parallel if any input is parallel)
+ * @brief nested loop join two tables (parallel if any input is parallel)
  * Using raw pointers since called from Python.
  *
  * @param left_table left input table
@@ -160,9 +160,9 @@ table_info* hash_join_table(
  * @param num_rows_ptr Pointer used to store the number of rows in the
         output to return to Python. This enables marking all columns as
         dead.
- * @return table_info* cross join output table
+ * @return table_info* nested loop join output table
  */
-table_info* cross_join_table(
+table_info* nested_loop_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
     bool right_parallel, bool is_left, bool is_right, bool* key_in_output,
     int64_t* vect_need_typechange, bool rebalance_if_skewed,
@@ -216,5 +216,36 @@ table_info* interval_join_table(
     uint64_t interval_start_col_id, uint64_t interval_end_col_id,
     bool* key_in_output, int64_t* use_nullable_arr_type,
     bool rebalance_if_skewed, uint64_t* num_rows_ptr);
+
+// Helper function declarations
+void nested_loop_join_handle_dict_encoded(
+    std::shared_ptr<table_info> left_table,
+    std::shared_ptr<table_info> right_table, bool left_parallel,
+    bool right_parallel);
+int get_bcast_join_threshold();
+std::shared_ptr<table_info> rebalance_join_output(
+    std::shared_ptr<table_info> original_output);
+void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
+                                  std::shared_ptr<table_info> right_table,
+                                  bool is_left_outer, bool is_right_outer,
+                                  cond_expr_fn_batch_t cond_func,
+                                  bool parallel_trace,
+                                  bodo::vector<int64_t>& left_idxs,
+                                  bodo::vector<int64_t>& right_idxs,
+                                  bodo::vector<uint8_t>& left_row_is_matched,
+                                  bodo::vector<uint8_t>& right_row_is_matched);
+void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
+                        bodo::vector<int64_t>& table_idxs,
+                        bodo::vector<int64_t>& other_table_idxs,
+                        bool needs_reduction);
+std::shared_ptr<table_info> create_out_table(
+    std::shared_ptr<table_info> left_table,
+    std::shared_ptr<table_info> right_table, bodo::vector<int64_t>& left_idxs,
+    bodo::vector<int64_t>& right_idxs, bool* key_in_output,
+    int64_t* use_nullable_arr_type, uint64_t* cond_func_left_columns,
+    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    uint64_t cond_func_right_column_len);
+std::tuple<std::vector<array_info*>, std::vector<void*>, std::vector<void*>>
+get_gen_cond_data_ptrs(std::shared_ptr<table_info> table);
 
 #endif  // _JOIN_H_INCLUDED
