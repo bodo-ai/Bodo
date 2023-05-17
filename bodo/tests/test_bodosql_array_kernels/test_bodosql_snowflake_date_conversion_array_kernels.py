@@ -14,6 +14,24 @@ from bodo.tests.utils import check_func
 @pytest.fixture(
     params=[
         ("2022-02-18",),
+        pytest.param(("14-DEC-2017",), id="month_name", marks=pytest.mark.slow),
+        pytest.param(("1/15/2021",), id="/ date", marks=pytest.mark.slow),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        "17-May-2029",
+                        "14-mar-2029",
+                        "3/13/2021",
+                        "03/17/2025",
+                        "2022-02-18",
+                    ]
+                    * 2
+                ),
+            ),
+            id="mixed-format-series",
+            marks=pytest.mark.slow,
+        ),
         ("2020-12-01T13:56:03.172",),
         ("2007-01-01T03:30",),
         ("1701-12-01T12:12:02.21",),
@@ -190,6 +208,14 @@ def invalid_to_date_strings_with_format_str(request):
         pytest.param(
             (
                 pd.Series(
+                    pd.date_range(start="1/2/2023", end="1/3/2025", freq="5D")
+                ).dt.date,
+            ),
+            id="date",
+        ),
+        pytest.param(
+            (
+                pd.Series(
                     [
                         pd.Timestamp("4/2/2003"),
                         None,
@@ -249,7 +275,38 @@ def scalar_to_date_equiv_fn_inner(val, formatstr=None, scale=0):
         if val.isnumeric() or (len(val) > 1 and val[0] == "-" and val[1:].isnumeric()):
             return number_to_datetime(np.int64(val)).floor(freq="D")
         else:
-            tmp_val = pd.to_datetime(val, errors="coerce").floor(freq="D")
+            if "-" in val:
+                parts = val.split("-")
+                if len(parts) != 3:
+                    return None
+                # Standardize to YYYY-MM-DD
+                months_map = {
+                    "jan": 1,
+                    "feb": 2,
+                    "mar": 3,
+                    "apr": 4,
+                    "may": 5,
+                    "jun": 6,
+                    "jul": 7,
+                    "aug": 8,
+                    "sep": 9,
+                    "oct": 10,
+                    "nov": 11,
+                    "dec": 12,
+                }
+                if parts[1] in months_map:
+                    new_parts = [parts[2], str(months_map[parts[1]]), parts[0]]
+                    new_str = "-".join(new_parts)
+                else:
+                    new_str = val
+            else:
+                parts = val.split("/")
+                if len(parts) != 3:
+                    return None
+                # Standardize to YYYY-MM-DD
+                new_parts = [parts[2], parts[0], parts[1]]
+                new_str = "-".join(new_parts)
+            tmp_val = pd.to_datetime(new_str, errors="coerce").floor(freq="D")
             if not pd.isna(tmp_val):
                 return tmp_val
             else:

@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.pandas;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.generateBinOpCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateTryCastCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
@@ -11,7 +12,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateDatePart;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.LikeCodeGen.generateLikeCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateTryToNumberCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.generatePostfixOpCode;
@@ -36,13 +36,13 @@ import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.calcite.avatica.SqlType;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.*;
@@ -100,9 +100,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   @Override
   public Expr visitLiteral(RexLiteral literal) {
-    String code =
-        LiteralCodeGen.generateLiteralCode(literal, false, visitor);
-    return new Expr.Raw(code);
+    return LiteralCodeGen.generateLiteralCode(literal, false, visitor);
   }
 
   @Override
@@ -127,6 +125,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       return visitCaseOp(call);
     } else if (call.getOperator() instanceof SqlCastFunction) {
       return visitCastScan(call);
+    } else if (call.getOperator() instanceof BodoSqlTryCastFunction) {
+      return visitTryCastScan(call);
     } else if (call.getOperator() instanceof SqlExtractFunction) {
       return visitExtractScan(call);
     } else if (call.getOperator() instanceof SqlSubstringFunction) {
@@ -282,31 +282,39 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     // as its second operand. If there is an escape value it will
     // be the third value, although it is not required and only supported
     // for LIKE and ILIKE
-    String opName = node.getOperator().getName();
+    SqlLikeOperator op = (SqlLikeOperator) node.getOperator();
     List<RexNode> operands = node.getOperands();
-    RexNode colIndex = operands.get(0);
-    Expr arg = colIndex.accept(this);
-    String argCode = arg.emit();
     RexNode patternNode = operands.get(1);
 
     // The regular expression functions only support literal patterns
-    if ((opName.equals("REGEXP") || opName.equals("RLIKE"))
-        && !(patternNode instanceof RexLiteral)) {
-      throw new BodoSQLCodegenException(
-          String.format("%s Error: Pattern must be a string literal", opName));
+    boolean patternRegex = false;
+    if (op.getKind() == SqlKind.REGEXP || op.getKind() == SqlKind.RLIKE) {
+      if (!(patternNode instanceof RexLiteral)) {
+        throw new BodoSQLCodegenException(
+            String.format("%s Error: Pattern must be a string literal", op.getName()));
+      }
+      patternRegex = true;
     }
+
+    Expr arg = operands.get(0).accept(this);
     Expr pattern = patternNode.accept(this);
-    String sqlPattern = pattern.emit();
-    // If escape is missing use the empty string.
-    String sqlEscape = "''";
+    Expr escape;
     if (operands.size() == 3) {
-      RexNode escapeNode = operands.get(2);
-      Expr escape = escapeNode.accept(this);
-      sqlEscape = escape.emit();
+      escape = operands.get(2).accept(this);
+    } else {
+      escape = new Expr.StringLiteral("");
     }
-    /* Assumption: Typing in LIKE requires this to be a string type. */
-    String likeCode = generateLikeCode(opName, argCode, sqlPattern, sqlEscape);
-    return new Expr.Raw(likeCode);
+
+    if (patternRegex) {
+      return new Expr.Call("bodo.libs.bodosql_array_kernels.regexp_like",
+          arg, pattern, new Expr.StringLiteral(""));
+    } else {
+      return new Expr.Call("bodo.libs.bodosql_array_kernels.like_kernel",
+          arg, pattern, escape,
+          // Use the opposite. The python call is for case insensitivity while
+          // our boolean is for case sensitivity so they are opposites.
+          new Expr.BooleanLiteral(!op.isCaseSensitive()));
+    }
   }
 
   protected Expr visitCaseOp(RexCall node) {
@@ -402,9 +410,19 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             == BodoSQLExprType.ExprType.SCALAR;
     List<Expr> args = visitList(operation.operands);
     Expr child = args.get(0);
-    String exprCode =
-        generateCastCode(
-            child.emit(), inputType, outputType, outputScalar);
+    String exprCode = generateCastCode(child.emit(), inputType, outputType, outputScalar);
+    return new Expr.Raw(exprCode);
+  }
+
+  protected Expr visitTryCastScan(RexCall operation) {
+    RelDataType inputType = operation.operands.get(0).getType();
+    if (!SqlTypeName.CHAR_TYPES.contains(inputType.getSqlTypeName()))
+      throw new BodoSQLCodegenException("TRY_CAST only supports casting from strings.");
+    RelDataType outputType = operation.getType();
+
+    List<Expr> args = visitList(operation.operands);
+    Expr child = args.get(0);
+    String exprCode = generateTryCastCode(child.emit(), outputType);
     return new Expr.Raw(exprCode);
   }
 
@@ -422,20 +440,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     // node.operands contains
     //  * String to perform the substring operation on
     //  * start index
-    //  * substring length
+    //  * substring length (optional)
     //  All of these values can be both scalars and columns
-    assert node.operands.size() == 3;
-    List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>(node.operands.size());
-    for (RexNode operand_node : node.operands) {
-      exprTypes.add(
-          visitor.exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operand_node, nodeId)));
-    }
+    // NOTE: check on number of arguments happen in generateSubstringInfo
     List<Expr> operands = visitList(node.operands);
-    String fnName = node.getOperator().getName();
-    String code =
-        getThreeArgStringFnInfo(
-            fnName, operands.get(0).emit(), operands.get(1).emit(), operands.get(2).emit());
-    return new Expr.Raw(code);
+    return generateSubstringInfo(operands);
   }
 
   protected Expr visitGenericFuncOp(RexCall fnOperation) {
@@ -519,7 +528,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     String expr;
     String strExpr;
-    DatetimeFnCodeGen.DateTimeType dateTimeExprType;
+    DatetimeFnCodeGen.DateTimeType dateTimeExprType1;
+    DatetimeFnCodeGen.DateTimeType dateTimeExprType2;
     boolean isTime;
     boolean isDate;
     String unit;
@@ -530,6 +540,10 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         return new Expr.Raw(
             getSingleArgNumericFnInfo(
                 fnOperation.getOperator().toString(), operands.get(0).emit()));
+      case GREATEST:
+      case LEAST:
+        return generateLeastGreatestCode(fnOperation.getOperator().toString(), operands);
+
       case MOD:
         return new Expr.Raw(
             getDoubleArgNumericFnInfo(
@@ -538,17 +552,20 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 operands.get(1).emit()));
       case TIMESTAMP_ADD:
         // Uses Calcite parser, accepts both quoted and unquoted time units
-        dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(2));
-        unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
+        dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(2));
+        unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
         assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
         return new Expr.Raw(generateSnowflakeDateAddCode(operands, unit));
       case TIMESTAMP_DIFF:
         assert operands.size() == 3;
-        dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-        if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
+        dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
+        dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(2));
+        if ((dateTimeExprType1 == DatetimeFnCodeGen.DateTimeType.TIME)
+            != (dateTimeExprType2 == DatetimeFnCodeGen.DateTimeType.TIME)) {
           throw new BodoSQLCodegenException(
-              "Invalid type of arguments to TIMESTAMPDIFF: arg1 and arg2 must be the same type.");
-        unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
+              "Invalid type of arguments to TIMESTAMPDIFF: cannot mix date/timestamp with time.");
+        }
+        unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
         return generateDateDiffFnInfo(unit, operands.get(1), operands.get(2));
       case TRIM:
         assert operands.size() == 3;
@@ -636,8 +653,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
             // Otherwise, fall back to the normal DATEADD. TIMEADD and TIMESTAMPADD are aliases.
             if (operands.size() == 3) {
-              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(2));
-              unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
+              dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(2));
+              unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
               assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
               return new Expr.Raw(generateSnowflakeDateAddCode(operands, unit));
             }
@@ -659,13 +676,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 throw new BodoSQLCodegenException("Cannot add/subtract days from TIME");
               }
               Set<SqlTypeName> DATE_INTERVAL_TYPES =
-                  Sets.immutableEnumSet(SqlTypeName.INTERVAL_YEAR_MONTH,
+                  Sets.immutableEnumSet(
+                      SqlTypeName.INTERVAL_YEAR_MONTH,
                       SqlTypeName.INTERVAL_YEAR,
                       SqlTypeName.INTERVAL_MONTH,
                       SqlTypeName.INTERVAL_WEEK,
                       SqlTypeName.INTERVAL_DAY);
-              boolean is_date_interval = DATE_INTERVAL_TYPES.contains(
-                  fnOperation.getOperands().get(1).getType().getSqlTypeName());
+              boolean is_date_interval =
+                  DATE_INTERVAL_TYPES.contains(
+                      fnOperation.getOperands().get(1).getType().getSqlTypeName());
               Expr arg0 = operands.get(0);
               Expr arg1 = operands.get(1);
               // Cast arg0 to from string to timestamp, if needed
@@ -683,8 +702,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 arg0 = new Expr.Raw(casted_expr);
               }
               // add/minus a date interval to a date object should return a date object
-              if (is_date_interval &&
-                  getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.DATE) {
+              if (is_date_interval
+                  && getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.DATE) {
                 if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
                   arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
                 }
@@ -702,31 +721,35 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             if (operands.size() == 2) {
               arg1 = operands.get(1);
               arg2 = operands.get(0);
-              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-              if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(0)))
-                throw new BodoSQLCodegenException(
-                    "Invalid type of arguments to DATEDIFF: arg0 and arg1 must be the same type.");
+              dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(0));
+              dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(1));
             } else if (operands.size() == 3) { // this is the Snowflake option
               unit = operands.get(0).emit();
               arg1 = operands.get(1);
               arg2 = operands.get(2);
-              dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-              if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
-                throw new BodoSQLCodegenException(
-                    "Invalid type of arguments to DATEDIFF: arg1 and arg2 must be the same type.");
+              dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
+              dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(2));
             } else {
               throw new BodoSQLCodegenException(
                   "Invalid number of arguments to DATEDIFF: must be 2 or 3.");
             }
-            unit = standardizeTimeUnit(fnName, unit, dateTimeExprType);
+            if ((dateTimeExprType1 == DateTimeType.TIME)
+                != (dateTimeExprType2 == DateTimeType.TIME)) {
+              throw new BodoSQLCodegenException(
+                  "Invalid type of arguments to DATEDIFF: cannot mix date/timestamp with time.");
+            }
+            unit = standardizeTimeUnit(fnName, unit, dateTimeExprType1);
             return generateDateDiffFnInfo(unit, arg1, arg2);
           case "TIMEDIFF":
             assert operands.size() == 3;
-            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-            if (dateTimeExprType != getDateTimeExprType(fnOperation.getOperands().get(2)))
+            dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
+            dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(2));
+            if ((dateTimeExprType1 == DateTimeType.TIME)
+                != (dateTimeExprType2 == DateTimeType.TIME)) {
               throw new BodoSQLCodegenException(
-                  "Invalid type of arguments to TIMEDIFF: arg1 and arg2 must be the same type.");
-            unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
+                  "Invalid type of arguments to TIMEDIFF: cannot mix date/timestamp with time.");
+            }
+            unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
             arg1 = operands.get(1);
             arg2 = operands.get(2);
             return generateDateDiffFnInfo(unit, arg1, arg2);
@@ -905,16 +928,17 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             return getSingleArgDatetimeFnInfo(fnName, operands.get(0).emit());
           case "LAST_DAY":
-            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(0));
-            if (dateTimeExprType == DateTimeType.TIME)
+            dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(0));
+            if (dateTimeExprType1 == DateTimeType.TIME)
               throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             if (operands.size() == 2) {
-              unit = standardizeTimeUnit(fnName, operands.get(1).emit(), dateTimeExprType);
+              unit = standardizeTimeUnit(fnName, operands.get(1).emit(), dateTimeExprType1);
               if (unit.equals("day") || TIME_PART_UNITS.contains(unit))
-                throw new BodoSQLCodegenException(operands.get(1).emit() + " is not a valid time unit for " + fnName);
+                throw new BodoSQLCodegenException(
+                    operands.get(1).emit() + " is not a valid time unit for " + fnName);
               return generateLastDayCode(operands.get(0).emit(), unit);
             }
-            assert  operands.size() == 1;
+            assert operands.size() == 1;
             // the default time unit is month
             return generateLastDayCode(operands.get(0).emit(), "month");
           case "NEXT_DAY":
@@ -1084,7 +1108,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "SPLIT_PART":
           case "REPLACE":
           case "MID":
-          case "SUBSTR":
           case "SUBSTRING_INDEX":
           case "TRANSLATE3":
             if (operands.size() != 3) {
@@ -1096,6 +1119,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                     operands.get(0).emit(),
                     operands.get(1).emit(),
                     operands.get(2).emit()));
+          case "SUBSTR":
+            return generateSubstringInfo(operands);
           case "INSERT":
             return generateInsert(operands);
           case "POSITION":
@@ -1108,8 +1133,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "INITCAP":
             return generateInitcapInfo(operands);
           case "DATE_TRUNC":
-            dateTimeExprType = getDateTimeExprType(fnOperation.getOperands().get(1));
-            unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType);
+            dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
+            unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
             return generateDateTruncCode(unit, operands.get(1));
           case "MICROSECOND":
           case "SECOND":
@@ -1241,9 +1266,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     @Override
     public Expr visitLiteral(RexLiteral literal) {
-      String code =
-          LiteralCodeGen.generateLiteralCode(literal, true, visitor);
-      return new Expr.Raw(code);
+      return LiteralCodeGen.generateLiteralCode(literal, true, visitor);
     }
 
     @Override
@@ -1253,8 +1276,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
       List<Expr> args = visitList(operation.operands);
       Expr child = args.get(0);
-      String exprCode =
-          generateCastCode(child.emit(), inputType, outputType, true);
+      String exprCode = generateCastCode(child.emit(), inputType, outputType, true);
       return new Expr.Raw(exprCode);
     }
 

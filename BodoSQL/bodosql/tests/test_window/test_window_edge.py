@@ -1,3 +1,5 @@
+import datetime
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -85,6 +87,7 @@ def test_window_no_rows(uint8_window_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_window_case(uint8_window_df, spark_info):
     """Tests windowed window function calls inside of CASE statements. The
@@ -228,4 +231,66 @@ def test_window_using_function(
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "orders",
+    [
+        pytest.param(
+            [
+                "ORDER BY I32",
+                "ORDER BY I32 DESC",
+                "ORDER BY STR ASC NULLS FIRST, I32 ASC",
+                "ORDER BY I32 DESC",
+            ],
+            id="integers_strings",
+        ),
+        pytest.param(
+            [
+                "ORDER BY BIN DESC NULLS FIRST, I32 DESC",
+                "ORDER BY DAT ASC NULLS LAST, I32 DESC",
+                "ORDER BY BIN DESC NULLS FIRST, I32 DESC",
+                "ORDER BY BIN DESC NULLS FIRST, I32 DESC",
+            ],
+            id="binary_dates",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_row_number_without_partition(orders, spark_info, memory_leak_check):
+    """Test using ROW_NUMBER without a partition"""
+    query = f"SELECT I32, {', '.join(f'ROW_NUMBER() OVER ({o}) AS C{i}' for i,o in enumerate(orders))} FROM table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "I32": pd.Series(list(range(20)), dtype=pd.Int32Dtype()),
+                "STR": (
+                    ["A", "e", "I", "o", "U", "y"]
+                    + [None] * 4
+                    + ["alpha", "A", "gamma", "delta", "epsilon", "U"]
+                    + [None] * 4
+                ),
+                "BIN": [
+                    None
+                    if i % 4 == 2
+                    else bytes(str(2 << int(i / 1.5)), encoding="utf-8")
+                    for i in range(20)
+                ],
+                "DAT": [
+                    None
+                    if i % 5 == 4
+                    else datetime.date.fromordinal(730120 + (7 << (3 * i)) % 10000)
+                    for i in range(20)
+                ],
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        sort_output=True,
+        check_dtype=False,
+        check_names=False,
     )

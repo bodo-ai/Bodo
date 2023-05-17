@@ -289,7 +289,7 @@ def dt_fn_dataframe():
 
 @pytest.fixture(
     params=[
-        pytest.param((x, ["timestamps"], ("1", "2")), id=x)
+        pytest.param((x, ["timestamps"], ("1", "2")), id=x, marks=pytest.mark.slow)
         for x in [
             "SECOND",
             "MINUTE",
@@ -315,7 +315,7 @@ def dt_fn_dataframe():
         )
     ]
     + [
-        pytest.param((x, ["timestamps"], ("1", "2")), id=x)
+        pytest.param((x, ["timestamps"], ("1", "2")), id=x, marks=pytest.mark.slow)
         for x in [
             "WEEK",
             "WEEKOFYEAR",
@@ -327,6 +327,7 @@ def dt_fn_dataframe():
         ),
         pytest.param(
             ("CURRENT_DATE", [], ("TIMESTAMP 2020-04-25", "TIMESTAMP 2020-04-25")),
+            marks=pytest.mark.slow,
         ),
     ]
     + [
@@ -449,10 +450,12 @@ def test_get_format(get_format_str, dt_fn_dataframe, spark_info, memory_leak_che
         pytest.param(
             "SELECT A, GETDATE() - interval '6' months from table1",
             id="no_case-minus_interval-month",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT A, GETDATE() + interval '5' weeks from table1",
             id="no_case-plus_interval-week",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT A, GETDATE() - interval '8 weeks' from table1",
@@ -465,10 +468,12 @@ def test_get_format(get_format_str, dt_fn_dataframe, spark_info, memory_leak_che
         pytest.param(
             "SELECT A, GETDATE() + interval '5' days from table1",
             id="no_case-plus_interval-day",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT A, CASE WHEN EXTRACT(MONTH from GETDATE()) = A then 'y' ELSE 'n' END from table1",
             id="case",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -674,6 +679,7 @@ def sysdate_equiv_fns(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_sysdate_equivalents_cols(
     basic_df, sysdate_equiv_fns, spark_info, memory_leak_check
 ):
@@ -711,6 +717,7 @@ def test_sysdate_equivalents_cols(
     )
 
 
+@pytest.mark.slow
 def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_check):
     """
     Tests the group of equivalent functions which return the UTC timestamp in case.
@@ -813,6 +820,7 @@ def python_mysql_dt_format_strings(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_date_format_timestamp(
     dt_fn_dataframe, python_mysql_dt_format_strings, memory_leak_check
 ):
@@ -841,6 +849,7 @@ def test_date_format_timestamp(
     )
 
 
+@pytest.mark.slow
 def test_date_format_date(date_df, python_mysql_dt_format_strings, memory_leak_check):
     """
     tests the date format function with date inputs
@@ -1465,7 +1474,7 @@ def dateadd_df():
         ),
         pytest.param(
             (
-                "TIMEADD({!r}, col_int, col_dt)",
+                "TIMEADD({!s}, col_int, col_dt)",
                 ["hour", "minute", "second"],
                 pd.DataFrame(
                     {
@@ -1529,7 +1538,7 @@ def dateadd_df():
         ),
         pytest.param(
             (
-                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!r}, -25, col_dt) END",
+                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!s}, -25, col_dt) END",
                 ["year", "month", "week", "day"],
                 pd.DataFrame(
                     {
@@ -1600,7 +1609,7 @@ def dateadd_df():
         ),
         pytest.param(
             (
-                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!r}, -25, col_dt) END",
+                "CASE WHEN col_int < 0 THEN NULL else DATEADD({!s}, -25, col_dt) END",
                 ["millisecond", "microsecond", "nanosecond"],
                 pd.DataFrame(
                     {
@@ -1688,7 +1697,7 @@ def dateadd_date_df():
     params=[
         pytest.param(
             (
-                "DATEADD({!r}, col_int, col_dt)",
+                "DATEADD({!s}, col_int, col_dt)",
                 ["year", "quarter", "month", "week", "day"],
                 pd.DataFrame(
                     {
@@ -1766,7 +1775,7 @@ def dateadd_date_df():
         ),
         pytest.param(
             (
-                "TIMESTAMPADD({!r}, col_int, col_dt)",
+                "TIMESTAMPADD({!s}, col_int, col_dt)",
                 ["millisecond", "microsecond", "nanosecond"],
                 pd.DataFrame(
                     {
@@ -1840,10 +1849,11 @@ def dateadd_date_df():
                     }
                 ),
             ),
+            id="case-date_units",
         ),
         pytest.param(
             (
-                "CASE WHEN col_int < 0 THEN TIMESTAMP '1999-12-31' else TIMESTAMPADD({!r}, -25, col_dt) END",
+                "CASE WHEN col_int < 0 THEN TIMESTAMP '1999-12-31' else TIMESTAMPADD({!s}, -25, col_dt) END",
                 ["hour", "minute", "second"],
                 pd.DataFrame(
                     {
@@ -2019,7 +2029,11 @@ def test_snowflake_quarter_dateadd(time_zone, has_case, memory_leak_check):
         pytest.param(
             ("'mm'", 158, "2035-5-12 20:30:00", "2036-1-6 0:45:00"), id="month"
         ),
-        pytest.param(("'d'", 1, "2022-3-13 20:30:00", "2022-11-7 0:45:00"), id="day"),
+        pytest.param(
+            ("'d'", 1, "2022-3-13 20:30:00", "2022-11-7 0:45:00"),
+            id="day",
+            marks=pytest.mark.slow,
+        ),
         pytest.param(("'h'", 8, "2022-3-13 4:30:00", "2022-11-6 8:45:00"), id="hour"),
     ]
 )
@@ -2083,7 +2097,7 @@ def tz_dateadd_data(request, tz_dateadd_args):
 @pytest.mark.parametrize(
     "case",
     [
-        pytest.param(False, id="no_case"),
+        pytest.param(False, id="no_case", marks=pytest.mark.slow),
         pytest.param(True, id="with_case"),
     ],
 )
@@ -2715,7 +2729,7 @@ def test_subdate_td_scalars(
     "use_case",
     [
         pytest.param(False, id="no_case"),
-        pytest.param(True, id="with_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
     ],
 )
 @pytest.mark.parametrize(
@@ -2723,7 +2737,11 @@ def test_subdate_td_scalars(
     [
         pytest.param(100, id="integer"),
         pytest.param("INTERVAL '4' days + INTERVAL '6' hours", id="timedelta_add"),
-        pytest.param("INTERVAL '4' days - INTERVAL '6' hours", id="timedelta_sub"),
+        pytest.param(
+            "INTERVAL '4' days - INTERVAL '6' hours",
+            id="timedelta_sub",
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
@@ -3254,6 +3272,7 @@ def test_next_previous_day_scalars(
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_tz_aware_day(tz_aware_df, memory_leak_check):
     query = "SELECT DAY(A) as m from table1"
     df = tz_aware_df["table1"]
@@ -3322,6 +3341,7 @@ def test_tz_aware_month(tz_aware_df, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_tz_aware_month_case(memory_leak_check):
     query = "SELECT CASE WHEN B THEN MONTH(A) END as m from table1"
     df = pd.DataFrame(
@@ -3370,7 +3390,7 @@ def large_tz_df(request):
 @pytest.mark.parametrize(
     "case",
     [
-        pytest.param(False, id="no_case"),
+        pytest.param(False, id="no_case", marks=pytest.mark.slow),
         pytest.param(True, id="case"),
     ],
 )
@@ -3424,7 +3444,7 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
     "case",
     [
         pytest.param(False, id="no_case"),
-        pytest.param(True, id="case"),
+        pytest.param(True, id="case", marks=pytest.mark.slow),
     ],
 )
 def test_tz_aware_dayof_fns(large_tz_df, case, memory_leak_check):
@@ -3513,6 +3533,7 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_tz_aware_next_day(memory_leak_check):
     query = "SELECT next_day(A, B) as m from table1"
     df = pd.DataFrame(
@@ -3563,6 +3584,7 @@ def test_tz_aware_next_day_case(
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_tz_aware_previous_day(memory_leak_check):
     query = "SELECT previous_day(A, B) as m from table1"
     df = pd.DataFrame(
@@ -3633,6 +3655,7 @@ def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
     query = f"SELECT CASE WHEN B THEN DATE_TRUNC('{date_trunc_literal}', A) END as output from table1"
     df = pd.DataFrame(
@@ -3655,6 +3678,7 @@ def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_tz_aware_add_sub_interval_year(representative_tz, memory_leak_check):
     """
     Test +/- Interval Year on tz-aware data.
@@ -3732,6 +3756,7 @@ def test_tz_aware_add_sub_interval_month(representative_tz, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_tz_aware_add_sub_interval_month_case(representative_tz, memory_leak_check):
     """
     Test +/- Interval Month on tz-aware data with case.
@@ -3822,6 +3847,7 @@ def test_tz_aware_add_sub_interval_day_case(representative_tz, memory_leak_check
 
 
 @pytest.mark.tz_aware
+@pytest.mark.slow
 def test_tz_aware_subdate_integer(memory_leak_check):
     """
     Test subdate on tz-aware data with an integer argument.
@@ -4011,7 +4037,7 @@ def date_from_parts_data():
     "use_case",
     [
         pytest.param(False, id="no_case"),
-        pytest.param(True, id="with_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
     ],
 )
 def test_date_from_parts(date_from_parts_data, use_case, memory_leak_check):
@@ -4040,7 +4066,10 @@ def test_date_from_parts(date_from_parts_data, use_case, memory_leak_check):
 
 
 @pytest.fixture(
-    params=[pytest.param(True, id="with_ns"), pytest.param(False, id="no_ns")]
+    params=[
+        pytest.param(True, id="with_ns", marks=pytest.mark.slow),
+        pytest.param(False, id="no_ns"),
+    ]
 )
 def timestamp_from_parts_data(request):
     year = pd.Series([2014, 2016, 2018, None, 2022, 2024], dtype=pd.Int64Dtype())

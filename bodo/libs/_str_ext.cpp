@@ -225,7 +225,7 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
     offset_t total_chars = offsets[n_strs];
     // printf("n_strs %d sep %c total chars:%d\n", n_strs, sep, total_chars);
     offset_t* index_offsets = new offset_t[n_strs + 1];
-    std::vector<offset_t> data_offs;
+    bodo::vector<offset_t> data_offs;
 
     data_offs.push_back(-1);
     index_offsets[0] = 0;
@@ -596,7 +596,7 @@ void* pd_pyarrow_array_from_string_array(array_info* str_arr) {
     // only str_arr and true arguments are relevant here
     std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    bodo_array_to_arrow(::arrow::default_memory_pool(),
+    bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(),
                         std::shared_ptr<array_info>(str_arr), &arrow_arr,
                         false /*convert_timedelta_to_int64*/, "", time_unit,
                         false /*downcast_time_ns_to_us*/);
@@ -898,8 +898,8 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
            num_null_bitmask_bytes);
 
     // Map string to its new index in dictionary values array
-    UNORD_MAP_CONTAINER<std::string, std::pair<int32_t, uint64_t>, string_hash,
-                        std::equal_to<>>
+    bodo::unord_map_container<std::string, std::pair<int32_t, uint64_t>,
+                              string_hash, std::equal_to<>>
         str_to_ind;
     uint32_t num_dict_strs = 0;
     uint64_t total_dict_chars = 0;
@@ -989,7 +989,8 @@ int64_t re_escape_length_kind2(char* pattern, int64_t length) {
         int16_t char_val = *((int16_t*)(pattern) + i);
         // All the escaped characters fit in 1 byte.
         if (char_val < 0xff) {
-            num_escapes += int(escapes.contains(pattern[i]));
+            char to_check = (char)char_val;
+            num_escapes += int(escapes.contains(to_check));
         }
     }
     return length + num_escapes;
@@ -1011,7 +1012,8 @@ int64_t re_escape_length_kind4(char* pattern, int64_t length) {
         // All the escaped characters fit in 1 byte.
         if (char_val < 0xff) {
             // Count the number of escapes.
-            num_escapes += int(escapes.contains(pattern[i]));
+            char to_check = (char)char_val;
+            num_escapes += int(escapes.contains(to_check));
         }
     }
     return length + num_escapes;

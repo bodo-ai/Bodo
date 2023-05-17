@@ -4,12 +4,21 @@ Implements array kernels that are specific to BodoSQL which have a variable
 number of arguments
 """
 
+import numpy as np
+import pandas as pd
 from numba.core import types
 from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import is_str_arr_type, raise_bodo_error
+from bodo.utils.typing import (
+    get_common_scalar_dtype,
+    get_overload_const_list,
+    is_overload_constant_list,
+    is_str_arr_type,
+    raise_bodo_error,
+)
+from bodo.utils.utils import is_array_typ
 
 
 def coalesce(A):  # pragma: no cover
@@ -239,7 +248,6 @@ def overload_coalesce_util(A):
 
     dead_offset = 0
     for i in range(len(A)):
-
         # If A[i] is NULL or comes after a scalar, it can be skipped
         if i in dead_cols:
             dead_offset += 1
@@ -405,7 +413,6 @@ def decode_util(A):
     # Loop over every argument that is being compared with the first argument
     # to see if they match. A[i+1] is the corresponding output argument.
     for i in range(1, len(A) - 1, 2):
-
         # The start of each conditional
         cond = "if" if len(scalar_text) == 0 else "elif"
 
@@ -627,3 +634,255 @@ def overload_concat_ws_util(A, sep):
         arg_string,
         arg_sources,
     )
+
+
+def least_greatest_codegen(A, is_greatest):
+    """
+    A codegen function for SQL functions LEAST and GREATEST,
+    which takes in an array of 1+ columns/scalars. Depending on
+    the value of is_greatest, a flag which indicates whether
+    the function is LEAST or GREATEST, this function will return
+    the smallest/largest value.
+
+    Args:
+        A (any array/scalar tuple): the array of values that are compared
+        to find the smallest value.
+
+    Raises:
+        BodoError: if there are 0 columns, or the types don't match
+
+    Returns:
+        an array containing the smallest/largest value of the input array
+    """
+
+    if len(A) == 0:
+        raise_bodo_error("Cannot compare 0 columns")
+
+    arg_names = []
+    arg_types = []
+    has_array_typ = False
+
+    for i, arr_typ in enumerate(A):
+        arg_name = f"A{i}"
+        arg_names.append(arg_name)
+        arg_types.append(arr_typ)
+        if is_array_typ(arr_typ):
+            has_array_typ = True
+
+    propagate_null = [True] * len(arg_names)
+
+    func = "GREATEST" if is_greatest else "LEAST"
+    if has_array_typ:
+        out_dtype = get_common_broadcasted_type(arg_types, func)
+    else:
+        out_dtype = get_common_scalar_dtype(arg_types)[0]
+
+    # Create the mapping from the tuple to the local variable.
+    arg_string = "A"
+    arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A))}
+
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = "unbox_if_tz_naive_timestamp" if is_array_typ(out_dtype) else ""
+    valid_arg_typ = out_dtype.dtype if is_array_typ(out_dtype) else out_dtype
+
+    if is_valid_datetime_or_date_arg(valid_arg_typ):
+        func_args = ", ".join(f"{unbox_str}(arg{i})" for i in range(len(arg_names)))
+    else:
+        func_args = ", ".join(f"arg{i}" for i in range(len(arg_names)))
+
+    func = "max" if is_greatest else "min"
+    scalar_text = f"  res[i] = {func}(({func_args}))\n"
+
+    extra_globals = {
+        "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
+    }
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        arg_string,
+        arg_sources,
+        extra_globals=extra_globals,
+    )
+
+
+def least(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(least)
+def overload_least(A):
+    """Handles cases where LEAST receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if not isinstance(A, (types.Tuple, types.UniTuple)):
+        raise_bodo_error("Least argument must be a tuple")
+    for i in range(len(A)):
+        if isinstance(A[i], types.optional):
+            # Note: If we have an optional scalar and its not the last argument,
+            # then the NULL vs non-NULL case can lead to different decisions
+            # about dictionary encoding in the output. This will lead to a memory
+            # leak as the dict-encoding result will be cast to a regular string array.
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.least",
+                ["A"],
+                0,
+                container_arg=i,
+                container_length=len(A),
+            )
+
+    def impl(A):  # pragma: no cover
+        return least_util(A)
+
+    return impl
+
+
+def least_util(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(least_util, no_unliteral=True)
+def overload_least_util(A):
+    """A dedicated kernel for the SQL function LEAST which takes in array of
+       1+ columns/scalars and returns the smallest value.
+
+    Args:
+        A (any array/scalar tuple): the array of values that are compared
+        to find the smallest value.
+
+    Returns:
+        an array containing the smallest value of the input array
+    """
+
+    return least_greatest_codegen(A, is_greatest=False)
+
+
+def greatest(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(greatest)
+def overload_greatest(A):
+    """Handles cases where GREATEST receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if not isinstance(A, (types.Tuple, types.UniTuple)):
+        raise_bodo_error("Greatest argument must be a tuple")
+    for i in range(len(A)):
+        if isinstance(A[i], types.optional):
+            # Note: If we have an optional scalar and its not the last argument,
+            # then the NULL vs non-NULL case can lead to different decisions
+            # about dictionary encoding in the output. This will lead to a memory
+            # leak as the dict-encoding result will be cast to a regular string array.
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.greatest",
+                ["A"],
+                0,
+                container_arg=i,
+                container_length=len(A),
+            )
+
+    def impl(A):  # pragma: no cover
+        return greatest_util(A)
+
+    return impl
+
+
+def greatest_util(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(greatest_util, no_unliteral=True)
+def overload_greatest_util(A):
+    """A dedicated kernel for the SQL function GREATEST which takes in array of
+       1+ columns/scalars and returns the largest value.
+
+    Args:
+        A (any array/scalar tuple): the array of values that are compared
+        to find the largest value.
+
+    Returns:
+        an array containing the largest value of the input array
+    """
+    return least_greatest_codegen(A, is_greatest=True)
+
+
+def row_number(df, by_cols, ascending, na_position):  # pragma: no cover
+    return
+
+
+@overload(row_number, no_unliteral=True, inline="always")
+def overload_row_number(df, by, ascending, na_position):
+    """Performs the ROW_NUMBER operation on a DataFrame based on the sorting
+       parameters provided. The result is returned as a DataFrame containing
+       a single column called ROW_NUMBER due to constraints in how the code
+       generation for window functions is currently handled.
+
+    Args:
+        df (pd.DataFrame): the DataFrame whose row ordinals are being sought
+        by (constant List[str]): list of column names to sort by
+        ascending (constant List[bool]): list indicating which columns to sort
+        in ascending versus descending order
+        na_position (constant List[str]): list of "first" or "last" values
+        indicating which of the columns should have nulls placed first or last
+
+    Returns:
+        pd.DataFrame: a DataFrame with a single column ROW_NUMBER indicating
+        what row number each row of the original DataFrame would be located
+        in (1-indexed) if it were sorted bby the parameters provided.
+    """
+    if (
+        not is_overload_constant_list(by)
+        or not is_overload_constant_list(ascending)
+        or not is_overload_constant_list(na_position)
+    ):  # pragma: no cover
+        raise_bodo_error(
+            "row_number by, ascending and na_position arguments must be constant lists"
+        )
+    by_list = get_overload_const_list(by)
+    asc_list = get_overload_const_list(ascending)
+    na_list = get_overload_const_list(na_position)
+    func_text = "def impl(df, by, ascending, na_position):\n"
+    cols = ", ".join([f"df['{col}'].values" for col in by_list])
+    func_text += "   n = len(df)\n"
+    func_text += (
+        "   index_2 = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)\n"
+    )
+    func_text += f"   df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe(({cols},), index_2, __col_name_meta_value_1)\n"
+    # Calculate the "bounds" for each ranks. It's really just a cumulative sum of
+    # the length of the chunks on all the ranks. We will later use this to shuffle
+    # data back as part of 'sort_index'.
+    func_text += f"   index_bounds = bodo.libs.distributed_api.get_chunk_bounds(bodo.utils.conversion.coerce_to_array(df2.index))\n"
+    func_text += f"   df3 = df2.sort_values(by={by_list}, ascending={asc_list}, na_position={na_list})\n"
+    func_text += "   rows = np.arange(1, n+1)\n"
+    func_text += (
+        "   index_3 = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df3)\n"
+    )
+    func_text += "   df4 = bodo.hiframes.pd_dataframe_ext.init_dataframe((rows,), index_3, __col_name_meta_value_2)\n"
+    # Sort by index. Use the "bounds" calculated earlier to make sure that
+    # the ranks receive the right data (corresponding to the lengths in the
+    # input dataframe).
+    func_text += "   return df4.sort_index(_bodo_chunk_bounds=index_bounds)\n"
+
+    __col_name_meta_value_1 = bodo.utils.typing.ColNamesMetaType(tuple(by_list))
+    __col_name_meta_value_2 = bodo.utils.typing.ColNamesMetaType(("ROW_NUMBER",))
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "np": np,
+            "pd": pd,
+            "__col_name_meta_value_1": __col_name_meta_value_1,
+            "__col_name_meta_value_2": __col_name_meta_value_2,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+
+    return impl

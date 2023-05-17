@@ -122,16 +122,19 @@ BODOSQL_TO_PYSPARK_FN_MAP = {
 @pytest.fixture(
     params=[
         ("CONCAT", ["strings", "strings"], ("'A'", "'B'")),
-        (
-            "CONCAT",
-            ["strings", "strings", "strings", "strings"],
-            ("'A'", "'B'"),
+        pytest.param(
+            (
+                "CONCAT",
+                ["strings", "strings", "strings", "strings"],
+                ("'A'", "'B'"),
+            ),
+            marks=pytest.mark.slow,
         ),
     ]
     +
     # string functions that take one string arg and return a string
     [
-        (x, ["strings"], ("'A'", "'B'"))
+        pytest.param((x, ["strings"], ("'A'", "'B'")), marks=pytest.mark.slow)
         for x in [
             "LCASE",
             "UCASE",

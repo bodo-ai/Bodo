@@ -4,9 +4,11 @@ Test correctness of SQL TRIM, LTRIM and RTRIM functions on BodoSQL
 """
 
 import pandas as pd
+import pytest
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.slow
 def test_trim(trim_df, memory_leak_check):
     """
     Tests TRIM with and without optional characters (scalars/columns)
@@ -38,6 +40,7 @@ def test_trim(trim_df, memory_leak_check):
         )
 
 
+@pytest.mark.slow
 def test_ltrim(trim_df, memory_leak_check):
     """
     Tests LTRIM with and without optional characters (scalars/columns)
@@ -67,6 +70,7 @@ def test_ltrim(trim_df, memory_leak_check):
         )
 
 
+@pytest.mark.slow
 def test_rtrim(trim_df, memory_leak_check):
     """
     Tests RTRIM with and without optional characters (scalars/columns)

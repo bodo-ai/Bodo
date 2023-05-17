@@ -1,7 +1,5 @@
 package com.bodosql.calcite.ir
 
-import com.bodosql.calcite.application.Utils.Utils
-
 abstract class Expr {
     /**
      * Emits code for this expression.
@@ -182,8 +180,10 @@ abstract class Expr {
      * Represents a triple quoted String.
      * @param arg The body of the string.
      */
-    data class TripleQuotedString(val arg: Expr) : Expr() {
-        override fun emit(): String = "\"\"\"${arg.emit()}\"\"\""
+    class TripleQuotedString(arg: String) : Expr() {
+        private val s = arg.replace("\"\"\"", """\"\"\"""")
+
+        override fun emit(): String = "\"\"\"$s\"\"\""
     }
 
     /**
@@ -192,7 +192,20 @@ abstract class Expr {
      * @param arg The body of the string.
      */
     data class StringLiteral(val arg: String) : Expr() {
-        override fun emit(): String = "\"${Utils.escapePythonQuotes(arg)}\""
+        override fun emit(): String {
+            val literal = arg
+                .replace("""["\\\n\r\t\u0008\f]""".toRegex()) { m ->
+                    when (val v = m.value) {
+                        "\n" -> """\n"""
+                        "\r" -> """\r"""
+                        "\t" -> """\t"""
+                        "\b" -> """\b"""
+                        "\u000c" -> """\f"""
+                        else -> "\\$v"
+                    }
+                }
+            return "\"$literal\""
+        }
     }
 
     /**
@@ -220,7 +233,7 @@ abstract class Expr {
     /**
      * Represents a Python None value.
      */
-    class None : Expr() {
+    object None : Expr() {
         override fun emit(): String = "None"
     }
 }

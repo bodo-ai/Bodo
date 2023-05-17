@@ -551,13 +551,8 @@ def get_s3_bucket_region(s3_filepath, parallel):
     PyArrow's region detection only works for actual S3 buckets.
     Returns an empty string in case region cannot be determined.
     """
-
-    try:
-        from pyarrow import fs as pa_fs
-    except:  # pragma: no cover
-        raise BodoError("Reading from s3 requires pyarrow currently.")
-
     from mpi4py import MPI
+    from pyarrow import fs as pa_fs
 
     comm = MPI.COMM_WORLD
 
@@ -638,7 +633,7 @@ class StorageOptionsDictType(types.Opaque):
 
 
 storage_options_dict_type = StorageOptionsDictType()
-types.storage_options_dict_type = storage_options_dict_type
+types.storage_options_dict_type = storage_options_dict_type  # type: ignore
 register_model(StorageOptionsDictType)(models.OpaqueModel)
 
 

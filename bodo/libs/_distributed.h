@@ -10,6 +10,7 @@
 #include <iostream>
 #include <numeric>
 #include <random>
+#include <span>
 #include <tuple>
 #include <vector>
 
@@ -52,7 +53,8 @@ static MPI_Op get_MPI_op(int op_enum) __UNUSED__;
 static int get_elem_size(int type_enum) __UNUSED__;
 static void dist_reduce(char* in_ptr, char* out_ptr, int op,
                         int type_enum) __UNUSED__;
-static void MPI_Allreduce_bool_or(std::vector<uint8_t>& V) __UNUSED__;
+template <typename Alloc>
+static void MPI_Allreduce_bool_or(std::vector<uint8_t, Alloc>& V) __UNUSED__;
 static void dist_exscan(char* in_ptr, char* out_ptr, int op,
                         int type_enum) __UNUSED__;
 
@@ -332,7 +334,8 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
     return;
 }
 
-static void MPI_Allreduce_bool_or(std::vector<uint8_t>& V) {
+template <typename Alloc>
+static void MPI_Allreduce_bool_or(std::vector<uint8_t, Alloc>& V) {
     int len = V.size();
     MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
     MPI_Allreduce(MPI_IN_PLACE, V.data(), len, mpi_typ8, MPI_BOR,
@@ -675,9 +678,10 @@ static void permutation_int(int64_t* output, int n) {
 // For example, if |n_samples| is 9 using the same example as above, then
 // the function returns [-1, 2, 0, 1] because indices [0, 1, 2] go to rank 0,
 // [3, 4, 5] go to rank 1, and [6, 7, 8] go to rank 2.
-static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t n_elems_local,
-                                            int64_t num_ranks, int64_t* p,
-                                            int64_t p_len, int64_t n_samples) {
+static bodo::vector<int64_t> find_dest_ranks(int64_t rank,
+                                             int64_t n_elems_local,
+                                             int64_t num_ranks, int64_t* p,
+                                             int64_t p_len, int64_t n_samples) {
     // find global start offset of my current chunk of data
     int64_t my_chunk_start = 0;
     // get current chunk sizes of all ranks
@@ -687,7 +691,7 @@ static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t n_elems_local,
     for (int i = 0; i < rank; i++)
         my_chunk_start += AllSizes[i];
 
-    std::vector<int64_t> dest_ranks(n_elems_local);
+    bodo::vector<int64_t> dest_ranks(n_elems_local);
     // find destination of every element in my chunk based on the permutation,
     // or -1 when there is no destination because p[my_chunk_start + i] >=
     // n_samples
@@ -702,8 +706,9 @@ static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t n_elems_local,
     return dest_ranks;
 }
 
-static std::vector<int> find_send_counts(const std::vector<int64_t>& dest_ranks,
-                                         int64_t num_ranks, int64_t elem_size) {
+static std::vector<int> find_send_counts(
+    const std::span<const int64_t> dest_ranks, int64_t num_ranks,
+    int64_t elem_size) {
     std::vector<int> send_counts(num_ranks);
     for (auto dest : dest_ranks) {
         if (dest != -1) {
@@ -1049,6 +1054,15 @@ static void oneD_reshape_shuffle(char* output, char* input,
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;
+    }
+}
+
+template <class T>
+static void calc_disp(std::vector<T>& disps, std::vector<T> const& counts) {
+    size_t n = counts.size();
+    disps[0] = 0;
+    for (size_t i = 1; i < n; i++) {
+        disps[i] = disps[i - 1] + counts[i - 1];
     }
 }
 

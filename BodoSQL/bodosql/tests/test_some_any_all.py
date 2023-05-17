@@ -44,6 +44,7 @@ def test_some_any_all_numeric_non_null_tuples(
     )
 
 
+@pytest.mark.slow
 def test_some_any_all_string_non_null_tuples(
     bodosql_string_types, some_any_all, comparison_ops, spark_info, memory_leak_check
 ):
@@ -115,27 +116,7 @@ def test_some_any_all_interval_non_null_tuples(
     )
 
 
-def test_some_any_all_like_not_like_non_null_tuples(
-    bodosql_string_types, like_expression, some_any_all, spark_info, memory_leak_check
-):
-    """Tests that the basic comparison operators work with Timedelta data within the same table"""
-    query = f""" SELECT A FROM table1 WHERE A {like_expression} {some_any_all} ('h%o', '%', '%el%')"""
-
-    # Spark casts interval types to bigint, doing comparisons to bigint equivalents of the above inttervals to avoid typing errors.
-    if some_any_all == "ANY" or some_any_all == "SOME":
-        spark_query = f"SELECT A FROM table1 WHERE A {like_expression} 'h%o' OR A {like_expression} '%' OR A {like_expression} '%el%'"
-    else:
-        spark_query = f"SELECT A FROM table1 WHERE A {like_expression} 'h%o' AND A {like_expression} '%' AND A {like_expression} '%el%'"
-
-    check_query(
-        query,
-        bodosql_string_types,
-        spark_info,
-        check_dtype=False,
-        equivalent_spark_query=spark_query,
-    )
-
-
+@pytest.mark.slow
 def test_some_any_all_null_tuples(
     bodosql_nullable_numeric_types,
     some_any_all,

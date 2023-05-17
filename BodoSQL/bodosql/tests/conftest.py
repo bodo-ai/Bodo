@@ -487,9 +487,9 @@ def bodosql_boolean_types(request):
 @pytest.fixture(
     params=[
         "2011-01-01",
-        "1971-02-02",
+        pytest.param("1971-02-02", marks=pytest.mark.slow),
         "2021-03-03",
-        "2004-12-07",
+        pytest.param("2004-12-07", marks=pytest.mark.slow),
         "2007-01-01 03:30:00",
     ]
 )
@@ -1655,25 +1655,42 @@ def pytest_collection_modifyitems(items):
     Also Marks the tests with marker "bodosql_<x>of4".
     """
     azure_1p_markers = [
-        pytest.mark.bodosql_1of6,
-        pytest.mark.bodosql_2of6,
-        pytest.mark.bodosql_3of6,
-        pytest.mark.bodosql_4of6,
-        pytest.mark.bodosql_5of6,
-        pytest.mark.bodosql_6of6,
+        pytest.mark.bodosql_1of12,
+        pytest.mark.bodosql_2of12,
+        pytest.mark.bodosql_3of12,
+        pytest.mark.bodosql_4of12,
+        pytest.mark.bodosql_5of12,
+        pytest.mark.bodosql_6of12,
+        pytest.mark.bodosql_7of12,
+        pytest.mark.bodosql_8of12,
+        pytest.mark.bodosql_9of12,
+        pytest.mark.bodosql_10of12,
+        pytest.mark.bodosql_11of12,
+        pytest.mark.bodosql_12of12,
     ]
     azure_2p_markers = [
-        pytest.mark.bodosql_1of11,
-        pytest.mark.bodosql_2of11,
-        pytest.mark.bodosql_3of11,
-        pytest.mark.bodosql_4of11,
-        pytest.mark.bodosql_5of11,
-        pytest.mark.bodosql_6of11,
-        pytest.mark.bodosql_7of11,
-        pytest.mark.bodosql_8of11,
-        pytest.mark.bodosql_9of11,
-        pytest.mark.bodosql_10of11,
-        pytest.mark.bodosql_11of11,
+        pytest.mark.bodosql_1of22,
+        pytest.mark.bodosql_2of22,
+        pytest.mark.bodosql_3of22,
+        pytest.mark.bodosql_4of22,
+        pytest.mark.bodosql_5of22,
+        pytest.mark.bodosql_6of22,
+        pytest.mark.bodosql_7of22,
+        pytest.mark.bodosql_8of22,
+        pytest.mark.bodosql_9of22,
+        pytest.mark.bodosql_10of22,
+        pytest.mark.bodosql_11of22,
+        pytest.mark.bodosql_12of22,
+        pytest.mark.bodosql_13of22,
+        pytest.mark.bodosql_14of22,
+        pytest.mark.bodosql_15of22,
+        pytest.mark.bodosql_16of22,
+        pytest.mark.bodosql_17of22,
+        pytest.mark.bodosql_18of22,
+        pytest.mark.bodosql_19of22,
+        pytest.mark.bodosql_20of22,
+        pytest.mark.bodosql_21of22,
+        pytest.mark.bodosql_22of22,
     ]
     # Sort the items. This is needed due to a niche issue with azure CI:
     # https://bodo.atlassian.net/browse/BE-4190
@@ -1761,10 +1778,10 @@ def timeadd_dataframe():
 @pytest.fixture(
     params=[
         "hour",
-        "minute",
+        pytest.param("minute", marks=pytest.mark.slow),
         "second",
         "millisecond",
-        "microsecond",
+        pytest.param("microsecond", marks=pytest.mark.slow),
         "nanosecond",
     ]
 )

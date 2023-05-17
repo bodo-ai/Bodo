@@ -70,7 +70,7 @@ def test_datediff_literals(basic_df, spark_info, memory_leak_check):
     "query, expected_output",
     [
         pytest.param(
-            "SELECT DATEDIFF('YEAR', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            "SELECT DATEDIFF(YEAR, TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
             pd.DataFrame({"A": pd.Series([-6])}),
             id="year",
         ),
@@ -80,7 +80,7 @@ def test_datediff_literals(basic_df, spark_info, memory_leak_check):
             id="quarter",
         ),
         pytest.param(
-            "SELECT TIMESTAMPDIFF('MONTH', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            "SELECT TIMESTAMPDIFF(MONTH, TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
             pd.DataFrame({"A": pd.Series([-62])}),
             id="month",
         ),
@@ -90,7 +90,7 @@ def test_datediff_literals(basic_df, spark_info, memory_leak_check):
             id="week",
         ),
         pytest.param(
-            "SELECT DATEDIFF('DAY', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            "SELECT DATEDIFF(DAY, TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
             pd.DataFrame({"A": pd.Series([-1892])}),
             id="day",
         ),
@@ -100,7 +100,7 @@ def test_datediff_literals(basic_df, spark_info, memory_leak_check):
             id="hour",
         ),
         pytest.param(
-            "SELECT DATEDIFF('MINUTE', TIMESTAMP '2017-02-28 12:10:05', TIMESTAMP '2011-12-25 10:10:10')",
+            "SELECT DATEDIFF(MINUTE, TIMESTAMP '2017-02-28 12:10:05', TIMESTAMP '2011-12-25 10:10:10')",
             pd.DataFrame({"A": pd.Series([-2724600])}),
             id="minute",
         ),
@@ -163,6 +163,7 @@ def test_datediff_multitable_columns(
             "select DATEDIFF('YEAR', table1.A, table1.B) from table1",
             "select (year(table1.B) - year(table1.A)) from table1",
             id="year",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "select DATEDIFF('DAY', table1.A, table1.B) from table1",
@@ -295,6 +296,7 @@ def test_str_date_case_stmt(spark_info, memory_leak_check):
         pytest.param(
             "2013-04-28T20:57:01.123456789+00:00",
             id='YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM_no_offset',
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "2013-04-28T20:57:01.123456789+07:00",

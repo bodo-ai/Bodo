@@ -94,6 +94,19 @@ class DatetimeAttribute(AttributeTemplate):
         return types.int64
 
 
+# '_ymd' is a Bodo-specific attribute for convenience.
+# It simply returns a tuple: (year, month, day)
+# corresponding to this Date object. This is useful
+# for cases such as comparison operators where we
+# need all 3 values.
+@overload_attribute(DatetimeDateType, "_ymd")
+def overload_datetime_date_get_ymd(a):
+    def get_ymd(a):  # pragma: no cover
+        return _ord2ymd(cast_datetime_date_to_int(a) + UNIX_EPOCH_ORD)
+
+    return get_ymd
+
+
 @overload_attribute(DatetimeDateType, "year")
 def overload_datetime_date_get_year(a):
     def get_year(a):  # pragma: no cover
@@ -216,6 +229,17 @@ def cast_datetime_date_to_int(typingctx, val=None):
         return args[0]
 
     return types.int32(datetime_date_type), codegen
+
+
+DATE_TO_NS = 24 * 60 * 60 * 10**9
+
+
+@register_jitable
+def cast_datetime_date_to_int_ns(dt):
+    """
+    Cast datetime.date to nanoseconds (int)
+    """
+    return cast_datetime_date_to_int(dt) * DATE_TO_NS
 
 
 ###############################################################################
@@ -426,7 +450,8 @@ def overload_date_str(val):
     if val == datetime_date_type:
 
         def impl(val):  # pragma: no cover
-            return str(val.year) + "-" + str_2d(val.month) + "-" + str_2d(val.day)
+            year, month, day = val._ymd
+            return str(year) + "-" + str_2d(month) + "-" + str_2d(day)
 
         return impl
 
@@ -441,9 +466,10 @@ def replace_overload(date, year=None, month=None, day=None):
         raise BodoError("date.replace(): day must be an integer")
 
     def impl(date, year=None, month=None, day=None):  # pragma: no cover
-        year_val = date.year if year is None else year
-        month_val = date.month if month is None else month
-        day_val = date.day if day is None else day
+        year_, month_, day_ = date._ymd
+        year_val = year_ if year is None else year
+        month_val = month_ if month is None else month
+        day_val = day_ if day is None else day
         return datetime.date(year_val, month_val, day_val)
 
     return impl
@@ -489,7 +515,8 @@ def weekday(date):
 @overload_method(DatetimeDateType, "isocalendar", no_unliteral=True)
 def overload_pd_timestamp_isocalendar(date):
     def impl(date):  # pragma: no cover
-        year, week, day_of_week = get_isocalendar(date.year, date.month, date.day)
+        year, month, day = date._ymd
+        year, week, day_of_week = get_isocalendar(year, month, day)
         return (year, week, day_of_week)
 
     return impl
@@ -993,25 +1020,27 @@ def create_cmp_op_overload(op):
         if lhs == datetime_date_type and rhs == datetime_date_type:
 
             def impl(lhs, rhs):  # pragma: no cover
-                y, y2 = lhs.year, rhs.year
-                m, m2 = lhs.month, rhs.month
-                d, d2 = lhs.day, rhs.day
-                return op(_cmp((y, m, d), (y2, m2, d2)), 0)
+                ord, ord2 = cast_datetime_date_to_int(lhs), cast_datetime_date_to_int(
+                    rhs
+                )
+                return op(ord, ord2)
 
             return impl
 
         # datetime.date and datetime64
         if lhs == datetime_date_type and rhs == bodo.datetime64ns:
+            # Convert both to integers (ns) for comparison.
             return lambda lhs, rhs: op(
-                bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.Timestamp(lhs)),
-                rhs,
+                cast_datetime_date_to_int_ns(lhs),
+                bodo.hiframes.pd_timestamp_ext.dt64_to_integer(rhs),
             )  # pragma: no cover
 
         # datetime64 and datetime.date
         if rhs == datetime_date_type and lhs == bodo.datetime64ns:
+            # Convert both to integers (ns) for comparison.
             return lambda lhs, rhs: op(
-                lhs,
-                bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.Timestamp(rhs)),
+                bodo.hiframes.pd_timestamp_ext.dt64_to_integer(lhs),
+                cast_datetime_date_to_int_ns(rhs),
             )  # pragma: no cover
 
     return overload_date_cmp

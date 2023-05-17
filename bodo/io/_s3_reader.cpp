@@ -140,7 +140,8 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region,
         options.proxy_options = get_s3_proxy_options_from_env_vars();
 
         arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> result;
-        result = arrow::fs::S3FileSystem::Make(options);
+        result =
+            arrow::fs::S3FileSystem::Make(options, bodo::buffer_io_context());
         CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::Make", s3_fs,
                                std::string(""))
         is_fs_initialized = true;

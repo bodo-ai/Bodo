@@ -1,9 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
-import com.bodosql.calcite.table.CatalogTableImpl
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.rel2sql.SqlImplementor
 
 /**
  * Temporary convention for Snowflake relations.

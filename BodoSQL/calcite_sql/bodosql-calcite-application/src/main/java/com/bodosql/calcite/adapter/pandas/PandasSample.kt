@@ -2,17 +2,14 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Module
+import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptSamplingParameters
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelCollationTraitDef
-import org.apache.calcite.rel.RelInput
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelWriter
 import org.apache.calcite.rel.SingleRel
-import org.apache.calcite.rel.core.Sample
-import org.apache.calcite.rel.metadata.RelMdCollation
-import org.apache.calcite.rex.RexNode
 
 class PandasSample(
     cluster: RelOptCluster,
@@ -20,7 +17,7 @@ class PandasSample(
     child: RelNode,
     val params: RelOptSamplingParameters,
 ) : SingleRel(cluster, traitSet, child), PandasRel {
-    
+
     init {
         assert(convention == PandasRel.CONVENTION)
     }

@@ -48,6 +48,7 @@ def test_orderby_numeric_scalar(bodosql_numeric_types, spark_info, memory_leak_c
     )
 
 
+@pytest.mark.slow
 def test_orderby_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     """
     Tests orderby works in the simple case for numeric types
@@ -152,6 +153,7 @@ def test_orderby_bool(bodosql_boolean_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_orderby_str(bodosql_string_types, spark_info, memory_leak_check):
     """
     Tests orderby works in the simple case for string types
@@ -274,6 +276,7 @@ def test_distinct_orderby(bodosql_numeric_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_orderby_multiple_cols(col_a_identical_tables, spark_info, memory_leak_check):
     """
     checks that orderby works correctly when sorting by multiple columns
@@ -344,6 +347,7 @@ def test_orderby_nulls_defaults_asc(null_ordering_table, spark_info, memory_leak
     )
 
 
+@pytest.mark.slow
 def test_orderby_nulls_defaults_desc(
     null_ordering_table, spark_info, memory_leak_check
 ):

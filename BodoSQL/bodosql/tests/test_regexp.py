@@ -57,6 +57,7 @@ def regexp_strings_df():
                 ),
             ),
             id="simple_pattern-no_flags-alias-1",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -71,6 +72,7 @@ def regexp_strings_df():
                 ),
             ),
             id="simple_pattern-no_flags-alias-2",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -99,6 +101,7 @@ def regexp_strings_df():
                 ),
             ),
             id="medium_pattern-no_flags-alias-2",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -438,6 +441,7 @@ def test_regexp_replace(regexp_strings_df, args, spark_info, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-ignore_case_extract-no_group",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -510,6 +514,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-0-ignore_case-no_group",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -538,6 +543,7 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
                 ),
             ),
             id="medium_pattern-1-2-1-no_flags-2",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (

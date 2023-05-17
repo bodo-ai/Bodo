@@ -2918,7 +2918,6 @@ _install_unary_ops()
 # inline IR for parallelizable data structures, but don't inline for scalars since we
 # pattern match pd.isna(A[i]) in SeriesPass to handle it properly
 def overload_isna(obj):
-
     check_runtime_cols_unsupported(obj, "pd.isna()")
     # DataFrame, Series, Index
     if isinstance(
@@ -3811,7 +3810,6 @@ def validate_keys(keys, df):
 def overload_dataframe_join(
     left, other, on=None, how="left", lsuffix="", rsuffix="", sort=False
 ):
-
     check_runtime_cols_unsupported(left, "DataFrame.join()")
     check_runtime_cols_unsupported(other, "DataFrame.join()")
     unsupported_args = dict(lsuffix=lsuffix, rsuffix=rsuffix)
@@ -4817,7 +4815,6 @@ def crosstab_overload(
     normalize=False,
     _pivot_values=None,
 ):
-
     # TODO[BE-3188]: Disabling since needs to use new pivot infrastructure
     raise BodoError(f"pandas.crosstab() not supported yet")
 
@@ -4938,7 +4935,6 @@ def overload_dataframe_sort_values(
         _bodo_interval_sort=False,
         _bodo_transformed=False,
     ):  # pragma: no cover
-
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
             df,
             by,
@@ -5094,6 +5090,7 @@ def overload_dataframe_sort_index(
     sort_remaining=True,
     ignore_index=False,
     key=None,
+    _bodo_chunk_bounds=None,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.sort_index()")
     unsupported_args = dict(
@@ -5148,15 +5145,15 @@ def overload_dataframe_sort_index(
         sort_remaining=True,
         ignore_index=False,
         key=None,
+        _bodo_chunk_bounds=None,
     ):  # pragma: no cover
-
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
             df,
             "$_bodo_index_",
             ascending,
             inplace,
             na_position,
-            None,
+            _bodo_chunk_bounds,
             False,  # _bodo_interval_sort
         )
 
@@ -5527,7 +5524,6 @@ def overload_dataframe_sample(
     axis=None,
     ignore_index=False,
 ):
-
     """Implementation of the sample functionality from
     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.sample.html
     """
@@ -6249,7 +6245,6 @@ def _parse_query_expr(
 
     class NewFuncNode(pandas.core.computation.ops.FuncNode):
         def __init__(self, name):
-
             if name not in pandas.core.computation.ops.MATHOPS or (
                 pandas.core.computation.check._NUMEXPR_INSTALLED
                 and pandas.core.computation.check_NUMEXPR_VERSION
@@ -6640,6 +6635,7 @@ def iternext_itertuples(context, builder, sig, args, result):
 #     return None
 
 # numba.parfors.array_analysis.ArrayAnalysis._analyze_op_static_getitem = _analyze_op_static_getitem
+
 
 # FIXME: fix array analysis for tuples in general
 def _analyze_op_pair_first(self, scope, equiv_set, expr, lhs):

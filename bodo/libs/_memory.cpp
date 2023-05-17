@@ -664,4 +664,27 @@ SizeClass* BufferPool::GetSizeClass_Unsafe(uint64_t idx) const {
     return this->size_classes_[idx].get();
 }
 
+/// Helper Functions for using BufferPool in Arrow
+
+::arrow::compute::ExecContext* buffer_exec_context() {
+    using arrow::compute::ExecContext;
+
+    static auto ctx_ =
+        std::make_shared<ExecContext>(bodo::BufferPool::DefaultPtr());
+    return ctx_.get();
+}
+
+::arrow::io::IOContext buffer_io_context() {
+    using arrow::io::IOContext;
+
+    static IOContext ctx_(bodo::BufferPool::DefaultPtr());
+    return ctx_;
+}
+
+std::shared_ptr<::arrow::MemoryManager> buffer_memory_manager() {
+    static auto mm_ =
+        arrow::CPUDevice::memory_manager(bodo::BufferPool::DefaultPtr());
+    return mm_;
+}
+
 }  // namespace bodo

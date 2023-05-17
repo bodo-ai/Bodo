@@ -1,6 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import datetime
+import operator
 import re
 
 import numpy as np
@@ -257,9 +258,9 @@ def test_different_tz_unsupported(cmp_op):
     Timestamps with different timezone.
     """
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
-    ts1 = pd.Timestamp("4/4/2022")
-    ts2 = pd.Timestamp("4/4/2022", tz="Poland")
-    # Check that comparison is not support between tz-aware and naive
+    ts1 = pd.Timestamp("4/4/2022", tz="Poland")
+    ts2 = pd.Timestamp("4/4/2022", tz="US/Pacific")
+    # Check different timezones aren't supported
     with pytest.raises(
         BodoError, match="requires both Timestamps share the same timezone"
     ):
@@ -268,16 +269,6 @@ def test_different_tz_unsupported(cmp_op):
         BodoError, match="requires both Timestamps share the same timezone"
     ):
         func(ts2, ts1)
-    # Check different timezones aren't supported
-    ts3 = pd.Timestamp("4/4/2022", tz="US/Pacific")
-    with pytest.raises(
-        BodoError, match="requires both Timestamps share the same timezone"
-    ):
-        func(ts3, ts2)
-    with pytest.raises(
-        BodoError, match="requires both Timestamps share the same timezone"
-    ):
-        func(ts2, ts3)
 
 
 def test_pd_timedelta_add(representative_tz, memory_leak_check):
@@ -484,3 +475,109 @@ def test_timestamp_freq_methods(freq, representative_tz, memory_leak_check):
     check_func(impl1, (ts, freq))
     check_func(impl2, (ts, freq))
     check_func(impl3, (ts, freq))
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(operator.eq, id="eq"),
+        pytest.param(operator.ne, id="ne"),
+        pytest.param(operator.lt, id="lt"),
+        pytest.param(operator.le, id="le"),
+        pytest.param(operator.gt, id="gt"),
+        pytest.param(operator.ge, id="ge"),
+    ],
+)
+def op(request):
+    return request.param
+
+
+@pytest.mark.parametrize(
+    "tz_aware",
+    [
+        pd.Timestamp("2019-01-01 12:00:00", tz="Europe/Berlin"),
+        pd.Timestamp("2020-01-01 23:59:59.999", tz="US/Eastern"),
+        pd.Timestamp("2030-01-01 15:23:42.728347", tz="GMT"),
+    ],
+)
+@pytest.mark.parametrize(
+    "datetime64",
+    [
+        np.datetime64("2019-01-01 12:00:00", "ns"),
+        np.datetime64("2020-01-01 23:59:59.999", "ns"),
+        np.datetime64("2030-01-01 15:23:42.728347", "ns"),
+    ],
+)
+def test_tz_aware_compare_datetime64(tz_aware, datetime64, op, memory_leak_check):
+    """
+    test comparison between tz_aware timestamp and datetime64 scalar works correctly
+    """
+
+    def comparison_impl(op):
+        def cmp(a, b):
+            return op(a, b)
+
+        return cmp
+
+    def expected_output(lhs, rhs):
+        if isinstance(lhs, pd.Timestamp):
+            left = lhs.tz_localize(None)
+        else:
+            left = lhs
+        if isinstance(rhs, pd.Timestamp):
+            right = rhs.tz_localize(None)
+        else:
+            right = rhs
+        return op(left, right)
+
+    check_func(
+        comparison_impl(op),
+        (tz_aware, datetime64),
+        py_output=expected_output(tz_aware, datetime64),
+    )
+    check_func(
+        comparison_impl(op),
+        (datetime64, tz_aware),
+        py_output=expected_output(datetime64, tz_aware),
+    )
+
+
+@pytest.mark.parametrize(
+    "tz_aware",
+    [
+        pd.Timestamp("2020-01-01 22:00:00", tz="Europe/Berlin"),
+        pd.Timestamp("2020-01-01 23:59:59.999", tz="US/Eastern"),
+        pd.Timestamp("2020-01-02 01:23:42.728347", tz="GMT"),
+    ],
+)
+@pytest.mark.parametrize(
+    "tz_naive",
+    [
+        pd.Timestamp("2020-01-01 22:00:00"),
+        pd.Timestamp("2020-01-01 23:59:59.999"),
+        pd.Timestamp("2020-01-02 01:23:42.728347"),
+    ],
+)
+def test_tz_aware_compare_tz_naive(tz_aware, tz_naive, op, memory_leak_check):
+    """
+    test comparison between tz_aware timestamp and tz_naive timestamp scalar works correctly
+    """
+
+    def comparison_impl(op):
+        def cmp(a, b):
+            return op(a, b)
+
+        return cmp
+
+    def expected_output(lhs, rhs):
+        return op(lhs.tz_localize(None), rhs.tz_localize(None))
+
+    check_func(
+        comparison_impl(op),
+        (tz_aware, tz_naive),
+        py_output=expected_output(tz_aware, tz_naive),
+    )
+    check_func(
+        comparison_impl(op),
+        (tz_naive, tz_aware),
+        py_output=expected_output(tz_naive, tz_aware),
+    )

@@ -3,6 +3,7 @@
 #ifndef _GROUPBY_AGG_FUNCS_H_INCLUDED
 #define _GROUPBY_AGG_FUNCS_H_INCLUDED
 
+#include <span>
 #include "_array_utils.h"
 #include "_groupby_ftypes.h"
 /**
@@ -22,8 +23,9 @@
  * @param v2 The second list of strings.
  * @return -1 if v1 < v2, 0 if v1=v2 and 1 if v1 > v2
  */
-int compare_list_string(std::vector<std::pair<std::string, bool>> const& v1,
-                        std::vector<std::pair<std::string, bool>> const& v2) {
+int compare_list_string(
+    const std::span<const std::pair<std::string, bool>> v1,
+    const std::span<const std::pair<std::string, bool>> v2) {
     size_t len1 = v1.size();
     size_t len2 = v2.size();
     size_t minlen = len1;
@@ -49,26 +51,6 @@ int compare_list_string(std::vector<std::pair<std::string, bool>> const& v1,
     } else {
         return 0;
     }
-}
-
-/**
- * @brief Convert the given value to a double.
- *
- * @tparam T The input type.
- * @tparam dtype The underlying dtype of the input type.
- * @param val The value to convert
- * @return Val as a double.
- */
-template <typename T, int dtype>
-inline typename std::enable_if<!is_decimal<dtype>::value, double>::type
-to_double(T const& val) {
-    return static_cast<double>(val);
-}
-
-template <typename T, int dtype>
-inline typename std::enable_if<is_decimal<dtype>::value, double>::type
-to_double(T const& val) {
-    return decimal_to_double(val);
 }
 
 // Template definitions used by multiple aggregate functions
@@ -99,7 +81,32 @@ struct bool_aggfunc {
      * @param[in,out] current aggregate value, holds the result
      * @param[in] other input value.
      */
-    static void apply(std::shared_ptr<array_info> arr, int64_t idx, T& v2);
+    static void apply(const std::shared_ptr<array_info>& arr, int64_t idx,
+                      T& v2);
+};
+
+/**
+ * This template is used for boolxor_agg.
+ */
+template <typename T, int dtype, typename Enable = void>
+struct boolxor_agg {
+    /**
+     * Aggregation function for boolxor_agg. The goal is to
+     * count the number of non-null occurrences and the number of true
+     * occurrences.
+     *
+     * @param[in] arr: array of input values
+     * @param[in,out] one_arr: boolean array indicating which groups have 1+
+     * nonzero observations
+     * @param[in,out] two_arr: boolean array indicating which groups have 2+
+     * nonzero observations
+     * @param[in] idx: index of the array that is being accessed
+     * @param[in] i_grp: index of the corresponding group
+     */
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             const std::shared_ptr<array_info>& one_arr,
+                             const std::shared_ptr<array_info>&, int64_t idx,
+                             int64_t i_grp);
 };
 
 /**
@@ -145,8 +152,9 @@ struct aggliststring {
      * @param[in,out] first input value, and holds the result
      * @param[in] second input value.
      */
-    static void apply(std::vector<std::pair<std::string, bool>>& v1,
-                      std::vector<std::pair<std::string, bool>>& v2) {}
+    template <typename Alloc1, typename Alloc2>
+    static void apply(std::vector<std::pair<std::string, bool>, Alloc1>& v1,
+                      std::vector<std::pair<std::string, bool>, Alloc2>& v2) {}
 };
 
 // sum
@@ -181,8 +189,10 @@ inline static void bool_sum(int64_t& v1, bool& v2) {
 
 template <>
 struct aggliststring<Bodo_FTypes::sum> {
-    inline static void apply(std::vector<std::pair<std::string, bool>>& v1,
-                             std::vector<std::pair<std::string, bool>>& v2) {
+    template <typename Alloc1, typename Alloc2>
+    inline static void apply(
+        std::vector<std::pair<std::string, bool>, Alloc1>& v1,
+        std::vector<std::pair<std::string, bool>, Alloc2>& v2) {
         v1.insert(v1.end(), v2.begin(), v2.end());
     }
 };
@@ -228,8 +238,10 @@ struct aggdict<Bodo_FTypes::min> {
 
 template <>
 struct aggliststring<Bodo_FTypes::min> {
-    inline static void apply(std::vector<std::pair<std::string, bool>>& v1,
-                             std::vector<std::pair<std::string, bool>>& v2) {
+    template <typename Alloc1, typename Alloc2>
+    inline static void apply(
+        std::vector<std::pair<std::string, bool>, Alloc1>& v1,
+        std::vector<std::pair<std::string, bool>, Alloc2>& v2) {
         if (compare_list_string(v1, v2) == 1) {
             v1 = v2;
         }
@@ -239,8 +251,8 @@ struct aggliststring<Bodo_FTypes::min> {
 // nullable boolean implementation
 template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::min> {
-    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
-                             bool& v2) {
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             int64_t idx, bool& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         // And to get the output.
         v1 = v1 && v2;
@@ -289,8 +301,10 @@ struct aggdict<Bodo_FTypes::max> {
 
 template <>
 struct aggliststring<Bodo_FTypes::max> {
-    inline static void apply(std::vector<std::pair<std::string, bool>>& v1,
-                             std::vector<std::pair<std::string, bool>>& v2) {
+    template <typename Alloc1, typename Alloc2>
+    inline static void apply(
+        std::vector<std::pair<std::string, bool>, Alloc1>& v1,
+        std::vector<std::pair<std::string, bool>, Alloc2>& v2) {
         if (compare_list_string(v1, v2) == -1) {
             v1 = v2;
         }
@@ -300,8 +314,8 @@ struct aggliststring<Bodo_FTypes::max> {
 // nullable boolean implementation
 template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::max> {
-    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
-                             bool& v2) {
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             int64_t idx, bool& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         // OR to get the output.
         v1 = v1 || v2;
@@ -336,8 +350,8 @@ struct aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::prod> {
 // nullable boolean implementation
 template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::prod> {
-    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
-                             bool& v2) {
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             int64_t idx, bool& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         v1 = v1 && v2;
         SetBitTo((uint8_t*)arr->data1(), idx, v1);
@@ -400,8 +414,9 @@ inline static void idxmin_dict(int32_t& v1, int32_t& v2, std::string& s1,
     }
 }
 
-inline static void idxmin_bool(std::shared_ptr<array_info> arr, int64_t grp_num,
-                               bool& v2, uint64_t& index_pos, int64_t i) {
+inline static void idxmin_bool(const std::shared_ptr<array_info>& arr,
+                               int64_t grp_num, bool& v2, uint64_t& index_pos,
+                               int64_t i) {
     bool v1 = GetBit((uint8_t*)arr->data1(), grp_num);
     if (v2 < v1) {
         SetBitTo((uint8_t*)arr->data1(), grp_num, v2);
@@ -465,8 +480,9 @@ inline static void idxmax_dict(int32_t& v1, int32_t& v2, std::string& s1,
     }
 }
 
-inline static void idxmax_bool(std::shared_ptr<array_info> arr, int64_t grp_num,
-                               bool& v2, uint64_t& index_pos, int64_t i) {
+inline static void idxmax_bool(const std::shared_ptr<array_info>& arr,
+                               int64_t grp_num, bool& v2, uint64_t& index_pos,
+                               int64_t i) {
     bool v1 = GetBit((uint8_t*)arr->data1(), grp_num);
     if (v2 > v1) {
         SetBitTo((uint8_t*)arr->data1(), grp_num, v2);
@@ -488,8 +504,8 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
      * @param idx The index to load/store for array.
      * @param v2 other input value.
      */
-    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
-                             T& v2) {
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             int64_t idx, T& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         v1 = (v1 || (v2 != 0));
         SetBitTo((uint8_t*)arr->data1(), idx, v1);
@@ -501,7 +517,7 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
                     typename std::enable_if<is_decimal<dtype>::value>::type> {
     /**
      * Aggregation function for boolor_agg. Note this implementation
-     * handles both integer and floating point data.
+     * handles decimal data.
      *
      * @param[in,out] arr The array holding the current aggregation info. This
      * is necessary because nullable booleans have 1 bit per boolean
@@ -509,10 +525,53 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
      * @param v2 other input value.
      */
     // TODO: Compare decimal directly?
-    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
-                             T& v2) {
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             int64_t idx, T& v2) {
         bool v1 = GetBit((uint8_t*)arr->data1(), idx);
         v1 = v1 || ((decimal_to_double(v2)) != 0.0);
+        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+    }
+};
+
+// booland_agg
+
+template <typename T, int dtype>
+struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg,
+                    typename std::enable_if<!is_decimal<dtype>::value>::type> {
+    /**
+     * Aggregation function for booland_agg. Note this implementation
+     * handles both integer and floating point data.
+     *
+     * @param[in,out] arr The array holding the current aggregation info. This
+     * is necessary because nullable booleans have 1 bit per boolean
+     * @param idx The index to load/store for array.
+     * @param v2 other input value.
+     */
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             int64_t idx, T& v2) {
+        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        v1 = (v1 && (v2 != 0));
+        SetBitTo((uint8_t*)arr->data1(), idx, v1);
+    }
+};
+
+template <typename T, int dtype>
+struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg,
+                    typename std::enable_if<is_decimal<dtype>::value>::type> {
+    /**
+     * Aggregation function for booland_agg. Note this implementation
+     * handles decimal data data.
+     *
+     * @param[in,out] arr The array holding the current aggregation info. This
+     * is necessary because nullable booleans have 1 bit per boolean
+     * @param idx The index to load/store for array.
+     * @param v2 other input value.
+     */
+    // TODO: Compare decimal directly?
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             int64_t idx, T& v2) {
+        bool v1 = GetBit((uint8_t*)arr->data1(), idx);
+        v1 = v1 && ((decimal_to_double(v2)) != 0.0);
         SetBitTo((uint8_t*)arr->data1(), idx, v1);
     }
 };
@@ -546,8 +605,10 @@ struct aggstring<Bodo_FTypes::last> {
 
 template <>
 struct aggliststring<Bodo_FTypes::last> {
-    inline static void apply(std::vector<std::pair<std::string, bool>>& v1,
-                             std::vector<std::pair<std::string, bool>>& v2) {
+    template <typename Alloc1, typename Alloc2>
+    inline static void apply(
+        std::vector<std::pair<std::string, bool>, Alloc1>& v1,
+        std::vector<std::pair<std::string, bool>, Alloc2>& v2) {
         v1 = v2;
     }
 };
@@ -555,8 +616,8 @@ struct aggliststring<Bodo_FTypes::last> {
 // nullable boolean implementation
 template <>
 struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::last> {
-    inline static void apply(std::shared_ptr<array_info> arr, int64_t idx,
-                             bool& v2) {
+    inline static void apply(const std::shared_ptr<array_info>& arr,
+                             int64_t idx, bool& v2) {
         SetBitTo((uint8_t*)arr->data1(), idx, v2);
     }
 };
@@ -693,6 +754,35 @@ struct kurt_agg {
         }
     }
 };
+
+// boolxor_agg
+
+template <typename T, int dtype>
+struct boolxor_agg<T, dtype> {
+    /**
+     * Aggregation function for boolxor_agg. The goal is to
+     * count the number of non-null occurrences and the number of true
+     * occurrences.
+     *
+     * @param T: input value
+     * @param[in,out] one_arr: boolean array indicating which groups have 1+
+     * nonzero observations
+     * @param[in,out] two_arr: boolean array indicating which groups have 2+
+     * nonzero observations
+     * @param[in] i_grp: index of the corresponding group
+     */
+    inline static void apply(const T val,
+                             const std::shared_ptr<array_info>& one_arr,
+                             const std::shared_ptr<array_info>& two_arr,
+                             int64_t i_grp) {
+        if (val != 0) {
+            bool old_one = GetBit((uint8_t*)one_arr->data1(), i_grp);
+            SetBitTo((uint8_t*)one_arr->data1(), i_grp, true);
+            SetBitTo((uint8_t*)two_arr->data1(), i_grp, old_one);
+        }
+    }
+};
+
 // Non inlined operations over multiple columns
 
 /**
@@ -718,8 +808,9 @@ struct kurt_agg {
  * @return false The comparison is a tie. If there are more columns we should
  * continue iterating.
  */
-bool idx_compare_column(std::shared_ptr<array_info> out_arr, int64_t grp_num,
-                        std::shared_ptr<array_info> in_arr, int64_t in_idx,
-                        bool asc, bool na_pos);
+bool idx_compare_column(const std::shared_ptr<array_info>& out_arr,
+                        int64_t grp_num,
+                        const std::shared_ptr<array_info>& in_arr,
+                        int64_t in_idx, bool asc, bool na_pos);
 
 #endif  // _GROUPBY_AGG_FUNCS_H_INCLUDED

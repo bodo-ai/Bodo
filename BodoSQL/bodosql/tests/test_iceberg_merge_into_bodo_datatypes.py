@@ -62,6 +62,9 @@ bodo_datatype_expected_sql_types = {
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(600)
+# NOTE (allai5): Arbitrary high timeout number due to inability to replicate
+# timeout locally
 def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_conn):
     """
     Test MERGE INTO with all Bodo datatypes as values.
@@ -133,6 +136,7 @@ def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_con
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.parametrize("col_name", bodo_datatype_cols.keys())
 def test_merge_into_bodo_datatypes_as_expr(

@@ -1244,6 +1244,7 @@ def test_dataframe_explode():
     """
     Tests for df.explode() on single and multiple columns.
     """
+
     # NOTE: a helper is necessary as Pandas df.explode() will fail for the tests below
     # because the `mylen` function used by Pandas internally marks scalars/NAs as having
     # length -1 and takes empty arrays as 0 despite each of the aforementioned taking up
@@ -1818,3 +1819,40 @@ def test_union_integer_promotion(memory_leak_check):
             sort_output=True,
             reset_index=True,
         )
+
+
+def test_union_nullable_boolean(memory_leak_check):
+    """
+    Tests a union of two DataFrames with boolean columns where 1 column is
+    nullable and the other is non-nullable.
+    """
+    new_cols_tup = bodo.utils.typing.ColNamesMetaType(("A",))
+
+    def impl(df1):
+        # Create df2 in JIT so we keep the type as a non-nullable boolean.
+        df2 = pd.DataFrame(
+            {
+                "A": np.zeros(6, dtype="bool"),
+            }
+        )
+        return bodo.hiframes.pd_dataframe_ext.union_dataframes(
+            (df1, df2), False, new_cols_tup
+        )
+
+    df1 = pd.DataFrame(
+        {
+            "A": pd.array([True, False, None] * 3, dtype="boolean"),
+        }
+    )
+    py_output = pd.DataFrame(
+        {
+            "A": pd.array([True, False, None] * 3 + [False] * 6, dtype="boolean"),
+        }
+    )
+    check_func(
+        impl,
+        (df1,),
+        py_output=py_output,
+        sort_output=True,
+        reset_index=True,
+    )

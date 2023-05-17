@@ -179,7 +179,6 @@ void iceberg_pq_write(const char *table_data_loc,
         // and create the transform columns.
         PyObject *sort_order_iter = PyObject_GetIter(sort_order);
         PyObject *sort_order_field_tuple;
-        int i = 0;
         while ((sort_order_field_tuple = PyIter_Next(sort_order_iter))) {
             // PyTuple_GetItem returns borrowed reference, no need to decref
             PyObject *col_idx_py = PyTuple_GetItem(sort_order_field_tuple, 0);
@@ -223,7 +222,6 @@ void iceberg_pq_write(const char *table_data_loc,
             transform_cols.push_back(transform_col);
 
             Py_DECREF(sort_order_field_tuple);
-            i++;
         }
         Py_DECREF(sort_order_iter);
 
@@ -392,8 +390,8 @@ void iceberg_pq_write(const char *table_data_loc,
         const uint32_t seed = SEED_HASH_PARTITION;
         std::shared_ptr<uint32_t[]> hashes =
             hash_keys(transform_cols, seed, is_parallel);
-        UNORD_MAP_CONTAINER<multi_col_key, partition_write_info,
-                            multi_col_key_hash>
+        bodo::unord_map_container<multi_col_key, partition_write_info,
+                                  multi_col_key_hash>
             key_to_partition;
 
         new_table->num_keys = transform_cols.size();

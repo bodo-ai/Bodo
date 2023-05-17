@@ -21,6 +21,7 @@ def test_like(
     )
 
 
+@pytest.mark.slow
 def test_like_ilike_non_literal_pattern(
     bodosql_string_types, spark_info, memory_leak_check
 ):
@@ -68,6 +69,7 @@ def test_like_ilike_arr_pattern(spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_like_ilike_basic_escape(spark_info, memory_leak_check):
     """
     tests that like and like works for a couple different possible regex strings
@@ -150,6 +152,7 @@ def test_like_ilike_non_constant_basic_escape(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_like_ilike_arr_escape(memory_leak_check):
     """
     tests that like and ilike works for arr escape values
@@ -277,6 +280,7 @@ def test_like_constants(
     check_query(query, basic_df, spark_info, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_nested_upper_lower(bodosql_string_types, spark_info, memory_leak_check):
     """
     Tests that lower/upper calls nest properly
@@ -289,6 +293,7 @@ def test_nested_upper_lower(bodosql_string_types, spark_info, memory_leak_check)
     )
 
 
+@pytest.mark.slow
 def test_upper_lower_scalars(basic_df, string_constants, spark_info, memory_leak_check):
     """
     Tests that lower/upper calls work on scalar values
@@ -553,7 +558,7 @@ def test_both_percent_scalar(
 
 
 @pytest.mark.slow
-def test_utf_scalar(spark_info, memory_leak_check):
+def test_utf_scalar(spark_info):
     check_query(
         "select 'ǖǘǚǜ'",
         {},
@@ -604,6 +609,7 @@ def test_utf_scalar(spark_info, memory_leak_check):
                 ),
             ),
             id="vector_scalar_scalar_remove_punct_transform_space",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -695,6 +701,7 @@ def test_translate(args, spark_info, memory_leak_check):
                 ),
             ),
             id="vector_space_comma",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -755,6 +762,7 @@ def test_initcap(args, spark_info, memory_leak_check):
                 ),
             ),
             id="scalar_vector_no_case_no_max",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -782,6 +790,7 @@ def test_initcap(args, spark_info, memory_leak_check):
                 ),
             ),
             id="scalar_vector_with_case_with_max",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -879,6 +888,7 @@ def test_editdistance(args, spark_info, memory_leak_check):
                 ),
             ),
             id="vector_lastchar_vector",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -950,6 +960,7 @@ def test_split_part(args, spark_info, memory_leak_check):
                 ),
             ),
             id="vector_default_default",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -972,6 +983,7 @@ def test_split_part(args, spark_info, memory_leak_check):
                 ),
             ),
             id="vector_space_5",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (

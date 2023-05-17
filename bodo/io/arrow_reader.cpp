@@ -419,7 +419,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
                 return out_array;
             }
             arrow::Result<std::shared_ptr<arrow::Array>> res =
-                arrow::Concatenate(arrays, arrow::default_memory_pool());
+                arrow::Concatenate(arrays, bodo::BufferPool::DefaultPtr());
             std::shared_ptr<arrow::Array> concat_res;
             CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
             out_array = arrow_array_to_bodo(concat_res);
@@ -443,11 +443,38 @@ class StringBuilder : public TableBuilder::BuilderColumn {
     StringBuilder() {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
-        // XXX hopefully keeping the string arrays around doesn't prevent other
-        // intermediate Arrow arrays and tables from being deleted when not
-        // needed anymore
-        arrays.insert(arrays.end(), chunked_arr->chunks().begin(),
-                      chunked_arr->chunks().end());
+        // Reserve some space up front in case of multiple chunks.
+        arrays.reserve(arrays.size() + chunked_arr->chunks().size());
+        for (const std::shared_ptr<arrow::Array>& chunk :
+             chunked_arr->chunks()) {
+            if (chunk->type_id() == arrow::Type::STRING) {
+                static_assert(OFFSET_BITWIDTH == 64);
+                // Convert 32-bit offset array to 64-bit offset array to match
+                // Bodo data layout. This avoids overflow errors during the
+                // Concatenate step in get_output.
+                ::arrow::Result<std::shared_ptr<::arrow::Array>> res =
+                    arrow::compute::Cast(*chunk, arrow::large_utf8(),
+                                         arrow::compute::CastOptions::Safe(),
+                                         bodo::buffer_exec_context());
+                std::shared_ptr<arrow::Array> casted_arr;
+                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+                arrays.push_back(std::move(casted_arr));
+            } else if (chunk->type_id() == arrow::Type::BINARY) {
+                static_assert(OFFSET_BITWIDTH == 64);
+                // Convert 32-bit offset array to 64-bit offset array to match
+                // Bodo data layout. This avoids overflow errors during the
+                // Concatenate step in get_output.
+                ::arrow::Result<std::shared_ptr<::arrow::Array>> res =
+                    arrow::compute::Cast(*chunk, arrow::large_binary(),
+                                         arrow::compute::CastOptions::Safe(),
+                                         bodo::buffer_exec_context());
+                std::shared_ptr<arrow::Array> casted_arr;
+                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+                arrays.push_back(std::move(casted_arr));
+            } else {  // LARGE_STRING or LARGE_BINARY
+                arrays.push_back(chunk);
+            }
+        }
     }
 
     virtual std::shared_ptr<array_info> get_output() {
@@ -458,7 +485,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                 return out_array;
             }
             arrow::Result<std::shared_ptr<arrow::Array>> res =
-                arrow::Concatenate(arrays, arrow::default_memory_pool());
+                arrow::Concatenate(arrays, bodo::BufferPool::DefaultPtr());
             std::shared_ptr<arrow::Array> concat_res;
             CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
             out_array = arrow_array_to_bodo(concat_res);
@@ -706,8 +733,8 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
     // str_to_ind maps string to its new index, new offset in the new
     // dictionary array. the 0th offset maps to 0.
     // Supports access with string_view. See comments for string_hash.
-    UNORD_MAP_CONTAINER<std::string, std::pair<int32_t, uint64_t>, string_hash,
-                        std::equal_to<>>
+    bodo::unord_map_container<std::string, std::pair<int32_t, uint64_t>,
+                              string_hash, std::equal_to<>>
         str_to_ind;
     int64_t count = 0;  // cumulative counter, used for reindexing the unique
                         // strings in the inner dict array
@@ -822,7 +849,7 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
         // again to our own buffers in
         // info_to_array https://bodo.atlassian.net/browse/BE-1426
         out_arrow_array =
-            arrow::Concatenate(arrays, arrow::default_memory_pool())
+            arrow::Concatenate(arrays, bodo::BufferPool::DefaultPtr())
                 .ValueOrDie();
         arrays.clear();  // memory of each array will be freed now
 
@@ -1174,7 +1201,9 @@ std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
                 // should be safe to compare.
                 // (https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4NK5arrow8DataType9bit_widthEv)
 
-                auto res = arrow::compute::Cast(col, exp_type);
+                auto res = arrow::compute::Cast(
+                    col, exp_type, arrow::compute::CastOptions::Safe(),
+                    bodo::buffer_exec_context());
                 // TODO: Use std::format after fixing C++ compiler errors
                 CHECK_ARROW(res.status(),
                             "Unable to upcast from " + col->type()->ToString() +

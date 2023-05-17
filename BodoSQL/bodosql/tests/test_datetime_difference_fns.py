@@ -520,6 +520,7 @@ def nanosecond_data(has_tz):
         "US/Mountain" if has_tz else None,
     )
 
+
 @pytest.fixture
 def timestampdiff_data():
     """Returns a dictionary mapping each unit to a function that takes in a
@@ -557,15 +558,15 @@ def timestampdiff_data():
 @pytest.mark.parametrize(
     "unit",
     [
-        "YEAR",
+        pytest.param("YEAR", marks=pytest.mark.slow),
         "QUARTER",
-        "MONTH",
+        pytest.param("MONTH", marks=pytest.mark.slow),
         "WEEK",
-        "DAY",
+        pytest.param("DAY", marks=pytest.mark.slow),
         "HOUR",
-        "MINUTE",
+        pytest.param("MINUTE", marks=pytest.mark.slow),
         "SECOND",
-        "MICROSECOND",
+        pytest.param("MICROSECOND", marks=pytest.mark.slow),
         "NANOSECOND",
     ],
 )

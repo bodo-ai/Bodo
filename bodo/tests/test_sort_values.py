@@ -828,6 +828,7 @@ def test_sort_values_na_position_list(memory_leak_check):
 
     random.seed(5)
     df1 = get_random_dataframe_two_columns(n, len_siz)
+
     # Pandas can't support multiple na_position values, so we use py_output
     # Here we always sort by column A and for column B we replace with NA with
     # a value that matches where FIRST LAST would place null values
@@ -1184,7 +1185,7 @@ def test_sort_values_input_boundaries(memory_leak_check):
     Test sort_values() with redistribution boundaries passed in manually
     """
 
-    @bodo.jit(distributed=["df"])
+    @bodo.jit(distributed=["df", "A"])
     def impl(df, A):
         bounds = bodo.libs.distributed_api.get_chunk_bounds(A)
         return df.sort_values(by="A", _bodo_chunk_bounds=bounds)
@@ -1277,7 +1278,7 @@ def test_sort_values_input_boundaries(memory_leak_check):
     # error checking unsupported array type
     with pytest.raises(BodoError, match=(r"only supported when there is a single key")):
 
-        @bodo.jit(distributed=["df"])
+        @bodo.jit(distributed=["df", "A"])
         def impl(df, A):
             bounds = bodo.libs.distributed_api.get_chunk_bounds(A)
             return df.sort_values(by=["A", "B"], _bodo_chunk_bounds=bounds)
@@ -2190,7 +2191,8 @@ def test_sort_values_ascending_bool(memory_leak_check):
 
 def test_sort_force_reshuffling(memory_leak_check):
     """By having only one key we guarantee that all rows will be put into just one bin.
-    This gets us a very skewed partition and therefore triggers the reshuffling after sort"""
+    This gets us a very skewed partition and therefore triggers the reshuffling after sort
+    """
 
     def f(df):
         return df.sort_values(by=["A"], kind="mergesort")

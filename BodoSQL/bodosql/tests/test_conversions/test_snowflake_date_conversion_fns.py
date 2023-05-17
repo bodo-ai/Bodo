@@ -36,7 +36,7 @@ def invalid_to_date_args(request):
     params=[
         pytest.param("DATE", id="date"),
         pytest.param("TRY_TO_DATE", id="try_to_date"),
-        pytest.param("TO_DATE", id="to_date"),
+        pytest.param("TO_DATE", id="to_date", marks=pytest.mark.slow),
     ]
 )
 def test_fn(request):
@@ -314,8 +314,8 @@ def format_input_string_df():
     [
         pytest.param("A", "YYYY-MM-DD", id="YYYY-MM-DD"),
         pytest.param("B", "DD-MON-YYYY", id="DD-MON-YYYY"),
-        pytest.param("C", "MM/DD/YYYY", id="MM/DD/YYYY"),
-        pytest.param("D", "___MMMM__DD____YY__", id="___MMMM__DD____YY__"),
+        pytest.param("C", "MM/DD/YYYY", id="MM/DD/YYYY", marks=pytest.mark.slow),
+        pytest.param("D", "___MMMM__DD____YY__", id="___MMMM__DD____YY__", marks=pytest.mark.slow),
         pytest.param("E", "DY@#$DD@#$YYYY@#$MON", id="DY@#$DD@#$YYYY@#$MON"),
     ],
 )
@@ -357,10 +357,10 @@ def test_date_casting_functions_with_valid_format(
     "input_col, format_str",
     [
         pytest.param("A", "MM/DD/YYYY", id="MM/DD/YYYY"),
-        pytest.param("B", "YYYY-MM-DD", id="YYYY-MM-DD"),
+        pytest.param("B", "YYYY-MM-DD", id="YYYY-MM-DD", marks=pytest.mark.slow),
         pytest.param("C", "DD-MON-YYYY", id="DD-MON-YYYY"),
         pytest.param("D", "DY@#$DD@#$YYYY@#$MON", id="DY@#$DD@#$YYYY@#$MON"),
-        pytest.param("E", "___MMMM__DD____YY__", id="___MMMM__DD____YY__"),
+        pytest.param("E", "___MMMM__DD____YY__", id="___MMMM__DD____YY__", marks=pytest.mark.slow),
     ],
 )
 def test_date_casting_functions_with_invalid_format(

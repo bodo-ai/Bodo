@@ -137,7 +137,7 @@ def generate_CI_buildspec(num_groups):
     images = {
         "linux": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:3.4"
     }
-    pytest_starting_marker = "not slow"
+    pytest_starting_marker = "not slow and not weekly"
     pytest_options = [
         pytest_starting_marker + " and " + str(i) for i in range(num_groups)
     ]

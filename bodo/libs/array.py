@@ -2241,11 +2241,6 @@ def interval_join_table(
     key_in_output_t,
     need_typechange_t,
     _bodo_rebalance_output_if_skewed,
-    cond_func,
-    left_col_nums,
-    left_col_nums_len,
-    right_col_nums,
-    right_col_nums_len,
     num_rows_ptr_t,
 ):
     """
@@ -2275,11 +2270,6 @@ def interval_join_table(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -2306,11 +2296,6 @@ def interval_join_table(
             types.voidptr,
             types.voidptr,
             types.boolean,
-            types.voidptr,
-            types.voidptr,
-            types.uint64,
-            types.voidptr,
-            types.uint64,
             types.voidptr,
         ),
         codegen,

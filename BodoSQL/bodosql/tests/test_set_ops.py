@@ -11,7 +11,7 @@ from bodo.tests.timezone_common import representative_tz  # noqa
 
 @pytest.fixture(
     params=[
-        pytest.param("UNION", id="union_op"),
+        pytest.param("UNION", id="union_op", marks=pytest.mark.slow),
         pytest.param("UNION DISTINCT", id="union_distinct", marks=pytest.mark.slow),
         pytest.param("UNION ALL", id="union_all"),
     ]
@@ -26,7 +26,7 @@ def union_cmds(request):
         pytest.param(
             "INTERSECT DISTINCT", id="intersect_distinct", marks=pytest.mark.slow
         ),
-        pytest.param("INTERSECT ALL", id="intersect_all"),
+        pytest.param("INTERSECT ALL", id="intersect_all", marks=pytest.mark.slow),
     ]
 )
 def intersect_cmds(request):
@@ -54,8 +54,8 @@ def except_cmds(request):
         pytest.param(
             "INTERSECT DISTINCT", id="intersect_distinct", marks=pytest.mark.slow
         ),
-        pytest.param("INTERSECT ALL", id="intersect_all"),
-        pytest.param("EXCEPT", id="except_op"),
+        pytest.param("INTERSECT ALL", id="intersect_all", marks=pytest.mark.slow),
+        pytest.param("EXCEPT", id="except_op", marks=pytest.mark.slow),
         pytest.param("MINUS", id="minus_op", marks=pytest.mark.slow),
         pytest.param("EXCEPT ALL", id="except_all"),
         pytest.param("MINUS ALL", id="minus_all", marks=pytest.mark.slow),
@@ -135,6 +135,7 @@ def make_tz_aware_df(tz):
 # ===== Set Ops Tests
 
 
+@pytest.mark.slow
 def test_set_ops_numeric_cols(set_ops_dfs, set_ops_cmds, spark_info, memory_leak_check):
     """
     Test that set ops work for a single numeric column
@@ -209,6 +210,7 @@ def test_set_ops_null_literals(query_cmd, py_output, memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_set_ops_string_cols(
     bodosql_string_types, set_ops_cmds, spark_info, memory_leak_check
 ):
@@ -229,6 +231,7 @@ def test_set_ops_datetime_cols(
     check_query(query, bodosql_datetime_types, spark_info, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_set_ops_binary_cols(
     bodosql_binary_types, set_ops_cmds, spark_info, memory_leak_check
 ):
@@ -259,6 +262,7 @@ def test_union_string_restrictions(
     )
 
 
+@pytest.mark.slow
 def test_intersect_string_restrictions(
     bodosql_string_types, intersect_cmds, spark_info, memory_leak_check
 ):
@@ -293,6 +297,7 @@ def test_except_string_restrictions(
 # ===== Timezone-Aware Cols
 
 
+@pytest.mark.slow
 def test_union_tz_aware_cols(union_cmds, representative_tz, memory_leak_check):
     """
     Tests that UNION [ALL/DISTINCT] works for tz_aware columns
@@ -333,6 +338,7 @@ def test_intersect_tz_aware_cols(intersect_cmds, representative_tz, memory_leak_
     check_query(query, ctx, None, expected_output=py_output)
 
 
+@pytest.mark.slow
 def test_except_tz_aware_cols(except_cmds, representative_tz, memory_leak_check):
     """
     Tests that EXCEPT/MINUS [ALL] works for tz_aware columns

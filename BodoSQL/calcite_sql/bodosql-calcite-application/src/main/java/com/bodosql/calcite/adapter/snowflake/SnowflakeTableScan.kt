@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
 import com.bodosql.calcite.table.CatalogTableImpl
+import com.bodosql.calcite.traits.BatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptPlanner
@@ -56,7 +57,7 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
         fun create(cluster: RelOptCluster, table: RelOptTable, catalogTable: CatalogTableImpl): SnowflakeTableScan {
             // TODO(jsternberg): This next line should be required and always part
             // of creating a SnowflakeTableScan. On the other hand, while we are using the
-            // HepPlanner, this trait set causes an issue. The existance of the trait set
+            // HepPlanner, this trait set causes an issue. The existence of the trait set
             // causes the HepPlanner to try and stick to the convention, but it uses the
             // VolcanoPlanner initialized with PlannerImpl to do that. The VolcanoPlanner
             // gets confused about HepRelVertex and this causes it to fail to enforce
@@ -67,7 +68,7 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
             // treated like the NONE convention by the HepPlanner. We'll then add it using
             // copy and a RelShuttle before invoking the VolcanoPlanner.
             // val traitSet = cluster.traitSetOf(SnowflakeRel.CONVENTION)
-            val traitSet = cluster.traitSet()
+            val traitSet = cluster.traitSet().replace(BatchingProperty.SINGLE_BATCH)
             return SnowflakeTableScan(cluster, traitSet, table, catalogTable)
         }
     }

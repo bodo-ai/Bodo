@@ -5,6 +5,7 @@
 
 #include <mpi.h>
 #include <iostream>
+#include <span>
 #include <string>
 #include <unordered_map>
 
@@ -21,7 +22,7 @@
 void append_to_primitive(
     std::shared_ptr<arrow::PrimitiveArray> const& primitive_array,
     int64_t offset, int64_t length, arrow::ArrayBuilder* builder,
-    const std::vector<uint8_t>& valid_elems) {
+    const std::span<const uint8_t> valid_elems) {
     arrow::Type::type typ = builder->type()->id();
     const uint8_t* values = primitive_array->values()->data();
     if (typ == arrow::Type::BOOL) {
@@ -200,7 +201,7 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         } else {
             vect_size = num_elems;
         }
-        std::vector<uint8_t> valid_elems(vect_size, 0);
+        bodo::vector<uint8_t> valid_elems(vect_size, 0);
         // TODO: more efficient way of getting null data?
         size_t j = 0;
         if (primitive_array->type()->id() != arrow::Type::BOOL) {
@@ -421,8 +422,8 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             // so we need one first loop to determine the needed length. In the
             // second loop, the assignation is made. If the entries are missing
             // then the bitmask is set to false.
-            std::vector<offset_t> ListSizes_index(nRowOut);
-            std::vector<offset_t> ListSizes_data(nRowOut);
+            bodo::vector<offset_t> ListSizes_index(nRowOut);
+            bodo::vector<offset_t> ListSizes_data(nRowOut);
             int64_t tot_size_index = 0;
             int64_t tot_size_data = 0;
             offset_t* index_offsets = (offset_t*)in_arr->data3();
@@ -498,7 +499,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             // second loop, the assignation is made. If the entries are missing
             // then the bitmask is set to false.
             int64_t n_chars = 0;
-            std::vector<offset_t> ListSizes(nRowOut);
+            bodo::vector<offset_t> ListSizes(nRowOut);
             offset_t* in_offsets = (offset_t*)in_arr->data2();
             char* in_data1 = in_arr->data1();
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -619,7 +620,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             // sizes are not known in advance)
             std::unique_ptr<arrow::ArrayBuilder> builder;
             std::shared_ptr<arrow::Array> in_arrow_array = to_arrow(in_arr);
-            (void)arrow::MakeBuilder(arrow::default_memory_pool(),
+            (void)arrow::MakeBuilder(bodo::BufferPool::DefaultPtr(),
                                      in_arrow_array->type(), &builder);
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
@@ -654,7 +655,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
 };
 
 std::shared_ptr<array_info> RetrieveArray_SingleColumn(
-    std::shared_ptr<array_info> in_arr, std::vector<int64_t> const& ListIdx,
+    std::shared_ptr<array_info> in_arr, const std::span<const int64_t> ListIdx,
     bool use_nullable_arr) {
     return RetrieveArray_SingleColumn_F(std::move(in_arr), ListIdx.data(),
                                         ListIdx.size(), use_nullable_arr);
@@ -669,15 +670,15 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
         return nullptr;
     }
     size_t siz = idx_arr->length;
-    return RetrieveArray_SingleColumn_F(in_arr, (int64_t*)idx_arr->data1(), siz,
-                                        use_nullable_arr);
+    return RetrieveArray_SingleColumn_F(
+        std::move(in_arr), (int64_t*)idx_arr->data1(), siz, use_nullable_arr);
 }
 
 std::shared_ptr<array_info> RetrieveArray_TwoColumns(
     std::shared_ptr<array_info> const& arr1,
     std::shared_ptr<array_info> const& arr2,
-    std::vector<int64_t> const& short_write_idxs,
-    std::vector<int64_t> const& long_write_idxs) {
+    const std::span<const int64_t> short_write_idxs,
+    const std::span<const int64_t> long_write_idxs) {
     if ((arr1 != nullptr) && (arr2 != nullptr) &&
         (arr1->arr_type == bodo_array_type::DICT) &&
         (arr2->arr_type == bodo_array_type::DICT) &&
@@ -713,8 +714,8 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // need one first loop to determine the needed length. In the second
         // loop, the assignation is made. If the entries are missing then the
         // bitmask is set to false.
-        std::vector<offset_t> ListSizes_index(nRowOut);
-        std::vector<offset_t> ListSizes_data(nRowOut);
+        bodo::vector<offset_t> ListSizes_index(nRowOut);
+        bodo::vector<offset_t> ListSizes_data(nRowOut);
         int64_t tot_size_index = 0;
         int64_t tot_size_data = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -789,7 +790,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // loop, the assignation is made. If the entries are missing then the
         // bitmask is set to false.
         int64_t n_chars = 0;
-        std::vector<offset_t> ListSizes(nRowOut);
+        bodo::vector<offset_t> ListSizes(nRowOut);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
                 get_iRow(iRow);
@@ -954,7 +955,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // sizes are not known in advance)
         std::unique_ptr<arrow::ArrayBuilder> builder;
         std::shared_ptr<arrow::Array> in_arr_typ = to_arrow(arr1);
-        (void)arrow::MakeBuilder(arrow::default_memory_pool(),
+        (void)arrow::MakeBuilder(bodo::BufferPool::DefaultPtr(),
                                  in_arr_typ->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
@@ -985,7 +986,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
 
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    std::vector<int64_t> const& ListIdx, int const& n_cols_arg) {
+    const std::span<const int64_t> ListIdx, int const& n_cols_arg) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     size_t n_cols;
     if (n_cols_arg == -1) {
@@ -1006,7 +1007,8 @@ std::shared_ptr<table_info> RetrieveTable(
 
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    std::vector<int64_t> const& rowInds, std::vector<size_t> const& colInds) {
+    const std::span<const int64_t> rowInds,
+    std::vector<size_t> const& colInds) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     for (size_t i_col : colInds) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
@@ -1230,9 +1232,10 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
     }
 }
 
-bool TestEqualColumn(std::shared_ptr<array_info> arr1, int64_t pos1,
-                     std::shared_ptr<array_info> arr2, int64_t pos2,
-                     bool is_na_equal) {
+bool TestEqualColumn(const std::shared_ptr<const array_info>& arr1,
+                     int64_t pos1,
+                     const std::shared_ptr<const array_info>& arr2,
+                     int64_t pos2, bool is_na_equal) {
     if (arr1->arr_type == bodo_array_type::STRUCT ||
         arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
         // TODO: Handle is_na_equal in Arrow arrays
@@ -1279,8 +1282,9 @@ bool TestEqualColumn(std::shared_ptr<array_info> arr1, int64_t pos1,
                     "TestEqualColumn: don't know if arrays have unified "
                     "dictionary");
             }
-            arr1 = arr1->child_arrays[1];
-            arr2 = arr2->child_arrays[1];
+            // Recursively call on the indices
+            return TestEqualColumn(arr1->child_arrays[1], pos1,
+                                   arr2->child_arrays[1], pos2, is_na_equal);
         }
         // NULLABLE case. We need to consider the bitmask and the values.
         bool bit1 = arr1->get_null_bit(pos1);
@@ -1400,9 +1404,9 @@ bool TestEqualColumn(std::shared_ptr<array_info> arr1, int64_t pos1,
 };
 
 int KeyComparisonAsPython_Column(bool const& na_position_bis,
-                                 std::shared_ptr<array_info> arr1,
+                                 const std::shared_ptr<array_info>& arr1,
                                  size_t const& iRow1,
-                                 std::shared_ptr<array_info> arr2,
+                                 const std::shared_ptr<array_info>& arr2,
                                  size_t const& iRow2) {
     if (arr1->arr_type == bodo_array_type::STRUCT ||
         arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
@@ -1678,8 +1682,9 @@ bool KeyComparisonAsPython(
  * have sentinel nulls are supported.
  */
 template <Bodo_CTypes::CTypeEnum DType>
-requires(NullSentinelDtype<DType>) void fill_null_bitmask_numpy(
-    uint8_t* bitmask, const std::shared_ptr<array_info> arr) {
+    requires(NullSentinelDtype<DType>)
+void fill_null_bitmask_numpy(uint8_t* bitmask,
+                             const std::shared_ptr<array_info> arr) {
     using T = typename dtype_to_type<DType>::type;
     T* data = (T*)(arr->data1());
     for (size_t i = 0; i < arr->length; i++) {
@@ -2068,10 +2073,10 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
 
 #undef DEBUG_DEBUG  // Yes, it is a concept
 
-std::vector<std::string> GetColumn_as_ListString(
+bodo::vector<std::string> GetColumn_as_ListString(
     const std::shared_ptr<array_info> arr) {
     size_t nRow = arr->length;
-    std::vector<std::string> ListStr(nRow);
+    bodo::vector<std::string> ListStr(nRow);
     std::string strOut;
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         if (arr->dtype == Bodo_CTypes::_BOOL) {
@@ -2110,9 +2115,9 @@ std::vector<std::string> GetColumn_as_ListString(
     }
     if (arr->arr_type == bodo_array_type::DICT) {
         nRow = arr->child_arrays[1]->length;
-        std::vector<std::string> dataStr(nRow);
+        bodo::vector<std::string> dataStr(nRow);
         dataStr = GetColumn_as_ListString(arr->child_arrays[0]);
-        std::vector<std::string> indexStr(nRow);
+        bodo::vector<std::string> indexStr(nRow);
         indexStr = GetColumn_as_ListString(arr->child_arrays[1]);
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             bool bit = arr->get_null_bit(iRow);
@@ -2221,20 +2226,20 @@ void DEBUG_PrintVectorArrayInfo(
             nRowMax = nRow;
         ListLen[iCol] = nRow;
     }
-    std::vector<std::vector<std::string>> ListListStr;
+    bodo::vector<bodo::vector<std::string>> ListListStr;
     for (int iCol = 0; iCol < nCol; iCol++) {
-        std::vector<std::string> LStr = GetColumn_as_ListString(ListArr[iCol]);
+        bodo::vector<std::string> LStr = GetColumn_as_ListString(ListArr[iCol]);
         for (int iRow = ListLen[iCol]; iRow < nRowMax; iRow++)
             LStr.emplace_back("");
         ListListStr.emplace_back(LStr);
     }
-    std::vector<std::string> ListStrOut(nRowMax);
+    bodo::vector<std::string> ListStrOut(nRowMax);
     for (int iRow = 0; iRow < nRowMax; iRow++) {
         std::string str = std::to_string(iRow) + " :";
         ListStrOut[iRow] = str;
     }
     for (int iCol = 0; iCol < nCol; iCol++) {
-        std::vector<int> ListLen(nRowMax);
+        bodo::vector<int> ListLen(nRowMax);
         size_t maxlen = 0;
         for (int iRow = 0; iRow < nRowMax; iRow++) {
             size_t elen = ListListStr[iCol][iRow].size();
@@ -2394,7 +2399,7 @@ void DEBUG_PrintColumn(std::ostream& os,
             os << f << " ";
         os << "\n";
     }
-    std::vector<std::string> LStr = GetColumn_as_ListString(arr);
+    bodo::vector<std::string> LStr = GetColumn_as_ListString(arr);
     for (int i_row = 0; i_row < n_rows; i_row++)
         os << "i_row=" << i_row << " S=" << LStr[i_row] << "\n";
 }

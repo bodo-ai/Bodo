@@ -2,8 +2,13 @@
 """Tests for user facing BodoSQL APIs.
 """
 
+import datetime
 import os
+import re
+import time
 
+import bodosql
+import numba
 import numpy as np
 import pandas as pd
 import pytest
@@ -594,3 +599,79 @@ def test_validate_query(query, request, memory_leak_check):
         assert bc.validate_query(query)
     else:
         assert not bc.validate_query(query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param("select * from t1", id="valid-query"),
+        pytest.param("select * from table1", id="invalid-query"),
+    ],
+)
+def test_fail_validate_also_fails_compile(query, request, memory_leak_check):
+    """
+    All queries that don't validate also shouldn't compile.
+    """
+    df = pd.DataFrame({"a": np.arange(100), "b": ["r32r", "R32", "Rew", "r32r"] * 25})
+    bc = BodoSQLContext(
+        {
+            "t1": df,
+            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+        }
+    )
+
+    (compiles_flag, _compile_time, _error_message) = bc.validate_query_compiles(query)
+    if not "invalid" in request.node.name:
+        assert compiles_flag
+    else:
+        assert not compiles_flag
+
+
+@pytest.mark.parametrize(
+    "query_text",
+    [
+        """
+def impl(t1, t2):
+    return 'hello' + True
+""",
+        """
+def impl(t1, t2):
+    return t1[t2]
+""",
+    ],
+)
+def test_fails_compile(query_text):
+    """
+    Tests queries that pass validation, but fail during compile.
+    Calls a helper function of the sql context, so we don't have to rely on
+    generating a query that fails to compile.
+    """
+
+    df = pd.DataFrame({"a": np.arange(100), "b": ["r32r", "R32", "Rew", "r32r"] * 25})
+    bc = BodoSQLContext(
+        {
+            "t1": df,
+            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+        }
+    )
+
+    glbls = {
+        "np": np,
+        "pd": pd,
+        "bodosql": bodosql,
+        "re": re,
+        "bodo": bodo,
+        "ColNamesMetaType": bodo.utils.typing.ColNamesMetaType,
+        "MetaType": bodo.utils.typing.MetaType,
+        "numba": numba,
+        "time": time,
+        "datetime": datetime,
+        "pd": pd,
+    }
+
+    try:
+        bc._functext_compile(query_text, dict(), glbls)
+    except Exception as e:
+        return
+
+    raise Exception("Should have failed to compile")

@@ -65,6 +65,26 @@ def test_contains(args, memory_leak_check):
     )
 
 
+def test_contains_optional(memory_leak_check):
+    """Test the optional code path for contains."""
+
+    def impl(A, pattern, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = pattern if flag1 else None
+        return bodo.libs.bodosql_array_kernels.contains(arg0, arg1)
+
+    A = "mean"
+    pattern = "e"
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            py_output = True if flag0 and flag1 else None
+            check_func(
+                impl,
+                (A, pattern, flag0, flag1),
+                py_output=py_output,
+            )
+
+
 @pytest.mark.parametrize(
     "n",
     [
@@ -2002,6 +2022,45 @@ def test_substring(args, memory_leak_check):
     check_func(
         impl,
         (arr, start, length),
+        py_output=substring_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_substring_suffix(memory_leak_check):
+    """Test substring_suffix kernel"""
+    arr = pd.Series(
+        pd.array(
+            [
+                "alphabet soup is 🟥🟧🟨🟩🟦🟪",
+                "so very very delicious",
+                "aaeaaeieaaeioiea",
+                "alpha beta gamma delta epsilon",
+                None,
+                "foo",
+                "bar",
+            ]
+        )
+    )
+    start = pd.Series(pd.array([5, -5, 3, -8, 10, 20, 1]))
+
+    def impl(arr, start):
+        return pd.Series(bodo.libs.bodosql_array_kernels.substring_suffix(arr, start))
+
+    # Simulates SUBSTRING on a single row
+    def substring_scalar_fn(elem, start):
+        if pd.isna(elem) or pd.isna(start):
+            return None
+        elif start > 0:
+            start -= 1
+        return elem[start:]
+
+    substring_answer = vectorized_sol((arr, start), substring_scalar_fn, object)
+    check_func(
+        impl,
+        (arr, start),
         py_output=substring_answer,
         check_dtype=False,
         reset_index=True,

@@ -107,15 +107,44 @@ public class CastCodeGen {
     return codeBuilder.toString();
   }
 
-  /**
-   * Function that returns the generated name for a Cast call.
-   *
-   * @param name The name for the arg.
-   * @return The name generated that matches the Cast call.
-   */
-  public static String generateCastName(String name, SqlTypeName typeName) {
-    StringBuilder nameBuilder = new StringBuilder();
-    nameBuilder.append("CAST(").append(name).append(" AS ").append(typeName.toString()).append(")");
-    return nameBuilder.toString();
+  public static String generateTryCastCode(
+      String arg,
+      RelDataType outputType) {
+    StringBuilder codeBuilder = new StringBuilder();
+    SqlTypeName outputTypeName = outputType.getSqlTypeName();
+    codeBuilder.append("bodo.libs.bodosql_array_kernels.");
+    switch (outputTypeName) {
+    case BOOLEAN:
+      codeBuilder.append("try_to_boolean(").append(arg).append(")");
+      break;
+    case CHAR:
+    case VARCHAR:
+      return arg;
+    case DATE:
+      codeBuilder.append("try_to_date(").append(arg).append(", None)");
+      break;
+    case DECIMAL:
+    case INTEGER:
+      codeBuilder.append("try_to_number(").append(arg).append(")");
+      break;
+    case DOUBLE:
+    case FLOAT:
+      codeBuilder.append("try_to_double(").append(arg).append(", None)");
+      break;
+    case TIME:
+      codeBuilder.append("to_time(").append(arg).append(", _try=True)");
+      break;
+    case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+      String tzStr = ((TZAwareSqlType) outputType).getTZInfo().getPyZone();
+      codeBuilder.append("try_to_timestamp(").append(arg).append(", None, ").append(tzStr).append(", 0)");
+      break;
+    case TIMESTAMP:
+      codeBuilder.append("try_to_timestamp(").append(arg).append(", None, None, 0)");
+      break;
+    default:
+      throw new BodoSQLCodegenException(
+          String.format("%s is not supported by TRY_CAST.", outputTypeName));
+    }
+    return codeBuilder.toString();
   }
 }

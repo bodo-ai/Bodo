@@ -15,8 +15,7 @@ public class BodoArrayHelpers {
    * @param typ SqlType
    * @return A string representation of the allocated bodo array with the specified length
    */
-  public static String sqlTypeToNullableBodoArray(
-      String len, RelDataType typ) {
+  public static String sqlTypeToNullableBodoArray(String len, RelDataType typ) {
     // TODO: Use nullable information to optimize on if the output can contain NULLs.
     SqlTypeName typeName = typ.getSqlTypeName();
     switch (typeName) {
@@ -32,8 +31,7 @@ public class BodoArrayHelpers {
       case DECIMAL:
         return String.format("bodo.libs.float_arr_ext.alloc_float_array(%s, bodo.float64)", len);
       case DATE:
-        return String.format(
-            "bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(%s)", len);
+        return String.format("bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(%s)", len);
       case TIMESTAMP:
         return String.format("np.empty(%s, dtype=\"datetime64[ns]\")", len);
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
@@ -77,8 +75,7 @@ public class BodoArrayHelpers {
    * @return A string that can be provided to generate code for the corresponding array type. This
    *     will be lowered as a global when we JIT compile the code.
    */
-  public static String sqlTypeToBodoArrayType(
-      RelDataType type, boolean strAsDict) {
+  public static String sqlTypeToBodoArrayType(RelDataType type, boolean strAsDict) {
     boolean nullable = type.isNullable();
     switch (type.getSqlTypeName()) {
       case NULL:

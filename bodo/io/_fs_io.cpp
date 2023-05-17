@@ -312,6 +312,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
 
         std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
         arrow::Status status;
+        // TODO: Do I need to make this Buffer Pool aware?
         std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
         hdfs_get_fs(orig_path, &hdfs_fs);
         if (is_parallel) {

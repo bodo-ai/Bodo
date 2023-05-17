@@ -1409,6 +1409,18 @@ numeric types
     SELECT SUM(CASE WHEN A THEN 1 ELSE 0 END) FROM table1
     `#!sql ``
 
+#### APPROX_PERCENTILE
+-   `#!sql APPROX_PERCENTILE(A, q)`
+
+    Returns the approximate value of the `q`-th percentile of column `A` (e.g.
+    0.5 = median, or 0.9 = the 90th percentile). `A` can be any numeric column,
+    and `q` can be any scalar float between zero and one.
+
+    The approximation is calculated using the t-digest algorithm.
+    
+    !!! note
+        Currently, BodoSQL only supports this function without a GroupBy.
+
 #### VARIANCE
 -   `#!sql VARIANCE`
 
@@ -1440,8 +1452,25 @@ numeric types
 -   `#!sql BOOLOR_AGG`
 
     Compute the logical OR of the boolean value of every input
-    in a group. This is supported for numeric and boolean types.
-    Currently, this requires a `#!sql GROUP BY` clause.
+    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if there is at least 1 non-zero entry. This is supported for 
+    numeric and boolean types.
+
+#### BOOLAND_AGG
+-   `#!sql BOOLAND_AGG`
+
+    Compute the logical AND of the boolean value of every input
+    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if all non-`#!sql NULL` entries are also non-zero. This is supported for 
+    numeric and boolean types.
+
+#### BOOLXOR_AGG
+-   `#!sql BOOLXOR_AGG`
+
+    Returns `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
+    returning True if exactly one non-`#!sql NULL` entry is also non-zero (this is
+    counterintuitive to how the logical XOR is normally thought of). This is 
+    supported for numeric and boolean types.
 
 All aggregate functions have the syntax:
 
@@ -2673,7 +2702,8 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
 (if there is an `#!sql ORDER BY` clause).
 !!! note
     `#!sql RANGE BETWEEN` is not currently supported.
-    Currently, BodoSQL supports the following Window functions:
+    
+Currently, BodoSQL supports the following Window functions:
 
 !!!note
     If a window frame contains `NaN` values, the output may diverge from Snowflake's
@@ -2802,6 +2832,27 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
     than 4 non-`NULL` entries.
 
 
+#### BOOLOR_AGG
+-   `#!sql BOOLOR_AGG`
+
+    Outputs `#!sql true` if there is at least 1 non-zero` element in the
+    window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
+
+
+#### BOOLAND_AGG
+-   `#!sql BOOLAND_AGG`
+
+    Outputs `#!sql true` if every element in the window that is non-`#!sql NULL`
+    is also non-zero, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
+
+
+#### BOOLXOR_AGG
+-   `#!sql BOOLXOR_AGG`
+
+    Outputs `#!sql true` if there is at exactly 1 non-zero element in the
+    window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
+
+
 #### LEAD
 -   `#!sql LEAD(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
 
@@ -2919,6 +2970,9 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
 
     Compute an increasing row number (starting at 1) for each
     row. This function cannot be used with `#!sql ROWS BETWEEN`.
+
+!!! note
+    This window function is supported without a partition.
 
 
 #### CONDITIONAL_TRUE_EVENT

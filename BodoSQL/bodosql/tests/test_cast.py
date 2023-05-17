@@ -4,9 +4,12 @@ Test correctness of SQL cast queries on BodoSQL
 """
 import datetime
 
+import bodosql
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
+
+import bodo
 
 
 @pytest.fixture(
@@ -43,12 +46,19 @@ def test_cast_str_to_numeric(
     spark_query1 = "SELECT CAST('5' AS INT)"
     spark_query2 = "SELECT CAST('-3' AS INT)"
     spark_query3 = "SELECT CAST('5.2' AS FLOAT)"
+    spark_query4 = "SELECT CAST('23.1204' AS DOUBLE)"
     if use_sf_cast_syntax:
         query1 = "SELECT '5'::INT"
         query2 = "SELECT '-3'::INT"
         query3 = "SELECT '5.2'::FLOAT"
+        query4 = "SELECT '23.1204'::NUMBER(38, 4)"
     else:
-        (query1, query2, query3) = (spark_query1, spark_query2, spark_query3)
+        (query1, query2, query3, query4) = (
+            spark_query1,
+            spark_query2,
+            spark_query3,
+            spark_query4,
+        )
     check_query(
         query1,
         basic_df,
@@ -70,6 +80,14 @@ def test_cast_str_to_numeric(
         basic_df,
         spark_info,
         equivalent_spark_query=spark_query3,
+        check_names=False,
+        check_dtype=False,
+    )
+    check_query(
+        query4,
+        basic_df,
+        spark_info,
+        equivalent_spark_query=spark_query4,
         check_names=False,
         check_dtype=False,
     )
@@ -114,20 +132,38 @@ def test_numeric_to_str(basic_df, spark_info, use_sf_cast_syntax, memory_leak_ch
     )
 
 
+@pytest.fixture(
+    params=[
+        pytest.param("VARCHAR", marks=pytest.mark.slow),
+        "TEXT",
+        "STRING",
+        pytest.param("NVARCHAR", marks=pytest.mark.slow),
+        pytest.param("NVARCHAR2", marks=pytest.mark.slow),
+        pytest.param("CHAR VARYING", marks=pytest.mark.slow),
+        "NCHAR VARYING",
+    ]
+)
+def cast_str_typename(request):
+    """
+    The type name used for casting to string
+    """
+    return request.param
+
+
 @pytest.mark.slow
-def test_numeric_to_str_varchar(
-    basic_df, use_sf_cast_syntax, spark_info, memory_leak_check
+def test_numeric_to_str(
+    basic_df, use_sf_cast_syntax, cast_str_typename, spark_info, memory_leak_check
 ):
     """test that you can cast numeric literals to strings"""
 
     if use_sf_cast_syntax:
-        query1 = "SELECT 13::VARCHAR"
-        query2 = "SELECT (-103)::VARCHAR"
-        query3 = "SELECT 5.012::VARCHAR"
+        query1 = f"SELECT 13::{cast_str_typename}"
+        query2 = f"SELECT (-103)::{cast_str_typename}"
+        query3 = f"SELECT 5.012::{cast_str_typename}"
     else:
-        query1 = "SELECT CAST(13 AS VARCHAR)"
-        query2 = "SELECT CAST(-103 AS VARCHAR)"
-        query3 = "SELECT CAST(5.012 AS VARCHAR)"
+        query1 = f"SELECT CAST(13 AS {cast_str_typename})"
+        query2 = f"SELECT CAST(-103 AS {cast_str_typename})"
+        query3 = f"SELECT CAST(5.012 AS {cast_str_typename})"
 
     spark_query1 = "SELECT CAST(13 AS STRING)"
     spark_query2 = "SELECT CAST(-103 AS STRING)"
@@ -403,7 +439,11 @@ def test_string_scalar_to_numeric(
 
 @pytest.mark.slow
 def test_numeric_scalar_to_str(
-    bodosql_numeric_types, use_sf_cast_syntax, spark_info, memory_leak_check
+    bodosql_numeric_types,
+    use_sf_cast_syntax,
+    cast_str_typename,
+    spark_info,
+    memory_leak_check,
 ):
     """Tests casting int scalars (from columns) to str types"""
     # Use substring to avoid difference in Number of decimal places for
@@ -411,9 +451,9 @@ def test_numeric_scalar_to_str(
     spark_query = "SELECT CASE WHEN B > 5 THEN SUBSTRING(CAST(A AS STRING), 1, 3) ELSE 'OTHER' END FROM TABLE1"
 
     if use_sf_cast_syntax:
-        query = "SELECT CASE WHEN B > 5 THEN SUBSTRING(A::VARCHAR, 1, 3) ELSE 'OTHER' END FROM TABLE1"
+        query = f"SELECT CASE WHEN B > 5 THEN SUBSTRING(A::{cast_str_typename}, 1, 3) ELSE 'OTHER' END FROM TABLE1"
     else:
-        query = "SELECT CASE WHEN B > 5 THEN SUBSTRING(CAST(A AS VARCHAR), 1, 3) ELSE 'OTHER' END FROM TABLE1"
+        query = f"SELECT CASE WHEN B > 5 THEN SUBSTRING(CAST(A AS {cast_str_typename}), 1, 3) ELSE 'OTHER' END FROM TABLE1"
 
     check_query(
         query,
@@ -427,14 +467,18 @@ def test_numeric_scalar_to_str(
 
 @pytest.mark.slow
 def test_numeric_nullable_scalar_to_str(
-    bodosql_nullable_numeric_types, use_sf_cast_syntax, spark_info, memory_leak_check
+    bodosql_nullable_numeric_types,
+    use_sf_cast_syntax,
+    cast_str_typename,
+    spark_info,
+    memory_leak_check,
 ):
     """Tests casting nullable int scalars (from columns) to str types"""
 
     if use_sf_cast_syntax:
-        query = "SELECT CASE WHEN B > 5 THEN A::VARCHAR ELSE 'OTHER' END FROM TABLE1"
+        query = f"SELECT CASE WHEN B > 5 THEN A::{cast_str_typename} ELSE 'OTHER' END FROM TABLE1"
     else:
-        query = "SELECT CASE WHEN B > 5 THEN CAST(A AS VARCHAR) ELSE 'OTHER' END FROM TABLE1"
+        query = f"SELECT CASE WHEN B > 5 THEN CAST(A AS {cast_str_typename}) ELSE 'OTHER' END FROM TABLE1"
     spark_query = (
         "SELECT CASE WHEN B > 5 THEN CAST(A AS STRING) ELSE 'OTHER' END FROM TABLE1"
     )
@@ -450,15 +494,17 @@ def test_numeric_nullable_scalar_to_str(
 
 @pytest.mark.slow
 def test_string_scalar_to_str(
-    bodosql_string_types, use_sf_cast_syntax, spark_info, memory_leak_check
+    bodosql_string_types,
+    use_sf_cast_syntax,
+    cast_str_typename,
+    spark_info,
+    memory_leak_check,
 ):
     """Tests casting string scalars (from columns) to str types"""
     if use_sf_cast_syntax:
-        query = (
-            "SELECT CASE WHEN B <> 'how' THEN A::VARCHAR ELSE 'OTHER' END FROM TABLE1"
-        )
+        query = f"SELECT CASE WHEN B <> 'how' THEN A::{cast_str_typename} ELSE 'OTHER' END FROM TABLE1"
     else:
-        query = "SELECT CASE WHEN B <> 'how' THEN CAST(A AS VARCHAR) ELSE 'OTHER' END FROM TABLE1"
+        query = f"SELECT CASE WHEN B <> 'how' THEN CAST(A AS {cast_str_typename}) ELSE 'OTHER' END FROM TABLE1"
     spark_query = "SELECT CASE WHEN B <> 'how' THEN CAST(A AS STRING) ELSE 'OTHER' END FROM TABLE1"
     check_query(
         query,
@@ -472,13 +518,17 @@ def test_string_scalar_to_str(
 
 @pytest.mark.slow
 def test_timestamp_scalar_to_str(
-    bodosql_datetime_types, use_sf_cast_syntax, spark_info, memory_leak_check
+    bodosql_datetime_types,
+    use_sf_cast_syntax,
+    cast_str_typename,
+    spark_info,
+    memory_leak_check,
 ):
     """Tests casting datetime scalars (from columns) to string types"""
     if use_sf_cast_syntax:
-        query = "SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN A::VARCHAR ELSE 'OTHER' END FROM TABLE1"
+        query = f"SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN A::{cast_str_typename} ELSE 'OTHER' END FROM TABLE1"
     else:
-        query = "SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN CAST(A AS VARCHAR) ELSE 'OTHER' END FROM TABLE1"
+        query = f"SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN CAST(A AS {cast_str_typename}) ELSE 'OTHER' END FROM TABLE1"
     spark_query = "SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN CAST(A AS STRING) ELSE 'OTHER' END FROM TABLE1"
     check_query(
         query,
@@ -624,7 +674,6 @@ def test_tz_aware_datetime_to_timestamp_cast(
 
 
 def test_implicit_cast_date_to_tz_aware(tz_aware_df, memory_leak_check):
-
     query = "SELECT * FROM table1 WHERE table1.A BETWEEN DATE '2020-1-1' AND DATE '2021-12-31'"
     expected_filter = (
         pd.Timestamp("2020-1-1", tz="US/Pacific") <= tz_aware_df["table1"]["A"]
@@ -725,3 +774,160 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
         check_names=False,
         expected_output=expected_output,
     )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                "VARCHAR",
+                pd.Series(["", "kafae", None, "!@$$#", "1999-12-31"] * 4),
+                pd.Series(["", "kafae", None, "!@$$#", "1999-12-31"] * 4),
+            ),
+            id="VARCHAR",
+        ),
+        pytest.param(
+            (
+                "DOUBLE",
+                pd.Series(["634.234", "425", "asda", None, "-0.1251"] * 4),
+                pd.Series([634.234, 425.0, None, None, -0.1251] * 4),
+            ),
+            id="DOUBLE",
+        ),
+        pytest.param(
+            (
+                "FLOAT",
+                pd.Series(["-435.392", None, "-999", "1rfw43te", "0.0001"] * 4),
+                pd.Series([-435.392, None, -999.0, None, 0.0001] * 4),
+            ),
+            id="FLOAT",
+        ),
+        pytest.param(
+            (
+                "NUMBER",
+                pd.Series(["734", "-103", "105+106", "58.47", None] * 4),
+                pd.Series([734, -103, None, 58, None] * 4),
+            ),
+            id="NUMBER",
+        ),
+        pytest.param(
+            (
+                "INTEGER",
+                pd.Series(["0", "-49.36", "1999-12-31", None, "482"] * 4),
+                pd.Series([0, -49, None, None, 482] * 4),
+            ),
+            id="INTEGER",
+        ),
+        pytest.param(
+            (
+                "DATE",
+                pd.Series(
+                    ["2014-02-25", "97/52/63", None, "1942-04-30", "2019-10-03"] * 4
+                ),
+                pd.Series(
+                    [
+                        datetime.date(2014, 2, 25),
+                        None,
+                        None,
+                        datetime.date(1942, 4, 30),
+                        datetime.date(2019, 10, 3),
+                    ]
+                    * 4
+                ),
+            ),
+            id="DATE",
+        ),
+        pytest.param(
+            (
+                "TIME",
+                pd.Series(
+                    [
+                        "03:24:55",
+                        None,
+                        "1942-04-30",
+                        "20:39:47.876",
+                        "19:57:28.082374912",
+                    ]
+                    * 4
+                ),
+                pd.Series(
+                    [
+                        bodo.Time(3, 24, 55),
+                        None,
+                        None,
+                        bodo.Time(20, 39, 47, 876),
+                        bodo.Time(19, 57, 28, 82, 374, 912),
+                    ]
+                    * 4
+                ),
+            ),
+            id="TIME",
+        ),
+        pytest.param(
+            (
+                "TIMESTAMP",
+                pd.Series(
+                    [
+                        None,
+                        "2014-02-25",
+                        "20:39:47.876",
+                        "1942-04-30 03:24:55",
+                        "2019-10-03 19:57:28.082374912",
+                    ]
+                    * 4
+                ),
+                pd.Series(
+                    [
+                        None,
+                        pd.Timestamp("2014-02-25"),
+                        None,
+                        pd.Timestamp("1942-04-30 03:24:55"),
+                        pd.Timestamp("2019-10-03 19:57:28.082374912"),
+                    ]
+                    * 4
+                ),
+            ),
+            id="TIMESTAMP",
+        ),
+    ],
+)
+def try_cast_argument(request):
+    """Inputs for test_try_cast"""
+    return request.param
+
+
+def test_try_cast(try_cast_argument, memory_leak_check):
+    """Tests TRY_CAST behaves as expected"""
+    type, data, answer = try_cast_argument
+    query = f"SELECT TRY_CAST(A AS {type}) from table1"
+    ctx = {"table1": pd.DataFrame({"A": data})}
+    expected_output = pd.DataFrame({"A": answer})
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output,
+    )
+
+
+def test_try_cast_error_handling(basic_df, memory_leak_check):
+    """
+    Tests TRY_CAST function can throw correct error when input is wrong
+    """
+    query1 = "SELECT TRY_CAST('binary' AS BINARY)"
+    with pytest.raises(
+        Exception,
+        match="BINARY is not supported by TRY_CAST",
+    ):
+        bc = bodosql.BodoSQLContext(basic_df)
+        bc.sql(query1)
+
+    query2 = "SELECT TRY_CAST(123 AS DOUBLE) from table1"
+    with pytest.raises(
+        Exception,
+        match="TRY_CAST only supports casting from strings",
+    ):
+        bc = bodosql.BodoSQLContext(basic_df)
+        bc.sql(query2)
