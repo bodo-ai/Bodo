@@ -1467,6 +1467,7 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             numba.core.registry.cpu_target.target_context,
         )[0]
 
+
     @bound_function("groupby.std", no_unliteral=True)
     def resolve_std(self, grp, args, kws):
         return resolve_gb(
