@@ -5,9 +5,20 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
-from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterable,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Union,
+)
 from urllib.parse import urlparse
 
+import llvmlite.binding as ll
 import numba
 import numpy as np
 import numpy.typing as npt
@@ -26,7 +37,13 @@ import bodo
 import bodo.ir.connector
 from bodo import objmode
 from bodo.hiframes.table import Table, TableType
-from bodo.io.helpers import PyArrowTableSchemaType, is_nullable
+from bodo.io import arrow_cpp
+from bodo.io.arrow_reader import ArrowReaderType
+from bodo.io.helpers import (
+    is_nullable,
+    map_cpp_to_py_table_column_idxs,
+    pyarrow_schema_type,
+)
 from bodo.io.parquet_pio import ParquetPredicateType
 from bodo.ir.filter import Filter, supported_funcs_map
 from bodo.libs.array import (
@@ -48,15 +65,25 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_overload_constant_str,
 )
-from bodo.utils.utils import check_and_propagate_cpp_exception
+from bodo.utils.utils import (
+    check_and_propagate_cpp_exception,
+    inlined_check_and_propagate_cpp_exception,
+)
 
-if bodo.utils.utils.has_pyarrow():
-    import llvmlite.binding as ll
+if TYPE_CHECKING:  # pragma: no cover
+    from llvmlite.ir.builder import IRBuilder
+    from numba.core.base import BaseContext
 
-    from bodo.io import arrow_cpp
 
-    ll.add_symbol("snowflake_read_py_entry", arrow_cpp.snowflake_read_py_entry)
-    ll.add_symbol("iceberg_pq_read_py_entry", arrow_cpp.iceberg_pq_read_py_entry)
+ll.add_symbol("snowflake_read_py_entry", arrow_cpp.snowflake_read_py_entry)
+ll.add_symbol(
+    "snowflake_reader_init_py_entry", arrow_cpp.snowflake_reader_init_py_entry
+)
+ll.add_symbol(
+    "snowflake_reader_init_py_entry", arrow_cpp.snowflake_reader_init_py_entry
+)
+ll.add_symbol("arrow_reader_read_py_entry", arrow_cpp.arrow_reader_read_py_entry)
+ll.add_symbol("iceberg_pq_read_py_entry", arrow_cpp.iceberg_pq_read_py_entry)
 
 MPI_ROOT = 0
 
@@ -71,10 +98,10 @@ class SnowflakeReadParams(NamedTuple):
     def from_column_information(
         cls,
         out_used_cols: list[int],
-        col_typs: list[Any],
+        col_typs: list[types.ArrayCompatible],
         index_column_name: Optional[str],
-        index_column_type: Any,
-    ):
+        index_column_type: Union[types.ArrayCompatible, types.NoneType],
+    ):  # pragma: no cover
         """Construct a SnowflakeReaderParams from the IR parameters"""
         col_indices_map = {c: i for i, c in enumerate(out_used_cols)}
         snowflake_dict_cols = [
@@ -112,8 +139,8 @@ class SqlReader(ir.Stmt):
         unsupported_arrow_types: List[pa.DataType],
         is_select_query: bool,
         has_side_effects: bool,
-        index_column_name: str,
-        index_column_type,
+        index_column_name: Optional[str],
+        index_column_type: Union[types.ArrayCompatible, types.NoneType],
         database_schema: Optional[str],
         # Only relevant for Iceberg and Snowflake
         pyarrow_schema: Optional[pa.Schema],
@@ -121,6 +148,11 @@ class SqlReader(ir.Stmt):
         is_merge_into: bool,
         file_list_type,
         snapshot_id_type,
+        # Batch size to read chunks in, or none, to read the entire table together
+        # Only supported for Snowflake
+        # Treated as compile-time constant for simplicity
+        # But not enforced that all chunks are this size
+        chunksize: Optional[int] = None,
     ):
         self.connector_typ = "sql"
         self.sql_request = sql_request
@@ -180,6 +212,8 @@ class SqlReader(ir.Stmt):
         else:
             self.file_list_type = types.none
             self.snapshot_id_type = types.none
+
+        self.chunksize = chunksize
 
     def __repr__(self):  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
@@ -260,6 +294,9 @@ def remove_dead_sql(
 
     This does not include column elimination on the table.
     """
+    if sql_node.chunksize is not None:  # pragma: no cover
+        return sql_node
+
     table_var = sql_node.out_vars[0].name
     index_var = sql_node.out_vars[1].name
     file_list_var = sql_node.out_vars[2].name if len(sql_node.out_vars) > 2 else None
@@ -379,13 +416,16 @@ def sql_distributed_run(
         sql_cols = []
         sql_types = []
         dict_encoded_cols = []
+        out_types = (
+            sql_node.out_types
+            if sql_node.chunksize is None
+            else sql_node.out_types[0].col_types
+        )
         for i in sql_node.out_used_cols:
             colname = sql_node.df_colnames[i]
             sql_cols.append(colname)
-            sql_types.append(sql_node.out_types[i])
-            if isinstance(
-                sql_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
-            ):
+            sql_types.append(out_types[i])
+            if isinstance(out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType):
                 dict_encoded_cols.append(colname)
         # Include the index since it needs to be loaded from the query
         if sql_node.index_column_name:
@@ -421,9 +461,14 @@ def sql_distributed_run(
                 sql_node.sql_request,
             )
 
-    parallel = bodo.ir.connector.is_connector_table_parallel(
-        sql_node, array_dists, typemap, "SQLReader"
-    )
+    if sql_node.chunksize is not None:  # pragma: no cover
+        parallel = bodo.ir.connector.is_chunked_connector_table_parallel(
+            sql_node, array_dists, "SQLReader"
+        )
+    else:
+        parallel = bodo.ir.connector.is_connector_table_parallel(
+            sql_node, array_dists, typemap, "SQLReader"
+        )
 
     # Check for any unsupported columns still remaining
     if sql_node.unsupported_columns:
@@ -542,32 +587,43 @@ def sql_distributed_run(
         filter_args = extra_args
 
     # total_rows is used for setting total size variable below
-    func_text += f"    (total_rows, table_var, index_var, file_list, snapshot_id) = _sql_reader_py(sql_request, conn, database_schema, {filter_args})\n"
+    if sql_node.chunksize is not None:  # pragma: no cover
+        func_text += f"    snowflake_reader = _sql_reader_py(sql_request, conn, database_schema, {filter_args})\n"
+    else:
+        func_text += f"    (total_rows, table_var, index_var, file_list, snapshot_id) = _sql_reader_py(sql_request, conn, database_schema, {filter_args})\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     sql_impl = loc_vars["sql_impl"]
 
-    sql_reader_py = _gen_sql_reader_py(
-        sql_node.df_colnames,
-        sql_node.out_types,
-        sql_node.index_column_name,
-        sql_node.index_column_type,
-        sql_node.out_used_cols,
-        sql_node.converted_colnames,
-        typingctx,
-        targetctx,
-        sql_node.db_type,
-        limit,
-        parallel,
-        typemap,
-        sql_node.filters,
-        sql_node.pyarrow_schema,
-        not sql_node.is_live_table,
-        sql_node.is_select_query,
-        sql_node.is_merge_into,
-        is_independent,
-    )
+    genargs = {
+        "col_names": sql_node.df_colnames,
+        "col_typs": sql_node.out_types
+        if sql_node.chunksize is None
+        else sql_node.out_types[0].col_types,
+        "index_column_name": sql_node.index_column_name,
+        "index_column_type": sql_node.index_column_type,
+        "out_used_cols": sql_node.out_used_cols,
+        "converted_colnames": sql_node.converted_colnames,
+        "typingctx": typingctx,
+        "targetctx": targetctx,
+        "db_type": sql_node.db_type,
+        "limit": limit,
+        "parallel": parallel,
+        "typemap": typemap,
+        "filters": sql_node.filters,
+        "pyarrow_schema": sql_node.pyarrow_schema,
+        "is_dead_table": not sql_node.is_live_table,
+        "is_select_query": sql_node.is_select_query,
+        "is_merge_into": sql_node.is_merge_into,
+        "is_independent": is_independent,
+    }
+    if sql_node.chunksize is not None:  # pragma: no cover
+        sql_reader_py = _gen_sql_reader_chunked_py(
+            **genargs, chunksize=sql_node.chunksize, out_type=sql_node.out_types[0]
+        )
+    else:
+        sql_reader_py = _gen_sql_reader_py(**genargs)
 
     schema_type = types.none if sql_node.database_schema is None else string_type
     f_block = compile_to_numba_ir(
@@ -630,6 +686,10 @@ def sql_distributed_run(
     # value comes from 'total_rows' output of '_sql_reader_py' above
     if meta_head_only_info:
         nodes[-5].target = meta_head_only_info[1]
+
+    if sql_node.chunksize is not None:  # pragma: no cover
+        nodes[-1].target = sql_node.out_vars[0]
+        return nodes
 
     # assign output table
     nodes[-4].target = sql_node.out_vars[0]
@@ -872,6 +932,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
             # data matches.
             # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#timestamp-ltz-timestamp-ntz-timestamp-tz
             tz_str = "TIMESTAMP_TZ"
+
         # Timestamp needs to be converted to a timestamp literal
         def impl(filter_value):  # pragma: no cover
             nanosecond = filter_value.nanosecond
@@ -1119,10 +1180,10 @@ def req_limit(sql_request):
 
 def prune_columns(
     col_names: List[str],
-    col_typs: List[Any],
+    col_typs: List[types.ArrayCompatible],
     out_used_cols: List[int],
     index_column_name: Optional[str],
-    index_column_type,
+    index_column_type: Union[types.ArrayCompatible, types.NoneType],
 ):
     """Prune the columns to only those that are used in the snowflake reader."""
     used_col_names = [col_names[i] for i in out_used_cols]
@@ -1154,19 +1215,117 @@ def prune_snowflake_select(
     return pa.schema(selected_fields)
 
 
-def map_snowflake_columns(
-    col_names: List[str], out_used_cols: List[int]
-) -> npt.NDArray[np.int64]:
-    """Generate a list of snowflake column indices corresponding to each of the selected column names."""
-    idx = []
-    j = 0
-    for i in range(len(col_names)):
-        if j < len(out_used_cols) and i == out_used_cols[j]:
-            idx.append(j)
-            j += 1
-        else:
-            idx.append(-1)
-    return np.array(idx, dtype=np.int64)
+def _gen_sql_reader_chunked_py(
+    col_names: List[str],
+    col_typs: List[Any],
+    index_column_name: Optional[str],
+    index_column_type,
+    out_used_cols: List[int],
+    converted_colnames: List[str],
+    typingctx,
+    targetctx,
+    db_type: str,
+    limit: Optional[int],
+    parallel: bool,
+    typemap,
+    filters: Optional[Any],
+    pyarrow_schema: Optional[pa.Schema],
+    is_dead_table: bool,
+    is_select_query: bool,
+    is_merge_into: bool,
+    is_independent: bool,
+    chunksize: int,
+    out_type,
+):  # pragma: no cover
+    """Function to generate main streaming SQL implementation.
+
+    See _gen_sql_reader_py for argument documentation
+
+    Args:
+        chunksize(int): Number of rows in each batch
+    """
+    assert (
+        db_type == "snowflake"
+    ), f"Database {db_type} not supported in streaming IO mode, and should not go down this path"
+    assert (
+        pyarrow_schema is not None
+    ), "SQLNode must contain a pyarrow_schema if reading from Snowflake"
+
+    call_id = next_label()
+
+    used_col_names, _ = prune_columns(
+        col_names=col_names,
+        col_typs=col_typs,
+        out_used_cols=out_used_cols,
+        index_column_name=index_column_name,
+        index_column_type=index_column_type,
+    )
+
+    # Handle filter information because we may need to update the function header
+    filter_args = ""  # TODO perhaps not needed
+
+    func_text = f"def sql_reader_chunked_py(sql_request, conn, database_schema, {filter_args}):\n"
+
+    if is_select_query:
+        pyarrow_schema = prune_snowflake_select(
+            used_col_names=used_col_names,
+            pyarrow_schema=pyarrow_schema,
+            converted_colnames=converted_colnames,
+        )
+
+    params: SnowflakeReadParams = SnowflakeReadParams.from_column_information(
+        out_used_cols=out_used_cols,
+        col_typs=col_typs,
+        index_column_name=index_column_name,
+        index_column_type=index_column_type,
+    )
+
+    func_text += "\n".join(
+        [
+            f"  total_rows_np = np.array([0], dtype=np.int64)",
+            f"  snowflake_reader = snowflake_reader_init_py_entry(",
+            f"    unicode_to_utf8(sql_request),",
+            f"    unicode_to_utf8(conn),",
+            f"    {parallel},",
+            f"    {is_independent},",
+            f"    pyarrow_schema_{call_id},",
+            f"    {len(params.nullable_cols_array)},",
+            f"    nullable_cols_array.ctypes,",
+            f"    {len(params.snowflake_dict_cols_array)},",
+            f"    snowflake_dict_cols_array.ctypes,",
+            f"    total_rows_np.ctypes,",
+            f"    {is_select_query and len(used_col_names) == 0},",
+            f"    {is_select_query},",
+            f"    {chunksize},",
+            f"    out_type,",
+            f"  )",
+            "",
+        ]
+    )
+    func_text += "  return snowflake_reader"
+
+    glbls = globals().copy()  # TODO: fix globals after Numba's #3355 is resolved
+    glbls.update(
+        bodo=bodo,
+        index_col_typ=index_column_type,
+        np=np,
+        unicode_to_utf8=unicode_to_utf8,
+        check_and_propagate_cpp_exception=check_and_propagate_cpp_exception,
+        get_node_portion=bodo.libs.distributed_api.get_node_portion,
+        snowflake_reader_init_py_entry=snowflake_reader_init_py_entry,
+        out_type=out_type,
+    )
+    glbls.update(params._asdict())
+    glbls.update({f"pyarrow_schema_{call_id}": pyarrow_schema})
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    sql_reader_py = loc_vars["sql_reader_chunked_py"]
+
+    # TODO: no_cpython_wrapper=True crashes for some reason
+    jit_func = numba.njit(sql_reader_py)
+    compiled_funcs.append(jit_func)
+    return jit_func
 
 
 def _gen_sql_reader_py(
@@ -1432,7 +1591,7 @@ def _gen_sql_reader_py(
         params: SnowflakeReadParams = SnowflakeReadParams.from_column_information(
             out_used_cols=out_used_cols,
             col_typs=col_typs,
-            index_column_name= index_column_name,
+            index_column_name=index_column_name,
             index_column_type=index_column_type,
         )
         # Track the total number of rows for loading 0 columns. If we load any
@@ -1456,7 +1615,6 @@ def _gen_sql_reader_py(
             f"  )\n"
             f"  check_and_propagate_cpp_exception()\n"
         )
-
         func_text += f"  total_rows = total_rows_np[0]\n"
         if parallel:
             func_text += f"  local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
@@ -1474,7 +1632,7 @@ def _gen_sql_reader_py(
         else:
             # Map each logical column in the table to its location
             # in the input SQL table
-            table_idx = map_snowflake_columns(
+            table_idx = map_cpp_to_py_table_column_idxs(
                 col_names=col_names, out_used_cols=out_used_cols
             )
             func_text += f"  table_var = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
@@ -1633,7 +1791,6 @@ def _gen_sql_reader_py(
 
 
 parquet_predicate_type = ParquetPredicateType()
-pyarrow_schema_type = PyArrowTableSchemaType()
 
 
 @intrinsic
@@ -1784,3 +1941,75 @@ _snowflake_read = types.ExternalFunction(
         types.boolean,  # _is_select_query
     ),
 )
+
+
+@intrinsic
+def snowflake_reader_init_py_entry(
+    typingctx,
+    query_t,
+    conn_t,
+    parallel_t,
+    is_independent_t,
+    pyarrow_schema_t,
+    n_fields_t,
+    is_nullable_t,
+    num_str_as_dict_cols_t,
+    str_as_dict_cols_t,
+    total_nrows_t,
+    only_length_query_t,
+    is_select_query_t,
+    chunksize_t,
+    arrow_reader_t,
+):  # pragma: no cover
+    assert isinstance(arrow_reader_t, types.TypeRef) and isinstance(
+        arrow_reader_t.instance_type, ArrowReaderType
+    ), "snowflake_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
+    assert (
+        pyarrow_schema_t == pyarrow_schema_type
+    ), "snowflake_reader_init_py_entry(): The 5th argument pyarrow_schema must by a PyArrow schema"
+
+    def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),  # query void*
+                lir.IntType(8).as_pointer(),  # conn_str void*
+                lir.IntType(1),  # parallel bool
+                lir.IntType(1),  # is_independent bool
+                lir.IntType(8).as_pointer(),  # pyarrow_schema PyObject*
+                lir.IntType(64),  # n_fields int64
+                lir.IntType(8).as_pointer(),  # _is_nullable void*
+                lir.IntType(32),  # num_str_as_dict_cols int32
+                lir.IntType(8).as_pointer(),  # _str_as_dict_cols void*
+                lir.IntType(8).as_pointer(),  # total_nrows void*
+                lir.IntType(1),  # _only_length_query bool
+                lir.IntType(1),  # _is_select_query bool
+                lir.IntType(64),  # chunksize
+            ],
+        )
+
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="snowflake_reader_init_py_entry"
+        )
+
+        snowflake_reader = builder.call(fn_tp, args[:-1])
+        inlined_check_and_propagate_cpp_exception(context, builder)
+        return snowflake_reader
+
+    sig = arrow_reader_t.instance_type(
+        types.voidptr,  # query
+        types.voidptr,  # conn_str
+        types.boolean,  # parallel
+        types.boolean,  # is_independent
+        pyarrow_schema_type,
+        types.int64,  # n_fields
+        types.voidptr,  # _is_nullable
+        types.int32,  # num_str_as_dict_cols
+        types.voidptr,  # _str_as_dict_cols
+        types.voidptr,  # total_nrows
+        types.boolean,  # _only_length_query
+        types.boolean,  # _is_select_query
+        types.int64,  # chunksize
+        arrow_reader_t,  # typing only
+    )
+    return sig, codegen

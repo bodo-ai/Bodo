@@ -744,7 +744,8 @@ void DEBUG_PrintSetOfColumn(
  * @brief Print the contents of a table to the output stream.
  * See DEBUG_PrintSetOfColumn for more details
  */
-void DEBUG_PrintTable(std::ostream& os, std::shared_ptr<table_info> table);
+void DEBUG_PrintTable(std::ostream& os,
+                      const std::shared_ptr<const table_info>& table);
 
 /**
  * @brief Prints contents of a std::unordered_map to the output stream.

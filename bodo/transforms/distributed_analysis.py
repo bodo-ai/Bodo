@@ -1490,6 +1490,26 @@ class DistributedAnalysis:
         if fdef == ("setna", "bodo.libs.array_kernels"):
             return
 
+        if fdef == ("read_arrow_next", "bodo.io.arrow_reader"):  # pragma: no cover
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            in_dist = array_dists[rhs.args[0].name]
+
+            # return is a tuple(array, bool)
+            out_dist = Distribution(
+                min(
+                    array_dists[lhs][0].value,
+                    in_dist.value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+
+            if out_dist == Distribution.REP:
+                in_dist = out_dist
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist, False)
+            return
+
         if (
             isinstance(func_mod, str) and func_mod == "bodo"
         ) and func_name == "rebalance":

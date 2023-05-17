@@ -42,6 +42,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
+from bodo.io.helpers import get_table_iterator
 from bodo.ir.filter import supported_arrow_funcs_map, supported_funcs_map
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
@@ -731,6 +732,7 @@ class TypingTransforms:
                         used_dfs,
                         skipped_vars,
                         index_def,
+                        label,
                     )
                     # If this function returns a list we have updated the working body.
                     # This is done to enable updating a single block that is not yet being processed
@@ -872,6 +874,7 @@ class TypingTransforms:
         used_dfs: Dict[str, ir.Inst],
         skipped_vars: Set[str],
         index_def,
+        label: int,
     ):
         """detect filter pushdown and add filters to ParquetReader or SQLReader IR nodes if possible.
 
@@ -886,18 +889,28 @@ class TypingTransforms:
 
         Throws GuardException if not possible.
         """
+
         # avoid empty dataframe
         require(len(value_def.args) > 0)
         data_def = get_definition(func_ir, value_def.args[0])
         assert is_expr(data_def, "build_tuple"), "invalid data tuple in init_dataframe"
-        read_node = get_definition(func_ir, data_def.items[0])
+
+        # table_def_node is the IR node that creates the input table, which is
+        # read_arrow_next() in the streaming read case but otherwise same as read node.
+        table_def_node = read_node = get_definition(func_ir, data_def.items[0])
+        # TODO: Change to Walrus Operator once Cython 3 is supported
+        arrow_iter_name = guard(get_table_iterator, read_node, func_ir)
+        if arrow_iter_name:
+            read_node = get_definition(func_ir, arrow_iter_name)
         require(
             isinstance(
                 read_node,
                 (bodo.ir.parquet_ext.ParquetReader, bodo.ir.sql_ext.SqlReader),
             )
         )
-        require(all(get_definition(func_ir, v) == read_node for v in data_def.items))
+        require(
+            all(get_definition(func_ir, v) == table_def_node for v in data_def.items)
+        )
         if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
             # Filter pushdown is only supported for snowflake and iceberg
             # right now.
@@ -935,7 +948,15 @@ class TypingTransforms:
             set(used_dfs.keys()), assign, func_ir
         )
         new_working_body, is_ir_reordered = self._reorder_filter_nodes(
-            read_node, index_def, used_dfs, skipped_vars, filters, working_body, func_ir
+            table_def_node,
+            read_node,
+            index_def,
+            used_dfs,
+            skipped_vars,
+            filters,
+            working_body,
+            func_ir,
+            label,
         )
         old_filters = read_node.filters
         # If there are existing filters then we need to merge them together because this is
@@ -1091,6 +1112,7 @@ class TypingTransforms:
 
     def _reorder_filter_nodes(
         self,
+        table_def_node,
         read_node,
         index_def,
         used_dfs,
@@ -1098,11 +1120,15 @@ class TypingTransforms:
         filters,
         working_body: List[ir.Stmt],
         func_ir: ir.FunctionIR,
+        label: int,
     ):
         """reorder nodes that are used for Parquet/SQL partition filtering to be before the
         Reader node (to be accessible when the Reader is run).
 
         df_names is a set of variables that need to be tracked to perform the filter pushdown.
+        table_def_node is read_arrow_next() in streaming case, otherwise it's read_node.
+
+        label is the current basic block number being processed.
 
         Categorizes all statements after the read node as either filter variable nodes
         or not. For example, given df["B"] == a, any node that is used for
@@ -1119,7 +1145,7 @@ class TypingTransforms:
         }
 
         # data array/table variables should not be used in filter expressions directly
-        non_filter_vars = {v.name for v in read_node.list_vars()}
+        non_filter_vars = {v.name for v in table_def_node.list_vars()}
 
         # find all variables that are potentially used in filter expressions after the
         # reader node
@@ -1171,7 +1197,7 @@ class TypingTransforms:
                     continue
 
             # avoid nodes before the reader
-            if stmt is read_node:
+            if stmt is table_def_node:
                 break
             stmt_vars: Set[str] = {v.name for v in stmt.list_vars()}
 
@@ -1247,8 +1273,27 @@ class TypingTransforms:
         # check this code for changes
         start_idx, end_idx = pq_ind, len(new_body)
         changed = working_body[start_idx:end_idx] != new_body[start_idx:end_idx]
+
         # update current basic block with new stmt order
-        new_working_body = new_body + non_filter_nodes
+        if read_node == table_def_node:
+            new_working_body = new_body + non_filter_nodes
+        else:  # pragma: no cover
+            # move filter nodes before the actual read IR node, not read_arrow_next()
+            new_working_body = non_filter_nodes
+            read_found = False
+            # read node is before the while loop so it's in a predecessor block
+            cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+            for pred, _ in cfg.predecessors(label):
+                body = func_ir.blocks[pred].body
+                for i, inst in enumerate(body):
+                    if inst == read_node:
+                        func_ir.blocks[pred].body = body[:i] + new_body + body[i:]
+                        read_found = True
+                        break
+            assert (
+                read_found
+            ), "_reorder_filter_nodes: read node not found in streaming I/O"
+
         return new_working_body, changed
 
     def _get_filter_nodes(self, index_def, func_ir):
