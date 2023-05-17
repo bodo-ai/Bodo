@@ -50,6 +50,7 @@ from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.float_arr_ext import FloatDtype, FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
+from bodo.libs.null_arr_ext import null_array_type
 from bodo.libs.str_arr_ext import string_array_type, string_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
@@ -312,6 +313,7 @@ class SeriesDtypeEnum(Enum):
     PD_nullable_Float32 = 46
     PD_nullable_Float64 = 47
     FloatingArray = 48
+    NullArray = 49
 
 
 # Map of types that can be mapped to a singular enum. Maps type -> enum
@@ -377,6 +379,7 @@ _one_to_one_enum_to_type_map = {
     SeriesDtypeEnum.STRING.value: string_type,
     SeriesDtypeEnum.Bool.value: bodo.bool_,
     SeriesDtypeEnum.NoneType.value: types.none,
+    SeriesDtypeEnum.NullArray.value: null_array_type,
 }
 
 
@@ -397,7 +400,7 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
 
     The general structure procedure as follows:
 
-    The type enum list acts as a stack. At the begining of each call to
+    The type enum list acts as a stack. At the beginning of each call to
     _dtype_from_type_enum_list_recursor, the function pops
     one or more enums from the typ_enum_list, and returns a tuple of the remaining
     typ_enum_list, and the dtype that was inferred.
@@ -644,6 +647,10 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
     # bytes
     # floats
 
+    # Nullable arrays need special handling because they don't have a dtype
+    elif typ == null_array_type:
+        return [SeriesDtypeEnum.NullArray.value]
+
     # integer arrays need special handling, as integerArray's dtype is not a nullable integer
     elif isinstance(typ, IntegerArrayType):
         return [SeriesDtypeEnum.IntegerArray.value] + _dtype_to_type_enum_list_recursor(
@@ -700,7 +707,6 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
         # In the case that we're converting a dataframe index,
         # we need to upcast to 64 bit width in order to match pandas semantics
         if upcast_numeric_index:
-
             if isinstance(typ.dtype, types.Float):
                 upcasted_dtype = types.float64
                 if isinstance(typ.data, FloatingArrayType):  # pragma: no cover
@@ -1479,7 +1485,6 @@ def _set_bodo_meta_dataframe(c, obj, typ):
 
 
 def get_series_dtype_handle_null_int_and_hetrogenous(series_typ):
-
     # Heterogeneous series are never distributed. Therefore, we should never need to use the typing metadata
     if isinstance(series_typ, HeterogeneousSeriesType):
         return None

@@ -148,6 +148,17 @@ array_info* categorical_array_to_info(uint64_t n_items, char* data,
         /*offset*/ data - (char*)meminfo->data);
 }
 
+array_info* null_array_to_info(uint64_t n_items) {
+    // Null arrays are all null and just represented by a length. However,
+    // most of the C++ code doesn't support null arrays, so we create an
+    // all null boolean array.
+
+    // TODO: Avoid allocating the null bitmap and data array and create
+    // a NULL CTYPE. This will require changes in the C++ code to support.
+    return alloc_nullable_array_all_nulls(n_items, Bodo_CTypes::_BOOL, 0)
+        .release();
+}
+
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                    char* null_bitmap, NRT_MemInfo* meminfo,
                                    NRT_MemInfo* meminfo_bitmask) {
@@ -357,6 +368,18 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
     NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
     incref_meminfo(data_meminfo);
     *meminfo = data_meminfo;
+}
+
+void info_to_null_array(array_info* info, uint64_t* n_items) {
+    // TODO: Replace with proper null array requirements once
+    // they are integrated into C++.
+    if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "_array.cpp:: info_to_null_array: "
+                        "info_to_null_array requires nullable input");
+        return;
+    }
+    *n_items = info->length;
 }
 
 void info_to_nullable_array(array_info* info, uint64_t* n_items,
@@ -1427,6 +1450,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, categorical_array_to_info);
     // Not covered by error handler
+    SetAttrStringFromVoidPtr(m, null_array_to_info);
+    // Not covered by error handler
     SetAttrStringFromVoidPtr(m, nullable_array_to_info);
     SetAttrStringFromVoidPtr(m, interval_array_to_info);
     // Not covered by error handler
@@ -1437,6 +1462,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, info_to_struct_array);
     SetAttrStringFromVoidPtr(m, get_child_info);
     SetAttrStringFromVoidPtr(m, info_to_numpy_array);
+    SetAttrStringFromVoidPtr(m, info_to_null_array);
     SetAttrStringFromVoidPtr(m, info_to_nullable_array);
     SetAttrStringFromVoidPtr(m, info_to_interval_array);
     SetAttrStringFromVoidPtr(m, alloc_numpy);

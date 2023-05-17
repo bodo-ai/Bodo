@@ -787,7 +787,7 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
 
         // allocate Bodo list of string array with preexisting string array
         // alloc_list_string_array deletes the string array_info struct
-        std::shared_ptr<array_info> out_array =
+        std::unique_ptr<array_info> out_array =
             alloc_list_string_array(total_n_lists, out_str_array, 0);
 
         // copy list offsets and null bitmap
