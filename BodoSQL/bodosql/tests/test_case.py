@@ -266,6 +266,7 @@ def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
             spark_info,
             check_dtype=False,
         )
+
         # Add a check that the case statement is not inlined.
         @bodo.jit(pipeline_class=SeriesOptTestPipeline)
         def bodo_func(bc, query):

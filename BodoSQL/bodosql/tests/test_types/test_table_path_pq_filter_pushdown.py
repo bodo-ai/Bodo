@@ -329,7 +329,6 @@ def test_coalesce_filter_pushdown(datapath, memory_leak_check):
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-
         check_func(impl, (bc,), py_output=py_output, reset_index=True, sort_output=True)
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"
@@ -629,7 +628,6 @@ def test_table_path_col_pruning_and_filter_pushdown_implicit_casting(
     logger = create_string_io_logger(stream)
 
     with set_logging_stream(logger, 1):
-
         py_output = read_df.loc[read_df["E"] == "a", ["A", "B", "C", "D"]]
         # make sure the ParquetReader node has filters parameter set and we have trimmed
         # any unused columns.
@@ -764,7 +762,6 @@ def test_table_path_col_pruning_simple(datapath, memory_leak_check):
     logger = create_string_io_logger(stream)
 
     with set_logging_stream(logger, 1):
-
         py_output1 = read_df.loc[:, ["A"]]
         # make sure the ParquetReader node has filters parameter set and we have trimmed
         # any unused columns.

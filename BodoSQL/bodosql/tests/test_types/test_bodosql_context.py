@@ -675,3 +675,49 @@ def test_fails_compile(query_text):
         return
 
     raise Exception("Should have failed to compile")
+
+
+fn_1 = """
+def impl(bc, n):
+    out = 3
+    if n > 3:
+        out = out + n
+    return out
+"""
+fn_1_expected = 13
+
+fn_2 = """
+def impl(bc, n):
+    df = bc.dataframes[0]
+    for i in range(n):
+        df["A"] = df["A"] + df["B"]
+    return df["A"].sum()
+"""
+fn_2_expected = 154450
+
+
+@pytest.mark.parametrize(
+    "test_fn_and_expected",
+    [
+        (fn_1, fn_1_expected),
+        (fn_2, fn_2_expected),
+    ],
+)
+def test_bodosql_inline_control_flow(memory_leak_check, test_fn_and_expected):
+    """
+    This is a temporary function that should only exist until
+    we've merged streaming into the main branch, and then should
+    be removed, along with overload_test_sql_control_flow in
+    BodoSQL/bodosql/context_ext.py
+    """
+    test_fn, expected = test_fn_and_expected
+
+    @bodo.jit
+    def impl(df, n):
+        bc = BodoSQLContext({"t1": df})
+        return bc.__gen_control_flow_fn((test_fn, n))
+
+    df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
+    out = impl(df, 10)
+    # TODO: this may need to be a better function then simple equality
+    assert out == expected

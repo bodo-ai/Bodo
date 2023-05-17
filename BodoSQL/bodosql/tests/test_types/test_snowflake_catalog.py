@@ -1363,7 +1363,7 @@ def test_snowflake_catalog_create_table_tpch(
     )
 
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    for (tpch_table_name, df) in tpch_data.items():
+    for tpch_table_name, df in tpch_data.items():
         bc = bc.add_or_replace_view(tpch_table_name, df)
 
     def impl(bc, query):
@@ -1586,7 +1586,6 @@ def test_snowflake_catalog_table_priority(args, memory_leak_check):
         tableScopingTest2TableName,
         tableScopingTest4TableName,
     ]:
-
         bc = bc.add_or_replace_view(table_name, expected_out_local)
 
     current_table_name, expected_output = args
@@ -1645,7 +1644,6 @@ def test_snowflake_catalog_table_priority_override(args, memory_leak_check):
         tableScopingTest2TableName,
         tableScopingTest4TableName,
     ]:
-
         bc = bc.add_or_replace_view(table_name, expected_out_local)
 
     prefix, expected_output = args
@@ -1833,7 +1831,6 @@ def test_snowflake_catalog_create_table_like(
 
     try_body_threw_error = False
     try:
-
         # Only test with only_1D=True so we only create the table once.
         check_func(impl, (bc, query), only_1D=True, py_output=5)
 
