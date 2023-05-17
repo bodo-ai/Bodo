@@ -1,6 +1,6 @@
 // Copyright (C) 2021 Bodo Inc. All rights reserved.
 
-// Here we define ArrowDataframeReader base class and TableBuilder which are
+// Here we define ArrowReader base class and TableBuilder which are
 // used to read Arrow tables into Bodo. Note that we use Arrow to read parquet
 // so this includes reading parquet (see ParquetReader subclass in
 // parquet_reader.cpp). TableBuilder uses BuilderColumn objects to convert
@@ -77,7 +77,7 @@ class TableBuilder {
 
     /// Get output Bodo table
     /// needs to be raw pointer since will be returned to Python
-    /// in ArrowDataframeReader code path
+    /// in ArrowReader code path
     table_info* get_table() {
         std::vector<std::shared_ptr<array_info>> arrays;
         for (auto col : columns) {
@@ -85,6 +85,10 @@ class TableBuilder {
         }
         return new table_info(arrays);
     }
+
+    inline int64_t get_total_rows() const { return this->total_rows; }
+
+    inline int64_t get_rem_rows() const { return this->rem_rows; }
 
     /**
      * Output column builder.
@@ -104,41 +108,46 @@ class TableBuilder {
 
    private:
     std::vector<BuilderColumn*> columns;  // output column builders
+    int64_t total_rows;
+    int64_t rem_rows;  // Remaining number of rows to build table
 };
 
-// --------- ArrowDataframeReader ---------
+// --------- ArrowReader ---------
 
 /**
  * Abstract class that implements all of the common functionality to read
  * dataframes from Arrow into Bodo. Subclasses need to implement any
  * functionality that is specific to the source (like parquet).
  */
-class ArrowDataframeReader {
+class ArrowReader {
    public:
     /**
      * @param parallel : true if reading in parallel
      * @param pyarrow_schema: PyArrow schema of source
      * @param tot_rows_to_read : total number of global rows to read from the
-     * dataset (starting from the beginning). Read all rows if is -1
+     *   dataset (starting from the beginning). Read all rows if is -1
      * @param selected_fields : Fields to select from the Arrow source,
-     * using the field ID of Arrow schema
-     * NOTE: selected_fields must be sorted
+     *   using the field ID of Arrow schema
+     *   NOTE: selected_fields must be sorted
      * @param num_selected_fields : length of selected_fields array
      * @param is_nullable : array of bools that indicates which of the
-     * selected fields is nullable. Same length and order as selected_fields.
+     *   selected fields is nullable. Same length and order as selected_fields.
+     * @param batch_size : Number of rows for Readers to output per iteration
+     *   if they support batching. -1 means dont output in batches, output
+     * entire dataset all at once
      */
-    ArrowDataframeReader(bool parallel, PyObject* pyarrow_schema,
-                         int64_t tot_rows_to_read,
-                         std::set<int> selected_fields,
-                         std::vector<bool> is_nullable)
+    ArrowReader(bool parallel, PyObject* pyarrow_schema,
+                int64_t tot_rows_to_read, std::set<int> selected_fields,
+                std::vector<bool> is_nullable, int64_t batch_size = -1)
         : parallel(parallel),
           tot_rows_to_read(tot_rows_to_read),
           is_nullable(is_nullable),
-          selected_fields(selected_fields) {
+          selected_fields(selected_fields),
+          batch_size(batch_size) {
         this->set_arrow_schema(pyarrow_schema);
     }
 
-    virtual ~ArrowDataframeReader() { release_gil(); }
+    virtual ~ArrowReader() { release_gil(); }
 
     inline void set_arrow_schema(PyObject* pyarrow_schema) {
         this->pyarrow_schema = pyarrow_schema;
@@ -161,27 +170,78 @@ class ArrowDataframeReader {
     /// Return the number of rows read by the current rank
     int64_t get_local_rows() const { return count; }
 
-    /// read data and return a Bodo table
-    /// Output table_info* is returned to Python where it will be deleted after
-    /// use.
-    table_info* read() {
-        tracing::Event ev("reader::read", parallel);
+    /**
+     * @brief Read a batch of data and return a Bodo table
+     *
+     * @param[out] is_last_out Either this is the last batch or
+     *  the last batch has already been returned
+     * @param[out] total_rows_out Number of rows in the output batch
+     * @return table_info* Out table returned to Python where it will be deleted
+     * after use. If there are no rows remaining to be read in, will return
+     * an empty table.
+     */
+    table_info* read_batch(bool& is_last, uint64_t& total_rows_out) {
         if (!initialized) {
             throw std::runtime_error(
-                "ArrowDataframeReader::read(): not initialized");
+                "ArrowReader::read_batch(): not initialized");
         }
 
-        TableBuilder builder(schema, selected_fields, count, is_nullable,
-                             str_as_dict_colnames,
-                             create_dict_encoding_from_strings);
-        rows_left = count;
-        read_all(builder);
+        tracing::Event ev("reader::read_batch", parallel);
+        // Handling for repeated extra calls to reader
+        // TODO: Determine the general handling for the no-column case
+        // (when selected_fields.empty() == true)
+        // Right now, this occurs when reading a Snowflake DELETE
+        // What would be the equivalent for Parquet?
+        if (rows_left == 0 && !selected_fields.empty()) {
+            is_last = true;
+            total_rows_out = 0;
+            ev.finalize();
 
+            TableBuilder builder(schema, selected_fields, 0, is_nullable,
+                                 str_as_dict_colnames, false);
+            return builder.get_table();
+        }
+
+        auto [out_table, is_last_, total_rows_out_] = read_inner();
+        if (is_last_ && rows_left != 0) {
+            throw std::runtime_error(
+                "ArrowReader::read_batch(): did not read all rows");
+        }
+
+        total_rows_out = total_rows_out_;
+        is_last = is_last_;
+        return out_table;
+    }
+
+    /**
+     * @brief Convenience function to read the entire dataset and return a Bodo
+     * table
+     * @return table_info* Out table returned to Python where it will be deleted
+     * after use
+     */
+    table_info* read_all() {
+        if (!initialized) {
+            throw std::runtime_error(
+                "ArrowReader::read_all(): not initialized");
+        }
+        if (this->batch_size != -1) {
+            throw std::runtime_error(
+                "ArrowReader::read_all(): Expected to read input all at once, "
+                "but "
+                "a batch-size is defined. Use ArrowReader::read_batch() to "
+                "read in batches");
+        }
+
+        tracing::Event ev("reader::read_all", parallel);
+        auto [out_table, is_last_, total_rows_out_] = read_inner();
+        assert(is_last_ == true);
+        assert(total_rows_out_ == this->total_rows);
         if (rows_left != 0) {
             throw std::runtime_error(
-                "ArrowDataframeReader::read(): did not read all rows");
+                "ArrowReader::read_all(): did not read all rows");
         }
-        return builder.get_table();
+
+        return out_table;
     }
 
    protected:
@@ -208,12 +268,12 @@ class ArrowDataframeReader {
 
     /// Total number of rows this process has to read (across pieces)
     int64_t count = 0;
-    int64_t rows_left;  // only used during ArrowDataframeReader::read()
+    int64_t rows_left;  // only used during ArrowReader::read()
+    int64_t batch_size;
 
     /// initialize reader
-    void init_arrow_reader(
-        const std::vector<int32_t>& str_as_dict_cols = {},
-        bool create_dict_from_string = false);
+    void init_arrow_reader(const std::vector<int32_t>& str_as_dict_cols = {},
+                           bool create_dict_from_string = false);
 
     /**
      * Helper Function to Upcast Runtime Data to Expected Reader Schema
@@ -238,8 +298,12 @@ class ArrowDataframeReader {
     /// Return Python object representing Arrow dataset
     virtual PyObject* get_dataset() = 0;
 
-    /// Read all pieces (data read from pieces is appended to builder)
-    virtual void read_all(TableBuilder& builder) = 0;
+    /**
+     * @brief Helper Interface Function for sub Readers to implement
+     * Perform the actual management and read of input pieces into batches
+     * Depending on the reader, must handle batched and non-batched reads
+     */
+    virtual std::tuple<table_info*, bool, uint64_t> read_inner() = 0;
 
    private:
     // XXX needed to call into Python?

@@ -201,7 +201,7 @@ table_info* iceberg_pq_read_py_entry(
         }
 
         *total_rows_out = reader.get_total_rows();
-        table_info* read_output = reader.read();
+        table_info* read_output = reader.read_all();
 
         // Append the index column to the output table used for MERGE INTO COW
         // Since the MERGE INTO flag is internal, we assume that this column

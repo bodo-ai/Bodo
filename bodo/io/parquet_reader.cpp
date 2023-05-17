@@ -1,6 +1,6 @@
 // Copyright (C) 2021 Bodo Inc. All rights reserved.
 
-// Implementation of ParquetReader (subclass of ArrowDataframeReader) with
+// Implementation of ParquetReader (subclass of ArrowReader) with
 // functionality that is specific to reading parquet datasets
 
 #include "parquet_reader.h"
@@ -145,14 +145,23 @@ PyObject* ParquetReader::get_dataset() {
     return ds;
 }
 
-void ParquetReader::read_all(TableBuilder& builder) {
+std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
+    if (batch_size != -1) {
+        throw std::runtime_error(
+            "ParquetReader::read does not support custom batch sizes");
+    }
+
+    TableBuilder builder(schema, selected_fields, count, is_nullable,
+                         str_as_dict_colnames,
+                         create_dict_encoding_from_strings);
+
     if (get_num_pieces() == 0) {
         // get_scanner_batches trace event has to be called by all ranks
         // Adding call here to avoid hangs in tracing.
         // This event is used to track load imbalance so we can't use
         // trace(is_parallel=False) to be able to collect min/max/avg.
         tracing::Event ev_get_scanner_batches("get_scanner_batches");
-        return;
+        return std::make_tuple(builder.get_table(), true, 0);
     }
 
     size_t cur_piece = 0;
@@ -296,6 +305,9 @@ void ParquetReader::read_all(TableBuilder& builder) {
                  this->input_file_name_col_indices_arr}),
             0, 0, 0, false, false, false);
     }
+
+    table_info* table = builder.get_table();
+    return std::make_tuple(table, true, table->nrows());
 }
 
 void ParquetReader::get_partition_info(PyObject* piece) {
@@ -371,12 +383,14 @@ table_info* pq_read_py_entry(
                              selected_fields, is_nullable, input_file_name_col,
                              use_hive);
 
-        // initialize reader
+        // Initialize reader
         reader.init_pq_reader(str_as_dict_cols, num_str_as_dict_cols,
                               part_cols_cat_dtype, selected_part_cols,
                               num_partition_cols);
         *total_rows_out = reader.get_total_rows();
-        table_info* out = reader.read();
+        // Actually read contents
+        table_info* out = reader.read_all();
+
         // append the partition columns to the final output table
         std::vector<std::shared_ptr<array_info>>& part_cols =
             reader.get_partition_cols();

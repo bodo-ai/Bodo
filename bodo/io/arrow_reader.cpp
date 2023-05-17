@@ -1,6 +1,6 @@
 // Copyright (C) 2021 Bodo Inc. All rights reserved.
 
-// Implementation of ArrowDataframeReader, ColumnBuilder subclasses and
+// Implementation of ArrowReader, ColumnBuilder subclasses and
 // helper code to read Arrow data into Bodo.
 
 #include <arrow/compute/api.h>
@@ -884,6 +884,9 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                            std::vector<bool>& is_nullable,
                            const std::set<std::string>& str_as_dict_cols,
                            const bool create_dict_from_string) {
+    total_rows = num_rows;
+    rem_rows = num_rows;
+
     int j = 0;
     for (int i : selected_fields) {
         const bool nullable_field = is_nullable[j++];
@@ -929,6 +932,9 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
 
 TableBuilder::TableBuilder(std::shared_ptr<table_info> table,
                            const int64_t num_rows) {
+    total_rows = num_rows;
+    rem_rows = num_rows;
+
     for (std::shared_ptr<array_info> arr : table->columns) {
         if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             columns.push_back(
@@ -960,17 +966,21 @@ void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
     // NOTE table could be sliced, so the column builders need to take into
     // account the offset and length attributes of the Arrow arrays in the
     // table
+    rem_rows -= table->num_rows();
     for (size_t i = 0; i < columns.size(); i++) {
         columns[i]->append(table->column(i));
     }
 }
 
-// -------------------- ArrowDataframeReader --------------------
-void ArrowDataframeReader::init_arrow_reader(
+// -------------------- ArrowReader --------------------
+
+void ArrowReader::init_arrow_reader(
     const std::vector<int32_t>& str_as_dict_cols,
     const bool create_dict_from_string) {
-    if (initialized)
-        throw std::runtime_error("ArrowDataframeReader already initialized");
+    if (initialized) {
+        throw std::runtime_error("ArrowReader already initialized");
+    }
+
     tracing::Event ev("reader::init", parallel);
     ev.add_attribute("g_parallel", parallel);
     ev.add_attribute("g_tot_rows_to_read", tot_rows_to_read);
@@ -1018,7 +1028,7 @@ void ArrowDataframeReader::init_arrow_reader(
 
     if (iterator == NULL) {
         throw std::runtime_error(
-            "ArrowDataframeReader::init_arrow_reader(): error getting pieces "
+            "ArrowReader::init_arrow_reader(): error getting pieces "
             "iterator");
     }
 
@@ -1143,10 +1153,14 @@ void ArrowDataframeReader::init_arrow_reader(
         ev.add_attribute("num_rows", count);
         ev.add_attribute("g_total_rows", total_rows);
     }
+
+    // Initialize the number of rows left to read
+    rows_left = count;
+
     initialized = true;
 }
 
-std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
+std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
     std::shared_ptr<arrow::Table> table) {
     if (!table->schema()->Equals(this->schema)) {
         arrow::ChunkedArrayVector new_cols;
@@ -1224,3 +1238,30 @@ std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
 
     return table;
 }
+
+/**
+ * @brief Py Entry Function to Call read_batch(...) on ArrowReaders
+ *
+ * @param[in] reader ArrowReader object to get next batch of
+ * @param[out] is_last_out Bool to pass to Python if is last batch
+ * @param[out] total_rows_out uint64 to pass to Python for the # of rows
+ *        in the output batch
+ * @return table_info* Output Bodo table representing the batch
+ */
+table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
+                                       uint64_t* total_rows_out) {
+    bool is_last_out_ = false;
+    uint64_t total_rows_out_ = 0;
+
+    table_info* table = reader->read_batch(is_last_out_, total_rows_out_);
+
+    *total_rows_out = total_rows_out_;
+    *is_last_out = is_last_out_;
+    return table;
+}
+
+/**
+ * @brief Delete / deallocate an ArrowReader object
+ * @param[in] reader ArrowReader object to delete
+ */
+void arrow_reader_del_py_entry(ArrowReader* reader) { delete reader; }

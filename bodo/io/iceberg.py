@@ -20,10 +20,7 @@ from numba.extending import intrinsic
 
 import bodo
 from bodo.io.fs_io import get_s3_bucket_region_njit
-from bodo.io.helpers import (
-    _get_numba_typ_from_pa_typ,
-    pyarrow_table_schema_type,
-)
+from bodo.io.helpers import _get_numba_typ_from_pa_typ, pyarrow_schema_type
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
@@ -926,7 +923,7 @@ def iceberg_write(
         partition_spec="python_list_of_heterogeneous_tuples_type",
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
-        expected_schema="pyarrow_table_schema_type",
+        expected_schema="pyarrow_schema_type",
     ):
         (
             already_exists,
@@ -1113,7 +1110,7 @@ def iceberg_merge_cow(
         partition_spec="python_list_of_heterogeneous_tuples_type",
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
-        expected_schema="pyarrow_table_schema_type",
+        expected_schema="pyarrow_schema_type",
     ):
         (
             already_exists,
@@ -1238,7 +1235,7 @@ def iceberg_pq_write_table_cpp(
             types.voidptr,
             types.int64,
             types.voidptr,
-            pyarrow_table_schema_type,
+            pyarrow_schema_type,
         ),
         codegen,
     )

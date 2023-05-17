@@ -15,6 +15,7 @@ from numba.core.ir_utils import build_definitions, find_topo_order, guard
 
 import bodo
 from bodo.hiframes.table import TableType, del_column
+from bodo.io.helpers import get_table_iterator
 from bodo.utils.del_column_utils import (
     get_table_used_columns,
     is_table_use_column_ops,
@@ -537,7 +538,6 @@ def _compute_table_column_use(blocks, func_ir, typemap):
             lambda: (set(), False, False)
         )
         for stmt in reversed(ir_block.body):
-
             # IR extensions that impact column uses.
             if type(stmt) in ir_extension_table_column_use:
                 f = ir_extension_table_column_use[type(stmt)]
@@ -556,21 +556,26 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                 lhs_name = stmt.target.name
                 # Handle simple assignments (i.e. df2 = df1)
                 # This should add update the equiv_vars
-                if isinstance(stmt.value, ir.Var) and isinstance(
-                    typemap[lhs_name], TableType
+                # Arrow reader is equivalent to tables for column elimination purposes
+                if isinstance(rhs, ir.Var) and isinstance(
+                    typemap[lhs_name],
+                    (TableType, bodo.io.arrow_reader.ArrowReaderType),
                 ):
-                    rhs_name = stmt.value.name
-                    if lhs_name not in equiv_vars:
-                        equiv_vars[lhs_name] = set()
-                    if rhs_name not in equiv_vars:
-                        equiv_vars[rhs_name] = set()
-                    equiv_vars[lhs_name].add(rhs_name)
-                    equiv_vars[rhs_name].add(lhs_name)
-                    equiv_vars[lhs_name] |= equiv_vars[rhs_name]
-                    equiv_vars[rhs_name] |= equiv_vars[lhs_name]
+                    rhs_name = rhs.name
+                    _update_equiv_set(equiv_vars, lhs_name, rhs_name)
                     continue
+                # pattern match "table, is_last = read_arrow_next(reader)" and set table
+                # and reader as equivalent
+
+                if isinstance(typemap[lhs_name], TableType):
+                    # TODO: Replace with walrus operation once Cython 3 is supported
+                    arrow_iter_name = guard(get_table_iterator, rhs, func_ir)
+                    if arrow_iter_name is not None:  # pragma: no cover
+                        _update_equiv_set(equiv_vars, lhs_name, arrow_iter_name)
+                        continue
+
                 # Handle calls to get_table_data
-                elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "call":
+                if isinstance(stmt.value, ir.Expr) and stmt.value.op == "call":
                     rhs = stmt.value
                     fdef = guard(numba.core.ir_utils.find_callname, func_ir, rhs)
                     if fdef == ("get_table_data", "bodo.hiframes.table"):
@@ -673,7 +678,6 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         continue
                     # handle table filter like T2 = T1[ind]
                     elif fdef == ("table_filter", "bodo.hiframes.table"):
-
                         # NOTE: column uses of input T1 are the same as output T2.
                         # Here we simply traverse the IR in reversed order and update uses,
                         # which works because table filter variables are internally
@@ -734,7 +738,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         # a typeref MetaType
                         idx_list = typemap[rhs.args[1].name].instance_type.meta
                         if use_all or cannot_del_cols:
-                            # If we useall or cannot delete columns for the output
+                            # If we use all or cannot delete columns for the output
                             # we add every input column. We can still delete columns
                             # from the input potentially because this creates new
                             # lists.
@@ -803,7 +807,6 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         "logical_table_to_table",
                         "bodo.hiframes.table",
                     ) and isinstance(typemap[rhs.args[0].name], TableType):
-
                         rhs_table = rhs.args[0].name
                         orig_used_cols, use_all, cannot_del_cols = block_use_map[
                             rhs_table
@@ -847,7 +850,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                 elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "getattr":
                     if stmt.value.attr == "shape":
                         # Skip ops that shouldn't impact the number of columns. Shape
-                        # can be computed from a combination of the tyep and the length
+                        # can be computed from a combination of the type and the length
                         # of any column, but no particular column. This needs to be skipped
                         # because it is inserted by
                         continue
@@ -859,7 +862,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                 # and operations like returns.
                 #
                 if var.name != lhs_name and isinstance(typemap[var.name], TableType):
-                    # The table is used in an unexpect way so it is not safe to delete.
+                    # The table is used in an unexpected way so it is not safe to delete.
                     block_use_map[var.name] = (set(), True, True)
 
     return table_col_use_map, equiv_vars
@@ -976,7 +979,7 @@ def remove_dead_columns(
                     "generate_mappable_table_func",
                     "bodo.utils.table_utils",
                 ):
-                    # In this case, if only a subset of the columns are live out of this maped table function,
+                    # In this case, if only a subset of the columns are live out of this mapped table function,
                     # we can pass this subset of columns to generate_mappable_table_func, which will allow generate_mappable_table_func
                     # To ignore these columns when mapping the function onto the table.
                     used_columns = _find_used_columns(
@@ -1265,6 +1268,52 @@ def remove_dead_columns(
                     # We do not set removed = True here, as this branch does not make
                     # any changes that could allow removal in dead code elimination.
                     continue
+                elif fdef == ("read_arrow_next", "bodo.io.arrow_reader"):
+                    # Compute all columns that are live at this statement
+                    # Assumes that the arrow_reader (first arg) is an equivalent var
+                    # to the output table (first value in the output tuple)
+                    # We can't easily get the table var from the tuple var, which is why
+                    # we do it like this instead
+                    used_columns = _find_used_columns(
+                        rhs.args[0].name,
+                        len(typemap[lhs_name][0].arr_types),
+                        lives,
+                        equiv_vars,
+                    )
+                    if used_columns is None:
+                        # if used_columns is None it means all columns are used.
+                        # As such, we can't do any column pruning
+                        new_body.append(stmt)
+                        continue
+
+                    nodes = compile_func_single_block(
+                        eval(
+                            "lambda arrow_reader: bodo.io.arrow_reader.read_arrow_next(arrow_reader, used_cols=used_columns)"
+                        ),
+                        rhs.args,
+                        stmt.target,
+                        typing_info=typing_info,
+                        extra_globals={
+                            "used_columns": bodo.utils.typing.MetaType(
+                                tuple(sorted(used_columns))
+                            )
+                        },
+                    )
+
+                    # Replace the variable in the return value to keep
+                    # distributed analysis consistent.
+                    nodes[-1].target = stmt.target
+                    # Update distributed analysis for the replaced function
+                    new_nodes = list(reversed(nodes))
+                    if dist_analysis:
+                        bodo.transforms.distributed_analysis.propagate_assign(
+                            dist_analysis.array_dists, new_nodes
+                        )
+                    new_body += new_nodes
+                    # We do not set removed = True here, as this branch does not make
+                    # any changes that could allow removal in dead code elimination.
+                    continue
+
         new_body.append(stmt)
 
     new_body.reverse()
@@ -1281,7 +1330,7 @@ def remove_dead_table_columns(
     """
     Runs table liveness analysis and eliminates columns from TableType
     creation functions. This must be run before custom IR extensions are
-    transformed. Thie function returns if any changes were made that could
+    transformed. The function returns True if any changes were made that could
     allow for dead code elimination to make changes.
     """
     # We return True if any changes were made that could
@@ -1429,3 +1478,15 @@ def _compute_table_column_uses(
             return set(), use_all, cannot_del_cols
         used_columns.update(used_col_local)
     return used_columns, False, False
+
+
+def _update_equiv_set(equiv_vars, lhs_name, rhs_name):
+    """Update equivalent variable sets for lhs and rhs to set them as equivalent"""
+    if lhs_name not in equiv_vars:
+        equiv_vars[lhs_name] = set()
+    if rhs_name not in equiv_vars:
+        equiv_vars[rhs_name] = set()
+    equiv_vars[lhs_name].add(rhs_name)
+    equiv_vars[rhs_name].add(lhs_name)
+    equiv_vars[lhs_name] |= equiv_vars[rhs_name]
+    equiv_vars[rhs_name] |= equiv_vars[lhs_name]

@@ -6,8 +6,10 @@ File that contains some IO related helpers.
 import os
 import threading
 import uuid
+from typing import TYPE_CHECKING, List
 
 import numba
+import numpy as np
 import pyarrow as pa
 from mpi4py import MPI
 from numba.core import types
@@ -45,6 +47,10 @@ from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils import tracing
 from bodo.utils.typing import BodoError, raise_bodo_error
 
+if TYPE_CHECKING:
+    import numpy.typing as npt
+    from numba.core import ir
+
 
 class PyArrowTableSchemaType(types.Opaque):
     """Type for pyarrow schema object passed to C++. It is just a Python object passed
@@ -55,20 +61,20 @@ class PyArrowTableSchemaType(types.Opaque):
         super(PyArrowTableSchemaType, self).__init__(name="PyArrowTableSchemaType")
 
 
-pyarrow_table_schema_type = PyArrowTableSchemaType()
-types.pyarrow_table_schema_type = pyarrow_table_schema_type  # type: ignore
+pyarrow_schema_type = PyArrowTableSchemaType()
+types.pyarrow_schema_type = pyarrow_schema_type  # type: ignore
 register_model(PyArrowTableSchemaType)(models.OpaqueModel)
 
 
 @unbox(PyArrowTableSchemaType)
-def unbox_pyarrow_table_schema_type(typ, val, c):
+def unbox_pyarrow_schema_type(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
     return NativeValue(val)
 
 
 @box(PyArrowTableSchemaType)
-def box_pyarrow_table_schema_type(typ, val, c):
+def box_pyarrow_schema_type(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
     return val
@@ -76,7 +82,7 @@ def box_pyarrow_table_schema_type(typ, val, c):
 
 @typeof_impl.register(pa.lib.Schema)
 def typeof_pyarrow_table_schema(val, c):
-    return pyarrow_table_schema_type
+    return pyarrow_schema_type
 
 
 @lower_constant(PyArrowTableSchemaType)
@@ -429,6 +435,31 @@ def numba_to_pyarrow_schema(df: DataFrameType, is_iceberg: bool = False) -> pa.S
     return pa.schema(fields)
 
 
+# ---------------------------- Compilation Time Helpers ----------------------------- #
+def map_cpp_to_py_table_column_idxs(
+    col_names: List[str], out_used_cols: List[int]
+) -> "npt.NDArray[np.int64]":  # pragma: no cover
+    """
+    Compilation-time helper that maps the index / location of each
+    column in the table type to its 'physical index' in the C++ table
+    during IO. Columns that are pruned are assigned index -1.
+
+    For Snowflake reads, it is generally true (but not enforced)
+    that the order of columns in the C++ table is maintained in the
+    table type. However, the table type will still retain typing info
+    for pruned columns, which would not have any pointers for in C++
+    """
+    idx = []
+    j = 0
+    for i in range(len(col_names)):
+        if j < len(out_used_cols) and i == out_used_cols[j]:
+            idx.append(j)
+            j += 1
+        else:
+            idx.append(-1)
+    return np.array(idx, dtype=np.int64)
+
+
 # ----------------------------- Snowflake Write Helpers ----------------------------- #
 
 
@@ -590,6 +621,47 @@ def box_exception_propagating_thread_type(typ, val, c):
 @typeof_impl.register(ExceptionPropagatingThread)
 def typeof_exception_propagating_thread(val, c):
     return exception_propagating_thread_type
+
+
+def get_table_iterator(rhs: "ir.Inst", func_ir: "ir.FunctionIR") -> str:
+    """pattern match "table, is_last = read_arrow_next(reader)" and return the reader
+    variable name.
+
+    Args:
+        rhs (ir.Inst): righthand side of assignemnt to table variable.
+        func_ir (ir.FunctionIR): Function IR used for finding definitions and calls.
+
+    Returns:
+        str: Variable name of the ArrowReaderType var used in read_arrow_next
+
+    Raises:
+        GuardException if unable to find the pattern or varname
+    """
+    from numba.core import ir
+    from numba.core.ir_utils import find_callname, get_definition, require
+
+    from bodo.utils.utils import is_call
+
+    # example IR:
+    # $24load_global.0 = global(read_arrow_next:
+    #       CPUDispatcher(<function read_arrow_next at 0x42f6543e20>))
+    # $28call_function.2 = call $24load_global.0(arrow_iterator.18,
+    #       func=$24load_global.0, args=[Var(arrow_iterator.18, arrow.py:22)], kws=(),
+    #       vararg=None, varkwarg=None, target=None)
+    # $30unpack_sequence.5 = exhaust_iter(value=$28call_function.2, count=2)
+    # $table.167 = static_getitem(value=$30unpack_sequence.5, index=0, index_var=None,
+    #       fn=<built-in function getitem>)
+
+    require(isinstance(rhs, ir.Expr) and rhs.op == "static_getitem" and rhs.index == 0)
+    exhaust_iter = get_definition(func_ir, rhs.value)
+    require(isinstance(exhaust_iter, ir.Expr) and exhaust_iter.op == "exhaust_iter")
+    tup_def = get_definition(func_ir, exhaust_iter.value)
+    require(
+        is_call(tup_def)
+        and find_callname(func_ir, tup_def)
+        == ("read_arrow_next", "bodo.io.arrow_reader")
+    )
+    return tup_def.args[0].name
 
 
 def join_all_threads(thread_list):

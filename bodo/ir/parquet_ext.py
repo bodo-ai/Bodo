@@ -29,7 +29,7 @@ from bodo.io.fs_io import (
 from bodo.io.helpers import (
     is_nullable,
     numba_to_pyarrow_schema,
-    pyarrow_table_schema_type,
+    pyarrow_schema_type,
 )
 from bodo.io.parquet_pio import (
     ParquetFileInfo,
@@ -879,7 +879,7 @@ pq_read_py_entry = types.ExternalFunction(
         parquet_predicate_type,  # dnf_filters
         parquet_predicate_type,  # expr_filters
         storage_options_dict_type,  # storage_options
-        pyarrow_table_schema_type,  # pyarrow_schema
+        pyarrow_schema_type,  # pyarrow_schema
         types.int64,  # tot_rows_to_read
         types.voidptr,  # _selected_fields
         types.int32,  # num_selected_fields
