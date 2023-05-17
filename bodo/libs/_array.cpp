@@ -1455,7 +1455,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, shuffle_renormalization_py_entrypt);
     SetAttrStringFromVoidPtr(m, shuffle_renormalization_group_py_entrypt);
     SetAttrStringFromVoidPtr(m, hash_join_table);
-    SetAttrStringFromVoidPtr(m, cross_join_table);
+    SetAttrStringFromVoidPtr(m, nested_loop_join_table);
     SetAttrStringFromVoidPtr(m, interval_join_table);
     SetAttrStringFromVoidPtr(m, sample_table_py_entry);
     SetAttrStringFromVoidPtr(m, sort_values_table_py_entry);
