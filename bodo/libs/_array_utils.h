@@ -368,8 +368,8 @@ inline bool TestEqual(std::vector<std::shared_ptr<array_info>> const& columns,
  * @param is_na_equal Are NA values considered equal
  * @return True if they are equal and false otherwise.
  */
-inline bool TestEqualJoin(const std::shared_ptr<table_info>& table1,
-                          const std::shared_ptr<table_info>& table2,
+inline bool TestEqualJoin(const std::shared_ptr<const table_info>& table1,
+                          const std::shared_ptr<const table_info>& table2,
                           size_t const& iRow1, size_t const& iRow2,
                           size_t const& n_key, bool is_na_equal) {
     // iteration over the list of key for the comparison.
