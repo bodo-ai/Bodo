@@ -59,6 +59,11 @@ data: {
         "USER",
         "TEMP",
         "TRANSIENT",
+        "OUT",
+        "FILTER",
+        "CONDITION",
+        "TRANSLATION",
+        "POSITION",
     ]
 
     # List of additional join types. Each is a method with no arguments.
