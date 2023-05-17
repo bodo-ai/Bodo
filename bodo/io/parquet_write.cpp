@@ -252,7 +252,7 @@ int64_t pq_write(
         cur_str += len;
     }
 
-    auto pool = ::arrow::default_memory_pool();
+    auto pool = bodo::BufferPool::DefaultPtr();
 
     // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
     // columns
@@ -286,7 +286,10 @@ int64_t pq_write(
 
             // Skip expected string types since they can be dictionary encoded
             if (!array_type->Equals(arrow_type)) {
-                auto res = arrow::compute::Cast(*columns[i].get(), arrow_type);
+                auto res =
+                    arrow::compute::Cast(*columns[i].get(), arrow_type,
+                                         arrow::compute::CastOptions::Safe(),
+                                         bodo::buffer_exec_context());
 
                 if (!res.ok()) {
                     std::string err_msg =
@@ -539,8 +542,8 @@ void pq_write_partitioned_py_entry(
         const uint32_t seed = SEED_HASH_PARTITION;
         std::shared_ptr<uint32_t[]> hashes =
             hash_keys(partition_cols, seed, is_parallel);
-        UNORD_MAP_CONTAINER<multi_col_key, partition_write_info,
-                            multi_col_key_hash>
+        bodo::unord_map_container<multi_col_key, partition_write_info,
+                                  multi_col_key_hash>
             key_to_partition;
 
         // TODO nullable partition cols?

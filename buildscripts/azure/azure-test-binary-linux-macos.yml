@@ -13,7 +13,6 @@ jobs:
     - group: SnowflakeCredentials
   pool: ScalingVMSet
   strategy:
-    maxParallel: 11
     matrix:
       ${{ insert }}: ${{ parameters.matrix }}
 

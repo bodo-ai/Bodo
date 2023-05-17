@@ -539,7 +539,6 @@ def test_kurtosis_skew(df, memory_leak_check):
 
 @pytest.mark.slow
 def test_sum_string(memory_leak_check):
-
     assert pandas_version in (
         (1, 3),
         (1, 4),
@@ -686,7 +685,6 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
 
 
 def test_random_string_sum_min_max_first_last(memory_leak_check):
-
     assert pandas_version in (
         (1, 3),
         (1, 4),
@@ -740,7 +738,6 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
 
 
 def test_random_binary_sum_min_max_first_last(memory_leak_check):
-
     assert pandas_version in (
         (1, 3),
         (1, 4),
@@ -2887,6 +2884,7 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
         }
     )
     check_func(impl1, (df,), sort_output=True, convert_to_nullable_float=False)
+
     # acc_loop: as_index=False, Series output. (Key has string column)
     def impl14(df):
         df2 = df.groupby(["A", "B"], as_index=False).B.apply(
@@ -2896,6 +2894,7 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
         return df2
 
     check_func(impl14, (df,), sort_output=True, reset_index=True)
+
     # acc_loop: as_index=True, DataFrame output. (Key has string column)
     def impl15(df):
         df2 = df.groupby(["A", "B"]).B.apply(
@@ -2905,6 +2904,7 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
         return df2
 
     check_func(impl15, (df,), sort_output=True, reset_index=True)
+
     # row_loop: as_index=True, index is single column, output: Series
     def impl16(df):
         df2 = df.groupby(["B"]).apply(
@@ -3749,6 +3749,7 @@ def test_min(test_df, memory_leak_check):
 @pytest.mark.slow
 def test_min_max_other_supported_types(memory_leak_check):
     """Test Groupby.min()/max() with other types not in df_test"""
+
     # TODO: [BE-435] HA: Once all these groupby functions are done, merge the dataframe examples with df_test
     def impl1(df):
         A = df.groupby("A").min()
@@ -6540,6 +6541,7 @@ def test_groupby_ngroup(memory_leak_check):
         memory_leak_check (fixture function): check memory leak in the test.
 
     """
+
     # basic case
     def impl1(df):
         result = df.groupby("A").ngroup()
@@ -6683,85 +6685,94 @@ def test_groupby_num_shuffle_keys(memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "data_col, has_null_group",
+    "t_val, f_val, dtype",
     [
-        # Test on all interger types
-        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="int8"), False),
-        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="uint8"), False),
-        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="int16"), False),
-        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="uint16"), False),
-        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="int32"), False),
-        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="uint32"), False),
-        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="int64"), False),
-        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="uint64"), False),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Int8"), True),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="UInt8"), True),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Int16"), True),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="UInt16"), True),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Int32"), True),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="UInt32"), True),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Int64"), True),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="UInt64"), True),
-        # Test on boolean types
-        (
-            pd.Series(
-                ([False, True, True, False, True, True] + [False] * 6), dtype="bool"
-            ),
-            False,
-        ),
-        (
-            pd.Series(
-                ([False, True, True, None, True, True] + [False, None] * 3),
-                dtype="boolean",
-            ),
-            True,
-        ),
-        # Test on float types
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="float32"), True),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="float64"), True),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Float32"), True),
-        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Float64"), True),
-        (
-            pd.Series(
-                (
-                    [
-                        Decimal("0.0"),
-                        Decimal("1.6"),
-                        Decimal("2.2"),
-                        None,
-                        Decimal("4.8"),
-                        Decimal("0.05"),
-                    ]
-                    + [Decimal("0.0"), None] * 3
-                )
-            ),
-            True,
-        ),
+        pytest.param(-1, 0, pd.Int8Dtype(), id="int8"),
+        pytest.param(5, 0, pd.UInt8Dtype(), id="uint8", marks=pytest.mark.slow),
+        pytest.param(10, 0, pd.Int16Dtype(), id="int16", marks=pytest.mark.slow),
+        pytest.param(255, 0, pd.UInt16Dtype(), id="uint16", marks=pytest.mark.slow),
+        pytest.param(1024, 0, pd.Int32Dtype(), id="int32", marks=pytest.mark.slow),
+        pytest.param(1, 0, pd.UInt32Dtype(), id="uint32", marks=pytest.mark.slow),
+        pytest.param(-2048, 0, pd.Int64Dtype(), id="int64", marks=pytest.mark.slow),
+        pytest.param(64, 0, pd.UInt64Dtype(), id="uint64"),
+        pytest.param(True, False, pd.BooleanDtype(), id="bool"),
+        pytest.param(3.14, 0.0, np.float32, id="float32"),
+        pytest.param(-2.71828, 0.0, np.float64, id="float64"),
+        pytest.param(Decimal("0.05"), Decimal("0.0"), None, id="decimal"),
     ],
 )
-def test_boolagg_or(data_col, has_null_group, memory_leak_check):
-    """Tests calling a groupby with boolagg_or, a function used by
-    BodoSQL and not part or regular pandas, on all possible datatypes."""
+def test_boolor_booland_boolxor_agg(t_val, f_val, dtype, memory_leak_check):
+    """Tests calling a groupby with boolor_agg/booland_agg/boolxor_agg, functions
+    used by BodoSQL and not part or regular pandas, on all possible datatypes."""
 
     def impl(df):
         # Note we choose all of these flag + code format because
         # these are the generated SQL flags
         return df.groupby(["key"], as_index=False, dropna=False).agg(
-            data_out=pd.NamedAgg(column="data", aggfunc="boolor_agg"),
+            or_out=pd.NamedAgg(column="data", aggfunc="boolor_agg"),
+            and_out=pd.NamedAgg(column="data", aggfunc="booland_agg"),
+            xor_out=pd.NamedAgg(column="data", aggfunc="boolxor_agg"),
         )
 
-    groups = pd.Series([1, 2, 3, 4, 5, 6] * 2)
+    scale = 5
+
+    # For boolxor_agg, groups where exactly one value is t_val and the rest are
+    # either f_val or None should be True, the rest should be False, or NULL
+    # if the entire group is all-null. For booland_agg, all the values must
+    # be true. For boolor_agg, at least one value must be true.
+    original_keys = [
+        "0/3",
+        "1/3",
+        "2/3",
+        "3/3",
+        "1/1",
+        "2/2",
+        "0/0",
+        "0/1",
+        "0/2",
+        "1/2",
+    ]
+    group_keys = []
+    for i in range(scale):
+        for key in original_keys:
+            group_keys.append(key + chr(i + 65))
+    groups = pd.Series(group_keys).repeat(3).values
     df = pd.DataFrame(
         {
             "key": groups,
-            "data": data_col,
+            "data": pd.Series(
+                (
+                    [f_val, f_val, f_val]
+                    + [f_val, t_val, f_val]
+                    + [t_val, f_val, t_val]
+                    + [t_val, t_val, t_val]
+                    + [None, None, t_val]
+                    + [None, t_val, t_val]
+                    + [None, None, None]
+                    + [f_val, None, None]
+                    + [None, f_val, f_val]
+                    + [t_val, f_val, None]
+                )
+                * scale,
+                dtype=dtype,
+            ),
         }
     )
     expected_output = pd.DataFrame(
         {
-            "key": pd.Series([1, 2, 3, 4, 5, 6]),
-            "data_out": pd.Series(
-                [False, True, True, None if has_null_group else False, True, True],
+            "key": pd.Series(group_keys),
+            "or_out": pd.Series(
+                [False, True, True, True, True, True, None, False, False, True] * scale,
+                dtype="boolean",
+            ),
+            "and_out": pd.Series(
+                [False, False, False, True, True, True, None, False, False, False]
+                * scale,
+                dtype="boolean",
+            ),
+            "xor_out": pd.Series(
+                [False, True, False, False, True, False, None, False, False, True]
+                * scale,
                 dtype="boolean",
             ),
         }
@@ -6772,6 +6783,7 @@ def test_boolagg_or(data_col, has_null_group, memory_leak_check):
         sort_output=True,
         reset_index=True,
         py_output=expected_output,
+        check_names=False,
     )
 
 

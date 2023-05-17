@@ -241,6 +241,60 @@ void IdxMinMaxColSet::combine(const grouping_info& grp_info) {
     this->combine_cols.pop_back();
 }
 
+BoolXorColSet::BoolXorColSet(std::shared_ptr<array_info> in_col, int ftype,
+                             bool combine_step, bool use_sql_rules)
+    : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
+
+BoolXorColSet::~BoolXorColSet() {}
+
+void BoolXorColSet::alloc_update_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    std::shared_ptr<array_info> one_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::_BOOL, 0, 0);
+    std::shared_ptr<array_info> two_col =
+        alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
+                    Bodo_CTypes::_BOOL, 0, 0);
+    aggfunc_output_initialize(one_col, this->ftype, use_sql_rules);
+    aggfunc_output_initialize(two_col, this->ftype, use_sql_rules);
+    out_cols.push_back(one_col);
+    out_cols.push_back(two_col);
+    this->update_cols.push_back(one_col);
+    this->update_cols.push_back(two_col);
+}
+
+void BoolXorColSet::update(const std::vector<grouping_info>& grp_infos) {
+    std::vector<std::shared_ptr<array_info>> aux_cols = {this->update_cols[1]};
+    do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
+                       grp_infos[0], this->ftype);
+}
+
+void BoolXorColSet::combine(const grouping_info& grp_info) {
+    std::shared_ptr<array_info> one_col_in = this->update_cols[0];
+    std::shared_ptr<array_info> two_col_in = this->update_cols[1];
+    std::shared_ptr<array_info> one_col_out = this->combine_cols[0];
+    std::shared_ptr<array_info> two_col_out = this->combine_cols[1];
+    aggfunc_output_initialize(one_col_out, Bodo_FTypes::boolxor_agg,
+                              use_sql_rules);
+    aggfunc_output_initialize(two_col_out, Bodo_FTypes::boolxor_agg,
+                              use_sql_rules);
+    boolxor_combine(one_col_in, two_col_in, one_col_out, two_col_out, grp_info);
+}
+
+void BoolXorColSet::eval(const grouping_info& grp_info) {
+    std::vector<std::shared_ptr<array_info>>* mycols;
+    if (this->combine_step) {
+        mycols = &this->combine_cols;
+    } else {
+        mycols = &this->update_cols;
+    }
+    // Perform the evaluation step with one_col used as the output column
+    // and two_col as the aux column
+    std::vector<std::shared_ptr<array_info>> aux_cols = {mycols->at(1)};
+    do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+                       Bodo_FTypes::boolxor_eval);
+}
+
 VarStdColSet::VarStdColSet(std::shared_ptr<array_info> in_col, int ftype,
                            bool combine_step, bool use_sql_rules)
     : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
@@ -312,12 +366,12 @@ void VarStdColSet::alloc_combine_columns(
 }
 
 void VarStdColSet::combine(const grouping_info& grp_info) {
-    std::shared_ptr<array_info> count_col_in = this->update_cols[0];
-    std::shared_ptr<array_info> mean_col_in = this->update_cols[1];
-    std::shared_ptr<array_info> m2_col_in = this->update_cols[2];
-    std::shared_ptr<array_info> count_col_out = this->combine_cols[1];
-    std::shared_ptr<array_info> mean_col_out = this->combine_cols[2];
-    std::shared_ptr<array_info> m2_col_out = this->combine_cols[3];
+    const std::shared_ptr<array_info>& count_col_in = this->update_cols[0];
+    const std::shared_ptr<array_info>& mean_col_in = this->update_cols[1];
+    const std::shared_ptr<array_info>& m2_col_in = this->update_cols[2];
+    const std::shared_ptr<array_info>& count_col_out = this->combine_cols[1];
+    const std::shared_ptr<array_info>& mean_col_out = this->combine_cols[2];
+    const std::shared_ptr<array_info>& m2_col_out = this->combine_cols[3];
     aggfunc_output_initialize(count_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(mean_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count, use_sql_rules);
@@ -439,14 +493,14 @@ void SkewColSet::alloc_combine_columns(
 }
 
 void SkewColSet::combine(const grouping_info& grp_info) {
-    std::shared_ptr<array_info> count_col_in = this->update_cols[0];
-    std::shared_ptr<array_info> m1_col_in = this->update_cols[1];
-    std::shared_ptr<array_info> m2_col_in = this->update_cols[2];
-    std::shared_ptr<array_info> m3_col_in = this->update_cols[3];
-    std::shared_ptr<array_info> count_col_out = this->combine_cols[1];
-    std::shared_ptr<array_info> m1_col_out = this->combine_cols[2];
-    std::shared_ptr<array_info> m2_col_out = this->combine_cols[3];
-    std::shared_ptr<array_info> m3_col_out = this->combine_cols[4];
+    const std::shared_ptr<array_info>& count_col_in = this->update_cols[0];
+    const std::shared_ptr<array_info>& m1_col_in = this->update_cols[1];
+    const std::shared_ptr<array_info>& m2_col_in = this->update_cols[2];
+    const std::shared_ptr<array_info>& m3_col_in = this->update_cols[3];
+    const std::shared_ptr<array_info>& count_col_out = this->combine_cols[1];
+    const std::shared_ptr<array_info>& m1_col_out = this->combine_cols[2];
+    const std::shared_ptr<array_info>& m2_col_out = this->combine_cols[3];
+    const std::shared_ptr<array_info>& m3_col_out = this->combine_cols[4];
     aggfunc_output_initialize(count_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(m1_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count, use_sql_rules);
@@ -571,16 +625,16 @@ void KurtColSet::alloc_combine_columns(
 }
 
 void KurtColSet::combine(const grouping_info& grp_info) {
-    std::shared_ptr<array_info> count_col_in = this->update_cols[0];
-    std::shared_ptr<array_info> m1_col_in = this->update_cols[1];
-    std::shared_ptr<array_info> m2_col_in = this->update_cols[2];
-    std::shared_ptr<array_info> m3_col_in = this->update_cols[3];
-    std::shared_ptr<array_info> m4_col_in = this->update_cols[4];
-    std::shared_ptr<array_info> count_col_out = this->combine_cols[1];
-    std::shared_ptr<array_info> m1_col_out = this->combine_cols[2];
-    std::shared_ptr<array_info> m2_col_out = this->combine_cols[3];
-    std::shared_ptr<array_info> m3_col_out = this->combine_cols[4];
-    std::shared_ptr<array_info> m4_col_out = this->combine_cols[5];
+    const std::shared_ptr<array_info>& count_col_in = this->update_cols[0];
+    const std::shared_ptr<array_info>& m1_col_in = this->update_cols[1];
+    const std::shared_ptr<array_info>& m2_col_in = this->update_cols[2];
+    const std::shared_ptr<array_info>& m3_col_in = this->update_cols[3];
+    const std::shared_ptr<array_info>& m4_col_in = this->update_cols[4];
+    const std::shared_ptr<array_info>& count_col_out = this->combine_cols[1];
+    const std::shared_ptr<array_info>& m1_col_out = this->combine_cols[2];
+    const std::shared_ptr<array_info>& m2_col_out = this->combine_cols[3];
+    const std::shared_ptr<array_info>& m3_col_out = this->combine_cols[4];
+    const std::shared_ptr<array_info>& m4_col_out = this->combine_cols[5];
     aggfunc_output_initialize(count_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(m1_col_out, Bodo_FTypes::count, use_sql_rules);
     aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count, use_sql_rules);
@@ -669,10 +723,10 @@ GeneralUdfColSet::GeneralUdfColSet(std::shared_ptr<array_info> in_col,
 GeneralUdfColSet::~GeneralUdfColSet() {}
 
 void GeneralUdfColSet::fill_in_columns(
-    std::shared_ptr<table_info> general_in_table,
+    const std::shared_ptr<table_info>& general_in_table,
     const grouping_info& grp_info) const {
     std::shared_ptr<array_info> in_col = this->in_col;
-    std::vector<std::vector<int64_t>> group_rows(grp_info.num_groups);
+    bodo::vector<bodo::vector<int64_t>> group_rows(grp_info.num_groups);
     // get the rows in each group
     for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = grp_info.row_to_group[i];
@@ -724,13 +778,13 @@ void NUniqueColSet::update(const std::vector<grouping_info>& grp_infos) {
         // table
         aggfunc_output_initialize(this->update_cols[0], Bodo_FTypes::sum,
                                   use_sql_rules);  // zero initialize
-        nunique_computation(input_col, this->update_cols[0],
+        nunique_computation(std::move(input_col), this->update_cols[0],
                             grp_infos[my_nunique_table->id], dropna,
                             is_parallel);
     } else {
         // use default grouping_info
-        nunique_computation(input_col, this->update_cols[0], grp_infos[0],
-                            dropna, is_parallel);
+        nunique_computation(std::move(input_col), this->update_cols[0],
+                            grp_infos[0], dropna, is_parallel);
     }
 }
 
@@ -852,7 +906,8 @@ void HeadColSet::alloc_update_columns(
 void HeadColSet::update(const std::vector<grouping_info>& grp_infos) {
     head_computation(this->in_col, this->update_cols[0], head_row_list);
 }
-void HeadColSet::set_head_row_list(std::vector<int64_t> row_list) {
+
+void HeadColSet::set_head_row_list(bodo::vector<int64_t>& row_list) {
     head_row_list = row_list;
 }
 
@@ -938,20 +993,21 @@ std::unique_ptr<BasicColSet> makeColSet(
     }
     switch (ftype) {
         case Bodo_FTypes::udf:
-            colset =
-                new UdfColSet(in_cols[0], do_combine, udf_table, udf_table_idx,
-                              udf_n_redvars[n_udf], use_sql_rules);
+            colset = new UdfColSet(in_cols[0], do_combine, std::move(udf_table),
+                                   udf_table_idx, udf_n_redvars[n_udf],
+                                   use_sql_rules);
             break;
         case Bodo_FTypes::gen_udf:
-            colset = new GeneralUdfColSet(in_cols[0], udf_table, udf_table_idx,
-                                          use_sql_rules);
+            colset = new GeneralUdfColSet(in_cols[0], std::move(udf_table),
+                                          udf_table_idx, use_sql_rules);
             break;
         case Bodo_FTypes::median:
             colset = new MedianColSet(in_cols[0], skipna, use_sql_rules);
             break;
         case Bodo_FTypes::nunique:
-            colset = new NUniqueColSet(in_cols[0], skipna, nunique_table,
-                                       do_combine, is_parallel, use_sql_rules);
+            colset =
+                new NUniqueColSet(in_cols[0], skipna, std::move(nunique_table),
+                                  do_combine, is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::cumsum:
         case Bodo_FTypes::cummin:
@@ -961,6 +1017,10 @@ std::unique_ptr<BasicColSet> makeColSet(
             break;
         case Bodo_FTypes::mean:
             colset = new MeanColSet(in_cols[0], do_combine, use_sql_rules);
+            break;
+        case Bodo_FTypes::boolxor_agg:
+            colset =
+                new BoolXorColSet(in_cols[0], ftype, do_combine, use_sql_rules);
             break;
         case Bodo_FTypes::var_pop:
         case Bodo_FTypes::std_pop:

@@ -184,7 +184,7 @@ void equi_join_keys_handle_dict_encoded(std::shared_ptr<table_info> left_table,
  * @param n_key The number of key columns. Indices below this will not be added
  * to the set.
  */
-void insert_non_equi_func_set(UNORD_SET_CONTAINER<int64_t>* set,
+void insert_non_equi_func_set(bodo::unord_set_container<int64_t>* set,
                               std::shared_ptr<table_info> table,
                               uint64_t* non_equi_func_col_nums,
                               uint64_t len_non_equi, bool is_parallel,
@@ -222,11 +222,12 @@ void insert_non_equi_func_set(UNORD_SET_CONTAINER<int64_t>* set,
  * @param right_parallel Is the right table distributed.
  * @param n_key The number of key columns. These will not be processed in the
  * non-equality functions.
- * @return std::tuple<UNORD_SET_CONTAINER<int64_t>*,
- * UNORD_SET_CONTAINER<int64_t>*> A tuple of pointers to the sets of column
- * numbers that are used in the non-equality C funcs.
+ * @return std::tuple<bodo::unord_set_container<int64_t>*,
+ * bodo::unord_set_container<int64_t>*> A tuple of pointers to the sets of
+ * column numbers that are used in the non-equality C funcs.
  */
-std::tuple<UNORD_SET_CONTAINER<int64_t>*, UNORD_SET_CONTAINER<int64_t>*>
+std::tuple<bodo::unord_set_container<int64_t>*,
+           bodo::unord_set_container<int64_t>*>
 create_non_equi_func_sets(std::shared_ptr<table_info> left_table,
                           std::shared_ptr<table_info> right_table,
                           uint64_t* left_non_equi_func_col_nums,
@@ -235,16 +236,16 @@ create_non_equi_func_sets(std::shared_ptr<table_info> left_table,
                           uint64_t len_right_non_equi, bool left_parallel,
                           bool right_parallel, size_t n_key) {
     // Convert the left table.
-    UNORD_SET_CONTAINER<int64_t>* left_non_equi_func_col_num_set =
-        new UNORD_SET_CONTAINER<int64_t>();
+    bodo::unord_set_container<int64_t>* left_non_equi_func_col_num_set =
+        new bodo::unord_set_container<int64_t>();
     left_non_equi_func_col_num_set->reserve(len_left_non_equi);
     insert_non_equi_func_set(left_non_equi_func_col_num_set, left_table,
                              left_non_equi_func_col_nums, len_left_non_equi,
                              left_parallel, n_key);
 
     // Convert the right table.
-    UNORD_SET_CONTAINER<int64_t>* right_non_equi_func_col_num_set =
-        new UNORD_SET_CONTAINER<int64_t>();
+    bodo::unord_set_container<int64_t>* right_non_equi_func_col_num_set =
+        new bodo::unord_set_container<int64_t>();
     right_non_equi_func_col_num_set->reserve(len_right_non_equi);
     insert_non_equi_func_set(right_non_equi_func_col_num_set, right_table,
                              right_non_equi_func_col_nums, len_right_non_equi,
@@ -273,13 +274,13 @@ create_non_equi_func_sets(std::shared_ptr<table_info> left_table,
 template <typename Map>
 void insert_build_table_equi_join_some_non_equality(
     Map* key_rows_map,
-    std::vector<UNORD_MAP_CONTAINER<
+    bodo::vector<bodo::unord_map_container<
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
         joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
         second_level_hash_maps,
     joinHashFcts::SecondLevelHashHashJoinTable second_level_hash_fct,
     joinHashFcts::SecondLevelKeyEqualHashJoinTable second_level_equal_fct,
-    std::vector<std::vector<size_t>*>* groups, size_t build_table_rows) {
+    bodo::vector<bodo::vector<size_t>*>* groups, size_t build_table_rows) {
     // If 'uses_cond_func' we have a separate insertion process. We
     // place the condition before the loop to avoid overhead.
     for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
@@ -292,13 +293,10 @@ void insert_build_table_equi_join_some_non_equality(
             // Update the value of first_level_group_id stored in
             // the hash map as well since its pass by reference.
             first_level_group_id = second_level_hash_maps->size() + 1;
-            UNORD_MAP_CONTAINER<
+            auto* group_map = new bodo::unord_map_container<
                 size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
-                joinHashFcts::SecondLevelKeyEqualHashJoinTable>* group_map =
-                new UNORD_MAP_CONTAINER<
-                    size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
-                    joinHashFcts::SecondLevelKeyEqualHashJoinTable>(
-                    {}, second_level_hash_fct, second_level_equal_fct);
+                joinHashFcts::SecondLevelKeyEqualHashJoinTable>(
+                {}, second_level_hash_fct, second_level_equal_fct);
             second_level_hash_maps->emplace_back(group_map);
         }
         auto group_map = (*second_level_hash_maps)[first_level_group_id - 1];
@@ -309,7 +307,7 @@ void insert_build_table_equi_join_some_non_equality(
             // Update the value of group_id stored in the hash map
             // as well since its pass by reference.
             second_level_group_id = groups->size() + 1;
-            groups->emplace_back(new std::vector<size_t>());
+            groups->emplace_back(new bodo::vector<size_t>());
         }
         (*groups)[second_level_group_id - 1]->emplace_back(i_build);
     }
@@ -326,7 +324,7 @@ void insert_build_table_equi_join_some_non_equality(
  */
 template <typename Map>
 void insert_build_table_equi_join_all_equality(
-    Map* key_rows_map, std::vector<std::vector<size_t>*>* groups,
+    Map* key_rows_map, bodo::vector<bodo::vector<size_t>*>* groups,
     size_t build_table_rows) {
     for (size_t i_build = 0; i_build < build_table_rows; i_build++) {
         // Check if the group already exists, if it doesn't this
@@ -337,7 +335,7 @@ void insert_build_table_equi_join_all_equality(
             // Update the value of group_id stored in the hash map
             // as well since its pass by reference.
             group_id = groups->size() + 1;
-            groups->emplace_back(new std::vector<size_t>());
+            groups->emplace_back(new bodo::vector<size_t>());
         }
         (*groups)[group_id - 1]->emplace_back(i_build);
     }
@@ -754,7 +752,7 @@ struct handle_build_table_hit<true> {
      * @param V_build_map: Bitmap for the build table with an outer join.
      * @param pos Current group number for the build table.
      */
-    static inline void apply(std::vector<uint8_t>& V_build_map, size_t pos) {
+    static inline void apply(bodo::vector<uint8_t>& V_build_map, size_t pos) {
         SetBitTo(V_build_map.data(), pos, true);
     }
 };
@@ -772,7 +770,7 @@ struct handle_build_table_hit<false> {
      * @param V_build_map: Bitmap for the build table with an outer join.
      * @param pos Current group number for the build table.
      */
-    static inline void apply(std::vector<uint8_t>& V_build_map, size_t pos) {
+    static inline void apply(bodo::vector<uint8_t>& V_build_map, size_t pos) {
         // This function does nothing.
     }
 };
@@ -806,9 +804,9 @@ struct handle_probe_table_miss<false, false> {
      * in the probe table.
      * @param pos The current row number.
      */
-    static inline void apply(std::vector<int64_t>& build_write_idxs,
-                             std::vector<int64_t>& probe_write_idxs,
-                             std::vector<uint8_t>& V_probe_map, size_t pos) {
+    static inline void apply(bodo::vector<int64_t>& build_write_idxs,
+                             bodo::vector<int64_t>& probe_write_idxs,
+                             bodo::vector<uint8_t>& V_probe_map, size_t pos) {
         // This function does nothing.
     }
 };
@@ -832,9 +830,9 @@ struct handle_probe_table_miss<true, false> {
      * in the probe table.
      * @param pos The current row number.
      */
-    static inline void apply(std::vector<int64_t>& build_write_idxs,
-                             std::vector<int64_t>& probe_write_idxs,
-                             std::vector<uint8_t>& V_probe_map, size_t pos) {
+    static inline void apply(bodo::vector<int64_t>& build_write_idxs,
+                             bodo::vector<int64_t>& probe_write_idxs,
+                             bodo::vector<uint8_t>& V_probe_map, size_t pos) {
         build_write_idxs.emplace_back(-1);
         probe_write_idxs.emplace_back(pos);
     }
@@ -857,9 +855,9 @@ struct handle_probe_table_miss<true, true> {
      * in the probe table. This is the parameter we will modify.
      * @param pos The current row number.
      */
-    static inline void apply(std::vector<int64_t>& build_write_idxs,
-                             std::vector<int64_t>& probe_write_idxs,
-                             std::vector<uint8_t>& V_probe_map, size_t pos) {
+    static inline void apply(bodo::vector<int64_t>& build_write_idxs,
+                             bodo::vector<int64_t>& probe_write_idxs,
+                             bodo::vector<uint8_t>& V_probe_map, size_t pos) {
         SetBitTo(V_probe_map.data(), pos, false);
     }
 };
@@ -899,14 +897,14 @@ template <bool build_table_outer, bool probe_table_outer,
           bool is_outer_broadcast, typename Map>
 void insert_probe_table_equi_join_some_non_equality(
     Map* key_rows_map,
-    std::vector<UNORD_MAP_CONTAINER<
+    bodo::vector<bodo::unord_map_container<
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
         joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
         second_level_hash_maps,
-    std::vector<std::vector<size_t>*>* groups, size_t build_table_rows,
-    size_t probe_table_rows, std::vector<uint8_t>& V_build_map,
-    std::vector<uint8_t>& V_probe_map, std::vector<int64_t>& build_write_idxs,
-    std::vector<int64_t>& probe_write_idxs, bool build_is_left,
+    bodo::vector<bodo::vector<size_t>*>* groups, size_t build_table_rows,
+    size_t probe_table_rows, bodo::vector<uint8_t>& V_build_map,
+    bodo::vector<uint8_t>& V_probe_map, bodo::vector<int64_t>& build_write_idxs,
+    bodo::vector<int64_t>& probe_write_idxs, bool build_is_left,
     std::vector<std::shared_ptr<array_info>>& left_table_infos,
     std::vector<std::shared_ptr<array_info>>& right_table_infos,
     std::vector<void*>& col_ptrs_left, std::vector<void*>& col_ptrs_right,
@@ -933,7 +931,7 @@ void insert_probe_table_equi_join_some_non_equality(
         } else {
             // If the first level matches, check each second level
             // hash.
-            UNORD_MAP_CONTAINER<
+            bodo::unord_map_container<
                 size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
                 joinHashFcts::SecondLevelKeyEqualHashJoinTable>* group_map =
                 (*second_level_hash_maps)[iter->second - 1];
@@ -943,7 +941,7 @@ void insert_probe_table_equi_join_some_non_equality(
             // TODO [BE-1300]: Explore tsl:sparse_map
             for (auto& item : *group_map) {
                 size_t pos = item.second - 1;
-                std::vector<size_t>* group = (*groups)[pos];
+                bodo::vector<size_t>* group = (*groups)[pos];
                 // Select a single member
                 size_t cmp_row = (*group)[0];
                 size_t left_ind = 0;
@@ -1008,11 +1006,11 @@ void insert_probe_table_equi_join_some_non_equality(
 template <bool build_table_outer, bool probe_table_outer,
           bool is_outer_broadcast, typename Map>
 void insert_probe_table_equi_join_all_equality(
-    Map* key_rows_map, std::vector<std::vector<size_t>*>* groups,
+    Map* key_rows_map, bodo::vector<bodo::vector<size_t>*>* groups,
     size_t build_table_rows, size_t probe_table_rows,
-    std::vector<uint8_t>& V_build_map, std::vector<uint8_t>& V_probe_map,
-    std::vector<int64_t>& build_write_idxs,
-    std::vector<int64_t>& probe_write_idxs) {
+    bodo::vector<uint8_t>& V_build_map, bodo::vector<uint8_t>& V_probe_map,
+    bodo::vector<int64_t>& build_write_idxs,
+    bodo::vector<int64_t>& probe_write_idxs) {
     for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
         size_t i_probe_shift = i_probe + build_table_rows;
         auto iter = key_rows_map->find(i_probe_shift);
@@ -1026,7 +1024,7 @@ void insert_probe_table_equi_join_all_equality(
             // If the build table entry is present in output as
             // well, then we need to keep track whether they are
             // used or not by the probe table.
-            std::vector<size_t>* group = (*groups)[iter->second - 1];
+            bodo::vector<size_t>* group = (*groups)[iter->second - 1];
             size_t pos = iter->second - 1;
             handle_build_table_hit<build_table_outer>::apply(V_build_map, pos);
             for (size_t idx = 0; idx < group->size(); idx++) {
@@ -1064,8 +1062,9 @@ struct insert_build_table_miss<true> {
      * @param pos_build_disp The total number of missing rows in the build table
      * so far.
      */
-    static inline void apply(size_t pos, std::vector<int64_t>& build_write_idxs,
-                             std::vector<int64_t>& probe_write_idxs,
+    static inline void apply(size_t pos,
+                             bodo::vector<int64_t>& build_write_idxs,
+                             bodo::vector<int64_t>& probe_write_idxs,
                              int64_t myrank, int64_t n_pes,
                              int64_t pos_build_disp) {
         int node = pos_build_disp % n_pes;
@@ -1094,8 +1093,9 @@ struct insert_build_table_miss<false> {
      * @param pos_build_disp The total number of missing rows in the build table
      * so far.
      */
-    static inline void apply(size_t pos, std::vector<int64_t>& build_write_idxs,
-                             std::vector<int64_t>& probe_write_idxs,
+    static inline void apply(size_t pos,
+                             bodo::vector<int64_t>& build_write_idxs,
+                             bodo::vector<int64_t>& probe_write_idxs,
                              int64_t myrank, int64_t n_pes,
                              int64_t pos_build_disp) {
         build_write_idxs.emplace_back(pos);
@@ -1119,10 +1119,10 @@ struct insert_build_table_miss<false> {
  * @param n_pes The total number of processes.
  */
 template <bool build_miss_needs_reduction>
-void insert_build_table_misses(std::vector<uint8_t>& V_build_map,
-                               std::vector<std::vector<size_t>*>* groups,
-                               std::vector<int64_t>& build_write_idxs,
-                               std::vector<int64_t>& probe_write_idxs,
+void insert_build_table_misses(bodo::vector<uint8_t>& V_build_map,
+                               bodo::vector<bodo::vector<size_t>*>* groups,
+                               bodo::vector<int64_t>& build_write_idxs,
+                               bodo::vector<int64_t>& probe_write_idxs,
                                int64_t myrank, int64_t n_pes) {
     if (build_miss_needs_reduction) {
         // Perform the reduction on build table misses if necessary
@@ -1132,7 +1132,7 @@ void insert_build_table_misses(std::vector<uint8_t>& V_build_map,
     // Add missing rows for outer joins when there are no matching build
     // table groups.
     for (size_t pos = 0; pos < groups->size(); pos++) {
-        std::vector<size_t>* group = (*groups)[pos];
+        bodo::vector<size_t>* group = (*groups)[pos];
         bool bit = GetBit(V_build_map.data(), pos);
         if (!bit) {
             for (size_t idx = 0; idx < group->size(); idx++) {
@@ -1159,11 +1159,10 @@ void insert_build_table_misses(std::vector<uint8_t>& V_build_map,
  * @param myrank The current rank.
  * @param n_pes The total number of processes.
  */
-void insert_probe_table_broadcast_misses(std::vector<uint8_t>& V_probe_map,
-                                         std::vector<int64_t>& build_write_idxs,
-                                         std::vector<int64_t>& probe_write_idxs,
-                                         size_t probe_table_rows,
-                                         int64_t myrank, int64_t n_pes) {
+void insert_probe_table_broadcast_misses(
+    bodo::vector<uint8_t>& V_probe_map, bodo::vector<int64_t>& build_write_idxs,
+    bodo::vector<int64_t>& probe_write_idxs, size_t probe_table_rows,
+    int64_t myrank, int64_t n_pes) {
     MPI_Allreduce_bool_or(V_probe_map);
     int pos = 0;
     for (size_t i_probe = 0; i_probe < probe_table_rows; i_probe++) {
@@ -1228,9 +1227,10 @@ void generate_col_last_use_info(
     std::shared_ptr<table_info> work_left_table,
     std::shared_ptr<table_info> work_right_table, size_t n_tot_left,
     size_t n_tot_right, size_t n_key, int64_t* vect_same_key,
-    bool* key_in_output, UNORD_SET_CONTAINER<int64_t>* left_cond_func_cols_set,
-    UNORD_SET_CONTAINER<int64_t>* right_cond_func_cols_set, bool extra_data_col,
-    bool is_join) {
+    bool* key_in_output,
+    bodo::unord_set_container<int64_t>* left_cond_func_cols_set,
+    bodo::unord_set_container<int64_t>* right_cond_func_cols_set,
+    bool extra_data_col, bool is_join) {
     offset_t key_in_output_idx = 0;
 
     if (extra_data_col) {
@@ -1316,16 +1316,17 @@ void hash_join_compute_tuples_helper(
     const size_t build_table_rows,
     const std::shared_ptr<table_info> build_table,
     const size_t probe_table_rows, const bool probe_miss_needs_reduction,
-    Map* key_rows_map, std::vector<std::vector<size_t>*>* groups,
+    Map* key_rows_map, bodo::vector<bodo::vector<size_t>*>* groups,
     const bool build_table_outer, const bool probe_table_outer,
     cond_expr_fn_t& cond_func, tracing::Event& ev_alloc_map,
-    std::vector<UNORD_MAP_CONTAINER<
+    bodo::vector<bodo::unord_map_container<
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
         joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
         second_level_hash_maps,
     std::shared_ptr<uint32_t[]>& build_nonequal_key_hashes,
-    std::vector<uint8_t>& V_build_map, std::vector<int64_t>& build_write_idxs,
-    std::vector<uint8_t>& V_probe_map, std::vector<int64_t>& probe_write_idxs) {
+    bodo::vector<uint8_t>& V_build_map, bodo::vector<int64_t>& build_write_idxs,
+    bodo::vector<uint8_t>& V_probe_map,
+    bodo::vector<int64_t>& probe_write_idxs) {
     // Create a data structure containing the columns to match the format
     // expected by cond_func. We create two pairs of vectors, one with
     // the array_infos, which handle general types, and one with just data1
@@ -1704,10 +1705,10 @@ std::shared_ptr<table_info> hash_join_table_inner(
     joinHashFcts::HashHashJoinTable hash_fct{
         build_table_rows, build_table_hashes, probe_table_hashes};
 
-    std::vector<std::vector<size_t>*>* groups = nullptr;
+    bodo::vector<bodo::vector<size_t>*>* groups = nullptr;
     std::shared_ptr<uint32_t[]> build_nonequal_key_hashes =
         std::shared_ptr<uint32_t[]>(nullptr);
-    std::vector<UNORD_MAP_CONTAINER<
+    bodo::vector<bodo::unord_map_container<
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
         joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>*
         second_level_hash_maps = nullptr;
@@ -1715,12 +1716,12 @@ std::shared_ptr<table_info> hash_join_table_inner(
     // build_write_idxs and probe_write_idxs are used for the output.
     // It precises the index used for the writing of the output table
     // from the build and probe table.
-    std::vector<int64_t> build_write_idxs, probe_write_idxs;
+    bodo::vector<int64_t> build_write_idxs, probe_write_idxs;
 
     // Allocate the vector for any build misses.
     // Start off as empty since it will be resized after the groups are
     // calculated.
-    std::vector<uint8_t> V_build_map(0);
+    bodo::vector<uint8_t> V_build_map(0);
 
     // V_probe_map and V_build_map takes similar roles.
     // They indicate if an entry in the build or probe table
@@ -1728,7 +1729,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
     // This is needed only if said table is replicated
     // (i.e probe_miss_needs_reduction/build_miss_needs_reduction).
     // Start off as empty, since it will be re-sized later.
-    std::vector<uint8_t> V_probe_map(0);
+    bodo::vector<uint8_t> V_probe_map(0);
 
     // The 'key_rows_map' contains the identical keys with the corresponding
     // rows. We address the entry by the row index. We store all the rows which
@@ -1752,10 +1753,9 @@ std::shared_ptr<table_info> hash_join_table_inner(
     // and EQ_JOIN_2_KEYS_IMPL macros to avoid repetition.
 #ifndef EQ_JOIN_IMPL_COMMON
 #define EQ_JOIN_IMPL_COMMON(JOIN_KEY_TYPE)                                     \
-    using unordered_map_t =                                                    \
-        UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,   \
-                            JOIN_KEY_TYPE>;                                    \
-    unordered_map_t* key_rows_map = new UNORD_MAP_CONTAINER<                   \
+    using unordered_map_t = bodo::unord_map_container<                         \
+        size_t, size_t, joinHashFcts::HashHashJoinTable, JOIN_KEY_TYPE>;       \
+    unordered_map_t* key_rows_map = new bodo::unord_map_container<             \
         size_t, size_t, joinHashFcts::HashHashJoinTable, JOIN_KEY_TYPE>(       \
         {}, hash_fct, equal_fct);                                              \
     /* reserving space is very important to avoid expensive reallocations      \
@@ -1764,7 +1764,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
      * reserve?                                                                \
      */                                                                        \
     key_rows_map->reserve(build_table_rows);                                   \
-    groups = new std::vector<std::vector<size_t>*>();                          \
+    groups = new bodo::vector<bodo::vector<size_t>*>();                        \
     groups->reserve(build_table_rows);                                         \
     /* Define additional information needed for non-equality conditions,       \
      * determined by 'uses_cond_func'. We need a vector of hash maps for the   \
@@ -1772,7 +1772,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
      * table on all columns that are not since they will insert into the       \
      * hash map.                                                               \
      */                                                                        \
-    second_level_hash_maps = new std::vector<UNORD_MAP_CONTAINER<              \
+    second_level_hash_maps = new bodo::vector<bodo::unord_map_container<       \
         size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,            \
         joinHashFcts::SecondLevelKeyEqualHashJoinTable>*>();                   \
     hash_join_compute_tuples_helper(                                           \
@@ -2252,8 +2252,8 @@ std::shared_ptr<table_info> hash_join_table_inner(
         for (size_t rownum = 0; rownum < num_rows; rownum++) {
             // Determine the source of each row. At most 1 value can be -1.
             // Whichever value is -1, other table is the source of the row.
-            std::vector<int64_t>* left_write_idxs;
-            std::vector<int64_t>* right_write_idxs;
+            bodo::vector<int64_t>* left_write_idxs;
+            bodo::vector<int64_t>* right_write_idxs;
             if (build_is_left) {
                 left_write_idxs = &build_write_idxs;
                 right_write_idxs = &probe_write_idxs;
@@ -2394,9 +2394,9 @@ get_gen_cond_data_ptrs(std::shared_ptr<table_info> table) {
  * @param needs_reduction : whether the bitmap needs a reduction (the
  * corresponding table is replicated, but the other table is distributed).
  */
-void add_unmatched_rows(std::vector<uint8_t>& bit_map, size_t n_rows,
-                        std::vector<int64_t>& table_idxs,
-                        std::vector<int64_t>& other_table_idxs,
+void add_unmatched_rows(bodo::vector<uint8_t>& bit_map, size_t n_rows,
+                        bodo::vector<int64_t>& table_idxs,
+                        bodo::vector<int64_t>& other_table_idxs,
                         bool needs_reduction) {
     if (needs_reduction) {
         int n_pes, myrank;
@@ -2453,18 +2453,18 @@ void add_unmatched_rows(std::vector<uint8_t>& bit_map, size_t n_rows,
  */
 std::shared_ptr<table_info> create_out_table(
     std::shared_ptr<table_info> left_table,
-    std::shared_ptr<table_info> right_table, std::vector<int64_t>& left_idxs,
-    std::vector<int64_t>& right_idxs, bool* key_in_output,
+    std::shared_ptr<table_info> right_table, bodo::vector<int64_t>& left_idxs,
+    bodo::vector<int64_t>& right_idxs, bool* key_in_output,
     int64_t* use_nullable_arr_type, uint64_t* cond_func_left_columns,
     uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
     uint64_t cond_func_right_column_len) {
     // Create sets for cond func columns. These columns act
     // like key columns and are contained inside of key_in_output,
     // so we need an efficient lookup.
-    UNORD_SET_CONTAINER<int64_t> left_cond_func_cols_set;
+    bodo::unord_set_container<int64_t> left_cond_func_cols_set;
     left_cond_func_cols_set.reserve(cond_func_left_column_len);
 
-    UNORD_SET_CONTAINER<int64_t> right_cond_func_cols_set;
+    bodo::unord_set_container<int64_t> right_cond_func_cols_set;
     right_cond_func_cols_set.reserve(cond_func_right_column_len);
 
     for (size_t i = 0; i < cond_func_left_column_len; i++) {
@@ -2542,10 +2542,10 @@ void cross_join_table_local(std::shared_ptr<table_info> left_table,
                             std::shared_ptr<table_info> right_table,
                             bool is_left_outer, bool is_right_outer,
                             cond_expr_fn_batch_t cond_func, bool parallel_trace,
-                            std::vector<int64_t>& left_idxs,
-                            std::vector<int64_t>& right_idxs,
-                            std::vector<uint8_t>& left_row_is_matched,
-                            std::vector<uint8_t>& right_row_is_matched) {
+                            bodo::vector<int64_t>& left_idxs,
+                            bodo::vector<int64_t>& right_idxs,
+                            bodo::vector<uint8_t>& left_row_is_matched,
+                            bodo::vector<uint8_t>& right_row_is_matched) {
     tracing::Event ev("cross_join_table_local", parallel_trace);
     size_t n_rows_left = left_table->nrows();
     size_t n_rows_right = right_table->nrows();
@@ -2710,8 +2710,8 @@ table_info* cross_join_table(
 
             // bcast_row_is_matched is reset in each iteration, but
             // other_row_is_matched is updated across iterations
-            std::vector<uint8_t> bcast_row_is_matched;
-            std::vector<uint8_t> other_row_is_matched(n_bytes_other, 0);
+            bodo::vector<uint8_t> bcast_row_is_matched;
+            bodo::vector<uint8_t> other_row_is_matched(n_bytes_other, 0);
 
             for (int p = 0; p < n_pes; p++) {
                 std::shared_ptr<table_info> bcast_table_chunk =
@@ -2725,8 +2725,8 @@ table_info* cross_join_table(
                 std::fill(bcast_row_is_matched.begin(),
                           bcast_row_is_matched.end(), 0);
 
-                std::vector<int64_t> left_idxs;
-                std::vector<int64_t> right_idxs;
+                bodo::vector<int64_t> left_idxs;
+                bodo::vector<int64_t> right_idxs;
 
                 // incref other table since needed in next iterations and
                 // cross_join_table_local decrefs
@@ -2768,8 +2768,8 @@ table_info* cross_join_table(
 
             // handle non-bcast table's unmatched rows of if outer
             if (is_left_outer && !left_table_bcast) {
-                std::vector<int64_t> left_idxs;
-                std::vector<int64_t> right_idxs;
+                bodo::vector<int64_t> left_idxs;
+                bodo::vector<int64_t> right_idxs;
                 add_unmatched_rows(other_row_is_matched, left_table->nrows(),
                                    left_idxs, right_idxs, false);
                 std::shared_ptr<table_info> out_table_chunk = create_out_table(
@@ -2779,8 +2779,8 @@ table_info* cross_join_table(
                     cond_func_right_columns, cond_func_right_column_len);
                 out_table_chunks.emplace_back(out_table_chunk);
             } else if (is_right_outer && left_table_bcast) {
-                std::vector<int64_t> left_idxs;
-                std::vector<int64_t> right_idxs;
+                bodo::vector<int64_t> left_idxs;
+                bodo::vector<int64_t> right_idxs;
                 add_unmatched_rows(other_row_is_matched, right_table->nrows(),
                                    right_idxs, left_idxs, false);
                 std::shared_ptr<table_info> out_table_chunk = create_out_table(
@@ -2797,15 +2797,15 @@ table_info* cross_join_table(
         // isn't necessary (output's distribution will match the other input as
         // intended)
         else {
-            std::vector<int64_t> left_idxs;
-            std::vector<int64_t> right_idxs;
+            bodo::vector<int64_t> left_idxs;
+            bodo::vector<int64_t> right_idxs;
 
             size_t n_bytes_left =
                 is_left_outer ? (left_table->nrows() + 7) >> 3 : 0;
             size_t n_bytes_right =
                 is_right_outer ? (right_table->nrows() + 7) >> 3 : 0;
-            std::vector<uint8_t> left_row_is_matched(n_bytes_left, 0);
-            std::vector<uint8_t> right_row_is_matched(n_bytes_right, 0);
+            bodo::vector<uint8_t> left_row_is_matched(n_bytes_left, 0);
+            bodo::vector<uint8_t> right_row_is_matched(n_bytes_right, 0);
 
             cross_join_table_local(left_table, right_table, is_left_outer,
                                    is_right_outer, cond_func, parallel_trace,
@@ -2848,18 +2848,50 @@ table_info* cross_join_table(
     }
 }
 
-bool is_point_right_of_interval_start(
-    std::shared_ptr<array_info> left_interval_col, const size_t& int_idx,
-    std::shared_ptr<array_info> point_col, const size_t& point_idx,
+/**
+ * @brief Check if an array contains a NA value according
+ * to SQL rules at a given index.
+ *
+ * TODO: Template on array_type + move to a helper function if/when its used
+ * in more places.
+ *
+ */
+inline bool isna_sql(const std::shared_ptr<array_info>& arr,
+                     const size_t& idx) {
+    if (arr->null_bitmask() != nullptr && !arr->get_null_bit(idx)) {
+        return true;
+    }
+    // Datetime still uses a NaT value. TODO: Remove.
+    if (arr->dtype == Bodo_CTypes::DATETIME) {
+        int64_t* dt64_arr = (int64_t*)arr->data1();
+        return dt64_arr[idx] == std::numeric_limits<int64_t>::min();
+    }
+    return false;
+}
+
+inline bool is_point_right_of_interval_start(
+    const std::shared_ptr<array_info>& left_interval_col, const size_t& int_idx,
+    const std::shared_ptr<array_info>& point_col, const size_t& point_idx,
     bool strictly_right) {
-    if (point_col->null_bitmask() != nullptr &&
-        !point_col->get_null_bit((size_t)point_idx)) {
+    if (isna_sql(point_col, point_idx)) {
         return false;
     }
 
     auto comp = KeyComparisonAsPython_Column(true, left_interval_col, int_idx,
                                              point_col, point_idx);
     return strictly_right ? comp > 0 : comp >= 0;
+}
+
+inline bool is_point_left_of_interval_end(
+    const std::shared_ptr<array_info>& right_interval_col,
+    const size_t& int_idx, const std::shared_ptr<array_info>& point_col,
+    const size_t& point_idx, bool strictly_left) {
+    // Note: No need to check if Point is NA because we will have already
+    // skipped it in is_point_right_of_interval_start.
+
+    auto comp = KeyComparisonAsPython_Column(true, right_interval_col, int_idx,
+                                             point_col, point_idx);
+    return strictly_left ? comp < 0 : comp <= 0;
 }
 
 /**
@@ -2892,18 +2924,18 @@ bool is_point_right_of_interval_start(
  * <= r
  * @param is_strict_start_cond In the join condition, is the point required to
  * be strictly right of the left interval? True when l < p, false when l <= p
- * @param point_left Is the point table the left table? Required when passing
- * idxs to cond_func
+ * @param is_strict_end_cond In the join condition, is the point required to
+ * be strictly left of the right interval? True when p < r, false when p <= r
  * @return A pair of vectors of indexes to the left and right table
- * repesenting the output
+ * representing the output
  */
-std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
+std::pair<bodo::vector<int64_t>, bodo::vector<int64_t>> interval_merge(
     std::shared_ptr<table_info> interval_table,
-    std::shared_ptr<table_info> point_table, cond_expr_fn_batch_t cond_func,
-    uint64_t interval_start_col_id, uint64_t interval_end_col_id,
-    uint64_t point_col_id, int curr_rank, int n_pes, bool interval_parallel,
-    bool point_parallel, bool is_point_outer, bool is_strict_contained,
-    bool is_strict_start_cond, bool point_left) {
+    std::shared_ptr<table_info> point_table, uint64_t interval_start_col_id,
+    uint64_t interval_end_col_id, uint64_t point_col_id, int curr_rank,
+    int n_pes, bool interval_parallel, bool point_parallel, bool is_point_outer,
+    bool is_strict_contained, bool is_strict_start_cond,
+    bool is_strict_end_cond) {
     tracing::Event ev("interval_merge", interval_parallel || point_parallel);
 
     // When the point side is empty, the output will be empty regardless of
@@ -2912,14 +2944,12 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
     // side is not, the output won't be empty in case of a point-outer join
     // (it'll be the point table plus nulls for all the columns from the
     // interval side).
-    // This was added to avoid problems with batch_n_rows computation
-    // (undefined behavior)
     if (point_table->nrows() == 0) {
         ev.add_attribute("out_num_rows", 0);
         ev.add_attribute("out_num_inner_rows", 0);
         ev.add_attribute("out_num_outer_rows", 0);
         ev.finalize();
-        return std::pair(std::vector<int64_t>(), std::vector<int64_t>());
+        return std::pair(bodo::vector<int64_t>(), bodo::vector<int64_t>());
     }
 
     auto [interval_arr_infos, interval_col_data, interval_col_null] =
@@ -2927,59 +2957,20 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
     auto [point_arr_infos, point_col_data, point_col_null] =
         get_gen_cond_data_ptrs(point_table);
 
-    auto interval_arr_infos_ptr = interval_arr_infos.data();
-    auto interval_col_data_ptr = interval_col_data.data();
-    auto interval_col_null_ptr = interval_col_null.data();
-    auto point_arr_infos_ptr = point_arr_infos.data();
-    auto point_col_data_ptr = point_col_data.data();
-    auto point_col_null_ptr = point_col_null.data();
-
-    // Prebuild the condition function by partial application
-    // Makes actual join loop simpler to read
-    // TODO: Does this impact performance? Assuming C++ compiler
-    //       can recognize and undo this during compilation
-    std::function<void(int64_t, int64_t, int64_t, uint8_t*)> inner_cond_func;
-    if (point_left) {
-        inner_cond_func = [&cond_func, interval_arr_infos_ptr,
-                           point_arr_infos_ptr, interval_col_data_ptr,
-                           point_col_data_ptr, interval_col_null_ptr,
-                           point_col_null_ptr](
-                              int64_t interval_idx, int64_t point_start_idx,
-                              int64_t point_end_idx, uint8_t* match_arr) {
-            cond_func(point_arr_infos_ptr, interval_arr_infos_ptr,
-                      point_col_data_ptr, interval_col_data_ptr,
-                      point_col_null_ptr, interval_col_null_ptr, match_arr,
-                      point_start_idx, point_end_idx, interval_idx,
-                      interval_idx + 1 /*+1 so that it's not an empty loop*/);
-        };
-    } else {
-        inner_cond_func = [&cond_func, interval_arr_infos_ptr,
-                           point_arr_infos_ptr, interval_col_data_ptr,
-                           point_col_data_ptr, interval_col_null_ptr,
-                           point_col_null_ptr](
-                              int64_t interval_idx, int64_t point_start_idx,
-                              int64_t point_end_idx, uint8_t* match_arr) {
-            cond_func(interval_arr_infos_ptr, point_arr_infos_ptr,
-                      interval_col_data_ptr, point_col_data_ptr,
-                      interval_col_null_ptr, point_col_null_ptr, match_arr,
-                      interval_idx,
-                      interval_idx + 1 /*+1 so that it's not an empty loop*/,
-                      point_start_idx, point_end_idx);
-        };
-    }
-
-    // Start Col of Interval Table and Point Col
+    // Start Col of Interval Table, End Col of Interval Table and Point Col
     std::shared_ptr<array_info> left_inter_col =
         interval_table->columns[interval_start_col_id];
+    std::shared_ptr<array_info> right_inter_col =
+        interval_table->columns[interval_end_col_id];
     std::shared_ptr<array_info> point_col = point_table->columns[point_col_id];
 
     // Rows of the Output Joined Table
-    std::vector<int64_t> joined_interval_idxs;
-    std::vector<int64_t> joined_point_idxs;
+    bodo::vector<int64_t> joined_interval_idxs;
+    bodo::vector<int64_t> joined_point_idxs;
 
     // Bitmask indicating all matched rows in left table
     size_t n_bytes_point = is_point_outer ? (point_table->nrows() + 7) >> 3 : 0;
-    std::vector<uint8_t> point_matched_rows(n_bytes_point, 0);
+    bodo::vector<uint8_t> point_matched_rows(n_bytes_point, 0);
 
     // Set 500K batch size to make sure batch data of all cores fits in L3
     // cache.
@@ -2992,21 +2983,23 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
         throw std::runtime_error("interval_join_table: batch_size_bytes <= 0");
     }
 
-    // Since we iterate on the point side (with the interval side constant),
-    // we use the point table size for batch size calculation.
-    // XXX We can technically do it based on the one column instead of
-    // the whole table since we're guaranteed that only one column is involved
-    // in the general join condition.
-    uint64_t n_batches = (uint64_t)std::ceil(
-        table_local_memory_size(point_table) / (double)batch_size_bytes);
-    uint64_t batch_n_rows =
-        (uint64_t)std::ceil(point_table->nrows() / (double)n_batches);
-    uint64_t n_bytes_match = (batch_n_rows + 7) >> 3;
-    uint8_t* match_arr = new uint8_t[n_bytes_match];
-
     uint64_t point_pos = 0;
+    // Keep track of the previous end for values with the same start
+    // interval. We sort ties by the end interval in Ascending order, so
+    // any entries with the same start value can skip some additional checks.
+    // prev_point_pos_end is the first not matched value.
+    uint64_t prev_point_pos_end = 0;
     for (uint64_t interval_pos = 0; interval_pos < interval_table->nrows();
          interval_pos++) {
+        // Skip intervals that contain NA values, resetting prev_point_pos_end.
+        if (isna_sql(left_inter_col, interval_pos) ||
+            isna_sql(right_inter_col, interval_pos)) {
+            // Skip intervals that contain NA values, resetting
+            // prev_point_pos_end.
+            prev_point_pos_end = point_pos;
+            continue;
+        }
+
         // Find first row in the point table thats in the interval
         while (point_pos < point_table->nrows() &&
                !is_point_right_of_interval_start(left_inter_col, interval_pos,
@@ -3017,37 +3010,47 @@ std::pair<std::vector<int64_t>, std::vector<int64_t>> interval_merge(
         if (point_pos >= point_table->nrows())
             break;
 
+        // Starting location for the current interval. If the
+        // start is the same as the previous interval we can skip
+        // ahead.
+        uint64_t start_point_pos = point_pos;
+        // Check if the intervals start at the same point and the previous
+        // interval had any matches.
+        if (interval_pos != 0 && prev_point_pos_end > point_pos) {
+            // Note: We don't need NA to match because NA should never have
+            // matched any entries.
+            bool start_equal =
+                TestEqualColumn(left_inter_col, interval_pos, left_inter_col,
+                                interval_pos - 1, false);
+            if (start_equal) {
+                for (uint64_t i = point_pos; i < prev_point_pos_end; i++) {
+                    joined_interval_idxs.push_back(interval_pos);
+                    joined_point_idxs.push_back(i);
+                    // Note we don't need to update point_matched_rows because
+                    // these values have already matched.
+                }
+                start_point_pos = prev_point_pos_end;
+            }
+        }
+
         // Because tables are sorted, a consecutive range of rows in point table
         // will fit in the interval.
         // Thus, we loop and match all until outside of interval. Then reset.
-        // For best efficiency, we do this in batches. If during a batch, we
-        // encounter any non-matches, we break out of the loop.
-        for (uint64_t point_batch_start = point_pos;
-             point_batch_start < point_table->nrows();
-             point_batch_start += batch_n_rows) {
-            uint64_t point_batch_end = std::min(
-                point_batch_start + batch_n_rows, point_table->nrows());
-
-            inner_cond_func(interval_pos, point_batch_start, point_batch_end,
-                            match_arr);
-            // Whether or not to break out of the loop. We can break as soon
-            // as we see a not-matching point.
-            bool found_not_match = false;
-            int64_t match_ind = 0;
-            for (uint64_t i = point_batch_start; i < point_batch_end; i++) {
-                bool match = GetBit(match_arr, match_ind++);
-                if (match) {
-                    joined_interval_idxs.push_back(interval_pos);
-                    joined_point_idxs.push_back(i);
-                    if (is_point_outer) {
-                        SetBitTo(point_matched_rows.data(), i, true);
-                    }
-                } else {
-                    found_not_match = true;
-                    break;
+        for (uint64_t curr_point = start_point_pos;
+             curr_point < point_table->nrows(); curr_point++) {
+            bool match = is_point_left_of_interval_end(
+                right_inter_col, interval_pos, point_col, curr_point,
+                is_strict_end_cond);
+            if (match) {
+                joined_interval_idxs.push_back(interval_pos);
+                joined_point_idxs.push_back(curr_point);
+                if (is_point_outer) {
+                    SetBitTo(point_matched_rows.data(), curr_point, true);
                 }
-            }
-            if (found_not_match) {
+            } else {
+                // Update where we had our first !match to skip checks on
+                // future iterations.
+                prev_point_pos_end = curr_point;
                 break;
             }
         }
@@ -3076,10 +3079,7 @@ table_info* interval_join_table(
     bool strict_start, bool strict_end, uint64_t point_col_id,
     uint64_t interval_start_col_id, uint64_t interval_end_col_id,
     bool* key_in_output, int64_t* use_nullable_arr_type,
-    bool rebalance_if_skewed, cond_expr_fn_batch_t cond_func,
-    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
-    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
-    uint64_t* num_rows_ptr) {
+    bool rebalance_if_skewed, uint64_t* num_rows_ptr) {
     try {
         std::shared_ptr<table_info> left_table =
             std::shared_ptr<table_info>(in_left_table);
@@ -3187,13 +3187,13 @@ table_info* interval_join_table(
         ev_sort.finalize();
 
         auto [interval_idxs, point_idxs] = interval_merge(
-            sorted_interval_table, sorted_point_table, cond_func,
-            interval_start_col_id, interval_end_col_id, point_col_id, myrank,
-            n_pes, interval_table_parallel, point_table_parallel,
-            is_outer_point, strict_contained, strict_start, is_left_point);
+            sorted_interval_table, sorted_point_table, interval_start_col_id,
+            interval_end_col_id, point_col_id, myrank, n_pes,
+            interval_table_parallel, point_table_parallel, is_outer_point,
+            strict_contained, strict_start, strict_end);
 
         std::shared_ptr<table_info> sorted_left_table, sorted_right_table;
-        std::vector<int64_t> left_idxs, right_idxs;
+        bodo::vector<int64_t> left_idxs, right_idxs;
         if (is_left_point) {
             sorted_left_table = std::move(sorted_point_table);
             sorted_right_table = std::move(sorted_interval_table);
@@ -3208,8 +3208,7 @@ table_info* interval_join_table(
         std::shared_ptr<table_info> out_table = create_out_table(
             std::move(sorted_left_table), std::move(sorted_right_table),
             left_idxs, right_idxs, key_in_output, use_nullable_arr_type,
-            cond_func_left_columns, cond_func_left_column_len,
-            cond_func_right_columns, cond_func_right_column_len);
+            nullptr, 0, nullptr, 0);
 
         // Check for skew if BodoSQL suggested we should
         if (rebalance_if_skewed && (left_parallel || right_parallel)) {

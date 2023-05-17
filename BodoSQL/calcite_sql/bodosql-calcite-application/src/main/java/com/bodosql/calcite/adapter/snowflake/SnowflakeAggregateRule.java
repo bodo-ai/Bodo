@@ -21,7 +21,8 @@ public class SnowflakeAggregateRule extends AbstractSnowflakeAggregateRule {
                 b0 ->
                     b0.operand(LogicalAggregate.class)
                         .predicate(SnowflakeAggregateRule::isPushableAggregate)
-                        .oneInput(b1 -> b1.operand(SnowflakeTableScan.class).noInputs()));
+                        .oneInput(b1 -> b1.operand(SnowflakeTableScan.class).noInputs()))
+            .as(Config.class);
 
     Config WITH_FILTER =
         ImmutableSnowflakeAggregateRule.Config.of()
@@ -35,7 +36,8 @@ public class SnowflakeAggregateRule extends AbstractSnowflakeAggregateRule {
                                     .predicate(SnowflakeAggregateRule::isPushableFilter)
                                     .oneInput(
                                         b2 -> b2.operand(SnowflakeTableScan.class).noInputs())))
-            .withDescription("SnowflakeAggregateRule::WithFilter");
+            .withDescription("SnowflakeAggregateRule::WithFilter")
+            .as(Config.class);
 
     @Override
     default @NotNull SnowflakeAggregateRule toRule() {

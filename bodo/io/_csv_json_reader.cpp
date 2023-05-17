@@ -25,6 +25,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
 #include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
 #include "_bodo_file_reader.h"
@@ -558,7 +559,7 @@ typedef struct {
     size_t chunk_start;   // start of our chunk
     size_t chunk_size;    // size of our chunk
     size_t chunk_pos;     // current position in our chunk
-    std::vector<char>
+    bodo::vector<char>
         buf;  // internal buffer for converting stream input to Unicode object
 
     // The following attributes are needed for chunksize Iterator support
@@ -925,13 +926,13 @@ class MemReader : public FileReader {
     /// current read position
     int64_t pos = start;
     /// data stored by this MemReader
-    std::vector<char> data;
+    bodo::vector<char> data;
     /// character that constitutes the row separator for this data
     char row_separator;
     /// true if the content refers to JSON where records span multiple lines
     bool json_multi_line = false;
     /// starting offset of each row
-    std::vector<int64_t> row_offsets;
+    bodo::vector<int64_t> row_offsets;
     /// FileReader status
     bool status_ok = true;
 
@@ -1024,7 +1025,7 @@ class MemReader : public FileReader {
     /**
      * Replace data with new_data (MemReader takes ownership of it).
      */
-    void set_data(std::vector<char> &new_data) {
+    void set_data(bodo::vector<char> &new_data) {
         data = std::move(new_data);
         start = pos = 0;
         row_offsets.clear();
@@ -1090,7 +1091,7 @@ class MemReader : public FileReader {
 
         arrow::Result<std::shared_ptr<arrow::io::CompressedInputStream>>
             istream_result = arrow::io::CompressedInputStream::Make(
-                codec.get(), raw_istream);
+                codec.get(), raw_istream, bodo::BufferPool::DefaultPtr());
         CHECK_ARROW(istream_result, "read_compressed_file",
                     "arrow::io::CompressedInputStream::Make")
         std::shared_ptr<arrow::io::CompressedInputStream> istream =
@@ -1175,7 +1176,7 @@ void data_row_correction(MemReader *reader, char row_separator) {
     int rank = dist_get_rank();
     int num_ranks = dist_get_size();
 
-    std::vector<char> &data = reader->data;
+    bodo::vector<char> &data = reader->data;
     if (rank < num_ranks - 1) {  // receive chunk from right, append to my data
         size_t cur_data_size = data.size();
         MPI_Status status;
@@ -1544,7 +1545,7 @@ void balance_rows(MemReader *reader) {
         cur_offset += recvcounts[rank];
         total_recv_size += recvcounts[rank];
     }
-    std::vector<char> recvbuf(total_recv_size);
+    bodo::vector<char> recvbuf(total_recv_size);
     char *sendbuf = reader->data.data() + reader->start;
 
     bodo_alltoallv(sendbuf, sendcounts, sdispls, MPI_CHAR, recvbuf.data(),
@@ -1598,7 +1599,7 @@ void balance_rows(MemReader *reader) {
  * of local_data. Needed to identify i_start for nrows/chunksize-iterator case.
  */
 static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
-                               const std::vector<char> &local_data,
+                               const bodo::vector<char> &local_data,
                                char row_separator, int64_t &rows_count,
                                int64_t &global_offset, int64_t global_start,
                                int64_t &total_bytes, bool is_skiplist,
@@ -1661,7 +1662,7 @@ static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
  *
  */
 static void compute_skiprows_list_offsets(
-    int64_t i_start, int64_t bytes_read, const std::vector<char> &local_data,
+    int64_t i_start, int64_t bytes_read, const bodo::vector<char> &local_data,
     char row_separator, SkiprowsListInfo *skiprows_list_info,
     int64_t &skiplist_idx, int64_t &rows_count, int64_t &total_bytes,
     bool csv_header) {
@@ -1736,7 +1737,7 @@ void read_file_info(const std::vector<std::string> &file_names,
 
     // TODO Tune (https://bodo.atlassian.net/browse/BE-2600)
     constexpr int64_t CHUNK_SIZE = 1024 * 1024;
-    std::vector<char> local_data(CHUNK_SIZE);
+    bodo::vector<char> local_data(CHUNK_SIZE);
     // Bytes skipped from the beginning based on how many rows to skip when
     // using skiprows
     int64_t total_skipped = 0;

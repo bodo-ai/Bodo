@@ -13,19 +13,14 @@ import java.net.URLEncoder;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
-import java.sql.JDBCType;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
+import kotlin.*;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
@@ -165,9 +160,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   private String getSnowflakeParameter(String param, boolean shouldRetry) throws SQLException {
     try {
-      Connection conn = getConnection();
-      Statement stmt = conn.createStatement();
-      ResultSet paramInfo = stmt.executeQuery(String.format("Show parameters like '%s'", param));
+      ResultSet paramInfo =
+          executeSnowflakeQuery(String.format("Show parameters like '%s'", param));
       if (paramInfo.next()) {
         return paramInfo.getString(2);
       } else {
@@ -304,29 +298,34 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     try {
       // Fetch the timezone info.
       BodoTZInfo tzInfo = getSnowflakeTimezone(shouldRetry);
-      DatabaseMetaData metaData = getDataBaseMetaData(shouldRetry);
-      // Passing null for columnNamePattern should match all columns. Although
-      // this is not in the public documentation.
-      ResultSet tableInfo = metaData.getColumns(catalogName, schema.getName(), tableName, null);
+      // Table metadata needs to be derived from describe table because some types
+      // aren't available via the JDBC connector. In particular Snowflake doesn't communicate
+      // information about Variant, Array, or Object.
+      ResultSet tableInfo =
+          executeSnowflakeQuery(
+              String.format("Describe table %s.%s.%s", catalogName, schema.getName(), tableName));
       List<BodoSQLColumn> columns = new ArrayList<>();
       while (tableInfo.next()) {
-        // Column name is stored in column 4
-        // Data type is stored in column 5
-        // NULLABLE is stored in column 11. Note we can only
-        // be certain there are no nulls if we see columnNoNulls
-        // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getColumns
-        String writeName = tableInfo.getString(4);
+        // Column name is stored in column 1
+        // Data type is stored in column 2
+        // NULLABLE is stored in column 4.
+        // https://docs.snowflake.com/en/sql-reference/sql/desc-table#examples
+        // TODO: Can we leverage primary key and unique key? Snowflake
+        // states they don't enforce them.
+        // TODO: Can we leverage additional type information (e.g. max string size).
+        String writeName = tableInfo.getString(1);
         String readName = writeName;
         if (readName.equals(readName.toUpperCase())) {
           readName = readName.toLowerCase();
         }
-        int dataType = tableInfo.getInt(5);
-        BodoSQLColumnDataType type =
-            BodoSQLColumnDataType.fromJavaSqlType(JDBCType.valueOf(dataType));
+        String dataType = tableInfo.getString(2);
+        // Parse the given type for the column type and precision information.
+        Pair<BodoSQLColumnDataType, Integer> snowflakeTypeInfo =
+            BodoSQLColumnDataType.fromSnowflakeTypeName(dataType);
+        BodoSQLColumnDataType type = snowflakeTypeInfo.getFirst();
+        int precision = snowflakeTypeInfo.getSecond();
         // The column is nullable unless we are certain it has no nulls.
-        boolean nullable = tableInfo.getInt(11) != DatabaseMetaData.columnNoNulls;
-        // The precision value is held in field 9, decimal digits
-        int precision = tableInfo.getInt(9);
+        boolean nullable = tableInfo.getString(4).toUpperCase(Locale.ROOT).equals("Y");
         columns.add(new BodoSQLColumnImpl(readName, writeName, type, nullable, tzInfo, precision));
       }
       return new CatalogTableImpl(tableName, schema, columns);
@@ -645,9 +644,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   private void executeExplainQueryImpl(String query, boolean shouldRetry) {
     try {
-      conn = getConnection();
-      Statement stmt = conn.createStatement();
-      stmt.executeQuery(String.format("Explain %s", query));
+      executeSnowflakeQuery(String.format("Explain %s", query));
     } catch (SQLException e) {
       String errorMsg =
           String.format(
@@ -668,5 +665,17 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   @Override
   public String getCatalogName() {
     return catalogName;
+  }
+
+  /**
+   * Execute the given query inside Snowflake and return the result set.
+   *
+   * @param query The query to execute exactly.
+   * @return The ResultSet returned by executing the query.
+   */
+  private ResultSet executeSnowflakeQuery(String query) throws SQLException {
+    conn = getConnection();
+    Statement stmt = conn.createStatement();
+    return stmt.executeQuery(query);
   }
 }

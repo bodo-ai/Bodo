@@ -242,7 +242,7 @@ class DistributedPass:
             deadcode_eliminated = False
             # If dead columns are pruned, run dead code elimination until there are no changes
             if deadcode_elim_can_make_changes:
-                # We extend numba's dead code eleminiation, through both remove_dead_extensions and in numba_compat.
+                # We extend numba's dead code elimination, through both remove_dead_extensions and in numba_compat.
                 # So we can use their remove_dead
                 while remove_dead(
                     self.func_ir.blocks,
@@ -252,7 +252,7 @@ class DistributedPass:
                 ):
                     deadcode_eliminated |= True
             # If we eliminated dead code, run these two passes again, and mark that we may need to
-            # rerun typing pass to perfrom filter pushdown
+            # rerun typing pass to perform filter pushdown
             flag = deadcode_eliminated
 
         # transform
@@ -1055,7 +1055,6 @@ class DistributedPass:
             func_mod in ("sklearn.metrics._regression", "sklearn.metrics")
             and func_name == "mean_squared_error"
         ):
-
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 import sklearn
 
@@ -1146,7 +1145,6 @@ class DistributedPass:
             func_mod in ("sklearn.metrics._regression", "sklearn.metrics")
             and func_name == "mean_absolute_error"
         ):
-
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 import sklearn
 
@@ -1269,7 +1267,6 @@ class DistributedPass:
             func_mod in ("sklearn.model_selection._split", "sklearn.model_selection")
             and func_name == "train_test_split"
         ):
-
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 import sklearn
 
@@ -1352,7 +1349,6 @@ class DistributedPass:
             func_mod in ("sklearn.metrics._regression", "sklearn.metrics")
             and func_name == "r2_score"
         ):
-
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 import sklearn
 
@@ -1812,6 +1808,15 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return
 
+        if (
+            fdef[0] in {"boolor_agg", "booland_agg", "boolxor_agg"}
+            and fdef[1] == "bodo.libs.array_kernels"
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            arr = rhs.args[0]
+            f = eval(f"lambda A: bodo.libs.array_kernels.{fdef[0]}(A, True)")
+            return compile_func_single_block(f, rhs.args, assign.target, self)
+
         if fdef == (
             "quantile",
             "bodo.libs.array_kernels",
@@ -1827,6 +1832,13 @@ class DistributedPass:
                 ")"
             )
             return nodes + compile_func_single_block(f, rhs.args, assign.target, self)
+
+        if fdef == (
+            "approx_percentile",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         if fdef == ("nunique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
@@ -1992,6 +2004,13 @@ class DistributedPass:
                 return [assign]
             else:
                 warnings.warn("Invoking rebalance on a replicated array has no effect")
+
+        if fdef == (
+            "get_chunk_bounds",
+            "bodo.libs.distributed_api",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         if func_name == "random_shuffle" and func_mod in {
             "bodo.libs.distributed_api",
@@ -2279,7 +2298,6 @@ class DistributedPass:
                 )
 
             else:
-
                 func_text = (
                     ""
                     "def impl(start, stop, step, name, chunk_start, chunk_end):\n"
@@ -3570,7 +3588,6 @@ class DistributedPass:
             return out
 
         elif isinstance(index_typ, types.SliceType):
-
             start_var, nodes = self._get_dist_start_var(arr, equiv_set, avail_vars)
             arr_len = self._get_dist_var_len(arr, nodes, equiv_set, avail_vars)
 
@@ -3626,7 +3643,6 @@ class DistributedPass:
         return out
 
     def _run_parfor(self, parfor, equiv_set, avail_vars):
-
         # Thread and 1D parfors turn to gufunc in multithread mode
         if (
             bodo.multithread_mode
@@ -3691,7 +3707,7 @@ class DistributedPass:
         array_accesses = _get_array_accesses(
             parfor.loop_body, self.func_ir, self.typemap
         )
-        for (arr, index, is_bitwise) in array_accesses:
+        for arr, index, is_bitwise in array_accesses:
             # XXX avail_vars is used since accessed array could be defined in
             # init_block
             # arrays that are access bitwise don't have the same size
@@ -3719,7 +3735,7 @@ class DistributedPass:
         # TODO: test multi-dim array sizes and complex indexing like slice
         parfor.loop_nests[0].stop = new_stop_var
 
-        for (arr, index, _) in array_accesses:
+        for arr, index, _ in array_accesses:
             assert (
                 arr not in self._T_arrs
             ), "1D_Var parfor for transposed parallel array not supported"
@@ -3798,7 +3814,7 @@ class DistributedPass:
             prepend += nodes
             self._1D_Var_parfor_starts[ind_varname] = l_nest.start
 
-            for (arr, index, _) in array_accesses:
+            for arr, index, _ in array_accesses:
                 if self._index_has_par_index(index, ind_varname):
                     self._1D_Var_array_accesses[arr].append(index)
 
@@ -4264,7 +4280,6 @@ class DistributedPass:
             args = [offset_var]
             arg_typs = (types.intp,)
         else:
-
             func_text = (
                 ""
                 "def f(old_slice, offset):\n"
@@ -4945,7 +4960,7 @@ def lower_parfor_sequential(typingctx, func_ir, typemap, calltypes, metadata):
     parfor_found = False
     new_blocks = {}
     scope = next(iter(func_ir.blocks.values())).scope
-    for (block_label, block) in func_ir.blocks.items():
+    for block_label, block in func_ir.blocks.items():
         block_label, parfor_found = _lower_parfor_sequential_block(
             block_label,
             block,

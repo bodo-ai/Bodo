@@ -30,6 +30,7 @@ static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
     {Bodo_FTypes::last, Bodo_FTypes::last},
     {Bodo_FTypes::nunique, Bodo_FTypes::sum},  // used in nunique_mode = 2
     {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg},
+    {Bodo_FTypes::booland_agg, Bodo_FTypes::booland_agg},
     {Bodo_FTypes::count_if, Bodo_FTypes::sum}};
 
 int get_combine_func(int update_ftype) { return combine_funcs[update_ftype]; }
@@ -172,8 +173,8 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
                              "So far only cumulative sums for list-strings");
     }
     int64_t n = arr->length;
-    using T = std::pair<bool, std::vector<std::pair<std::string, bool>>>;
-    std::vector<T> null_bit_val_vec(n);
+    using T = std::pair<bool, bodo::vector<std::pair<std::string, bool>>>;
+    bodo::vector<T> null_bit_val_vec(n);
     uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask();
     uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask();
     char* data = arr->data1();
@@ -183,7 +184,7 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
         bool isna = !GetBit(null_bitmask, i);
         offset_t start_idx_offset = index_offsets[i];
         offset_t end_idx_offset = index_offsets[i + 1];
-        std::vector<std::pair<std::string, bool>> LEnt;
+        bodo::vector<std::pair<std::string, bool>> LEnt;
         for (offset_t idx = start_idx_offset; idx < end_idx_offset; idx++) {
             offset_t str_len = data_offsets[idx + 1] - data_offsets[idx];
             offset_t start_data_offset = data_offsets[idx];
@@ -224,8 +225,8 @@ void cumulative_computation_list_string(std::shared_ptr<array_info> arr,
     }
     //
     size_t n_bytes = (n + 7) >> 3;
-    std::vector<uint8_t> Vmask(n_bytes, 0);
-    std::vector<std::vector<std::pair<std::string, bool>>> ListListPair(n);
+    bodo::vector<uint8_t> Vmask(n_bytes, 0);
+    bodo::vector<bodo::vector<std::pair<std::string, bool>>> ListListPair(n);
     for (int i = 0; i < n; i++) {
         SetBitTo(Vmask.data(), i, !null_bit_val_vec[i].first);
         ListListPair[i] = null_bit_val_vec[i].second;
@@ -258,7 +259,7 @@ void cumulative_computation_string(std::shared_ptr<array_info> arr,
     }
     int64_t n = arr->length;
     using T = std::pair<bool, std::string>;
-    std::vector<T> null_bit_val_vec(n);
+    bodo::vector<T> null_bit_val_vec(n);
     uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask();
     char* data = arr->data1();
     offset_t* offsets = (offset_t*)arr->data2();
@@ -299,8 +300,8 @@ void cumulative_computation_string(std::shared_ptr<array_info> arr,
     }
     // Now writing down in the array.
     size_t n_bytes = (n + 7) >> 3;
-    std::vector<uint8_t> Vmask(n_bytes, 0);
-    std::vector<std::string> ListString(n);
+    bodo::vector<uint8_t> Vmask(n_bytes, 0);
+    bodo::vector<std::string> ListString(n);
     for (int64_t i = 0; i < n; i++) {
         SetBitTo(Vmask.data(), i, !null_bit_val_vec[i].first);
         ListString[i] = null_bit_val_vec[i].second;
@@ -337,8 +338,8 @@ void cumulative_computation_dict_encoded_string(
     }
     int64_t n = arr->length;
     using T = std::pair<bool, std::string>;
-    std::vector<T> null_bit_val_vec(n);  // a temporary vector that stores the
-                                         // null bit and value for each row
+    bodo::vector<T> null_bit_val_vec(n);  // a temporary vector that stores the
+                                          // null bit and value for each row
     uint8_t* null_bitmask = (uint8_t*)arr->child_arrays[1]->null_bitmask();
     char* data = arr->child_arrays[0]->data1();
     offset_t* offsets = (offset_t*)arr->child_arrays[0]->data2();
@@ -383,8 +384,8 @@ void cumulative_computation_dict_encoded_string(
     }
     // Now writing down in the array.
     size_t n_bytes = (n + 7) >> 3;
-    std::vector<uint8_t> Vmask(n_bytes, 0);
-    std::vector<std::string> ListString(n);
+    bodo::vector<uint8_t> Vmask(n_bytes, 0);
+    bodo::vector<std::string> ListString(n);
     for (int64_t i = 0; i < n; i++) {
         SetBitTo(Vmask.data(), i, !null_bit_val_vec[i].first);
         ListString[i] = null_bit_val_vec[i].second;
@@ -465,9 +466,9 @@ void cumulative_computation(std::shared_ptr<array_info> arr,
 
 void head_computation(std::shared_ptr<array_info> arr,
                       std::shared_ptr<array_info> out_arr,
-                      const std::vector<int64_t>& row_list) {
+                      const bodo::vector<int64_t>& row_list) {
     std::shared_ptr<array_info> updated_col =
-        RetrieveArray_SingleColumn(arr, row_list);
+        RetrieveArray_SingleColumn(std::move(arr), row_list);
     *out_arr = std::move(*updated_col);
 }
 
@@ -603,7 +604,7 @@ void shift_computation(std::shared_ptr<array_info> arr,
         sign = 1;
     }
 
-    std::vector<int64_t> row_list(num_rows);
+    bodo::vector<int64_t> row_list(num_rows);
     if (tmp_periods == 0) {
         for (size_t i = 0; i < num_rows; i++) {
             row_list[i] = i;
@@ -612,9 +613,9 @@ void shift_computation(std::shared_ptr<array_info> arr,
         int64_t gid;       // group number
         int64_t cur_pos;   // new value for current row
         int64_t prev_val;  // previous value
-        std::vector<int64_t> nrows_per_group(
+        bodo::vector<int64_t> nrows_per_group(
             num_groups);  // array holding number of rows per group
-        std::vector<std::vector<int64_t>> p_values(
+        bodo::vector<std::vector<int64_t>> p_values(
             num_groups,
             std::vector<int64_t>(tmp_periods));  // 2d array holding most recent
                                                  // N=periods elements per group
@@ -642,17 +643,17 @@ void shift_computation(std::shared_ptr<array_info> arr,
     }
     // 2. Retrieve column and put it in update_cols
     std::shared_ptr<array_info> updated_col =
-        RetrieveArray_SingleColumn(arr, row_list);
+        RetrieveArray_SingleColumn(std::move(arr), row_list);
     *out_arr = std::move(*updated_col);
 }
 
 // Variance
-void var_combine(std::shared_ptr<array_info> count_col_in,
-                 std::shared_ptr<array_info> mean_col_in,
-                 std::shared_ptr<array_info> m2_col_in,
-                 std::shared_ptr<array_info> count_col_out,
-                 std::shared_ptr<array_info> mean_col_out,
-                 std::shared_ptr<array_info> m2_col_out,
+void var_combine(const std::shared_ptr<array_info>& count_col_in,
+                 const std::shared_ptr<array_info>& mean_col_in,
+                 const std::shared_ptr<array_info>& m2_col_in,
+                 const std::shared_ptr<array_info>& count_col_out,
+                 const std::shared_ptr<array_info>& mean_col_out,
+                 const std::shared_ptr<array_info>& m2_col_out,
                  grouping_info const& grp_info) {
     for (size_t i = 0; i < count_col_in->length; i++) {
         // Var always has null compute columns even
@@ -689,15 +690,45 @@ void var_combine(std::shared_ptr<array_info> count_col_in,
     }
 }
 
+// boolxor_agg
+void boolxor_combine(const std::shared_ptr<array_info>& one_col_in,
+                     const std::shared_ptr<array_info>& two_col_in,
+                     const std::shared_ptr<array_info>& one_col_out,
+                     const std::shared_ptr<array_info>& two_col_out,
+                     grouping_info const& grp_info) {
+    for (size_t i = 0; i < one_col_in->length; i++) {
+        if (one_col_in->get_null_bit(i)) {
+            int64_t group_num = grp_info.row_to_group[i];
+
+            // Fetch the input data
+            bool one_in = GetBit((uint8_t*)one_col_in->data1(), i);
+            bool two_in = GetBit((uint8_t*)two_col_in->data1(), i);
+
+            // Get the existing group values
+            bool one_out = GetBit((uint8_t*)one_col_out->data1(), group_num);
+            bool two_out = GetBit((uint8_t*)two_col_out->data1(), group_num);
+            two_out = two_out || two_in || (one_in && one_out);
+
+            // Update the group values.
+            one_out = one_out || one_in;
+            SetBitTo((uint8_t*)one_col_out->data1(), group_num, one_out);
+            SetBitTo((uint8_t*)two_col_out->data1(), group_num, two_out);
+            // Set all the null bits to true.
+            one_col_out->set_null_bit(group_num, true);
+            two_col_out->set_null_bit(group_num, true);
+        }
+    }
+}
+
 // Skew
-void skew_combine(std::shared_ptr<array_info> count_col_in,
-                  std::shared_ptr<array_info> m1_col_in,
-                  std::shared_ptr<array_info> m2_col_in,
-                  std::shared_ptr<array_info> m3_col_in,
-                  std::shared_ptr<array_info> count_col_out,
-                  std::shared_ptr<array_info> m1_col_out,
-                  std::shared_ptr<array_info> m2_col_out,
-                  std::shared_ptr<array_info> m3_col_out,
+void skew_combine(const std::shared_ptr<array_info>& count_col_in,
+                  const std::shared_ptr<array_info>& m1_col_in,
+                  const std::shared_ptr<array_info>& m2_col_in,
+                  const std::shared_ptr<array_info>& m3_col_in,
+                  const std::shared_ptr<array_info>& count_col_out,
+                  const std::shared_ptr<array_info>& m1_col_out,
+                  const std::shared_ptr<array_info>& m2_col_out,
+                  const std::shared_ptr<array_info>& m3_col_out,
                   grouping_info const& grp_info) {
     for (size_t i = 0; i < count_col_in->length; i++) {
         if (count_col_in->get_null_bit(i)) {
@@ -728,16 +759,16 @@ void skew_combine(std::shared_ptr<array_info> count_col_in,
 }
 
 // Kurtosis
-void kurt_combine(std::shared_ptr<array_info> count_col_in,
-                  std::shared_ptr<array_info> m1_col_in,
-                  std::shared_ptr<array_info> m2_col_in,
-                  std::shared_ptr<array_info> m3_col_in,
-                  std::shared_ptr<array_info> m4_col_in,
-                  std::shared_ptr<array_info> count_col_out,
-                  std::shared_ptr<array_info> m1_col_out,
-                  std::shared_ptr<array_info> m2_col_out,
-                  std::shared_ptr<array_info> m3_col_out,
-                  std::shared_ptr<array_info> m4_col_out,
+void kurt_combine(const std::shared_ptr<array_info>& count_col_in,
+                  const std::shared_ptr<array_info>& m1_col_in,
+                  const std::shared_ptr<array_info>& m2_col_in,
+                  const std::shared_ptr<array_info>& m3_col_in,
+                  const std::shared_ptr<array_info>& m4_col_in,
+                  const std::shared_ptr<array_info>& count_col_out,
+                  const std::shared_ptr<array_info>& m1_col_out,
+                  const std::shared_ptr<array_info>& m2_col_out,
+                  const std::shared_ptr<array_info>& m3_col_out,
+                  const std::shared_ptr<array_info>& m4_col_out,
                   grouping_info const& grp_info) {
     for (size_t i = 0; i < count_col_in->length; i++) {
         if (count_col_in->get_null_bit(i)) {
@@ -819,9 +850,9 @@ void nunique_computation(std::shared_ptr<array_info> arr,
                                                               seed};
         KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{arr,
                                                                    siztype};
-        UNORD_SET_CONTAINER<int64_t,
-                            HashNuniqueComputationNumpyOrNullableIntBool,
-                            KeyEqualNuniqueComputationNumpyOrNullableIntBool>
+        bodo::unord_set_container<
+            int64_t, HashNuniqueComputationNumpyOrNullableIntBool,
+            KeyEqualNuniqueComputationNumpyOrNullableIntBool>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
@@ -861,8 +892,8 @@ void nunique_computation(std::shared_ptr<array_info> arr,
                                                   in_data_offsets, seed};
         KeyEqualNuniqueComputationListString equal_fct{
             arr, in_index_offsets, in_data_offsets, sub_null_bitmask, seed};
-        UNORD_SET_CONTAINER<int64_t, HashNuniqueComputationListString,
-                            KeyEqualNuniqueComputationListString>
+        bodo::unord_set_container<int64_t, HashNuniqueComputationListString,
+                                  KeyEqualNuniqueComputationListString>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
@@ -897,8 +928,8 @@ void nunique_computation(std::shared_ptr<array_info> arr,
 
         HashNuniqueComputationString hash_fct{arr, in_offsets, seed};
         KeyEqualNuniqueComputationString equal_fct{arr, in_offsets};
-        UNORD_SET_CONTAINER<int64_t, HashNuniqueComputationString,
-                            KeyEqualNuniqueComputationString>
+        bodo::unord_set_container<int64_t, HashNuniqueComputationString,
+                                  KeyEqualNuniqueComputationString>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
@@ -932,9 +963,9 @@ void nunique_computation(std::shared_ptr<array_info> arr,
         HashNuniqueComputationNumpyOrNullableIntBool hash_fct{arr, siztype};
         KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{arr,
                                                                    siztype};
-        UNORD_SET_CONTAINER<int64_t,
-                            HashNuniqueComputationNumpyOrNullableIntBool,
-                            KeyEqualNuniqueComputationNumpyOrNullableIntBool>
+        bodo::unord_set_container<
+            int64_t, HashNuniqueComputationNumpyOrNullableIntBool,
+            KeyEqualNuniqueComputationNumpyOrNullableIntBool>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
@@ -981,7 +1012,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
                         bool use_sql_rules) {
     switch (window_func) {
         case Bodo_FTypes::row_number: {
-            const std::vector<int64_t>& row_to_group = grp_info.row_to_group;
+            const bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
             int64_t num_rows = row_to_group.size();
             // Wrap the row_to_group in an array info so we can use it to sort.
             std::shared_ptr<array_info> group_arr =

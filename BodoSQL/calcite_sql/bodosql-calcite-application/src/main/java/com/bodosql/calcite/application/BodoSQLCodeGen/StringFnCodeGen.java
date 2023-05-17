@@ -43,8 +43,6 @@ public class StringFnCodeGen {
     equivalentFnMapBroadcast.put("SPACE", "bodo.libs.bodosql_array_kernels.space");
     equivalentFnMapBroadcast.put("STRCMP", "bodo.libs.bodosql_array_kernels.strcmp");
     equivalentFnMapBroadcast.put("INSTR", "bodo.libs.bodosql_array_kernels.instr");
-    equivalentFnMapBroadcast.put("SUBSTRING", "bodo.libs.bodosql_array_kernels.substring");
-    equivalentFnMapBroadcast.put("SUBSTR", "bodo.libs.bodosql_array_kernels.substring");
     equivalentFnMapBroadcast.put("MID", "bodo.libs.bodosql_array_kernels.substring");
     equivalentFnMapBroadcast.put(
         "SUBSTRING_INDEX", "bodo.libs.bodosql_array_kernels.substring_index");
@@ -329,5 +327,38 @@ public class StringFnCodeGen {
             "bodo.libs.bodosql_array_kernels.%s(%s, %s)",
             trimName.toLowerCase(), stringToBeTrimmed.emit(), charactersToBeTrimmed.emit());
     return new Expr.Raw(outputExpr);
+  }
+  /**
+   * Function that returns the rexInfo for a SUBSTR/MID Function call
+   *
+   * @param operandsInfo the information about the 2-3 arguments
+   * @return The RexNodeVisitorInfo corresponding to the function call
+   */
+  public static Expr generateSubstringInfo(List<Expr> operandsInfo) {
+    StringBuilder expr_code = new StringBuilder();
+
+    int argCount = operandsInfo.size();
+    if (argCount == 3) {
+      // length argument is passed
+      expr_code.append("bodo.libs.bodosql_array_kernels.substring(");
+      expr_code.append(operandsInfo.get(0).emit());
+      expr_code.append(", ");
+      expr_code.append(operandsInfo.get(1).emit());
+      expr_code.append(", ");
+      expr_code.append(operandsInfo.get(2).emit());
+
+    } else if (argCount == 2) {
+      expr_code.append("bodo.libs.bodosql_array_kernels.substring_suffix(");
+      expr_code.append(operandsInfo.get(0).emit());
+      expr_code.append(", ");
+      expr_code.append(operandsInfo.get(1).emit());
+
+    } else {
+      throw new BodoSQLCodegenException(
+          "Error, invalid number of arguments passed to SUBSTR/SUBSTRING");
+    }
+
+    expr_code.append(")");
+    return new Expr.Raw(expr_code.toString());
   }
 }

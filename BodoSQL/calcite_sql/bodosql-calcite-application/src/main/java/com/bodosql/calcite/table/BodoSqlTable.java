@@ -164,7 +164,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * <p>If there are no casts that need to be performed this returns the empty string.
    *
    * @param varName Name of the variable containing the data to write.
-   * @return Generated code used to cast the Table being writen.
+   * @return Generated code used to cast the Table being written.
    */
   public String generateWriteCastCode(String varName) {
     return generateCommonCastCode(varName, true);
@@ -188,8 +188,8 @@ public abstract class BodoSqlTable implements ExtensibleTable {
     List<String> castExprs = new ArrayList<>();
     for (BodoSQLColumn col : this.columns) {
       if (!isWrite && col.requiresReadCast()) {
-          castColNames.add(col.getColumnName());
-          castExprs.add(col.getReadCastExpr(varName));
+        castColNames.add(col.getColumnName());
+        castExprs.add(col.getReadCastExpr(varName));
       }
     }
     if (castColNames.isEmpty()) {

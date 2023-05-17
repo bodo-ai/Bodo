@@ -78,8 +78,8 @@ static void array_isin_kernel(std::shared_ptr<array_info> out_arr,
         }
         return (size_t)value;
     };
-    UNORD_SET_CONTAINER<size_t, std::function<size_t(int64_t)>,
-                        std::function<bool(int64_t, int64_t)>>
+    bodo::unord_set_container<size_t, std::function<size_t(int64_t)>,
+                              std::function<bool(int64_t, int64_t)>>
         eset({}, hash_fct, equal_fct);
     for (int64_t pos = 0; pos < len_values; pos++) {
         eset.insert(pos);
@@ -167,7 +167,7 @@ std::shared_ptr<table_info> get_samples_from_table_local(
     tracing::Event ev("get_samples_from_table_local", parallel);
     std::mt19937 gen(1234567890);
     double block_size = double(n_local) / n_loc_sample;
-    std::vector<int64_t> ListIdx(n_loc_sample);
+    bodo::vector<int64_t> ListIdx(n_loc_sample);
     double cur_lo = 0;
     for (int64_t i = 0; i < n_loc_sample; i++) {
         int64_t lo = round(cur_lo);
@@ -260,7 +260,7 @@ std::shared_ptr<table_info> sort_values_table_local(
     tracing::Event ev("sort_values_table_local", is_parallel);
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
-    std::vector<int64_t> ListIdx(n_rows);
+    bodo::vector<int64_t> ListIdx(n_rows);
     for (size_t i = 0; i < n_rows; i++) {
         ListIdx[i] = i;
     }
@@ -465,7 +465,7 @@ std::shared_ptr<table_info> sort_values_table(
     // Want to keep dead keys only when we will perform a shuffle operation
     // later in the function
     std::shared_ptr<table_info> local_sort = sort_values_table_local(
-        in_table, n_key_t, vect_ascending, na_position,
+        std::move(in_table), n_key_t, vect_ascending, na_position,
         (parallel && n_total != 0) ? nullptr : dead_keys, parallel);
 
     if (!parallel) {
@@ -717,7 +717,7 @@ void validate_inputs_for_get_parallel_sort_bounds_for_domain(
  */
 std::shared_ptr<table_info> create_send_table_and_hashes_from_rank_to_row_ids(
     std::shared_ptr<table_info> table,
-    const std::vector<std::vector<int64_t>> rank_to_row_ids,
+    const std::vector<bodo::vector<int64_t>> rank_to_row_ids,
     std::shared_ptr<uint32_t[]>& hashes, bool parallel) {
     tracing::Event ev("create_send_table_and_hashes_from_rank_to_row_ids",
                       parallel);
@@ -735,7 +735,7 @@ std::shared_ptr<table_info> create_send_table_and_hashes_from_rank_to_row_ids(
     // Get indices for new table by flattening rank_to_row_ids
     // TODO Change to use uint64_t when possible. Initial attempt
     // had issues at linking time (symbol not found, etc.).
-    std::vector<int64_t> indices =
+    bodo::vector<int64_t> indices =
         flatten<int64_t>(rank_to_row_ids, total_rows);
     // Create new table using the indices.
     // NOTE: RetrieveTable decrefs all arrays.
@@ -773,16 +773,16 @@ std::shared_ptr<table_info> create_send_table_and_hashes_from_rank_to_row_ids(
  * @param parallel Only for tracing purposes.
  * @param strict Only filter strict bad intervals (where A > B instead of A >=
  * B)
- * @return const std::vector<std::vector<uint64_t>> Vector of length n_pes. i'th
- * element is a vector of row ids that must be sent to the i'th rank. Due to the
- * nature of the algorithm, each vector will be sorted.
+ * @return const std::vector<bodo::vector<uint64_t>> Vector of length n_pes.
+ * i'th element is a vector of row ids that must be sent to the i'th rank. Due
+ * to the nature of the algorithm, each vector will be sorted.
  */
-const std::vector<std::vector<int64_t>> compute_destinations_for_interval(
+const std::vector<bodo::vector<int64_t>> compute_destinations_for_interval(
     std::shared_ptr<table_info> table, std::shared_ptr<array_info> bounds_arr,
     int n_pes, bool parallel, bool strict) {
     tracing::Event ev("compute_destinations_for_interval", parallel);
     // TODO XXX Convert to use uint64_t
-    std::vector<std::vector<int64_t>> rank_to_row_ids(n_pes);
+    std::vector<bodo::vector<int64_t>> rank_to_row_ids(n_pes);
     uint32_t rank_id = 0;
     uint32_t rank_id_i = 0;
     for (uint64_t i = 0; i < table->nrows(); i++) {
@@ -842,8 +842,8 @@ const std::vector<std::vector<int64_t>> compute_destinations_for_interval(
  * the rows in the input table.
  */
 std::shared_ptr<uint32_t[]> compute_destinations_for_point_table(
-    std::shared_ptr<table_info> table, std::shared_ptr<array_info> bounds_arr,
-    int n_pes, bool parallel) {
+    std::shared_ptr<table_info> table,
+    const std::shared_ptr<array_info>& bounds_arr, int n_pes, bool parallel) {
     tracing::Event ev("compute_destinations_for_point_table", parallel);
     uint64_t n_local = table->nrows();
     // We call them hashes for consistency, but in this case, they're actually
@@ -1011,7 +1011,10 @@ std::shared_ptr<table_info> sort_table_for_interval_join(
     ev.add_attribute("is_table_point_side", is_table_point_side);
     ev.add_attribute("table_len_local", table->nrows());
 
+    // Set the sort order to ascending for all columns.
     int64_t asc[2] = {1, 1};
+    // Set the NaNs as last. This is done so intervals are strict
+    // subsets in case we encounter Floats. NA values will be ignored.
     int64_t na_pos[2] = {1, 1};
 
     std::shared_ptr<table_info> local_sort_table;
@@ -1044,7 +1047,7 @@ std::shared_ptr<table_info> sort_table_for_interval_join(
             std::move(local_sort_table), bounds_arr, n_pes, parallel);
     } else {
         // NOTE: This will skip bad intervals.
-        std::vector<std::vector<int64_t>> rank_to_row_ids_for_table =
+        std::vector<bodo::vector<int64_t>> rank_to_row_ids_for_table =
             compute_destinations_for_interval(local_sort_table, bounds_arr,
                                               n_pes, parallel, strict);
 
@@ -1144,7 +1147,10 @@ sort_both_tables_for_interval_join(std::shared_ptr<table_info> table_1,
     // 1. Sort the tables locally
     //
 
+    // Set the sort order to ascending for all columns.
     int64_t asc[2] = {1, 1};
+    // Set the NaNs as last. This is done so intervals are strict
+    // subsets in case we encounter Floats. NA values will be ignored.
     int64_t na_pos[2] = {1, 1};
 
     // sort_values_table_local will decref all arrays in table_1
@@ -1303,11 +1309,11 @@ static std::shared_ptr<table_info> drop_duplicates_keys_inner(
     std::shared_ptr<uint32_t[]> hashes = hash_keys(key_arrs, seed, is_parallel);
     HashDropDuplicates hash_fct{hashes};
     KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
-    UNORD_MAP_CONTAINER<size_t, size_t, HashDropDuplicates,
-                        KeyEqualDropDuplicates>
+    bodo::unord_map_container<size_t, size_t, HashDropDuplicates,
+                              KeyEqualDropDuplicates>
         entSet({}, hash_fct, equal_fct);
     //
-    std::vector<int64_t> ListRow;
+    bodo::vector<int64_t> ListRow;
     uint64_t next_ent = 0;
     bool has_nulls = dropna && does_keys_have_nulls(key_arrs);
     auto is_ok = [&](size_t i_row) -> bool {
@@ -1323,7 +1329,7 @@ static std::shared_ptr<table_info> drop_duplicates_keys_inner(
             }
         }
     }
-    std::vector<int64_t> ListIdx;
+    bodo::vector<int64_t> ListIdx;
     for (auto& eRow : ListRow) {
         if (eRow != -1) {
             ListIdx.push_back(eRow);
@@ -1332,7 +1338,6 @@ static std::shared_ptr<table_info> drop_duplicates_keys_inner(
     // Now building the out_arrs array. We select only the first num_keys.
     std::shared_ptr<table_info> ret_table =
         RetrieveTable(std::move(in_table), ListIdx, num_keys);
-    //
     hashes.reset();
     return ret_table;
 }
@@ -1405,8 +1410,8 @@ std::shared_ptr<table_info> drop_duplicates_table_inner(
     }
     HashDropDuplicates hash_fct{hashes};
     KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
-    UNORD_MAP_CONTAINER<size_t, size_t, HashDropDuplicates,
-                        KeyEqualDropDuplicates>
+    bodo::unord_map_container<size_t, size_t, HashDropDuplicates,
+                              KeyEqualDropDuplicates>
         entSet({}, hash_fct, equal_fct);
     // The loop over the short table.
     // entries are stored one by one and all of them are put even if identical
@@ -1417,8 +1422,8 @@ std::shared_ptr<table_info> drop_duplicates_table_inner(
     auto is_ok = [&](size_t i_row) -> bool {
         return !has_nulls || !does_row_has_nulls(key_arrs, i_row);
     };
-    auto RetrieveListIdx1 = [&]() -> std::vector<int64_t> {
-        std::vector<int64_t> ListRow;
+    auto RetrieveListIdx1 = [&]() -> bodo::vector<int64_t> {
+        bodo::vector<int64_t> ListRow;
         uint64_t next_ent = 0;
         for (size_t i_row = 0; i_row < n_rows; i_row++) {
             // don't add if entry is NA and dropna=true
@@ -1441,7 +1446,7 @@ std::shared_ptr<table_info> drop_duplicates_table_inner(
                 }
             }
         }
-        std::vector<int64_t> ListIdx;
+        bodo::vector<int64_t> ListIdx;
         for (auto& eRow : ListRow) {
             if (eRow != -1) {
                 ListIdx.push_back(eRow);
@@ -1451,8 +1456,8 @@ std::shared_ptr<table_info> drop_duplicates_table_inner(
     };
     // In this case we store the pairs of values, the first and the last.
     // This allows to reach conclusions in all possible cases.
-    auto RetrieveListIdx2 = [&]() -> std::vector<int64_t> {
-        std::vector<std::pair<int64_t, int64_t>> ListRowPair;
+    auto RetrieveListIdx2 = [&]() -> bodo::vector<int64_t> {
+        bodo::vector<std::pair<int64_t, int64_t>> ListRowPair;
         size_t next_ent = 0;
         for (size_t i_row = 0; i_row < n_rows; i_row++) {
             // don't add if entry is NA and dropna=true
@@ -1468,7 +1473,7 @@ std::shared_ptr<table_info> drop_duplicates_table_inner(
                 }
             }
         }
-        std::vector<int64_t> ListIdx;
+        bodo::vector<int64_t> ListIdx;
         for (auto& eRowPair : ListRowPair) {
             if (eRowPair.first != -1) {
                 ListIdx.push_back(eRowPair.first);
@@ -1479,7 +1484,7 @@ std::shared_ptr<table_info> drop_duplicates_table_inner(
         }
         return ListIdx;
     };
-    std::vector<int64_t> ListIdx;
+    bodo::vector<int64_t> ListIdx;
     if (step == 1 || keep == 0 || keep == 1) {
         ListIdx = RetrieveListIdx1();
     } else {
@@ -1744,8 +1749,8 @@ table_info* union_tables(table_info** in_tables, int64_t num_tables,
  * @param out Output vector that samples are written to
  */
 void sample_ints_unordset(int64_t n_samp, int64_t n_total, std::mt19937& gen,
-                          std::vector<int64_t>& out) {
-    UNORD_SET_CONTAINER<int64_t> UnordsetIdxChosen;
+                          bodo::vector<int64_t>& out) {
+    bodo::unord_set_container<int64_t> UnordsetIdxChosen;
 
     int64_t i_samp = 0;
     std::uniform_int_distribution<int64_t> rng(0, n_total - 1);
@@ -1768,8 +1773,8 @@ void sample_ints_unordset(int64_t n_samp, int64_t n_total, std::mt19937& gen,
  * @param out Output vector that samples are written to
  */
 void sample_ints_bitmask(int64_t n_samp, int64_t n_total, std::mt19937& gen,
-                         std::vector<int64_t>& out) {
-    std::vector<bool> BitmaskIdxChosen(n_total);
+                         bodo::vector<int64_t>& out) {
+    bodo::vector<bool> BitmaskIdxChosen(n_total);
 
     int64_t i_samp = 0;
     std::uniform_int_distribution<int64_t> rng(0, n_total - 1);
@@ -1792,8 +1797,8 @@ void sample_ints_bitmask(int64_t n_samp, int64_t n_total, std::mt19937& gen,
  * @param out Output vector that samples are written to
  */
 void sample_ints_permute(int64_t n_samp, int64_t n_total, std::mt19937& gen,
-                         std::vector<int64_t>& out) {
-    std::vector<int64_t> AllIndices(n_total);
+                         bodo::vector<int64_t>& out) {
+    bodo::vector<int64_t> AllIndices(n_total);
     for (int64_t i_total = 0; i_total < n_total; i_total++) {
         AllIndices[i_total] = i_total;
     }
@@ -1850,7 +1855,7 @@ std::shared_ptr<table_info> sample_table_inner_parallel(
     // Sample random points deterministically across the whole array.
     // Each RNG has the same seed on all ranks, so this is safe and requires
     // no synchronization across ranks.
-    std::vector<int64_t> ListIdxChosen;
+    bodo::vector<int64_t> ListIdxChosen;
     std::mt19937 gen(random_state);
 
     if (replace) {
@@ -1892,8 +1897,8 @@ std::shared_ptr<table_info> sample_table_inner_parallel(
         // more memory than a bitmask. Setting this threshold to the
         // halfway point gives similar performance on large arrays.
 
-        std::vector<int64_t> ListIdxSampled;
-        std::vector<int64_t> ListIdxSampledExport;
+        bodo::vector<int64_t> ListIdxSampled;
+        bodo::vector<int64_t> ListIdxSampledExport;
 
         // NOTE: MPI requires sendcounts and displs to be passed as ints, so
         // these could overflow
@@ -1921,7 +1926,7 @@ std::shared_ptr<table_info> sample_table_inner_parallel(
             }
 
             // Compute destination rank of each sample
-            std::vector<int> ListByProcessor(n_samp);
+            bodo::vector<int> ListByProcessor(n_samp);
             for (int64_t i_samp = 0; i_samp < n_samp; i_samp++) {
                 int64_t idx_rand = ListIdxSampled[i_samp];
                 int i_proc =
@@ -1991,7 +1996,7 @@ std::shared_ptr<table_info> sample_table_inner_sequential(
     // Sample random points deterministically across the whole array.
     // Each RNG has the same seed on all ranks, so this is safe and requires
     // no synchronization across ranks.
-    std::vector<int64_t> ListIdxChosen(n_samp);
+    bodo::vector<int64_t> ListIdxChosen(n_samp);
     std::mt19937 gen(random_state);
 
     if (replace) {

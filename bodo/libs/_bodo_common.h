@@ -537,7 +537,8 @@ struct array_info {
  *
  * @return std::shared_ptr<arrow::Array> equivalent Array array
  */
-std::shared_ptr<arrow::Array> to_arrow(std::shared_ptr<array_info> info);
+std::shared_ptr<arrow::Array> to_arrow(
+    const std::shared_ptr<const array_info> info);
 
 std::shared_ptr<array_info> alloc_array(int64_t length, int64_t n_sub_elems,
                                         int64_t n_sub_sub_elems,
@@ -593,8 +594,8 @@ std::shared_ptr<array_info> alloc_dict_string_array(
  * the vector of strings.
  */
 std::shared_ptr<array_info> create_string_array(
-    std::vector<uint8_t> const& null_bitmap,
-    std::vector<std::string> const& list_string);
+    bodo::vector<uint8_t> const& null_bitmap,
+    bodo::vector<std::string> const& list_string);
 
 /**
  * @brief Create an array of list of strings,
@@ -609,8 +610,8 @@ std::shared_ptr<array_info> create_string_array(
  * constructed from the vector.
  */
 std::shared_ptr<array_info> create_list_string_array(
-    std::vector<uint8_t> const& null_bitmap,
-    std::vector<std::vector<std::pair<std::string, bool>>> const&
+    bodo::vector<uint8_t> const& null_bitmap,
+    bodo::vector<bodo::vector<std::pair<std::string, bool>>> const&
         list_list_pair);
 
 /**
@@ -637,7 +638,7 @@ std::shared_ptr<array_info> create_dict_string_array(
  */
 
 template <typename T>
-inline T& getv(std::shared_ptr<array_info> arr, size_t idx) {
+inline T& getv(const std::shared_ptr<const array_info>& arr, size_t idx) {
     return ((T*)arr->data1())[idx];
 }
 
@@ -672,7 +673,7 @@ struct mpi_comm_info {
     // hash_to_rank() once during shuffle. Also stores the result of filtering
     // rows with bloom filters (removed rows have dest == -1), so that we only
     // query the filter once.
-    std::vector<int> row_dest;
+    bodo::vector<int> row_dest;
     // true if using a bloom filter to discard rows before shuffling
     bool filtered = false;
 

@@ -36,7 +36,7 @@ def contains(arr, pattern):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.contains",
-                ["arr", "contains"],
+                ["arr", "pattern"],
                 i,
             )
 
@@ -488,6 +488,33 @@ def substring(arr, start, length):
 
     def impl(arr, start, length):  # pragma: no cover
         return substring_util(arr, start, length)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def substring_suffix(arr, start):  # pragma: no cover
+    """Handles cases where SUBSTR/SUBSTRING receives two [optional] arguments only and forwards
+    to args appropriate version of the real implementation
+
+    Args:
+        arr (string array/series/scalar): the strings(s) to be modified
+        start (integer array/series/scalar): the starting location(s) of the substring(s)
+
+    Returns:
+        string array/scalar: the string/column of extracted substrings
+    """
+    args = [arr, start]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.substring_suffix",
+                ["arr", "start"],
+                i,
+            )
+
+    def impl(arr, start):  # pragma: no cover
+        return substring_suffix_util(arr, start)
 
     return impl
 
@@ -1517,6 +1544,41 @@ def substring_util(arr, start, length):
     scalar_text += "else:\n"
     scalar_text += "   if arg1 > 0: arg1 -= 1\n"
     scalar_text += "   res[i] = arg0[arg1:arg1+arg2]\n"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        may_cause_duplicate_dict_array_values=True,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def substring_suffix_util(arr, start):
+    """A dedicated kernel for the SQL function SUBSTR/SUBSTRING which takes in a string,
+       (or string column), and one integer (or integer columns) and returns
+       the string starting from the index of the first integer.
+
+    Args:
+        arr (string array/series/scalar): the strings(s) to be modified
+        start (integer array/series/scalar): the starting location(s) of the substring(s)
+
+    Returns:
+        string array/scalar: the string/column of extracted substrings
+    """
+
+    arr_is_string = verify_string_binary_arg(arr, "SUBSTRING", "arr")
+    verify_int_arg(start, "SUBSTRING", "start")
+
+    out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
+
+    arg_names = ["arr", "start"]
+    arg_types = [arr, start]
+    propagate_null = [True] * 2
+    scalar_text = "  if arg1 > 0: arg1 -= 1\n"
+    scalar_text += "  res[i] = arg0[arg1:]\n"
 
     return gen_vectorized(
         arg_names,

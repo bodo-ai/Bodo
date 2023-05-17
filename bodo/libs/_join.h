@@ -205,14 +205,6 @@ table_info* cross_join_table(
  * columns currently.
  * @param rebalance_if_skewed: After the merge should we check the data for
  *   skew and rebalance if needed?
- * @param cond_func function generated in Python to evaluate general join
- * conditions. It takes data pointers for left/right tables and row indices.
- * @param cond_func_left_columns Array of column numbers in the left table
- * used by cond_func.
- * @param cond_func_left_column_len Length of cond_func_left_columns.
- * @param cond_func_right_columns Array of column numbers in the right table
- * used by cond_func.
- * @param cond_func_right_column_len Length of cond_func_right_columns.
  * @param num_rows_ptr Pointer used to store the number of rows in the
  * output to return to Python. This enables marking all columns as dead.
  * @return table_info* interval join output table
@@ -223,9 +215,6 @@ table_info* interval_join_table(
     bool strict_start, bool strict_end, uint64_t point_col_id,
     uint64_t interval_start_col_id, uint64_t interval_end_col_id,
     bool* key_in_output, int64_t* use_nullable_arr_type,
-    bool rebalance_if_skewed, cond_expr_fn_batch_t cond_func,
-    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
-    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
-    uint64_t* num_rows_ptr);
+    bool rebalance_if_skewed, uint64_t* num_rows_ptr);
 
 #endif  // _JOIN_H_INCLUDED

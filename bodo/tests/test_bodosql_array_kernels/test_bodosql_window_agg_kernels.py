@@ -7,6 +7,7 @@ import math
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -49,6 +50,92 @@ def nullable_float_arr_maker(L, to_null, to_nan):
         else:
             A[i] = L[i]
     return pd.Series(A)
+
+
+def uniform_distribution(n, seed):
+    """Generates an array of random points in a uniform distribution
+
+    Args:
+        n (integer): the number of points to generate
+        seed (integer): the starting seed for the generation
+
+    Returns:
+        np.ndarray[float64]: array of floats in a uniform distribbution
+    """
+    np.random.seed(seed)
+    return np.random.uniform(0, 1000, n)
+
+
+def gaussian_distribution(n, seed):
+    """Generates an array of random points in a gaussian distribution
+
+    Args:
+        n (integer): the number of points to generate
+        seed (integer): the starting seed for the generation
+
+    Returns:
+        np.ndarray[float64]: array of floats in a gaussian distribbution
+    """
+    np.random.seed(seed)
+    return np.random.normal(75, 15, n)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(pd.Series([math.tan(i) for i in range(30000)]), id="tangent"),
+        pytest.param(
+            pd.Series([i for i in range(30000)], dtype=pd.Int32Dtype()),
+            id="linear_no_null",
+        ),
+        pytest.param(
+            pd.Series(
+                [None if i**0.5 == int(i**0.5) else i for i in range(90000)],
+                dtype=pd.Int32Dtype(),
+            ),
+            id="linear_null",
+        ),
+        pytest.param(pd.Series([i**0.5 for i in range(100000)]), id="root_no_nan"),
+        pytest.param(
+            pd.Series([np.nan if i % 7 == 0 else i**0.5 for i in range(100000)]),
+            id="root_nan",
+        ),
+        pytest.param(pd.Series(uniform_distribution(30000, 42)), id="uniform"),
+        pytest.param(pd.Series(gaussian_distribution(30000, 42)), id="gaussian"),
+    ],
+)
+def test_approx_percentile(data, memory_leak_check):
+    def impl(arr):
+        return (
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.001),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.01),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.1),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.25),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.42),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.5),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.63),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.75),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.9),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.99),
+            bodo.libs.array_kernels.approx_percentile(arr.values, 0.999),
+        )
+
+    percentiles = [0.001, 0.01, 0.1, 0.25, 0.42, 0.5, 0.63, 0.75, 0.9, 0.99, 0.999]
+    exact_answer = tuple([float(data.quantile(perc)) for perc in percentiles])
+    # There are no strong accuracy guarantees for the t-digest quantile approximation
+    # algorithm, so the best we can do is compare to the exact answer using
+    # a somewhat large relative & absolute tolerance. 40% was chosen as an
+    # arbitrary cutoff for the relative tolerance based on observations.
+    check_func(
+        impl,
+        (data,),
+        py_output=exact_answer,
+        is_out_distributed=False,
+        check_dtype=False,
+        reset_index=True,
+        atol=0.01,
+        rtol=0.4,
+    )
 
 
 @pytest.mark.parametrize(
@@ -222,6 +309,24 @@ def window_refsol(S, lower, upper, func, use_nans=False):
             )
             if func == "count":
                 result = len(elems)
+            elif func == "boolor":
+                result = (
+                    None
+                    if len(elems) == 0
+                    else len(list(filter(lambda x: bool(x), elems))) > 0
+                )
+            elif func == "booland":
+                result = (
+                    None
+                    if len(elems) == 0
+                    else len(list(filter(lambda x: bool(x), elems))) == len(elems)
+                )
+            elif func == "boolxor":
+                result = (
+                    None
+                    if len(elems) == 0
+                    else len(list(filter(lambda x: bool(x), elems))) == 1
+                )
             elif use_nans and ("nan" in map(str, elems)):
                 result = np.nan
             elif func == "sum":
@@ -230,6 +335,10 @@ def window_refsol(S, lower, upper, func, use_nans=False):
                 result = None if len(elems) == 0 else elems.mean()
             elif func == "median":
                 result = None if len(elems) == 0 else elems.median()
+            elif func == "min":
+                result = None if len(elems) == 0 else elems.min()
+            elif func == "max":
+                result = None if len(elems) == 0 else elems.max()
             elif func == "ratio_to_report":
                 total = elems.sum()
                 result = (
@@ -246,12 +355,13 @@ def window_refsol(S, lower, upper, func, use_nans=False):
             elif func == "stddev_samp":
                 result = None if len(elems) <= 1 else np.std(elems, ddof=1)
         if use_nans:
+            default = False if func.startswith("bool") else 0.0
             if result is None:
                 to_null.append(i)
-                L.append(0.0)
+                L.append(default)
             elif result is np.nan:
                 to_nan.append(i)
-                L.append(0.0)
+                L.append(default)
             else:
                 L.append(result)
         else:
@@ -265,6 +375,61 @@ def window_refsol(S, lower, upper, func, use_nans=False):
         }
         out_dtype = dtype_map.get(func, None)
         return pd.Series(L, dtype=out_dtype)
+
+
+# Calculates the window function Mode, breaking ties by finding
+# the element that appeared first in the sequence chronologically
+def window_refsol_mode(S, lower, upper, use_nans):
+    L = []
+    to_null = [-1]
+    to_nan = [-1]
+    for i in range(len(S)):
+        if upper < lower:
+            L.append(None)
+        else:
+            elems = pd.Series(
+                [
+                    elem
+                    for elem in S.iloc[
+                        np.clip(i + lower, 0, len(S)) : np.clip(
+                            i + upper + 1, 0, len(S)
+                        )
+                    ]
+                    if ((str(elem) != "<NA>") if use_nans else not (pd.isna(elem)))
+                ]
+            )
+            if len(elems) == 0:
+                if use_nans:
+                    L.append(0.0)
+                    to_null.append(i)
+                else:
+                    L.append(None)
+            else:
+                counts = {}
+                if use_nans:
+                    bestVal, bestCount = np.nan, np.isnan(elems).sum()
+                else:
+                    bestVal, bestCount = None, 0
+                for elem in elems:
+                    if use_nans and np.isnan(elem):
+                        continue
+                    counts[elem] = counts.get(elem, 0) + 1
+                    if counts[elem] > bestCount or (
+                        (not (use_nans and np.isnan(bestVal)))
+                        and counts[elem] == bestCount
+                        and S[S == elem].index[0] < S[S == bestVal].index[0]
+                    ):
+                        bestCount = counts[elem]
+                        bestVal = elem
+                if bestVal is np.nan:
+                    L.append(0.0)
+                    to_nan.append(i)
+                else:
+                    L.append(bestVal)
+    if use_nans:
+        return nullable_float_arr_maker(L, to_null, to_nan)
+    else:
+        return pd.Series(L, dtype=S.dtype)
 
 
 def window_refsol_double(Y, X, lower, upper, func, use_nans=False):
@@ -352,11 +517,10 @@ def window_kernel_all_types_data():
             [None if "0" in str(i) else (i**2) % 17 for i in range(100)],
             dtype=pd.UInt8Dtype(),
         ),
-        "float64_nonan": pd.Series(
-            [
-                None if "11" in str(i) else (((13 + i) ** 2) % 41) ** 0.4
-                for i in range(100)
-            ]
+        "float64_nonan": nullable_float_arr_maker(
+            [(((13 + i) ** 2) % 41) ** 0.4 for i in range(100)],
+            [i for i in range(100) if "11" in str(i)],
+            [-1],
         ),
         "float64_nan": nullable_float_arr_maker(
             [float(i % 13) for i in range(100)],
@@ -521,6 +685,9 @@ def window_kernel_two_arg_data():
         "var_samp",
         "stddev_pop",
         "stddev_samp",
+        "boolor",
+        "booland",
+        "boolxor",
     ],
 )
 def test_windowed_kernels_numeric(
@@ -572,6 +739,21 @@ def test_windowed_kernels_numeric(
             bodo.libs.bodosql_array_kernels.windowed_stddev_samp(S, lower, upper)
         )
 
+    def impl10(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_boolor(S, lower, upper)
+        )
+
+    def impl11(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_booland(S, lower, upper)
+        )
+
+    def impl12(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_boolxor(S, lower, upper)
+        )
+
     S = window_kernel_numeric_data[dataset]
 
     implementations = {
@@ -584,6 +766,9 @@ def test_windowed_kernels_numeric(
         "var_samp": impl7,
         "stddev_pop": impl8,
         "stddev_samp": impl9,
+        "boolor": impl10,
+        "booland": impl11,
+        "boolxor": impl12,
     }
     impl = implementations[func]
 
@@ -640,18 +825,14 @@ def test_windowed_kernels_numeric(
             id="float64_nan-entire_window",
         ),
         pytest.param("string", -1000, 0, id="string-suffix_exclusive"),
-        pytest.param(
-            "string", -1000, 1000, id="string-entire_window", marks=pytest.mark.slow
-        ),
+        pytest.param("string", -1000, 1000, id="string-entire_window"),
         pytest.param("string", -20, 20, id="string-rolling_41", marks=pytest.mark.slow),
-        pytest.param("string", 1, 3, id="string-leading_3", marks=pytest.mark.slow),
+        pytest.param("string", 1, 3, id="string-leading_3"),
         pytest.param("string", 3, -3, id="string-backward", marks=pytest.mark.slow),
         pytest.param("binary", -1000, 0, id="binary-prefix", marks=pytest.mark.slow),
-        pytest.param(
-            "binary", -1000, 1000, id="binary-entire_window", marks=pytest.mark.slow
-        ),
+        pytest.param("binary", -1000, 1000, id="binary-entire_window"),
         pytest.param("binary", 0, 0, id="binary-current", marks=pytest.mark.slow),
-        pytest.param("binary", 1, 3, id="binary-leading_3", marks=pytest.mark.slow),
+        pytest.param("binary", 1, 3, id="binary-leading_3"),
         pytest.param("binary", 3, -3, id="binary-backward", marks=pytest.mark.slow),
         pytest.param(
             "timestamp",
@@ -686,15 +867,30 @@ def test_windowed_kernels_numeric(
         pytest.param("time", 1000, 2000, id="time-too_large"),
     ],
 )
-def test_windowed_mode(
+@pytest.mark.parametrize(
+    "func",
+    [
+        "mode",
+        "min",
+        "max",
+    ],
+)
+def test_windowed_non_numeric(
+    func,
     dataset,
     window_kernel_all_types_data,
     lower_bound,
     upper_bound,
     memory_leak_check,
 ):
-    def impl(S, lower, upper):
+    def impl1(S, lower, upper):
         return pd.Series(bodo.libs.bodosql_array_kernels.windowed_mode(S, lower, upper))
+
+    def impl2(S, lower, upper):
+        return pd.Series(bodo.libs.bodosql_array_kernels.windowed_min(S, lower, upper))
+
+    def impl3(S, lower, upper):
+        return pd.Series(bodo.libs.bodosql_array_kernels.windowed_max(S, lower, upper))
 
     if bodo.get_size() > 1:
         # These kernels are only sequential
@@ -702,66 +898,26 @@ def test_windowed_mode(
 
     data = window_kernel_all_types_data[dataset]
 
-    # Calculates the window function for each row, breaking ties by finding
-    # the element that appeared first in the sequence chronologically
-    def generate_answers(S, lower, upper, use_nans):
-        L = []
-        to_null = [-1]
-        to_nan = [-1]
-        for i in range(len(S)):
-            if upper < lower:
-                L.append(None)
-            else:
-                elems = pd.Series(
-                    [
-                        elem
-                        for elem in S.iloc[
-                            np.clip(i + lower, 0, len(S)) : np.clip(
-                                i + upper + 1, 0, len(S)
-                            )
-                        ]
-                        if ((str(elem) != "<NA>") if use_nans else not (pd.isna(elem)))
-                    ]
-                )
-                if len(elems) == 0:
-                    if use_nans:
-                        L.append(0.0)
-                        to_null.append(i)
-                    else:
-                        L.append(None)
-                else:
-                    counts = {}
-                    if use_nans:
-                        bestVal, bestCount = np.nan, np.isnan(elems).sum()
-                    else:
-                        bestVal, bestCount = None, 0
-                    for elem in elems:
-                        if use_nans and np.isnan(elem):
-                            continue
-                        counts[elem] = counts.get(elem, 0) + 1
-                        if counts[elem] > bestCount or (
-                            (not (use_nans and np.isnan(bestVal)))
-                            and counts[elem] == bestCount
-                            and S[S == elem].index[0] < S[S == bestVal].index[0]
-                        ):
-                            bestCount = counts[elem]
-                            bestVal = elem
-                    if bestVal is np.nan:
-                        L.append(0.0)
-                        to_nan.append(i)
-                    else:
-                        L.append(bestVal)
-        if use_nans:
-            return nullable_float_arr_maker(L, to_null, to_nan)
-        else:
-            return pd.Series(L, dtype=S.dtype)
+    implementations = {
+        "mode": impl1,
+        "min": impl2,
+        "max": impl3,
+    }
+    impl = implementations[func]
+
+    if func == "mode":
+        answer = window_refsol_mode(
+            data, lower_bound, upper_bound, dataset == "float64_nan"
+        )
+    else:
+        answer = window_refsol(
+            data, lower_bound, upper_bound, func, dataset == "float64_nan"
+        )
 
     check_func(
         impl,
         (data, lower_bound, upper_bound),
-        py_output=generate_answers(
-            data, lower_bound, upper_bound, dataset == "float64_nan"
-        ),
+        py_output=answer,
         check_dtype=False,
         reset_index=True,
         # For now, only works sequentially because it can only be used inside
@@ -871,3 +1027,124 @@ def test_windowed_kernels_two_arg(
         is_out_distributed=False,
         atol=1e-4,
     )
+
+
+def test_window_dict_min_max(memory_leak_check):
+    """Tests windowed_min and windowed_max on dictionary encoded arrays"""
+
+    def impl(arr):
+        return (
+            pd.Series(bodo.libs.bodosql_array_kernels.windowed_min(arr, -2, 2)),
+            pd.Series(bodo.libs.bodosql_array_kernels.windowed_max(arr, -2, 2)),
+        )
+
+    arr = pa.array(
+        [
+            "alpha",
+            "beta",
+            "gamma",
+            None,
+            "delta",
+            "epsilon",
+            "",
+            "XYZ",
+            "alpha",
+            None,
+            "delta",
+            "beta",
+            "",
+            "",
+            "",
+            None,
+            "XYZ",
+        ],
+        type=pa.dictionary(pa.int32(), pa.string()),
+    )
+    answer = (
+        pd.Series(
+            [
+                "alpha",
+                "alpha",
+                "alpha",
+                "beta",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "XYZ",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        ),
+        pd.Series(
+            [
+                "gamma",
+                "gamma",
+                "gamma",
+                "gamma",
+                "gamma",
+                "epsilon",
+                "epsilon",
+                "epsilon",
+                "delta",
+                "delta",
+                "delta",
+                "delta",
+                "delta",
+                "beta",
+                "XYZ",
+                "XYZ",
+                "XYZ",
+            ]
+        ),
+    )
+
+    check_func(
+        impl,
+        (arr,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        # For now, only works sequentially because it can only be used inside
+        # of a Window function with a partition
+        only_seq=True,
+    )
+
+
+def test_string_min_max(memory_leak_check):
+    def impl_max_arr(arr):
+        return bodo.libs.bodosql_array_kernels.str_arr_max(arr)
+
+    def impl_min_arr(arr):
+        return bodo.libs.bodosql_array_kernels.str_arr_min(arr)
+
+    def impl_max_series(arr):
+        return bodo.libs.bodosql_array_kernels.str_arr_max(arr.values)
+
+    def impl_min_series(arr):
+        return bodo.libs.bodosql_array_kernels.str_arr_min(arr.values)
+
+    args = [
+        (pd.Series(["A", "B", "C", "D", "E"]), "E", "A", False),
+        (pd.Series(["I", "e", "A", "o", "U"]), "o", "A", False),
+        (pd.Series([None, "42", "720", "1024", None]), "720", "1024", False),
+        (pd.Series(["a", "B", None, "!", ""]), "a", "", False),
+        (pd.Series(["", "⚕¶", "©¡™", "ᖴ∆π", "🐍∫ßå"]), "🐍∫ßå", "", False),
+        (pd.Series([b"A", b"B", b"C", b"D", b"E"]), b"E", b"A", False),
+        (pd.Series([b"I", b"e", b"A", b"o", b"U"]), b"o", b"A", False),
+        (pd.Series([None, b"42", b"720", b"1024", None]), b"720", b"1024", False),
+        (pd.Series([b"a", b"B", None, b"!", b""]), b"a", b"", False),
+    ]
+    for data, data_max, data_min, dict_test in args:
+        if dict_test:
+            check_func(impl_max_arr, (data,), py_output=data_max, only_seq=True)
+            check_func(impl_min_arr, (data,), py_output=data_min, only_seq=True)
+        else:
+            check_func(impl_max_series, (data,), py_output=data_max, only_seq=True)
+            check_func(impl_min_series, (data,), py_output=data_min, only_seq=True)

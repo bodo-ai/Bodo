@@ -164,6 +164,70 @@ def windowed_sum(S, lower_bound, upper_bound):
     )
 
 
+def windowed_boolor(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def windowed_booland(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def windowed_boolxor(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def make_windowed_bool_aggfunc(func, cond):
+    def overload_fn(S, lower_bound, upper_bound):
+        verify_int_float_arg(S, func, S)
+        if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
+            raise_bodo_error("Input must be an array type")
+
+        calculate_block = f"res[i] = {cond}"
+
+        constant_block = "in_window = 0\n"
+        constant_block += "true_count = 0\n"
+        constant_block += "for i in range(len(arr0)):\n"
+        constant_block += "  if not bodo.libs.array_kernels.isna(arr0, i):\n"
+        constant_block += "    in_window += 1\n"
+        constant_block += "    true_count += int(bool(arr0[i]))\n"
+        constant_block += f"constant_value = {cond}"
+
+        setup_block = "true_count = 0"
+
+        enter_block = "true_count += int(bool(elem0))"
+
+        exit_block = "true_count -= int(bool(elem0))"
+
+        out_dtype = bodo.boolean_array_type
+
+        return gen_windowed(
+            calculate_block,
+            out_dtype,
+            constant_block=constant_block,
+            setup_block=setup_block,
+            enter_block=enter_block,
+            exit_block=exit_block,
+            propagate_nan=False,
+        )
+
+    return overload_fn
+
+
+def _install_windowed_bool_aggfuncs():
+    overload(windowed_boolor)(
+        make_windowed_bool_aggfunc("boolor_agg", "true_count > 0")
+    )
+    overload(windowed_booland)(
+        make_windowed_bool_aggfunc("booland_agg", "true_count == in_window")
+    )
+    overload(windowed_boolxor)(
+        make_windowed_bool_aggfunc("boolor_agg", "true_count == 1")
+    )
+
+
+_install_windowed_bool_aggfuncs()
+
+
 @numba.generated_jit(nopython=True)
 def windowed_count(S, lower_bound, upper_bound):
     if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
@@ -577,3 +641,198 @@ def windowed_corr(Y, X, lower_bound, upper_bound):
         exit_block=exit_block,
         num_args=2,
     )
+
+
+def str_arr_max(arr):  # pragma: no cover
+    return ""
+
+
+def str_arr_min(arr):  # pragma: no cover
+    return ""
+
+
+def make_str_arr_min_max_overload(func):
+    """Takes in a function name (either min or max) and returns an overload
+    for taking the min/max of an array of strings (see full docstring below)"""
+    cmp = "<" if func == "min" else ">"
+
+    def overload_fn(arr):
+        """Returns the minimum/maximum value in an array of strings (only designed
+        to work in sequential contexts for window functions). This is necessary
+        because the infrastructure for Series.min/Series.max does not support
+        string or binary data.
+
+        Args:
+            arr (string/binary array): the array whose minimum / maximum is
+            being sought
+
+        Returns:
+            string/binary scalar: the minimum / maximum value in the array
+            (or None if there are no non-null entries)
+        """
+        # Parametrize the starting value and comparison operation based on
+        # the dtype and whether the function is min or max
+        if arr == bodo.string_array_type:
+            starting_value = '""'
+        elif arr == bodo.binary_array_type:
+            starting_value = 'b""'
+        else:
+            return None
+        func_text = "def impl(arr):\n"
+        func_text += f"   best_str = {starting_value}\n"
+        func_text += "   has_non_na = False\n"
+        func_text += "   for i in range(len(arr)):\n"
+        func_text += "       if not bodo.libs.array_kernels.isna(arr, i):\n"
+        func_text += "          cur_str = arr[i]\n"
+        func_text += "          if has_non_na:\n"
+        func_text += f"             if cur_str {cmp} best_str:\n"
+        func_text += "                best_str = cur_str\n"
+        func_text += "          else:\n"
+        func_text += "             has_non_na = True\n"
+        func_text += "             best_str = cur_str\n"
+        func_text += "   if has_non_na:\n"
+        func_text += "      return best_str\n"
+        func_text += "   return None\n"
+
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "numba": numba,
+                "np": np,
+                "pd": pd,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+    return overload_fn
+
+
+def windowed_min(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def windowed_max(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+def make_windowed_min_max_function(func, cmp):
+    """Takes in a function name (either min or max) and a corresponding comparison
+    string (either "<" or ">") and generates an overload for the windowed_min
+    / windowed_max kernel."""
+
+    def impl(S, lower_bound, upper_bound):
+        """Returns the sliding minimum/maximum of an array
+
+        Args:
+            S (any array/series): vector of data whose
+            lower_bound (int): how many indices before the current row does each
+            window frame start
+            upper_bound (int): how many indices after the current row does each
+            window frame start
+
+        Returns:
+            any array: the array that contains the minimum/maximum value of
+            the original array for a slice related to each index in the array,
+            streaching forward/backward based on lower_bobund and upper_bound.
+        """
+        if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
+            raise_bodo_error("Input must be an array type")
+
+        setup_block = "lo = max(0, lower_bound)\n"
+        setup_block += "hi = max(0, upper_bound + 1)\n"
+
+        # Dictionary encoded arrays have a special procedure to find the
+        # min/max string within each slice
+        if S == bodo.dict_str_arr_type or (
+            isinstance(S, bodo.SeriesType) and S.data == bodo.dict_str_arr_type
+        ):
+            setup_block += "dictionary = arr0._data\n"
+            setup_block += "indices = arr0._indices\n"
+            # asort[i] = k means that the kth index in the original dictionary
+            # is the ith largest string from the dictionary
+            setup_block += "asort = bodo.hiframes.series_impl.argsort(dictionary)\n"
+            # rsort[i] = k means that the ith index in the original dictionary
+            # is the kth largest string from the dictionary
+            setup_block += "rsort = bodo.hiframes.series_impl.argsort(asort)\n"
+            # remapped[i] = k means that the string at index i is the kth largest
+            # string from the original dictionary
+            setup_block += (
+                "remapped = bodo.utils.utils.alloc_type(n, dict_index_dtype, (-1,))\n"
+            )
+            setup_block += "for j in range(n):\n"
+            setup_block += "  if bodo.libs.array_kernels.isna(indices, j):\n"
+            setup_block += "    bodo.libs.array_kernels.setna(remapped, j)\n"
+            setup_block += "  else:\n"
+            setup_block += "    remapped[j] = rsort[indices[j]]\n"
+            # Extract the slice of remapped and find the minimum/maximum integer
+            # from within that section. If when the calculation is done and
+            # ordinal = k, that means the the min/max string in the slice is
+            # the kth-largest string from the original dictionary, which
+            # is located at index asort[k] of the dictionary
+            calculate_block = "section = remapped[lo:hi]\n"
+            calculate_block += "ordinal = -1\n"
+            calculate_block += "for j in range(len(section)):\n"
+            calculate_block += "  if not bodo.libs.array_kernels.isna(section, j):\n"
+            calculate_block += f"    if ordinal == -1 or section[j] {cmp} ordinal:\n"
+            calculate_block += "      ordinal = section[j]\n"
+            calculate_block += "if ordinal == -1:\n"
+            calculate_block += "   bodo.libs.array_kernels.setna(res, j)\n"
+            calculate_block += "else:\n"
+            calculate_block += "   bodo.libs.str_arr_ext.get_str_arr_item_copy(res, i, dictionary, asort[ordinal])\n"
+
+            constant_block = f"constant_value = bodo.libs.bodosql_array_kernels.str_arr_{func}(arr0._data)"
+
+        elif is_valid_string_arg(S) or is_valid_binary_arg(S):
+            calculate_block = (
+                f"res[i] = bodo.libs.bodosql_array_kernels.str_arr_{func}(arr0[lo:hi])"
+            )
+            constant_block = (
+                f"constant_value = bodo.libs.bodosql_array_kernels.str_arr_{func}(arr0)"
+            )
+        else:
+            calculate_block = f"res[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(S.iloc[lo:hi].{func}())"
+            constant_block = f"constant_value = bodo.utils.conversion.unbox_if_tz_naive_timestamp(S.{func}())"
+
+        enter_block = "hi = entering + 1"
+
+        exit_block = "lo = exiting + 1"
+
+        extra_globals = {
+            "dict_index_dtype": bodo.libs.dict_arr_ext.dict_indices_arr_type
+        }
+
+        if isinstance(S, bodo.SeriesType):  # pragma: no cover
+            out_dtype = S.data
+        else:
+            out_dtype = S
+
+        propagate_nan = (
+            bodo.libs.float_arr_ext._use_nullable_float and is_valid_float_arg(S)
+        )
+
+        return gen_windowed(
+            calculate_block,
+            out_dtype,
+            constant_block=constant_block,
+            setup_block=setup_block,
+            enter_block=enter_block,
+            exit_block=exit_block,
+            propagate_nan=propagate_nan,
+            extra_globals=extra_globals,
+        )
+
+    return impl
+
+
+def _install_windowed_min_max_fns():
+    overload(windowed_min)(make_windowed_min_max_function("min", "<"))
+    overload(windowed_max)(make_windowed_min_max_function("max", ">"))
+    overload(str_arr_min)(make_str_arr_min_max_overload("min"))
+    overload(str_arr_max)(make_str_arr_min_max_overload("max"))
+
+
+_install_windowed_min_max_fns()

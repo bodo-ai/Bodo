@@ -211,6 +211,27 @@ class IdxMinMaxColSet : public BasicColSet {
 };
 
 /**
+ * @brief Colset for boolxor_agg
+ *
+ */
+class BoolXorColSet : public BasicColSet {
+   public:
+    BoolXorColSet(std::shared_ptr<array_info> in_col, int ftype,
+                  bool combine_step, bool use_sql_rules);
+
+    virtual ~BoolXorColSet();
+
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+
+    virtual void update(const std::vector<grouping_info>& grp_infos);
+
+    virtual void combine(const grouping_info& grp_info);
+
+    virtual void eval(const grouping_info& grp_info);
+};
+
+/**
  * @brief Colset for Variance and Standard deviation operations.
  *
  */
@@ -333,7 +354,7 @@ class GeneralUdfColSet : public UdfColSet {
      * Fill in the input table for general UDF cfunc. See udf_general_fn
      * and aggregate.py::gen_general_udf_cb for more information.
      */
-    void fill_in_columns(std::shared_ptr<table_info> general_in_table,
+    void fill_in_columns(const std::shared_ptr<table_info>& general_in_table,
                          const grouping_info& grp_info) const;
 };
 
@@ -459,10 +480,10 @@ class HeadColSet : public BasicColSet {
 
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
-    void set_head_row_list(std::vector<int64_t> row_list);
+    void set_head_row_list(bodo::vector<int64_t>& row_list);
 
    private:
-    std::vector<int64_t> head_row_list;
+    bodo::vector<int64_t> head_row_list;
 };
 
 /**

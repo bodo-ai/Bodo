@@ -184,7 +184,6 @@ def create_binary_op_overload(op):
     # possible, e.g. dictionaries are compatible
 
     def overload_string_array_binary_op(lhs, rhs):
-
         # optimized paths for dictionary-encoded arrays
         opt_impl = bodo.libs.dict_arr_ext.get_binary_op_overload(op, lhs, rhs)
         if opt_impl is not None:
@@ -2160,7 +2159,6 @@ def str_arr_setitem(A, idx, val):
 
     # slice case
     if isinstance(idx, types.SliceType):
-
         if val == string_array_type:
 
             def impl_slice(A, idx, val):  # pragma: no cover
@@ -2209,7 +2207,6 @@ def str_arr_setitem(A, idx, val):
     # set scalar value using bool index
     # NOTE: this changes the array inplace after construction
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-
         if val == string_type:
 
             def impl_bool_scalar(A, idx, val):  # pragma: no cover
@@ -2282,7 +2279,6 @@ def overload_str_arr_ndim(A):
 
 @overload_method(StringArrayType, "astype", no_unliteral=True)
 def overload_str_arr_astype(A, dtype, copy=True):
-
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
         raise_bodo_error(

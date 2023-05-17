@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl
 import com.bodosql.calcite.table.CatalogTableImpl
+import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
@@ -31,7 +32,7 @@ class SnowflakeFilter private constructor(
             cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode,
             condition: RexNode, catalogTable: CatalogTableImpl
         ): SnowflakeFilter {
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION)
+            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)
             return SnowflakeFilter(cluster, newTraitSet, input, condition, catalogTable)
         }
     }

@@ -196,6 +196,7 @@ broadcasted_fixed_arg_functions = {
     "strcmp",
     "strtok",
     "substring",
+    "substring_suffix",
     "substring_index",
     "subtract_numeric",
     "tan",
@@ -235,4 +236,4 @@ broadcasted_fixed_arg_functions = {
 }
 
 
-broadcasted_variadic_functions = {"coalesce", "decode"}
+broadcasted_variadic_functions = {"coalesce", "decode", "greatest", "least"}

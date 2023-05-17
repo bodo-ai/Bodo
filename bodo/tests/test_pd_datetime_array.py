@@ -339,14 +339,31 @@ def test_tz_array_tz_scalar_comparison(cmp_op, memory_leak_check):
     check_func(func, (ts, arr))
 
 
+def test_tz_aware_array_tz_naive_scalar_comparison(cmp_op, memory_leak_check):
+    """Check that comparison operators work between
+    the tz-aware array and a tz-naive scalar
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    ts = pd.Timestamp("4/4/2022")
+    py_output = pd.array(
+        [cmp_op(arr[i].tz_localize(None), ts) for i in range(len(arr))]
+    )
+    check_func(func, (arr, ts), py_output=py_output)
+    py_output = pd.array(
+        [cmp_op(ts, arr[i].tz_localize(None)) for i in range(len(arr))]
+    )
+    check_func(func, (ts, arr), py_output=py_output)
+
+
 def test_scalar_different_tz_unsupported(cmp_op, memory_leak_check):
     """Check that comparison operators work between
     the tz-aware array and a tz-aware scalar with the same timezone.
     """
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
-    ts1 = pd.Timestamp("4/4/2022")
-    # Check that comparison is not support between tz-aware and naive
+    # Check different timezones aren't supported
+    ts1 = pd.Timestamp("4/4/2022", tz="US/Pacific")
     with pytest.raises(
         BodoError, match="requires both Timestamps share the same timezone"
     ):
@@ -355,16 +372,6 @@ def test_scalar_different_tz_unsupported(cmp_op, memory_leak_check):
         BodoError, match="requires both Timestamps share the same timezone"
     ):
         func(ts1, arr)
-    # Check different timezones aren't supported
-    ts2 = pd.Timestamp("4/4/2022", tz="US/Pacific")
-    with pytest.raises(
-        BodoError, match="requires both Timestamps share the same timezone"
-    ):
-        func(arr, ts2)
-    with pytest.raises(
-        BodoError, match="requires both Timestamps share the same timezone"
-    ):
-        func(ts2, arr)
 
 
 def test_tz_array_date_scalar_comparison(sample_tz, cmp_op, memory_leak_check):
@@ -466,13 +473,32 @@ def test_tz_array_date_series_comparison(sample_tz, cmp_op, memory_leak_check):
     check_func(func, (S, arr), py_output=pd.Series(py_output))
 
 
+def test_aware_array_tz_naive_array_comparison(cmp_op, memory_leak_check):
+    """Check that comparison operators throw exceptions between
+    the 2 arrays with different timezones.
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    arr1 = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    arr2 = pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30).values
+    py_output = pd.array(
+        [cmp_op(arr1[i].tz_localize(None), arr2[i]) for i in range(len(arr1))]
+    )
+    check_func(func, (arr1, arr2), py_output=py_output)
+    py_output = pd.array(
+        [cmp_op(arr2[i], arr1[i].tz_localize(None)) for i in range(len(arr1))]
+    )
+    check_func(func, (arr2, arr1), py_output=py_output)
+
+
 def test_array_different_tz_unsupported(cmp_op, memory_leak_check):
     """Check that comparison operators throw exceptions between
     the 2 arrays with different timezones.
     """
     func = bodo.jit(generate_comparison_ops_func(cmp_op))
     arr1 = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
-    arr2 = pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30).values
+    arr2 = pd.date_range(
+        start="2/1/2022", freq="8D2H30T", periods=30, tz="US/Pacific"
+    ).array
     # Check that comparison is not support between tz-aware and naive
     with pytest.raises(
         BodoError, match="requires both Timestamps share the same timezone"
@@ -482,18 +508,6 @@ def test_array_different_tz_unsupported(cmp_op, memory_leak_check):
         BodoError, match="requires both Timestamps share the same timezone"
     ):
         func(arr2, arr1)
-    # Check different timezones aren't supported
-    arr3 = pd.date_range(
-        start="2/1/2022", freq="8D2H30T", periods=30, tz="US/Pacific"
-    ).array
-    with pytest.raises(
-        BodoError, match="requires both Timestamps share the same timezone"
-    ):
-        func(arr1, arr3)
-    with pytest.raises(
-        BodoError, match="requires both Timestamps share the same timezone"
-    ):
-        func(arr3, arr1)
 
 
 def test_tz_convert_none(memory_leak_check):

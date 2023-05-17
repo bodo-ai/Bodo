@@ -908,7 +908,6 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         return gatherv_impl_int_arr
 
     if isinstance(data, DatetimeArrayType):
-
         tz = data.tz
 
         def impl_pd_datetime_arr(
@@ -1072,7 +1071,6 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                 )
             )
         for typ, input_blk in data.type_to_blk.items():
-
             # Output block may be different from input block in certain cases.
             # Specifically, if the input table has a string and dict encoded string block,
             # which will be fused in the output table block.
@@ -2985,7 +2983,6 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
         def tz_aware_getitem_impl(
             arr, ind, arr_start, total_len, is_1D
         ):  # pragma: no cover
-
             if ind >= total_len:
                 raise IndexError("index out of bounds")
 
@@ -3101,7 +3098,7 @@ def get_chunk_bounds(A):  # pragma: no cover
 
 
 @overload(get_chunk_bounds, jit_options={"cache": True})
-def get_chunk_bounds_overload(A):
+def get_chunk_bounds_overload(A, parallel=False):
     """get chunk boundary value (last element) of array A for each rank and make it
     available on all ranks.
     For example, given A data on rank 0 [1, 4, 6], and on rank 1 [7, 8, 11],
@@ -3109,7 +3106,10 @@ def get_chunk_bounds_overload(A):
 
     Designed for MERGE INTO support currently. Only supports Numpy int arrays, and
     handles empty chunk corner cases to support boundaries of sort in ascending order.
-    See https://bodo.atlassian.net/wiki/spaces/B/pages/1157529601/MERGE+INTO+Design
+    See https://bodo.atlassian.net/wiki/spaces/B/pages/1157529601/MERGE+INTO+Design.
+
+    Also used in implementation of window functions without partitions (e.g. ROW_NUMBER)
+    for shuffling the rows back to the right rank after computation.
 
     Args:
         A (Bodo Numpy int array): input array chunk on this rank
@@ -3120,7 +3120,12 @@ def get_chunk_bounds_overload(A):
     if not (isinstance(A, types.Array) and isinstance(A.dtype, types.Integer)):
         raise BodoError("get_chunk_bounds() only supports Numpy int input currently.")
 
-    def impl(A):  # pragma: no cover
+    def impl(A, parallel=False):  # pragma: no cover
+        if not parallel:
+            # In the replicated case this is expected to be a NO-OP. This path exists
+            # to avoid MPI calls in case we cannot optimize out this funciton for some reason.
+            return np.empty(0, np.int64)
+
         n_pes = get_size()
         all_bounds = np.empty(n_pes, np.int64)
         all_empty = np.empty(n_pes, np.int8)
@@ -3160,6 +3165,7 @@ c_alltoallv = types.ExternalFunction(
         types.int32,
     ),
 )
+
 
 # TODO: test
 # TODO: big alltoallv

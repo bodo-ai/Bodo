@@ -1547,8 +1547,24 @@ class DistributedAnalysis:
             # quantile doesn't affect input's distribution
             return
 
+        if fdef == ("approx_percentile", "bodo.libs.array_kernels"):
+            # quantile doesn't affect input's distribution
+            return
+
         if fdef == ("nunique", "bodo.libs.array_kernels"):
             # nunique doesn't affect input's distribution
+            return
+
+        if fdef == ("boolor_agg", "bodo.libs.array_kernels"):
+            # boolor_agg doesn't affect input's distribution
+            return
+
+        if fdef == ("booland_agg", "bodo.libs.array_kernels"):
+            # booland_agg doesn't affect input's distribution
+            return
+
+        if fdef == ("boolxor_agg", "bodo.libs.array_kernels"):
+            # boolxor_agg doesn't affect input's distribution
             return
 
         if fdef == ("series_str_dt64_astype", "bodo.hiframes.pd_timestamp_ext"):
@@ -1598,9 +1614,7 @@ class DistributedAnalysis:
         if (
             func_name in broadcasted_variadic_functions
             and func_mod == "bodo.libs.bodosql_array_kernels"
-        ):
-            # Note: this will fail if the tuple argument is not constant,
-            # but this should never happen because we control code generation
+        ) and not is_overload_constant_tuple(self.typemap[rhs.args[0].name]):
             elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
             assert (
                 elems is not None

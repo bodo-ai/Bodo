@@ -118,6 +118,7 @@ class IcebergParquetReader : public ParquetReader {
     const char* conn;
     const char* database_schema;
     const char* table_name;
+
     // List of the original Iceberg file names as relative paths.
     // For example if the absolute path was
     // /Users/bodo/iceberg_db/my_table/part01.pq and the iceberg directory is

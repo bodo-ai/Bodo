@@ -83,6 +83,11 @@ public class WindowAggCodeGen {
     windowOptimizedKernels.add("STDDEV");
     windowOptimizedKernels.add("STDDEV_SAMP");
     windowOptimizedKernels.add("STDDEV_POP");
+    windowOptimizedKernels.add("BOOLOR_AGG");
+    windowOptimizedKernels.add("BOOLAND_AGG");
+    windowOptimizedKernels.add("BOOLXOR_AGG");
+    windowOptimizedKernels.add("MIN");
+    windowOptimizedKernels.add("MAX");
 
     // Window functions that have a two-argument sliding-window kernel
     twoArgWindowOptimizedKernels.add("COVAR_SAMP");
@@ -109,11 +114,14 @@ public class WindowAggCodeGen {
     windowCodeExpressions.put("VAR_SAMP", "windowed_var_samp");
     windowCodeExpressions.put("VARIANCE_POP", "windowed_var_pop");
     windowCodeExpressions.put("VAR_POP", "windowed_var_pop");
+    windowCodeExpressions.put("BOOLOR_AGG", "windowed_boolor");
+    windowCodeExpressions.put("BOOLAND_AGG", "windowed_booland");
+    windowCodeExpressions.put("BOOLXOR_AGG", "windowed_boolxor");
+    windowCodeExpressions.put("MIN", "windowed_min");
+    windowCodeExpressions.put("MAX", "windowed_max");
 
     // Window functions that are still implemented via taking slices in a loop
     // and calling a Pandas method on the result
-    windowMethods.put("MIN", ".min()");
-    windowMethods.put("MAX", ".max()");
     windowMethods.put("COUNT_IF", ".sum()");
     windowMethods.put("KURTOSIS", ".kurtosis()");
     windowMethods.put("SKEW", ".skew()");
@@ -437,8 +445,6 @@ public class WindowAggCodeGen {
           // at the end.
         case "KURTOSIS":
         case "SKEW":
-        case "MIN":
-        case "MAX":
         case "COUNT_IF":
           needsToRevertSort |= hasOrder;
           loopAggNames.add(aggName);
@@ -568,8 +574,7 @@ public class WindowAggCodeGen {
     // Build the array to store the output
     addIndent(funcText, 2);
     funcText.append(outputArrayName).append(" = ");
-    funcText.append(
-        sqlTypeToNullableBodoArray(partitionLength, typs.get(i)) + "\n");
+    funcText.append(sqlTypeToNullableBodoArray(partitionLength, typs.get(i)) + "\n");
 
     // Load the input array
     addIndent(funcText, 2);
@@ -705,9 +710,7 @@ public class WindowAggCodeGen {
       } else {
         addIndent(na_arr_call, 3);
         na_arr_call.append(
-            String.format(
-                "arr%d = %s\n",
-                i, sqlTypeToNullableBodoArray(partitionLength, typ)));
+            String.format("arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, typ)));
       }
       addIndent(na_arr_call, 3);
       na_arr_call.append(String.format("for j in range(len(arr%d)):\n", i));
@@ -744,8 +747,7 @@ public class WindowAggCodeGen {
     } else {
       addIndent(fill_op, 3);
       fill_op.append(
-          String.format(
-              "arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, typ)));
+          String.format("arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, typ)));
     }
     addIndent(fill_op, 3);
     fill_op.append(String.format("for j in range(len(arr%d)):\n", i));
@@ -817,47 +819,81 @@ public class WindowAggCodeGen {
       switch (aggNames.get(i)) {
 
           // The functions that always have a float output
-        case "STDDEV":
-        case "STDDEV_POP":
-        case "STDDEV_SAMP":
-        case "VAR_POP":
-        case "VAR_SAMP":
-        case "VARIANCE_SAMP":
-        case "VARIANCE_POP":
+        case "KURTOSIS":
+        case "SKEW":
           funcText.append(
               "bodo.libs.float_arr_ext.alloc_float_array(" + partitionLength + ", bodo.float64)\n");
           break;
 
           // The functions that always have a (positive) integer output
         case "COUNT(*)":
+        case "COUNT_IF":
           funcText.append(
               "bodo.libs.int_arr_ext.alloc_int_array(" + partitionLength + ", bodo.uint32)\n");
           break;
 
-          // If MIN/MAX, verify that the inputs are not strings
-        case "MAX":
-        case "MIN":
-          if (SqlTypeName.STRING_TYPES.contains(typs.get(i).getSqlTypeName())) {
-            throw new BodoSQLCodegenException(
-                "Windowed aggregation function "
-                    + aggNames.get(i)
-                    + " not supported for SQL type "
-                    + typs.get(i).toString());
-          }
-
-          // Everything but the always float/int categories has the same
-          // dtype as the input array
+          // Everything else has the same dtype as the input array
         default:
-          funcText.append(
-              sqlTypeToNullableBodoArray(partitionLength, typs.get(i)) + "\n");
+          funcText.append(sqlTypeToNullableBodoArray(partitionLength, typs.get(i)) + "\n");
       }
     }
 
+    // Handle all of the function calls where each row uses the same slice of
+    // the entire column
+    List<Integer> constant_slices = new ArrayList<Integer>();
+    for (int i = 0; i < aggNames.size(); i++) {
+      Boolean lowerBounded = lowerBoundedFlags.get(i);
+      Boolean upperBounded = upperBoundedFlags.get(i);
+      if (lowerBounded || upperBounded) {
+        continue;
+      }
+      assertWithErrMsg(argsLists.get(i).size() == 1, aggNames.get(i) + " requires 1 input");
+      assertWithErrMsg(
+          argsLists.get(i).get(0).isDfCol(), aggNames.get(i) + " requires a column input");
+
+      constant_slices.add(i);
+
+      // If the aggregation is not COUNT_IF, set the entire array to zero if there
+      // are no non-null elements.
+      if (!aggNames.get(i).equals("COUNT_IF")) {
+        addIndent(funcText, 2);
+        funcText
+            .append("if sorted_df[")
+            .append(makeQuoted(argsLists.get(i).get(0).getExprString()))
+            .append("].count() == 0:\n");
+        addIndent(funcText, 3);
+        funcText.append("for i in range(").append(partitionLength).append("):\n");
+        addIndent(funcText, 4);
+        funcText
+            .append("bodo.libs.array_kernels.setna(")
+            .append(aggOutputs.get(i))
+            .append(", i)\n");
+        addIndent(funcText, 2);
+        funcText.append("else:\n");
+        addIndent(funcText, 1);
+      }
+
+      // Set the entire array equal to the result of calling the aggregation
+      // method on the entire input column
+      addIndent(funcText, 2);
+      funcText
+          .append(aggOutputs.get(i))
+          .append("[:] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(sorted_df[")
+          .append(makeQuoted(argsLists.get(i).get(0).getExprString()))
+          .append("]")
+          .append(windowMethods.get(aggNames.get(i)))
+          .append(")\n");
+    }
+
+    // Now loop across the rows and perform the slice-based aggregation for each
+    // window function column that was not already handled above.
     addIndent(funcText, 2);
     funcText.append("for i in range(" + partitionLength + "):\n");
 
     for (int i = 0; i < aggNames.size(); i++) {
-
+      if (constant_slices.contains(i)) {
+        continue;
+      }
       Boolean lowerBounded = lowerBoundedFlags.get(i);
       Boolean upperBounded = upperBoundedFlags.get(i);
       String lowerBound = lowerBounds.get(i);
@@ -978,7 +1014,7 @@ public class WindowAggCodeGen {
 
     // Default shift amount is 1
     Expr shiftAmount = new Expr.IntegerLiteral(1);
-    Expr fillValue = new Expr.None();
+    Expr fillValue = Expr.None.INSTANCE;
 
     // If there are 2 (or 3) arguments, use the 2nd argument to extract the shift amount
     if (num_arguments >= 2) {

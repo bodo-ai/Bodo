@@ -83,6 +83,11 @@ numeric_funcs_map = {
     "truncate": "TRUNCATE",
 }
 
+cond_funcs_map = {
+    "least": "LEAST",
+    "greatest": "GREATEST",
+}
+
 # TODO (srilman): Replace with | operation once upgrading to Python 3.9
 supported_funcs_no_arg_map = {
     **string_funcs_no_arg_map,
@@ -94,6 +99,7 @@ supported_funcs_map = {
     **supported_funcs_no_arg_map,
     **numeric_funcs_map,
     **string_funcs_map,
+    **cond_funcs_map,
 }
 
 supported_arrow_funcs_map = {
