@@ -540,46 +540,46 @@ struct array_info {
 std::shared_ptr<arrow::Array> to_arrow(
     const std::shared_ptr<const array_info> info);
 
-std::shared_ptr<array_info> alloc_array(int64_t length, int64_t n_sub_elems,
+std::unique_ptr<array_info> alloc_array(int64_t length, int64_t n_sub_elems,
                                         int64_t n_sub_sub_elems,
                                         bodo_array_type::arr_type_enum arr_type,
                                         Bodo_CTypes::CTypeEnum dtype,
                                         int64_t extra_null_bytes,
                                         int64_t num_categories);
 
-std::shared_ptr<array_info> alloc_numpy(int64_t length,
+std::unique_ptr<array_info> alloc_numpy(int64_t length,
                                         Bodo_CTypes::CTypeEnum typ_enum);
 
-std::shared_ptr<array_info> alloc_array_item(int64_t n_arrays,
+std::unique_ptr<array_info> alloc_array_item(int64_t n_arrays,
                                              int64_t n_total_items,
                                              Bodo_CTypes::CTypeEnum dtype);
-std::shared_ptr<array_info> alloc_categorical(int64_t length,
+std::unique_ptr<array_info> alloc_categorical(int64_t length,
                                               Bodo_CTypes::CTypeEnum typ_enum,
                                               int64_t num_categories);
 
-std::shared_ptr<array_info> alloc_nullable_array(
+std::unique_ptr<array_info> alloc_nullable_array(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     int64_t extra_null_bytes = 0);
 
-std::shared_ptr<array_info> alloc_nullable_array_no_nulls(
+std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes);
 
-std::shared_ptr<array_info> alloc_nullable_array_all_nulls(
+std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes);
 
-std::shared_ptr<array_info> alloc_string_array(int64_t length, int64_t n_chars,
+std::unique_ptr<array_info> alloc_string_array(int64_t length, int64_t n_chars,
                                                int64_t extra_null_bytes = 0);
 
-std::shared_ptr<array_info> alloc_list_string_array(
+std::unique_ptr<array_info> alloc_list_string_array(
     int64_t n_lists, std::shared_ptr<array_info> string_arr,
     int64_t extra_null_bytes);
 
-std::shared_ptr<array_info> alloc_list_string_array(int64_t n_lists,
+std::unique_ptr<array_info> alloc_list_string_array(int64_t n_lists,
                                                     int64_t n_strings,
                                                     int64_t n_chars,
                                                     int64_t extra_null_bytes);
 
-std::shared_ptr<array_info> alloc_dict_string_array(
+std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
     bool has_global_dictionary, bool has_deduped_local_dictionary);
 
@@ -593,7 +593,7 @@ std::shared_ptr<array_info> alloc_dict_string_array(
  * @return std::shared_ptr<array_info> A string type array info constructed from
  * the vector of strings.
  */
-std::shared_ptr<array_info> create_string_array(
+std::unique_ptr<array_info> create_string_array(
     bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<std::string> const& list_string);
 
@@ -609,7 +609,7 @@ std::shared_ptr<array_info> create_string_array(
  * @return std::shared_ptr<array_info> A list of strings type array info
  * constructed from the vector.
  */
-std::shared_ptr<array_info> create_list_string_array(
+std::unique_ptr<array_info> create_list_string_array(
     bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<bodo::vector<std::pair<std::string, bool>>> const&
         list_list_pair);
@@ -626,7 +626,7 @@ std::shared_ptr<array_info> create_list_string_array(
  * @param has_sorted_dictionary Is dict_arr sorted on this rank?
  * @return std::shared_ptr<array_info> The dictionary array.
  */
-std::shared_ptr<array_info> create_dict_string_array(
+std::unique_ptr<array_info> create_dict_string_array(
     std::shared_ptr<array_info> dict_arr,
     std::shared_ptr<array_info> indices_arr, bool has_global_dictionary = false,
     bool has_deduped_local_dictionary = false,

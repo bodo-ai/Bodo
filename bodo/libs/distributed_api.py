@@ -650,6 +650,19 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
         return impl_cat
 
+    if data == bodo.null_array_type:
+
+        def impl_null_array(
+            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+        ):  # pragma: no cover
+            # Gather the lengths of the null array
+            lengths = gather_scalar(len(data), allgather, root=root)
+            # Sum the results to get the total length
+            total_length = lengths.sum()
+            return bodo.libs.null_arr_ext.init_null_array(total_length)
+
+        return impl_null_array
+
     if isinstance(data, types.Array):
         typ_val = numba_to_c_type(data.dtype)
 

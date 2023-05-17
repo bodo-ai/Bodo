@@ -248,7 +248,6 @@ def box_dict_arr(typ, val, c):
     dict_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
     if typ == dict_str_arr_type:
-
         # box to Pandas ArrowStringArray to minimize boxing overhead
         from bodo.libs.array import array_info_type, array_to_info_codegen
 
@@ -273,7 +272,7 @@ def box_dict_arr(typ, val, c):
         return arr
 
     else:
-        # create a PyArrow dictionary array fron indices and data
+        # create a PyArrow dictionary array from indices and data
         # pa.DictionaryArray.from_arrays(dict_arr.data, dict_arr.indices)
         mod_name = c.context.insert_const_string(c.builder.module, "pyarrow")
         pa_class_obj = c.pyapi.import_module_noblock(mod_name)

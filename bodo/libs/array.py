@@ -73,6 +73,7 @@ ll.add_symbol(
 )
 ll.add_symbol("numpy_array_to_info", array_ext.numpy_array_to_info)
 ll.add_symbol("categorical_array_to_info", array_ext.categorical_array_to_info)
+ll.add_symbol("null_array_to_info", array_ext.null_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
 ll.add_symbol("interval_array_to_info", array_ext.interval_array_to_info)
 ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
@@ -82,6 +83,7 @@ ll.add_symbol("info_to_struct_array", array_ext.info_to_struct_array)
 ll.add_symbol("get_child_info", array_ext.get_child_info)
 ll.add_symbol("info_to_string_array", array_ext.info_to_string_array)
 ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
+ll.add_symbol("info_to_null_array", array_ext.info_to_null_array)
 ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
 ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
@@ -465,6 +467,30 @@ def array_to_info_codegen(context, builder, sig, args):
                     arr.meminfo,
                 ],
             )
+
+    # null array
+    if arr_type == bodo.null_array_type:
+        arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
+        # TODO: Add a null dtype in C++. Since adding C++ support enables
+        # passing the null array anywhere, including places where null arrays
+        # may not be supported, we initially allocate an int8 array that will
+        # be unused.
+        length = arr.length
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(64),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="null_array_to_info"
+        )
+        return builder.call(
+            fn_tp,
+            [
+                length,
+            ],
+        )
 
     # nullable integer/bool array
     if isinstance(
@@ -1006,6 +1032,35 @@ def info_to_array_codegen(context, builder, sig, args):
     # Numpy
     if isinstance(arr_type, types.Array):
         return _lower_info_to_array_numpy(arr_type, context, builder, in_info)
+
+    # null array
+    if arr_type == bodo.null_array_type:
+        arr = cgutils.create_struct_proxy(arr_type)(context, builder)
+        # Set the array as not empty
+        arr.not_empty = lir.Constant(lir.IntType(1), 1)
+        length_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),  # info
+                lir.IntType(64).as_pointer(),  # num_items
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="info_to_null_array"
+        )
+        builder.call(
+            fn_tp,
+            [
+                in_info,
+                length_ptr,
+            ],
+        )
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        arr.length = builder.load(length_ptr)
+        return arr._getvalue()
 
     # nullable integer/bool array
     if isinstance(
