@@ -346,3 +346,11 @@ def test_is_distinct_from_case_nullable_numeric(
         check_dtype=False,
         check_names=False,
     )
+
+
+def test_distinct_null(basic_df, spark_info, memory_leak_check):
+    """
+    Test DISTINCT with a null array
+    """
+    query = f"SELECT DISTINCT A, NULL as B from table1"
+    check_query(query, basic_df, spark_info, check_dtype=False)

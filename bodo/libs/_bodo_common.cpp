@@ -207,38 +207,38 @@ std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
     return AllocateBodoBuffer(size);
 }
 
-std::shared_ptr<array_info> alloc_numpy(int64_t length,
+std::unique_ptr<array_info> alloc_numpy(int64_t length,
                                         Bodo_CTypes::CTypeEnum typ_enum) {
     int64_t size = length * numpy_item_size[typ_enum];
     std::unique_ptr<BodoBuffer> buffer = AllocateBodoBuffer(size);
-    return std::make_shared<array_info>(
+    return std::make_unique<array_info>(
         bodo_array_type::NUMPY, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer)}));
 }
 
-std::shared_ptr<array_info> alloc_interval_array(
+std::unique_ptr<array_info> alloc_interval_array(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
     int64_t size = length * numpy_item_size[typ_enum];
     std::unique_ptr<BodoBuffer> left_buffer = AllocateBodoBuffer(size);
     std::unique_ptr<BodoBuffer> right_buffer = AllocateBodoBuffer(size);
-    return std::make_shared<array_info>(
+    return std::make_unique<array_info>(
         bodo_array_type::INTERVAL, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {std::move(left_buffer), std::move(right_buffer)}));
 }
 
-std::shared_ptr<array_info> alloc_categorical(int64_t length,
+std::unique_ptr<array_info> alloc_categorical(int64_t length,
                                               Bodo_CTypes::CTypeEnum typ_enum,
                                               int64_t num_categories) {
     int64_t size = length * numpy_item_size[typ_enum];
     std::unique_ptr<BodoBuffer> buffer = AllocateBodoBuffer(size);
-    return std::make_shared<array_info>(
+    return std::make_unique<array_info>(
         bodo_array_type::CATEGORICAL, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer)}),
         std::vector<std::shared_ptr<array_info>>({}), 0, 0, num_categories);
 }
 
-std::shared_ptr<array_info> alloc_nullable_array(
+std::unique_ptr<array_info> alloc_nullable_array(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes) {
     int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     int64_t size;
@@ -254,38 +254,38 @@ std::shared_ptr<array_info> alloc_nullable_array(
     std::unique_ptr<BodoBuffer> buffer = AllocateBodoBuffer(size);
     std::unique_ptr<BodoBuffer> buffer_bitmask =
         AllocateBodoBuffer(n_bytes * sizeof(uint8_t));
-    return std::make_shared<array_info>(
+    return std::make_unique<array_info>(
         bodo_array_type::NULLABLE_INT_BOOL, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {std::move(buffer), std::move(buffer_bitmask)}));
 }
 
-std::shared_ptr<array_info> alloc_nullable_array_no_nulls(
+std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes) {
     // Same as alloc_nullable_array but we set the null_bitmask
     // such that there are no null values in the output.
     // Useful for cases like allocating indices array of dictionary-encoded
     // string arrays such as input_file_name column where nulls are not possible
-    std::shared_ptr<array_info> arr =
+    std::unique_ptr<array_info> arr =
         alloc_nullable_array(length, typ_enum, extra_null_bytes);
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     memset(arr->null_bitmask(), 0xff, n_bytes);  // null not possible
     return arr;
 }
 
-std::shared_ptr<array_info> alloc_nullable_array_all_nulls(
+std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes) {
     // Same as alloc_nullable_array but we set the null_bitmask
     // such that all values are null values in the output.
     // Useful for cases like the iceberg void transform.
-    std::shared_ptr<array_info> arr =
+    std::unique_ptr<array_info> arr =
         alloc_nullable_array(length, typ_enum, extra_null_bytes);
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     memset(arr->null_bitmask(), 0x00, n_bytes);  // all nulls
     return arr;
 }
 
-std::shared_ptr<array_info> alloc_string_array(int64_t length, int64_t n_chars,
+std::unique_ptr<array_info> alloc_string_array(int64_t length, int64_t n_chars,
                                                int64_t extra_null_bytes) {
     // allocate data/offsets/null_bitmap arrays
     std::unique_ptr<BodoBuffer> data_buffer =
@@ -303,14 +303,14 @@ std::shared_ptr<array_info> alloc_string_array(int64_t length, int64_t n_chars,
     offsets_ptr[0] = 0;
     offsets_ptr[length] = n_chars;
 
-    return std::make_shared<array_info>(
+    return std::make_unique<array_info>(
         bodo_array_type::STRING, Bodo_CTypes::STRING, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {std::move(data_buffer), std::move(offsets_buffer),
              std::move(null_bitmap_buffer)}));
 }
 
-std::shared_ptr<array_info> alloc_dict_string_array(
+std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
     bool has_global_dictionary, bool has_deduped_local_dictionary) {
     // dictionary
@@ -320,7 +320,7 @@ std::shared_ptr<array_info> alloc_dict_string_array(
     std::shared_ptr<array_info> indices_data_arr =
         alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
 
-    return std::make_shared<array_info>(
+    return std::make_unique<array_info>(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
         std::vector<std::shared_ptr<BodoBuffer>>({}),
         std::vector<std::shared_ptr<array_info>>(
@@ -328,7 +328,7 @@ std::shared_ptr<array_info> alloc_dict_string_array(
         0, 0, 0, has_global_dictionary, has_deduped_local_dictionary, false);
 }
 
-std::shared_ptr<array_info> create_string_array(
+std::unique_ptr<array_info> create_string_array(
     bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<std::string> const& list_string) {
     size_t len = list_string.size();
@@ -342,7 +342,7 @@ std::shared_ptr<array_info> create_string_array(
         iter++;
     }
     size_t extra_bytes = 0;
-    std::shared_ptr<array_info> out_col =
+    std::unique_ptr<array_info> out_col =
         alloc_string_array(len, nb_char, extra_bytes);
     // update string array payload to reflect change
     char* data_o = out_col->data1();
@@ -365,7 +365,7 @@ std::shared_ptr<array_info> create_string_array(
     return out_col;
 }
 
-std::shared_ptr<array_info> create_list_string_array(
+std::unique_ptr<array_info> create_list_string_array(
     bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<bodo::vector<std::pair<std::string, bool>>> const&
         list_list_pair) {
@@ -392,7 +392,7 @@ std::shared_ptr<array_info> create_list_string_array(
     // been determined here (previous out_col was just an empty
     // dummy allocation).
 
-    std::shared_ptr<array_info> new_out_col =
+    std::unique_ptr<array_info> new_out_col =
         alloc_list_string_array(len, nb_string, nb_char, 0);
     offset_t* index_offsets_o = (offset_t*)new_out_col->data3();
     offset_t* data_offsets_o = (offset_t*)new_out_col->data2();
@@ -429,11 +429,11 @@ std::shared_ptr<array_info> create_list_string_array(
     return new_out_col;
 }
 
-std::shared_ptr<array_info> create_dict_string_array(
+std::unique_ptr<array_info> create_dict_string_array(
     std::shared_ptr<array_info> dict_arr,
     std::shared_ptr<array_info> indices_arr, bool has_global_dictionary,
     bool has_deduped_local_dictionary, bool has_sorted_dictionary) {
-    std::shared_ptr<array_info> out_col = std::make_shared<array_info>(
+    std::unique_ptr<array_info> out_col = std::make_unique<array_info>(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
         indices_arr->length, std::vector<std::shared_ptr<BodoBuffer>>({}),
         std::vector<std::shared_ptr<array_info>>({dict_arr, indices_arr}), 0, 0,
@@ -450,7 +450,7 @@ NRT_MemInfo* alloc_meminfo(int64_t length) {
 }
 
 /**
- * @brief destrcutor for array(item) array meminfo. Decrefs the underlying data,
+ * @brief destructor for array(item) array meminfo. Decrefs the underlying data,
  * offsets and null_bitmap arrays.
  *
  * Note: duplicate of dtor_array_item_array but with array_item_arr_payload
@@ -484,7 +484,7 @@ void dtor_array_item_arr(array_item_arr_payload* payload, int64_t size,
     }
 }
 
-std::shared_ptr<array_info> alloc_list_string_array(
+std::unique_ptr<array_info> alloc_list_string_array(
     int64_t length, std::shared_ptr<array_info> string_arr,
     int64_t extra_null_bytes) {
     std::unique_ptr<BodoBuffer> offsets_buffer =
@@ -500,14 +500,14 @@ std::shared_ptr<array_info> alloc_list_string_array(
     offsets_ptr[0] = 0;
     offsets_ptr[length] = string_arr->length;
 
-    return std::make_shared<array_info>(
+    return std::make_unique<array_info>(
         bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {std::move(offsets_buffer), std::move(null_bitmap_buffer)}),
         std::vector<std::shared_ptr<array_info>>({string_arr}));
 }
 
-std::shared_ptr<array_info> alloc_list_string_array(int64_t n_lists,
+std::unique_ptr<array_info> alloc_list_string_array(int64_t n_lists,
                                                     int64_t n_strings,
                                                     int64_t n_chars,
                                                     int64_t extra_null_bytes) {
@@ -613,7 +613,7 @@ NRT_MemInfo* alloc_array_item_arr_meminfo() {
  * -- n_sub_sub_elems is the total number of characters for
  *    the keys in the dictionary
  */
-std::shared_ptr<array_info> alloc_array(int64_t length, int64_t n_sub_elems,
+std::unique_ptr<array_info> alloc_array(int64_t length, int64_t n_sub_elems,
                                         int64_t n_sub_sub_elems,
                                         bodo_array_type::arr_type_enum arr_type,
                                         Bodo_CTypes::CTypeEnum dtype,

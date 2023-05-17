@@ -2,9 +2,12 @@
 """Array implementation for null array type. This is an array that contains
 all null values and can be cast to any other array type.
 """
+import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import (
+    NativeValue,
+    box,
     intrinsic,
     make_attribute_wrapper,
     models,
@@ -12,6 +15,8 @@ from numba.extending import (
     overload_attribute,
     overload_method,
     register_model,
+    typeof_impl,
+    unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
 
@@ -113,6 +118,42 @@ def init_null_array_equiv(self, scope, equiv_set, loc, args, kws):
 ArrayAnalysis._analyze_op_call_bodo_libs_null_arr_ext_init_null_array = (
     init_null_array_equiv
 )
+
+
+@typeof_impl.register(pa.NullArray)
+def typeof_null_array(val, c):
+    return null_array_type
+
+
+@box(NullArrayType)
+def box_null_arr(typ, val, c):
+    """Box null array into a pyarrow null array.
+    TODO: Convert to a Pandas array with a null pyarrow type
+    when we switch to Pandas 2.0.
+    """
+    null_array = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    len_obj = c.pyapi.long_from_longlong(null_array.length)
+
+    mod_name = c.context.insert_const_string(c.builder.module, "pyarrow")
+    pa_class_obj = c.pyapi.import_module_noblock(mod_name)
+    nulls_arr_obj = c.pyapi.call_method(pa_class_obj, "nulls", (len_obj,))
+
+    c.pyapi.decref(pa_class_obj)
+    c.pyapi.decref(len_obj)
+    c.context.nrt.decref(c.builder, typ, val)
+    return nulls_arr_obj
+
+
+@unbox(NullArrayType)
+def unbox_null_arr(typ, obj, c):
+    """Unbox a null array via the length."""
+    n_obj = c.pyapi.call_method(obj, "__len__", ())
+    n = c.pyapi.long_as_longlong(n_obj)
+    c.pyapi.decref(n_obj)
+    null_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    null_arr.length = n
+    null_arr.not_empty = lir.Constant(lir.IntType(1), 1)
+    return NativeValue(null_arr._getvalue())
 
 
 @overload(len, no_unliteral=True)
