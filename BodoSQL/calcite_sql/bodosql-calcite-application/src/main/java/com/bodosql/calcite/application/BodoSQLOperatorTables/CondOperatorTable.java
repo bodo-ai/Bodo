@@ -329,6 +329,7 @@ public class CondOperatorTable implements SqlOperatorTable {
               SqlKind.OTHER,
               ReturnTypes.BOOLEAN_NULLABLE,
               OperandTypes.or(OperandTypes.BOOLEAN, OperandTypes.NUMERIC))
+          .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
   // The same as BOOLAND_AGG except that it returns true if all of the inputs are true
@@ -338,6 +339,7 @@ public class CondOperatorTable implements SqlOperatorTable {
               SqlKind.OTHER,
               ReturnTypes.BOOLEAN_NULLABLE,
               OperandTypes.or(OperandTypes.BOOLEAN, OperandTypes.NUMERIC))
+          .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
   // The same as BOOLAND_AGG except that it returns true if exactly one of the inputs  is are true
@@ -347,6 +349,7 @@ public class CondOperatorTable implements SqlOperatorTable {
               SqlKind.OTHER,
               ReturnTypes.BOOLEAN_NULLABLE,
               OperandTypes.or(OperandTypes.BOOLEAN, OperandTypes.NUMERIC))
+          .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
   private List<SqlOperator> functionList =
