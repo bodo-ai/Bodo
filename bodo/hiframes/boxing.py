@@ -347,6 +347,7 @@ _one_to_one_type_to_enum_map = {
     string_type: SeriesDtypeEnum.STRING.value,
     bodo.bool_: SeriesDtypeEnum.Bool.value,
     types.none: SeriesDtypeEnum.NoneType.value,
+    null_array_type: SeriesDtypeEnum.NullArray.value,
 }
 
 # The reverse of the above map, Maps enum -> type
@@ -646,10 +647,6 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
     # dicts
     # bytes
     # floats
-
-    # Nullable arrays need special handling because they don't have a dtype
-    elif typ == null_array_type:
-        return [SeriesDtypeEnum.NullArray.value]
 
     # integer arrays need special handling, as integerArray's dtype is not a nullable integer
     elif isinstance(typ, IntegerArrayType):
