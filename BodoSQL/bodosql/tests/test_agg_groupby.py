@@ -802,7 +802,8 @@ def test_any_value(args, spark_info, memory_leak_check):
 )
 def test_boolor_booland_boolxor_agg(query, res, memory_leak_check):
     """Tests boolor_agg, booland_agg and boolxor_agg. These is done separately
-    from existing aggregation tests, as we need specific inputs to stress this function"""
+    from existing aggregation tests, as we need specific inputs to stress this function
+    """
 
     ctx = {
         "table1": pd.DataFrame(
@@ -932,6 +933,70 @@ def test_boolor_booland_boolxor_agg(query, res, memory_leak_check):
     }
     expected_output = pd.DataFrame({0: pd.Series(res, dtype="boolean")})
 
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output,
+    )
+
+
+@pytest.mark.slow
+def test_booland_agg_having(memory_leak_check):
+    """Test having with booland_agg aggregation in the condition"""
+    query = (
+        "SELECT G, boolor_agg(B) FROM table1 GROUP BY G HAVING booland_agg(B = True)"
+    )
+    expected_output = pd.DataFrame({"0: ": [4, 5, 6], "1: ": [True, True, True]})
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "B": pd.Series(
+                    [
+                        # Group 0: all NULL
+                        None,
+                        None,
+                        None,
+                        None,
+                        # Group 1: all false
+                        False,
+                        False,
+                        False,
+                        False,
+                        # Group 2: one true
+                        True,
+                        False,
+                        False,
+                        False,
+                        # Group 3: two null, one true
+                        None,
+                        True,
+                        None,
+                        False,
+                        # Group 4: two null, two true
+                        True,
+                        None,
+                        True,
+                        None,
+                        # Group 5: three null, one true
+                        None,
+                        True,
+                        None,
+                        None,
+                        # Group 6: all true
+                        True,
+                        True,
+                        True,
+                        True,
+                    ],
+                    dtype=pd.BooleanDtype(),
+                ),
+                "G": pd.Series(list(range(7))).repeat(4).values,
+            }
+        )
+    }
     check_query(
         query,
         ctx,
