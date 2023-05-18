@@ -4641,8 +4641,8 @@ def test_stream_join_basic(memory_leak_check):
     from bodo.libs.stream_join import (
         delete_join_state,
         init_join_state,
-        join_build_get_batch,
-        join_probe_get_batch,
+        join_build_consume_batch,
+        join_probe_consume_batch,
     )
 
     conn_str = bodo.tests.utils.get_snowflake_connection_string(
@@ -4702,7 +4702,7 @@ def test_stream_join_basic(memory_leak_check):
         )
         while True:
             table1, is_last1 = read_arrow_next(reader1)
-            join_build_get_batch(join_state, table1, is_last1)
+            join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
 
@@ -4715,7 +4715,7 @@ def test_stream_join_basic(memory_leak_check):
         out_dfs = []
         while True:
             table2, is_last2 = read_arrow_next(reader2)
-            out_table = join_probe_get_batch(
+            out_table = join_probe_consume_batch(
                 join_state, table2, out_table_type, is_last2
             )
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
