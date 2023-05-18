@@ -22,3 +22,4 @@ RUN cd mpich-3.3.2 ; make ; make install
 # Install remaining build dependencies for Bodo
 RUN yum install -y openssl-devel
 RUN yum install -y boost-devel
+RUN yum install -y hdf5-mpich-devel

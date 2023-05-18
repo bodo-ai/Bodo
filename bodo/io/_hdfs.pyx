@@ -1,4 +1,4 @@
-# Copied from https://github.com/apache/arrow/blob/master/python/pyarrow/_hdfs.pyx
+# Copied from https://github.com/apache/arrow/blob/apache-arrow-11.0.0/python/pyarrow/_hdfs.pyx
 # See comment in bodo/io/__init__.py for why this is needed.
 # See our modification to this file below where it says "bodo change".
 
@@ -21,11 +21,11 @@
 
 # cython: language_level = 3
 
-from pyarrow.lib cimport check_status
+from pyarrow._fs cimport FileSystem
 from pyarrow.includes.common cimport *
 from pyarrow.includes.libarrow cimport *
 from pyarrow.includes.libarrow_fs cimport *
-from pyarrow._fs cimport FileSystem
+from pyarrow.lib cimport check_status
 
 from pyarrow.lib import frombytes, tobytes
 from pyarrow.util import _stringify_path

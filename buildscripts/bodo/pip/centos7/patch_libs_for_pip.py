@@ -49,8 +49,10 @@ def patch_lib(fpath, new_libmpi_name, arrow_libs):
     # `auditwheel repair` (which runs before this script) bundles Arrow libraries with Bodo,
     # and includes a hash in their filename (for example: libarrow-777f8346.so.500). But for
     # Bodo to work correctly with pyarrow, it needs to use the same libraries (the library files
-    # that pyarrow loads at runtime), so we have to rename to their original names
-    regexp = re.compile("lib(.*)-.*\.so\.(\d+)$")
+    # that pyarrow loads at runtime), so we have to rename to their original names.
+    # libarrow_python doesn't have a version at the end (it's of the form libarrow_python-1fd610cd.so
+    # and not libarrow_python-1fd610cd.so.1100) like the other Arrow libs.
+    regexp = re.compile("lib(.*)-.*\.so(\.(\d+))*$")
     for arrow_lib in arrow_libs:
         m = regexp.match(arrow_lib)
         libname = m.group(1)

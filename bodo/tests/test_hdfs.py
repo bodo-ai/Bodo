@@ -144,7 +144,8 @@ def test_csv_data1(datapath, hdfs_datapath):
         dtype={"A": int, "B": float, "C": float, "D": int},
     )
 
-    check_func(test_impl, (hdfs_fname,), py_output=py_output)
+    # Need check_dtype=False because of nullable floats
+    check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
 
 
 def test_csv_data_date1(datapath, hdfs_datapath):
@@ -170,7 +171,8 @@ def test_csv_data_date1(datapath, hdfs_datapath):
         parse_dates=[2],
     )
 
-    check_func(test_impl, (hdfs_fname,), py_output=py_output)
+    # Need check_dtype=False because of nullable floats
+    check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
 
 
 def test_hdfs_read_json(datapath, hdfs_datapath):
