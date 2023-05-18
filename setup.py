@@ -247,6 +247,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_shuffle.cpp",
     "bodo/libs/_str_ext.cpp",
     "bodo/libs/iceberg_transforms.cpp",
+    "bodo/libs/_stream_join.cpp",
 ]
 ext_metadata["depends"] += [
     "bodo/io/_bodo_file_reader.h",
@@ -286,6 +287,7 @@ ext_metadata["depends"] += [
     "bodo/libs/_shuffle.h",
     "bodo/libs/hyperloglog.hpp",
     "bodo/libs/iceberg_transforms.h",
+    "bodo/libs/_stream_join.h",
     "bodo/libs/simd-block-fixed.h",
 ]
 
