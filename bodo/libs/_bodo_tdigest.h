@@ -1,6 +1,6 @@
 // Monkey-patch of the Arrow tdigest library
 // https://github.com/apache/arrow/blob/5de56928e0fe43f02005552eee058de57ffb2682/cpp/src/arrow/util/tdigest.h
-// https://github.com/apache/arrow/blob/apache-arrow-9.0.0/cpp/src/arrow/util/tdigest.h
+// https://github.com/apache/arrow/blob/apache-arrow-11.0.0/cpp/src/arrow/util/tdigest.h
 #pragma once
 
 #include <cmath>

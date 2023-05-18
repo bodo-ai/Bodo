@@ -140,6 +140,13 @@ int64_t SizeClass::findUnmappedFrame() noexcept {
 }
 
 int64_t SizeClass::AllocateFrame(OwningSwip swip) {
+    // Get a lock on the SizeClass state for the duration
+    // of this function. This is cheaper than getting it
+    // for individual sub-operations and avoids potential
+    // deadlocks. 'scoped_lock' guarantees that the lock
+    // will be released when the function ends (even if
+    // there's an exception).
+    std::scoped_lock lock(this->mtx_);
     int64_t frame_idx = this->findUnmappedFrame();
     if (frame_idx == -1) {
         return -1;
@@ -154,6 +161,13 @@ int64_t SizeClass::AllocateFrame(OwningSwip swip) {
 }
 
 void SizeClass::FreeFrame(uint64_t idx) {
+    // Get a lock on the SizeClass state for the duration
+    // of this function. This is cheaper than getting it
+    // for individual sub-operations and avoids potential
+    // deadlocks. 'scoped_lock' guarantees that the lock
+    // will be released when the function ends (even if
+    // there's an exception).
+    std::scoped_lock lock(this->mtx_);
     if (idx >= this->capacity_) {
         throw std::runtime_error("FreeFrame: Frame Index is out of bounds!");
     }
@@ -370,9 +384,9 @@ size_t BufferPool::num_size_classes() const {
     return this->size_classes_.size();
 }
 
-int64_t BufferPool::size_align(int64_t size) {
-    const auto remainder = size % this->alignment_;
-    return (remainder == 0) ? size : (size + this->alignment_ - remainder);
+int64_t BufferPool::size_align(int64_t size, int64_t alignment) {
+    const auto remainder = size % alignment;
+    return (remainder == 0) ? size : (size + alignment - remainder);
 }
 
 int64_t BufferPool::max_memory() const { return stats_.max_memory(); }
@@ -380,8 +394,6 @@ int64_t BufferPool::max_memory() const { return stats_.max_memory(); }
 int64_t BufferPool::bytes_allocated() const { return stats_.bytes_allocated(); }
 
 std::string BufferPool::backend_name() const { return "bodo"; }
-
-uint16_t BufferPool::alignment() const { return this->alignment_; }
 
 int64_t BufferPool::find_size_class_idx(int64_t size) const {
     if (static_cast<uint64_t>(size) > this->size_class_bytes_.back()) {
@@ -398,9 +410,15 @@ inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
     memset(ptr + size, 0, static_cast<size_t>(capacity - size));
 }
 
-::arrow::Status BufferPool::Allocate(int64_t size, uint8_t** out) {
+::arrow::Status BufferPool::Allocate(int64_t size, int64_t alignment,
+                                     uint8_t** out) {
     if (size < 0) {
         return ::arrow::Status::Invalid("Negative allocation size requested.");
+    }
+
+    if ((alignment <= 0) || ((alignment & (alignment - 1)) != 0)) {
+        return ::arrow::Status::Invalid(
+            "Alignment must be a positive number and a power of 2.");
     }
 
     // Copied from Arrow (they are probably just being conservative for
@@ -415,7 +433,7 @@ inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
         return ::arrow::Status::OK();
     }
 
-    const int64_t aligned_size = this->size_align(size);
+    const int64_t aligned_size = this->size_align(size, alignment);
 
     if (aligned_size <= static_cast<int64_t>(this->malloc_threshold_)) {
         // Use malloc
@@ -437,16 +455,16 @@ inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
         //     and seems to be what is generally recommended. The only
         //     requirement is that the allocation size must be a multiple of the
         //     requested alignment, which we do in size_align already.
-        // malloc does 16-bit alignment by default, so we can use it for
+        // malloc does 16B alignment by default, so we can use it for
         // those cases.
         // All these allocations can be free-d using 'free'.
-        void* result = this->alignment_ > kMinAlignment
-                           ? ::aligned_alloc(this->alignment_, aligned_size)
+        void* result = alignment > kMinAlignment
+                           ? ::aligned_alloc(alignment, aligned_size)
                            : ::malloc(aligned_size);
         if (result == nullptr) {
             // XXX This is an unlikely branch, so it would
             // be good to indicate that to the compiler
-            // similar to how Velox does it using "foggy".
+            // similar to how Velox does it using "folly".
             return ::arrow::Status::UnknownError(
                 "Failed to allocate required bytes.");
         }
@@ -459,10 +477,14 @@ inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
         this->zero_padding(static_cast<uint8_t*>(result), size, aligned_size);
 
     } else {
+        // Mmap-ed memory is always page (typically 4096B) aligned
+        // (https://stackoverflow.com/questions/42259495/does-mmap-return-aligned-pointer-values).
+        static long page_size = sysconf(_SC_PAGE_SIZE);
+        if (alignment > page_size) {
+            return ::arrow::Status::Invalid(
+                "Requested alignment higher than max supported alignment.");
+        }
         // Use one of the mmap-ed buffer frames.
-        // Mmap-ed memory is always (at-least) 64-byte aligned
-        // (https://stackoverflow.com/questions/42259495/does-mmap-return-aligned-pointer-values)
-        // so we don't need to worry about that.
         int64_t size_class_idx = this->find_size_class_idx(aligned_size);
 
         if (size_class_idx == -1) {
@@ -523,7 +545,7 @@ inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
 }
 
 std::tuple<bool, int64_t, int64_t, int64_t> BufferPool::get_alloc_details(
-    uint8_t* buffer, int64_t size) {
+    uint8_t* buffer, int64_t size, int64_t alignment) {
     if (size == -1) {
         // If we don't know the size, we need to find the buffer frame
         // (if there is one).
@@ -540,7 +562,7 @@ std::tuple<bool, int64_t, int64_t, int64_t> BufferPool::get_alloc_details(
     } else {
         // To match Allocate, get aligned_size before checking
         // for the size class.
-        const int64_t aligned_size = this->size_align(size);
+        const int64_t aligned_size = this->size_align(size, alignment);
         if (aligned_size <= static_cast<int64_t>(this->malloc_threshold_)) {
             return std::make_tuple(false, -1, -1, aligned_size);
         } else {
@@ -574,7 +596,7 @@ void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
     }
 }
 
-void BufferPool::Free(uint8_t* buffer, int64_t size) {
+void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     // Handle zero case.
     if (buffer == kZeroSizeArea) {
         if (size > 0) {  // neither 0 nor -1 (unknown)
@@ -591,7 +613,7 @@ void BufferPool::Free(uint8_t* buffer, int64_t size) {
     }
 
     auto [is_mmap_alloc, size_class_idx, frame_idx, size_freed] =
-        this->get_alloc_details(buffer, size);
+        this->get_alloc_details(buffer, size, alignment);
 
     this->free_helper(buffer, is_mmap_alloc, size_class_idx, frame_idx,
                       size_freed);
@@ -601,7 +623,7 @@ void BufferPool::Free(uint8_t* buffer, int64_t size) {
 }
 
 ::arrow::Status BufferPool::Reallocate(int64_t old_size, int64_t new_size,
-                                       uint8_t** ptr) {
+                                       int64_t alignment, uint8_t** ptr) {
     if (new_size < 0) {
         return ::arrow::Status::Invalid(
             "Negative reallocation size requested.");
@@ -619,17 +641,17 @@ void BufferPool::Free(uint8_t* buffer, int64_t size) {
                          "be 0 or unknown."
                       << std::endl;
         }
-        return this->Allocate(new_size, ptr);
+        return this->Allocate(new_size, alignment, ptr);
     }
 
     if (new_size == 0) {
-        this->Free(previous_ptr, old_size);
+        this->Free(previous_ptr, old_size, alignment);
         *ptr = kZeroSizeArea;
         return ::arrow::Status::OK();
     }
 
     auto [is_mmap_alloc, size_class_idx, frame_idx, old_size_aligned] =
-        this->get_alloc_details(previous_ptr, old_size);
+        this->get_alloc_details(previous_ptr, old_size, alignment);
 
     // In case of an mmap frame: if new_size still fits, it's a NOP.
     // Note that we only do this when new_size >= old_size, because
@@ -646,7 +668,8 @@ void BufferPool::Free(uint8_t* buffer, int64_t size) {
 
     uint8_t* out = nullptr;
     // Allocate new_size
-    CHECK_ARROW_MEM(this->Allocate(new_size, &out), "Allocation failed!");
+    CHECK_ARROW_MEM(this->Allocate(new_size, alignment, &out),
+                    "Allocation failed!");
     // Copy over the contents
     memcpy(out, *ptr, static_cast<size_t>(std::min(new_size, old_size)));
     // Free original memory (re-use information from get_alloc_details output)

@@ -940,6 +940,7 @@ def test_np_io1(datapath, memory_leak_check):
 
 def test_np_io2(datapath, memory_leak_check):
     fname = datapath("np_file1.dat")
+
     # parallel version
     def test_impl():
         A = np.fromfile(fname, np.float64)
@@ -1306,7 +1307,7 @@ def test_csv_header_write_read(datapath, memory_leak_check):
         "bodo_csv_header_test_1D_var.csv",
     )
     args = [arg_seq, arg_1D, arg_1D_var]
-    for (func, df_arg, fname_arg) in args:
+    for func, df_arg, fname_arg in args:
         with ensure_clean(fname_arg):
             func(df_arg, fname_arg)
             check_func(read_impl, (fname_arg,), py_output=pd_res)
@@ -2366,6 +2367,7 @@ def test_csv_skiprows_list_chunksize(datapath, memory_leak_check):
     Test pd.read_csv skiprows as list with chunksize
     """
     fname = datapath("example.csv")
+
     # list + chunksize (each rank gets a chunk)
     # (include case where rank's chunk start_pos and end_pos is inside a skipped row)
     def impl1(fname):
@@ -3030,7 +3032,6 @@ def check_to_csv_string_output(df, impl):
 
 @pytest.mark.slow
 def test_csv_non_constant_filepath_error(datapath):
-
     f1 = datapath("csv_data_cat1.csv")
 
     @bodo.jit
@@ -3089,7 +3090,6 @@ def test_csv_non_constant_filepath_error(datapath):
 
 @pytest.mark.slow
 def test_json_non_constant_filepath_error(datapath):
-
     f1 = datapath("example.json")
 
     @bodo.jit
@@ -3150,7 +3150,6 @@ def test_json_non_constant_filepath_error(datapath):
 
 @pytest.mark.slow
 def test_excel_non_constant_filepath_error(datapath):
-
     f1 = datapath("data.xlsx")
 
     @bodo.jit

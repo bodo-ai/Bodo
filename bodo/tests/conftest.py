@@ -377,15 +377,16 @@ def hdfs_dir(hadoop_server, datapath):
     """
     create a directory in hdfs and add files to it
     """
-    hdfs3 = pytest.importorskip("hdfs3")
-    from hdfs3 import HDFileSystem
+    from pyarrow.fs import HadoopFileSystem as HDFileSystem
+    from pyarrow.fs import LocalFileSystem, copy_files
 
     host, port = hadoop_server
     dir_name = "bodo-test"
 
     if bodo.get_rank() == 0:
         hdfs = HDFileSystem(host=host, port=port)
-        hdfs.mkdir("/" + dir_name)
+        local_fs = LocalFileSystem()
+        hdfs.create_dir("/" + dir_name)
         test_hdfs_files = [
             ("csv_data1.csv", datapath("csv_data1.csv")),
             ("csv_data_date1.csv", datapath("csv_data_date1.csv")),
@@ -395,34 +396,34 @@ def hdfs_dir(hadoop_server, datapath):
         ]
         for fname, path in test_hdfs_files:
             formatted_fname = "/{}/{}".format(dir_name, fname)
-            hdfs.put(path, formatted_fname)
+            copy_files(path, formatted_fname, local_fs, hdfs)
 
-        hdfs.mkdir("/bodo-test/int_nulls_multi.pq")
+        hdfs.create_dir("/bodo-test/int_nulls_multi.pq")
         prefix = datapath("int_nulls_multi.pq")
         pat = prefix + "/*.snappy.parquet"
         int_nulls_multi_parts = [f for f in glob.glob(pat)]
         for path in int_nulls_multi_parts:
             fname = path[len(prefix) + 1 :]
             fname = "/{}/int_nulls_multi.pq/{}".format(dir_name, fname)
-            hdfs.put(path, fname)
+            copy_files(path, fname, local_fs, hdfs)
 
-        hdfs.mkdir("/bodo-test/example_single.json")
+        hdfs.create_dir("/bodo-test/example_single.json")
         prefix = datapath("example_single.json")
         pat = prefix + "/*.json"
         example_single_parts = [f for f in glob.glob(pat)]
         for path in example_single_parts:
             fname = path[len(prefix) + 1 :]
             fname = "/{}/example_single.json/{}".format(dir_name, fname)
-            hdfs.put(path, fname)
+            copy_files(path, fname, local_fs, hdfs)
 
-        hdfs.mkdir("/bodo-test/example_multi.json")
+        hdfs.create_dir("/bodo-test/example_multi.json")
         prefix = datapath("example_multi.json")
         pat = prefix + "/*.json"
         example_multi_parts = [f for f in glob.glob(pat)]
         for path in example_multi_parts:
             fname = path[len(prefix) + 1 :]
             fname = "/{}/example_multi.json/{}".format(dir_name, fname)
-            hdfs.put(path, fname)
+            copy_files(path, fname, local_fs, hdfs)
 
     bodo.barrier()
     return dir_name

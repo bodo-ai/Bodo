@@ -1,3 +1,5 @@
+import mmap
+
 import pyarrow as pa
 import pyarrow.lib
 import pytest
@@ -151,6 +153,10 @@ def test_malloc_allocation():
     # go through malloc
     allocation: BufferPoolAllocation = pool.allocate(5 * 1024)
 
+    # Verify that default allocation is 64B
+    assert allocation.alignment == 64
+    assert allocation.get_ptr_as_int() % 64 == 0
+
     # Verify stats after allocation
     assert pool.bytes_allocated() == 5 * 1024
     assert pool.max_memory() == 5 * 1024
@@ -197,6 +203,10 @@ def test_mmap_smallest_size_class_allocation():
 
     # Allocate 6KiB+1 (minimum amount to allocate through mmap)
     alloc1: BufferPoolAllocation = pool.allocate((6 * 1024) + 1)
+
+    # Verify that default allocation is 64B
+    assert alloc1.alignment == 64
+    assert alloc1.get_ptr_as_int() % 64 == 0
 
     # Verify stats
     assert pool.bytes_allocated() == 8 * 1024
@@ -264,6 +274,10 @@ def test_mmap_medium_size_classes_allocation():
 
     # Allocate 12KiB (in the 16KiB SizeClass)
     alloc1: BufferPoolAllocation = pool.allocate(12 * 1024)
+
+    # Verify that default allocation is 64B
+    assert alloc1.alignment == 64
+    assert alloc1.get_ptr_as_int() % 64 == 0
 
     # Verify stats
     assert pool.bytes_allocated() == 16 * 1024
@@ -349,6 +363,10 @@ def test_mmap_largest_size_class_allocation():
     # Allocate 3MiB (in the 4MiB SizeClass)
     alloc1: BufferPoolAllocation = pool.allocate(3 * 1024 * 1024)
 
+    # Verify that default allocation is 64B
+    assert alloc1.alignment == 64
+    assert alloc1.get_ptr_as_int() % 64 == 0
+
     # Verify stats
     assert pool.bytes_allocated() == 4 * 1024 * 1024
     assert pool.max_memory() == 4 * 1024 * 1024
@@ -415,6 +433,81 @@ def test_larger_than_pool_allocation():
 
     # Delete pool (to be conservative)
     del pool
+
+
+def test_alignment():
+    """
+    Test that setting the alignment during allocations
+    works as expected.
+    """
+
+    def size_align(size, alignment):
+        remainder = size % alignment
+        return size if (remainder == 0) else (size + alignment - remainder)
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(
+        memory_size=8, min_size_class=8, max_num_size_classes=10
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+    malloc_threshold = int(0.75 * 8 * 1024)
+
+    # Test with malloc/mmap and small/medium/large alignments.
+    for size, alignment in [
+        (5 * 1024, 16),  # Should go through malloc
+        (5 * 1024, 32),  # Should go through malloc
+        (5 * 1024, 64),  # Should go through malloc
+        (5 * 1024, 128),  # Should go through malloc
+        (14 * 1024, 16),  # Should go through mmap
+        (14 * 1024, 32),  # Should go through mmap
+        (14 * 1024, 64),  # Should go through mmap
+        (14 * 1024, 128),  # Should go through mmap
+        (
+            1024,
+            4096,
+        ),  # Should go through malloc
+        (
+            5 * 1024,
+            4096,
+        ),  # Would usually be malloc, but large alignment should force it to go through mmap
+    ]:
+        # Aligned size is what the BufferPool should actually try to allocate.
+        aligned_size = size_align(size, alignment)
+        # Collect state before allocation
+        bytes_allocated_before = pool.bytes_allocated()
+        allocation: BufferPoolAllocation = pool.allocate(size, alignment=alignment)
+        bytes_allocated_after = pool.bytes_allocated()
+        # Check that alignment matches up as expected
+        assert allocation.alignment == alignment
+        assert allocation.get_ptr_as_int() % alignment == 0
+        # Check that actual allocation size is >= aligned_size.
+        # In case of malloc, it should be exactly aligned_size.
+        # In case of mmap frame, it might be higher.
+        if aligned_size <= malloc_threshold:
+            assert (bytes_allocated_after - bytes_allocated_before) == aligned_size
+        else:
+            assert (bytes_allocated_after - bytes_allocated_before) >= aligned_size
+        pool.free(allocation)
+
+    # Trying to allocate with alignment larger than page-size should error
+    with pytest.raises(
+        ValueError, match="Requested alignment higher than max supported alignment."
+    ):
+        page_size = mmap.PAGESIZE
+        _: BufferPoolAllocation = pool.allocate(20 * 1024, page_size * 2)
+
+    # Trying to allocate with non power of 2 alignment should error out
+    with pytest.raises(
+        ValueError, match="Alignment must be a positive number and a power of 2."
+    ):
+        # Malloc
+        _: BufferPoolAllocation = pool.allocate(10, 48)
+
+    with pytest.raises(
+        ValueError, match="Alignment must be a positive number and a power of 2."
+    ):
+        # Mmap
+        _: BufferPoolAllocation = pool.allocate(20 * 1024, 48)
 
 
 def test_larger_than_available_space_allocation():

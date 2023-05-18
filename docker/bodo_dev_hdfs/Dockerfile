@@ -29,9 +29,9 @@ ENV HADOOP_MAPRED_HOME=$HADOOP_HOME
 RUN wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-${hdfs}/hadoop-${hdfs}.tar.gz" | tar -xzf - -C /opt
 
 # copy hadoop configuration for pseudo-distributed
-COPY core-site.xml $HADOOP_HOME/etc/hadoop/
-COPY hdfs-site.xml $HADOOP_HOME/etc/hadoop/
-COPY reset_hdfs.sh /root
+COPY docker/bodo_dev_hdfs/core-site.xml $HADOOP_HOME/etc/hadoop/
+COPY docker/bodo_dev_hdfs/hdfs-site.xml $HADOOP_HOME/etc/hadoop/
+COPY docker/bodo_dev_hdfs/reset_hdfs.sh /root
 
 # configure ssh
 RUN ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa

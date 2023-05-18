@@ -7,6 +7,7 @@
 #include <arrow/memory_pool.h>
 #include <arrow/stl_allocator.h>
 #include <iostream>
+#include <mutex>
 
 // TODO Tell the compiler that the branch is unlikely.
 #define CHECK_ARROW_MEM(expr, msg)                                      \
@@ -88,12 +89,18 @@ class SizeClass {
      * @brief True if 'ptr' is in the address range of this SizeClass. Checks
      * that ptr is at a size class page boundary.
      *
+     * NOTE: This function is deterministic and therefore doesn't
+     * need to be thread safe.
+     *
      * @param ptr Pointer to check
      */
     bool isInRange(uint8_t* ptr) const;
 
     /**
      * @brief Get the address for the frame at index idx.
+     *
+     * NOTE: This function is deterministic and therefore doesn't
+     * need to be thread safe.
      *
      * @param idx Frame Index
      * @return uint8_t* Address of the frame.
@@ -102,6 +109,9 @@ class SizeClass {
 
     /**
      * @brief Get the index of the frame at which ptr starts.
+     *
+     * NOTE: This function is deterministic and therefore doesn't
+     * need to be thread safe.
      *
      * @param ptr Pointer to the start of the frame
      * @return uint64_t Frame Index
@@ -117,6 +127,8 @@ class SizeClass {
      * This will return -1 in case an empty frame
      * wasn't found. The caller must handle this.
      *
+     * NOTE: This function is thread safe.
+     *
      * @param swip Swip to store for this frame.
      * @return int64_t Index of the allocated frame.
      */
@@ -128,6 +140,8 @@ class SizeClass {
      * associated with the frame, unpin and unmap the
      * frame and clear the swip metadata.
      *
+     * NOTE: This function is thread safe.
+     *
      * @param idx Frame index to free.
      */
     void FreeFrame(uint64_t idx);
@@ -136,6 +150,8 @@ class SizeClass {
      * @brief Same as FreeFrame(uint64_t idx), but
      * the frame is specified using the start of the
      * frame.
+     *
+     * NOTE: This function is thread safe.
      *
      * @param ptr Pointer to the start of the frame.
      */
@@ -148,12 +164,19 @@ class SizeClass {
     inline uint64_t getNumBlocks() const { return this->capacity_; }
 
     /// @brief Check if frame at index 'idx' is mapped.
+    /// Note: Not thread safe.
     bool isFrameMapped(uint64_t idx) const;
 
     /// @brief Check if frame at index 'idx' is pinned.
+    /// Note: Not thread safe.
     bool isFramePinned(uint64_t idx) const;
 
    private:
+    /// NOTE: The private functions are not thread safe
+    /// on their own. They assume that the thread entered
+    /// through some public function and obtained a
+    /// lock to read/modify the state.
+
     /// @brief Number of buffer frames.
     const uint64_t capacity_;
 
@@ -233,6 +256,15 @@ class SizeClass {
      * frame was found.
      */
     int64_t findUnmappedFrame() noexcept;
+
+    // Simple mutex to make the SizeClass state (various bitmaps, etc.)
+    // thread-safe. Bodo itself doesn't use threading, but Arrow/PyArrow do use
+    // threading during IO, etc., so the BufferPool needs to be thread safe.
+    // Having the mutex at the SizeClass level reduces overall overheads
+    // since allocations/frees in different SizeClass-es
+    // won't slow down each other. This is similar to how Velox manages
+    // thread safety in its Memory Allocator.
+    std::mutex mtx_;
 };
 
 class BufferPool final : public ::arrow::MemoryPool {
@@ -255,33 +287,31 @@ class BufferPool final : public ::arrow::MemoryPool {
 
     /**
      * @brief Allocate a new memory region of at least 'size' bytes.
-     * The allocated region will be this->alignment_ byte aligned (64 by
+     * The allocated region will be 'alignment' byte aligned (64 by
      * default).
      *
-     * NOTE: The signature has changed in Arrow-11, it will
-     * need to be updated when we upgrade. The change is that now there is a
-     * field to specify the alignment.
-     *
      * @param size Number of bytes to allocated
+     * @param alignment Alignment that needs to be guaranteed for the
+     * allocation.
      * @param[in, out] out Pointer to pointer which should store the address of
      * the allocated memory.
      */
-    virtual ::arrow::Status Allocate(int64_t size, uint8_t** out) override;
+    virtual ::arrow::Status Allocate(int64_t size, int64_t alignment,
+                                     uint8_t** out) override;
 
     /**
      * @brief Resize an already allocated memory section.
      *
-     * NOTE: The signature has changed in Arrow-11, it will
-     * need to be updated when we upgrade. The change is that now there is a
-     * field to specify the alignment.
-     *
      * @param old_size Use -1 if previous size is not known.
      * @param new_size Number of bytes to allocate.
+     * @param alignment Alignment that needs to be guaranteed for the
+     * allocation.
      * @param[in, out] ptr Pointer to pointer which stores the address of the
      * previously allocated memory and should be modified to now store
      * the address of the new allocated memory region.
      */
     virtual ::arrow::Status Reallocate(int64_t old_size, int64_t new_size,
+                                       int64_t alignment,
                                        uint8_t** ptr) override;
 
     /**
@@ -296,8 +326,10 @@ class BufferPool final : public ::arrow::MemoryPool {
      * known. If -1 is passed and if the memory was originally allocated using
      * malloc, we won't know the memory size and hence the stats won't be
      * updated.
+     * @param alignment The alignment of the allocation. Defaults to 64 bytes.
      */
-    virtual void Free(uint8_t* buffer, int64_t size) override;
+    virtual void Free(uint8_t* buffer, int64_t size,
+                      int64_t alignment) override;
 
     /// @brief The number of bytes currently allocated through
     /// this allocator.
@@ -348,9 +380,6 @@ class BufferPool final : public ::arrow::MemoryPool {
     /// Pool
     virtual size_t num_size_classes() const;
 
-    /// @brief Get the default alignment for allocations through the Buffer Pool
-    virtual uint16_t alignment() const;
-
     /**
      * @brief Get a raw pointer to a SizeClass at index 'idx. This
      * can be unsafe since we're returning the underlying pointer
@@ -390,10 +419,6 @@ class BufferPool final : public ::arrow::MemoryPool {
     /// access.
     std::vector<uint64_t> size_class_bytes_;
 
-    /// @brief Specifies the memory allocation alignment through this memory
-    /// pool.
-    const uint16_t alignment_ = 64;
-
     /**
      * @brief Helper function for initializing
      * the BufferPool. This is called from the constructor.
@@ -401,13 +426,15 @@ class BufferPool final : public ::arrow::MemoryPool {
     void Initialize();
 
     /**
-     * @brief Returns a size that is this->alignment_ aligned, essentially
-     * rounding up to the closest multiple of this->alignment_.
+     * @brief Returns a size that is 'alignment' aligned, essentially
+     * rounding up to the closest multiple of 'alignment'.
      *
      * @param size Original size
+     * @param alignment Alignment to use. Defaults to 64.
      * @return int64_t Aligned size
      */
-    int64_t size_align(int64_t size);
+    int64_t size_align(int64_t size,
+                       int64_t alignment = arrow::kDefaultBufferAlignment);
 
     /**
      * @brief Get the index of the size-class that would be most
@@ -431,6 +458,7 @@ class BufferPool final : public ::arrow::MemoryPool {
      * @param size Size of the allocation (from the caller perspective since we
      * might allocate and return a memory region that's greater than the
      * original request but the caller wouldn't know that).
+     * @param alignment Alignment used for the allocation.
      * @return std::tuple<bool, int64_t, int64_t, int64_t>
      *  bool: Whether the allocation was made through mmap.
      *  int64_t: If the allocation was made through mmap, this
@@ -444,7 +472,8 @@ class BufferPool final : public ::arrow::MemoryPool {
      *      "aligned" size.
      */
     std::tuple<bool, int64_t, int64_t, int64_t> get_alloc_details(
-        uint8_t* buffer, int64_t size);
+        uint8_t* buffer, int64_t size,
+        int64_t alignment = arrow::kDefaultBufferAlignment);
 
     /**
      * @brief Helper for free-ing a memory allocation.

@@ -13,6 +13,7 @@ import yaml
 
 CI_BUILDSPEC_FILENAME = "buildspec.yml"
 
+
 # Helper function for creating cross product of the provided values. From:
 # https://stackoverflow.com/questions/5228158/cartesian-product-of-a-dictionary-of-lists
 def dict_product(dict_to_merge):
@@ -135,7 +136,7 @@ def get_compute_type(env_var_dict, image_path, buildspec):
 # Function to generate the batch portion for the CI build
 def generate_CI_buildspec(num_groups):
     images = {
-        "linux": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:3.4"
+        "linux": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:3.6"
     }
     pytest_starting_marker = "not slow and not weekly"
     pytest_options = [

@@ -171,15 +171,22 @@ inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
 inline void buffer_pool_aligned_data_alloc(size_t size, unsigned align,
                                            NRT_MemInfo *mi) {
     std::shared_ptr<bodo::BufferPool> pool = bodo::BufferPool::Default();
-    if (align && (align > pool->alignment())) {
+    if (align && ((align > ::arrow::kDefaultBufferAlignment) ||
+                  ((align & (align - 1)) != 0))) {
         // TODO Add compiler hint to mark this as an unlikely branch.
         throw std::runtime_error(
             std::string("Requested alignment (") + std::to_string(align) +
-            std::string(") is greater than supported alignment (") +
-            std::to_string(pool->alignment()) + std::string(")."));
+            std::string(") is either greater than default alignment (") +
+            std::to_string(::arrow::kDefaultBufferAlignment) +
+            std::string(") or not a power of 2."));
     }
     // Pass a pointer to the data pointer in the MemInfo to be used as
     // the Swip by the BufferPool.
+    // We use the default alignment (64B) for all MemInfo data allocations
+    // since we don't provide the alignment information during Free/Realloc.
+    // Using the default value at Free/Realloc time and using another
+    // value at Alloc time can lead to issues since the BufferPool might
+    // calculate the sizes incorrectly and search in the incorrect SizeClass.
     CHECK_ARROW_MEM(
         pool->Allocate(size, reinterpret_cast<uint8_t **>(&(mi->data))),
         "Allocation failed!");
