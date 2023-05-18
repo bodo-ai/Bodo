@@ -1704,6 +1704,7 @@ std::shared_ptr<table_info> union_tables_inner(
     tracing::Event ev_concat("union_table_concat", is_parallel);
     std::shared_ptr<table_info> concatenated_table =
         concat_tables(shuffled_tables);
+    shuffled_tables.clear();
     ev_concat.finalize();
     std::shared_ptr<table_info> out_table;
     if (drop_duplicates) {
