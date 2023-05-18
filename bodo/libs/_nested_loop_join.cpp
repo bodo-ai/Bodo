@@ -171,6 +171,7 @@ table_info* nested_loop_join_table(
             }
 
             out_table = concat_tables(out_table_chunks);
+            out_table_chunks.clear();
         }
         // If either table is already replicated then broadcasting
         // isn't necessary (output's distribution will match the other input as

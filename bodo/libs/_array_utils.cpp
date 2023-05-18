@@ -2494,8 +2494,7 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
 
 /**
  * @brief concatenate tables vertically into a single table.
- * Input tables are assumed to have the same schema, and will
- * be fully deleted (decref arrays and delete pointers).
+ * Input tables are assumed to have the same schema.
  *
  * @param table_chunks input tables which are assumed to have the
  * same schema
@@ -2517,9 +2516,6 @@ std::shared_ptr<table_info> concat_tables(
     std::shared_ptr<table_info> out_table =
         std::shared_ptr<table_info>(table_builder.get_table());
 
-    for (std::shared_ptr<table_info> table : table_chunks) {
-        table->columns.clear();
-    }
     return out_table;
 }
 

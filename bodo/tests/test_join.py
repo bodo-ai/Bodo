@@ -35,6 +35,7 @@ from bodo.tests.utils import (
     gen_random_decimal_array,
     gen_random_list_string_array,
     get_start_end,
+    pytest_mark_snowflake,
     temp_env_override,
 )
 
@@ -3246,6 +3247,7 @@ def test_merge_general_cond_all_keys(memory_leak_check):
     test merge(): with general condition expressions where all non-equal
     conditions use only key columns.
     """
+
     # single equality term
     def impl(df1, df2):
         return df1.merge(
@@ -4622,6 +4624,140 @@ def test_merge_output_cast_key_order(memory_leak_check):
         }
     )
     check_func(impl, (df1, df2), sort_output=True, reset_index=True)
+
+
+@pytest_mark_snowflake
+def test_stream_join_basic(memory_leak_check):
+    """ """
+    import bodo
+
+    # TODO[BSE-355]: support parallelism
+    if bodo.get_size() > 1:
+        return
+
+    import bodo.io.snowflake
+    import bodo.tests.utils
+    from bodo.io.arrow_reader import read_arrow_next
+    from bodo.libs.stream_join import (
+        delete_join_state,
+        init_join_state,
+        join_build_get_batch,
+        join_probe_get_batch,
+    )
+
+    conn_str = bodo.tests.utils.get_snowflake_connection_string(
+        "SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"
+    )
+
+    l_orderkey_start = 680_000
+    l_orderkey_end = 690_000
+    p_size_limit = 35
+    # Equivalent query:
+    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # from lineitem inner join part on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
+    # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
+    # and p_size > {p_size_limit}
+
+    n_keys = 2
+    str_c_type = bodo.utils.utils.CTypeEnum.STRING.value
+    int32_c_type = bodo.utils.utils.numba_to_c_type(bodo.int32)
+    int8_c_type = bodo.utils.utils.numba_to_c_type(bodo.int8)
+    build_arr_types = np.array(
+        [int32_c_type, str_c_type, str_c_type, int8_c_type], np.int8
+    )
+    out_table_type = bodo.TableType(
+        (
+            bodo.IntegerArrayType(bodo.int32),
+            bodo.string_array_type,
+            bodo.string_array_type,
+            bodo.IntegerArrayType(bodo.int8),
+            bodo.IntegerArrayType(bodo.int32),
+            bodo.string_array_type,
+            bodo.IntegerArrayType(bodo.int32),
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "p_partkey",
+            "p_comment",
+            "p_name",
+            "p_size",
+            "l_partkey",
+            "l_comment",
+            "l_orderkey",
+        )
+    )
+
+    @bodo.jit(distributed=False)
+    def test_stream_join(conn):
+        join_state = init_join_state(
+            build_arr_types.ctypes, len(build_arr_types), n_keys
+        )
+
+        # read PART table and build join hash table
+        reader1 = pd.read_sql(
+            f"SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE FROM PART where P_SIZE > {p_size_limit}",
+            conn,
+            _bodo_chunksize=4000,
+        )
+        while True:
+            table1, is_last1 = read_arrow_next(reader1)
+            join_build_get_batch(join_state, table1, is_last1)
+            if is_last1:
+                break
+
+        # read LINEITEM table and probe
+        reader2 = pd.read_sql(
+            f"SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY FROM LINEITEM where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}",
+            conn,
+            _bodo_chunksize=4000,
+        )
+        out_dfs = []
+        while True:
+            table2, is_last2 = read_arrow_next(reader2)
+            out_table = join_probe_get_batch(
+                join_state, table2, out_table_type, is_last2
+            )
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df)
+            if is_last2:
+                break
+
+        delete_join_state(join_state)
+        return pd.concat(out_dfs)
+
+    # TODO[BSE-367]: Support dict-encoded strings
+    saved_SF_READ_AUTO_DICT_ENCODE_ENABLED = (
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
+    )
+    try:
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = False
+        out_df = test_stream_join(conn_str)
+    finally:
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
+            saved_SF_READ_AUTO_DICT_ENCODE_ENABLED
+        )
+    expected_df = pd.DataFrame(
+        {
+            "p_partkey": [183728],
+            "p_comment": ["bold deposi"],
+            "p_name": ["yellow turquoise cornflower coral saddle"],
+            "p_size": [37],
+            "l_partkey": [183728],
+            "l_comment": ["bold deposi"],
+            "l_orderkey": [685476],
+        }
+    )
+    _test_equal(
+        out_df,
+        expected_df,
+        check_dtype=False,
+    )
 
 
 @pytest.mark.slow
