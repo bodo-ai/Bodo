@@ -106,14 +106,15 @@ static arrow::Status GetSchemaMetadata(
 }
 
 // This function is copied from Arrow.
+// (https://github.com/apache/arrow/blob/apache-arrow-11.0.0/cpp/src/parquet/arrow/writer.cc#L521)
 // Bodo change: pass a different schema for metadata (added schema_for_metadata
 // parameter)
-static arrow::Status OpenFileWriter(
+static arrow::Result<std::unique_ptr<parquet::arrow::FileWriter>>
+FileWrite_Open(
     const ::arrow::Schema &schema, const ::arrow::Schema &schema_for_metadata,
     ::arrow::MemoryPool *pool, std::shared_ptr<::arrow::io::OutputStream> sink,
     std::shared_ptr<parquet::WriterProperties> properties,
-    std::shared_ptr<parquet::ArrowWriterProperties> arrow_properties,
-    std::unique_ptr<parquet::arrow::FileWriter> *writer) {
+    std::shared_ptr<parquet::ArrowWriterProperties> arrow_properties) {
     std::shared_ptr<parquet::SchemaDescriptor> parquet_schema;
     RETURN_NOT_OK(parquet::arrow::ToParquetSchema(
         &schema, *properties, *arrow_properties, &parquet_schema));
@@ -132,14 +133,17 @@ static arrow::Status OpenFileWriter(
                              std::move(sink), schema_node,
                              std::move(properties), std::move(metadata)));
 
+    std::unique_ptr<parquet::arrow::FileWriter> writer;
     auto schema_ptr = std::make_shared<::arrow::Schema>(schema);
-    return parquet::arrow::FileWriter::Make(
+    RETURN_NOT_OK(parquet::arrow::FileWriter::Make(
         pool, std::move(base_writer), std::move(schema_ptr),
-        std::move(arrow_properties), writer);
+        std::move(arrow_properties), &writer));
+    return writer;
 }
 
 // This function is copied from Arrow.
-// Bodo change: passing through schema_for_metadata to OpenFileWriter
+// (https://github.com/apache/arrow/blob/apache-arrow-11.0.0/cpp/src/parquet/arrow/writer.cc#L560)
+// Bodo change: passing through schema_for_metadata to FileWrite_Open
 static arrow::Status WriteTable(
     const ::arrow::Table &table, ::arrow::MemoryPool *pool,
     std::shared_ptr<::arrow::io::OutputStream> sink, int64_t chunk_size,
@@ -147,9 +151,10 @@ static arrow::Status WriteTable(
     std::shared_ptr<parquet::ArrowWriterProperties> arrow_properties,
     std::shared_ptr<arrow::Schema> schema_for_metadata) {
     std::unique_ptr<parquet::arrow::FileWriter> writer;
-    RETURN_NOT_OK(OpenFileWriter(*table.schema(), *schema_for_metadata, pool,
-                                 std::move(sink), std::move(properties),
-                                 std::move(arrow_properties), &writer));
+    ARROW_ASSIGN_OR_RAISE(
+        writer, FileWrite_Open(*table.schema(), *schema_for_metadata, pool,
+                               std::move(sink), std::move(properties),
+                               std::move(arrow_properties)));
     RETURN_NOT_OK(writer->WriteTable(table, chunk_size));
     return writer->Close();
 }

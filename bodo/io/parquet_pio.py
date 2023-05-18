@@ -662,7 +662,6 @@ def get_parquet_dataset(
             )
 
             for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
-
                 # The validation (and unification) step needs to happen before the
                 # scan on the fragment since otherwise it will fail in case the
                 # file schema doesn't match the dataset schema exactly.
@@ -757,7 +756,7 @@ def get_parquet_dataset(
                 warnings.warn(
                     BodoWarning(
                         f"Total number of row groups in parquet dataset {fpath_tidbit} ({total_num_row_groups}) is too small for effective IO parallelization."
-                        "For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()}). For more details, refer to https://docs.bodo.ai/latest/file_io/#parquet-section."
+                        f"For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()}). For more details, refer to https://docs.bodo.ai/latest/file_io/#parquet-section."
                     )
                 )
 

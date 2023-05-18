@@ -7,7 +7,6 @@ platforms:
   - osx-64
   - linux-64
 
-
 dependencies:
   - python=3.10.*
   - pip
@@ -19,7 +18,7 @@ dependencies:
   - pandas>=1.3.*,<1.5
 
   # IO
-  - pyarrow =9.0.0=*_cpu
+  - pyarrow =11.0.0=*_cpu
   - fsspec >=2021.09
 
   # HDFS

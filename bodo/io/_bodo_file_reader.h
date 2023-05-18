@@ -64,8 +64,10 @@ class FileReader {
      * f_type to string
      */
     const char *f_type_to_string() {
-        if (this->f_type == File_Type::csv) return "csv";
-        if (this->f_type == File_Type::json) return "json";
+        if (this->f_type == File_Type::csv)
+            return "csv";
+        if (this->f_type == File_Type::json)
+            return "json";
         return "";
     }
 };
@@ -84,7 +86,8 @@ class SingleFileReader : public FileReader {
     virtual bool ok() = 0;
     virtual bool read_to_buff(char *s, int64_t size) = 0;
     bool read(char *s, int64_t size) {
-        if (!this->read_to_buff(s, size)) return false;
+        if (!this->read_to_buff(s, size))
+            return false;
         if (this->f_type == File_Type::json && (!this->json_lines)) {
             edit_json_multiline_obj(s, size);
         }
@@ -162,7 +165,8 @@ class DirectoryFileReader : public FileReader {
                         bool csv_header, bool json_lines)
         : FileReader(f_type, csv_header, json_lines), dirname(_dirname){};
     ~DirectoryFileReader() {
-        if (this->f_reader) delete this->f_reader;
+        if (this->f_reader)
+            delete this->f_reader;
     };
     virtual void initFileReader(const char *fname){};
     bool seek(int64_t pos) {

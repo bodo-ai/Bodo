@@ -82,6 +82,8 @@ else:
         PREFIX_DIR += "\Library"
 
 
+import pyarrow
+
 try:
     import h5py  # noqa
 except ImportError:
@@ -150,11 +152,8 @@ if is_win:
     # use Microsoft MPI on Windows
     mpi_libs = ["msmpi"]
     if os.environ.get("BUILD_PIP", "") == "1":
-        import pyarrow
-
-        # building pip package, need to set additional include and library paths
+        # building pip package, need to set additional library paths
         pyarrow_dirname = os.path.dirname(pyarrow.__file__)
-        ext_metadata["include_dirs"].append(os.path.join(pyarrow_dirname, "include"))
         ext_metadata["extra_link_args"].append(f"/LIBPATH:{pyarrow_dirname}")
     # hdf5-parallel Windows build uses CMake which needs this flag
     ext_metadata["define_macros"].append(("H5_BUILT_AS_DYNAMIC_LIB", None))
@@ -304,6 +303,15 @@ ext_metadata["include_dirs"] += np_compile_args["include_dirs"]
 ext_metadata["library_dirs"] += np_compile_args["library_dirs"]
 ext_metadata["define_macros"] += np_compile_args["define_macros"]
 
+# Inject required options for extensions compiled against
+# PyArrow and Arrow
+pa_compile_args = {
+    "include_dirs": [pyarrow.get_include()],
+    "library_dirs": pyarrow.get_library_dirs(),
+}
+ext_metadata["include_dirs"].extend(pa_compile_args["include_dirs"])
+ext_metadata["library_dirs"].extend(pa_compile_args["library_dirs"])
+
 # Compile Bodo extension
 bodo_ext = Extension(**ext_metadata)
 
@@ -317,9 +325,11 @@ pyx_builtins = []
 ext_pyfs = Extension(
     name="bodo.io.pyfs",
     sources=["bodo/io/pyfs.pyx"],
-    include_dirs=np_compile_args["include_dirs"] + ind,
+    include_dirs=np_compile_args["include_dirs"]
+    + ind
+    + pa_compile_args["include_dirs"],
     define_macros=[],
-    library_dirs=lid,
+    library_dirs=lid + pa_compile_args["library_dirs"],
     # We cannot compile with -Werror yet because pyfs.cpp
     # generates serveral warnings.
     extra_compile_args=[x for x in eca if x != "-Werror"],
@@ -331,9 +341,11 @@ pyx_builtins.append(os.path.join("bodo", "io", "pyfs.pyx"))
 ext_hdfs_pyarrow = Extension(
     name="bodo.io._hdfs",
     sources=["bodo/io/_hdfs.pyx"],
-    include_dirs=np_compile_args["include_dirs"] + ind,
+    include_dirs=np_compile_args["include_dirs"]
+    + ind
+    + pa_compile_args["include_dirs"],
     define_macros=[],
-    library_dirs=lid,
+    library_dirs=lid + pa_compile_args["library_dirs"],
     libraries=["arrow", "arrow_python"],
     # We cannot compile with -Werror yet because hdfs.cpp
     # generates serveral warnings.
@@ -360,9 +372,11 @@ pyx_builtins.append(os.path.join("bodo", "utils", "tracing.pyx"))
 ext_memory = Extension(
     name="bodo.libs.memory",
     sources=["bodo/libs/memory.pyx", "bodo/libs/_memory.cpp"],
-    include_dirs=np_compile_args["include_dirs"] + ind,
+    include_dirs=np_compile_args["include_dirs"]
+    + ind
+    + pa_compile_args["include_dirs"],
     define_macros=[],
-    library_dirs=lid,
+    library_dirs=lid + pa_compile_args["library_dirs"],
     libraries=["arrow", "arrow_python"] + mpi_libs,
     # Cannot compile with -Werror yet because memory.cpp
     # generated multiple unused variable warnings
@@ -444,7 +458,7 @@ setup(
         if develop_mode
         else [
             "numba==0.56.4",
-            "pyarrow==9.0.0",
+            "pyarrow==11.0.0",
             "pandas>=1.3,<1.5",
             "numpy>=1.18,<1.24",
             "fsspec>=2021.09",

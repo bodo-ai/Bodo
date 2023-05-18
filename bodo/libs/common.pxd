@@ -4,7 +4,7 @@
 
 # Imports standard Cython modules.
 # Similar to PyArrow
-# (https://github.com/apache/arrow/blob/apache-arrow-9.0.0/python/pyarrow/includes/common.pxd)
+# (https://github.com/apache/arrow/blob/apache-arrow-11.0.0/python/pyarrow/includes/common.pxd)
 
 cimport cpython
 from libc.stdint cimport *

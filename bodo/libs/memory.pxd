@@ -40,16 +40,15 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
 
 
     cdef cppclass CBufferPool" bodo::BufferPool"(CMemoryPool):
-        CStatus Allocate(int64_t size, uint8_t** out)
-        CStatus Reallocate(int64_t old_size, int64_t new_size, uint8_t** ptr)
-        void Free(uint8_t* buffer, int64_t size)
+        CStatus Allocate(int64_t size, int64_t alignment, uint8_t** out)
+        CStatus Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr)
+        void Free(uint8_t* buffer, int64_t size, int64_t alignment)
         # put overloads under a different name to avoid cython bug with multiple
         # layers of inheritance
         int64_t get_bytes_allocated" bytes_allocated"()
         int64_t get_max_memory" max_memory"()
         c_string get_backend_name" backend_name"()
         size_t num_size_classes()
-        uint16_t alignment()
         CSizeClass* GetSizeClass_Unsafe(uint64_t idx)
 
         @staticmethod

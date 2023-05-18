@@ -35,6 +35,8 @@ cdef class BufferPoolAllocation():
         uint8_t* ptr
         # Size of the allocation
         int size
+        # Alignment for the allocation
+        int alignment
     
     def __init__(self):
         """
@@ -54,6 +56,12 @@ cdef class BufferPoolAllocation():
         """
         self.size = size
 
+    cdef void set_alignment(self, int alignment):
+        """
+        Set allocation alignment.
+        """
+        self.alignment = alignment
+
     @staticmethod
     cdef BufferPoolAllocation ccopy(BufferPoolAllocation other):
         """
@@ -62,6 +70,7 @@ cdef class BufferPoolAllocation():
         new_object = BufferPoolAllocation()
         new_object.set_ptr(other.ptr)
         new_object.set_size(other.size)
+        new_object.set_alignment(other.alignment)
         return new_object
     
     @staticmethod
@@ -74,6 +83,26 @@ cdef class BufferPoolAllocation():
             new_object = BufferPoolAllocation.ccopy(other)
         return new_object
     
+    @property
+    def alignment(self):
+        return self.alignment
+
+    cdef int64_t c_ptr_as_int(self):
+        """
+        Simply casts the 'ptr' as 'int64_t'
+        """
+        return <int64_t>self.ptr
+
+
+    def get_ptr_as_int(self) -> int:
+        """
+        Get the pointer as an integer. This is
+        useful in verifying that the alignment
+        is correct.
+        """
+        return int(self.c_ptr_as_int())
+
+    
     def __eq__(self, other: BufferPoolAllocation) -> bool:
         """
         Check if two BufferPoolAllocations instances are
@@ -81,7 +110,11 @@ cdef class BufferPoolAllocation():
         memory region and have the same allocation size.
         """
         if isinstance(other, BufferPoolAllocation):
-            return (self.ptr == other.ptr) and (self.size == other.size)
+            return (
+                (self.ptr == other.ptr) and
+                (self.size == other.size) and
+                (self.alignment == other.alignment)
+            )
         else:
             return False
 
@@ -375,31 +408,32 @@ cdef class BufferPool(MemoryPool):
         size_class.cinit(c_size_class)
         return size_class
 
-    cdef BufferPoolAllocation c_allocate(self, int size):
+    cdef BufferPoolAllocation c_allocate(self, int size, int alignment):
         # Create an empty BufferPoolAllocation instance.
         allocation = BufferPoolAllocation()
         # Allocate memory through the BufferPool.
         # Pass the pointer in the BufferPoolAllocation instance
         # to be used as the "swip".
-        check_status(deref(self.c_pool).Allocate(size, &(allocation.ptr)))
+        check_status(deref(self.c_pool).Allocate(size, alignment, &(allocation.ptr)))
         # Set the allocation size. This is required during
         # free and reallocate.
         allocation.size = size
+        allocation.alignment = alignment
         return allocation
     
     cdef void c_free(self, BufferPoolAllocation allocation):
-        deref(self.c_pool).Free(allocation.ptr, allocation.size)
+        deref(self.c_pool).Free(allocation.ptr, allocation.size, allocation.alignment)
     
     cdef void c_reallocate(self, int new_size, BufferPoolAllocation allocation):
-        check_status(deref(self.c_pool).Reallocate(allocation.size, new_size, &(allocation.ptr)))
+        check_status(deref(self.c_pool).Reallocate(allocation.size, new_size, allocation.alignment, &(allocation.ptr)))
         allocation.size = new_size
 
-    def allocate(self, size) -> BufferPoolAllocation:
+    def allocate(self, size, alignment=64) -> BufferPoolAllocation:
         """
         Wrapper around c_allocate. We encode the information
         from the allocation in a BufferPoolAllocation object. 
         """
-        return self.c_allocate(size)
+        return self.c_allocate(size, alignment)
 
     def free(self, allocation: BufferPoolAllocation):
         """
