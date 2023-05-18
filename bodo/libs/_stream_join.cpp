@@ -3,45 +3,39 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 
-uint32_t HashHashJoinTable::operator()(const size_t iRow) const {
-    if (iRow < join_state->build_table_rows) {
+uint32_t HashHashJoinTable::operator()(const int64_t iRow) const {
+    if (iRow >= 0) {
         return join_state->build_table_hashes[iRow];
     } else {
-        return join_state
-            ->probe_table_hashes[iRow - join_state->build_table_rows];
+        return join_state->probe_table_hashes[-iRow - 1];
     }
 }
 
-bool KeyEqualHashJoinTable::operator()(const size_t iRowA,
-                                       const size_t iRowB) const {
-    size_t jRowA, jRowB;
-    std::shared_ptr<table_info> table_A, table_B;
+bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
+                                       const int64_t iRowB) const {
+    const std::shared_ptr<const table_info>& build_table =
+        join_state->build_table_buffer;
+    const std::shared_ptr<const table_info>& probe_table =
+        join_state->probe_table;
 
-    int64_t build_table_rows = join_state->build_table_rows;
-    std::shared_ptr<table_info> build_table = join_state->build_table_buffer;
-    std::shared_ptr<table_info> probe_table = join_state->probe_table;
+    bool is_build_A = iRowA >= 0;
+    bool is_build_B = iRowB >= 0;
 
-    if (iRowA < build_table_rows) {
-        table_A = build_table;
-        jRowA = iRowA;
-    } else {
-        table_A = probe_table;
-        jRowA = iRowA - build_table_rows;
-    }
-    if (iRowB < build_table_rows) {
-        table_B = build_table;
-        jRowB = iRowB;
-    } else {
-        table_B = probe_table;
-        jRowB = iRowB - build_table_rows;
-    }
+    size_t jRowA = is_build_A ? iRowA : -iRowA - 1;
+    size_t jRowB = is_build_B ? iRowB : -iRowB - 1;
+
+    const std::shared_ptr<const table_info>& table_A =
+        is_build_A ? build_table : probe_table;
+    const std::shared_ptr<const table_info>& table_B =
+        is_build_B ? build_table : probe_table;
+
     // Determine if NA columns should match. They should always
     // match when populating the hash map with the build table.
     // When comparing the build and probe tables this depends on
     // is_na_equal.
     // TODO: Eliminate groups with NA columns with is_na_equal=False
     // from the hashmap.
-    bool set_na_equal = (table_A == table_B) || is_na_equal;
+    bool set_na_equal = (is_build_A && is_build_B) || is_na_equal;
     bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB,
                               join_state->n_keys, set_na_equal);
     return test;
@@ -54,8 +48,9 @@ bool KeyEqualHashJoinTable::operator()(const size_t iRowA,
  * @param in_table build table batch
  * @param is_last is last batch
  */
-void join_build_get_batch(JoinState* join_state,
-                          std::shared_ptr<table_info> in_table, bool is_last) {
+void join_build_consume_batch(JoinState* join_state,
+                              std::shared_ptr<table_info> in_table,
+                              bool is_last) {
     int64_t n_prev_build = join_state->build_table_buffer->nrows();
 
     // append batch to build rows (needed for hash table comparisons and
@@ -64,18 +59,20 @@ void join_build_get_batch(JoinState* join_state,
         {join_state->build_table_buffer, in_table});
     join_state->build_table_buffer = concat_tables(tables);
     tables.clear();
-    in_table.reset();
 
-    // update join state for hashing and comparison functions
-    int64_t n_rows = join_state->build_table_buffer->nrows();
-    join_state->build_table_rows = n_rows;
-    join_state->build_table_hashes =
-        hash_keys_table(join_state->build_table_buffer, join_state->n_keys,
-                        SEED_HASH_JOIN, false);
+    // add hashes of the new batch
+    join_state->build_table_hashes.reserve(
+        join_state->build_table_hashes.size() + in_table->nrows());
+    std::shared_ptr<uint32_t[]> batch_hashes =
+        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_JOIN, false);
+    join_state->build_table_hashes.insert(
+        join_state->build_table_hashes.end(), batch_hashes.get(),
+        batch_hashes.get() + in_table->nrows());
 
     // insert batch into hash table
+    int64_t n_rows = join_state->build_table_buffer->nrows();
     for (int64_t i_row = n_prev_build; i_row < n_rows; i_row++) {
-        join_state->build_table.insert(std::make_pair(i_row, i_row));
+        join_state->build_table.emplace(i_row, i_row);
     }
 }
 
@@ -88,7 +85,7 @@ void join_build_get_batch(JoinState* join_state,
  * @param is_last is last batch
  * @return std::shared_ptr<table_info> output table batch
  */
-std::shared_ptr<table_info> join_probe_get_batch(
+std::shared_ptr<table_info> join_probe_consume_batch(
     JoinState* join_state, std::shared_ptr<table_info> in_table, bool is_last) {
     int64_t n_rows = in_table->nrows();
 
@@ -97,14 +94,12 @@ std::shared_ptr<table_info> join_probe_get_batch(
     join_state->probe_table_hashes = hash_keys_table(
         join_state->probe_table, join_state->n_keys, SEED_HASH_JOIN, false);
 
-    int64_t build_table_rows = join_state->build_table_rows;
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
 
     // probe hash table
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-        auto range =
-            join_state->build_table.equal_range(build_table_rows + i_row);
+        auto range = join_state->build_table.equal_range(-i_row - 1);
         for (auto it = range.first; it != range.second; ++it) {
             build_idxs.push_back(it->second);
             probe_idxs.push_back(i_row);
@@ -181,11 +176,11 @@ JoinState* join_state_init_py_entry(int8_t* arr_c_types, int n_arrs,
  * @param in_table build table batch
  * @param is_last is last batch
  */
-void join_build_get_batch_py_entry(JoinState* join_state, table_info* in_table,
-                                   bool is_last) {
+void join_build_consume_batch_py_entry(JoinState* join_state,
+                                       table_info* in_table, bool is_last) {
     try {
-        join_build_get_batch(join_state, std::shared_ptr<table_info>(in_table),
-                             is_last);
+        join_build_consume_batch(
+            join_state, std::shared_ptr<table_info>(in_table), is_last);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -200,10 +195,11 @@ void join_build_get_batch_py_entry(JoinState* join_state, table_info* in_table,
  * @param is_last is last batch
  * @return table_info* output table batch
  */
-table_info* join_probe_get_batch_py_entry(JoinState* join_state,
-                                          table_info* in_table, bool is_last) {
+table_info* join_probe_consume_batch_py_entry(JoinState* join_state,
+                                              table_info* in_table,
+                                              bool is_last) {
     try {
-        std::shared_ptr<table_info> out = join_probe_get_batch(
+        std::shared_ptr<table_info> out = join_probe_consume_batch(
             join_state, std::unique_ptr<table_info>(in_table), is_last);
         return new table_info(*out);
     } catch (const std::exception& e) {
@@ -228,8 +224,8 @@ PyMODINIT_FUNC PyInit_stream_join_cpp(void) {
     bodo_common_init();
 
     SetAttrStringFromVoidPtr(m, join_state_init_py_entry);
-    SetAttrStringFromVoidPtr(m, join_build_get_batch_py_entry);
-    SetAttrStringFromVoidPtr(m, join_probe_get_batch_py_entry);
+    SetAttrStringFromVoidPtr(m, join_build_consume_batch_py_entry);
+    SetAttrStringFromVoidPtr(m, join_probe_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, delete_join_state);
     return m;
 }

@@ -26,10 +26,12 @@ if TYPE_CHECKING:  # pragma: no cover
 
 ll.add_symbol("join_state_init_py_entry", stream_join_cpp.join_state_init_py_entry)
 ll.add_symbol(
-    "join_build_get_batch_py_entry", stream_join_cpp.join_build_get_batch_py_entry
+    "join_build_consume_batch_py_entry",
+    stream_join_cpp.join_build_consume_batch_py_entry,
 )
 ll.add_symbol(
-    "join_probe_get_batch_py_entry", stream_join_cpp.join_probe_get_batch_py_entry
+    "join_probe_consume_batch_py_entry",
+    stream_join_cpp.join_probe_consume_batch_py_entry,
 )
 ll.add_symbol("delete_join_state", stream_join_cpp.delete_join_state)
 
@@ -70,14 +72,14 @@ def init_join_state(build_arr_types, n_arrs, n_keys):
     return impl
 
 
-_join_build_get_batch = types.ExternalFunction(
-    "join_build_get_batch_py_entry",
+_join_build_consume_batch = types.ExternalFunction(
+    "join_build_consume_batch_py_entry",
     types.void(join_state_type, cpp_table_type, types.bool_),
 )
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def join_build_get_batch(join_state, table, is_last):
+def join_build_consume_batch(join_state, table, is_last):
     """Consume a build table batch in streaming join (insert into hash table)
 
     Args:
@@ -89,20 +91,20 @@ def join_build_get_batch(join_state, table, is_last):
 
     def impl(join_state, table, is_last):  # pragma: no cover
         cpp_table = py_table_to_cpp_table(table, table_type)
-        _join_build_get_batch(join_state, cpp_table, is_last)
+        _join_build_consume_batch(join_state, cpp_table, is_last)
         bodo.utils.utils.check_and_propagate_cpp_exception()
 
     return impl
 
 
-_join_probe_get_batch = types.ExternalFunction(
-    "join_probe_get_batch_py_entry",
+_join_probe_consume_batch = types.ExternalFunction(
+    "join_probe_consume_batch_py_entry",
     cpp_table_type(join_state_type, cpp_table_type, types.bool_),
 )
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def join_probe_get_batch(join_state, table, out_table_type, is_last):
+def join_probe_consume_batch(join_state, table, out_table_type, is_last):
     """Consume a probe table batch in streaming join (probe hash table and produce
     output rows)
 
@@ -120,7 +122,7 @@ def join_probe_get_batch(join_state, table, out_table_type, is_last):
 
     def impl(join_state, table, out_table_type, is_last):  # pragma: no cover
         cpp_table = py_table_to_cpp_table(table, in_table_type)
-        out_cpp_table = _join_probe_get_batch(join_state, cpp_table, is_last)
+        out_cpp_table = _join_probe_consume_batch(join_state, cpp_table, is_last)
         bodo.utils.utils.check_and_propagate_cpp_exception()
         out_table = cpp_table_to_py_table(
             out_cpp_table, np.arange(n_out_arrs), out_table_type
