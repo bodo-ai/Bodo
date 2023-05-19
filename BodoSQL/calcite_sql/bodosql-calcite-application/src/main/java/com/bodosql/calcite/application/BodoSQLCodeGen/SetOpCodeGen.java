@@ -6,6 +6,10 @@ import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 import static com.bodosql.calcite.application.Utils.Utils.renameColumns;
 
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Expr.IntegerLiteral;
+import com.bodosql.calcite.ir.Variable;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -52,8 +56,13 @@ public class SetOpCodeGen {
       colNameTupleString.append(makeQuoted(colName)).append(", ");
     }
     colNameTupleString.append(")");
-    String globalVarName = pdVisitorClass.lowerAsColNamesMetaType(colNameTupleString.toString());
-    unionBuilder.append(", ").append(globalVarName).append(")\n");
+    List<Expr.StringLiteral> colNamesExpr = new ArrayList<>();
+    for (String colName : outputColumnNames) {
+      colNamesExpr.add(new Expr.StringLiteral(colName));
+    }
+    Expr.Tuple colNameTuple = new Expr.Tuple(colNamesExpr);
+    Variable globalVarName = pdVisitorClass.lowerAsColNamesMetaType(colNameTuple);
+    unionBuilder.append(", ").append(globalVarName.getName()).append(")\n");
     return unionBuilder.toString();
   }
 
@@ -348,31 +357,30 @@ public class SetOpCodeGen {
     final String dfCnt = outVar;
 
     // Generate dummyColIdxsGlobal, dummyColNamesGlobal, and colNamesList
-    StringBuilder dummyColIdxsTupleString = new StringBuilder("(");
-    StringBuilder dummyColNamesTupleString = new StringBuilder("(");
-    StringBuilder colNamesListString = new StringBuilder("[");
+    List<IntegerLiteral> dummmyColIdxs = new ArrayList<>();
+    List<Expr.StringLiteral> dummyColNameExprs = new ArrayList<>();
+    List<Expr.StringLiteral> colNameExprs = new ArrayList<>();
 
     for (int i = 0; i < colNames.size(); i++) {
-      dummyColIdxsTupleString.append(i).append(", ");
-      dummyColNamesTupleString.append(makeQuoted(colNames.get(i))).append(", ");
-      colNamesListString.append(makeQuoted(colNames.get(i))).append(", ");
+      dummmyColIdxs.add(new Expr.IntegerLiteral(i));
+      Expr.StringLiteral colName = new Expr.StringLiteral(colNames.get(i));
+      dummyColNameExprs.add(colName);
+      colNameExprs.add(colName);
     }
+    dummmyColIdxs.add(new IntegerLiteral(colNames.size()));
+    Expr.StringLiteral dummyColNameExpr = new Expr.StringLiteral(getDummyColNameBase());
+    dummyColNameExprs.add(dummyColNameExpr);
 
-    dummyColIdxsTupleString.append(colNames.size()).append(",)");
-    dummyColNamesTupleString.append(makeQuoted(getDummyColNameBase())).append(",)");
-    colNamesListString.append("]");
+    // Create tuples
+    Expr.Tuple dummyColIdxsTuple = new Expr.Tuple(dummmyColIdxs);
+    Expr.Tuple dummyColNamesTuple = new Expr.Tuple(dummyColNameExprs);
+    // Create a list
+    Expr.List colNamesList = new Expr.List(colNameExprs);
 
-    String dummyColIdxsGlobalVarName =
-        pdVisitorClass.lowerAsMetaType(dummyColIdxsTupleString.toString());
-    String dummyColNamesGlobalVarName =
-        pdVisitorClass.lowerAsColNamesMetaType(dummyColNamesTupleString.toString());
-    String colNamesList = colNamesListString.toString();
+    Variable dummyColIdxsGlobal = pdVisitorClass.lowerAsMetaType(dummyColIdxsTuple);
+    Variable dummyColNamesGlobal = pdVisitorClass.lowerAsColNamesMetaType(dummyColNamesTuple);
 
-    // Generate dummyGlobal
-    StringBuilder dummyTupleString = new StringBuilder("(");
-    dummyTupleString.append(makeQuoted(getDummyColNameBase())).append(",)");
-    String dummyGlobalVarName = pdVisitorClass.lowerAsColNamesMetaType(dummyTupleString.toString());
-
+    // TODO: Refactor to use Exprs
     // Compute dfOnes
     cumcountBuilder
         .append(indent)
@@ -388,7 +396,7 @@ public class SetOpCodeGen {
         .append("), (")
         .append(colOnes)
         .append(",), ")
-        .append(dummyColIdxsGlobalVarName)
+        .append(dummyColIdxsGlobal.getName())
         .append(", ")
         .append(expr)
         .append(".shape[1])\n")
@@ -399,7 +407,7 @@ public class SetOpCodeGen {
         .append(",), pd.RangeIndex(0, len(")
         .append(expr)
         .append("), 1), ")
-        .append(dummyColNamesGlobalVarName)
+        .append(dummyColNamesGlobal.getName())
         .append(")\n");
 
     // Compute dfCnt
@@ -409,7 +417,7 @@ public class SetOpCodeGen {
         .append(" = ")
         .append(dfOnes)
         .append(".groupby(")
-        .append(colNamesList)
+        .append(colNamesList.emit())
         .append(", dropna=False).cumsum()[")
         .append(makeQuoted(getDummyColNameBase()))
         .append("]\n")
@@ -421,7 +429,7 @@ public class SetOpCodeGen {
         .append("), (")
         .append(colCnt)
         .append(",), ")
-        .append(dummyColIdxsGlobalVarName)
+        .append(dummyColIdxsGlobal.getName())
         .append(", ")
         .append(expr)
         .append(".shape[1])\n")
@@ -432,7 +440,7 @@ public class SetOpCodeGen {
         .append(",), pd.RangeIndex(0, len(")
         .append(expr)
         .append("), 1), ")
-        .append(dummyColNamesGlobalVarName)
+        .append(dummyColNamesGlobal.getName())
         .append(")\n");
 
     return cumcountBuilder.toString();

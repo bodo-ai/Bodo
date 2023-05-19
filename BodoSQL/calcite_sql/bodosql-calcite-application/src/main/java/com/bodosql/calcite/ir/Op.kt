@@ -32,20 +32,13 @@ interface Op {
      * Represents an if operation with an optional else case
      * for bodies with a single line.
      */
-    data class If(val condAndBody: List<Pair<Expr, Op>>, val elseBlock: Op) : Op {
+    data class If(val cond: Expr, val ifFrame: Frame, val elseFrame: Frame) : Op {
 
         override fun emit(doc: Doc) {
-            // Create an indented version of the doc for the bodies.
-            var indentDoc: Doc = doc.indent()
-            var isFirst: Boolean = true
-            for ((cond, body) in condAndBody) {
-                val starter: String = if (isFirst) "if" else "elif"
-                doc.write("$starter ${cond.emit()}:")
-                body.emit(indentDoc)
-                isFirst = false
-            }
+            doc.write("if ${cond.emit()}:")
+            ifFrame.emit(doc.indent())
             doc.write("else:")
-            elseBlock.emit(indentDoc)
+            elseFrame.emit(doc.indent())
         }
     }
 

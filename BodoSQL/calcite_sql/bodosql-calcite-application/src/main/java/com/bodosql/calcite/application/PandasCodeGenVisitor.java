@@ -288,33 +288,34 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * Modifies the codegen such that the specified expression will be lowered into the func_text as a
    * global. This is currently only used for lowering metaDataType's and array types.
    *
-   * @return string variable name, which will be lowered as a global with a value equal to the
-   *     supplied expression
+   * @return Variable for the global.
    */
-  public String lowerAsGlobal(String expression) {
-    String global_var_name = generatedCode.getSymbolTable().genGlobalVar().getName();
-    this.loweredGlobals.put(global_var_name, expression);
-    return global_var_name;
+  public Variable lowerAsGlobal(Expr expression) {
+    Variable globalVar = generatedCode.getSymbolTable().genGlobalVar();
+    this.loweredGlobals.put(globalVar.getName(), expression.emit());
+    return globalVar;
   }
 
   /**
    * pass expression as a MetaType global to the generated output function
    *
    * @param expression to pass, e.g. (2, 3, 1)
-   * @return variable name for the global
+   * @return variable for the global
    */
-  public String lowerAsMetaType(String expression) {
-    return lowerAsGlobal("MetaType(" + expression + ")");
+  public Variable lowerAsMetaType(Expr expression) {
+    Expr typeCall = new Expr.Call("MetaType", List.of(expression));
+    return lowerAsGlobal(typeCall);
   }
 
   /**
    * Modifies the codegen such that the specified expression will be lowered into the func_text as a
    * ColNameMetaType global.
    *
-   * @return string variable name, which will conti
+   * @return variable for the global
    */
-  public String lowerAsColNamesMetaType(String expression) {
-    return lowerAsGlobal("ColNamesMetaType(" + expression + ")");
+  public Variable lowerAsColNamesMetaType(Expr expression) {
+    Expr typeCall = new Expr.Call("ColNamesMetaType", List.of(expression));
+    return lowerAsGlobal(typeCall);
   }
 
   /**
@@ -1474,11 +1475,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
       List<String> outputDfColnameList = out.getValue();
       String generatedDfName = this.genWindowedAggDfName();
       this.generatedCode
-          .append(indent)
-          .append(generatedDfName)
-          .append(" = ")
-          .append(dfExpr)
-          .append("\n");
+          .appendToMainFunction(indent)
+          .appendToMainFunction(generatedDfName)
+          .appendToMainFunction(" = ")
+          .appendToMainFunction(dfExpr)
+          .appendToMainFunction("\n");
 
       // For each aggregation that was fused into this window, extract the
       // corresponding column
@@ -1517,11 +1518,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
         ctx.getColsToAddList().add(colName);
 
         this.generatedCode
-            .append(indent)
-            .append(colName)
-            .append(" = ")
-            .append(outputColExprs.get(outputColExprsIdx))
-            .append("\n");
+            .appendToMainFunction(indent)
+            .appendToMainFunction(colName)
+            .appendToMainFunction(" = ")
+            .appendToMainFunction(outputColExprs.get(outputColExprsIdx))
+            .appendToMainFunction("\n");
 
         // Since we're adding the column to the dataframe before the apply, we return
         // an expression that references the added column.
@@ -1888,12 +1889,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
               zeroExpr,
               argsListList,
               isRespectNulls);
-      String fn_text = out.getKey();
+      String funcText = out.getKey();
       outputColList = out.getValue();
 
       // The length of the output column list should be the same length as argsListList
       assert argsListList.size() == outputColList.size();
-      this.generatedCode.append(fn_text);
+      this.generatedCode.appendToMainFunction(funcText);
 
       // perform the groupby apply, using the generated function call
       outputExpr.append(groupedColExpr).append(".apply(").append(fn_name).append(")");

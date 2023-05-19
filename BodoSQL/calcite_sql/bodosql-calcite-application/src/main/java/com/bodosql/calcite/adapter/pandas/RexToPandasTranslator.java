@@ -3,7 +3,6 @@ package com.bodosql.calcite.adapter.pandas;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.generateBinOpCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateTryCastCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.generateCaseCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getDoubleArgCondFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getSingleArgCondFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitIf;
@@ -73,11 +72,10 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.get
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getTwoArgStringFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getDoubleArgTrigFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getSingleArgTrigFnInfo;
+import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.Utils.Utils.generateCombinedDf;
-import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.isWindowedAggFn;
-import static com.bodosql.calcite.application.Utils.Utils.renameExprsList;
-
+import static com.bodosql.calcite.application.Utils.Utils.renameTableRef;
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen;
@@ -88,7 +86,12 @@ import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.ir.Dataframe;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Expr.FrameTripleQuotedString;
+import com.bodosql.calcite.ir.Frame;
 import com.bodosql.calcite.ir.Module;
+import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.Op.Assign;
+import com.bodosql.calcite.ir.Op.If;
 import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -97,6 +100,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexCall;
@@ -168,11 +172,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   @Override
   public Expr visitInputRef(RexInputRef inputRef) {
-    String refValue =
-        String.format(
-            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(%s, %d)",
-            input.getVariable().getName(), inputRef.getIndex());
-    return new Expr.Raw(refValue);
+    return new Expr.Call(
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
+        List.of(input.getVariable(), new Expr.IntegerLiteral(inputRef.getIndex())));
   }
 
   @Override
@@ -406,6 +408,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     return visitCaseOp(node, false);
   }
 
+  /**
+   * Overview of code generation for case:
+   * https://bodo.atlassian.net/wiki/spaces/B/pages/1368752135/WIP+BodoSQL+Case+Implementation
+   *
+   * @param node The case node to visit
+   * @param isSingleRow Is case a nested inside another case statement?
+   * @return The resulting expression from generating case code.
+   */
   protected Expr visitCaseOp(RexCall node, boolean isSingleRow) {
     // TODO: Technical debt, this should be done in our fork of calcite
     // Calcite optimizes a large number of windowed aggregation functions into case statements,
@@ -418,72 +428,297 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     List<RexNode> operands = node.getOperands();
     // Even if the contents are scalars, we will always have a dataframe unless we
-    // are inside another apply. We choose to generate apply code in this case because
-    // we only compile single basic blocks.
-    boolean generateApply = !isSingleRow;
+    // are inside another case statement. We opt to use the case kernel to avoid
+    // the compilation overhead for very large case statements (the kernel
+    // can make the inlining decision).
+    boolean callCaseKernel = !isSingleRow;
 
-    // The body of case may require wrapping everything inside a global variable.
-    // In the future this all needs to be wrapped inside the original builder, but we
-    // can't support that yet.
-    Module.Builder oldBuilder = this.builder;
-    Module.Builder innerBuilder = this.builder;
-
-    if (generateApply) {
-      // If we're generating an apply, the input set of columns to add should be empty,
-      // since we only add columns to the colsToAddList when inside an apply.
-      assert ctx.getColsToAddList().size() == 0;
-      // If we generate an apply we need to write the generated if/else
-      innerBuilder = new Module.Builder(this.builder);
+    if (callCaseKernel) {
+      // If we call the case kernel we need to generate a new frame for
+      // writing the values that will be inserted into the loop body.
+      // We create the loop body as a global to allow the kernel to make
+      // decisions about inlining.
+      builder.startFrame();
     }
-
+    /** Create the translator for visiting the operands. */
     RexToPandasTranslator localTranslator =
-        new RexToPandasTranslator.ScalarContext(visitor, innerBuilder, typeSystem, nodeId, input);
-    List<String> args = new ArrayList<>(operands.size());
-    for (Expr expr : localTranslator.visitList(operands)) {
-      args.add(expr.emit());
+        new RexToPandasTranslator.ScalarContext(visitor, builder, typeSystem, nodeId, input);
+    /** Generate the code for visiting the operands to case. */
+    Variable outputVar = visitCaseOperands(localTranslator, operands);
+    if (callCaseKernel) {
+      RelDataType outputType = node.getType();
+      return generateCaseKernelCall(localTranslator.ctx, outputVar, outputType);
+    } else {
+      // If we're not the top level kernel, so we need to pass back the information so that it is
+      // properly handled by the actual kernel.
+      ctx.unionContext(localTranslator.ctx);
+      // Just return the output variable because there is no kernel.
+      return outputVar;
     }
+  }
 
-    String inputVar = input.getVariable().getName();
-    if (generateApply && localTranslator.ctx.getColsToAddList().size() > 0) {
-      // If we do generate an apply, add the columns that we need to the dataframe
-      // and change the variables to reference the new dataframe
+  /**
+   * Visit the operands to a call to case using the given translator. These operands are traversed
+   * in reverse order because each operand should generate its code into a different Python frame
+   * and its simplest to generate the code this way.
+   *
+   * <p>The operands to case are of the form: [cond1, truepath1, cond2, truepath2, ..., elsepath]
+   * All of these components are present, so the operands is always of Length 2n + 1, where n is the
+   * number of conditions and n > 0. The else is always present, even if not explicit in the
+   * original SQL query.
+   *
+   * <p>For code generation purposes we first process the else and then we process each pair of
+   * condition + truepath. The final code will place each truepath in the `if` block when evaluating
+   * each condition and the next condition in its else block.
+   *
+   * <p>All "result" paths are defined to use the same output Variable, which is returned by this
+   * function.
+   *
+   * <p>For example, if we have 5 inputs with no intermediate variables, the generated code might
+   * look like this:
+   *
+   * <p><code>
+   *     if bodo.libs.bodosql_array_kernels.is_true(cond1):
+   *        output_var = truepath1
+   *     else:
+   *        if bodo.libs.bodosql_array_kernels.is_true(cond2):
+   *          output_var = truepath2
+   *        else:
+   *          output_var = elsepath
+   * </code>
+   *
+   * @param translator The translator used to visit each operand.
+   * @param operands The list of RexNodes to visit to capture the proper computation.
+   * @return The output variable written to in all paths.
+   */
+  private Variable visitCaseOperands(RexToPandasTranslator translator, List<RexNode> operands) {
+    // Create the output variable shared by all nodes
+    Variable outputVar = new Variable(visitor.genGenericTempVar());
+    // Generate the frames we will use. Each operand is it a different, frame,
+    // including the current frame for the 0th operand.
+    for (int i = 0; i < operands.size() - 1; i++) {
+      builder.startFrame();
+    }
+    // Generate the else code
+    Expr elsePath = operands.get(operands.size() - 1).accept(translator);
+    // Assign to the output variable
+    builder.add(new Op.Assign(outputVar, elsePath));
+    for (int i = operands.size() - 2; i > 0; i -= 2) {
+      // Pop the else Frame
+      Frame elseFrame = builder.endFrame();
+      // Generate the if path frame + code
+      Expr ifPath = operands.get(i).accept(translator);
+      // Assign to the output variable
+      builder.add(new Op.Assign(outputVar, ifPath));
+      // Pop the two frames for the condition
+      Frame ifFrame = builder.endFrame();
+      // Visit the cond code
+      Expr cond = operands.get(i - 1).accept(translator);
+      // Wrap the cond expr in a is_true call
+      Expr.Call condCall = new Expr.Call("bodo.libs.bodosql_array_kernels.is_true", List.of(cond));
+      // Generate the if statement
+      Op.If ifStatement = new If(condCall, ifFrame, elseFrame);
+      builder.add(ifStatement);
+    }
+    return outputVar;
+  }
+
+  /**
+   * Prepare the arguments and generate the call to `bodo.utils.typing.bodosql_case_placeholder` for
+   * the main case kernel. There are additional complexities associated with window functions, so
+   * some arguments make modifications to existing code, which are highlighted in the helper
+   * functions.
+   *
+   * <p>This function returns a Variable which holds the result of kernel call and appends the call
+   * directly to the generated Code for the active Frame.
+   *
+   * @param translatorContext The BodoContext generated from visiting the operands. This tracks
+   *     information like which columns where used.
+   * @param loopOutputVar The output variable for the result in the loop body.
+   * @param outputType The RelDataType of the final output.
+   * @return The variable that is assigned to the output of the kernel.
+   */
+  private Variable generateCaseKernelCall(
+      BodoCtx translatorContext, Variable loopOutputVar, RelDataType outputType) {
+    // Pop off the active Frame for generating a triple quote
+    // string global.
+    Frame loopBodyFrame = builder.endFrame();
+    Variable inputVar = getCaseInputVar(translatorContext);
+
+    // Relevant steps for generating the kernel call:
+    //
+    // 1) a tuple of necessary input arrays
+    // 2) (global constant) initialization code for unpacking the input array tuple with the correct
+    // array
+    // 3) (global constant) body of the CASE loop
+    // 4) Generated named parameters. This is only used when Named parameters (BodoSQL's
+    // SQL reference to Python variables) are used. This is very uncommon!
+    // 5) number of output rows (same as input rows, needed for allocation)
+    // 6) loop variable name
+    // 7) output array type
+    // 8) Generate the final call
+
+    // Sort used columns so we always get the same code. This is used by steps
+    // 1 and 2.
+    TreeSet<Integer> sortedUsedColumns = new TreeSet<>(translatorContext.getUsedColumns());
+    // Step 1: Create a tuple of arrays
+    Expr.Tuple inputData = generateCaseArrayTuple(inputVar, sortedUsedColumns);
+    // Step 2: Create the initialization code + constant
+    Variable initGlobal = generateCaseInitializationCode(inputVar, sortedUsedColumns);
+    // Step 3: Generate the loop body constant
+    Variable bodyGlobal = generateCaseLoopBody(inputVar, loopBodyFrame);
+    // Step 4: Generate the namedArguments to the bodosql_case_placeholder call.
+    // This is only used if we have named Parameters, so in most cases it will be empty.
+    List<kotlin.Pair<String, Expr>> namedArgs = generateCaseNamedArgs(translatorContext);
+    // Step 5: Generate the output size
+    Expr.Call lenCall = new Expr.Call("len", List.of(inputVar));
+    // Step 6: Generate the array variable
+    Variable arrVar = new Variable(visitor.genGenericTempVar());
+    // Step 7: Create the type
+    Variable outputArrayTypeGlobal =
+        visitor.lowerAsGlobal(sqlTypeToBodoArrayType(outputType, false));
+
+    // Step 8: Generate the function call
+    Expr.Call functionCall =
+        new Expr.Call(
+            "bodo.utils.typing.bodosql_case_placeholder",
+            List.of(
+                inputData,
+                lenCall,
+                initGlobal,
+                bodyGlobal,
+                // Note: The variable name must be a string literal here.
+                new Expr.StringLiteral(loopOutputVar.getName()),
+                outputArrayTypeGlobal),
+            namedArgs);
+    // Add the call to the generated code.
+    builder.add(new Op.Assign(arrVar, functionCall));
+    // Update the output variable
+    return arrVar;
+  }
+
+  /**
+   * Determine the input variable for function calls. If we need to generate additional columns
+   * (which can occur if a RexOver is used in the body of a case statement), then we need to
+   * generate a new variable that will be added to the code with additional columns.
+   *
+   * @param translatorContext The BodoContext holding what columns need to be added.
+   * @return The input variable being selected.
+   */
+  private Variable getCaseInputVar(BodoCtx translatorContext) {
+    if (translatorContext.getColsToAddList().size() > 0) {
+      Variable newInputVar = builder.getSymbolTable().genDfVar();
+      // Generate the new variable in the code
       List<String> colNames = input.getRel().getRowType().getFieldNames();
-      final String indent = getBodoIndent();
-      String tmp_case_name = "tmp_case_" + builder.getSymbolTable().genDfVar().emit();
-      this.builder.append(
-          indent
-              + tmp_case_name
-              + " = "
-              + generateCombinedDf(inputVar, colNames, localTranslator.ctx.getColsToAddList())
-              + "\n");
-      args = renameExprsList(args, inputVar, tmp_case_name);
-      inputVar = tmp_case_name;
-      // get column names including the added columns
-      List<String> newColNames = new ArrayList<>();
-      for (String col : colNames) newColNames.add(col);
-      for (String col : localTranslator.ctx.getColsToAddList()) newColNames.add(col);
-    } else if (!generateApply) {
-      // If we're not the top level apply, we need to pass back the information so that it is
-      // properly handled
-      // by the actual top level apply
-      // null columns are handled by the cond itself, so don't need to pass those back
-      ctx.getNamedParams().addAll(localTranslator.ctx.getNamedParams());
-      ctx.getColsToAddList().addAll(localTranslator.ctx.getColsToAddList());
-      ctx.getUsedColumns().addAll(localTranslator.ctx.getUsedColumns());
+      Variable prevInputVar = input.getVariable();
+      Op.Assign newDataFrame =
+          new Assign(
+              newInputVar,
+              generateCombinedDf(prevInputVar, colNames, translatorContext.getColsToAddList()));
+      // Add the new variable to the generated code.
+      this.builder.add(newDataFrame);
+      return newInputVar;
+    } else {
+      return input.getVariable();
     }
+  }
 
-    String codeExpr =
-        generateCaseCode(
-            args,
-            generateApply,
-            localTranslator.ctx,
-            inputVar,
-            node.getType(),
-            visitor,
-            oldBuilder,
-            innerBuilder);
+  /**
+   * Generate the tuple of arrays to feed as input to `bodo.utils.typing.bodosql_case_placeholder`
+   *
+   * @param inputVar The input DataFrame variable from which to extract the arrays.
+   * @param sortedUsedColumns A sorted Set of columns indicated which columns to select.
+   * @return The Expr.Tuple of arguments.
+   */
+  private Expr.Tuple generateCaseArrayTuple(Variable inputVar, TreeSet<Integer> sortedUsedColumns) {
+    List<Expr.Call> inputDataArgs = new ArrayList<>();
+    // Create the tuples variable
+    for (int colNo : sortedUsedColumns) {
+      inputDataArgs.add(
+          new Expr.Call(
+              "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
+              List.of(inputVar, new Expr.IntegerLiteral(colNo))));
+    }
+    return new Expr.Tuple(inputDataArgs);
+  }
 
-    return new Expr.Raw(codeExpr);
+  /**
+   * Generates the initial to be used inside `bodo.utils.typing.bodosql_case_placeholder` before
+   * loop generation. This unpacks the tuple of arrays into variable names that we assumed when we
+   * visited the operands.
+   *
+   * <p>This data is then converted to a triple quoted string and passed to the globals via the
+   * MetaType (for reduced compliation time). That global variable is returned.
+   *
+   * @param inputVar The input variable which is needed for generating the variable names.
+   * @param sortedUsedColumns A sorted Set of columns indicated which columns to select.
+   * @return The generated global variable.
+   */
+  private Variable generateCaseInitializationCode(
+      Variable inputVar, TreeSet<Integer> sortedUsedColumns) {
+    // Create a new frame for appending the initialization variable
+    builder.startFrame();
+    // Create the tuples variable
+    Variable arrs = new Variable("arrs");
+    Iterator<Integer> usedCols = sortedUsedColumns.iterator();
+    for (int i = 0; i < sortedUsedColumns.size(); i++) {
+      // Note: This exact variable name is required/assumed in the code generation.
+      Op.Assign initLine =
+          new Assign(
+              new Variable(inputVar.getName() + "_" + usedCols.next()),
+              new Expr.Getitem(arrs, new Expr.IntegerLiteral(i)));
+      builder.add(initLine);
+    }
+    // Pop the frame and generate the triple quoted string
+    Frame initFrame = builder.endFrame();
+    Expr.FrameTripleQuotedString initBody = new FrameTripleQuotedString(initFrame, 1);
+    // Create the global variable.
+    return visitor.lowerAsMetaType(initBody);
+  }
+
+  /**
+   * Generate the loop body code as a global variable from the frame used when visiting the
+   * operands. If we needed to generate a new input variable (which can occur if a RexOver is used
+   * in the body of a case statement), we will need to update this loop body with the new input
+   * variable name. This is "hacky" and should be removed once we can guarentee not having RexOver
+   * inside case at a plan level.
+   *
+   * @param inputVar The input variable that should be used in the loopBody. If this isn't used we
+   *     need to update the contents of the body.
+   * @param loopBodyFrame The Frame where the operands were initially visited. This contains the
+   *     code for the loop body.
+   * @return The generated global variable.
+   */
+  private Variable generateCaseLoopBody(Variable inputVar, Frame loopBodyFrame) {
+    // Generate the triple quoted string
+    // Note: We use indent level 2 because this is found inside a for loop
+    Expr loopBody = new FrameTripleQuotedString(loopBodyFrame, 2);
+    Variable prevInputVar = input.getVariable();
+    if (!prevInputVar.equals(inputVar)) {
+      // Update the loop body to replace any uses of the prevInputVar with the new inputVar.
+      // TODO: Remove
+      String loopBodyStr = loopBody.emit();
+      loopBody = new Expr.Raw(renameTableRef(loopBodyStr, prevInputVar, inputVar));
+    }
+    return visitor.lowerAsGlobal(loopBody);
+  }
+
+  /**
+   * Generate a list suitable to pass as the named arguments to an Expr.Call expression for the
+   * named Parameters that were used inside the body of the loop. Named parameters are not standard
+   * SQL, equating to SQL variables in other languages, so in most cases this will return an empty
+   * list.
+   *
+   * @param translatorContext The context that tracks any used named parameters
+   * @return Thes list suitable to pass to the Expr.Call
+   */
+  private List<kotlin.Pair<String, Expr>> generateCaseNamedArgs(BodoCtx translatorContext) {
+    TreeSet<String> sortedParamSet = new TreeSet<>(translatorContext.getNamedParams());
+    List<kotlin.Pair<String, Expr>> namedArgs = new ArrayList<>();
+    for (String param : sortedParamSet) {
+      namedArgs.add(new kotlin.Pair<>(param, new Expr.Raw(param)));
+    }
+    return namedArgs;
   }
 
   protected Expr visitCastScan(RexCall operation) {
@@ -601,10 +836,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
       // If we're not the top level apply, we need to pass back the information so that it is
       // properly handled by the actual top level apply
-      ctx.getColsToAddList().addAll(localCtx.getColsToAddList());
-      ctx.getNamedParams().addAll(localCtx.getNamedParams());
-      ctx.getUsedColumns().addAll(localCtx.getUsedColumns());
-
+      ctx.unionContext(localCtx);
       return result;
     }
 
@@ -1337,16 +1569,13 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     @Override
     public Expr visitInputRef(RexInputRef inputRef) {
+      // Add a use for generating variables in case
       ctx.getUsedColumns().add(inputRef.getIndex());
       // NOTE: Codegen for bodosql_case_placeholder() expects column value accesses
       // (e.g. bodo.utils.indexing.scalar_optional_getitem(T1_1, i))
-      String refValue =
-          "bodo.utils.indexing.scalar_optional_getitem("
-              + input.getVariable().getName()
-              + "_"
-              + inputRef.getIndex()
-              + ", i)";
-      return new Expr.Raw(refValue);
+      Variable inputVar = new Variable(input.getVariable().getName() + "_" + inputRef.getIndex());
+      Variable index = new Variable("i");
+      return new Expr.Call("bodo.utils.indexing.scalar_optional_getitem", List.of(inputVar, index));
     }
 
     @Override

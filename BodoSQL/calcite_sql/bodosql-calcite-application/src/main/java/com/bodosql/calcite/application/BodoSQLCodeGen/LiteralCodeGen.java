@@ -1,15 +1,16 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.escapePythonQuotes;
-
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Expr.DecimalLiteral;
 import com.google.common.collect.Range;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.Iterator;
+import java.util.List;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
@@ -76,7 +77,7 @@ public class LiteralCodeGen {
                     + typeName);
         }
       case SARG:
-        StringBuilder literalList = new StringBuilder("[");
+        List<Expr> literalList = new ArrayList<>();
 
         Sarg sargVal = (Sarg) node.getValue();
         Iterator<Range> iter = sargVal.rangeSet.asRanges().iterator();
@@ -92,15 +93,14 @@ public class LiteralCodeGen {
                   && curRange.hasUpperBound()
                   && curRange.upperEndpoint() == curRange.lowerEndpoint()
               : "Internal error: Attempted to convert a non-discrete sarg into a literal value.";
-          String expr = sargValToPyLiteral(curRange.lowerEndpoint());
-          literalList.append(expr).append(", ");
+          Expr expr = sargValToPyLiteral(curRange.lowerEndpoint());
+          literalList.add(expr);
         }
-        literalList.append("]");
         // initialize the array, and lower it as a global
 
         // Note, currently, setting the dtype of this array directly can cause
         // issues in typing. So, we just let Bodo infer the type of the lowered array.
-        String arrayExpr = "pd.array(" + literalList.toString() + ")";
+        Expr arrayExpr = new Expr.Call("pd.array", List.of(new Expr.List(literalList)));
 
         if (isSingleRow) {
           // note that we can't lower this as a global, if we are inside a case statement,
@@ -112,7 +112,7 @@ public class LiteralCodeGen {
           throw new BodoSQLCodegenException(
               "Internal Error: Attempted to generate a Sarg literal within a case statement.");
         } else {
-          return new Expr.Raw(visitor.lowerAsGlobal(arrayExpr));
+          return visitor.lowerAsGlobal(arrayExpr);
         }
 
       default:
@@ -203,18 +203,17 @@ public class LiteralCodeGen {
    * @return A string that represents the value as a python literal
    * @param <C> The type of said literal.
    */
-  public static <C extends Comparable<C>> String sargValToPyLiteral(C scalarVal) {
+  public static <C extends Comparable<C>> Expr sargValToPyLiteral(C scalarVal) {
     // TODO: extend this to other types (timestamp, etc) which may need to do some
     // extra parsing/conversion
 
     if (scalarVal instanceof NlsString) {
       NlsString as_Nls = ((NlsString) scalarVal);
-      // Simply calling toString creates a string with charset information attached
-      // IE UTF-8:"hello world". This is needed to convert to a python literal string
-      // TODO: check if this handles dealing with non-ascii strings
-      return escapePythonQuotes(as_Nls.asSql(false, false));
+      // Call get value to get the underlying string without the surrounding 's
+      // indicating a SQL literal. Expr.StringLiteral will handle string requirements.
+      return new Expr.StringLiteral(as_Nls.getValue());
     } else if (scalarVal instanceof BigDecimal) {
-      return scalarVal.toString();
+      return new DecimalLiteral((BigDecimal) scalarVal);
     } else {
       throw new BodoSQLCodegenException(
           "Internal error: Sarg limit value cannot be converted to python literal.");
