@@ -742,6 +742,7 @@ def test_df_apply_general_colnames(memory_leak_check):
 @pytest.mark.slow
 def test_df_apply_decimal(memory_leak_check):
     """make sure Decimal output can be handled in apply() properly"""
+
     # just returning input value since we don't support any Decimal creation yet
     # TODO: support Decimal(str) constructor
     # TODO: fix using freevar constants in UDFs
@@ -2063,7 +2064,6 @@ def test_loc_col_select(memory_leak_check):
 
 @pytest.mark.slow
 def test_getitem_loc_integer_cols():
-
     # TODO: BE-1325, support non string literals for scalar case
     # def impl1(df):
     #     return df.loc[0, 1]
