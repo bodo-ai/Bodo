@@ -1,14 +1,17 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.DateTimeHelpers.*;
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.Utils.DateTimeHelpers.convertMySQLFormatStringToPython;
+import static com.bodosql.calcite.application.Utils.DateTimeHelpers.isStringLiteral;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.ir.Expr;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.BodoTZInfo;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 public class DatetimeFnCodeGen {
   static List<String> fnList =
@@ -161,15 +164,11 @@ public class DatetimeFnCodeGen {
    * Helper function that handles the codegen for Date format
    *
    * @param arg1Info The VisitorInfo for the first argument.
-   * @param arg1ExprType Is arg1 a column or scalar?
    * @param arg2Info The VisitorInfo for the second argument. Currently, this is required to be a
    *     constant string literal.
-   * @param isSingleRow boolean value that determines if this function call is taking place within
-   *     an apply
    * @return the rexNodeVisitorInfo for the result.
    */
-  public static Expr generateDateFormatCode(
-      Expr arg1Info, Expr arg2Info) {
+  public static Expr generateDateFormatCode(Expr arg1Info, Expr arg2Info) {
     assert isStringLiteral(arg2Info.emit());
     String pythonFormatString = convertMySQLFormatStringToPython(arg2Info.emit());
     String outputExpression =
@@ -185,7 +184,6 @@ public class DatetimeFnCodeGen {
   /**
    * Helper function that handles codegen for CURDATE and CURRENTDATE
    *
-   * @param opName The name of the function
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static Expr generateCurdateCode() {
@@ -315,8 +313,7 @@ public class DatetimeFnCodeGen {
 
   public static ArrayList<String> TIME_PART_UNITS =
       new ArrayList<String>(
-          Arrays.asList("hour", "minute", "second", "millisecond", "microsecond", "nanosecond")
-      );
+          Arrays.asList("hour", "minute", "second", "millisecond", "microsecond", "nanosecond"));
 
   public enum DateTimeType {
     TIMESTAMP,
@@ -330,7 +327,7 @@ public class DatetimeFnCodeGen {
    * @param rexNode RexNode of the expression
    * @return The expression is a timestamp, time or date object
    */
-  public static DateTimeType getDateTimeExprType(RexNode rexNode) {
+  public static DateTimeType getDateTimeDataType(RexNode rexNode) {
     if (rexNode.getType().getSqlTypeName().toString().equals("TIME")) {
       return DateTimeType.TIME;
     }
@@ -345,13 +342,13 @@ public class DatetimeFnCodeGen {
    *
    * @param fnName the function which takes this time unit as input
    * @param inputTimeStr the input time unit string
-   * @param dateTimeExprType if the time expression is Bodo.Time object, the time unit should be
+   * @param dateTimeDataType if the time expression is Bodo.Time object, the time unit should be
    *     smaller or equal to hour if the time expression is date object, the time unit should be
    *     larger or equal to day
    * @return the standardized time unit string
    */
   public static String standardizeTimeUnit(
-      String fnName, String inputTimeStr, DateTimeType dateTimeExprType) {
+      String fnName, String inputTimeStr, DateTimeType dateTimeDataType) {
     String unit;
     switch (inputTimeStr.toLowerCase()) {
       case "\"year\"":
@@ -370,7 +367,7 @@ public class DatetimeFnCodeGen {
       case "yr":
       case "years":
       case "yrs":
-        if (dateTimeExprType == DateTimeType.TIME)
+        if (dateTimeDataType == DateTimeType.TIME)
           throw new BodoSQLCodegenException(
               "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
         unit = "year";
@@ -386,7 +383,7 @@ public class DatetimeFnCodeGen {
       case "mon":
       case "mons":
       case "months":
-        if (dateTimeExprType == DateTimeType.TIME)
+        if (dateTimeDataType == DateTimeType.TIME)
           throw new BodoSQLCodegenException(
               "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
         unit = "month";
@@ -402,7 +399,7 @@ public class DatetimeFnCodeGen {
       case "dd":
       case "days":
       case "dayofmonth":
-        if (dateTimeExprType == DateTimeType.TIME)
+        if (dateTimeDataType == DateTimeType.TIME)
           throw new BodoSQLCodegenException(
               "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
         unit = "day";
@@ -420,7 +417,7 @@ public class DatetimeFnCodeGen {
       case "weekofyear":
       case "woy":
       case "wy":
-        if (dateTimeExprType == DateTimeType.TIME)
+        if (dateTimeDataType == DateTimeType.TIME)
           throw new BodoSQLCodegenException(
               "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
         unit = "week";
@@ -436,7 +433,7 @@ public class DatetimeFnCodeGen {
       case "qtr":
       case "qtrs":
       case "quarters":
-        if (dateTimeExprType == DateTimeType.TIME)
+        if (dateTimeDataType == DateTimeType.TIME)
           throw new BodoSQLCodegenException(
               "Unsupported unit for " + fnName + " with TIME input: " + inputTimeStr);
         unit = "quarter";

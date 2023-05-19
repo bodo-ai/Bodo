@@ -1,57 +1,58 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.ir.Expr;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
-// List definining all numeric functions which will be mapped to their corresponding array kernel in
+// List defining all numeric functions which will be mapped to their corresponding array kernel in
 // Python.
 public class NumericCodeGen {
-  static List<String> fnList = Arrays.asList(
-      "ABS",
-      "BITAND",
-      "BITOR",
-      "BITXOR",
-      "BITSHIFTLEFT",
-      "BITSHIFTRIGHT",
-      "BITNOT",
-      "CBRT",
-      "CEIL",
-      "EXP",
-      "FACTORIAL",
-      "FLOOR",
-      "GETBIT",
-      "LN",
-      "LOG2",
-      "LOG10",
-      "MOD",
-      "POW",
-      "POWER",
-      "ROUND",
-      "SIGN",
-      "SQRT",
-      "SQUARE",
-      "TRUNC",
-      "TRUNCATE");
+  static List<String> fnList =
+      Arrays.asList(
+          "ABS",
+          "BITAND",
+          "BITOR",
+          "BITXOR",
+          "BITSHIFTLEFT",
+          "BITSHIFTRIGHT",
+          "BITNOT",
+          "CBRT",
+          "CEIL",
+          "EXP",
+          "FACTORIAL",
+          "FLOOR",
+          "GETBIT",
+          "LN",
+          "LOG2",
+          "LOG10",
+          "MOD",
+          "POW",
+          "POWER",
+          "ROUND",
+          "SIGN",
+          "SQRT",
+          "SQUARE",
+          "TRUNC",
+          "TRUNCATE");
 
   // List defining all numeric functions to be mapped (from fnList) which will
   // have two arguments.
-  static List<String> doubleArgFns = Arrays.asList(
-      "BITAND",
-      "BITOR",
-      "BITXOR",
-      "BITSHIFTLEFT",
-      "BITSHIFTRIGHT",
-      "GETBIT",
-      "MOD",
-      "POW",
-      "POWER",
-      "ROUND",
-      "TRUNC",
-      "TRUNCATE");
+  static List<String> doubleArgFns =
+      Arrays.asList(
+          "BITAND",
+          "BITOR",
+          "BITXOR",
+          "BITSHIFTLEFT",
+          "BITSHIFTRIGHT",
+          "GETBIT",
+          "MOD",
+          "POW",
+          "POWER",
+          "ROUND",
+          "TRUNC",
+          "TRUNCATE");
 
   // HashMap of all numeric functions which maps to array kernels
   // which handle all combinations of scalars/arrays/nulls.
@@ -72,7 +73,7 @@ public class NumericCodeGen {
   /**
    * Helper function that handles codegen for Single argument numeric functions
    *
-   * @param fnName   The name of the function
+   * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
@@ -88,7 +89,7 @@ public class NumericCodeGen {
   /**
    * Helper function that handles codegen for double argument numeric functions
    *
-   * @param fnName   The name of the function
+   * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
    * @param arg2Expr The string expression of arg2
    * @return The RexNodeVisitorInfo corresponding to the function call
@@ -104,11 +105,9 @@ public class NumericCodeGen {
   /**
    * Function that return the necessary generated code for a CONV Function Call.
    *
-   * @param inputExpr    The first argument of the CONV call, either a scalar, or
-   *                     a column
-   * @param curBaseExpr  The second argument of the CONV call, the current base
-   * @param newBaseExpr  The second argument of the CONV call, the base to convert
-   *                     to.
+   * @param inputExpr The first argument of the CONV call, either a scalar, or a column
+   * @param curBaseExpr The second argument of the CONV call, the current base
+   * @param newBaseExpr The second argument of the CONV call, the base to convert to.
    * @param outputScalar Should the output generate scalar code.
    * @return The code generated that matches the CONV expression.
    */
@@ -129,11 +128,9 @@ public class NumericCodeGen {
   /**
    * Function that returns the generated name for a CONV Function Call.
    *
-   * @param inputName   The first argument of the CONV call, either a scalar, or a
-   *                    column
+   * @param inputName The first argument of the CONV call, either a scalar, or a column
    * @param curBaseName The second argument of the CONV call, the current base
-   * @param newBaseName The second argument of the CONV call, the base to convert
-   *                    to.
+   * @param newBaseName The second argument of the CONV call, the base to convert to.
    * @return The name generated that matches the CONV expression.
    */
   public static String generateConvName(String inputName, String curBaseName, String newBaseName) {
@@ -152,13 +149,10 @@ public class NumericCodeGen {
   /**
    * Function that returns the RexVisitorInfo for a LOG Function Call.
    *
-   * @param operandsInfo A list of the visitor info, containing the information
-   *                     for each operand
-   * @param exprTypes    A list of the expression types of the operands
+   * @param operandsInfo A list of the visitor info, containing the information for each operand
    * @return The RexVisitorInfo that matches the LOG expression.
    */
-  public static Expr generateLogFnInfo(
-      List<Expr> operandsInfo, List<BodoSQLExprType.ExprType> exprTypes, boolean isScalar) {
+  public static Expr generateLogFnInfo(List<Expr> operandsInfo) {
     StringBuilder exprStrBuilder = new StringBuilder();
     if (operandsInfo.size() == 1) {
       // One operand, we default to log10 as that is the default behavior in mySQL
@@ -178,8 +172,7 @@ public class NumericCodeGen {
   }
 
   /**
-   * Helper function that handles the codegen for TO_NUMBER/TO_NUMERIC/TO_DECIMAL
-   * function
+   * Helper function that handles the codegen for TO_NUMBER/TO_NUMERIC/TO_DECIMAL function
    *
    * @param arg1Info The VisitorInfo for the first argument.
    * @return the rexNodeVisitorInfo for the function call
@@ -190,8 +183,7 @@ public class NumericCodeGen {
   }
 
   /**
-   * Helper function that handles the codegen for
-   * TRY_TO_NUMBER/TRY_TO_NUMERIC/TRY_TO_DECIMAL
+   * Helper function that handles the codegen for TRY_TO_NUMBER/TRY_TO_NUMERIC/TRY_TO_DECIMAL
    * function
    *
    * @param arg1Info The VisitorInfo for the first argument.

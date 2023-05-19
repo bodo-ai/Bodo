@@ -349,7 +349,7 @@ public class ExprTypeVisitor {
       determineRexCallExprType((RexCall) node, exprTypes, id, searchMap, builder);
     } else if (node instanceof RexFieldAccess || node instanceof RexCorrelVariable) {
       throw new BodoSQLExprTypeDeterminationException(
-          "Internal Error: BodoSQL does not support corelated Queries");
+          "Internal Error: BodoSQL does not support correlated Queries");
     } else {
       throw new BodoSQLExprTypeDeterminationException(
           "Internal Error: Calcite Plan Produced an Unsupported RexNode");
