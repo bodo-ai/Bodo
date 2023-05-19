@@ -4,7 +4,11 @@ import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
 import com.google.common.collect.ImmutableList;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelOptUtil;
@@ -33,7 +37,7 @@ import org.immutables.value.Value;
  * <p>In some cases, this rule has the effect of trimming: the aggregate will use fewer columns than
  * the project did.
  *
- * @see CoreRules#AGGREGATE_PROJECT_MERGE
+ * @see org.apache.calcite.rel.rules.CoreRules#AGGREGATE_PROJECT_MERGE
  *     <p>This code is a modified version of the default AggregateProjectMergeRule found at:
  *     https://github.com/apache/calcite/blob/7e38304093d803fba678817c07012f4d201ad8a0/core/src/main/java/org/apache/calcite/rel/rules/AggregateProjectMergeRule.java#L62
  *     However, the original rule does not preserve aliases in some conditions
@@ -117,38 +121,24 @@ public class AliasPreservingAggregateProjectMergeRule
     // changed, we need to check that the names are not modified (to keep
     // any aliases). If there are aliases we will generate a projection
     // that just renames columns.
-    List<String> newKeyNames = new ArrayList<>();
-    List<String> newFieldNames = newAggregate.getRowType().getFieldNames();
-    List<String> oldKeyNames = new ArrayList<>();
     List<String> oldFieldNames = aggregate.getRowType().getFieldNames();
-    for (int i = 0; i < aggregate.getGroupSet().asList().size(); i++) {
-      oldKeyNames.add(oldFieldNames.get(i));
-      newKeyNames.add(newFieldNames.get(i));
-    }
-    if (!newKeys.equals(newGroupSet.asList()) || !oldKeyNames.equals(newKeyNames)) {
+    List<String> newFieldNames = newAggregate.getRowType().getFieldNames();
+    boolean changedNames = !oldFieldNames.equals(newFieldNames);
+    if (!newKeys.equals(newGroupSet.asList()) || changedNames) {
       final List<Integer> posList = new ArrayList<>();
-      String[] keptFieldNames = new String[newAggregate.getRowType().getFieldCount()];
-      // Rule change. Here we generate the keptFieldNames so the
-      // future projection contains the original aliases
       for (int newKey : newKeys) {
-        int idx = newGroupSet.indexOf(newKey);
-        posList.add(idx);
-        keptFieldNames[idx] = oldFieldNames.get(idx);
+        posList.add(newGroupSet.indexOf(newKey));
       }
       for (int i = newAggregate.getGroupCount();
           i < newAggregate.getRowType().getFieldCount();
           i++) {
         posList.add(i);
-        keptFieldNames[i] = newFieldNames.get(i);
       }
 
       // Rule change. We have to force the projection to be generated if there
       // is only aliasing because the identity projection will not be generated.
       // The rules we apply do not remove this.
-      relBuilder.project(
-          relBuilder.fields(posList),
-          Arrays.asList(keptFieldNames),
-          !oldKeyNames.equals(newKeyNames));
+      relBuilder.project(relBuilder.fields(posList), oldFieldNames, changedNames);
     }
     return relBuilder.build();
   }
