@@ -55,6 +55,10 @@ public class Utils {
    * @return single quoted string
    */
   public static String makeQuoted(String unquotedString) {
+    if(unquotedString.length() > 1
+        && unquotedString.charAt(0) == '"'
+        && unquotedString.charAt(unquotedString.length() - 1) == '"')
+      return unquotedString;
     return '"' + unquotedString + '"';
   }
 
