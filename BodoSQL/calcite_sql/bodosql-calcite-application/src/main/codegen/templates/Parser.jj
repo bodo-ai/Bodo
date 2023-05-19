@@ -6400,6 +6400,26 @@ SqlNode BuiltinFunctionCall() :
             return SqlStdOperatorTable.TRIM.createCall(s.end(this), args);
         }
     |
+        <DATE_PART> { s = span(); }
+        <LPAREN>
+        args = QuotedOrUnquotedInterval()
+        <COMMA>
+        e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+        <RPAREN> {
+            return DatetimeOperatorTable.DATE_PART.createCall(
+                s.end(this), args);
+        }
+    |
+        <DATE_TRUNC> { s = span(); }
+        <LPAREN>
+        args = QuotedOrUnquotedInterval()
+        <COMMA>
+        e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
+        <RPAREN> {
+            return DatetimeOperatorTable.DATE_TRUNC.createCall(
+                s.end(this), args);
+        }
+    |
         node = TimestampAddFunctionCall() { return node; }
     |
         node = TimestampDiffFunctionCall() { return node; }
@@ -6944,15 +6964,7 @@ SqlCall TimestampAddFunctionCall() :
     <DATEADD> { s = span(); }
     <LPAREN>
     (
-        (
-            e = StringLiteral() {
-                args = startList(e);
-            }
-        |
-            interval = TimestampInterval() {
-                args = startList(SqlLiteral.createSymbol(interval, getPos()));
-            }
-        )
+        args = QuotedOrUnquotedInterval()
         <COMMA>
         e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
     |
@@ -6967,15 +6979,7 @@ SqlCall TimestampAddFunctionCall() :
 |
     <TIMEADD> { s = span(); }
     <LPAREN>
-    (
-        e = StringLiteral() {
-            args = startList(e);
-        }
-    |
-        interval = TimestampInterval() {
-            args = startList(SqlLiteral.createSymbol(interval, getPos()));
-        }
-    )
+    args = QuotedOrUnquotedInterval()
     <COMMA>
     e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
     <COMMA>
@@ -6987,15 +6991,7 @@ SqlCall TimestampAddFunctionCall() :
 |
     <TIMESTAMPADD> { s = span(); }
     <LPAREN>
-    (
-        e = StringLiteral() {
-            args = startList(e);
-        }
-    |
-        interval = TimestampInterval() {
-            args = startList(SqlLiteral.createSymbol(interval, getPos()));
-        }
-    )
+    args = QuotedOrUnquotedInterval()
     <COMMA>
     e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
     <COMMA>
@@ -7021,15 +7017,7 @@ SqlCall TimestampDiffFunctionCall() :
     <DATEDIFF> { s = span(); }
     <LPAREN>
     (
-      (
-          e = StringLiteral() {
-              args = startList(e);
-          }
-      |
-          interval = TimestampInterval() {
-              args = startList(SqlLiteral.createSymbol(interval, getPos()));
-          }
-      )
+      args = QuotedOrUnquotedInterval()
       <COMMA>
       e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
     |
@@ -7044,15 +7032,7 @@ SqlCall TimestampDiffFunctionCall() :
 |
     <TIMEDIFF> { s = span(); }
     <LPAREN>
-    (
-        e = StringLiteral() {
-            args = startList(e);
-        }
-    |
-        interval = TimestampInterval() {
-            args = startList(SqlLiteral.createSymbol(interval, getPos()));
-        }
-    )
+    args = QuotedOrUnquotedInterval()
     <COMMA>
     e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
     <COMMA>
@@ -7064,15 +7044,7 @@ SqlCall TimestampDiffFunctionCall() :
 |
     <TIMESTAMPDIFF> { s = span(); }
     <LPAREN>
-    (
-        e = StringLiteral() {
-            args = startList(e);
-        }
-    |
-        interval = TimestampInterval() {
-            args = startList(SqlLiteral.createSymbol(interval, getPos()));
-        }
-    )
+    args = QuotedOrUnquotedInterval()
     <COMMA>
     e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
     <COMMA>
@@ -7080,6 +7052,21 @@ SqlCall TimestampDiffFunctionCall() :
     <RPAREN> {
         return SqlStdOperatorTable.TIMESTAMP_DIFF.createCall(
             s.end(this), args);
+    }
+}
+
+List<SqlNode> QuotedOrUnquotedInterval() :
+{
+    SqlNode e;
+    TimeUnit interval;
+}
+{
+    e = StringLiteral() {
+        return startList(e);
+    }
+|
+    interval = TimestampInterval() {
+        return startList(SqlLiteral.createSymbol(interval, getPos()));
     }
 }
 
@@ -7955,11 +7942,13 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < DATA: "DATA" >
 |   < DATABASE: "DATABASE" >
 |   < DATE: "DATE" >
-|   < DATEADD: "DATEADD">
-|   < DATEDIFF: "DATEDIFF">
+|   < DATEADD: "DATEADD" >
+|   < DATEDIFF: "DATEDIFF" >
+|   < DATE_PART: "DATE_PART" >
 |   < DATETIME: "DATETIME" >
 |   < DATETIME_INTERVAL_CODE: "DATETIME_INTERVAL_CODE" >
 |   < DATETIME_INTERVAL_PRECISION: "DATETIME_INTERVAL_PRECISION" >
+|   < DATE_TRUNC: "DATE_TRUNC" >
 |   < DAY: "DAY" >
 |   < DAYS: "DAYS" >
 |   < DEALLOCATE: "DEALLOCATE" >

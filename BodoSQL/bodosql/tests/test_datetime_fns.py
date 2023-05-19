@@ -554,7 +554,7 @@ def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
     valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
     query = (
         f"SELECT A, "
-        f"  DATE_TRUNC('DAY', {now_equiv_fns}()) AS date_trunc, "
+        f"  DATE_TRUNC('DAY', {now_equiv_fns}()) AS date_trunc_res, "
         f"  EXTRACT(DAY from {now_equiv_fns}()) IN ({valid_days}) AS is_valid_day, "
         f"  EXTRACT(HOUR from {now_equiv_fns}()) IN ({valid_hours}) AS is_valid_hour, "
         f"  EXTRACT(MINUTE from {now_equiv_fns}()) IN ({valid_minutes}) AS is_valid_minute "
@@ -563,7 +563,7 @@ def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
     py_output = pd.DataFrame(
         {
             "A": basic_df["table1"]["A"],
-            "date_trunc": current_time.normalize(),
+            "date_trunc_res": current_time.normalize(),
             "is_valid_day": True,
             "is_valid_hour": True,
             "is_valid_minute": True,
@@ -582,7 +582,7 @@ def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
     valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
     query = (
         f"SELECT A, "
-        f"  CASE WHEN A THEN DATE_TRUNC('DAY', {now_equiv_fns}()) END AS date_trunc, "
+        f"  CASE WHEN A THEN DATE_TRUNC('DAY', {now_equiv_fns}()) END AS date_trunc_res, "
         f"  CASE WHEN A THEN EXTRACT(DAY from {now_equiv_fns}()) IN ({valid_days}) END AS is_valid_day, "
         f"  CASE WHEN A THEN EXTRACT(HOUR from {now_equiv_fns}()) IN ({valid_hours}) END AS is_valid_hour, "
         f"  CASE WHEN A THEN EXTRACT(MINUTE from {now_equiv_fns}()) IN ({valid_minutes}) END AS is_valid_minute "
@@ -598,7 +598,7 @@ def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
     py_output = pd.DataFrame(
         {
             "A": df.A,
-            "date_trunc": D,
+            "date_trunc_res": D,
             "is_valid_day": S,
             "is_valid_hour": S,
             "is_valid_minute": S,
@@ -1382,6 +1382,54 @@ def test_tz_aware_date_part(tz_aware_df, query_fmt, spark_info, memory_leak_chec
         query,
         tz_aware_df,
         spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=py_output,
+    )
+
+
+def test_date_part_unquoted_timeunit(memory_leak_check):
+    """
+    Test DATE_PART works for unquoted time unit input
+    """
+    query_fmt = "DATE_PART({!s}, A) AS my_{}"
+    selects = []
+    for unit in ["year", "quarter", "month", "week", "day", "hour", "minute", "second"]:
+        selects.append(query_fmt.format(unit, unit))
+    query = f"SELECT {', '.join(selects)} FROM table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        None,
+                        pd.Timestamp("2010-01-17"),
+                        pd.Timestamp("2011-02-26 03:36:01"),
+                        pd.Timestamp("2012-05-09 16:43:16.123456"),
+                        pd.Timestamp("2013-10-22 05:32:21.987654321"),
+                    ]
+                )
+            }
+        )
+    }
+    df = ctx["table1"]
+    py_output = pd.DataFrame(
+        {
+            "my_year": df.A.dt.year,
+            "my_quarter": df.A.dt.quarter,
+            "my_month": df.A.dt.month,
+            "my_week": df.A.dt.weekofyear,
+            "my_day": df.A.dt.day,
+            "my_hour": df.A.dt.hour,
+            "my_minute": df.A.dt.minute,
+            "my_second": df.A.dt.second,
+        }
+    )
+
+    check_query(
+        query,
+        ctx,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=py_output,
@@ -2986,6 +3034,35 @@ def test_date_trunc_timestamp(
         {"output": dt_fn_dataframe["table1"]["timestamps"].map(scalar_func)}
     )
     check_query(query, dt_fn_dataframe, None, expected_output=py_output)
+
+
+def test_date_trunc_unquoted_timeunit(dt_fn_dataframe, memory_leak_check):
+    """
+    Test DATE_TRUNC works for unquoted time unit input
+    """
+    query_fmt = "DATE_TRUNC({!s}, TIMESTAMPS) AS my_{}"
+    selects = []
+    py_output = pd.DataFrame()
+    for unit in [
+        "year",
+        "quarter",
+        "month",
+        "week",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "millisecond",
+        "microsecond",
+        "nanosecond",
+    ]:
+        selects.append(query_fmt.format(unit, unit))
+        scalar_func = generate_date_trunc_func(unit)
+        py_output[unit] = dt_fn_dataframe["table1"]["timestamps"].map(scalar_func)
+    query = f"SELECT {', '.join(selects)} FROM table1"
+    check_query(
+        query, dt_fn_dataframe, None, check_names=False, expected_output=py_output
+    )
 
 
 def test_yearofweek(dt_fn_dataframe, memory_leak_check):

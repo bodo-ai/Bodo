@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.Utils.Utils.escapePythonQuotes;
+import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
@@ -120,8 +121,8 @@ public class ExtractCodeGen {
    * @return The name generated that matches the Extract expression.
    */
   public static Expr generateDatePart(List<Expr> operandsInfo, boolean isTime, boolean isDate) {
-    String unit;
-    switch (operandsInfo.get(0).emit()) {
+    String unit = makeQuoted(operandsInfo.get(0).emit().toLowerCase());
+    switch (unit) {
       case "\"year\"":
       case "\"y\"":
       case "\"yy\"":
