@@ -4665,10 +4665,10 @@ def test_stream_join_basic(memory_leak_check):
     build_arr_dtypes = np.array(
         [int32_c_type, str_c_type, str_c_type, int8_c_type], np.int8
     )
-    int_arr_type = bodo.utils.utils.CArrayTypeEnum.NULLABLE_INT_BOOL.value
+    nullable_arr_type = bodo.utils.utils.CArrayTypeEnum.NULLABLE_INT_BOOL.value
     str_arr_type = bodo.utils.utils.CArrayTypeEnum.STRING.value
     build_arr_array_types = np.array(
-        [int_arr_type, str_arr_type, str_arr_type, int_arr_type], np.int8
+        [nullable_arr_type, str_arr_type, str_arr_type, nullable_arr_type], np.int8
     )
     out_table_type = bodo.TableType(
         (
