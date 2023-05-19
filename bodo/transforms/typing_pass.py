@@ -1234,6 +1234,14 @@ class TypingTransforms:
             # not immutable, assume that all vars are involved and must be filter_var's
             # If filter_var is immutable, then don't need to assume that
             used_filter_vars: Set[str] = stmt_vars & filter_vars
+
+            # This is a defensive check, and isn't expected to be hit
+            # so we need the pragma to let coverage pass
+            for fvar in used_filter_vars:
+                if fvar not in self.typemap:  # pragma: no cover
+                    self.needs_transform = True
+                    raise GuardException
+
             if used_filter_vars and any(
                 not is_immutable(self.typemap[fvar]) for fvar in used_filter_vars
             ):
@@ -1429,6 +1437,8 @@ class TypingTransforms:
         related to columns with boolean data. Returns a single filter
         comparing the boolean column to True.
 
+        Raises Guard exception if this is not possible.
+
         Args:
             col_def (ir.Expr): The IR expression for the column. There may be a transformation
                 function on the column.
@@ -1442,8 +1452,8 @@ class TypingTransforms:
         Returns:
             Tuple[str, str, ir.Var]: The filter for a column with a boolean output type.
         """
-        colname = guard(
-            self._get_col_name,
+
+        colname = self._get_col_name(
             col_def,
             df_var,
             df_col_names,
@@ -1451,7 +1461,12 @@ class TypingTransforms:
             read_node,
             new_ir_assigns,
         )
-        require(colname)
+
+        # This is a defensive check, and isn't expected to be hit
+        # so we need the pragma to let coverage pass
+        if df_var.name not in self.typemap:  # pragma: no cover
+            self.needs_transform = True
+            raise GuardException
         # Verify that the column has a boolean type.
         df_typ = self.typemap[df_var.name]
         col_num = df_typ.column_index[colname]
@@ -2094,6 +2109,11 @@ class TypingTransforms:
             )
             colname = left_colname if left_colname else right_colname
             scalar = rhs if left_colname else lhs
+            # This is a defensive check, and isn't expected to be hit
+            # so we need the pragma to let coverage pass
+            if scalar.name not in self.typemap:  # pragma: no cover
+                self.needs_transform = True
+                raise GuardException
             op = get_cmp_operator(
                 index_def,
                 self.typemap[scalar.name],
@@ -3876,11 +3896,16 @@ class TypingTransforms:
         data_arg_def = guard(get_definition, self.func_ir, data_arg)
 
         if isinstance(data_arg_def, ir.Expr) and data_arg_def.op == "build_map":
-            if idx_arg != "" and self.typemap[idx_arg.name] != types.none:
-                raise_bodo_error(
-                    "pd.Series(): Cannot specify index argument when initializing with a dictionary"
-                )
-
+            if idx_arg != "":
+                # This is a defensive check, and isn't expected to be hit
+                # so we need the pragma to let coverage pass
+                if idx_arg.name not in self.typemap:  # pragma: no cover
+                    self.needs_transform = True
+                    return nodes
+                elif self.typemap[idx_arg.name] != types.none:
+                    raise_bodo_error(
+                        "pd.Series(): Cannot specify index argument when initializing with a dictionary"
+                    )
             msg = "When initializng a series with a dictionary, the keys should be constant strings or constant ints"
 
             (
@@ -4116,6 +4141,7 @@ class TypingTransforms:
             """
             sql_ctx_def = guard(get_definition, self.func_ir, sql_context_var)
             if isinstance(sql_ctx_def, ir.Arg):
+                # Variable type always available in typemap since it is an argument.
                 return self.typemap[sql_context_var.name]
             fdef = guard(find_callname, self.func_ir, sql_ctx_def)
             if fdef is None or len(fdef) < 2:
@@ -4139,6 +4165,8 @@ class TypingTransforms:
                         return None
                 catalog_var = folded_args[1]
                 if isinstance(catalog_var, ir.Var):
+                    if catalog_var.name not in self.typemap:
+                        return None
                     catalog_typ = self.typemap[catalog_var.name]
                 else:
                     catalog_typ = types.none
@@ -4253,6 +4281,12 @@ class TypingTransforms:
             return [assign]
 
         keys = tuple(keys)
+
+        for value in values:
+            if value.name not in self.typemap:
+                self.needs_transform = True
+                return [assign]
+
         value_typs = tuple([self.typemap[value.name] for value in values])
         if func_name == "sql":
             (
@@ -4465,6 +4499,9 @@ class TypingTransforms:
                 func, args, out_var, self, extra_globals={"_inplace": inplace}
             )
             self.typemap.pop(out_var.name, None)
+            assert (
+                nodes[-1].value.name in self.typemap
+            ), f"Internal error in _run_df_set_column: {nodes[-1].value.name} not present in type map"
             self.typemap[out_var.name] = self.typemap[nodes[-1].value.name]
         else:
             nodes += compile_func_single_block(
@@ -4513,6 +4550,13 @@ class TypingTransforms:
             return self.typemap[obj_var.name]
         if func_var.name in self.typemap:
             return self.typemap[func_var.name].this
+        else:
+            # impl6 in test_set_df_column_names in bodo/tests/test_dataframe_part2.py
+            # Fails if this case throws an error. I'm not certain if this is function
+            # is intended to return None, if the type cannot be found,
+            # or if this is a bug. For now I'm just going to
+            # keep it as is and return "None"
+            return None
 
     def _replace_arg_with_literal(
         self, func_name, rhs, func_args, label, pyobject_to_literal=False
