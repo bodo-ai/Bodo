@@ -1,7 +1,9 @@
 package com.bodosql.calcite.sql.validate.implicit;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.validate.SqlValidator;
@@ -10,6 +12,7 @@ import org.apache.calcite.sql.validate.implicit.TypeCoercionFactory;
 import org.apache.calcite.sql.validate.implicit.TypeCoercionImpl;
 
 import javax.annotation.Nullable;
+import java.util.List;
 
 public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     public BodoTypeCoercionImpl(RelDataTypeFactory typeFactory, SqlValidator validator) {
@@ -17,6 +20,15 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     }
 
     public static TypeCoercionFactory FACTORY = new TypeCoercionFactoryImpl();
+
+    @Override
+    public @Nullable RelDataType implicitCast(RelDataType in, SqlTypeFamily expected) {
+        if ((SqlTypeUtil.isNumeric(in) || SqlTypeUtil.isCharacter(in)) && expected == SqlTypeFamily.BOOLEAN) {
+            return factory.createSqlType(SqlTypeName.BOOLEAN);
+        }
+        return super.implicitCast(in, expected);
+    }
+
 
     @Override
     public @Nullable RelDataType commonTypeForBinaryComparison(@Nullable RelDataType type1, @Nullable RelDataType type2) {
