@@ -25,7 +25,6 @@ class Module(private val frame: Frame) {
      */
     class Builder(val symbolTable: SymbolTable, private val functionFrame: Frame) {
         constructor() : this(symbolTable = SymbolTable(), functionFrame = Frame())
-        constructor(builder: Builder) : this(symbolTable = builder.symbolTable, functionFrame = Frame())
 
         private var activeFrame: Frame = functionFrame
 
@@ -56,6 +55,32 @@ class Module(private val frame: Frame) {
         fun append(code: StringBuilder): Builder {
             return append(code.toString())
         }
+
+        /**
+         * Adds the operation to the end of the main Function.
+         * This is used when we need to create state in the main function body,
+         * either in streaming or case statements.
+         * @param op Operation to add to the main Function's Frame.
+         */
+        fun addToMainFunction(op: Op) {
+            functionFrame.add(op)
+        }
+
+        /**
+         * This simulates appending directly to the main functions. This is used when we
+         * need to create state in the main function body, either in streaming or
+         * case statements.
+         */
+
+        fun appendToMainFunction(code: String): Builder {
+            functionFrame.append(code)
+            return this
+        }
+
+        fun appendToMainFunction(code: StringBuilder): Builder {
+            return appendToMainFunction(code.toString())
+        }
+
 
         fun genDataframe(rel: RelNode): Dataframe {
             val v = symbolTable.genDfVar()

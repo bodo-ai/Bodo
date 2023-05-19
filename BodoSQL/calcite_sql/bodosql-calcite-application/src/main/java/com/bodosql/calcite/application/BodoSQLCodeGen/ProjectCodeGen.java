@@ -1,16 +1,20 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.Utils.Utils.escapePythonQuotes;
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
+import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Expr.IntegerLiteral;
+import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeMap;
-import org.apache.calcite.rel.type.*;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 
@@ -63,7 +67,7 @@ public class ProjectCodeGen {
     int currentNonTableInd = numInputTableColumns;
     // logical column numbers in logical input table to logical_table_to_table() for creating output
     // table
-    List<Integer> outColInds = new ArrayList<>();
+    List<IntegerLiteral> outColInds = new ArrayList<>();
     for (int i = 0; i < childExprs.size(); i++) {
       BodoSQLExprType.ExprType exprType = exprTypes.get(i);
       RexNodeVisitorInfo childExpr = childExprs.get(i);
@@ -71,11 +75,11 @@ public class ProjectCodeGen {
       int childIndex = childExpr.getIndex();
       // output is just a column of input table (RexInputRef case)
       if (childIndex != -1) {
-        outColInds.add(childIndex);
+        outColInds.add(new Expr.IntegerLiteral(childIndex));
         continue;
       }
       // logical column number in input for non-table data
-      outColInds.add(currentNonTableInd);
+      outColInds.add(new Expr.IntegerLiteral(currentNonTableInd));
       currentNonTableInd++;
 
       String seriesName = pdVisitorClass.genSeriesVar();
@@ -108,14 +112,13 @@ public class ProjectCodeGen {
       int idx = scalarSeriesIdxs.get(i);
       if (exprTypes.get(idx) == BodoSQLExprType.ExprType.SCALAR) {
         // Scalars require separate code path to handle null.
-        String globalName =
-            pdVisitorClass.lowerAsGlobal(
-                sqlTypeToBodoArrayType(sqlTypes.get(idx), true));
+        Variable global =
+            pdVisitorClass.lowerAsGlobal(sqlTypeToBodoArrayType(sqlTypes.get(idx), true));
         outString
             .append("bodo.utils.conversion.coerce_scalar_to_array(")
             .append(childExprs.get(idx).getExprCode())
             // Generate a unique name based on the output variable
-            .append(String.format(", len(%s), %s)", inVar, globalName));
+            .append(String.format(", len(%s), %s)", inVar, global.getName()));
       } else {
         outString
             .append("bodo.utils.conversion.coerce_to_array(")
@@ -148,13 +151,9 @@ public class ProjectCodeGen {
     }
     outString.append("), ");
     // generate tuple of column indices, e.g. (4, 2, 1)
-    StringBuilder colIndTupleString = new StringBuilder("(");
-    for (Integer ind : outColInds) {
-      colIndTupleString.append(ind).append(", ");
-    }
-    colIndTupleString.append(")");
-    String colIndiceGlobalVarName = pdVisitorClass.lowerAsMetaType(colIndTupleString.toString());
-    outString.append(colIndiceGlobalVarName);
+    Expr.Tuple colIndTuple = new Expr.Tuple(outColInds);
+    Variable colIndicesGlobal = pdVisitorClass.lowerAsMetaType(colIndTuple);
+    outString.append(colIndicesGlobal.getName());
     outString.append(String.format(", %s.shape[1])\n", inVar));
 
     // output dataframe is always in table format
@@ -167,14 +166,14 @@ public class ProjectCodeGen {
     outString.append(",), index, ");
 
     // generate output column names for ColNamesMetaType
-    StringBuilder colNameTupleString = new StringBuilder("(");
+    List<Expr.StringLiteral> colNamesExpr = new ArrayList<>();
     for (String colName : outputColumns) {
-      colNameTupleString.append(makeQuoted(colName)).append(", ");
+      colNamesExpr.add(new Expr.StringLiteral(colName));
     }
-    colNameTupleString.append(")");
-    String globalVarName = pdVisitorClass.lowerAsColNamesMetaType(colNameTupleString.toString());
+    Expr.Tuple colNameTuple = new Expr.Tuple(colNamesExpr);
+    Variable globalVarName = pdVisitorClass.lowerAsColNamesMetaType(colNameTuple);
 
-    outString.append(globalVarName).append(")\n");
+    outString.append(globalVarName.getName()).append(")\n");
 
     return outString.toString();
   }
