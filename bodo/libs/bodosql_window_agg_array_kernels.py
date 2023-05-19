@@ -97,7 +97,7 @@ def change_event(S):
     Args:
         S (any Series): the values whose changes are being noted
 
-    Returns
+    Returns:
         integer Series: a counter that starts at zero and increases by 1 each
         time the values of the input change
     """
@@ -246,6 +246,52 @@ def windowed_count(S, lower_bound, upper_bound):
         out_dtype,
         constant_block=constant_block,
         empty_block=empty_block,
+        propagate_nan=False,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def windowed_count_if(S, lower_bound, upper_bound):
+    """Optimized implemention for the window function version of `count_if`. For every ith row in the
+    input array, define a window frame, formed by the inclusive range [i+lower_bound, i+upper_bound].
+    In this window frame, count the number of True values. This count is the ith element of the result.
+
+    Args:
+        S (any Series): the values whose changes are being noted
+        lower_bound (int): The lower bound of the window, where 0 is the current row,
+            negative values are preceding rows, and positive values are following rows.
+        upper_bound (int): The upper bound of the window, with the same logic as above.
+
+    Returns:
+        array[uint32]: Array of counts for each range--ith element is the ith window frame's True count as described above.
+    """
+    if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
+        raise_bodo_error("Input must be an array type")
+
+    calculate_block = "res[i] = true_count"
+
+    constant_block = "constant_value = S.sum()"
+
+    empty_block = "res[i] = 0"
+
+    # How many true values are currently in the window frame
+    setup_block = "true_count = 0"
+
+    # Cast bools to 1 or 0, adding to the count as they enter and subtracting when they exit
+    enter_block = "true_count += int(elem0)"
+
+    exit_block = "true_count -= int(elem0)"
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.uint32)
+
+    return gen_windowed(
+        calculate_block,
+        out_dtype,
+        constant_block=constant_block,
+        empty_block=empty_block,
+        setup_block=setup_block,
+        enter_block=enter_block,
+        exit_block=exit_block,
         propagate_nan=False,
     )
 

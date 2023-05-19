@@ -359,7 +359,6 @@ def gen_vectorized(
         # same because isna checks the data & indices, and scalar_text uses the
         # arguments extracted by getitem.
         elif use_dict_encoding:
-
             # Add a null value at the end of the dictionary and compute the scalar
             # kernel output for null values if we are not just propagating input nulls
             # to output array.
@@ -414,7 +413,6 @@ def gen_vectorized(
                     func_text += f"      arg{i} = {arg_names[i]}\n"
 
             if not use_dict_synthesis:
-
                 # Add the scalar computation. The text must use the argument variables
                 # in the form arg0, arg1, etc. and store its final answer in res[i].
                 func_text += indent_block(scalar_text, 6)
@@ -1256,7 +1254,7 @@ def gen_windowed(
         element exits the window. If not provided, does nothing.
 
         empty_block (string, optional): What should happen if the window frame
-        is null/empty. If not provided, calls setna.
+        only contains null/empty. If not provided, calls setna.
 
         num_args (integer): how many arguments the function takes in.
         The default is 1. Only 1 or 2 arguments supported. If 1, the input is

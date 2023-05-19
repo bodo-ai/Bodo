@@ -71,6 +71,7 @@ public class WindowAggCodeGen {
     windowOptimizedKernels.add("SUM");
     windowOptimizedKernels.add("$SUM0");
     windowOptimizedKernels.add("COUNT");
+    windowOptimizedKernels.add("COUNT_IF");
     windowOptimizedKernels.add("AVG");
     windowOptimizedKernels.add("MEDIAN");
     windowOptimizedKernels.add("MODE");
@@ -98,6 +99,7 @@ public class WindowAggCodeGen {
     windowCodeExpressions.put("SUM", "windowed_sum");
     windowCodeExpressions.put("$SUM0", "windowed_sum");
     windowCodeExpressions.put("COUNT", "windowed_count");
+    windowCodeExpressions.put("COUNT_IF", "windowed_count_if");
     windowCodeExpressions.put("AVG", "windowed_avg");
     windowCodeExpressions.put("MEDIAN", "windowed_median");
     windowCodeExpressions.put("MODE", "windowed_mode");
@@ -122,7 +124,6 @@ public class WindowAggCodeGen {
 
     // Window functions that are still implemented via taking slices in a loop
     // and calling a Pandas method on the result
-    windowMethods.put("COUNT_IF", ".sum()");
     windowMethods.put("KURTOSIS", ".kurtosis()");
     windowMethods.put("SKEW", ".skew()");
   }
@@ -445,7 +446,6 @@ public class WindowAggCodeGen {
           // at the end.
         case "KURTOSIS":
         case "SKEW":
-        case "COUNT_IF":
           needsToRevertSort |= hasOrder;
           loopAggNames.add(aggName);
           loopAggArgs.add(argsList);
@@ -827,7 +827,6 @@ public class WindowAggCodeGen {
 
           // The functions that always have a (positive) integer output
         case "COUNT(*)":
-        case "COUNT_IF":
           funcText.append(
               "bodo.libs.int_arr_ext.alloc_int_array(" + partitionLength + ", bodo.uint32)\n");
           break;
@@ -853,25 +852,19 @@ public class WindowAggCodeGen {
 
       constant_slices.add(i);
 
-      // If the aggregation is not COUNT_IF, set the entire array to zero if there
-      // are no non-null elements.
-      if (!aggNames.get(i).equals("COUNT_IF")) {
-        addIndent(funcText, 2);
-        funcText
-            .append("if sorted_df[")
-            .append(makeQuoted(argsLists.get(i).get(0).getExprString()))
-            .append("].count() == 0:\n");
-        addIndent(funcText, 3);
-        funcText.append("for i in range(").append(partitionLength).append("):\n");
-        addIndent(funcText, 4);
-        funcText
-            .append("bodo.libs.array_kernels.setna(")
-            .append(aggOutputs.get(i))
-            .append(", i)\n");
-        addIndent(funcText, 2);
-        funcText.append("else:\n");
-        addIndent(funcText, 1);
-      }
+      // Set the entire array to zero if there are no non-null elements.
+      addIndent(funcText, 2);
+      funcText
+          .append("if sorted_df[")
+          .append(makeQuoted(argsLists.get(i).get(0).getExprString()))
+          .append("].count() == 0:\n");
+      addIndent(funcText, 3);
+      funcText.append("for i in range(").append(partitionLength).append("):\n");
+      addIndent(funcText, 4);
+      funcText.append("bodo.libs.array_kernels.setna(").append(aggOutputs.get(i)).append(", i)\n");
+      addIndent(funcText, 2);
+      funcText.append("else:\n");
+      addIndent(funcText, 1);
 
       // Set the entire array equal to the result of calling the aggregation
       // method on the entire input column
@@ -957,19 +950,15 @@ public class WindowAggCodeGen {
       }
       funcText.append("]\n");
 
-      // For all slice-based functions (except COUNT_IF), an empty or all-null
-      // window corresponds to a null output. COUNT_IF just outputs zero in this
-      // case, so we do not generate this check for that function.
-      if (!aggNames.get(i).equals("COUNT_IF")) {
-        // If there is not at least 1 non-null entry in the slice, set the output to NULL
-        addIndent(funcText, 3);
-        funcText.append("if " + sliceName + ".count() == 0:\n");
-        addIndent(funcText, 4);
-        funcText.append("bodo.libs.array_kernels.setna(" + aggOutputs.get(i) + ", i)\n");
-        addIndent(funcText, 3);
-        funcText.append("else:\n");
-        addIndent(funcText, 1);
-      }
+      // For all slice-based functions, if there is not at least 1 non-null entry in the slice, set
+      // the output to NULL
+      addIndent(funcText, 3);
+      funcText.append("if " + sliceName + ".count() == 0:\n");
+      addIndent(funcText, 4);
+      funcText.append("bodo.libs.array_kernels.setna(" + aggOutputs.get(i) + ", i)\n");
+      addIndent(funcText, 3);
+      funcText.append("else:\n");
+      addIndent(funcText, 1);
 
       // Call the Pandas method on the slice and store the output
       String columnAggCall = sliceName + windowMethods.get(aggNames.get(i));

@@ -4,6 +4,7 @@
 
 import datetime
 import math
+import random
 
 import numpy as np
 import pandas as pd
@@ -309,6 +310,9 @@ def window_refsol(S, lower, upper, func, use_nans=False):
             )
             if func == "count":
                 result = len(elems)
+            elif func == "count_if":
+                # Summing over booleans will give us the count of true values.
+                result = elems.sum()
             elif func == "boolor":
                 result = (
                     None
@@ -778,6 +782,56 @@ def test_windowed_kernels_numeric(
         py_output=window_refsol(
             S, lower_bound, upper_bound, func, dataset == "float64_nan"
         ),
+        check_dtype=False,
+        reset_index=True,
+        # For now, only works sequentially because it can only be used inside
+        # of a Window function with a partition
+        only_seq=True,
+        is_out_distributed=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ["lower_bound", "upper_bound"],
+    [
+        pytest.param(-10000, 0, id="prefix"),
+        pytest.param(-10000, 10000, id="entire_window"),
+        pytest.param(1, 10000, id="suffix_exclusive"),
+        pytest.param(-2, 2, id="rolling 5"),
+        pytest.param(3, -3, id="backward"),
+    ],
+)
+def test_windowed_count_if(
+    lower_bound,
+    upper_bound,
+    memory_leak_check,
+):
+    """Tests the bodosql array kernel `windowed_count_if`. The `windowed_count_if` is an optimized implementation
+    of the window function version of count_if, utilizing gen_windowed.
+
+    Args:
+        lower_bound (int): The lower bound of the window being tested, where 0 is the current row,
+            negative values are preceding rows, and positive values are following rows.
+        upper_bound (int): The upper bound of the window being tested, with the same logic as above.
+        memory_leak_check (): Fixture, see `conftest.py`.
+
+    """
+
+    def impl(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_count_if(S, lower, upper)
+        )
+
+    # Generate seeded random series of None | True | False values for count_if to operate on.
+    random.seed(42)
+    S = pd.Series(
+        [random.choice([None, True, False]) for i in range(30)], dtype=pd.BooleanDtype()
+    )
+
+    check_func(
+        impl,
+        (S, lower_bound, upper_bound),
+        py_output=window_refsol(S, lower_bound, upper_bound, "count_if"),
         check_dtype=False,
         reset_index=True,
         # For now, only works sequentially because it can only be used inside
