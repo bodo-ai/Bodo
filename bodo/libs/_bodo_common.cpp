@@ -184,8 +184,7 @@ char* array_info::null_bitmask() const {
     }
 }
 
-std::shared_ptr<arrow::Array> to_arrow(
-    const std::shared_ptr<const array_info> arr) {
+std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
     std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
     bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
