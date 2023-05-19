@@ -1,7 +1,3 @@
----
-status: new
----
-
 # Native SQL with Database Catalogs {#sql_catalog}
 
 
@@ -12,8 +8,9 @@ SQL code to run on the tables in the connected remote database.
 
 ## Adding a Database Catalog
 
-:fontawesome-brands-aws: On AWS only ·
-:octicons-beaker-24:{.beta} Experimental 
+:fontawesome-brands-aws: Supported On AWS ·
+material-microsoft-azure:{.azure} Supported on Azure 
+
 
 In your workspaces view, navigate to the _Catalogs_ section in the sidebar.
 Click on _CREATE CATALOG_ and fill up the form with the required values.  
