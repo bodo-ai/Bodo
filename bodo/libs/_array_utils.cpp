@@ -1232,10 +1232,9 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
     }
 }
 
-bool TestEqualColumn(const std::shared_ptr<const array_info>& arr1,
-                     int64_t pos1,
-                     const std::shared_ptr<const array_info>& arr2,
-                     int64_t pos2, bool is_na_equal) {
+bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
+                     const std::shared_ptr<array_info>& arr2, int64_t pos2,
+                     bool is_na_equal) {
     if (arr1->arr_type == bodo_array_type::STRUCT ||
         arr1->arr_type == bodo_array_type::ARRAY_ITEM) {
         // TODO: Handle is_na_equal in Arrow arrays

@@ -373,8 +373,8 @@ class ElementComparator {
    public:
     // Store data pointers to avoid extra struct access in performance critical
     // code
-    ElementComparator(const std::shared_ptr<const array_info>& arr1_,
-                      const std::shared_ptr<const array_info>& arr2_) {
+    ElementComparator(const std::shared_ptr<array_info>& arr1_,
+                      const std::shared_ptr<array_info>& arr2_) {
         // Store the index data for dict encoded arrays since index comparison
         // is enough in case of unified dictionaries. Only use when the
         // dictionaries are the same (and are deduped since otherwise the index
@@ -550,8 +550,8 @@ class ElementComparator {
     }
 
    private:
-    std::shared_ptr<const array_info> arr1;
-    std::shared_ptr<const array_info> arr2;
+    std::shared_ptr<array_info> arr1;
+    std::shared_ptr<array_info> arr2;
     const char* data_ptr_1;
     const char* data_ptr_2;
     const uint8_t* null_bitmask_1;
