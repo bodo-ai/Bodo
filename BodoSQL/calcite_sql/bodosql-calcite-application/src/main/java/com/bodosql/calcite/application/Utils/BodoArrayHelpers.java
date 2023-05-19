@@ -1,8 +1,10 @@
 package com.bodosql.calcite.application.Utils;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import org.apache.calcite.rel.type.*;
-import org.apache.calcite.sql.type.*;
+import com.bodosql.calcite.ir.Expr;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.TZAwareSqlType;
 
 public class BodoArrayHelpers {
 
@@ -75,80 +77,96 @@ public class BodoArrayHelpers {
    * @return A string that can be provided to generate code for the corresponding array type. This
    *     will be lowered as a global when we JIT compile the code.
    */
-  public static String sqlTypeToBodoArrayType(RelDataType type, boolean strAsDict) {
+  public static Expr sqlTypeToBodoArrayType(RelDataType type, boolean strAsDict) {
     boolean nullable = type.isNullable();
+    // TODO: Create type exprs
+    String typeName = "";
     switch (type.getSqlTypeName()) {
       case NULL:
-        return "bodo.null_array_type";
+        typeName = "bodo.null_array_type";
+        break;
       case BOOLEAN:
         // TODO: Add nullable support in the type
-        return "bodo.boolean_array_type";
+        typeName = "bodo.boolean_array_type";
+        break;
       case TINYINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          return "bodo.IntegerArrayType(bodo.int8)";
+          typeName = "bodo.IntegerArrayType(bodo.int8)";
         } else {
-          return "numba.core.types.Array(bodo.int8, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.int8, 1, 'C')";
         }
+        break;
       case SMALLINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          return "bodo.IntegerArrayType(bodo.int16)";
+          typeName = "bodo.IntegerArrayType(bodo.int16)";
         } else {
-          return "numba.core.types.Array(bodo.int16, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.int16, 1, 'C')";
         }
+        break;
       case INTEGER:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          return "bodo.IntegerArrayType(bodo.int32)";
+          typeName = "bodo.IntegerArrayType(bodo.int32)";
         } else {
-          return "numba.core.types.Array(bodo.int32, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.int32, 1, 'C')";
         }
+        break;
       case BIGINT:
         // TODO: Add signed vs unsigned support
         if (nullable) {
-          return "bodo.IntegerArrayType(bodo.int64)";
+          typeName = "bodo.IntegerArrayType(bodo.int64)";
         } else {
-          return "numba.core.types.Array(bodo.int64, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.int64, 1, 'C')";
         }
+        break;
       case FLOAT:
         if (nullable) {
-          return "bodo.FloatingArrayType(bodo.float32)";
+          typeName = "bodo.FloatingArrayType(bodo.float32)";
         } else {
-          return "numba.core.types.Array(bodo.float32, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.float32, 1, 'C')";
         }
+        break;
       case DOUBLE:
       case DECIMAL:
         if (nullable) {
-          return "bodo.FloatingArrayType(bodo.float64)";
+          typeName = "bodo.FloatingArrayType(bodo.float64)";
         } else {
-          return "numba.core.types.Array(bodo.float64, 1, 'C')";
+          typeName = "numba.core.types.Array(bodo.float64, 1, 'C')";
         }
+        break;
       case DATE:
-        return "bodo.datetime_date_array_type";
+        typeName = "bodo.datetime_date_array_type";
+        break;
       case TIMESTAMP:
         // TODO: Add nullable support
-        return "numba.core.types.Array(bodo.datetime64ns, 1, 'C')";
+        typeName = "numba.core.types.Array(bodo.datetime64ns, 1, 'C')";
+        break;
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
         // TODO: Add nullable support
         TZAwareSqlType tzAwareType = (TZAwareSqlType) type;
-        return String.format("bodo.DatetimeArrayType(%s)", tzAwareType.getTZInfo().getPyZone());
+        typeName = String.format("bodo.DatetimeArrayType(%s)", tzAwareType.getTZInfo().getPyZone());
+        break;
       case TIME:
         // TODO: Add nullable support
         // TODO: Add precision support once Bodo stores value differently based on precision
-        return "bodo.TimeArrayType(9)";
+        typeName = "bodo.TimeArrayType(9)";
+        break;
       case VARCHAR:
       case CHAR:
         // TODO: Add nullable support
         if (strAsDict) {
-          return "bodo.dict_str_arr_type";
+          typeName = "bodo.dict_str_arr_type";
         } else {
-          return "bodo.string_array_type";
+          typeName = "bodo.string_array_type";
         }
+        break;
       case VARBINARY:
       case BINARY:
         // TODO: Add nullable support
-        return "bodo.binary_array_type";
+        typeName = "bodo.binary_array_type";
+        break;
       case INTERVAL_DAY_HOUR:
       case INTERVAL_DAY_MINUTE:
       case INTERVAL_DAY_SECOND:
@@ -160,7 +178,8 @@ public class BodoArrayHelpers {
       case INTERVAL_SECOND:
       case INTERVAL_DAY:
         // TODO: Add nullable support
-        return "numba.core.types.Array(bodo.timedelta64ns, 1, 'C')";
+        typeName = "numba.core.types.Array(bodo.timedelta64ns, 1, 'C')";
+        break;
       case INTERVAL_YEAR:
       case INTERVAL_MONTH:
       case INTERVAL_YEAR_MONTH:
@@ -171,5 +190,6 @@ public class BodoArrayHelpers {
             "Internal Error: Calcite Plan Produced an Unsupported Type: "
                 + type.getSqlTypeName().getName());
     }
+    return new Expr.Raw(typeName);
   }
 }

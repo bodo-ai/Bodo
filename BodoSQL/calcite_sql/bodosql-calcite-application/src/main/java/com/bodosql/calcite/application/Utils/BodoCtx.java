@@ -28,11 +28,17 @@ public class BodoCtx {
     return this.colsToAddList;
   }
 
+  public HashSet<Integer> getUsedColumns() {
+    return usedColumns;
+  }
+
   public HashSet<String> getNamedParams() {
     return this.namedParams;
   }
 
-  public HashSet<Integer> getUsedColumns() {
-    return usedColumns;
+  public void unionContext(BodoCtx ctx) {
+    this.colsToAddList.addAll(ctx.getColsToAddList());
+    this.usedColumns.addAll(ctx.getUsedColumns());
+    this.namedParams.addAll(ctx.getNamedParams());
   }
 }

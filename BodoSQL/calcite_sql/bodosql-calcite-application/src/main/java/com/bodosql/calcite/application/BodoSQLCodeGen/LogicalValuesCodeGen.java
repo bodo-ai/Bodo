@@ -1,11 +1,15 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
+import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
-import com.bodosql.calcite.application.*;
-import java.util.*;
-import org.apache.calcite.rel.type.*;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.ir.Variable;
+import java.util.Collections;
+import java.util.List;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
 
 /** Class that returns the generated code for Logical Values after all inputs have been visited. */
 public class LogicalValuesCodeGen {
@@ -43,16 +47,15 @@ public class LogicalValuesCodeGen {
     // Logical Values contain a tuple of entries to fill one row
     for (int i = 0; i < columnNames.size(); i++) {
       // Scalars require separate code path to handle null.
-      String globalName =
-          pdVisitorClass.lowerAsGlobal(
-              sqlTypeToBodoArrayType(sqlTypes.get(i).getType(), true));
+      Variable global =
+          pdVisitorClass.lowerAsGlobal(sqlTypeToBodoArrayType(sqlTypes.get(i).getType(), true));
       String colName = columnNames.get(i);
       outputStr
           .append(makeQuoted(colName))
           .append(
               String.format(
                   ": bodo.utils.conversion.coerce_scalar_to_array(%s, %d, %s), ",
-                  argExprs.get(i), columnLength, globalName));
+                  argExprs.get(i), columnLength, global.getName()));
     }
     outputStr.append(
         String.format(

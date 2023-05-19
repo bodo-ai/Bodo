@@ -2,6 +2,9 @@ package com.bodosql.calcite.application.Utils;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Expr.StringLiteral;
+import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
@@ -289,30 +292,30 @@ public class Utils {
    * new dataframe, consisting of both the new and old columns. Generally used immediately before
    * generating code for CASE statements.
    *
-   * @param inputVar The name of the input dataframe, to which we add the new columns.
+   * @param inputVar The input dataframe, to which we add the new columns.
    * @param colNames The list of the columns already present in inputVar, which need to be present
    *     in the output dataframe
    * @param colsToAddList The List of array variables that must be added to new dataframe.
-   * @return
+   * @return An expr that creates a DataFrame via pd.DataFrame.
    */
-  public static String generateCombinedDf(
-      String inputVar, List<String> colNames, List<String> colsToAddList) {
+  public static Expr.Call generateCombinedDf(
+      Variable inputVar, List<String> colNames, List<String> colsToAddList) {
     // TODO filter out the columns that don't need to be kept
     StringBuilder newDf = new StringBuilder("pd.DataFrame({");
-    for (String curCol : colNames) {
-      newDf
-          .append(makeQuoted(curCol))
-          .append(":")
-          .append(inputVar)
-          .append("[")
-          .append(makeQuoted(curCol))
-          .append("], ");
+    List<Expr.StringLiteral> keys = new ArrayList<>();
+    List<Expr> values = new ArrayList<>();
+    for (String curColName : colNames) {
+      Expr.StringLiteral colNameLiteral = new StringLiteral(curColName);
+      keys.add(colNameLiteral);
+      values.add(new Expr.Getitem(inputVar, colNameLiteral));
     }
     for (String preGeneratedCol : colsToAddList) {
-      newDf.append(makeQuoted(preGeneratedCol)).append(":").append(preGeneratedCol).append(", ");
+      Expr.StringLiteral colNameLiteral = new StringLiteral(preGeneratedCol);
+      keys.add(colNameLiteral);
+      values.add(new Variable(preGeneratedCol));
     }
-    newDf.append("})");
-    return newDf.toString();
+    Expr.Dict dict = new Expr.Dict(keys, values);
+    return new Expr.Call("pd.DataFrame", List.of(dict));
   }
 
   /**
@@ -357,30 +360,9 @@ public class Utils {
    * @param newTableName The new table name, that the output expr will use for table references
    * @return
    */
-  public static String renameTableRef(String expr, String oldTableName, String newTableName) {
+  public static String renameTableRef(String expr, Variable oldVar, Variable newVar) {
     // check word boundary with \b to reduce chance of name conflicts with oldTableName
-    return expr.replaceAll("\\b" + Pattern.quote(oldTableName + "_"), newTableName + "_");
-  }
-
-  /***
-   *  Renames a list of codeExpressions that are input to CASE to use a new table reference.
-   *  Used for handling window functions inside CASE where a new dataframe is created
-   *  to include window function output as columns.
-   *  For example, table1_1[i] -> tmp_case_df2_1[i]
-   *
-   *
-   * @param codeExprs The list of expressions to replace table references
-   * @param oldTableName The old table name, that the input expr uses for table references
-   * @param newTableName The new table name, that the output expr will use for table references
-   * @return
-   */
-  public static List<String> renameExprsList(
-      List<String> codeExprs, String oldTableName, String newTableName) {
-    List<String> outputExprs = new ArrayList<>();
-    for (int i = 0; i < codeExprs.size(); i++) {
-      outputExprs.add(renameTableRef(codeExprs.get(i), oldTableName, newTableName));
-    }
-    return outputExprs;
+    return expr.replaceAll("\\b" + Pattern.quote(oldVar.getName() + "_"), newVar.getName() + "_");
   }
 
   public static void assertWithErrMsg(boolean test, String msg) {

@@ -9,14 +9,22 @@ import static com.bodosql.calcite.application.Utils.Utils.assertWithErrMsg;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
-import com.bodosql.calcite.application.*;
-import com.bodosql.calcite.ir.*;
+import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.BodoSQLExprType;
+import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
-import com.google.common.collect.*;
-import java.util.*;
-import org.apache.calcite.rel.*;
-import org.apache.calcite.rel.type.*;
-import org.apache.calcite.rex.*;
+import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.Variable;
+import com.google.common.collect.ImmutableList;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import org.apache.calcite.rel.RelFieldCollation;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rex.RexFieldCollation;
+import org.apache.calcite.rex.RexOver;
+import org.apache.calcite.rex.RexWindow;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Pair;
@@ -1783,7 +1791,7 @@ public class WindowAggCodeGen {
 
     // Add the window function to the codegen
     Op.Assign assignment = new Op.Assign(outputVar, windowExpr);
-    builder.add(assignment);
+    builder.addToMainFunction(assignment);
     String outputColName = "AGG_OUTPUT_0";
     return new Expr.Call(
         "bodo.hiframes.pd_series_ext.get_series_data",

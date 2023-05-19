@@ -1,5 +1,7 @@
 package com.bodosql.calcite.ir
 
+import java.math.BigDecimal
+
 abstract class Expr {
     /**
      * Emits code for this expression.
@@ -32,7 +34,7 @@ abstract class Expr {
     data class Call(val callee: String, val args: kotlin.collections.List<Expr> = listOf(), val namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf()) : Expr() {
         constructor(callee: String, args: kotlin.collections.List<Expr>) : this(callee, args, listOf())
         constructor(callee: String, vararg args: Expr) : this(callee, args.toList(), listOf())
-
+        
         override fun emit(): String {
             val posArgs = args.asSequence().map { it.emit() }
             val namedArgs = namedArgs.asSequence().map { (name, value) -> "${name}=${value.emit()}" }
@@ -177,6 +179,20 @@ abstract class Expr {
     }
 
     /**
+     * Represents a Dictionary creation. Keys and values must
+     * be the same length.
+     * @param keys The key inputs to the dictionary.
+     * @param values The value inputs to the dictionary
+     */
+    data class Dict(val keys: kotlin.collections.List<StringLiteral>, val values: kotlin.collections.List<Expr>) : Expr() {
+        override fun emit(): String {
+            val mergedValues = keys zip values
+            val dictArgs = mergedValues.joinToString(separator = ", ") { it.first.emit() + " : " + it.second.emit() }
+            return "{${dictArgs}}"
+        }
+    }
+
+    /**
      * Represents a triple quoted String.
      * @param arg The body of the string.
      */
@@ -184,6 +200,24 @@ abstract class Expr {
         private val s = arg.replace("\"\"\"", """\"\"\"""")
 
         override fun emit(): String = "\"\"\"$s\"\"\""
+    }
+
+    /**
+     * Represents a triple quoted String built from a Frame.
+     * This is used when several expressions need to be passed in a global variable (e.g. Case).
+     * @param arg The body of the string as a Frame.
+     * @param indentLevel The indent level used for emitting the Frame.
+     */
+    class FrameTripleQuotedString(val arg: Frame, private val indentLevel: Int) : Expr() {
+
+        override fun emit(): String {
+            // Generate a doc with indent level provided + emit the frame
+            val doc = Doc(level = indentLevel)
+            arg.emit(doc)
+            // Generate the body
+            val body = doc.toString().replace("\"\"\"", """\"\"\"""")
+            return "\"\"\"$body\"\"\""
+        }
     }
 
     /**
@@ -227,6 +261,14 @@ abstract class Expr {
      * @param arg The value of the literal.
      */
     data class IntegerLiteral(val arg: kotlin.Int) : Expr() {
+        override fun emit(): String = arg.toString()
+    }
+
+    /**
+     * Represents a Decimal Literal.
+     * @param arg The value of the literal.
+     */
+    data class DecimalLiteral(val arg: BigDecimal) : Expr() {
         override fun emit(): String = arg.toString()
     }
 
