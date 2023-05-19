@@ -537,8 +537,7 @@ struct array_info {
  *
  * @return std::shared_ptr<arrow::Array> equivalent Array array
  */
-std::shared_ptr<arrow::Array> to_arrow(
-    const std::shared_ptr<const array_info> info);
+std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> info);
 
 std::unique_ptr<array_info> alloc_array(int64_t length, int64_t n_sub_elems,
                                         int64_t n_sub_sub_elems,
@@ -638,7 +637,7 @@ std::unique_ptr<array_info> create_dict_string_array(
  */
 
 template <typename T>
-inline T& getv(const std::shared_ptr<const array_info>& arr, size_t idx) {
+inline T& getv(const std::shared_ptr<array_info>& arr, size_t idx) {
     return ((T*)arr->data1())[idx];
 }
 
