@@ -473,3 +473,25 @@ new {
 .beta{
     color: #008DDD
 }
+
+.azure{
+    color: #008AD7
+}
+
+.requirement{
+    color: #ff0707;
+    font-size: 0.3rem;
+    top: -0.1rem;
+}
+
+.md-typeset .admonition.requirement,
+
+.requirement{
+    color: #ff0707;
+    font-size: 0.3rem;
+    top: -0.1rem;
+}
+
+
+
+
