@@ -104,6 +104,20 @@ _numba_to_c_type_map = {
 }
 
 
+# int values for array types to pass to C code
+# XXX: These are defined in _bodo_common.h and must match here
+class CArrayTypeEnum(Enum):
+    NUMPY = 0
+    STRING = 1
+    NULLABLE_INT_BOOL = 2  # nullable int or bool
+    LIST_STRING = 3  # list_string_array_type
+    STRUCT = 4
+    CATEGORICAL = 5
+    ARRAY_ITEM = 6
+    INTERVAL = 7
+    DICT = 8  # dictionary-encoded string array
+
+
 # silence Numba error messages for now
 # TODO: customize through @bodo.jit
 numba.core.errors.error_extras = {
@@ -270,7 +284,6 @@ typ_to_format = {
 
 @lower_builtin(cprint, types.VarArg(types.Any))
 def cprint_lower(context, builder, sig, args):  # pragma: no cover
-
     for i, val in enumerate(args):
         typ = sig.args[i]
         if isinstance(typ, types.ArrayCTypes):
@@ -550,7 +563,6 @@ def empty_like_type_overload(n, arr):
         return empty_like_type_datetime_date_arr
 
     if isinstance(arr, bodo.hiframes.time_ext.TimeArrayType):
-
         precision = arr.precision
 
         def empty_like_type_time_arr(n, arr):
@@ -1259,7 +1271,6 @@ def check_and_propagate_cpp_exception(typingctx):
     """
 
     def codegen(context, builder, sig, args):
-
         pyapi = context.get_python_api(builder)
         err_flag = pyapi.err_occurred()
         error_occured = cgutils.is_not_null(builder, err_flag)

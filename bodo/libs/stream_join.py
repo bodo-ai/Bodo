@@ -49,23 +49,28 @@ join_state_type = JoinStateType()
 
 _init_join_state = types.ExternalFunction(
     "join_state_init_py_entry",
-    join_state_type(types.voidptr, types.int32, types.int64),
+    join_state_type(types.voidptr, types.voidptr, types.int32, types.int64),
 )
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def init_join_state(build_arr_types, n_arrs, n_keys):
+def init_join_state(build_arr_dtypes, build_arr_array_types, n_arrs, n_keys):
     """Initialize C++ JoinState pointer
 
     Args:
-        build_arr_types_t (int8*): pointer to array of ints representing array types
+        build_arr_dtypes (int8*): pointer to array of ints representing array dtypes
                                    (as provided by numba_to_c_type)
-        n_arrs_t (int32): number of build columns
-        n_keys_t (int64): number of keys (assuming key columns are first in build table)
+        build_arr_array_types (int8*): pointer to array of ints representing array types
+        n_arrs (int32): number of build columns
+        n_keys (int64): number of keys (assuming key columns are first in build table)
     """
 
-    def impl(build_arr_types, n_arrs, n_keys):  # pragma: no cover
-        join_state = _init_join_state(build_arr_types, n_arrs, n_keys)
+    def impl(
+        build_arr_dtypes, build_arr_array_types, n_arrs, n_keys
+    ):  # pragma: no cover
+        join_state = _init_join_state(
+            build_arr_dtypes, build_arr_array_types, n_arrs, n_keys
+        )
         bodo.utils.utils.check_and_propagate_cpp_exception()
         return join_state
 
