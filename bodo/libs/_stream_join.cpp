@@ -121,35 +121,16 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     return std::make_shared<table_info>(out_arrs);
 }
 
-std::shared_ptr<table_info> alloc_table(std::vector<int8_t> arr_c_types) {
+std::shared_ptr<table_info> alloc_table(std::vector<int8_t> arr_c_types,
+                                        std::vector<int8_t> arr_array_types) {
     std::vector<std::shared_ptr<array_info>> arrays;
 
-    // TODO[BSE-367]: generalize to all types
-    for (int8_t arr_c_type : arr_c_types) {
-        bodo_array_type::arr_type_enum arr_type;
-        Bodo_CTypes::CTypeEnum dtype;
+    for (size_t i = 0; i < arr_c_types.size(); i++) {
+        bodo_array_type::arr_type_enum arr_type =
+            (bodo_array_type::arr_type_enum)arr_array_types[i];
+        Bodo_CTypes::CTypeEnum dtype = (Bodo_CTypes::CTypeEnum)arr_c_types[i];
 
-        switch (arr_c_type) {
-            case Bodo_CTypes::INT8:
-                arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-                dtype = Bodo_CTypes::INT8;
-                break;
-
-            case Bodo_CTypes::INT32:
-                arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-                dtype = Bodo_CTypes::INT32;
-                break;
-
-            case Bodo_CTypes::STRING:
-                arr_type = bodo_array_type::STRING;
-                dtype = Bodo_CTypes::STRING;
-                break;
-
-            default:
-                throw std::runtime_error("invalid array type in alloc_table " +
-                                         std::to_string(arr_c_type));
-        }
-        arrays.push_back(alloc_array(0, 0, -1, arr_type, dtype, 0, 0));
+        arrays.push_back(alloc_array(0, 0, 0, arr_type, dtype, 0, 0));
     }
     return std::make_shared<table_info>(arrays);
 }
@@ -163,10 +144,12 @@ std::shared_ptr<table_info> alloc_table(std::vector<int8_t> arr_c_types) {
  * @param n_keys number of join keys
  * @return JoinState* join state to return to Python
  */
-JoinState* join_state_init_py_entry(int8_t* arr_c_types, int n_arrs,
+JoinState* join_state_init_py_entry(int8_t* arr_c_types,
+                                    int8_t* arr_array_types, int n_arrs,
                                     int64_t n_keys) {
-    return new JoinState(std::vector<int8_t>(arr_c_types, arr_c_types + n_arrs),
-                         n_keys);
+    return new JoinState(
+        std::vector<int8_t>(arr_c_types, arr_c_types + n_arrs),
+        std::vector<int8_t>(arr_array_types, arr_array_types + n_arrs), n_keys);
 }
 
 /**

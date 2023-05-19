@@ -5,10 +5,13 @@
 /**
  * @brief allocate an empty table with provided column types
  *
- * @param arr_c_types vector of ints for column types (in Bodo_CTypes format)
+ * @param arr_c_types vector of ints for column dtypes (in Bodo_CTypes format)
+ * @param arr_array_types vector of ints for colmn array types (in
+ * bodo_array_type format)
  * @return std::shared_ptr<table_info> allocated table
  */
-std::shared_ptr<table_info> alloc_table(std::vector<int8_t> arr_c_types);
+std::shared_ptr<table_info> alloc_table(std::vector<int8_t> arr_c_types,
+                                        std::vector<int8_t> arr_array_types);
 struct JoinState;
 
 struct HashHashJoinTable {
@@ -60,10 +63,11 @@ struct JoinState {
                             KeyEqualHashJoinTable>
         build_table;
 
-    JoinState(std::vector<int8_t> arr_c_types, int64_t n_keys_)
+    JoinState(std::vector<int8_t> arr_c_types,
+              std::vector<int8_t> arr_array_types, int64_t n_keys_)
         : n_keys(n_keys_),
           build_table({}, HashHashJoinTable(this),
                       KeyEqualHashJoinTable(this, false)) {
-        build_table_buffer = alloc_table(arr_c_types);
+        build_table_buffer = alloc_table(arr_c_types, arr_array_types);
     }
 };
