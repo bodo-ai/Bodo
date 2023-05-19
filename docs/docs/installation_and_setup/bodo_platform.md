@@ -373,7 +373,7 @@ your cluster. You can place scripts and small data that are shared
 across cluster nodes in `/shared`. However, external storage, such as
 S3, should be used for reading and writing large data.
 
-## Running a Job {#running_a_job}
+## Running a Job {#running_a_job}  :material-delete-clock:{ title="Soon to be deprecated" }
 
 Bodo Cloud Platform has support for running scheduled (and immediate)
 Python jobs without the need for Jupyter Notebooks. To create a Job,
