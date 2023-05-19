@@ -3,32 +3,88 @@ package com.bodosql.calcite.adapter.pandas;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.generateBinOpCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateTryCastCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.generateCaseCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getDoubleArgCondFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getSingleArgCondFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitIf;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitVariadic;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateStrToDateCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateTimestampFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToBinaryFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToBooleanFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToCharFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToDateFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToDoubleFnCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateToTimestampFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateSnowflakeDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.generateDateDiffFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.DateTimeType;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.TIME_PART_UNITS;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurdateCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurrTimeCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurrTimestampCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateFormatCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTimeTypeFromPartsCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTruncCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateLastDayCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateMakeDateInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateToTimeCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateUTCDateCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateUTCTimestampCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getDateTimeDataType;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getDoubleArgDatetimeFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getSingleArgDatetimeFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getYearWeekFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateDatePart;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateConvCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLeastGreatestCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLogFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateToNumberCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateTryToNumberCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.getDoubleArgNumericFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.getSingleArgNumericFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.generatePostfixOpCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.PrefixOpCodeGen.generatePrefixOpCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.generateRegexpCountInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.generateRegexpInstrInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.generateRegexpLikeInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.generateRegexpReplaceInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.generateRegexpSubstrInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateFromDaysCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateFromUnixTimeCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateToDaysCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateToSecondsCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.generateUnixTimestamp;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatWSFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateEditdistance;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInitcapInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateInsert;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generatePosition;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateStrtok;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateSubstringInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateTrimFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getSingleArgStringFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getThreeArgStringFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.getTwoArgStringFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getDoubleArgTrigFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getSingleArgTrigFnInfo;
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.Utils.Utils.generateCombinedDf;
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
+import static com.bodosql.calcite.application.Utils.Utils.isWindowedAggFn;
 import static com.bodosql.calcite.application.Utils.Utils.renameExprsList;
 
-import com.bodosql.calcite.application.*;
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen;
+import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.BodoSQLExprType;
+import com.bodosql.calcite.application.ExprTypeVisitor;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.ir.Dataframe;
 import com.bodosql.calcite.ir.Expr;
@@ -41,13 +97,39 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-
-import org.apache.calcite.avatica.SqlType;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
-import org.apache.calcite.rex.*;
-import org.apache.calcite.sql.*;
-import org.apache.calcite.sql.fun.*;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexCorrelVariable;
+import org.apache.calcite.rex.RexDynamicParam;
+import org.apache.calcite.rex.RexFieldAccess;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexLocalRef;
+import org.apache.calcite.rex.RexNamedParam;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexOver;
+import org.apache.calcite.rex.RexPatternFieldRef;
+import org.apache.calcite.rex.RexRangeRef;
+import org.apache.calcite.rex.RexSubQuery;
+import org.apache.calcite.rex.RexTableInputRef;
+import org.apache.calcite.rex.RexVisitor;
+import org.apache.calcite.sql.SqlBinaryOperator;
+import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.sql.SqlInternalOperator;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlNullTreatmentOperator;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.SqlPostfixOperator;
+import org.apache.calcite.sql.SqlPrefixOperator;
+import org.apache.calcite.sql.fun.BodoSqlTryCastFunction;
+import org.apache.calcite.sql.fun.SqlCaseOperator;
+import org.apache.calcite.sql.fun.SqlCastFunction;
+import org.apache.calcite.sql.fun.SqlDatetimePlusOperator;
+import org.apache.calcite.sql.fun.SqlDatetimeSubtractionOperator;
+import org.apache.calcite.sql.fun.SqlExtractFunction;
+import org.apache.calcite.sql.fun.SqlLikeOperator;
+import org.apache.calcite.sql.fun.SqlSubstringFunction;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.TZAwareSqlType;
@@ -306,11 +388,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
 
     if (patternRegex) {
-      return new Expr.Call("bodo.libs.bodosql_array_kernels.regexp_like",
-          arg, pattern, new Expr.StringLiteral(""));
+      return new Expr.Call(
+          "bodo.libs.bodosql_array_kernels.regexp_like", arg, pattern, new Expr.StringLiteral(""));
     } else {
-      return new Expr.Call("bodo.libs.bodosql_array_kernels.like_kernel",
-          arg, pattern, escape,
+      return new Expr.Call(
+          "bodo.libs.bodosql_array_kernels.like_kernel",
+          arg,
+          pattern,
+          escape,
           // Use the opposite. The python call is for case insensitivity while
           // our boolean is for case sensitivity so they are opposites.
           new Expr.BooleanLiteral(!op.isCaseSensitive()));
@@ -552,14 +637,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 operands.get(1).emit()));
       case TIMESTAMP_ADD:
         // Uses Calcite parser, accepts both quoted and unquoted time units
-        dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(2));
+        dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(2));
         unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
         assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
         return new Expr.Raw(generateSnowflakeDateAddCode(operands, unit));
       case TIMESTAMP_DIFF:
         assert operands.size() == 3;
-        dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
-        dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(2));
+        dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));
+        dateTimeExprType2 = getDateTimeDataType(fnOperation.getOperands().get(2));
         if ((dateTimeExprType1 == DatetimeFnCodeGen.DateTimeType.TIME)
             != (dateTimeExprType2 == DatetimeFnCodeGen.DateTimeType.TIME)) {
           throw new BodoSQLCodegenException(
@@ -653,7 +738,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
             // Otherwise, fall back to the normal DATEADD. TIMEADD and TIMESTAMPADD are aliases.
             if (operands.size() == 3) {
-              dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(2));
+              dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(2));
               unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
               assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
               return new Expr.Raw(generateSnowflakeDateAddCode(operands, unit));
@@ -671,7 +756,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               // Cannot use dateadd/datesub functions on TIME data unless the
               // amount being added to them is a timedelta
               if (!manual_addition
-                  && getDateTimeExprType(fnOperation.getOperands().get(0))
+                  && getDateTimeDataType(fnOperation.getOperands().get(0))
                       .equals(DateTimeType.TIME)) {
                 throw new BodoSQLCodegenException("Cannot add/subtract days from TIME");
               }
@@ -703,7 +788,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
               }
               // add/minus a date interval to a date object should return a date object
               if (is_date_interval
-                  && getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.DATE) {
+                  && getDateTimeDataType(fnOperation.getOperands().get(0)) == DateTimeType.DATE) {
                 if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
                   arg1 = new Expr.Call("bodo.libs.bodosql_array_kernels.negate", arg1);
                 }
@@ -721,14 +806,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             if (operands.size() == 2) {
               arg1 = operands.get(1);
               arg2 = operands.get(0);
-              dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(0));
-              dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(1));
+              dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(0));
+              dateTimeExprType2 = getDateTimeDataType(fnOperation.getOperands().get(1));
             } else if (operands.size() == 3) { // this is the Snowflake option
               unit = operands.get(0).emit();
               arg1 = operands.get(1);
               arg2 = operands.get(2);
-              dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
-              dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(2));
+              dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));
+              dateTimeExprType2 = getDateTimeDataType(fnOperation.getOperands().get(2));
             } else {
               throw new BodoSQLCodegenException(
                   "Invalid number of arguments to DATEDIFF: must be 2 or 3.");
@@ -742,8 +827,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateDateDiffFnInfo(unit, arg1, arg2);
           case "TIMEDIFF":
             assert operands.size() == 3;
-            dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
-            dateTimeExprType2 = getDateTimeExprType(fnOperation.getOperands().get(2));
+            dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));
+            dateTimeExprType2 = getDateTimeDataType(fnOperation.getOperands().get(2));
             if ((dateTimeExprType1 == DateTimeType.TIME)
                 != (dateTimeExprType2 == DateTimeType.TIME)) {
               throw new BodoSQLCodegenException(
@@ -854,7 +939,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 getDoubleArgNumericFnInfo(fnName, operands.get(0).emit(), arg1_expr_code));
 
           case "LOG":
-            return generateLogFnInfo(operands, exprTypes, isSingleRow);
+            return generateLogFnInfo(operands);
           case "CONV":
             assert operands.size() == 3;
             strExpr =
@@ -924,11 +1009,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "YEAROFWEEK":
           case "YEAROFWEEKISO":
             assert operands.size() == 1;
-            if (getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.TIME)
+            if (getDateTimeDataType(fnOperation.getOperands().get(0)) == DateTimeType.TIME)
               throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             return getSingleArgDatetimeFnInfo(fnName, operands.get(0).emit());
           case "LAST_DAY":
-            dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(0));
+            dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(0));
             if (dateTimeExprType1 == DateTimeType.TIME)
               throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             if (operands.size() == 2) {
@@ -944,7 +1029,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "NEXT_DAY":
           case "PREVIOUS_DAY":
             assert operands.size() == 2;
-            if (getDateTimeExprType(fnOperation.getOperands().get(0)) == DateTimeType.TIME)
+            if (getDateTimeDataType(fnOperation.getOperands().get(0)) == DateTimeType.TIME)
               throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             return getDoubleArgDatetimeFnInfo(
                 fnName, operands.get(0).emit(), operands.get(1).emit());
@@ -1133,7 +1218,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "INITCAP":
             return generateInitcapInfo(operands);
           case "DATE_TRUNC":
-            dateTimeExprType1 = getDateTimeExprType(fnOperation.getOperands().get(1));
+            dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(1));
             unit = standardizeTimeUnit(fnName, operands.get(0).emit(), dateTimeExprType1);
             return generateDateTruncCode(unit, operands.get(1));
           case "MICROSECOND":
