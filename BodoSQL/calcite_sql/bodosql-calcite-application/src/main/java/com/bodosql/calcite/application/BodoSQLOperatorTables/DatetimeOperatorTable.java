@@ -939,8 +939,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
-              "DATE_TRUNC(STRING_LITERAL, DATETIME)",
-              OperandTypes.CHARACTER,
+              "DATE_TRUNC(UNIT, DATETIME)",
+              OperandTypes.ANY,
               OperandTypes.DATETIME),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
@@ -983,7 +983,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           ReturnTypes.INTEGER_NULLABLE,
           null,
           OperandTypes.sequence(
-              "DATE_PART(STRING, TIMESTAMP)", OperandTypes.STRING, OperandTypes.DATETIME),
+              "DATE_PART(UNIT, DATETIME)", OperandTypes.ANY, OperandTypes.DATETIME),
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction NEXT_DAY =
