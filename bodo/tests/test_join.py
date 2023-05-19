@@ -4662,8 +4662,13 @@ def test_stream_join_basic(memory_leak_check):
     str_c_type = bodo.utils.utils.CTypeEnum.STRING.value
     int32_c_type = bodo.utils.utils.numba_to_c_type(bodo.int32)
     int8_c_type = bodo.utils.utils.numba_to_c_type(bodo.int8)
-    build_arr_types = np.array(
+    build_arr_dtypes = np.array(
         [int32_c_type, str_c_type, str_c_type, int8_c_type], np.int8
+    )
+    int_arr_type = bodo.utils.utils.CArrayTypeEnum.NULLABLE_INT_BOOL.value
+    str_arr_type = bodo.utils.utils.CArrayTypeEnum.STRING.value
+    build_arr_array_types = np.array(
+        [int_arr_type, str_arr_type, str_arr_type, int_arr_type], np.int8
     )
     out_table_type = bodo.TableType(
         (
@@ -4691,7 +4696,10 @@ def test_stream_join_basic(memory_leak_check):
     @bodo.jit(distributed=False)
     def test_stream_join(conn):
         join_state = init_join_state(
-            build_arr_types.ctypes, len(build_arr_types), n_keys
+            build_arr_dtypes.ctypes,
+            build_arr_array_types.ctypes,
+            len(build_arr_dtypes),
+            n_keys,
         )
 
         # read PART table and build join hash table
@@ -4727,11 +4735,10 @@ def test_stream_join_basic(memory_leak_check):
             out_dfs.append(df)
             if is_last2:
                 break
-
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
-    # TODO[BSE-367]: Support dict-encoded strings
+    # TODO[BSE-439]: Support dict-encoded strings
     saved_SF_READ_AUTO_DICT_ENCODE_ENABLED = (
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
     )
