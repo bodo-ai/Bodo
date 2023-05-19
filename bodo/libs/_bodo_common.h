@@ -211,7 +211,7 @@ extern std::vector<size_t> numpy_item_size;
 
 /**
  * @brief enum for array types supported by Bodo
- *
+ * These are also defined in utils/utils.py and must match.
  */
 struct bodo_array_type {
     enum arr_type_enum {
