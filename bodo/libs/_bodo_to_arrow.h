@@ -17,12 +17,13 @@
  * Alternative to Arrow's PoolBuffer:
  * https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/memory_pool.cc#L838
  */
-class BodoBuffer : public arrow::MutableBuffer {
+class BodoBuffer : public arrow::ResizableBuffer {
    public:
     BodoBuffer(uint8_t *data, const int64_t size, NRT_MemInfo *meminfo_,
                bool incref = true)
-        : MutableBuffer(data, size, bodo::buffer_memory_manager()),
-          meminfo(meminfo_) {
+        : ResizableBuffer(data, size, bodo::buffer_memory_manager()),
+          meminfo(meminfo_),
+          pool_(bodo::BufferPool::DefaultPtr()) {
         if (incref) {
             incref_meminfo(meminfo);
         }
@@ -40,8 +41,92 @@ class BodoBuffer : public arrow::MutableBuffer {
 
     NRT_MemInfo *getMeminfo() { return meminfo; }
 
+    /**
+     * @brief Ensure that buffer can accommodate specified total number of bytes
+     * without re-allocation.
+     *
+     * Copied from Arrow's PoolBuffer since it is not exposed to use as base
+     * class:
+     * https://github.com/apache/arrow/blob/apache-arrow-11.0.0/cpp/src/arrow/memory_pool.cc
+     * Bodo change: alignment is not passed to alloc calls which defaults to
+     * 64-byte. Meminfo attributes are also updated.
+     *
+     * @param capacity minimum total capacity required in bytes
+     * @return arrow::Status
+     */
+    arrow::Status Reserve(const int64_t capacity) override {
+        if (capacity < 0) {
+            return arrow::Status::Invalid("Negative buffer capacity: ",
+                                          capacity);
+        }
+        if (!data_ || capacity > capacity_) {
+            int64_t new_capacity =
+                arrow::bit_util::RoundUpToMultipleOf64(capacity);
+            if (data_) {
+                // NOTE: meminfo->data needs to be passed to buffer pool manager
+                // since it stores swips
+                RETURN_NOT_OK(pool_->Reallocate(capacity_, new_capacity,
+                                                (uint8_t **)&(meminfo->data)));
+            } else {
+                RETURN_NOT_OK(pool_->Allocate(new_capacity,
+                                              (uint8_t **)&(meminfo->data)));
+            }
+            data_ = (uint8_t *)meminfo->data;
+            capacity_ = new_capacity;
+            // Updating size is necessary since used by the buffer pool manager
+            // for freeing.
+            meminfo->size = new_capacity;
+        }
+        return arrow::Status::OK();
+    }
+
+    /**
+     * @brief Make sure there is enough capacity and resize the buffer.
+     * If shrink_to_fit=true and new_size is smaller than existing size, updates
+     * capacity to the nearest multiple of 64 bytes.
+     *
+     * Copied from Arrow's PoolBuffer since it is not exposed to use as base
+     * class:
+     * https://github.com/apache/arrow/blob/apache-arrow-11.0.0/cpp/src/arrow/memory_pool.cc
+     * Bodo change: alignment is not passed to alloc calls which defaults to
+     * 64-byte. Meminfo attributes are also updated.
+     *
+     * @param new_size New size of the buffer
+     * @param shrink_to_fit if new size is smaller than the existing size,
+     * reallocate to fit.
+     * @return arrow::Status
+     */
+    arrow::Status Resize(const int64_t new_size,
+                         bool shrink_to_fit = true) override {
+        if (ARROW_PREDICT_FALSE(new_size < 0)) {
+            return arrow::Status::Invalid("Negative buffer resize: ", new_size);
+        }
+        if (data_ && shrink_to_fit && new_size <= size_) {
+            // Buffer is non-null and is not growing, so shrink to the requested
+            // size without excess space.
+            int64_t new_capacity =
+                arrow::bit_util::RoundUpToMultipleOf64(new_size);
+            if (capacity_ != new_capacity) {
+                // Buffer hasn't got yet the requested size.
+                RETURN_NOT_OK(pool_->Reallocate(capacity_, new_capacity,
+                                                (uint8_t **)&(meminfo->data)));
+                data_ = (uint8_t *)meminfo->data;
+                capacity_ = new_capacity;
+                // Updating size is necessary since used by the buffer pool
+                // manager for freeing.
+                meminfo->size = new_capacity;
+            }
+        } else {
+            RETURN_NOT_OK(Reserve(new_size));
+        }
+        size_ = new_size;
+
+        return arrow::Status::OK();
+    }
+
    private:
     NRT_MemInfo *meminfo;
+    arrow::MemoryPool *pool_;
 };
 
 std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
