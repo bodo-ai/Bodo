@@ -14,7 +14,7 @@ uint32_t HashHashJoinTable::operator()(const int64_t iRow) const {
 bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
                                        const int64_t iRowB) const {
     const std::shared_ptr<const table_info>& build_table =
-        join_state->build_table_buffer;
+        join_state->build_table_buffer.data_table;
     const std::shared_ptr<const table_info>& probe_table =
         join_state->probe_table;
 
@@ -51,15 +51,6 @@ bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
 void join_build_consume_batch(JoinState* join_state,
                               std::shared_ptr<table_info> in_table,
                               bool is_last) {
-    int64_t n_prev_build = join_state->build_table_buffer->nrows();
-
-    // append batch to build rows (needed for hash table comparisons and
-    // producing output)
-    std::vector<std::shared_ptr<table_info>> tables(
-        {join_state->build_table_buffer, in_table});
-    join_state->build_table_buffer = concat_tables(tables);
-    tables.clear();
-
     // add hashes of the new batch
     join_state->build_table_hashes.reserve(
         join_state->build_table_hashes.size() + in_table->nrows());
@@ -70,8 +61,17 @@ void join_build_consume_batch(JoinState* join_state,
         batch_hashes.get() + in_table->nrows());
 
     // insert batch into hash table
-    int64_t n_rows = join_state->build_table_buffer->nrows();
+    // TODO[BSE-441]: see if appending all selected rows upfront to the build
+    // buffer is faster (a call like AppendSelectedRows that takes a bool vector
+    // from partitioning and appends all selected input rows)
+    // TODO[BSE-441]: tune initial buffer buffer size and expansion strategy
+    // using heuristics (e.g. SQL planner statistics)
+    int64_t n_prev_build = join_state->build_table_buffer.data_table->nrows();
+    join_state->build_table_buffer.ReserveTable(in_table);
+    int64_t n_rows = n_prev_build + in_table->nrows();
     for (int64_t i_row = n_prev_build; i_row < n_rows; i_row++) {
+        join_state->build_table_buffer.AppendRow(in_table,
+                                                 i_row - n_prev_build);
         join_state->build_table.emplace(i_row, i_row);
     }
 }
@@ -109,7 +109,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     // create output table using build and probe table indices (columns appended
     // side by side)
     std::shared_ptr<table_info> build_out_table =
-        RetrieveTable(join_state->build_table_buffer, build_idxs);
+        RetrieveTable(join_state->build_table_buffer.data_table, build_idxs);
     std::shared_ptr<table_info> probe_out_table =
         RetrieveTable(in_table, probe_idxs);
 
