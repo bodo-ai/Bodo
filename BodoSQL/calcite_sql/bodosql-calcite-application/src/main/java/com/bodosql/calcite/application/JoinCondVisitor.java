@@ -9,7 +9,13 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.*;
+import org.apache.calcite.rex.RexVisitorImpl;
+import org.apache.calcite.sql.SqlBinaryOperator;
+import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.SqlPostfixOperator;
+import org.apache.calcite.sql.SqlPrefixOperator;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Pair;
 
@@ -231,5 +237,63 @@ public class JoinCondVisitor {
         String.format(
             "Internal Error: Call with operator %s not supported within a join condition.",
             joinNode.getOperator()));
+  }
+
+  public static boolean enableStreamingJoin = false;
+
+  /** Determine if a condition for a join equates to a HashJoin inside Bodo. */
+  public static boolean isBodoHashJoin(RexNode condition, int numLeftCols) {
+    if (!enableStreamingJoin) {
+      return false;
+    }
+    Boolean result =
+        condition.accept(
+            // We don't need deep traversal
+            new RexVisitorImpl<>(false) {
+              @Override
+              public Boolean visitCall(RexCall call) {
+                /**
+                 * We can only have a hash join if we either have an equality or AND of several
+                 * equalities.
+                 */
+                if (call.getOperator() instanceof SqlBinaryOperator) {
+                  if (call.getKind().equals(SqlKind.AND)) {
+                    // And is true if any value is valid. Note we can't
+                    // use visitArrayOr because it doesn't handle NULL properly
+                    for (RexNode operand : call.getOperands()) {
+                      Boolean b = operand.accept(this);
+                      // Evaluate null as False
+                      boolean isTrue = b != null && b;
+                      if (isTrue) {
+                        return true;
+                      }
+                    }
+                  } else if (call.getKind().equals(SqlKind.EQUALS)) {
+                    // Equals is valid if we have two RexInputRefs and they are from different
+                    // tables
+                    List<RexNode> operands = call.getOperands();
+                    if (operands.size() == 2) {
+                      RexNode first = operands.get(0);
+                      RexNode second = operands.get(1);
+                      if (first instanceof RexInputRef && second instanceof RexInputRef) {
+                        RexInputRef firstRef = (RexInputRef) first;
+                        RexInputRef secondRef = (RexInputRef) second;
+                        int firstColNum = firstRef.getIndex();
+                        int secondColNum = secondRef.getIndex();
+                        // We have a valid hash join condition if they come from different tables.
+                        return (firstColNum < numLeftCols && secondColNum >= numLeftCols)
+                            || (firstColNum >= numLeftCols && secondColNum < numLeftCols);
+                      }
+                    }
+                  }
+                  // All other cases are not supported. If there is code like (A == B) OR (A == B)
+                  // it will
+                  // be simplified by the plan.
+                }
+                return false;
+              }
+            });
+
+    return result != null && result;
   }
 }

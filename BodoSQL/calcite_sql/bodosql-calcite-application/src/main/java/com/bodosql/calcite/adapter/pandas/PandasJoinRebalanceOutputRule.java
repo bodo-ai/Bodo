@@ -1,7 +1,7 @@
 package com.bodosql.calcite.adapter.pandas;
 
 import com.bodosql.calcite.application.Utils.BodoSQLStyleImmutable;
-import com.bodosql.calcite.traits.SeparateStreamExchange;
+import com.bodosql.calcite.traits.CombineStreamsExchange;
 import com.google.common.collect.ImmutableList;
 import javax.annotation.Nullable;
 import org.apache.calcite.plan.RelOptRuleCall;
@@ -34,7 +34,7 @@ public abstract class PandasJoinRebalanceOutputRule<C extends PandasJoinRebalanc
 
   @Nullable
   public static RelNode generateNewProject(
-      PandasProject project, PandasJoin join, boolean containStreamSeparate) {
+      PandasProject project, PandasJoin join, boolean containsCombineStream) {
     // Determine the node count for the projection.
     int totalNodeCount = 0;
     for (RexNode projCol : project.getProjects()) {
@@ -50,9 +50,9 @@ public abstract class PandasJoinRebalanceOutputRule<C extends PandasJoinRebalanc
     if (totalNodeCount > nodeCountThreshold) {
       RelNode newJoin = join.withRebalanceOutput(true);
       RelNode input = newJoin;
-      if (containStreamSeparate) {
+      if (containsCombineStream) {
         input =
-            new SeparateStreamExchange(
+            new CombineStreamsExchange(
                 project.getInput().getCluster(), project.getInput().getTraitSet(), newJoin);
       }
       RelNode newProject = project.copy(project.getTraitSet(), ImmutableList.of(input));
@@ -62,9 +62,9 @@ public abstract class PandasJoinRebalanceOutputRule<C extends PandasJoinRebalanc
   }
 
   /**
-   * Implementation for when the Project has the Streaming physical trait (no RexOver()). In this
-   * case because Join currently outputs single batch there will be a SeparateStreamExchange that we
-   * must look past.
+   * Implementation for when the Project has the Single-Batch physical trait (RexOver()). In this
+   * case because the Project currently requires single batch and the Join outputs streaming, there
+   * will be a CombineStreamsExchange that we must look past.
    */
   public static class PandasJoinRebalanceStreamingProjectionRule
       extends PandasJoinRebalanceOutputRule<
@@ -92,7 +92,7 @@ public abstract class PandasJoinRebalanceOutputRule<C extends PandasJoinRebalanc
       PandasJoinRebalanceStreamingProjectionRuleConfig DEFAULT_CONFIG =
           com.bodosql.calcite.adapter.pandas
               .ImmutablePandasJoinRebalanceStreamingProjectionRuleConfig.of()
-              .withOperandFor(PandasProject.class, SeparateStreamExchange.class, PandasJoin.class)
+              .withOperandFor(PandasProject.class, CombineStreamsExchange.class, PandasJoin.class)
               .as(PandasJoinRebalanceStreamingProjectionRuleConfig.class);
 
       @Override
@@ -103,14 +103,14 @@ public abstract class PandasJoinRebalanceOutputRule<C extends PandasJoinRebalanc
       /** Defines an operand tree with three classes. */
       default PandasJoinRebalanceStreamingProjectionRule.Config withOperandFor(
           Class<? extends PandasProject> projectClass,
-          Class<? extends SeparateStreamExchange> separateStreamClass,
+          Class<? extends CombineStreamsExchange> combineStreamsClass,
           Class<? extends PandasJoin> joinClass) {
         return withOperandSupplier(
                 b0 ->
                     b0.operand(projectClass)
                         .oneInput(
                             b1 ->
-                                b1.operand(separateStreamClass)
+                                b1.operand(combineStreamsClass)
                                     .oneInput(
                                         b2 ->
                                             b2.operand(joinClass)
