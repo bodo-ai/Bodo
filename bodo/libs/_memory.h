@@ -362,7 +362,10 @@ class BufferPool final : public ::arrow::MemoryPool {
 
     /// @brief Simple wrapper for getting a pointer to the BufferPool singleton
     /// @return Pointer to Singleton BufferPool
-    static BufferPool* DefaultPtr() { return BufferPool::Default().get(); }
+    static BufferPool* DefaultPtr() {
+        static BufferPool* pool = BufferPool::Default().get();
+        return pool;
+    }
 
     /// Override the copy constructor and = operator as per the
     /// singleton pattern.
@@ -521,7 +524,7 @@ class STLBufferPoolAllocator {
         using other = STLBufferPoolAllocator<U>;
     };
 
-    STLBufferPoolAllocator() noexcept = default;
+    explicit STLBufferPoolAllocator() noexcept = default;
 
     template <class U>
     STLBufferPoolAllocator(const STLBufferPoolAllocator<U>& rhs) noexcept {
