@@ -136,10 +136,17 @@ public class RelationalAlgebraGenerator {
    *     gets stored in the {@link #planner}
    */
   public RelationalAlgebraGenerator(
-      BodoSqlSchema newSchema, String namedParamTableName, boolean useStreaming, int verboseLevel) {
+      BodoSqlSchema newSchema,
+      String namedParamTableName,
+      boolean useStreaming,
+      boolean enableJoinStreaming,
+      int verboseLevel) {
     this.catalog = null;
     this.useStreaming = useStreaming;
     this.verboseLevel = verboseLevel;
+    // Enable/Disable join streaming.
+    // TODO: Remove when join code generation is stable.
+    JoinCondVisitor.enableStreamingJoin = enableJoinStreaming;
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
     List<SchemaPlus> defaultSchemas =
@@ -163,10 +170,14 @@ public class RelationalAlgebraGenerator {
       BodoSqlSchema newSchema,
       String namedParamTableName,
       boolean useStreaming,
+      boolean enableJoinStreaming,
       int verboseLevel) {
     this.catalog = catalog;
     this.useStreaming = useStreaming;
     this.verboseLevel = verboseLevel;
+    // Enable/Disable join streaming.
+    // TODO: Remove when join code generation is stable.
+    JoinCondVisitor.enableStreamingJoin = enableJoinStreaming;
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
     List<SchemaPlus> defaultSchemas =

@@ -1008,12 +1008,14 @@ class BodoSQLContext:
                 self.schema,
                 NAMED_PARAM_TABLE_NAME,
                 bodo.bodosql_use_streaming_plan,
+                bodo.enable_join_streaming,
                 verbose_level,
             )
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
             NAMED_PARAM_TABLE_NAME,
             bodo.bodosql_use_streaming_plan,
+            bodo.enable_join_streaming,
             verbose_level,
         )
         return generator

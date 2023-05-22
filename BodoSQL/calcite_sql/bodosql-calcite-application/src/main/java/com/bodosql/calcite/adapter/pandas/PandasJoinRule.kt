@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
@@ -10,8 +9,8 @@ import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
-import org.apache.calcite.sql.type.SqlTypeName.*
 import org.apache.calcite.sql.SqlKind.*
+import org.apache.calcite.sql.type.SqlTypeName.*
 
 class PandasJoinRule private constructor(config: Config) : ConverterRule(config) {
     companion object {
@@ -63,8 +62,10 @@ class PandasJoinRule private constructor(config: Config) : ConverterRule(config)
             return null;
         }
 
+        val streamingTrait = PandasJoin.getStreamingTrait(rel.condition, rel.left)
+
         val inputs = join.inputs.map { input ->
-            convert(input, input.traitSet.replace(PandasRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH))
+            convert(input, input.traitSet.replace(PandasRel.CONVENTION).replace(streamingTrait))
         }
         return PandasJoin.create(inputs[0], inputs[1], join.condition, join.joinType)
     }

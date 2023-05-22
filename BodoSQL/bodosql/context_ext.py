@@ -371,6 +371,7 @@ def _gen_pd_func_text_and_lowered_globals(
                     schema,
                     NAMED_PARAM_TABLE_NAME,
                     bodo.bodosql_use_streaming_plan,
+                    bodo.enable_join_streaming,
                     verbose_level,
                 )
             else:
@@ -378,6 +379,7 @@ def _gen_pd_func_text_and_lowered_globals(
                     schema,
                     NAMED_PARAM_TABLE_NAME,
                     bodo.bodosql_use_streaming_plan,
+                    bodo.enable_join_streaming,
                     verbose_level,
                 )
         except Exception as e:
