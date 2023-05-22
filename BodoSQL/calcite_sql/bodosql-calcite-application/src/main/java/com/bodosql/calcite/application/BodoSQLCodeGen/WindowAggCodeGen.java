@@ -16,10 +16,7 @@ import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.ImmutableList;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexFieldCollation;
@@ -847,7 +844,12 @@ public class WindowAggCodeGen {
 
     // Handle all of the function calls where each row uses the same slice of
     // the entire column
-    List<Integer> constant_slices = new ArrayList<Integer>();
+    // This hashset contains the indices of the aggregations
+    // which are performed on a constant window, IE
+    // "Between Unbounded Preceding and Unbounded Following"
+    // These aggregations take a special optimized path,
+    // since we only have to compute the result once.
+    HashSet<Integer> constant_slices = new HashSet<Integer>();
     for (int i = 0; i < aggNames.size(); i++) {
       Boolean lowerBounded = lowerBoundedFlags.get(i);
       Boolean upperBounded = upperBoundedFlags.get(i);
@@ -888,6 +890,11 @@ public class WindowAggCodeGen {
 
     // Now loop across the rows and perform the slice-based aggregation for each
     // window function column that was not already handled above.
+    // If there exist no such slice-based aggregations to handle, immediately return
+    if (aggNames.size() == constant_slices.size()) {
+      return;
+    }
+
     addIndent(funcText, 2);
     funcText.append("for i in range(" + partitionLength + "):\n");
 
