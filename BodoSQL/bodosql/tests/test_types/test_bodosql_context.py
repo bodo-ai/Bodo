@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from bodosql import BodoSQLContext, SnowflakeCatalog, TablePath
+from bodosql.tests.utils import get_data_path_fn
 
 import bodo
 from bodo.tests.conftest import (  # pragma: no cover
@@ -149,6 +150,9 @@ def test_remove_view(memory_leak_check):
     )
 
 
+get_data_path = get_data_path_fn()
+
+
 # Note that this test will fail if ran from the wrong working directory, due to
 # the filepaths.
 @pytest.mark.parametrize(
@@ -162,7 +166,7 @@ def test_remove_view(memory_leak_check):
                     ),
                     "t2": pd.DataFrame({"C": [b"345253"] * 100}),
                     "t3": TablePath(
-                        "bodosql/tests/data/sample-parquet-data/partitioned",
+                        get_data_path("sample-parquet-data/partitioned"),
                         "parquet",
                     ),
                 },
@@ -177,7 +181,7 @@ def test_remove_view(memory_leak_check):
                     ),
                     "t2": pd.DataFrame({"C": [b"345253"] * 100}),
                     "t3": TablePath(
-                        "bodosql/tests/data/sample-parquet-data/partitioned",
+                        get_data_path("sample-parquet-data/partitioned"),
                         "parquet",
                     ),
                 },

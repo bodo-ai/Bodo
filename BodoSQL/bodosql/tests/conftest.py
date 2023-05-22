@@ -7,6 +7,7 @@ import sys
 import numpy as np
 import pandas as pd
 import pytest
+from bodosql.tests.utils import get_data_path_fn
 from pyspark.sql.types import (
     DoubleType,
     IntegerType,
@@ -42,32 +43,12 @@ def is_cached(pytestconfig):
 # similar to Pandas
 @pytest.fixture(scope="session")
 def datapath():
-    """Get the path to a test data file.
-
-    Parameters
-    ----------
-    path : str
-        Path to the file, relative to ``bodosql/tests/data``
-
-    Returns
-    -------
-    path : path including ``bodosql/tests/data``.
-
-    Raises
-    ------
-    ValueError
-        If the path doesn't exist.
     """
-    BASE_PATH = os.path.join(os.path.dirname(__file__), "data")
+    Get the path to a test data file. Wrapper around the call found in
+    bodosql.tests.utils.get_data_path_fn.
+    """
 
-    def deco(*args, check_exists=True):
-        path = os.path.join(BASE_PATH, *args)
-        if check_exists and not os.path.exists(path):
-            msg = "Could not find file {}."
-            raise ValueError(msg.format(path))
-        return path
-
-    return deco
+    return get_data_path_fn()
 
 
 @pytest.fixture(scope="module")
