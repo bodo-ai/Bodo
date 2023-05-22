@@ -1468,32 +1468,3 @@ def get_equivalent_spark_agg_query(query):
 
     return spark_query
     # TODO (allai5): BY CUBE, BY ROLLUP
-
-
-def get_data_path_fn():
-    """Returns a lambda that returns the path to a test data file.
-
-    Parameters to the returned lambda:
-    ----------
-    path : str
-        Path to the file, relative to ``bodosql/tests/data``
-
-    Returns
-    -------
-    path : path including ``bodosql/tests/data``.
-
-    Raises
-    ------
-    ValueError
-        If the path doesn't exist.
-    """
-    BASE_PATH = os.path.join(os.path.dirname(__file__), "data")
-
-    def deco(*args, check_exists=True):
-        path = os.path.join(BASE_PATH, *args)
-        if check_exists and not os.path.exists(path):
-            msg = "Could not find file {}."
-            raise ValueError(msg.format(path))
-        return path
-
-    return deco

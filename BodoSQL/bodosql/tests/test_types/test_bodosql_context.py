@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 import pytest
 from bodosql import BodoSQLContext, SnowflakeCatalog, TablePath
-from bodosql.tests.utils import get_data_path_fn
 
 import bodo
 from bodo.tests.conftest import (  # pragma: no cover
@@ -150,59 +149,54 @@ def test_remove_view(memory_leak_check):
     )
 
 
-get_data_path = get_data_path_fn()
+def test_bodosql_context_boxing_no_catalog(datapath, memory_leak_check):
+    """
+    Tests boxing and unboxing with a BodoSQL context with no catalog
+    """
+
+    bc = BodoSQLContext(
+        {
+            "t1": pd.DataFrame(
+                {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
+            ),
+            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+            "t3": TablePath(
+                datapath("sample-parquet-data/partitioned"),
+                "parquet",
+            ),
+        },
+    )
+
+    def impl(bc):
+        return bc
+
+    check_func(impl, (bc,))
 
 
-# Note that this test will fail if ran from the wrong working directory, due to
-# the filepaths.
-@pytest.mark.parametrize(
-    "bc",
-    [
-        pytest.param(
-            BodoSQLContext(
-                {
-                    "t1": pd.DataFrame(
-                        {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
-                    ),
-                    "t2": pd.DataFrame({"C": [b"345253"] * 100}),
-                    "t3": TablePath(
-                        get_data_path("sample-parquet-data/partitioned"),
-                        "parquet",
-                    ),
-                },
-            ),
-            id="no-catalog",
-        ),
-        pytest.param(
-            BodoSQLContext(
-                {
-                    "t1": pd.DataFrame(
-                        {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
-                    ),
-                    "t2": pd.DataFrame({"C": [b"345253"] * 100}),
-                    "t3": TablePath(
-                        get_data_path("sample-parquet-data/partitioned"),
-                        "parquet",
-                    ),
-                },
-                SnowflakeCatalog(
-                    os.environ.get("SF_USERNAME", ""),
-                    os.environ.get("SF_PASSWORD", ""),
-                    "bodopartner.us-east-1",
-                    "DEMO_WH",
-                    "TEST_DB",
-                    connection_params={"schema": "PUBLIC"},
-                ),
-            ),
-            id="snowflake-catalog",
-            marks=pytest_snowflake,
-        ),
-    ],
-)
-def test_bodosql_context_boxing(bc, memory_leak_check):
+def test_bodosql_context_boxing_with_catalog(datapath, memory_leak_check):
     """
-    Tests boxing and unboxing with a BodoSQL context.
+    Tests boxing and unboxing with a BodoSQL context with a catalog
     """
+    bc = BodoSQLContext(
+        {
+            "t1": pd.DataFrame(
+                {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
+            ),
+            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+            "t3": TablePath(
+                datapath("sample-parquet-data/partitioned"),
+                "parquet",
+            ),
+        },
+        SnowflakeCatalog(
+            os.environ.get("SF_USERNAME", ""),
+            os.environ.get("SF_PASSWORD", ""),
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            "TEST_DB",
+            connection_params={"schema": "PUBLIC"},
+        ),
+    )
 
     def impl(bc):
         return bc
