@@ -691,7 +691,7 @@ def test_sysdate_equivalents_cols(
     valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
     query = (
         f"SELECT A, "
-        f"  DATE_TRUNC('DAY', {sysdate_equiv_fns}()) AS date_trunc, "
+        f"  DATE_TRUNC('DAY', {sysdate_equiv_fns}()) AS date_trunc_res, "
         f"  EXTRACT(DAY from {sysdate_equiv_fns}()) IN ({valid_days}) AS is_valid_day, "
         f"  EXTRACT(HOUR from {sysdate_equiv_fns}()) IN ({valid_hours}) AS is_valid_hour, "
         f"  EXTRACT(MINUTE from {sysdate_equiv_fns}()) IN ({valid_minutes}) AS is_valid_minute "
@@ -700,7 +700,7 @@ def test_sysdate_equivalents_cols(
     py_output = pd.DataFrame(
         {
             "A": basic_df["table1"]["A"],
-            "date_trunc": current_time.normalize(),
+            "date_trunc_res": current_time.normalize(),
             "is_valid_day": True,
             "is_valid_hour": True,
             "is_valid_minute": True,
@@ -727,7 +727,7 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
     valid_days, valid_hours, valid_minutes = compute_valid_times(current_time)
     query = (
         f"SELECT A, "
-        f"  CASE WHEN A THEN DATE_TRUNC('DAY', {sysdate_equiv_fns}()) END AS date_trunc, "
+        f"  CASE WHEN A THEN DATE_TRUNC('DAY', {sysdate_equiv_fns}()) END AS date_trunc_res, "
         f"  CASE WHEN A THEN EXTRACT(DAY from {sysdate_equiv_fns}()) IN ({valid_days}) END AS is_valid_day, "
         f"  CASE WHEN A THEN EXTRACT(HOUR from {sysdate_equiv_fns}()) IN ({valid_hours}) END AS is_valid_hour, "
         f"  CASE WHEN A THEN EXTRACT(MINUTE from {sysdate_equiv_fns}()) IN ({valid_minutes}) END AS is_valid_minute "
@@ -743,7 +743,7 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
     py_output = pd.DataFrame(
         {
             "A": df.A,
-            "date_trunc": D,
+            "date_trunc_res": D,
             "is_valid_day": S,
             "is_valid_hour": S,
             "is_valid_minute": S,
