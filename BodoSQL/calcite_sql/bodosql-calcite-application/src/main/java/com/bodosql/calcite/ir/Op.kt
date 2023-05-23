@@ -36,16 +36,17 @@ interface Op {
     }
 
     /**
-     * Represents an if operation with an optional else case
-     * for bodies with a single line.
+     * Represents an if operation with an optional else case.
      */
-    data class If(val cond: Expr, val ifFrame: Frame, val elseFrame: Frame) : Op {
+    data class If(val cond: Expr, val ifFrame: Frame, val elseFrame: Frame? = null) : Op {
 
         override fun emit(doc: Doc) {
             doc.write("if ${cond.emit()}:")
             ifFrame.emit(doc.indent())
-            doc.write("else:")
-            elseFrame.emit(doc.indent())
+            if (elseFrame != null) {
+                doc.write("else:")
+                elseFrame.emit(doc.indent())
+            }
         }
 
     }
@@ -64,6 +65,28 @@ interface Op {
         }
 
     }
+
+    /**
+     * Represents a While operation.
+     */
+    data class While(val cond: Expr, val body: Frame) : Op {
+
+        override fun emit(doc: Doc) {
+            doc.write("while ${cond.emit()}:")
+            body.emit(doc.indent())
+        }
+    }
+
+    /**
+     * Represents a streaming pipeline. Used to provide a layer of
+     * abstraction with the actual pipeline details.
+     */
+    data class StreamingPipeline(val frame: StreamingPipelineFrame) : Op {
+        override fun emit(doc: Doc) {
+            frame.emit(doc)
+        }
+    }
+
 
     /**
      * A fallthrough to insert text directly into the document.
