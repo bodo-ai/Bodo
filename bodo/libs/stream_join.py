@@ -49,27 +49,59 @@ join_state_type = JoinStateType()
 
 _init_join_state = types.ExternalFunction(
     "join_state_init_py_entry",
-    join_state_type(types.voidptr, types.voidptr, types.int32, types.int64),
+    join_state_type(
+        types.voidptr,
+        types.voidptr,
+        types.int32,
+        types.voidptr,
+        types.voidptr,
+        types.int32,
+        types.int64,
+    ),
 )
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def init_join_state(build_arr_dtypes, build_arr_array_types, n_arrs, n_keys):
+def init_join_state(
+    build_arr_dtypes,
+    build_arr_array_types,
+    n_build_arrs,
+    probe_arr_dtypes,
+    probe_arr_array_types,
+    n_probe_arrs,
+    n_keys,
+):
     """Initialize C++ JoinState pointer
 
     Args:
         build_arr_dtypes (int8*): pointer to array of ints representing array dtypes
                                    (as provided by numba_to_c_type)
         build_arr_array_types (int8*): pointer to array of ints representing array types
-        n_arrs (int32): number of build columns
+        n_build_arrs (int32): number of build columns
+        probe_arr_dtypes (int8*): pointer to array of ints representing array dtypes
+                                   (as provided by numba_to_c_type)
+        probe_arr_array_types (int8*): pointer to array of ints representing array types
+        n_probe_arrs (int32): number of probe columns
         n_keys (int64): number of keys (assuming key columns are first in build table)
     """
 
     def impl(
-        build_arr_dtypes, build_arr_array_types, n_arrs, n_keys
+        build_arr_dtypes,
+        build_arr_array_types,
+        n_build_arrs,
+        probe_arr_dtypes,
+        probe_arr_array_types,
+        n_probe_arrs,
+        n_keys,
     ):  # pragma: no cover
         join_state = _init_join_state(
-            build_arr_dtypes, build_arr_array_types, n_arrs, n_keys
+            build_arr_dtypes,
+            build_arr_array_types,
+            n_build_arrs,
+            probe_arr_dtypes,
+            probe_arr_array_types,
+            n_probe_arrs,
+            n_keys,
         )
         bodo.utils.utils.check_and_propagate_cpp_exception()
         return join_state
@@ -79,12 +111,12 @@ def init_join_state(build_arr_dtypes, build_arr_array_types, n_arrs, n_keys):
 
 _join_build_consume_batch = types.ExternalFunction(
     "join_build_consume_batch_py_entry",
-    types.void(join_state_type, cpp_table_type, types.bool_),
+    types.void(join_state_type, cpp_table_type, types.bool_, types.bool_),
 )
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def join_build_consume_batch(join_state, table, is_last):
+def join_build_consume_batch(join_state, table, is_last, parallel=False):
     """Consume a build table batch in streaming join (insert into hash table)
 
     Args:
@@ -94,9 +126,9 @@ def join_build_consume_batch(join_state, table, is_last):
     """
     table_type = table
 
-    def impl(join_state, table, is_last):  # pragma: no cover
+    def impl(join_state, table, is_last, parallel=False):  # pragma: no cover
         cpp_table = py_table_to_cpp_table(table, table_type)
-        _join_build_consume_batch(join_state, cpp_table, is_last)
+        _join_build_consume_batch(join_state, cpp_table, is_last, parallel)
         bodo.utils.utils.check_and_propagate_cpp_exception()
 
     return impl
@@ -104,12 +136,14 @@ def join_build_consume_batch(join_state, table, is_last):
 
 _join_probe_consume_batch = types.ExternalFunction(
     "join_probe_consume_batch_py_entry",
-    cpp_table_type(join_state_type, cpp_table_type, types.bool_),
+    cpp_table_type(join_state_type, cpp_table_type, types.bool_, types.bool_),
 )
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def join_probe_consume_batch(join_state, table, out_table_type, is_last):
+def join_probe_consume_batch(
+    join_state, table, out_table_type, is_last, parallel=False
+):
     """Consume a probe table batch in streaming join (probe hash table and produce
     output rows)
 
@@ -125,9 +159,13 @@ def join_probe_consume_batch(join_state, table, out_table_type, is_last):
     in_table_type = table
     n_out_arrs = len(unwrap_typeref(out_table_type).arr_types)
 
-    def impl(join_state, table, out_table_type, is_last):  # pragma: no cover
+    def impl(
+        join_state, table, out_table_type, is_last, parallel=False
+    ):  # pragma: no cover
         cpp_table = py_table_to_cpp_table(table, in_table_type)
-        out_cpp_table = _join_probe_consume_batch(join_state, cpp_table, is_last)
+        out_cpp_table = _join_probe_consume_batch(
+            join_state, cpp_table, is_last, parallel
+        )
         bodo.utils.utils.check_and_propagate_cpp_exception()
         out_table = cpp_table_to_py_table(
             out_cpp_table, np.arange(n_out_arrs), out_table_type

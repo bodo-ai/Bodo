@@ -228,6 +228,8 @@ struct KeyEqualHashJoinTable {
 
 struct JoinState {
     TableBuildBuffer build_table_buffer;
+    TableBuildBuffer build_shuffle_buffer;
+    TableBuildBuffer probe_shuffle_buffer;
     int64_t n_keys;
 
     // state for hashing and comparison classes
@@ -240,10 +242,14 @@ struct JoinState {
                             KeyEqualHashJoinTable>
         build_table;
 
-    JoinState(std::vector<int8_t> arr_c_types,
-              std::vector<int8_t> arr_array_types, int64_t n_keys_)
+    JoinState(std::vector<int8_t> build_arr_c_types,
+              std::vector<int8_t> build_arr_array_types,
+              std::vector<int8_t> probe_arr_c_types,
+              std::vector<int8_t> probe_arr_array_types, int64_t n_keys_)
         : n_keys(n_keys_),
           build_table({}, HashHashJoinTable(this),
                       KeyEqualHashJoinTable(this, false)),
-          build_table_buffer(arr_c_types, arr_array_types) {}
+          build_table_buffer(build_arr_c_types, build_arr_array_types),
+          build_shuffle_buffer(build_arr_c_types, build_arr_array_types),
+          probe_shuffle_buffer(probe_arr_c_types, probe_arr_array_types) {}
 };
