@@ -342,3 +342,17 @@ def test_least_datetime_strings(representative_tz, memory_leak_check):
     S = df.min(axis=1, skipna=False)
     py_output = pd.DataFrame({"output": S})
     check_query(query, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.slow
+def test_single_column_least_greatest(greatest_or_least, memory_leak_check):
+    """
+    tests that Greatest/Least works with single column
+    """
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+    ctx = {"table1": df}
+
+    query = f"SELECT {greatest_or_least}(A) as output FROM table1"
+    py_output = pd.DataFrame({"output": df.A})
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
