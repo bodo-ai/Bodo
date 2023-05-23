@@ -76,6 +76,7 @@ import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBo
 import static com.bodosql.calcite.application.Utils.Utils.generateCombinedDf;
 import static com.bodosql.calcite.application.Utils.Utils.isWindowedAggFn;
 import static com.bodosql.calcite.application.Utils.Utils.renameTableRef;
+
 import com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen;
@@ -493,7 +494,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    */
   private Variable visitCaseOperands(RexToPandasTranslator translator, List<RexNode> operands) {
     // Create the output variable shared by all nodes
-    Variable outputVar = new Variable(visitor.genGenericTempVar());
+    Variable outputVar = visitor.genGenericTempVar();
     // Generate the frames we will use. Each operand is it a different, frame,
     // including the current frame for the 0th operand.
     for (int i = 0; i < operands.size() - 1; i++) {
@@ -573,7 +574,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     // Step 5: Generate the output size
     Expr.Call lenCall = new Expr.Call("len", List.of(inputVar));
     // Step 6: Generate the array variable
-    Variable arrVar = new Variable(visitor.genGenericTempVar());
+    Variable arrVar = visitor.genGenericTempVar();
     // Step 7: Create the type
     Variable outputArrayTypeGlobal =
         visitor.lowerAsGlobal(sqlTypeToBodoArrayType(outputType, false));
