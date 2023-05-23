@@ -691,7 +691,12 @@ def least_greatest_codegen(A, is_greatest):
         func_args = ", ".join(f"arg{i}" for i in range(len(arg_names)))
 
     func = "max" if is_greatest else "min"
-    scalar_text = f"  res[i] = {func}(({func_args}))\n"
+
+    # If only 1 column is passed, set result to be the same as input.
+    if len(A) == 1:
+        scalar_text = f"  res[i] = A0[i]\n"
+    else:
+        scalar_text = f"  res[i] = {func}(({func_args}))\n"
 
     extra_globals = {
         "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
