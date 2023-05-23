@@ -57,8 +57,11 @@ import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Dataframe;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Expr.Call;
+import com.bodosql.calcite.ir.Expr.StringLiteral;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.Op.Assign;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
@@ -258,21 +261,21 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Generate the new variable name for a precomputed windowed aggregation column.
+   * Generate the new variable for a precomputed windowed aggregation column.
    *
-   * @return variable name
+   * @return variable
    */
-  private String genTempColumnVar() {
-    return generatedCode.getSymbolTable().genTempColumnVar().getName();
+  private Variable genTempColumnVar() {
+    return generatedCode.getSymbolTable().genTempColumnVar();
   }
 
   /**
-   * Generate the new variable name for a precomputed windowed aggregation dataframe.
+   * Generate the new variable for a precomputed windowed aggregation dataframe.
    *
-   * @return variable name
+   * @return variable
    */
-  private String genWindowedAggDfName() {
-    return generatedCode.getSymbolTable().genWindowedAggDfName().getName();
+  private Variable genWindowedAggDf() {
+    return generatedCode.getSymbolTable().genWindowedAggDf();
   }
 
   /**
@@ -945,7 +948,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                       .append("])")
                       .toString())));
 
-      this.generatedCode.append(getBodoIndent()).add(new Op.ReturnStatement(outputVar));
+      this.generatedCode.add(new Op.ReturnStatement(outputVar));
     } else {
       // Assert that we've encountered a PandasTargetTableScan in the codegen, and
       // set the appropriate variables
@@ -1137,12 +1140,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
       }
       // Update the column names to ensure they match as we don't know the
       // Snowflake names right now
-      this.generatedCode.append(getBodoIndent()).append(outputVar.emit()).append(".columns = ");
-      this.generatedCode.append("[");
+      // TODO: FIX the LHS here in the IR
+      Variable columnsVar = new Variable(outputVar.getName() + ".columns");
+      List<Expr.StringLiteral> colNames = new ArrayList<>();
       for (String colName : outputColumns) {
-        this.generatedCode.append(makeQuoted(colName)).append(", ");
+        colNames.add(new StringLiteral(colName));
       }
-      this.generatedCode.append("]\n");
+      Expr.List colNamesExpr = new Expr.List(colNames);
+      this.generatedCode.add(new Op.Assign(columnsVar, colNamesExpr));
       this.genRelnodeTimerStop(node);
     } else {
       throw new BodoSQLCodegenException(
@@ -1273,15 +1278,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
         List<String> concatDfs = new ArrayList<>();
         if (hasMissingColsGroup) {
           Variable dummyDfVar = new Variable(genDfVar());
-          StringBuilder dummyDfExpr = new StringBuilder(inVar.emit()).append(".iloc[:0, :]");
-
+          // TODO: Switch to proper IR
+          Expr dummyDfExpr = new Expr.Raw(inVar.getName() + ".iloc[:0, :]");
           // Assign the dummy df to a variable name,
-          this.generatedCode
-              .append(getBodoIndent())
-              .append(dummyDfVar.emit())
-              .append(" = ")
-              .append(dummyDfExpr)
-              .append("\n");
+          this.generatedCode.add(new Op.Assign(dummyDfVar, dummyDfExpr));
           concatDfs.add(dummyDfVar.emit());
         }
         concatDfs.addAll(outputDfNames);
@@ -1410,7 +1410,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         childExprs.add(curRexInfo);
         childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
       }
-      Variable outputVar = new Variable(this.genWindowedAggDfName());
+      Variable outputVar = this.genWindowedAggDf();
       Expr outputCode =
           generateOptimizedEngineKernelCode(
               inputVar.getVariable().getName(),
@@ -1510,13 +1510,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // window aggregation
       String dfExpr = out.getKey();
       List<String> outputDfColnameList = out.getValue();
-      String generatedDfName = this.genWindowedAggDfName();
-      this.generatedCode
-          .appendToMainFunction(indent)
-          .appendToMainFunction(generatedDfName)
-          .appendToMainFunction(" = ")
-          .appendToMainFunction(dfExpr)
-          .appendToMainFunction("\n");
+      Variable generatedDf = this.genWindowedAggDf();
+      Expr rhs = new Expr.Raw(dfExpr);
+      this.generatedCode.addToMainFunction(new Op.Assign(generatedDf, rhs));
 
       // For each aggregation that was fused into this window, extract the
       // corresponding column
@@ -1528,7 +1524,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         String outputDfColName = outputDfColnameList.get(j);
         String outputCode =
             new StringBuilder("bodo.hiframes.pd_series_ext.get_series_data(")
-                .append(generatedDfName)
+                .append(generatedDf.getName())
                 .append("[" + makeQuoted(outputDfColName) + "])")
                 .toString();
 
@@ -1550,16 +1546,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
         // In the case that we're inside an apply, we precalculate the column
         // and add the column to colsToAddList. This will result in
         // the precomputed column being added to the dataframe before the apply.
-        String colName = genTempColumnVar();
+        Variable colVar = genTempColumnVar();
         int colInd = colNames.size() + ctx.getColsToAddList().size();
-        ctx.getColsToAddList().add(colName);
-
-        this.generatedCode
-            .appendToMainFunction(indent)
-            .appendToMainFunction(colName)
-            .appendToMainFunction(" = ")
-            .appendToMainFunction(outputColExprs.get(outputColExprsIdx))
-            .appendToMainFunction("\n");
+        ctx.getColsToAddList().add(colVar.getName());
+        // TODO: Move to proper IR
+        Expr colVarRhs = new Expr.Raw(outputColExprs.get(outputColExprsIdx));
+        this.generatedCode.addToMainFunction(new Op.Assign(colVar, colVarRhs));
 
         // Since we're adding the column to the dataframe before the apply, we return
         // an expression that references the added column.
@@ -1931,6 +1923,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       // The length of the output column list should be the same length as argsListList
       assert argsListList.size() == outputColList.size();
+      // TODO: Fix with proper IR.
       this.generatedCode.appendToMainFunction(funcText);
 
       // perform the groupby apply, using the generated function call
@@ -2299,12 +2292,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void genRelnodeTimerStart(RelNode node) {
     if (this.verboseLevel >= this.RelNodeTimingVerboseLevel) {
       int node_id = node.getId();
-      String msgString =
-          new StringBuilder(getBodoIndent())
-              .append("t_" + node_id)
-              .append(" = time.time()\n")
-              .toString();
-      this.generatedCode.append(msgString);
+      Variable var = new Variable("t_" + node_id);
+      Expr.Call timeCall = new Call("time.time");
+      this.generatedCode.add(new Assign(var, timeCall));
     }
   }
 
