@@ -44,7 +44,7 @@ class SymbolTable {
         return Variable("__bodo_generated_column__${colVarId++}")
     }
 
-    fun genWindowedAggDfName(): Variable {
+    fun genWindowedAggDf(): Variable {
         return Variable("__bodo_windowfn_generated_df_${dfVarId++}")
     }
 
