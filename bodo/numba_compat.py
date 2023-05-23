@@ -406,6 +406,7 @@ if _check_numba_change:  # pragma: no cover
     ):  # pragma: no cover
         warnings.warn("ir_utils.dead_code_elimination has changed")
 
+
 # replace dead_code_elimination function with a mini version since it is not safe for
 # Numba passes before our SeriesPass (currently InlineOverloads/InlineClosureCallPass)
 # to run dead code elimination. Alias analysis does not know about DataFrame/Series
@@ -443,7 +444,6 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
             new_body = [block.terminator]
             # for each statement in reverse order, excluding terminator
             for stmt in reversed(block.body[:-1]):
-
                 # ignore assignments that their lhs is not live or lhs==rhs
                 if isinstance(stmt, ir.Assign):
                     lhs = stmt.target
@@ -1093,6 +1093,7 @@ def string_from_string_and_size(self, string, size):
 
 numba.core.pythonapi.PythonAPI.string_from_string_and_size = string_from_string_and_size
 
+
 # This replaces Numba's numba.core.dispatcher._DispatcherBase._compile_for_args
 # method to delete args before returning the dispatcher object and handle BodoError.
 # Otherwise, the code is the same.
@@ -1171,7 +1172,11 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # exception comes from find_file_name_or_handler in fs_io.py called by FilenameType
         # OSError: When AWS credentials are not provided/incorrect
         except (OSError, FileNotFoundError) as ferr:
-            error = FileNotFoundError(str(ferr) + "\n" + e.loc.strformat() + "\n")
+            if e.loc:
+                loc_info = f"\n{e.loc.strformat()}\n"
+            else:
+                loc_info = ""
+            error = FileNotFoundError(str(ferr) + loc_info)
         # This is done to suppress stack when error comes as BodoError called by FilenameType.
         except bodo.utils.typing.BodoError as e:
             error = bodo.utils.typing.BodoError(str(e))
@@ -1244,7 +1249,8 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
                         break
                 if not n_found:
                     msg = f"{str(e)}"
-                msg += "\n" + e.loc.strformat() + "\n"
+                if e.loc:
+                    msg += "\n" + e.loc.strformat() + "\n"
                 e.patch_message(msg)
         error_rewrite(e, "typing")
     except errors.UnsupportedError as e:
@@ -1642,7 +1648,6 @@ def bodo_remove_dead_block(
 
         # ignore assignments that their lhs is not live or lhs==rhs
         if isinstance(stmt, ir.Assign):
-
             lhs = stmt.target
             rhs = stmt.value
 
@@ -2450,6 +2455,7 @@ if _check_numba_change:  # pragma: no cover
 
 # only used locally here, no need to replace in Numba
 
+
 # Bodo change: add func_ir input
 def get_stmt_writes(stmt, func_ir):
     import bodo
@@ -2521,6 +2527,7 @@ if _check_numba_change:  # pragma: no cover
         warnings.warn("numba.core.errors.NumbaError.patch_message has changed")
 
 numba.core.errors.NumbaError.patch_message = patch_message
+
 
 # --------------------- add_context ------------------------------
 def add_context(self, msg):
@@ -3301,6 +3308,7 @@ numba.core.inline_closurecall._created_inlined_var_name = _created_inlined_var_n
 
 # TODO: Include directly in Numba
 
+
 # Bodo Change, add support for calling a number constructor on strings, datetime, timedelta
 def resolve_number___call__(self, classty):
     """
@@ -3387,7 +3395,6 @@ numba.core.typing.builtins.NumberClassAttribute.resolve___call__ = (
 
 
 def on_assign(self, states, assign):
-
     if assign.target.name == states["varname"]:
         scope = states["scope"]
         defmap = states["defmap"]
@@ -3422,6 +3429,7 @@ numba.core.ssa._FreshVarHandler.on_assign = on_assign
 
 #################   Start Array Math Changes   #################
 
+
 # Bodo change: Enable multiple overloads in canonicalize_array_math
 def get_np_ufunc_typ_lst(func):
     """get type of the incoming function from builtin registry.
@@ -3429,10 +3437,10 @@ def get_np_ufunc_typ_lst(func):
     from numba.core import typing
 
     impls = []
-    for (k, v) in typing.npydecl.registry.globals:
+    for k, v in typing.npydecl.registry.globals:
         if k == func:
             impls.append(v)
-    for (k, v) in typing.templates.builtin_registry.globals:
+    for k, v in typing.templates.builtin_registry.globals:
         if k == func:
             impls.append(v)
     if len(impls) == 0:
@@ -4162,7 +4170,7 @@ def simplify_CFG(blocks):
         inst = blocks[label].body[0]
         predecessors = cfg.predecessors(label)
         delete_block = True
-        for (p, q) in predecessors:
+        for p, q in predecessors:
             block = blocks[p]
             if isinstance(block.body[-1], ir.Jump):
                 block.body[-1] = copy.copy(inst)
@@ -5335,6 +5343,7 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
 
 #### END MONKEY PATCH FOR CACHING TO SPECIFIC DIRECTORY FROM IPYTHON NOTEBOOKS ####
 
+
 #### START MONKEY PATCH FOR FUSING Tuples with Python 3.10 ####
 # Bodo Change: Include bytecode changes in the Numba pipeline. Necessary for
 # internally compiled functions.
@@ -5439,7 +5448,6 @@ if _check_numba_change:  # pragma: no cover
         warnings.warn("numba.core.caching._CacheLocator.ensure_cache_path has changed")
 
 if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:  # pragma: no cover
-
     # On platform, we use a shared network file system. If all ranks
     # try to verify that the cache location is valid, it can cause
     # filesystem contention and lead to delays in processing. This
@@ -5561,6 +5569,7 @@ numba.core.runtime.context.NRTContext.meminfo_varsize_realloc = _check_null_resu
     numba.core.runtime.context.NRTContext.meminfo_varsize_realloc.__wrapped__
 )
 #### END MONKEY PATCH FOR NRT NULL CHECKING ####
+
 
 #### BEGIN MONKEY PATCH FOR TYPE.BYTES CHECK IN SIGNATURE GENERATOR FOR LEN ####
 def generic(self, args, kws):
