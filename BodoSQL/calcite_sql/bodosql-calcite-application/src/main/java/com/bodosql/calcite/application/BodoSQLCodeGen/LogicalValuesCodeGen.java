@@ -10,6 +10,10 @@ import java.util.Collections;
 import java.util.List;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import com.bodosql.calcite.application.*;
+import com.bodosql.calcite.ir.Expr;
+import java.util.*;
+import org.apache.calcite.rel.type.*;
 
 /** Class that returns the generated code for Logical Values after all inputs have been visited. */
 public class LogicalValuesCodeGen {
@@ -17,24 +21,18 @@ public class LogicalValuesCodeGen {
   /**
    * Function that return the necessary generated code for a LogicalValues expression.
    *
-   * @param outVar The output variable.
    * @param argExprs The expression for each argument.
    * @param rowType The row type of the output. This is used if there are no initial values.
    * @param pdVisitorClass The PandasCodeGenVisitor used to lower globals.
    * @return The code generated for the LogicalValues expression.
    */
-  public static String generateLogicalValuesCode(
-      String outVar,
-      List<String> argExprs,
-      RelDataType rowType,
-      PandasCodeGenVisitor pdVisitorClass) {
-
-    final String indent = getBodoIndent();
+  public static Expr generateLogicalValuesCode(
+      List<String> argExprs, RelDataType rowType, PandasCodeGenVisitor pdVisitorClass) {
 
     StringBuilder outputStr = new StringBuilder();
     List<String> columnNames = rowType.getFieldNames();
     List<RelDataTypeField> sqlTypes = rowType.getFieldList();
-    outputStr.append(indent).append(outVar).append(" = pd.DataFrame({");
+    outputStr.append("pd.DataFrame({");
 
     final int columnLength;
     if (argExprs.size() == 0) {
@@ -59,8 +57,7 @@ public class LogicalValuesCodeGen {
     }
     outputStr.append(
         String.format(
-            "}, index=bodo.hiframes.pd_index_ext.init_range_index(0, %d, 1, None))\n",
-            columnLength));
-    return outputStr.toString();
+            "}, index=bodo.hiframes.pd_index_ext.init_range_index(0, %d, 1, None))", columnLength));
+    return new Expr.Raw(outputStr.toString());
   }
 }

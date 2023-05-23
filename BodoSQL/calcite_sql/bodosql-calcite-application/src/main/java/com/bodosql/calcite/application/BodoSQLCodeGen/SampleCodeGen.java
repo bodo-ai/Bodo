@@ -1,8 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
-
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.ir.Expr;
 import org.apache.calcite.plan.RelOptRowSamplingParameters;
 import org.apache.calcite.plan.RelOptSamplingParameters;
 
@@ -14,13 +13,11 @@ public class SampleCodeGen {
   /**
    * Function that returns the necessary generated code for a Sample expression.
    *
-   * @param outVar The output variable.
    * @param expr The expression of the input table
    * @param params Parameters of the Sample Relnode
    * @return The code generated for the Sample expression.
    */
-  public static String generateSampleCode(
-      String outVar, String expr, RelOptSamplingParameters params) {
+  public static Expr generateSampleCode(Expr expr, RelOptSamplingParameters params) {
     if (!params.isBernoulli()) {
       throw new BodoSQLCodegenException("Error: SYSTEM/BLOCK sampling is not yet supported");
     }
@@ -28,10 +25,7 @@ public class SampleCodeGen {
     StringBuilder sampleBuilder = new StringBuilder();
 
     sampleBuilder
-        .append(getBodoIndent())
-        .append(outVar)
-        .append(" = ")
-        .append(expr)
+        .append(expr.emit())
         .append(".sample(frac=")
         .append(params.getSamplingPercentage());
 
@@ -39,41 +33,33 @@ public class SampleCodeGen {
       sampleBuilder.append(", random_state=").append(params.getRepeatableSeed());
     }
 
-    sampleBuilder.append(")\n");
+    sampleBuilder.append(")");
 
-    return sampleBuilder.toString();
+    return new Expr.Raw(sampleBuilder.toString());
   }
 
   /**
    * Function that returns the necessary generated code for a RowSample expression.
    *
-   * @param outVar The output variable.
    * @param expr The expression of the input table
    * @param params Parameters of the RowSample Relnode
    * @return The code generated for the RowSample expression.
    */
-  public static String generateRowSampleCode(
-      String outVar, String expr, RelOptRowSamplingParameters params) {
+  public static Expr generateRowSampleCode(Expr expr, RelOptRowSamplingParameters params) {
     if (!params.isBernoulli()) {
       throw new BodoSQLCodegenException("Error: SYSTEM/BLOCK sampling is not yet supported");
     }
 
     StringBuilder rowSampleBuilder = new StringBuilder();
 
-    rowSampleBuilder
-        .append(getBodoIndent())
-        .append(outVar)
-        .append(" = ")
-        .append(expr)
-        .append(".sample(n=")
-        .append(params.getNumberOfRows());
+    rowSampleBuilder.append(expr.emit()).append(".sample(n=").append(params.getNumberOfRows());
 
     if (params.isRepeatable()) {
       rowSampleBuilder.append(", random_state=").append(params.getRepeatableSeed());
     }
 
-    rowSampleBuilder.append(")\n");
+    rowSampleBuilder.append(")");
 
-    return rowSampleBuilder.toString();
+    return new Expr.Raw(rowSampleBuilder.toString());
   }
 }

@@ -1,5 +1,6 @@
 package com.bodosql.calcite.schema;
 
+import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.table.BodoSqlTable;
 import java.util.HashMap;
 import java.util.Set;
@@ -33,7 +34,7 @@ public class LocalSchemaImpl extends BodoSqlSchema {
    * @return The generated code.
    */
   @Override
-  public String generateRemoteQuery(String query) {
+  public Expr generateRemoteQuery(String query) {
     throw new UnsupportedOperationException(
         "A remote query cannot be submitted with a local schema");
   }

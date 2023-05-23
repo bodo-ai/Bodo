@@ -17,7 +17,14 @@ interface Op {
      * @param expr Expression to evaluate.
      */
     data class Assign(val target: Variable, val expr: Expr) : Op {
-        override fun emit(doc: Doc) = doc.write("${target.name} = ${expr.emit()}")
+
+        override fun emit(doc: Doc) {
+            //Assertion to check that we're not shadowing variables
+            //by assigning to them multiple times
+
+            doc.write("${target.name} = ${expr.emit()}")
+        }
+
     }
 
     /**
@@ -40,6 +47,22 @@ interface Op {
             doc.write("else:")
             elseFrame.emit(doc.indent())
         }
+
+    }
+
+    /**
+     * Represents a return statement
+     */
+    data class ReturnStatement( val retVal: Variable?) : Op {
+
+        override fun emit(doc: Doc) {
+            if (retVal != null) {
+                doc.write("return ${this.retVal.emit()}")
+            } else {
+                doc.write("return")
+            }
+        }
+
     }
 
     /**
@@ -67,5 +90,6 @@ interface Op {
                 }
             }
         }
+
     }
 }

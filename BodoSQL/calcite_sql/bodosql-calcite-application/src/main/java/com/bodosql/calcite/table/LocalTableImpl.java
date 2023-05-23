@@ -1,5 +1,7 @@
 package com.bodosql.calcite.table;
 
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.LocalSchemaImpl;
 import java.util.*;
@@ -93,10 +95,10 @@ public class LocalTableImpl extends BodoSqlTable {
    * @return The generated code to write the table.
    */
   @Override
-  public String generateWriteCode(String varName) {
+  public Expr generateWriteCode(Variable varName) {
     assert this.isWriteable
         : "Internal error: Local table not writeable in call to generateWriteCode";
-    return String.format(this.writeCodeFormatString, varName, "");
+    return new Expr.Raw(String.format(this.writeCodeFormatString, varName.emit(), ""));
   }
 
   /**
@@ -107,9 +109,9 @@ public class LocalTableImpl extends BodoSqlTable {
    *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
    * @return The generated code to write the table.
    */
-  public String generateWriteCode(String varName, String extraArgs) {
+  public Expr generateWriteCode(Variable varName, String extraArgs) {
     assert this.isWriteable;
-    return String.format(this.writeCodeFormatString, varName, extraArgs);
+    return new Expr.Raw(String.format(this.writeCodeFormatString, varName.emit(), extraArgs));
   }
 
   /**
@@ -130,8 +132,8 @@ public class LocalTableImpl extends BodoSqlTable {
    * @return The generated code to read the table.
    */
   @Override
-  public String generateReadCode() {
-    return String.format(this.readCode, "");
+  public Expr generateReadCode() {
+    return new Expr.Raw(String.format(this.readCode, ""));
   }
 
   /**
@@ -143,8 +145,8 @@ public class LocalTableImpl extends BodoSqlTable {
    * @return The generated code to read the table.
    */
   @Override
-  public String generateReadCode(String extraArgs) {
-    return String.format(this.readCode, extraArgs);
+  public Expr generateReadCode(String extraArgs) {
+    return new Expr.Raw(String.format(this.readCode, extraArgs));
   }
 
   /**
@@ -155,7 +157,7 @@ public class LocalTableImpl extends BodoSqlTable {
    * @return The generated code.
    */
   @Override
-  public String generateRemoteQuery(String query) {
+  public Expr generateRemoteQuery(String query) {
     throw new UnsupportedOperationException(
         "A remote query cannot be submitted with a local table");
   }

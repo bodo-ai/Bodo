@@ -4,6 +4,7 @@
 
 package com.bodosql.calcite.schema;
 
+import com.bodosql.calcite.ir.Expr;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -145,5 +146,5 @@ public abstract class BodoSqlSchema implements Schema {
    * @param query Query to submit.
    * @return The generated code.
    */
-  public abstract String generateRemoteQuery(String query);
+  public abstract Expr generateRemoteQuery(String query);
 }

@@ -488,19 +488,19 @@ def _generate_table_read(
             # TODO: Replace with runtime variable once we support specifying
             # the schema
             if read_dict_list:
-                read_line = f"pd.read_parquet('{file_path}', {read_dict_list}, %s)\n"
+                read_line = f"pd.read_parquet('{file_path}', {read_dict_list}, %s)"
             else:
-                read_line = f"pd.read_parquet('{file_path}', %s)\n"
+                read_line = f"pd.read_parquet('{file_path}', %s)"
         elif file_type == "sql":
             # TODO: Replace with runtime variable once we support specifying
             # the schema
             conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(conn_str)
             if db_type == "iceberg":
-                read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list} %s)\n"
+                read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list} %s)"
             else:
                 read_line = (
-                    f"pd.read_sql('select * from {file_path}', '{conn_str}', %s)\n"
+                    f"pd.read_sql('select * from {file_path}', '{conn_str}', %s)"
                 )
         else:
             raise BodoError(

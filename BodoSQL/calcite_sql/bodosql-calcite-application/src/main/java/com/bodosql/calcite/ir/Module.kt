@@ -2,6 +2,7 @@ package com.bodosql.calcite.ir
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import org.apache.calcite.rel.RelNode
+import java.lang.Exception
 import java.util.*
 
 /**
@@ -30,12 +31,39 @@ class Module(private val frame: Frame) {
 
         private var parentFrames: Stack<Frame> = Stack()
 
+        private var assignedVariables: Set<Variable> = emptySet();
+
+        /**
+         * Helper function called by add/addall. Checks that no variable is assigned too twice.
+         * This is needed due to a bug when inlining BodoSQL code into python. Throws
+         * an error if a variable is assigned too twice.
+         */
+        private fun checkNoVariableShadowing(op: Op) {
+            if (op is Op.Assign) {
+                var targetVar: Variable = op.target
+                if (assignedVariables.contains(targetVar)) {
+                    throw Exception("Internal error in Assign.emit(): Attempted to perform an invalid variable shadow.")
+                }
+                assignedVariables.plus(targetVar)
+            }
+        }
+
         /**
          * Adds the operation to the end of the active Frame.
          * @param op Operation to add to the active Frame.
          */
         fun add(op: Op) {
+            checkNoVariableShadowing(op)
             activeFrame.add(op)
+        }
+
+        /**
+         * Adds the list of operations to the end of the module.
+         * @param ops Operations to add to the module.
+         */
+        fun addAll(ops: List<Op>) {
+            ops.forEach { it: Op -> checkNoVariableShadowing(it) }
+            activeFrame.addAll(ops)
         }
 
         /**

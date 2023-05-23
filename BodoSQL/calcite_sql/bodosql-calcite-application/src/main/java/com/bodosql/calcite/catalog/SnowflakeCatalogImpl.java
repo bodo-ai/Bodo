@@ -3,6 +3,8 @@ package com.bodosql.calcite.catalog;
 import static java.lang.Math.min;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
@@ -527,21 +529,22 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The generated code to produce a write.
    */
   @Override
-  public String generateWriteCode(
-      String varName,
+  public Expr generateWriteCode(
+      Variable varName,
       String schemaName,
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType tableType) {
-    return String.format(
-        "%s.to_sql('%s', '%s', schema='%s', if_exists='%s', _bodo_create_table_type='%s',"
-            + " index=False)",
-        varName,
-        tableName,
-        generatePythonConnStr(schemaName),
-        schemaName,
-        ifExists.asToSqlKwArgument(),
-        tableType.asStringKeyword());
+    return new Expr.Raw(
+        String.format(
+            "%s.to_sql('%s', '%s', schema='%s', if_exists='%s', _bodo_create_table_type='%s',"
+                + " index=False)",
+            varName.emit(),
+            tableName,
+            generatePythonConnStr(schemaName),
+            schemaName,
+            ifExists.asToSqlKwArgument(),
+            tableType.asStringKeyword()));
   }
 
   /**
@@ -552,10 +555,11 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The generated code to produce a read.
    */
   @Override
-  public String generateReadCode(String schemaName, String tableName) {
-    return String.format(
-        "pd.read_sql('%s', '%s', _bodo_is_table_input=True)",
-        tableName, generatePythonConnStr(schemaName));
+  public Expr generateReadCode(String schemaName, String tableName) {
+    return new Expr.Raw(
+        String.format(
+            "pd.read_sql('%s', '%s', _bodo_is_table_input=True)",
+            tableName, generatePythonConnStr(schemaName)));
   }
 
   /**
@@ -586,7 +590,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The generated code.
    */
   @Override
-  public String generateRemoteQuery(String query) {
+  public Expr generateRemoteQuery(String query) {
     // For correctness we need to verify that Snowflake can support this
     // query in its entirely (no BodoSQL specific features). To do this
     // we run an explain, which won't execute the query.
@@ -597,7 +601,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     if (schemaList.size() > 0) {
       schemaName = schemaList.get(0);
     }
-    return String.format("pd.read_sql('%s', '%s')", query, generatePythonConnStr(schemaName));
+    return new Expr.Raw(
+        String.format("pd.read_sql('%s', '%s')", query, generatePythonConnStr(schemaName)));
   }
 
   /**
