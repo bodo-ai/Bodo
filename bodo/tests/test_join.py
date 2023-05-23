@@ -4630,11 +4630,6 @@ def test_merge_output_cast_key_order(memory_leak_check):
 def test_stream_join_basic(memory_leak_check):
     """ """
     import bodo
-
-    # TODO[BSE-355]: support parallelism
-    if bodo.get_size() > 1:
-        return
-
     import bodo.io.snowflake
     import bodo.tests.utils
     from bodo.io.arrow_reader import read_arrow_next
@@ -4670,6 +4665,10 @@ def test_stream_join_basic(memory_leak_check):
     build_arr_array_types = np.array(
         [nullable_arr_type, str_arr_type, str_arr_type, nullable_arr_type], np.int8
     )
+    probe_arr_dtypes = np.array([int32_c_type, str_c_type, int32_c_type], np.int8)
+    probe_arr_array_types = np.array(
+        [nullable_arr_type, str_arr_type, nullable_arr_type], np.int8
+    )
     out_table_type = bodo.TableType(
         (
             bodo.IntegerArrayType(bodo.int32),
@@ -4693,12 +4692,15 @@ def test_stream_join_basic(memory_leak_check):
         )
     )
 
-    @bodo.jit(distributed=False)
+    @bodo.jit
     def test_stream_join(conn):
         join_state = init_join_state(
             build_arr_dtypes.ctypes,
             build_arr_array_types.ctypes,
             len(build_arr_dtypes),
+            probe_arr_dtypes.ctypes,
+            probe_arr_array_types.ctypes,
+            len(probe_arr_dtypes),
             n_keys,
         )
 
@@ -4710,6 +4712,10 @@ def test_stream_join_basic(memory_leak_check):
         )
         while True:
             table1, is_last1 = read_arrow_next(reader1)
+            is_last1 = bodo.libs.distributed_api.dist_reduce(
+                is_last1,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
             join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
@@ -4723,6 +4729,10 @@ def test_stream_join_basic(memory_leak_check):
         out_dfs = []
         while True:
             table2, is_last2 = read_arrow_next(reader2)
+            is_last2 = bodo.libs.distributed_api.dist_reduce(
+                is_last2,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
             out_table = join_probe_consume_batch(
                 join_state, table2, out_table_type, is_last2
             )
@@ -4760,6 +4770,7 @@ def test_stream_join_basic(memory_leak_check):
             "l_orderkey": [685476],
         }
     )
+    out_df = bodo.allgatherv(out_df)
     _test_equal(
         out_df,
         expected_df,

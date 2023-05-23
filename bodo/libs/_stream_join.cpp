@@ -2,6 +2,7 @@
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_shuffle.h"
 
 uint32_t HashHashJoinTable::operator()(const int64_t iRow) const {
     if (iRow >= 0) {
@@ -50,15 +51,17 @@ bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
  */
 void join_build_consume_batch(JoinState* join_state,
                               std::shared_ptr<table_info> in_table,
-                              bool is_last) {
-    // add hashes of the new batch
-    join_state->build_table_hashes.reserve(
-        join_state->build_table_hashes.size() + in_table->nrows());
-    std::shared_ptr<uint32_t[]> batch_hashes =
-        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_JOIN, false);
-    join_state->build_table_hashes.insert(
-        join_state->build_table_hashes.end(), batch_hashes.get(),
-        batch_hashes.get() + in_table->nrows());
+                              bool is_last, bool parallel) {
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    // get hashes of the new batch (different hashes for partitioning and hash
+    // table to reduce conflict)
+    std::shared_ptr<uint32_t[]> batch_hashes_partition = hash_keys_table(
+        in_table, join_state->n_keys, SEED_HASH_PARTITION, parallel);
+    std::shared_ptr<uint32_t[]> batch_hashes_join =
+        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_JOIN, parallel);
 
     // insert batch into hash table
     // TODO[BSE-441]: see if appending all selected rows upfront to the build
@@ -66,13 +69,57 @@ void join_build_consume_batch(JoinState* join_state,
     // from partitioning and appends all selected input rows)
     // TODO[BSE-441]: tune initial buffer buffer size and expansion strategy
     // using heuristics (e.g. SQL planner statistics)
-    int64_t n_prev_build = join_state->build_table_buffer.data_table->nrows();
+    join_state->build_table_hashes.reserve(
+        join_state->build_table_hashes.size() + in_table->nrows());
     join_state->build_table_buffer.ReserveTable(in_table);
-    int64_t n_rows = n_prev_build + in_table->nrows();
-    for (int64_t i_row = n_prev_build; i_row < n_rows; i_row++) {
-        join_state->build_table_buffer.AppendRow(in_table,
-                                                 i_row - n_prev_build);
-        join_state->build_table.emplace(i_row, i_row);
+    join_state->build_shuffle_buffer.ReserveTable(in_table);
+    int64_t curr_build_size =
+        join_state->build_table_buffer.data_table->nrows();
+    for (int64_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        if (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank ||
+            !parallel) {
+            join_state->build_table_hashes.emplace_back(
+                batch_hashes_join[i_row]);
+            join_state->build_table_buffer.AppendRow(in_table, i_row);
+            join_state->build_table.emplace(curr_build_size, curr_build_size);
+            curr_build_size++;
+        } else {
+            join_state->build_shuffle_buffer.AppendRow(in_table, i_row);
+        }
+    }
+
+    if (is_last && parallel) {
+        // shuffle data of other ranks
+        std::shared_ptr<table_info> shuffle_table =
+            join_state->build_shuffle_buffer.data_table;
+        mpi_comm_info comm_info_table(shuffle_table->columns);
+        std::shared_ptr<uint32_t[]> hashes = hash_keys_table(
+            shuffle_table, join_state->n_keys, SEED_HASH_PARTITION, parallel);
+        comm_info_table.set_counts(hashes, parallel);
+        std::shared_ptr<table_info> new_data = shuffle_table_kernel(
+            shuffle_table, hashes, comm_info_table, parallel);
+        shuffle_table.reset();
+        // TODO: clear build_shuffle_buffer memory
+
+        // add hashes of the new data
+        join_state->build_table_hashes.reserve(
+            join_state->build_table_hashes.size() + new_data->nrows());
+        std::shared_ptr<uint32_t[]> batch_hashes = hash_keys_table(
+            new_data, join_state->n_keys, SEED_HASH_JOIN, parallel);
+        join_state->build_table_hashes.insert(
+            join_state->build_table_hashes.end(), batch_hashes.get(),
+            batch_hashes.get() + new_data->nrows());
+
+        // insert received data to build table
+        int64_t n_prev_build =
+            join_state->build_table_buffer.data_table->nrows();
+        join_state->build_table_buffer.ReserveTable(new_data);
+        int64_t n_rows = n_prev_build + new_data->nrows();
+        for (int64_t i_row = n_prev_build; i_row < n_rows; i_row++) {
+            join_state->build_table_buffer.AppendRow(new_data,
+                                                     i_row - n_prev_build);
+            join_state->build_table.emplace(i_row, i_row);
+        }
     }
 }
 
@@ -86,23 +133,34 @@ void join_build_consume_batch(JoinState* join_state,
  * @return std::shared_ptr<table_info> output table batch
  */
 std::shared_ptr<table_info> join_probe_consume_batch(
-    JoinState* join_state, std::shared_ptr<table_info> in_table, bool is_last) {
-    int64_t n_rows = in_table->nrows();
+    JoinState* join_state, std::shared_ptr<table_info> in_table, bool is_last,
+    bool parallel) {
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     // update join state for hashing and comparison functions
     join_state->probe_table = in_table;
-    join_state->probe_table_hashes = hash_keys_table(
-        join_state->probe_table, join_state->n_keys, SEED_HASH_JOIN, false);
+    join_state->probe_table_hashes =
+        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_JOIN, parallel);
+    std::shared_ptr<uint32_t[]> batch_hashes_partition = hash_keys_table(
+        in_table, join_state->n_keys, SEED_HASH_PARTITION, parallel);
 
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
 
     // probe hash table
-    for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-        auto range = join_state->build_table.equal_range(-i_row - 1);
-        for (auto it = range.first; it != range.second; ++it) {
-            build_idxs.push_back(it->second);
-            probe_idxs.push_back(i_row);
+    join_state->probe_shuffle_buffer.ReserveTable(in_table);
+    for (int64_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        if (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank ||
+            !parallel) {
+            auto range = join_state->build_table.equal_range(-i_row - 1);
+            for (auto it = range.first; it != range.second; ++it) {
+                build_idxs.push_back(it->second);
+                probe_idxs.push_back(i_row);
+            }
+        } else {
+            join_state->probe_shuffle_buffer.AppendRow(in_table, i_row);
         }
     }
 
@@ -112,6 +170,54 @@ std::shared_ptr<table_info> join_probe_consume_batch(
         RetrieveTable(join_state->build_table_buffer.data_table, build_idxs);
     std::shared_ptr<table_info> probe_out_table =
         RetrieveTable(in_table, probe_idxs);
+    build_idxs.clear();
+    probe_idxs.clear();
+
+    if (is_last && parallel) {
+        // shuffle data of other ranks
+        std::shared_ptr<table_info> shuffle_table =
+            join_state->probe_shuffle_buffer.data_table;
+        mpi_comm_info comm_info_table(shuffle_table->columns);
+        std::shared_ptr<uint32_t[]> hashes = hash_keys_table(
+            shuffle_table, join_state->n_keys, SEED_HASH_PARTITION, parallel);
+        comm_info_table.set_counts(hashes, parallel);
+        std::shared_ptr<table_info> new_data = shuffle_table_kernel(
+            shuffle_table, hashes, comm_info_table, parallel);
+        shuffle_table.reset();
+        // TODO: clear probe_shuffle_buffer memory
+
+        // probe hash table with new data
+        join_state->probe_table = new_data;
+        join_state->probe_table_hashes =
+            hash_keys_table(join_state->probe_table, join_state->n_keys,
+                            SEED_HASH_JOIN, parallel);
+        for (int64_t i_row = 0; i_row < new_data->nrows(); i_row++) {
+            auto range = join_state->build_table.equal_range(-i_row - 1);
+            for (auto it = range.first; it != range.second; ++it) {
+                build_idxs.push_back(it->second);
+                probe_idxs.push_back(i_row);
+            }
+        }
+
+        std::shared_ptr<table_info> new_build_out_table = RetrieveTable(
+            join_state->build_table_buffer.data_table, build_idxs);
+        std::shared_ptr<table_info> new_probe_out_table =
+            RetrieveTable(new_data, probe_idxs);
+
+        // append new build data
+        std::vector<std::shared_ptr<table_info>> build_tables(
+            {build_out_table, new_build_out_table});
+        build_out_table = concat_tables(build_tables);
+        build_tables.clear();
+        new_build_out_table.reset();
+
+        // append new probe data
+        std::vector<std::shared_ptr<table_info>> probe_tables(
+            {probe_out_table, new_probe_out_table});
+        probe_out_table = concat_tables(probe_tables);
+        probe_tables.clear();
+        new_probe_out_table.reset();
+    }
 
     std::vector<std::shared_ptr<array_info>> out_arrs;
     out_arrs.insert(out_arrs.end(), build_out_table->columns.begin(),
@@ -144,12 +250,21 @@ std::shared_ptr<table_info> alloc_table(std::vector<int8_t> arr_c_types,
  * @param n_keys number of join keys
  * @return JoinState* join state to return to Python
  */
-JoinState* join_state_init_py_entry(int8_t* arr_c_types,
-                                    int8_t* arr_array_types, int n_arrs,
-                                    int64_t n_keys) {
+JoinState* join_state_init_py_entry(int8_t* build_arr_c_types,
+                                    int8_t* build_arr_array_types,
+                                    int n_build_arrs, int8_t* probe_arr_c_types,
+                                    int8_t* probe_arr_array_types,
+                                    int n_probe_arrs, int64_t n_keys) {
     return new JoinState(
-        std::vector<int8_t>(arr_c_types, arr_c_types + n_arrs),
-        std::vector<int8_t>(arr_array_types, arr_array_types + n_arrs), n_keys);
+        std::vector<int8_t>(build_arr_c_types,
+                            build_arr_c_types + n_build_arrs),
+        std::vector<int8_t>(build_arr_array_types,
+                            build_arr_array_types + n_build_arrs),
+        std::vector<int8_t>(probe_arr_c_types,
+                            probe_arr_c_types + n_probe_arrs),
+        std::vector<int8_t>(probe_arr_array_types,
+                            probe_arr_array_types + n_probe_arrs),
+        n_keys);
 }
 
 /**
@@ -160,10 +275,12 @@ JoinState* join_state_init_py_entry(int8_t* arr_c_types,
  * @param is_last is last batch
  */
 void join_build_consume_batch_py_entry(JoinState* join_state,
-                                       table_info* in_table, bool is_last) {
+                                       table_info* in_table, bool is_last,
+                                       bool parallel) {
     try {
-        join_build_consume_batch(
-            join_state, std::shared_ptr<table_info>(in_table), is_last);
+        join_build_consume_batch(join_state,
+                                 std::shared_ptr<table_info>(in_table), is_last,
+                                 parallel);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -180,10 +297,11 @@ void join_build_consume_batch_py_entry(JoinState* join_state,
  */
 table_info* join_probe_consume_batch_py_entry(JoinState* join_state,
                                               table_info* in_table,
-                                              bool is_last) {
+                                              bool is_last, bool parallel) {
     try {
         std::shared_ptr<table_info> out = join_probe_consume_batch(
-            join_state, std::unique_ptr<table_info>(in_table), is_last);
+            join_state, std::unique_ptr<table_info>(in_table), is_last,
+            parallel);
         return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

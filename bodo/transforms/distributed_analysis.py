@@ -1510,6 +1510,13 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist, False)
             return
 
+        if fdef in (
+            ("join_build_consume_batch", "bodo.libs.stream_join"),
+            ("join_probe_consume_batch", "bodo.libs.stream_join"),
+        ):  # pragma: no cover
+            self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
+            return
+
         if (
             isinstance(func_mod, str) and func_mod == "bodo"
         ) and func_name == "rebalance":

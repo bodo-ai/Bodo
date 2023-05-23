@@ -522,6 +522,13 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
+        if fdef in (
+            ("join_build_consume_batch", "bodo.libs.stream_join"),
+            ("join_probe_consume_batch", "bodo.libs.stream_join"),
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[1].name):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
         if (
             func_name == "fit"
             and "bodo.libs.xgb_ext" in sys.modules
