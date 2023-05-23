@@ -439,7 +439,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       // writing the values that will be inserted into the loop body.
       // We create the loop body as a global to allow the kernel to make
       // decisions about inlining.
-      builder.startFrame();
+      builder.startCodegenFrame();
     }
     /** Create the translator for visiting the operands. */
     RexToPandasTranslator localTranslator =
@@ -498,7 +498,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     // Generate the frames we will use. Each operand is it a different, frame,
     // including the current frame for the 0th operand.
     for (int i = 0; i < operands.size() - 1; i++) {
-      builder.startFrame();
+      builder.startCodegenFrame();
     }
     // Generate the else code
     Expr elsePath = operands.get(operands.size() - 1).accept(translator);
@@ -658,7 +658,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   private Variable generateCaseInitializationCode(
       Variable inputVar, TreeSet<Integer> sortedUsedColumns) {
     // Create a new frame for appending the initialization variable
-    builder.startFrame();
+    builder.startCodegenFrame();
     // Create the tuples variable
     Variable arrs = new Variable("arrs");
     Iterator<Integer> usedCols = sortedUsedColumns.iterator();
