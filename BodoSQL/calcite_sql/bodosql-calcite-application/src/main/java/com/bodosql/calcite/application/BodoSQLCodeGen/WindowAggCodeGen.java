@@ -16,7 +16,11 @@ import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.ImmutableList;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexFieldCollation;
@@ -139,7 +143,7 @@ public class WindowAggCodeGen {
    * assumed to have the same PARTITION BY / ORDER BY clauses, but everything else (function,
    * arguments, window frame) can vary from call to call.
    *
-   * @param fn_name The name of the Window Function
+   * @param fnVar The variable for Window Function used in df.apply.
    * @param sortByCols A string representing a list of string column names, to be used by
    *     df.sort_values, or empty string, if no sorting is necessary, or, in the case of RANK, will
    *     be the columns to be ranked in question
@@ -166,7 +170,7 @@ public class WindowAggCodeGen {
    *     arguments.
    */
   public static Pair<String, List<String>> generateWindowedAggFn(
-      final String fn_name,
+      final Variable fnVar,
       final String sortByCols,
       final String ascendingList,
       final String NAPositionList,
@@ -206,7 +210,7 @@ public class WindowAggCodeGen {
      * def closure_name(argument_df):
      */
     addIndent(funcText, 1);
-    funcText.append("def ").append(fn_name).append("(" + argumentDfName + "):\n");
+    funcText.append("def ").append(fnVar.getName()).append("(" + argumentDfName + "):\n");
 
     /* Before doing anything else, filter the partition columns out of the input DataFrame. This is
      * done to enable Bodo to know that these columns are unused within this function
