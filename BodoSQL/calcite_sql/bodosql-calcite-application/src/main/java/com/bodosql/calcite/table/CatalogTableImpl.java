@@ -2,6 +2,8 @@ package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import java.util.*;
@@ -101,7 +103,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * @return The generated code to write the table.
    */
   @Override
-  public String generateWriteCode(String varName) {
+  public Expr generateWriteCode(Variable varName) {
     return this.getCatalogSchema()
         .generateWriteCode(varName, this.getName(), BodoSQLCatalog.ifExistsBehavior.APPEND);
   }
@@ -114,7 +116,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
    * @return The generated code to write the table.
    */
-  public String generateWriteCode(String varName, String extraArgs) {
+  public Variable generateWriteCode(Variable varName, String extraArgs) {
     throw new UnsupportedOperationException("Catalog APIs do not support additional arguments");
   }
 
@@ -136,7 +138,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * @return The generated code to read the table.
    */
   @Override
-  public String generateReadCode() {
+  public Expr generateReadCode() {
     return this.getCatalogSchema().generateReadCode(this.getName());
   }
 
@@ -149,16 +151,16 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * @return The generated code to read the table.
    */
   @Override
-  public String generateReadCode(String extraArgs) {
+  public Expr generateReadCode(String extraArgs) {
     throw new UnsupportedOperationException("Catalog APIs do not support additional arguments");
   }
 
   @Override
-  public String generateReadCastCode(String varName) {
+  public Expr generateReadCastCode(Variable varName) {
     // Snowflake catalog uses _bodo_read_date_as_dt64=True to convert date columns to datetime64
     // without astype() calls in the IR which cause issues for limit pushdown.
     // see BE-4238
-    return "";
+    return varName;
   }
 
   /**
@@ -169,7 +171,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * @return The generated code.
    */
   @Override
-  public String generateRemoteQuery(String query) {
+  public Expr generateRemoteQuery(String query) {
     return this.getCatalogSchema().generateRemoteQuery(query);
   }
 

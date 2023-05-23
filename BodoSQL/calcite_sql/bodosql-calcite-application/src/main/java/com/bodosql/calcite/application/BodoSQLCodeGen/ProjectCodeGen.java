@@ -2,7 +2,6 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.Utils.Utils.escapePythonQuotes;
-import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLExprType;
@@ -10,6 +9,7 @@ import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
+import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,9 +44,9 @@ public class ProjectCodeGen {
    *     calculations)
    * @return The code generated for the Project expression.
    */
-  public static String generateProjectCode(
-      String inVar,
-      String outVar,
+  public static List<Op.Assign> generateProjectCode(
+      Variable inVar,
+      Variable outVar,
       List<String> outputColumns,
       List<RexNodeVisitorInfo> childExprs,
       List<BodoSQLExprType.ExprType> exprTypes,
@@ -54,8 +54,7 @@ public class ProjectCodeGen {
       PandasCodeGenVisitor pdVisitorClass,
       int numInputTableColumns) {
 
-    final String indent = getBodoIndent();
-    StringBuilder outString = new StringBuilder();
+    List<Op.Assign> outAssigns = new ArrayList<>();
     List<String> seriesNames = new ArrayList<>();
 
     List<String> scalarSeriesNames = new ArrayList<>();
@@ -83,13 +82,12 @@ public class ProjectCodeGen {
       currentNonTableInd++;
 
       String seriesName = pdVisitorClass.genSeriesVar();
+      Variable seriesVar = new Variable(seriesName);
       seriesNames.add(seriesName);
 
       switch (exprType) {
         case COLUMN:
-          outString
-              .append(indent)
-              .append(String.format("%s = %s\n", seriesName, childExpr.getExprCode()));
+          outAssigns.add(new Op.Assign(seriesVar, new Expr.Raw(childExpr.getExprCode())));
           break;
 
         case SCALAR:
@@ -104,28 +102,38 @@ public class ProjectCodeGen {
 
     // Throw away previous Index and define a dummy Index since BodoSQL never uses Index values.
     // This avoids MultiIndex issues and allows Bodo to optimize more.
-    outString.append(indent).append(String.format("index = pd.RangeIndex(0, len(%s), 1)\n", inVar));
+    String indexVarName = pdVisitorClass.genIndexVar();
+    Variable indexVar = new Variable(indexVarName);
+    outAssigns.add(
+        new Op.Assign(
+            indexVar, new Expr.Raw(String.format("pd.RangeIndex(0, len(%s), 1)", inVar.emit()))));
 
     // Generate array for scalar columns
     for (int i = 0; i < scalarSeriesNames.size(); i++) {
-      outString.append(indent).append(scalarSeriesNames.get(i)).append(" = ");
+      Expr curExpr;
       int idx = scalarSeriesIdxs.get(i);
       if (exprTypes.get(idx) == BodoSQLExprType.ExprType.SCALAR) {
         // Scalars require separate code path to handle null.
         Variable global =
             pdVisitorClass.lowerAsGlobal(sqlTypeToBodoArrayType(sqlTypes.get(idx), true));
-        outString
-            .append("bodo.utils.conversion.coerce_scalar_to_array(")
-            .append(childExprs.get(idx).getExprCode())
-            // Generate a unique name based on the output variable
-            .append(String.format(", len(%s), %s)", inVar, global.getName()));
+        curExpr =
+            new Expr.Raw(
+                new StringBuilder()
+                    .append("bodo.utils.conversion.coerce_scalar_to_array(")
+                    .append(childExprs.get(idx).getExprCode())
+                    // Generate a unique name based on the output variable
+                    .append(String.format(", len(%s), %s)", inVar.emit(), global.getName()))
+                    .toString());
       } else {
-        outString
-            .append("bodo.utils.conversion.coerce_to_array(")
-            .append(childExprs.get(idx).getExprCode())
-            .append(", True)");
+        curExpr =
+            new Expr.Raw(
+                new StringBuilder()
+                    .append("bodo.utils.conversion.coerce_to_array(")
+                    .append(childExprs.get(idx).getExprCode())
+                    .append(", True)")
+                    .toString());
       }
-      outString.append("\n");
+      outAssigns.add(new Op.Assign(new Variable(scalarSeriesNames.get(i)), curExpr));
     }
 
     // generate output table, e.g. logical_table_to_table((in_table, S0, S1), col_indices)
@@ -139,31 +147,32 @@ public class ProjectCodeGen {
     // logical_table_to_table((T1, S0), (2, 3, 1)) creates a table with (T1_2, S0, T1_1)
     // logical_table_to_table(((A, B, C), S0), (2, 3, 1)) creates a table with (C, S0, B)
     String outTableName = pdVisitorClass.genTableVar();
-    outString
-        .append(indent)
-        .append(outTableName)
-        .append(
-            " = bodo.hiframes.table.logical_table_to_table(bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(")
-        .append(inVar)
-        .append("), (");
+    StringBuilder tableExprRawString =
+        new StringBuilder()
+            .append(
+                "bodo.hiframes.table.logical_table_to_table(bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(")
+            .append(inVar.emit())
+            .append("), (");
     for (String seriesName : seriesNames) {
-      outString.append(String.format("%s, ", seriesName));
+      tableExprRawString.append(String.format("%s, ", seriesName));
     }
-    outString.append("), ");
+    tableExprRawString.append("), ");
     // generate tuple of column indices, e.g. (4, 2, 1)
     Expr.Tuple colIndTuple = new Expr.Tuple(outColInds);
-    Variable colIndicesGlobal = pdVisitorClass.lowerAsMetaType(colIndTuple);
-    outString.append(colIndicesGlobal.getName());
-    outString.append(String.format(", %s.shape[1])\n", inVar));
+    Variable colIndiceGlobalVarName = pdVisitorClass.lowerAsMetaType(colIndTuple);
+    tableExprRawString.append(colIndiceGlobalVarName.emit());
+    tableExprRawString.append(String.format(", %s.shape[1])", inVar.emit()));
 
+    outAssigns.add(
+        new Op.Assign(new Variable(outTableName), new Expr.Raw(tableExprRawString.toString())));
     // output dataframe is always in table format
-    outString
-        .append(indent)
-        .append(outVar)
-        .append(" = bodo.hiframes.pd_dataframe_ext.init_dataframe((")
-        .append(outTableName);
-
-    outString.append(",), index, ");
+    StringBuilder initDfRawString =
+        new StringBuilder()
+            .append("bodo.hiframes.pd_dataframe_ext.init_dataframe((")
+            .append(outTableName)
+            .append(",), ")
+            .append(indexVarName)
+            .append(", ");
 
     // generate output column names for ColNamesMetaType
     List<Expr.StringLiteral> colNamesExpr = new ArrayList<>();
@@ -173,9 +182,10 @@ public class ProjectCodeGen {
     Expr.Tuple colNameTuple = new Expr.Tuple(colNamesExpr);
     Variable globalVarName = pdVisitorClass.lowerAsColNamesMetaType(colNameTuple);
 
-    outString.append(globalVarName.getName()).append(")\n");
+    initDfRawString.append(globalVarName.emit()).append(")");
 
-    return outString.toString();
+    outAssigns.add(new Op.Assign(outVar, new Expr.Raw(initDfRawString.toString())));
+    return outAssigns;
   }
 
   /**
@@ -218,50 +228,38 @@ public class ProjectCodeGen {
    * optimized to use df.loc.
    *
    * @param inVar The input variable. This is only used if all dataframe members are scalars
-   * @param outVar The output variable.
    * @param inputRefs List of RexNodes that map to inputRefs.
    * @param inColNames List containing the inVar column names.
    * @param outColNames List to populate with the column names for the outvar.
    * @return The code generated for the Project expression.
    */
-  public static String generateLocCode(
-      String inVar,
-      String outVar,
-      List<RexNode> inputRefs,
-      List<String> inColNames,
-      List<String> outColNames) {
-    StringBuilder locString = new StringBuilder();
-    final String indent = getBodoIndent();
-
-    locString.append(indent).append(outVar).append(" = ").append(inVar).append(".loc[:, [");
+  public static Expr generateLocCode(
+      Variable inVar, List<RexNode> inputRefs, List<String> inColNames, List<String> outColNames) {
+    StringBuilder locString = new StringBuilder().append(inVar.emit()).append(".loc[:, [");
     for (RexNode r : inputRefs) {
       RexInputRef inputRef = (RexInputRef) r;
       String colName = inColNames.get(inputRef.getIndex());
       outColNames.add(colName);
       locString.append(makeQuoted(colName)).append(", ");
     }
-    locString.append("]]\n");
-    return locString.toString();
+    locString.append("]]");
+    return new Expr.Raw(locString.toString());
   }
 
-  public static String generateRenameCode(
-      String inVar, String outVar, TreeMap<String, String> colsToRename) {
-    StringBuilder renameString = new StringBuilder();
-
-    final String indent = getBodoIndent();
-    renameString
-        .append(indent)
-        .append(outVar)
-        .append(" = ")
-        .append(inVar)
-        .append(".rename(columns={");
+  public static Expr generateRenameCode(Expr inExpr, TreeMap<String, String> colsToRename) {
+    StringBuilder renameString =
+        new StringBuilder()
+            .append("(")
+            .append(inExpr.emit())
+            .append(")")
+            .append(".rename(columns={");
     for (String key : colsToRename.keySet()) {
       renameString.append(makeQuoted(key));
       renameString.append(": ");
       renameString.append(makeQuoted(colsToRename.get(key)));
       renameString.append(", ");
     }
-    renameString.append("}, copy=False)\n");
-    return renameString.toString();
+    renameString.append("}, copy=False)");
+    return new Expr.Raw(renameString.toString());
   }
 }

@@ -6,6 +6,9 @@ import static com.bodosql.calcite.application.Utils.Utils.assertWithErrMsg;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.Variable;
 import java.util.*;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.sql.SqlKind;
@@ -84,8 +87,8 @@ public class AggCodeGen {
    *     table1), then it is replicated.
    * @return The code generated for the aggregation.
    */
-  public static String generateAggCodeNoGroupBy(
-      String inVar,
+  public static Expr generateAggCodeNoGroupBy(
+      Variable inVar,
       List<String> inputColumnNames,
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
@@ -112,7 +115,7 @@ public class AggCodeGen {
       }
 
       StringBuilder seriesBuilder = new StringBuilder();
-      seriesBuilder.append(inVar);
+      seriesBuilder.append(inVar.emit());
       if (!(a.getAggregation().getKind() == SqlKind.COUNT && a.getArgList().isEmpty())) {
         // If we are performing a COUNT(*) then we avoid selecting a single series since
         // we may be able to compute a length without a particular column.
@@ -126,7 +129,7 @@ public class AggCodeGen {
       if (filterCol.length() > 0) {
         seriesBuilder
             .append("[")
-            .append(inVar)
+            .append(inVar.emit())
             .append("[")
             .append(makeQuoted(filterCol))
             .append("]]");
@@ -172,7 +175,10 @@ public class AggCodeGen {
         // Currently, the scalar float argument is converted into a column. To
         // access the quantile value, extract the first row.
         String quantile_str =
-            inVar + "[" + makeQuoted(inputColumnNames.get(a.getArgList().get(1))) + "].iloc[0]";
+            inVar.emit()
+                + "["
+                + makeQuoted(inputColumnNames.get(a.getArgList().get(1)))
+                + "].iloc[0]";
         // TODO: confirm that the second argument is a float
         assertWithErrMsg(true, "The second argument to APPROX_PERCENTILE must be a scalar float");
         // TODO: confirm that the second argument is between zero and one
@@ -224,7 +230,7 @@ public class AggCodeGen {
           "bodo.hiframes.pd_index_ext.init_numeric_index(bodo.utils.conversion.coerce_to_array([0]))");
     }
     aggString.append(")");
-    return aggString.toString();
+    return new Expr.Raw(aggString.toString());
   }
 
   /**
@@ -238,8 +244,8 @@ public class AggCodeGen {
    * @param group This list of column indices by which we are grouping
    * @return The code generated for the aggregation expression.
    */
-  public static String generateAggCodeNoAgg(
-      String inVar, List<String> inputColumnNames, List<Integer> group) {
+  public static Expr generateAggCodeNoAgg(
+      Variable inVar, List<String> inputColumnNames, List<Integer> group) {
     StringBuilder aggString = new StringBuilder();
 
     // Need to select a subset of columns to drop duplicates from.
@@ -253,7 +259,7 @@ public class AggCodeGen {
       }
       neededColsIxd.append("]");
 
-      aggString.append(inVar);
+      aggString.append(inVar.emit());
 
       // First, prune unneeded columns, if they exist. This ensures that columns not being grouped
       // will be filled with null
@@ -271,7 +277,7 @@ public class AggCodeGen {
       aggString.append("pd.DataFrame(index=pd.RangeIndex(0,1,1))");
     }
 
-    return aggString.toString();
+    return new Expr.Raw(aggString.toString());
   }
 
   /**
@@ -285,14 +291,14 @@ public class AggCodeGen {
    * @param aggCallNames The list of column names in which to store the outputs of the aggregation
    * @return The code generated for the aggregation.
    */
-  public static String generateAggCodeWithGroupBy(
-      String inVar,
+  public static Expr generateAggCodeWithGroupBy(
+      Variable inVar,
       List<String> inputColumnNames,
       List<Integer> group,
       List<AggregateCall> aggCallList,
       final List<String> aggCallNames) {
     StringBuilder aggString = new StringBuilder();
-    aggString.append(inVar);
+    aggString.append(inVar.emit());
 
     // Generate the Group By section
     aggString.append(generateGroupByCall(inputColumnNames, group));
@@ -344,7 +350,7 @@ public class AggCodeGen {
       aggString.append(renameColumns(renamedAggColumns));
       aggString.append(", copy=False)");
     }
-    return aggString.toString();
+    return new Expr.Raw(aggString.toString());
   }
 
   /**
@@ -362,8 +368,8 @@ public class AggCodeGen {
    * @return A pair of the code expression generated for the aggregation, and the function
    *     definition that is used in the groupby apply.
    */
-  public static Pair<String, String> generateApplyCodeWithGroupBy(
-      String inVar,
+  public static Pair<Expr, Op> generateApplyCodeWithGroupBy(
+      Variable inVar,
       List<String> inputColumnNames,
       List<Integer> group,
       List<AggregateCall> aggCallList,
@@ -481,13 +487,13 @@ public class AggCodeGen {
     StringBuilder applyString = new StringBuilder();
 
     // Generate the actual group call
-    applyString.append(inVar);
+    applyString.append(inVar.emit());
     // Generate the Group By section
     applyString.append(generateGroupByCall(inputColumnNames, group));
     // Add the columns from the apply
     // Generate the apply call
     applyString.append(".apply(").append(funcName).append(")");
-    return new Pair<>(applyString.toString(), fnString.toString());
+    return new Pair<>(new Expr.Raw(applyString.toString()), new Op.Code(fnString.toString()));
   }
 
   /**
@@ -520,7 +526,7 @@ public class AggCodeGen {
     }
   }
 
-  public static String concatDataFrames(List<String> dfNames) {
+  public static Expr concatDataFrames(List<String> dfNames) {
     StringBuilder concatString = new StringBuilder("pd.concat([");
     for (int i = 0; i < dfNames.size(); i++) {
       concatString.append(dfNames.get(i)).append(", ");
@@ -529,6 +535,6 @@ public class AggCodeGen {
     // We put ignore_index as True, since we don't care about the index in BodoSQL, and this results
     // in
     // faster runtime performance.
-    return concatString.append("], ignore_index=True)").toString();
+    return new Expr.Raw(concatString.append("], ignore_index=True)").toString());
   }
 }

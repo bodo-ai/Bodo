@@ -1,5 +1,6 @@
 package com.bodosql.calcite.table;
 
+import com.bodosql.calcite.ir.Variable;
 import java.sql.JDBCType;
 import java.util.Locale;
 import kotlin.Pair;
@@ -47,7 +48,7 @@ public interface BodoSQLColumn {
    * @return The string passed to __bodosql_replace_columns_dummy to cast this column to its BodoSQL
    *     supported type with a read.
    */
-  String getReadCastExpr(String varName);
+  String getReadCastExpr(Variable varName);
 
   /** Logger * */
   Logger LOGGER = LoggerFactory.getLogger(BodoSQLColumn.class);

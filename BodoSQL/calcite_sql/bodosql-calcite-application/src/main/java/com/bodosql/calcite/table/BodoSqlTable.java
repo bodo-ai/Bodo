@@ -4,6 +4,8 @@
 
 package com.bodosql.calcite.table;
 
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import java.util.ArrayList;
 import java.util.List;
@@ -152,7 +154,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * @param varName Name of the variable containing the loaded data.
    * @return Generated code used to cast the Table being read.
    */
-  public String generateReadCastCode(String varName) {
+  public Expr generateReadCastCode(Variable varName) {
     return generateCommonCastCode(varName, false);
   }
 
@@ -166,7 +168,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * @param varName Name of the variable containing the data to write.
    * @return Generated code used to cast the Table being written.
    */
-  public String generateWriteCastCode(String varName) {
+  public Expr generateWriteCastCode(Variable varName) {
     return generateCommonCastCode(varName, true);
   }
 
@@ -175,13 +177,13 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * to be written. This generates code using __bodosql_replace_columns_dummy to convert data while
    * maintaining table format if possible.
    *
-   * <p>If there are no columns to cast this returns an empty string.
+   * <p>If there are no columns to cast this returns the input variable
    *
    * @param varName Name of the variable to cast.
    * @param isWrite Is the cast for a read or write. This determines the cast direction.
    * @return The generated Python code or the empty string.
    */
-  private String generateCommonCastCode(String varName, boolean isWrite) {
+  private Expr generateCommonCastCode(Variable varName, boolean isWrite) {
     // Name of the columns to cast
     List<String> castColNames = new ArrayList<>();
     // List of string to use to perform the cast
@@ -193,8 +195,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
       }
     }
     if (castColNames.isEmpty()) {
-      // No cast is need, return ""
-      return "";
+      return varName;
     }
     // Construct tuples to pass to __bodosql_replace_columns_dummy
     StringBuilder namesBuilder = new StringBuilder();
@@ -207,9 +208,10 @@ public abstract class BodoSqlTable implements ExtensibleTable {
     }
     namesBuilder.append(")");
     typesBuilder.append(")");
-    return String.format(
-        "bodo.hiframes.dataframe_impl.__bodosql_replace_columns_dummy(%s, %s, %s)",
-        varName, namesBuilder, typesBuilder);
+    return new Expr.Raw(
+        String.format(
+            "bodo.hiframes.dataframe_impl.__bodosql_replace_columns_dummy(%s, %s, %s)",
+            varName.emit(), namesBuilder, typesBuilder));
   }
 
   // BodoSQL Table abstract classes
@@ -223,7 +225,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * @param varName Name of the variable to write.
    * @return The generated code to write the table.
    */
-  public abstract String generateWriteCode(String varName);
+  public abstract Expr generateWriteCode(Variable varName);
 
   /**
    * Generate the code needed to write the given variable to storage.
@@ -233,7 +235,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
    * @return The generated code to write the table.
    */
-  public abstract String generateWriteCode(String varName, String extraArgs);
+  public abstract Expr generateWriteCode(Variable varName, String extraArgs);
 
   /**
    * Return the location from which the table is generated. The return value is always entirely
@@ -248,7 +250,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    *
    * @return The generated code to read the table.
    */
-  public abstract String generateReadCode();
+  public abstract Expr generateReadCode();
 
   /**
    * Generate the code needed to read the table. This function is called by specialized IO
@@ -258,7 +260,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
    * @return The generated code to read the table.
    */
-  public abstract String generateReadCode(String extraArgs);
+  public abstract Expr generateReadCode(String extraArgs);
 
   /**
    * Generates the code necessary to submit the remote query to the catalog DB. This is not
@@ -267,7 +269,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * @param query Query to submit.
    * @return The generated code.
    */
-  public abstract String generateRemoteQuery(String query);
+  public abstract Expr generateRemoteQuery(String query);
 
   public abstract Table extend(List<RelDataTypeField> extensionFields);
 

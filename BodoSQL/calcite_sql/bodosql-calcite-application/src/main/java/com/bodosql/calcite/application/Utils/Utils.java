@@ -228,7 +228,8 @@ public class Utils {
    *
    * <p>The rough location in which this occurs within calcite is here:
    * https://github.com/apache/calcite/blob/master/core/src/main/java/org/apache/calcite/sql2rel/SqlToRelConverter.java#L2081
-   * I am still trying to find the exact location where this translation into case statments occurs.
+   * I am still trying to find the exact location where this translation into case statements
+   * occurs.
    *
    * @param node the case node to check
    * @return true if it is a wrapped windowed aggregation function, and False if it is not

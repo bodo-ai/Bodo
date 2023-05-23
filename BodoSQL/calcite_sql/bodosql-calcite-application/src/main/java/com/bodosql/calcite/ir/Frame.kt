@@ -26,6 +26,14 @@ class Frame() {
     }
 
     /**
+     * Adds the list of operations to the end of the active Frame.
+     * @param ops Operation to add to the active Frame.
+     */
+    fun addAll(ops: List<Op>) {
+        code.addAll(ops)
+    }
+
+    /**
      * This simulates appending code directly to a StringBuilder.
      * It is primarily meant as a way to support older code
      * and shouldn't be used anymore.

@@ -1,5 +1,6 @@
 package com.bodosql.calcite.table;
 
+import com.bodosql.calcite.ir.Variable;
 import javax.annotation.*;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -294,14 +295,15 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
    *     original data type with a read.
    */
   @Override
-  public String getReadCastExpr(String varName) {
+  public String getReadCastExpr(Variable varName) {
     String dtype = this.elemType.getTypeString();
     // Categorical data should be cast to the elem type. This cannot
     // be described in a single BodoSQLColumnDataType yet.
     return getCommonCastExpr(varName, String.format("'%s'", dtype));
   }
 
-  private String getCommonCastExpr(String varName, String castValue) {
-    return String.format("%s['%s'].astype(%s, copy=False)", varName, this.readName, castValue);
+  private String getCommonCastExpr(Variable varName, String castValue) {
+    return String.format(
+        "%s['%s'].astype(%s, copy=False)", varName.emit(), this.readName, castValue);
   }
 }

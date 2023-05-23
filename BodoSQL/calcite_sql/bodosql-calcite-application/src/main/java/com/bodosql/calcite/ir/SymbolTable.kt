@@ -15,6 +15,7 @@ class SymbolTable {
     private var colVarId: Int = 1
     private var groupByApplyFnId: Int = 1
     private var globalVarId: Int = 1
+    private var idxVarId: Int = 1
 
     companion object {
         private const val dummyColNameBase = "__bodo_dummy__"
@@ -30,6 +31,9 @@ class SymbolTable {
 
     fun genSeriesVar(): Variable {
         return Variable("S${dfVarId++}")
+    }
+    fun genIndexVar(): Variable {
+        return Variable("index_${idxVarId++}")
     }
 
     fun genGenericTempVar(): Variable {
