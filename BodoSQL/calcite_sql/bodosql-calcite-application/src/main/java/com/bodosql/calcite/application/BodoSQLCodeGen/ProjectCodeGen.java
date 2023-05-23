@@ -81,9 +81,8 @@ public class ProjectCodeGen {
       outColInds.add(new Expr.IntegerLiteral(currentNonTableInd));
       currentNonTableInd++;
 
-      String seriesName = pdVisitorClass.genSeriesVar();
-      Variable seriesVar = new Variable(seriesName);
-      seriesNames.add(seriesName);
+      Variable seriesVar = pdVisitorClass.genSeriesVar();
+      seriesNames.add(seriesVar.getName());
 
       switch (exprType) {
         case COLUMN:
@@ -91,7 +90,7 @@ public class ProjectCodeGen {
           break;
 
         case SCALAR:
-          scalarSeriesNames.add(seriesName);
+          scalarSeriesNames.add(seriesVar.getName());
           scalarSeriesIdxs.add(i);
           break;
 
@@ -102,8 +101,7 @@ public class ProjectCodeGen {
 
     // Throw away previous Index and define a dummy Index since BodoSQL never uses Index values.
     // This avoids MultiIndex issues and allows Bodo to optimize more.
-    String indexVarName = pdVisitorClass.genIndexVar();
-    Variable indexVar = new Variable(indexVarName);
+    Variable indexVar = pdVisitorClass.genIndexVar();
     outAssigns.add(
         new Op.Assign(
             indexVar, new Expr.Raw(String.format("pd.RangeIndex(0, len(%s), 1)", inVar.emit()))));
@@ -146,7 +144,7 @@ public class ProjectCodeGen {
     // For example, if input T1 has 3 columns:
     // logical_table_to_table((T1, S0), (2, 3, 1)) creates a table with (T1_2, S0, T1_1)
     // logical_table_to_table(((A, B, C), S0), (2, 3, 1)) creates a table with (C, S0, B)
-    String outTableName = pdVisitorClass.genTableVar();
+    Variable outTableVar = pdVisitorClass.genTableVar();
     StringBuilder tableExprRawString =
         new StringBuilder()
             .append(
@@ -163,28 +161,22 @@ public class ProjectCodeGen {
     tableExprRawString.append(colIndiceGlobalVarName.emit());
     tableExprRawString.append(String.format(", %s.shape[1])", inVar.emit()));
 
-    outAssigns.add(
-        new Op.Assign(new Variable(outTableName), new Expr.Raw(tableExprRawString.toString())));
-    // output dataframe is always in table format
-    StringBuilder initDfRawString =
-        new StringBuilder()
-            .append("bodo.hiframes.pd_dataframe_ext.init_dataframe((")
-            .append(outTableName)
-            .append(",), ")
-            .append(indexVarName)
-            .append(", ");
-
+    outAssigns.add(new Op.Assign(outTableVar, new Expr.Raw(tableExprRawString.toString())));
     // generate output column names for ColNamesMetaType
     List<Expr.StringLiteral> colNamesExpr = new ArrayList<>();
     for (String colName : outputColumns) {
       colNamesExpr.add(new Expr.StringLiteral(colName));
     }
     Expr.Tuple colNameTuple = new Expr.Tuple(colNamesExpr);
-    Variable globalVarName = pdVisitorClass.lowerAsColNamesMetaType(colNameTuple);
+    Variable globalVar = pdVisitorClass.lowerAsColNamesMetaType(colNameTuple);
 
-    initDfRawString.append(globalVarName.emit()).append(")");
-
-    outAssigns.add(new Op.Assign(outVar, new Expr.Raw(initDfRawString.toString())));
+    // output dataframe is always in table format
+    Expr tableTuple = new Expr.Tuple(List.of(outTableVar));
+    Expr.Call initDf =
+        new Expr.Call(
+            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            List.of(tableTuple, indexVar, globalVar));
+    outAssigns.add(new Op.Assign(outVar, initDf));
     return outAssigns;
   }
 

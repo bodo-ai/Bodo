@@ -1,15 +1,22 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.AggHelpers.*;
-import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.Utils.AggHelpers.generateGroupByCall;
+import static com.bodosql.calcite.application.Utils.AggHelpers.getCountCall;
+import static com.bodosql.calcite.application.Utils.AggHelpers.getDummyColName;
 import static com.bodosql.calcite.application.Utils.Utils.assertWithErrMsg;
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
+import static com.bodosql.calcite.application.Utils.Utils.getInputColumn;
+import static com.bodosql.calcite.application.Utils.Utils.isValidPythonIdentifier;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
+import static com.bodosql.calcite.application.Utils.Utils.renameColumns;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Variable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.util.Pair;
@@ -364,7 +371,7 @@ public class AggCodeGen {
    * @param group Indices of the columns to group by for the current aggregation.
    * @param aggCallList The list of aggregations to be performed.
    * @param aggCallNames The column names into which to store the outputs of the aggregation
-   * @param funcName Name of the function generated for the apply.
+   * @param funcVar Variable for the function generated for df.apply.
    * @return A pair of the code expression generated for the aggregation, and the function
    *     definition that is used in the groupby apply.
    */
@@ -374,7 +381,7 @@ public class AggCodeGen {
       List<Integer> group,
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
-      String funcName) {
+      Variable funcVar) {
     StringBuilder fnString = new StringBuilder();
 
     final String indent = getBodoIndent();
@@ -385,7 +392,7 @@ public class AggCodeGen {
      * will compute each operation on a line and return a series, using
      * pd.Index to name the output.
      */
-    fnString.append(indent).append("def ").append(funcName).append("(df):\n");
+    fnString.append(indent).append("def ").append(funcVar.getName()).append("(df):\n");
 
     ArrayList<String> seriesArgs = new ArrayList<>();
     ArrayList<String> indexNames = new ArrayList<>();
@@ -492,7 +499,7 @@ public class AggCodeGen {
     applyString.append(generateGroupByCall(inputColumnNames, group));
     // Add the columns from the apply
     // Generate the apply call
-    applyString.append(".apply(").append(funcName).append(")");
+    applyString.append(".apply(").append(funcVar.getName()).append(")");
     return new Pair<>(new Expr.Raw(applyString.toString()), new Op.Code(fnString.toString()));
   }
 
