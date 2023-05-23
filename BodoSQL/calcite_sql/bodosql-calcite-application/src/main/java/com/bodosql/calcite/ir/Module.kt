@@ -25,7 +25,7 @@ class Module(private val frame: Frame) {
      * Builder is used to construct a new module.
      */
     class Builder(val symbolTable: SymbolTable, private val functionFrame: Frame) {
-        constructor() : this(symbolTable = SymbolTable(), functionFrame = Frame())
+        constructor() : this(symbolTable = SymbolTable(), functionFrame = CodegenFrame())
 
         private var activeFrame: Frame = functionFrame
 
@@ -124,11 +124,22 @@ class Module(private val frame: Frame) {
         }
 
         /**
-         * Updates a builder to create a new activeFrame.
+         * Updates a builder to create a new activeFrame
+         * as a CodegenFrame.
          */
-        fun startFrame() {
+        fun startCodegenFrame() {
             parentFrames.add(activeFrame)
-            activeFrame = Frame()
+            activeFrame = CodegenFrame()
+        }
+
+
+        /**
+         * Updates a builder to create a new activeFrame
+         * as a StreamingPipelineFrame.
+         */
+        fun startStreamingPipelineFrame(exitCond: Variable) {
+            parentFrames.add(activeFrame)
+            activeFrame = StreamingPipelineFrame(exitCond)
         }
 
         /**
@@ -141,6 +152,29 @@ class Module(private val frame: Frame) {
             val res = activeFrame
             activeFrame = parentFrames.pop()
             return res
+        }
+
+        /**
+         * Terminates the current streaming pipeline and returns it.
+         * If the current frame is not a streaming pipeline it raises
+         * an exception.
+         */
+        fun endCurrentStreamingPipeline() : StreamingPipelineFrame {
+            if (activeFrame is StreamingPipelineFrame) {
+                return endFrame() as StreamingPipelineFrame
+            }
+            throw BodoSQLCodegenException("Attempting to end the current streaming pipeline from outside a streaming context.")
+        }
+
+        /**
+         * Returns the current frame if it is a streaming pipeline.
+         * Otherwise, this raises an exception.
+         */
+        fun getCurrentStreamingPipeline(): StreamingPipelineFrame {
+            if (activeFrame is StreamingPipelineFrame) {
+                return activeFrame as StreamingPipelineFrame
+            }
+            throw BodoSQLCodegenException("Attempting to fetch the current streaming pipeline from outside a streaming context.")
         }
     }
 }
