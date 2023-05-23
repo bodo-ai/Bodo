@@ -1,5 +1,7 @@
 package com.bodosql.calcite.catalog;
 
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import java.sql.*;
 import java.util.*;
@@ -85,8 +87,8 @@ public interface BodoSQLCatalog {
    * @param tableName Name of the table to use when writing.
    * @return The generated code to produce a write.
    */
-  String generateWriteCode(
-      String varName,
+  Expr generateWriteCode(
+      Variable varName,
       String schemaName,
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
@@ -99,7 +101,7 @@ public interface BodoSQLCatalog {
    * @param tableName Name of the table to use when reading.
    * @return The generated code to produce a read.
    */
-  String generateReadCode(String schemaName, String tableName);
+  Expr generateReadCode(String schemaName, String tableName);
 
   /**
    * Close any connections to the remote DataBase. If there are no connections this should be a
@@ -113,7 +115,7 @@ public interface BodoSQLCatalog {
    * @param query Query to submit.
    * @return The generated code.
    */
-  String generateRemoteQuery(String query);
+  Expr generateRemoteQuery(String query);
 
   /**
    * Return the db location to which this Catalog refers.

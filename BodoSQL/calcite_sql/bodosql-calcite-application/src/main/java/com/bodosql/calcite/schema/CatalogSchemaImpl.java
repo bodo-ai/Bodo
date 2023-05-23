@@ -1,6 +1,8 @@
 package com.bodosql.calcite.schema;
 
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Variable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
@@ -105,7 +107,7 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    * @return The generated code.
    */
   @Override
-  public String generateRemoteQuery(String query) {
+  public Expr generateRemoteQuery(String query) {
     return this.catalog.generateRemoteQuery(query);
   }
 
@@ -120,8 +122,8 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    * @param createTableType Behavior of the write if we're creating a new table. Defaults to DEFAULT
    * @return The generated code to compute the write in Python.
    */
-  public String generateWriteCode(
-      String varName,
+  public Expr generateWriteCode(
+      Variable varName,
       String tableName,
       BodoSQLCatalog.ifExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
@@ -129,8 +131,8 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
         varName, this.getName(), tableName, ifExists, createTableType);
   }
 
-  public String generateWriteCode(
-      String varName, String tableName, BodoSQLCatalog.ifExistsBehavior ifExists) {
+  public Expr generateWriteCode(
+      Variable varName, String tableName, BodoSQLCatalog.ifExistsBehavior ifExists) {
     return generateWriteCode(varName, tableName, ifExists, SqlCreateTable.CreateTableType.DEFAULT);
   }
 
@@ -138,10 +140,11 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    * API specific to CatalogSchemaImpl and not all schemas. Since schemas with the same catalog
    * often share the same code generation process, the read code for a given table with a catalog is
    * controlled by that catalog.
+   *
    * @param tableName The name of the table as the read source.
    * @return The generated code to compute the read in Python.
    */
-  public String generateReadCode(String tableName) {
+  public Expr generateReadCode(String tableName) {
     return this.catalog.generateReadCode(this.getName(), tableName);
   }
 

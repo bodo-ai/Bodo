@@ -2,9 +2,11 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.Utils.AggHelpers.getDummyColName;
 import static com.bodosql.calcite.application.Utils.JoinHelpers.preventColumnCollision;
-import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.Variable;
 import java.util.*;
 
 public class JoinCodeGen {
@@ -30,20 +32,19 @@ public class JoinCodeGen {
    *     skew.
    * @return The code generated for the Join expression.
    */
-  public static String generateJoinCode(
-      String outVar,
+  public static Op.Assign generateJoinCode(
+      Variable outVar,
       String joinType,
-      String rightTable,
-      String leftTable,
+      Variable rightTable,
+      Variable leftTable,
       List<String> rightColNames,
       List<String> leftColNames,
       List<String> expectedOutColumns,
-      String joinCond,
+      Expr joinCond,
       HashSet<String> mergeCols,
       boolean tryRebalanceOutput) {
 
     List<String> allColNames = new ArrayList<>();
-    StringBuilder generatedJoinCode = new StringBuilder();
 
     HashMap<String, Boolean> seenColNames = new HashMap<String, Boolean>();
     preventColumnCollision(leftColNames, mergeCols, seenColNames);
@@ -93,9 +94,12 @@ public class JoinCodeGen {
 
     boolean updateOnStr = false;
     if (!joinType.equals("cross")) {
-      onStr = makeQuoted(joinCond);
+      onStr = makeQuoted(joinCond.emit());
       updateOnStr = true;
     }
+
+    Expr leftTableExpr;
+    Expr rightTableExpr;
 
     // If we have an outer join we need to create duplicate columns
     if (hasDuplicateNames) {
@@ -128,8 +132,11 @@ public class JoinCodeGen {
       }
       leftRename.append("}, copy=False)");
       rightRename.append("}, copy=False)");
-      leftTable = leftTable + leftRename.toString();
-      rightTable = rightTable + rightRename.toString();
+      leftTableExpr = new Expr.Raw(leftTable.emit() + leftRename.toString());
+      rightTableExpr = new Expr.Raw(rightTable.emit() + rightRename.toString());
+    } else {
+      leftTableExpr = leftTable;
+      rightTableExpr = rightTable;
     }
 
     if (joinType.equals("full")) {
@@ -138,9 +145,9 @@ public class JoinCodeGen {
     onStr = onStr.equals("") ? "" : ", on=" + onStr;
     StringBuilder joinBuilder = new StringBuilder();
     joinBuilder
-        .append(leftTable)
+        .append(leftTableExpr.emit())
         .append(".merge(")
-        .append(rightTable)
+        .append(rightTableExpr.emit())
         .append(onStr)
         .append(", how=")
         .append(makeQuoted(joinType))
@@ -168,14 +175,10 @@ public class JoinCodeGen {
       joinBuilder.append("}, copy=False)");
     }
 
-    generatedJoinCode
-        .append(getBodoIndent())
-        .append(outVar)
-        .append(" = ")
-        .append(joinBuilder.toString())
-        .append('\n');
+    Op.Assign outputAssign = new Op.Assign(outVar, new Expr.Raw(joinBuilder.toString()));
+
     // Increment the counter for future joins.
     dummyCounter += 1;
-    return generatedJoinCode.toString();
+    return outputAssign;
   }
 }

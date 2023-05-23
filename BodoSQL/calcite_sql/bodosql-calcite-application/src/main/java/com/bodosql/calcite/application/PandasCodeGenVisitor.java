@@ -112,7 +112,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 /** Visitor class for parsed SQL nodes to generate Pandas code from SQL code. */
 public class PandasCodeGenVisitor extends RelVisitor {
   /* Stack of generated variables df1, df2 , etc. */
-  private final Stack<String> varGenStack = new Stack<>();
+  private final Stack<Variable> varGenStack = new Stack<>();
   /* Reserved column name for generating dummy columns. */
   // TODO: Add this to the docs as banned
   private final Module.Builder generatedCode;
@@ -137,14 +137,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // https://issues.apache.org/jira/browse/CALCITE-4559
   public final HashMap<String, RexNode> searchMap;
 
-  // Map of RelNode ID -> <DataFrame variable name, Column Names>
+  // Map of RelNode ID -> <DataFrame variable name>
   // Because the logical plan is a tree, Nodes that are at the bottom of
   // the tree must be repeated, even if they are identical. However, when
   // calcite produces identical nodes, it gives them the same node ID. As a
   // result, when finding nodes we wish to cache, we log variable names in this
   // map and load them inplace of segments of generated code.
   // This is currently only implemented for a subset of nodes.
-  private final HashMap<Integer, String> varCache;
+  private final HashMap<Integer, Variable> varCache;
 
   /*
   Hashmap containing globals that need to be lowered into the output func_text. Used for lowering
@@ -183,7 +183,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private final int verboseLevel;
 
   // These Variables track the target table for merge into
-  private @Nullable String targetTableDf;
+  private @Nullable Variable targetTableDf;
   // Extra arguments to pass to the write code for the fileList and Snapshot
   // id in the form of "argName1=varName1, argName2=varName2"
   private @Nullable String fileListAndSnapshotIdArgs;
@@ -237,6 +237,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public String genSeriesVar() {
     return generatedCode.getSymbolTable().genSeriesVar().getName();
+  }
+
+  /**
+   * Generate a new index variable name for step by step pandas codegen
+   *
+   * @return variable name
+   */
+  public String genIndexVar() {
+    return generatedCode.getSymbolTable().genIndexVar().getName();
   }
 
   /**
@@ -325,9 +334,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public String getGeneratedCode() {
     // If the stack is size 0 we don't return a DataFrame (e.g. to_sql)
-    if (this.varGenStack.size() > 0) {
-      this.generatedCode.append(String.format("  return %s\n", this.varGenStack.pop()));
+    if (this.varGenStack.size() == 1) {
+      this.generatedCode.add(new Op.ReturnStatement(this.varGenStack.pop()));
     }
+    assert this.varGenStack.size() == 0
+        : "Internal error: varGenStack should contain 1 or 0 values";
 
     Module m = this.generatedCode.build();
     return m.emit(1);
@@ -445,7 +456,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           for (int i = capacity - 1; i >= 0; i--) {
             // TODO(jsternberg): When varGenStack is refactored to natively hold dataframes,
             // the creation of a dataframe here should be removed.
-            Dataframe df = new Dataframe(varGenStack.pop(), node.getInput(i));
+            Dataframe df = new Dataframe(varGenStack.pop().emit(), node.getInput(i));
             inputs.add(df);
           }
           return inputs.build().reverse();
@@ -455,8 +466,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.genRelnodeTimerStart(node);
     Dataframe out = node.emit(generatedCode, getInputs);
     this.genRelnodeTimerStop(node);
-    varCache.put(node.getId(), out.getVariable().getName());
-    varGenStack.push(out.getVariable().getName());
+    varCache.put(node.getId(), out.getVariable());
+    varGenStack.push(out.getVariable());
   }
 
   /**
@@ -465,7 +476,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node RelNode to be visited
    */
   private void visitLogicalValues(Values node) {
-    String outVar = this.genDfVar();
+    Variable outVar = new Variable(this.genDfVar());
     List<String> exprCodes = new ArrayList<>();
     int id = node.getId();
     if (node.getTuples().size() != 0) {
@@ -479,8 +490,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       }
     }
     this.genRelnodeTimerStart(node);
-    this.generatedCode.append(
-        generateLogicalValuesCode(outVar, exprCodes, node.getRowType(), this));
+    Expr logicalValuesExpr = generateLogicalValuesCode(exprCodes, node.getRowType(), this);
+    this.generatedCode.add(new Op.Assign(outVar, logicalValuesExpr));
     this.varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
   }
@@ -491,29 +502,29 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node RelNode to be visited
    */
   private void visitLogicalFilter(Filter node) {
-    String outVar = genDfVar();
+    Variable outVar = new Variable(genDfVar());
     int nodeId = node.getId();
     if (this.isNodeCached(node)) {
       // If the node is in the cache load
-      String cacheKey = this.varCache.get(nodeId);
-      this.generatedCode.append(String.format("  %s = %s\n", outVar, cacheKey));
+      Variable cacheKey = this.varCache.get(nodeId);
+      this.generatedCode.add(new Op.Assign(outVar, cacheKey));
       // Push the column names
     } else {
       RelNode input = node.getInput();
       this.visit(input, 0, node);
       this.genRelnodeTimerStart(node);
-      String inVar = varGenStack.pop();
+      Variable inVar = varGenStack.pop();
       // The hashset is unused because the result should always be empty.
       // We assume filter is never within an apply.
-      RexToPandasTranslator translator = getRexTranslator(node, inVar, input);
-      Expr expr = node.getCondition().accept(translator);
-      this.generatedCode.append(
+      RexToPandasTranslator translator = getRexTranslator(node, inVar.emit(), input);
+      Expr filterExpr = node.getCondition().accept(translator);
+      Expr filteredDfExpr =
           generateFilterCode(
               inVar,
-              outVar,
-              expr.emit(),
+              filterExpr,
               exprTypesMap.get(
-                  ExprTypeVisitor.generateRexNodeKey(node.getCondition(), node.getId()))));
+                  ExprTypeVisitor.generateRexNodeKey(node.getCondition(), node.getId())));
+      this.generatedCode.add(new Op.Assign(outVar, filteredDfExpr));
       this.varCache.put(nodeId, outVar);
       this.genRelnodeTimerStop(node);
     }
@@ -526,7 +537,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node LogicalUnion node to be visited
    */
   private void visitLogicalUnion(Union node) {
-    List<String> childExprs = new ArrayList<>();
+    List<Variable> childExprs = new ArrayList<>();
     List<List<String>> childExprsColumns = new ArrayList<>();
     // Visit all of the inputs
     for (int i = 0; i < node.getInputs().size(); i++) {
@@ -536,9 +547,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
       childExprsColumns.add(input.getRowType().getFieldNames());
     }
     this.genRelnodeTimerStart(node);
-    String outVar = this.genDfVar();
+    Variable outVar = new Variable(this.genDfVar());
     List<String> columnNames = node.getRowType().getFieldNames();
-    this.generatedCode.append(generateUnionCode(outVar, columnNames, childExprs, node.all, this));
+    Expr unionExpr = generateUnionCode(columnNames, childExprs, node.all, this);
+    this.generatedCode.add(new Op.Assign(outVar, unionExpr));
     varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
   }
@@ -558,19 +570,19 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
     this.visit(lhs, 0, node);
-    String lhsExpr = varGenStack.pop();
+    Variable lhsExpr = varGenStack.pop();
     List<String> lhsColNames = lhs.getRowType().getFieldNames();
 
     RelNode rhs = node.getInput(1);
     this.visit(rhs, 1, node);
-    String rhsExpr = varGenStack.pop();
+    Variable rhsExpr = varGenStack.pop();
     List<String> rhsColNames = rhs.getRowType().getFieldNames();
 
-    String outVar = this.genDfVar();
+    Variable outVar = new Variable(this.genDfVar());
     List<String> colNames = node.getRowType().getFieldNames();
     this.genRelnodeTimerStart(node);
 
-    this.generatedCode.append(
+    this.generatedCode.addAll(
         generateIntersectCode(
             outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames, node.all, this));
 
@@ -593,23 +605,22 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
     this.visit(lhs, 0, node);
-    String lhsExpr = varGenStack.pop();
+    Variable lhsExpr = varGenStack.pop();
     List<String> lhsColNames = lhs.getRowType().getFieldNames();
 
     RelNode rhs = node.getInput(1);
     this.visit(rhs, 1, node);
-    String rhsExpr = varGenStack.pop();
+    Variable rhsExpr = varGenStack.pop();
     List<String> rhsColNames = rhs.getRowType().getFieldNames();
 
     assert lhsColNames.size() == rhsColNames.size();
     assert lhsColNames.size() > 0 && rhsColNames.size() > 0;
 
-    String outVar = this.genDfVar();
-    String throwAwayVar = this.genDfVar();
+    Variable outVar = new Variable(this.genDfVar());
     List<String> colNames = node.getRowType().getFieldNames();
     this.genRelnodeTimerStart(node);
 
-    this.generatedCode.append(
+    this.generatedCode.addAll(
         generateExceptCode(
             outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames, node.all, this));
 
@@ -626,11 +637,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
     RelNode input = node.getInput();
     this.visit(input, 0, node);
     this.genRelnodeTimerStart(node);
-    String inVar = varGenStack.pop();
+    Variable inVar = varGenStack.pop();
     List<String> colNames = input.getRowType().getFieldNames();
     /* handle case for queries with "ORDER BY" clause */
     List<RelFieldCollation> sortOrders = node.getCollation().getFieldCollations();
-    String outVar = this.genDfVar();
+    Variable outVar = new Variable(this.genDfVar());
     String limitStr = "";
     String offsetStr = "";
     /* handle case for queries with "LIMIT" clause */
@@ -651,7 +662,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       // fetch is either a named Parameter or a literal from parsing.
       // We visit the node to resolve the name.
-      RexToPandasTranslator translator = getRexTranslator(node, inVar, input);
+      RexToPandasTranslator translator = getRexTranslator(node, inVar.emit(), input);
       limitStr = fetch.accept(translator).emit();
     }
     RexNode offset = node.offset;
@@ -671,11 +682,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       // Offset is either a named Parameter or a literal from parsing.
       // We visit the node to resolve the name.
-      RexToPandasTranslator translator = getRexTranslator(node, inVar, input);
+      RexToPandasTranslator translator = getRexTranslator(node, inVar.emit(), input);
       offsetStr = offset.accept(translator).emit();
     }
-    this.generatedCode.append(
-        generateSortCode(inVar, outVar, colNames, sortOrders, limitStr, offsetStr));
+    Expr sortExpr = generateSortCode(inVar, colNames, sortOrders, limitStr, offsetStr);
+    this.generatedCode.add(new Op.Assign(outVar, sortExpr));
     varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
   }
@@ -686,21 +697,20 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node LogicalProject node to be visited
    */
   public void visitLogicalProject(Project node) {
-    String projectOutVar = this.genDfVar();
+    Variable projectOutVar = new Variable(this.genDfVar());
     List<String> colNames = node.getInput().getRowType().getFieldNames();
     // Output column names selected.
     List<String> outputColumns = new ArrayList();
     int nodeId = node.getId();
-    String outputCode = "";
     boolean needsTimerStop = false;
     if (this.isNodeCached(node)) {
-      String cacheKey = this.varCache.get(nodeId);
-      outputCode = String.format("  %s = %s\n", projectOutVar, cacheKey);
+      Variable cacheKey = this.varCache.get(nodeId);
+      this.generatedCode.add(new Op.Assign(projectOutVar, cacheKey));
     } else {
       this.visit(node.getInput(), 0, node);
       this.genRelnodeTimerStart(node);
       needsTimerStop = true;
-      String projectInVar = varGenStack.pop();
+      Variable projectInVar = varGenStack.pop();
       // ChildExprs operations produced.
       List<RexNodeVisitorInfo> childExprs = new ArrayList<>();
       // ExprTypes used for code generation
@@ -750,11 +760,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
       if (useLoc) {
         // If we are just a doing a loc we may want to load from cache. Needed for caching/reusing
         // joins.
-        outputCode =
-            generateLocCode(
-                projectInVar, projectOutVar, node.getProjects(), colNames, outputColumns);
+        Expr locExpr = generateLocCode(projectInVar, node.getProjects(), colNames, outputColumns);
         if (!renameMap.isEmpty()) {
-          outputCode = outputCode + generateRenameCode(projectOutVar, projectOutVar, renameMap);
+
+          locExpr = generateRenameCode(locExpr, renameMap);
           // Update the output columns with the mapping.
           List<String> oldOutputColumns = outputColumns;
           outputColumns = new ArrayList<>();
@@ -766,6 +775,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             }
           }
         }
+        this.generatedCode.add(new Op.Assign(projectOutVar, locExpr));
         // Currently we only cache projections if it has a loc. This is because the
         // projection can cause functions that trigger data generation (e.g random
         // values). In the future we should optimize this code to directly check for
@@ -806,12 +816,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
           } else {
             childExpr =
                 new RexNodeVisitorInfo(
-                    r.accept(getRexTranslator(node, projectInVar, node.getInput())).emit());
+                    r.accept(getRexTranslator(node, projectInVar.emit(), node.getInput())).emit());
           }
           childExprs.add(childExpr);
         }
         // handle windowed Aggregations
-        Dataframe dfInput = new Dataframe(projectInVar, node.getInput());
+        Dataframe dfInput = new Dataframe(projectInVar.emit(), node.getInput());
         List<Expr> windowAggInfo =
             visitAggOverOp(windowAggList, colNames, node.getId(), dfInput, false, new BodoCtx());
         // check that these all have the same len
@@ -825,7 +835,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           childExprs.set(origIdx, realChildExpr);
         }
 
-        outputCode =
+        List<Op.Assign> projectAssigns =
             generateProjectCode(
                 projectInVar,
                 projectOutVar,
@@ -835,9 +845,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 sqlTypes,
                 this,
                 colNames.size());
+        this.generatedCode.addAll(projectAssigns);
       }
     }
-    this.generatedCode.append(outputCode);
+
     if (needsTimerStop) {
       this.genRelnodeTimerStop(node);
     }
@@ -867,12 +878,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     SqlCreateTable.CreateTableType createTableType = node.getCreateTableType();
 
-    this.generatedCode
-        .append(getBodoIndent())
-        .append(
+    this.generatedCode.add(
+        new Op.Stmt(
             outputSchemaAsCatalog.generateWriteCode(
-                this.varGenStack.pop(), node.getTableName(), ifExists, createTableType))
-        .append("\n");
+                this.varGenStack.pop(), node.getTableName(), ifExists, createTableType)));
   }
 
   /**
@@ -910,7 +919,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     RelNode input = node.getInput();
     this.visit(input, 0, node);
     this.genRelnodeTimerStart(node);
-    String deltaDfVar = this.varGenStack.pop();
+    Variable deltaDfVar = this.varGenStack.pop();
     List<String> currentDeltaDfColNames = input.getRowType().getFieldNames();
 
     if (this.debuggingDeltaTable) {
@@ -920,15 +929,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // being removed from the table, and their presence/lack thereof shouldn't impact anything in
       // the
       // final implementation, but it can cause issues when testing the delta table
-      this.generatedCode
-          .append(getBodoIndent())
-          .append(deltaDfVar)
-          .append(" = ")
-          .append(deltaDfVar)
-          .append(".dropna(subset=[")
-          .append(makeQuoted(currentDeltaDfColNames.get(currentDeltaDfColNames.size() - 1)))
-          .append("])\n");
-      this.generatedCode.append(getBodoIndent()).append("return " + deltaDfVar);
+      Variable outputVar = new Variable(this.genDfVar());
+      this.generatedCode.add(
+          new Op.Assign(
+              outputVar,
+              new Expr.Raw(
+                  new StringBuilder()
+                      .append(getBodoIndent())
+                      .append(outputVar.emit())
+                      .append(" = ")
+                      .append(deltaDfVar.emit())
+                      .append(".dropna(subset=[")
+                      .append(
+                          makeQuoted(currentDeltaDfColNames.get(currentDeltaDfColNames.size() - 1)))
+                      .append("])")
+                      .toString())));
+
+      this.generatedCode.append(getBodoIndent()).add(new Op.ReturnStatement(outputVar));
     } else {
       // Assert that we've encountered a PandasTargetTableScan in the codegen, and
       // set the appropriate variables
@@ -954,28 +971,32 @@ public class PandasCodeGenVisitor extends RelVisitor {
       deltaTableExpectedColumnNames.add(ROW_ID_COL_NAME);
       deltaTableExpectedColumnNames.add(MERGE_ACTION_ENUM_COL_NAME);
 
-      StringBuilder outputCode = new StringBuilder();
-      String writebackDf = genDfVar();
+      Variable writebackDf = new Variable(genDfVar());
 
-      outputCode.append(
-          handleRename(deltaDfVar, currentDeltaDfColNames, deltaTableExpectedColumnNames));
-      outputCode
-          .append(getBodoIndent())
-          .append(writebackDf)
-          .append(" = bodosql.libs.iceberg_merge_into.do_delta_merge_with_target(")
-          .append(this.targetTableDf)
-          .append(", ")
-          .append(deltaDfVar)
-          .append(")\n");
+      Expr renamedDeltaDfVar =
+          handleRename(deltaDfVar, currentDeltaDfColNames, deltaTableExpectedColumnNames);
+      this.generatedCode.add(
+          new Op.Assign(
+              writebackDf,
+              new Expr.Raw(
+                  new StringBuilder()
+                      .append("bodosql.libs.iceberg_merge_into.do_delta_merge_with_target(")
+                      .append(this.targetTableDf.emit())
+                      .append(", ")
+                      .append(renamedDeltaDfVar.emit())
+                      .append(")")
+                      .toString())));
 
       // TODO: this can just be cast, since we handled rename
-      outputCode.append(
-          handleCastAndRenameBeforeWrite(writebackDf, targetTableFinalColumnNames, bodoSqlTable));
-      outputCode
-          .append(getBodoIndent())
-          .append(bodoSqlTable.generateWriteCode(writebackDf, this.fileListAndSnapshotIdArgs))
-          .append("\n");
-      this.generatedCode.append(outputCode);
+      Expr castedAndRenamedWriteBackDfExpr =
+          handleCastAndRenameBeforeWrite(writebackDf, targetTableFinalColumnNames, bodoSqlTable);
+      Variable castedAndRenamedWriteBackDfVar = new Variable(this.genDfVar());
+      this.generatedCode.add(
+          new Op.Assign(castedAndRenamedWriteBackDfVar, castedAndRenamedWriteBackDfExpr));
+      this.generatedCode.add(
+          new Op.Stmt(
+              bodoSqlTable.generateWriteCode(
+                  castedAndRenamedWriteBackDfVar, this.fileListAndSnapshotIdArgs)));
     }
     this.genRelnodeTimerStop(node);
   }
@@ -1004,9 +1025,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.visit(node.getInput(), 0, node);
     this.genRelnodeTimerStart(node);
     // Generate the to_sql code
-    StringBuilder outputCode = new StringBuilder();
     List<String> colNames = node.getInput().getRowType().getFieldNames();
-    String outVar = this.varGenStack.pop();
+    Variable inVar = this.varGenStack.pop();
     RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
     BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
     if (!bodoSqlTable.isWriteable()) {
@@ -1015,39 +1035,61 @@ public class PandasCodeGenVisitor extends RelVisitor {
               + "catalog or the SQL TablePath API");
     }
 
-    outputCode.append(handleCastAndRenameBeforeWrite(outVar, colNames, bodoSqlTable));
-    outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar)).append("\n");
-    this.generatedCode.append(outputCode);
+    Expr castedAndRenamedDfExpr = handleCastAndRenameBeforeWrite(inVar, colNames, bodoSqlTable);
+    Variable castedAndRenamedDfVar = new Variable(this.genDfVar());
+    this.generatedCode.add(new Op.Assign(castedAndRenamedDfVar, castedAndRenamedDfExpr));
+    this.generatedCode.add(new Op.Stmt(bodoSqlTable.generateWriteCode(castedAndRenamedDfVar)));
     this.genRelnodeTimerStop(node);
   }
 
-  public String handleCastAndRenameBeforeWrite(
-      String outVar, List<String> colNames, BodoSqlTable bodoSqlTable) {
-    StringBuilder outputCode = new StringBuilder();
-    String castExpr = bodoSqlTable.generateWriteCastCode(outVar);
-    if (castExpr != "") {
-      outputCode.append(getBodoIndent()).append(outVar).append(" = ").append(castExpr).append("\n");
+  /**
+   * Returns an expression which is the input dataframe with the appropriate casting/column renaming
+   * required for writing to the specified table
+   *
+   * <p>May append intermediate variables to generated code.
+   *
+   * @param inVar The input dataframe to be casted/renamed
+   * @param colNames Expected colNames of the output expression
+   * @param bodoSqlTable The table to be written to.
+   * @return
+   */
+  public Expr handleCastAndRenameBeforeWrite(
+      Variable inVar, List<String> colNames, BodoSqlTable bodoSqlTable) {
+    Expr outputExpr = inVar;
+
+    // Do the cast and update outputExpr if needed
+    Expr castExpr = bodoSqlTable.generateWriteCastCode(inVar);
+    if (!castExpr.emit().equals("")) {
+      outputExpr = castExpr;
     }
+
+    Variable intermediateDf = new Variable(this.genDfVar());
+    this.generatedCode.add(new Op.Assign(intermediateDf, outputExpr));
+
     // Update column names to the write names.
-    outputCode.append(handleRename(outVar, colNames, bodoSqlTable.getWriteColumnNames()));
-    return outputCode.toString();
+    outputExpr = handleRename(intermediateDf, colNames, bodoSqlTable.getWriteColumnNames());
+    return outputExpr;
   }
 
-  public String handleRename(String outVar, List<String> oldColNames, List<String> newColNames) {
+  /**
+   * Creates an expression that renames the columns of the input dataFrame variable. Simply returns
+   * the dataframe variable if no renaming is needed.
+   *
+   * @param inVar The input dataframe variable
+   * @param oldColNames The old column names
+   * @param newColNames The new column names
+   * @return
+   */
+  public Expr handleRename(Variable inVar, List<String> oldColNames, List<String> newColNames) {
     assert oldColNames.size() == newColNames.size();
-    StringBuilder outputCode = new StringBuilder();
+    StringBuilder outputCode = new StringBuilder(inVar.emit());
     boolean hasRename = false;
     for (int i = 0; i < newColNames.size(); i++) {
       if (!oldColNames.get(i).equals(newColNames.get(i))) {
         if (!hasRename) {
           // Only generate the rename if at least 1 column needs renaming to avoid any empty
           // dictionary issues.
-          outputCode
-              .append(getBodoIndent())
-              .append(outVar)
-              .append(" = ")
-              .append(outVar)
-              .append(".rename(columns={");
+          outputCode.append(".rename(columns={");
           hasRename = true;
         }
         outputCode.append(makeQuoted(oldColNames.get(i)));
@@ -1057,9 +1099,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
       }
     }
     if (hasRename) {
-      outputCode.append("}, copy=False)\n");
+      outputCode.append("}, copy=False)");
     }
-    return outputCode.toString();
+    return new Expr.Raw(outputCode.toString());
   }
 
   /**
@@ -1071,7 +1113,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitDelete(TableModify node) {
     RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
     BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
-    String outputVar = this.genDfVar();
+    Variable outputVar = new Variable(this.genDfVar());
     List<String> outputColumns = node.getRowType().getFieldNames();
     if (isSnowflakeCatalogTable(bodoSqlTable)) {
       this.genRelnodeTimerStart(node);
@@ -1079,12 +1121,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // We require the Snowflake Catalog to ensure we don't need to remap
       // any names.
       try {
-        this.generatedCode
-            .append(getBodoIndent())
-            .append(outputVar)
-            .append(" = ")
-            .append(bodoSqlTable.generateRemoteQuery(this.originalSQLQuery))
-            .append("\n");
+        this.generatedCode.add(
+            new Op.Assign(outputVar, bodoSqlTable.generateRemoteQuery(this.originalSQLQuery)));
+
       } catch (RuntimeException e) {
         // If we encounter an exception we cannot push the query into Snowflake.
         String errorMsg =
@@ -1098,7 +1137,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       }
       // Update the column names to ensure they match as we don't know the
       // Snowflake names right now
-      this.generatedCode.append(getBodoIndent()).append(outputVar).append(".columns = ");
+      this.generatedCode.append(getBodoIndent()).append(outputVar.emit()).append(".columns = ");
       this.generatedCode.append("[");
       for (String colName : outputColumns) {
         this.generatedCode.append(makeQuoted(colName)).append(", ");
@@ -1130,10 +1169,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<String> expectedOutputCols = node.getRowType().getFieldNames();
 
     int nodeId = node.getId();
-    String finalOutVar = this.genDfVar();
+    Variable finalOutVar = new Variable(this.genDfVar());
     if (isNodeCached(node)) {
-      String cacheKey = this.varCache.get(nodeId);
-      this.generatedCode.append(String.format("  %s = %s\n", finalOutVar, cacheKey));
+      Variable cacheKey = this.varCache.get(nodeId);
+      this.generatedCode.add(new Op.Assign(finalOutVar, cacheKey));
     } else {
       final List<AggregateCall> aggCallList = node.getAggCallList();
 
@@ -1169,7 +1208,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.visit(inputNode, 0, node);
       this.genRelnodeTimerStart(node);
       List<String> inputColumnNames = inputNode.getRowType().getFieldNames();
-      String inVar = varGenStack.pop();
+      Variable inVar = varGenStack.pop();
       List<String> outputDfNames = new ArrayList<>();
 
       // If any group is missing a column we may need to do a concat.
@@ -1184,7 +1223,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         List<Integer> curGroup = groups.get(i).toList();
 
         hasMissingColsGroup = hasMissingColsGroup || curGroup.size() < groupingVariables.size();
-        String curGroupAggExpr;
+        Expr curGroupAggExpr;
         /* First rename any input keys to the output. */
 
         /* group without aggregation : e.g. select B from table1 groupby A */
@@ -1199,23 +1238,21 @@ public class PandasCodeGenVisitor extends RelVisitor {
         }
         /* group with aggregation : e.g. select sum(B) from table1 groupby A */
         else {
-          Pair<String, String> curGroupAggExprAndAdditionalGeneratedCode =
+          Pair<Expr, @Nullable Op> curGroupAggExprAndAdditionalGeneratedCode =
               handleLogicalAggregateWithGroups(
                   inVar, inputColumnNames, aggCallList, aggCallNames, curGroup);
 
           curGroupAggExpr = curGroupAggExprAndAdditionalGeneratedCode.getKey();
-          this.generatedCode.append(curGroupAggExprAndAdditionalGeneratedCode.getValue());
+          @Nullable Op prependOp = curGroupAggExprAndAdditionalGeneratedCode.getValue();
+          if (prependOp != null) {
+            this.generatedCode.add(prependOp);
+          }
         }
         // assign each of the generated dataframes their own variable, for greater clarity in the
         // generated code
         String outDfName = this.genDfVar();
         outputDfNames.add(outDfName);
-        this.generatedCode
-            .append(getBodoIndent())
-            .append(outDfName)
-            .append(" = ")
-            .append(curGroupAggExpr)
-            .append("\n");
+        this.generatedCode.add(new Op.Assign(new Variable(outDfName), curGroupAggExpr));
       }
       // If we have multiple groups, append the dataframes together
       if (groups.size() > 1 || hasMissingColsGroup) {
@@ -1235,38 +1272,38 @@ public class PandasCodeGenVisitor extends RelVisitor {
         // initialize empty columns.
         List<String> concatDfs = new ArrayList<>();
         if (hasMissingColsGroup) {
-          StringBuilder dummyDfExpr = new StringBuilder(inVar).append(".iloc[:0, :]");
+          Variable dummyDfVar = new Variable(genDfVar());
+          StringBuilder dummyDfExpr = new StringBuilder(inVar.emit()).append(".iloc[:0, :]");
 
           // Assign the dummy df to a variable name,
           this.generatedCode
               .append(getBodoIndent())
-              .append(finalOutVar)
+              .append(dummyDfVar.emit())
               .append(" = ")
               .append(dummyDfExpr)
               .append("\n");
-          concatDfs.add(finalOutVar);
+          concatDfs.add(dummyDfVar.emit());
         }
         concatDfs.addAll(outputDfNames);
 
-        // Generate the concatenation
-        this.generatedCode
-            .append(getBodoIndent())
-            .append(finalOutVar)
-            .append(" = ")
-            .append(concatDataFrames(concatDfs));
+        // Generate the concatenation expression
+        StringBuilder concatExprRaw = new StringBuilder(concatDataFrames(concatDfs).emit());
 
-        // Sort the output dataframes, so that they are in the ordering expected by Calcite
+        // Sort the output dataframe, so that they are in the ordering expected by Calcite
         // Needed in the case that the topmost dataframe in the concat does not contain all the
         // columns in the correct ordering
-        this.generatedCode.append(".loc[:, [");
+        concatExprRaw.append(".loc[:, [");
 
         for (int i = 0; i < expectedOutputCols.size(); i++) {
-          this.generatedCode.append(makeQuoted(expectedOutputCols.get(i))).append(", ");
+          concatExprRaw.append(makeQuoted(expectedOutputCols.get(i))).append(", ");
         }
-        this.generatedCode.append("]]\n");
+        concatExprRaw.append("]]");
+
+        // Generate the concatenation
+        this.generatedCode.add(new Op.Assign(finalOutVar, new Expr.Raw(concatExprRaw.toString())));
 
       } else {
-        finalOutVar = outputDfNames.get(0);
+        finalOutVar = new Variable(outputDfNames.get(0));
       }
       this.varCache.put(nodeId, finalOutVar);
       this.genRelnodeTimerStop(node);
@@ -1286,14 +1323,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @return A pair of strings, the key is the expression that evaluates to the output of the
    *     aggregation, and the value is the code that needs to be appended to the generated code.
    */
-  public Pair<String, String> handleLogicalAggregateWithGroups(
-      String inVar,
+  public Pair<Expr, @Nullable Op> handleLogicalAggregateWithGroups(
+      Variable inVar,
       List<String> inputColumnNames,
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
       List<Integer> group) {
 
-    Pair<String, String> exprAndAdditionalGeneratedCode;
+    Pair<Expr, Op> exprAndAdditionalGeneratedCode;
     if (aggContainsFilter(aggCallList)) {
       // If we have a Filter we need to generate a groupby apply
       exprAndAdditionalGeneratedCode =
@@ -1307,9 +1344,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     } else {
       // Otherwise generate groupby.agg
-      String groupbyExpr =
+      Expr groupbyExpr =
           generateAggCodeWithGroupBy(inVar, inputColumnNames, group, aggCallList, aggCallNames);
-      exprAndAdditionalGeneratedCode = new Pair<>(groupbyExpr, "");
+      exprAndAdditionalGeneratedCode = new Pair<>(groupbyExpr, null);
     }
 
     return exprAndAdditionalGeneratedCode;
@@ -2013,11 +2050,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Determine how many \n characters have appears. This indicates the line
     // in which to insert the IO for table scans.
-    String outVar = this.genDfVar();
+    Variable outVar = new Variable(this.genDfVar());
     int nodeId = node.getId();
     if (canLoadFromCache && this.isNodeCached(node)) {
-      String cacheKey = this.varCache.get(nodeId);
-      this.generatedCode.append(String.format("  %s = %s\n", outVar, cacheKey));
+      Variable cacheKey = this.varCache.get(nodeId);
+      this.generatedCode.add(new Op.Assign(outVar, cacheKey));
     } else {
       BodoSqlTable table;
       // TODO(jsternberg): The proper way to do this is to have the individual nodes
@@ -2030,8 +2067,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
         RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
         table = (BodoSqlTable) relTable.table();
       }
-      String readCode;
-      String readAssign;
+      Expr readCode;
+      Op readAssign;
       // Add the table to cached values
       if (isTargetTableScan) {
         // TODO: Properly restrict to Iceberg.
@@ -2044,38 +2081,49 @@ public class PandasCodeGenVisitor extends RelVisitor {
         this.fileListAndSnapshotIdArgs =
             String.format(
                 "snapshot_id=%s, old_fnames=%s,", icebergSnapshotIDName, icebergFileListVarName);
+
+        // TODO: replace this with tuple assign instead of raw code
         readAssign =
-            String.format(
-                "  %s, %s, %s = %s\n",
-                outVar, icebergFileListVarName, icebergSnapshotIDName, readCode);
+            new Op.Code(
+                String.format(
+                    "%s, %s, %s = %s\n",
+                    outVar.emit(), icebergFileListVarName, icebergSnapshotIDName, readCode.emit()));
         targetTableDf = outVar;
       } else {
         readCode = table.generateReadCode();
-        readAssign = String.format("  %s = %s\n", outVar, readCode);
+        readAssign = new Op.Assign(outVar, readCode);
       }
 
       boolean readUsesIO = table.readRequiresIO();
       if (this.verboseLevel >= 1 && readUsesIO) {
         // If the user has set verbose level >= 1 and there is IO, we generate
         // timers and print the read time.
-        String timerVar = this.genGenericTempVar();
+        Variable timerVar = new Variable(this.genGenericTempVar());
         String tableName = table.getName();
-        this.generatedCode.append(String.format("  %s = time.time()\n", timerVar));
-        this.generatedCode.append(readAssign);
+        this.generatedCode.add(new Op.Assign(timerVar, new Expr.Raw("time.time()")));
+        this.generatedCode.add(readAssign);
         // Generate the Debug message.
-        this.generatedCode.append(
-            String.format(
-                "  bodo.user_logging.log_message('IO TIMING', f'Finished reading table %s in"
-                    + " {time.time() - %s} seconds')\n",
-                tableName, timerVar));
+        List<Expr> logMsgArgs =
+            List.of(
+                new Expr.StringLiteral("IO TIMING"),
+                new Expr.Raw(
+                    String.format(
+                        "f'Finished reading table %s in {time.time() - %s} seconds'",
+                        tableName, timerVar.emit())));
+        Expr.Call logMsgCall =
+            new Expr.Call("bodo.user_logging.log_message", logMsgArgs, List.of());
+        this.generatedCode.add(new Op.Stmt(logMsgCall));
       } else {
-        this.generatedCode.append(readAssign);
+        this.generatedCode.add(readAssign);
       }
 
-      String castExpr = table.generateReadCastCode(outVar);
-      if (castExpr != "") {
-        this.generatedCode.append(String.format("  %s = %s\n", outVar, castExpr));
+      Expr castExpr = table.generateReadCastCode(outVar);
+      if (!castExpr.equals(outVar)) {
+        // Generate a new outVar to avoid shadowing
+        outVar = new Variable(this.genDfVar());
+        this.generatedCode.add(new Op.Assign(outVar, castExpr));
       }
+
       if (!isTargetTableScan) {
         // Add the table to cached values. We only support this for regular
         // tables and not the target table in merge into.
@@ -2093,40 +2141,40 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   public void visitJoin(PandasJoin node) {
     /* get left/right tables */
-    String outVar = this.genDfVar();
+    Variable outVar = new Variable(this.genDfVar());
     int nodeId = node.getId();
     List<String> outputColNames = node.getRowType().getFieldNames();
     if (this.isNodeCached(node)) {
-      String cacheKey = this.varCache.get(nodeId);
-      this.generatedCode.append(String.format("  %s = %s\n", outVar, cacheKey));
+      Variable cacheKey = this.varCache.get(nodeId);
+      this.generatedCode.add(new Op.Assign(outVar, cacheKey));
     } else {
       this.visit(node.getLeft(), 0, node);
       List<String> leftColNames = node.getLeft().getRowType().getFieldNames();
-      String leftTable = varGenStack.pop();
+      Variable leftTable = varGenStack.pop();
       this.visit(node.getRight(), 1, node);
       List<String> rightColNames = node.getRight().getRowType().getFieldNames();
-      String rightTable = varGenStack.pop();
+      Variable rightTable = varGenStack.pop();
       this.genRelnodeTimerStart(node);
 
       RexNode cond = node.getCondition();
 
       /** Generate the expression for the join condition in a format Bodo supports. */
       HashSet<String> mergeCols = new HashSet<>();
-      Pair<String, Boolean> joinCondInfo =
+      Pair<Expr, Boolean> joinCondInfo =
           visitJoinCond(cond, leftColNames, rightColNames, mergeCols);
-      String joinCond = joinCondInfo.getKey();
+      Expr joinCond = joinCondInfo.getKey();
 
       /* extract join type */
       String joinType = node.getJoinType().lowerName;
 
       // a join without any conditions is a cross join (how="cross" in pd.merge)
-      if (joinCond.equals("True")) {
+      if (joinCond.emit().equals("True")) {
         joinType = "cross";
       }
 
       boolean tryRebalanceOutput = node.getRebalanceOutput();
 
-      String joinCode =
+      Op.Assign joinCode =
           generateJoinCode(
               outVar,
               joinType,
@@ -2138,7 +2186,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               joinCond,
               mergeCols,
               tryRebalanceOutput);
-      this.generatedCode.append(joinCode);
+      this.generatedCode.add(joinCode);
       this.varCache.put(nodeId, outVar);
       this.genRelnodeTimerStop(node);
     }
@@ -2157,12 +2205,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Visit the input
     RelNode inp = node.getInput(0);
     this.visit(inp, 0, node);
-    String inpExpr = varGenStack.pop();
+    Variable inpExpr = varGenStack.pop();
 
-    String outVar = this.genDfVar();
+    Variable outVar = new Variable(this.genDfVar());
     this.genRelnodeTimerStart(node);
 
-    this.generatedCode.append(generateRowSampleCode(outVar, inpExpr, node.getParams()));
+    this.generatedCode.add(new Op.Assign(outVar, generateRowSampleCode(inpExpr, node.getParams())));
 
     varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
@@ -2180,12 +2228,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Visit the input
     RelNode inp = node.getInput(0);
     this.visit(inp, 0, node);
-    String inpExpr = varGenStack.pop();
+    Variable inpExpr = varGenStack.pop();
 
-    String outVar = this.genDfVar();
+    Variable outVar = new Variable(this.genDfVar());
     this.genRelnodeTimerStart(node);
 
-    this.generatedCode.append(generateSampleCode(outVar, inpExpr, node.getParams()));
+    this.generatedCode.add(new Op.Assign(outVar, generateSampleCode(inpExpr, node.getParams())));
 
     varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);

@@ -15,6 +15,7 @@ abstract class Expr {
      */
     data class Raw(val code: String) : Expr() {
         override fun emit(): String = code
+
     }
 
     /**
@@ -41,6 +42,7 @@ abstract class Expr {
             val args = (posArgs + namedArgs).joinToString(separator = ", ")
             return "${callee}(${args})"
         }
+
     }
 
     /**
@@ -67,6 +69,7 @@ abstract class Expr {
             }
             return "${inputVar.emit()}.$methodName(${regularArgs}${keywordArgs})"
         }
+
     }
 
     /**
@@ -80,12 +83,12 @@ abstract class Expr {
      */
     data class Groupby(val inputVar: Expr, val keys: Expr.List, val asIndex: Boolean, val dropna: Boolean) : Expr() {
 
-
         override fun emit(): String {
             // Generate the keyword args
             val keywordArgs = listOf(Pair("as_index", BooleanLiteral(asIndex)), Pair("dropna", BooleanLiteral(dropna)), Pair("_is_bodosql", BooleanLiteral(true)))
             return Method(inputVar, "groupby", listOf(keys), keywordArgs).emit()
         }
+
     }
 
     /**
@@ -100,6 +103,7 @@ abstract class Expr {
         override fun emit(): String {
             return "${inputExpr.emit()}[${index.emit()}]"
         }
+
     }
 
     /**
@@ -107,7 +111,7 @@ abstract class Expr {
      * be called on scalars because it doesn't match SQL NULL
      * semantics
      *
-     * @param opString: The string for the input binop. This is a symbol
+     * @param opString: The string for the input unary op. This is a symbol
      * not a name.
      * @param inputExpr: The input expression to apply the op to.
      */
@@ -116,6 +120,7 @@ abstract class Expr {
         override fun emit(): String {
             return "${opString}(${inputExpr.emit()})"
         }
+
     }
 
     /**
@@ -133,6 +138,7 @@ abstract class Expr {
         override fun emit(): String {
             return "(${input1.emit()} $opString ${input2.emit()})"
         }
+
     }
 
     /**
@@ -149,6 +155,7 @@ abstract class Expr {
                 return "range(${start.emit()}, ${stop.emit()}, ${step.emit()})"
             }
         }
+
     }
 
 
@@ -165,6 +172,7 @@ abstract class Expr {
             val tupleArgs = args.joinToString(separator = ", ", postfix = ",") { it.emit() }
             return "(${tupleArgs})"
         }
+
     }
 
     /**
@@ -176,6 +184,8 @@ abstract class Expr {
             val listArgs = args.joinToString(separator = ", ") { it.emit() }
             return "[${listArgs}]"
         }
+
+
     }
 
     /**
@@ -200,6 +210,7 @@ abstract class Expr {
         private val s = arg.replace("\"\"\"", """\"\"\"""")
 
         override fun emit(): String = "\"\"\"$s\"\"\""
+
     }
 
     /**
@@ -240,6 +251,7 @@ abstract class Expr {
                 }
             return "\"$literal\""
         }
+
     }
 
     /**
@@ -254,6 +266,7 @@ abstract class Expr {
                 return "False"
             }
         }
+
     }
 
     /**
@@ -262,6 +275,7 @@ abstract class Expr {
      */
     data class IntegerLiteral(val arg: kotlin.Int) : Expr() {
         override fun emit(): String = arg.toString()
+
     }
 
     /**
@@ -277,5 +291,6 @@ abstract class Expr {
      */
     object None : Expr() {
         override fun emit(): String = "None"
+
     }
 }
