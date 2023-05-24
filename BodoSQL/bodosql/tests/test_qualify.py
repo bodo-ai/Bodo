@@ -8,13 +8,16 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.test_window.test_lead_lag import lead_or_lag  # noqa
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 import bodo
 
 # [BE-3894] TODO: refactor this file like how test_rows.py was refactored
 # for window fusion
+
+@pytest.fixture(params=["LEAD", "LAG"])
+def lead_or_lag(request):
+    return request.param
 
 
 # Helper environment variable to allow for testing locally, while avoiding
