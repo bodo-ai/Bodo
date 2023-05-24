@@ -1353,7 +1353,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
     elif isinstance(t, BinaryArrayType):
         return "pre_alloc_binary_array(1, 1)"
     elif t == ArrayItemArrayType(string_array_type):
-        return "pre_alloc_array_item_array(1, (1, 1), string_array_type)"
+        return "pre_alloc_array_item_array(1, (1,), 1, string_array_type)"
     elif isinstance(t, DecimalArrayType):
         return "alloc_decimal_array(1, {}, {})".format(t.precision, t.scale)
     elif isinstance(t, DatetimeDateArrayType):
@@ -1912,7 +1912,6 @@ def gen_top_level_agg_func(
 
         # generate cfuncs
         if udf_func_struct.regular_udfs:
-
             # generate update, combine and eval functions for the user-defined
             # functions and compile them to numba cfuncs, to be called from C++
             c_sig = types.void(
@@ -2240,7 +2239,11 @@ def agg_table_column_use(
 
     # get output's data column uses, which are only in first variable (table or array)
     if agg_node.is_output_table and agg_node.out_vars[0] is not None:
-        (out_used_cols, out_use_all, out_cannot_del_cols,) = _compute_table_column_uses(
+        (
+            out_used_cols,
+            out_use_all,
+            out_cannot_del_cols,
+        ) = _compute_table_column_uses(
             agg_node.out_vars[0].name, table_col_use_map, equiv_vars
         )
         # we don't simply propagate use_all since all of output columns may not use all
@@ -2793,7 +2796,6 @@ def _mv_read_only_init_vars(init_nodes, parfor, eval_nodes):
 
 
 def gen_init_func(init_nodes, reduce_vars, var_types, typingctx, targetctx):
-
     # parallelaccelerator adds functions that check the size of input array
     # these calls need to be removed
     _checker_calls = (
@@ -2849,7 +2851,6 @@ def gen_all_update_func(
     in_col_types,
     redvar_offsets,
 ):
-
     out_num_cols = len(update_funcs)
     in_num_cols = len(in_col_types)
 
@@ -2883,7 +2884,6 @@ def gen_all_combine_func(
     typingctx,
     targetctx,
 ):
-
     reduce_arrs_tup_typ = types.Tuple(
         [types.Array(t, 1, "C") for t in reduce_var_types]
     )
@@ -2941,7 +2941,6 @@ def gen_all_eval_func(
     eval_funcs,
     redvar_offsets,
 ):
-
     num_cols = len(redvar_offsets) - 1
 
     func_text = "def eval_all_f(redvar_arrs, out_arrs, j):\n"
