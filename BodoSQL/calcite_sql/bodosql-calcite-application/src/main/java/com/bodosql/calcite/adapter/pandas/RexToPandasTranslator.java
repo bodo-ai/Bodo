@@ -90,6 +90,7 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.FrameTripleQuotedString;
 import com.bodosql.calcite.ir.Frame;
 import com.bodosql.calcite.ir.Module;
+import com.bodosql.calcite.ir.Module.Builder;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
 import com.bodosql.calcite.ir.Op.If;
@@ -197,7 +198,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     } else if (call.getOperator() instanceof SqlBinaryOperator
         || call.getOperator() instanceof SqlDatetimePlusOperator
         || call.getOperator() instanceof SqlDatetimeSubtractionOperator) {
-      return visitBinOpScan(call);
+      return visitBinOpScan(call, builder);
     } else if (call.getOperator() instanceof SqlPostfixOperator) {
       return visitPostfixOpScan(call);
     } else if (call.getOperator() instanceof SqlPrefixOperator) {
@@ -255,7 +256,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
   }
 
-  private Expr visitBinOpScan(RexCall operation) {
+  private Expr visitBinOpScan(RexCall operation, Builder builder) {
     List<Expr> args = new ArrayList<>();
     List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
     SqlOperator binOp = operation.getOperator();
@@ -271,7 +272,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       // Support the concat operator by using the concat array kernel.
       return StringFnCodeGen.generateConcatFnInfo(args);
     }
-    return generateBinOpCode(args, binOp, argDataTypes);
+    return generateBinOpCode(args, binOp, argDataTypes, builder);
   }
 
   private Expr visitPostfixOpScan(RexCall operation) {

@@ -4,14 +4,19 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.gene
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Module.Builder;
+import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.Op.Assign;
+import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.Sets;
-
-import java.util.*;
-import org.apache.calcite.avatica.*;
-import org.apache.calcite.rel.type.*;
+import java.util.List;
+import java.util.Set;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.IntervalSqlType;
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.TZAwareSqlType;
 
 /**
  * Class that returns the generated code for a BinOp expression after all inputs have been visited.
@@ -25,10 +30,12 @@ public class BinOpCodeGen {
    * @param args The arguments to the binop.
    * @param binOp The Binary operator to apply to each pair of arguments.
    * @param argDataTypes List of SQL data types for the input to the binary operation.
+   * @param builder The Module.Builder for appending generated code. This is used for generating
+   *     intermediate variables.
    * @return The code generated for the BinOp call.
    */
   public static Expr generateBinOpCode(
-      List<Expr> args, SqlOperator binOp, List<RelDataType> argDataTypes) {
+      List<Expr> args, SqlOperator binOp, List<RelDataType> argDataTypes, Builder builder) {
     SqlKind binOpKind = binOp.getKind();
     // Handle the Datetime functions that are either tz-aware or tz-naive
     if (argDataTypes.size() == 2
@@ -52,7 +59,8 @@ public class BinOpCodeGen {
               || arg1TypeName.equals(SqlTypeName.DATE)
               || arg1TypeName.equals(SqlTypeName.TIME);
       Set<SqlTypeName> DATE_INTERVAL_TYPES =
-          Sets.immutableEnumSet(SqlTypeName.INTERVAL_YEAR_MONTH,
+          Sets.immutableEnumSet(
+              SqlTypeName.INTERVAL_YEAR_MONTH,
               SqlTypeName.INTERVAL_YEAR,
               SqlTypeName.INTERVAL_MONTH,
               SqlTypeName.INTERVAL_WEEK,
@@ -69,7 +77,7 @@ public class BinOpCodeGen {
       } else if (isArg0Datetime && isArg1Datetime) {
         assert binOpKind.equals(SqlKind.MINUS);
         return genDateSubCode(args);
-      } else if (isArg0Datetime) {  // timestamp/date +- interval
+      } else if (isArg0Datetime) { // timestamp/date +- interval
         assert binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS);
         if (arg0TypeName.equals(SqlTypeName.DATE) && DATE_INTERVAL_TYPES.contains(arg1TypeName)) {
           // add/minus a date interval to a date object should return a date object
@@ -79,22 +87,22 @@ public class BinOpCodeGen {
           return new Expr.Call(
               "bodo.libs.bodosql_array_kernels.add_date_interval_to_date", args.get(0), arg1);
         }
-        return genDatetimeArithCode(
-            args, binOpKind, isArg0Datetime, isArg1Interval);
-      } else if(isArg1Datetime) {  // inverval + timestamp/date
-        assert binOpKind.equals(SqlKind.PLUS);  // interval - timestamp/date is an invalid syntax
+        return genDatetimeArithCode(args, binOpKind, isArg0Datetime, isArg1Interval);
+      } else if (isArg1Datetime) { // inverval + timestamp/date
+        assert binOpKind.equals(SqlKind.PLUS); // interval - timestamp/date is an invalid syntax
         if (arg1TypeName.equals(SqlTypeName.DATE) && DATE_INTERVAL_TYPES.contains(arg0TypeName)) {
           // add/minus a date interval to a date object should return a date object
           return new Expr.Call(
-              "bodo.libs.bodosql_array_kernels.add_date_interval_to_date", args.get(1), args.get(0));
+              "bodo.libs.bodosql_array_kernels.add_date_interval_to_date",
+              args.get(1),
+              args.get(0));
         }
-        return genDatetimeArithCode(
-            args, binOpKind, isArg0Datetime, isArg0Interval);
+        return genDatetimeArithCode(args, binOpKind, isArg0Datetime, isArg0Interval);
       } else if ((isArg0Interval || isArg1Interval) && binOpKind.equals(SqlKind.TIMES)) {
         return genIntervalMultiplyCode(args, isArg0Interval);
       }
     }
-    return generateBinOpCodeHelper(args, binOpKind);
+    return generateBinOpCodeHelper(args, binOpKind, builder);
   }
   /**
    * Helper function that returns the necessary generated code for a BinOp Call. This function may
@@ -103,9 +111,11 @@ public class BinOpCodeGen {
    *
    * @param args The arguments to the binop.
    * @param binOpKind The SqlKind of the binary operator
+   * @param builder
    * @return The code generated for the BinOp call.
    */
-  public static Expr generateBinOpCodeHelper(List<Expr> args, SqlKind binOpKind) {
+  public static Variable generateBinOpCodeHelper(
+      List<Expr> args, SqlKind binOpKind, Builder builder) {
     final String fn;
     switch (binOpKind) {
       case EQUALS:
@@ -153,21 +163,19 @@ public class BinOpCodeGen {
     }
     StringBuilder codeBuilder = new StringBuilder();
     /** Create the function calls */
-    for (int i = 0; i < args.size() - 1; i++) {
-      // Generate n - 1 function calls
-      codeBuilder.append(fn).append("(");
+    Expr prevVar = args.get(0);
+    Variable outputVar = null;
+    for (int i = 1; i < args.size(); i++) {
+      // Generate the function call
+      Expr callExpr = new Expr.Call(fn, List.of(prevVar, args.get(i)));
+      // Generate a new variable
+      outputVar = builder.getSymbolTable().genGenericTempVar();
+      Op.Assign assign = new Assign(outputVar, callExpr);
+      builder.add(assign);
+      // Set the new prevVar
+      prevVar = outputVar;
     }
-    for (int i = 0; i < args.size(); i++) {
-      // Insert arguments and add , and closing )
-      codeBuilder.append(args.get(i).emit());
-      if (i != 0) {
-        codeBuilder.append(")");
-      }
-      if (i != (args.size() - 1)) {
-        codeBuilder.append(", ");
-      }
-    }
-    return new Expr.Raw(codeBuilder.toString());
+    return outputVar;
   }
 
   /**
