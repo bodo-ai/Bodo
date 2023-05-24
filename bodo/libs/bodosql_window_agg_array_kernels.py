@@ -21,6 +21,113 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 
+@numba.generated_jit(nopython=True)
+def null_ignoring_shift(input_arr, shift_amount, default_value):
+    """Performs the the equivalent of the following operation but skipping over
+       any rows that are NULL:
+       
+       input_arr.shift(shift_amount, fill_value=default_value)
+
+        Args:
+            input_arr (any array): the values that are being shifted
+            shift_amount (int): the number of rows to shift by (ignoring nulls)
+            default_value (optional any): the value to use by default when the
+            shift amount goes out of the array
+        
+        Returns:
+            input_arr (any array): an array identical to input_arr but where
+            all the values are shifted by shift_amount (ignoring nulls)
+
+        For example, consider the following input array:
+            [10, NA, NA, 20, 30, 40, NA, 50, NA]
+
+        Using .shift() on this array with a shift of 1 and a default of 0
+        would return the following:
+            [NA, NA, 20, 30, 40, NA, 50, NA, 0]
+
+        Using null_ignoring_shift with the same arguments would return
+        the following:
+            [20, 20, 20, 30, 40, 50, 50, 0, 0]
+
+        See the design for IGNORE NULLS here:
+        https://bodo.atlassian.net/wiki/spaces/~62c43badfa577c57c3b685b2/pages/1322745956/Ignore+Nulls+in+LEAD+LAG+design
+    """
+    if not bodo.utils.utils.is_array_typ(input_arr, True):  # pragma: no cover
+        raise_bodo_error("Input must be an array type")
+    if not isinstance(shift_amount, types.Integer): # pragma: no cover
+        raise_bodo_error("Shift amount must be an integer type")
+
+    no_default = default_value == bodo.none
+
+    func_text = "def impl(input_arr, shift_amount, default_value):\n"
+    if isinstance(input_arr, bodo.SeriesType):
+        func_text += "    input_arr = bodo.utils.conversion.coerce_to_array(input_arr)\n"
+    func_text += "    input_length = len(input_arr)\n"
+
+    # Edge case: shifting by zero means that the output is identical to the input
+    func_text += "    if (shift_amount == 0):\n"
+    func_text += "        return input_arr\n"
+    func_text += "    else:\n"
+    func_text += "        start_index = 0\n"
+    func_text += "        value_count = 0\n"
+    func_text += "        arr = bodo.utils.utils.alloc_type(input_length, input_arr, (-1,))\n"
+
+    # Shifting values from later in the array backward
+    func_text += "        if (shift_amount < 0):\n"
+    func_text += "            shift_amount = -(shift_amount)\n"
+    func_text += "            end_index = 0\n"
+    # Find K Valid
+    func_text += "            while ((end_index < input_length) and (value_count < shift_amount)):\n"
+    func_text += "                if not(bodo.libs.array_kernels.isna(input_arr, end_index)):\n"
+    func_text += "                    value_count += 1\n"
+    func_text += "                if (value_count < shift_amount):\n"
+    func_text += "                    end_index += 1\n"
+    # Iterate Forward
+    func_text += "            while (end_index < input_length):\n"
+    func_text += "                if not(bodo.libs.array_kernels.isna(input_arr, start_index)):\n"
+    # If the next shifted value is required, hunt for the next non-null value after end_index
+    func_text += "                    end_index += 1\n"
+    func_text += "                    while (bodo.libs.array_kernels.isna(input_arr, end_index) and (end_index < input_length)):\n"
+    func_text += "                        end_index += 1\n"
+    func_text += "                    if (end_index >= input_length):\n"
+    func_text += "                        break\n"
+    func_text += "                arr[start_index] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(input_arr[end_index])\n"
+    func_text += "                start_index += 1\n"
+    # Fill NAs/Defaults
+    func_text += "            for idx_var in range(start_index, input_length):\n"
+    if no_default:
+        func_text += "                bodo.libs.array_kernels.setna(arr, idx_var)\n"
+    else:
+        func_text += "                arr[idx_var] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(default_value)\n"
+
+    # Shifting values from earlier in the array forward
+    func_text += "        else:\n"
+    func_text += "            end_index = -1\n"
+    # Find K Valid & Fill NAs/Defaults
+    func_text += "            while ((start_index < input_length) and (value_count < shift_amount)):\n"
+    func_text += "                if not(bodo.libs.array_kernels.isna(input_arr, start_index)):\n"
+    func_text += "                    value_count += 1\n"
+    func_text += "                    if (end_index == -1):\n"
+    func_text += "                        end_index = start_index\n"
+    if no_default:
+        func_text += "                bodo.libs.array_kernels.setna(arr, start_index)\n"
+    else:
+        func_text += "                arr[start_index] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(default_value)\n"
+    func_text += "                start_index += 1\n"
+    # Iterate Forward
+    func_text += "            for idx_var in range(start_index, input_length):\n"
+    func_text += "                arr[idx_var] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(input_arr[end_index])\n"
+    func_text += "                if not(bodo.libs.array_kernels.isna(input_arr, idx_var)):\n"
+    # If the next shifted value is required, hunt for the next non-null value after end_index
+    func_text += "                    end_index += 1\n"
+    func_text += "                    while bodo.libs.array_kernels.isna(input_arr, end_index):\n"
+    func_text += "                        end_index += 1\n"
+    func_text += "        return arr\n"
+
+    loc_vars = {}
+    exec(func_text, {"np": np, "pd": pd, "bodo": bodo}, loc_vars)
+    return loc_vars["impl"]
+
 
 def rank_sql(arr_tup, method="average", pct=False):  # pragma: no cover
     return

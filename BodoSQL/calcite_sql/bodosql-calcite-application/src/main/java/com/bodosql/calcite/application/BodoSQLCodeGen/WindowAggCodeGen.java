@@ -1047,16 +1047,18 @@ public class WindowAggCodeGen {
         fillValue = new Expr.Raw(fillValueArg.getExprString());
       }
     }
+
+    // If using lead, flip the sign
+    if (isLead) {
+      shiftAmount = new Expr.Unary("-", shiftAmount);
+    }
+    
     // TODO: Refactor all variable generation to use the temporary variables.
     // This is only safe because we are inside a closure and adhere to our own conventions
     Variable outputArray = new Variable("arr" + i);
     Expr.Getitem aggColRef = new Expr.Getitem(new Expr.Raw("sorted_df"), aggColName);
 
     if (isRespectNulls) {
-      // If using lead, flip the sign
-      if (isLead) {
-        shiftAmount = new Expr.Unary("-", shiftAmount);
-      }
       // If we are respecting nulls then we can call shift directly
       Expr.Method functionCall =
           new Expr.Method(
@@ -1070,235 +1072,12 @@ public class WindowAggCodeGen {
     } else {
       // See the design for IGNORE NULLS here:
       // https://bodo.atlassian.net/wiki/spaces/~62c43badfa577c57c3b685b2/pages/1322745956/Ignore+Nulls+in+LEAD+LAG+design
-      // TODO: Refactor this to use a builder so we don't need to do the control flow/indent by hand
-
-      // If using lag, flip the sign
-      if (!isLead) {
-        shiftAmount = new Expr.Unary("-", shiftAmount);
-      }
-
-      // Some common constant
-      Expr.IntegerLiteral zeroLiteral = new Expr.IntegerLiteral(0);
-      Expr.IntegerLiteral oneLiteral = new Expr.IntegerLiteral(1);
-      Expr.IntegerLiteral negativeOneLiteral = new Expr.IntegerLiteral(-1);
-
-      // TODO: Refactor all variable generation to use the temporary variables.
-      // This is only safe because we are inside a closure and adhere to our own conventions
-      // Some common Vars
-      Variable inputArray = new Variable("input_arr" + i);
-      Variable lengthName = new Variable("input_length" + i);
-      Variable shiftAmountVar = new Variable("shift_amount" + i);
-      Variable startIndex = new Variable("start_index" + i);
-      Variable endIndex = new Variable("end_index" + i);
-      Variable valueCount = new Variable("value_count" + i);
-      Variable idxVar = new Variable("idx_var" + i);
-
-      // Some common Exprs
-      Expr.Binary validBelowThreshold = new Expr.Binary("<", valueCount, shiftAmountVar);
-      Expr.Call startIndexNACheck =
-          new Expr.Call("bodo.libs.array_kernels.isna", List.of(inputArray, startIndex));
-      Expr.Unary startNotNACheck = new Expr.Unary("not", startIndexNACheck);
-      Expr.Call endIndexNACheck =
-          new Expr.Call("bodo.libs.array_kernels.isna", List.of(inputArray, endIndex));
-      Expr.Call inArrayEndGetitem =
+      Expr.Call kernelCall =
           new Expr.Call(
-              "bodo.utils.conversion.unbox_if_tz_naive_timestamp",
-              List.of(new Expr.Getitem(inputArray, endIndex)));
-      // TODO: Create a setitem Op when we can use ops
-      Expr.Getitem outArrayStartGetitem = new Expr.Getitem(outputArray, startIndex);
-      // TODO: Create a setitem Op when we can use ops
-      Expr.Getitem outArrayIdxGetitem = new Expr.Getitem(outputArray, idxVar);
-      Expr.Range startToLengthRange = new Expr.Range(startIndex, lengthName, null);
-      Expr.Call fillValueUnboxed =
-          new Expr.Call("bodo.utils.conversion.unbox_if_tz_naive_timestamp", List.of(fillValue));
-
-      // Common initialization
+              "bodo.libs.bodosql_array_kernels.null_ignoring_shift",
+              List.of(aggColRef, shiftAmount, fillValue));
       addIndent(funcText, 2);
-      funcText
-          .append(inputArray.emit())
-          .append(" = ")
-          .append(
-              new Expr.Call("bodo.hiframes.pd_series_ext.get_series_data", List.of(aggColRef))
-                  .emit())
-          .append("\n");
-      addIndent(funcText, 2);
-      funcText
-          .append(lengthName.emit())
-          .append(" = ")
-          .append(new Expr.Call("len", List.of(inputArray)).emit())
-          .append("\n");
-      addIndent(funcText, 2);
-      funcText.append(shiftAmountVar.emit()).append(" = ").append(shiftAmount.emit()).append("\n");
-      addIndent(funcText, 2);
-      funcText
-          .append("if ")
-          .append(new Expr.Binary("==", shiftAmountVar, zeroLiteral).emit())
-          .append(":\n");
-      // Offset = 0 case. Input and output match because this is undefined.
-      addIndent(funcText, 4);
-      funcText.append(outputArray.emit()).append(" = ").append(inputArray.emit()).append("\n");
-      addIndent(funcText, 2);
-      funcText.append("else:\n");
-      // Allocate the output array
-      Expr.Call allocCall =
-          new Expr.Call(
-              "bodo.utils.utils.alloc_type",
-              List.of(lengthName, inputArray, new Expr.Tuple(List.of(negativeOneLiteral))));
-
-      // Initialize the common variables to the else case
-      addIndent(funcText, 4);
-      funcText.append(startIndex.emit()).append(" = ").append(zeroLiteral.emit()).append("\n");
-      addIndent(funcText, 4);
-      funcText.append(valueCount.emit()).append(" = ").append(zeroLiteral.emit()).append("\n");
-
-      addIndent(funcText, 4);
-      funcText.append(outputArray.emit()).append(" = ").append(allocCall.emit()).append("\n");
-
-      // Generate the positive vs negative offset case
-      addIndent(funcText, 4);
-      funcText
-          .append("if ")
-          .append(new Expr.Binary(">", shiftAmountVar, zeroLiteral).emit())
-          .append(":\n");
-
-      // Positive Offset case
-      // Initialize endIndex
-      addIndent(funcText, 6);
-      funcText.append(endIndex.emit()).append(" = ").append(zeroLiteral.emit()).append("\n");
-
-      // Generate the Find K valid step
-      Expr.Binary endIndexInWindowCheck = new Expr.Binary("<", endIndex, lengthName);
-      Expr.Binary whileCond = new Expr.Binary("and", endIndexInWindowCheck, validBelowThreshold);
-      addIndent(funcText, 6);
-      funcText.append("while ").append(whileCond.emit()).append(":\n");
-      // Check if this value is NA
-      Expr.Unary endNotNACheck = new Expr.Unary("not", endIndexNACheck);
-      addIndent(funcText, 8);
-      funcText.append("if ").append(endNotNACheck.emit()).append(":\n");
-      addIndent(funcText, 10);
-      funcText.append(valueCount.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
-      addIndent(funcText, 8);
-      funcText.append("if ").append(validBelowThreshold.emit()).append(":\n");
-      addIndent(funcText, 10);
-      funcText.append(endIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
-
-      // Generate the Iterate Forward step
-      addIndent(funcText, 6);
-      funcText.append("while ").append(endIndexInWindowCheck.emit()).append(":\n");
-      addIndent(funcText, 8);
-      funcText.append("if ").append(startNotNACheck.emit()).append(":\n");
-      addIndent(funcText, 10);
-      funcText.append(endIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
-      // Generate an end is na var
-      // TODO: Refactor all variable generation to use the temporary variables.
-      // This is only safe because we are inside a closure and adhere to our own conventions
-      Variable endIsNAVar = new Variable("end_is_na" + i);
-      addIndent(funcText, 10);
-      funcText.append(endIsNAVar.emit()).append(" = ").append(endIndexNACheck.emit()).append("\n");
-      Expr.Binary NAAndInBounds = new Expr.Binary("and", endIsNAVar, endIndexInWindowCheck);
-      addIndent(funcText, 10);
-      funcText.append("while ").append(NAAndInBounds.emit()).append(":\n");
-      // Update end_index and end_is_na
-      addIndent(funcText, 12);
-      funcText.append(endIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
-      addIndent(funcText, 12);
-      funcText.append(endIsNAVar.emit()).append(" = ").append(endIndexNACheck.emit()).append("\n");
-      // Escape if we are outside the window
-      Expr.Binary endIndexOutWindowCheck = new Expr.Binary(">=", endIndex, lengthName);
-      addIndent(funcText, 10);
-      funcText.append("if ").append(endIndexOutWindowCheck.emit()).append(":\n");
-      addIndent(funcText, 12);
-      funcText.append("break\n");
-      addIndent(funcText, 8);
-      funcText
-          .append(outArrayStartGetitem.emit())
-          .append(" = ")
-          .append(inArrayEndGetitem.emit())
-          .append("\n");
-      addIndent(funcText, 8);
-      funcText.append(startIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
-
-      // Generate the FILL NAs step
-      addIndent(funcText, 6);
-      funcText
-          .append("for ")
-          .append(idxVar.emit())
-          .append(" in ")
-          .append(startToLengthRange.emit())
-          .append(":\n");
-      addIndent(funcText, 8);
-      funcText
-          .append(outArrayIdxGetitem.emit())
-          .append(" = ")
-          .append(fillValueUnboxed.emit())
-          .append("\n");
-
-      addIndent(funcText, 4);
-      funcText.append("else:\n");
-
-      // Negative Offset Case
-      // Initialize endIndex
-      addIndent(funcText, 6);
-      funcText.append(endIndex.emit()).append(" = ").append(negativeOneLiteral.emit()).append("\n");
-      // Negate shift_Amount
-      addIndent(funcText, 6);
-      funcText
-          .append(shiftAmountVar.emit())
-          .append(" = ")
-          .append(new Expr.Unary("-", shiftAmountVar).emit())
-          .append("\n");
-
-      // Find K valid + Fill NAs fused step
-      Expr.Binary startIndexInWindowCheck = new Expr.Binary("<", startIndex, lengthName);
-      Expr.Binary negativeFindKCheck =
-          new Expr.Binary("and", startIndexInWindowCheck, validBelowThreshold);
-      addIndent(funcText, 6);
-      funcText.append("while ").append(negativeFindKCheck.emit()).append(":\n");
-      // Find K Valid step
-      addIndent(funcText, 8);
-      funcText.append("if ").append(startNotNACheck.emit()).append(":\n");
-      addIndent(funcText, 10);
-      funcText.append(valueCount.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
-      addIndent(funcText, 10);
-      Expr.Binary endIsNegativeOne = new Expr.Binary("==", endIndex, negativeOneLiteral);
-      funcText.append("if ").append(endIsNegativeOne.emit()).append(":\n");
-      addIndent(funcText, 12);
-      funcText.append(endIndex.emit()).append(" = ").append(startIndex.emit()).append("\n");
-      // Fill NAs Step
-      addIndent(funcText, 8);
-      funcText
-          .append(outArrayStartGetitem.emit())
-          .append(" = ")
-          .append(fillValueUnboxed.emit())
-          .append("\n");
-      addIndent(funcText, 8);
-      funcText.append(startIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
-
-      // Iterate Forward Step
-      addIndent(funcText, 6);
-      funcText
-          .append("for ")
-          .append(idxVar.emit())
-          .append(" in ")
-          .append(startToLengthRange.emit())
-          .append(":\n");
-      addIndent(funcText, 8);
-      funcText
-          .append(outArrayIdxGetitem.emit())
-          .append(" = ")
-          .append(inArrayEndGetitem.emit())
-          .append("\n");
-      Expr.Unary idxNotNACheck =
-          new Expr.Unary(
-              "not", new Expr.Call("bodo.libs.array_kernels.isna", List.of(inputArray, idxVar)));
-      addIndent(funcText, 8);
-      funcText.append("if ").append(idxNotNACheck.emit()).append(":\n");
-      addIndent(funcText, 10);
-      funcText.append(endIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
-      addIndent(funcText, 10);
-      funcText.append("while ").append(endIndexNACheck.emit()).append(":\n");
-      addIndent(funcText, 12);
-      funcText.append(endIndex.emit()).append(" += ").append(oneLiteral.emit()).append("\n");
+      funcText.append(outputArray.emit()).append(" = ").append(kernelCall.emit()).append("\n");
     }
     arraysToSort.add(outputArray.emit());
   }
