@@ -141,11 +141,13 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    * often share the same code generation process, the read code for a given table with a catalog is
    * controlled by that catalog.
    *
+   * @param useStreaming Should we generate code to read the table as streaming (currently only
+   *     supported for snowflake tables)
    * @param tableName The name of the table as the read source.
    * @return The generated code to compute the read in Python.
    */
-  public Expr generateReadCode(String tableName) {
-    return this.catalog.generateReadCode(this.getName(), tableName);
+  public Expr generateReadCode(String tableName, boolean useStreaming) {
+    return this.catalog.generateReadCode(this.getName(), tableName, useStreaming);
   }
 
   /** @return The catalog for the schema. */

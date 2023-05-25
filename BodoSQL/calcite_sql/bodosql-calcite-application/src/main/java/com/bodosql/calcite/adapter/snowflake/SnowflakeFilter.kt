@@ -32,7 +32,7 @@ class SnowflakeFilter private constructor(
             cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode,
             condition: RexNode, catalogTable: CatalogTableImpl
         ): SnowflakeFilter {
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)
+            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION)
             return SnowflakeFilter(cluster, newTraitSet, input, condition, catalogTable)
         }
     }

@@ -1,8 +1,10 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
+import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.Sort
 import org.apache.calcite.rel.logical.LogicalSort
 
@@ -18,8 +20,10 @@ class PandasSortRule private constructor(config: Config) : ConverterRule(config)
 
     override fun convert(rel: RelNode): RelNode {
         val sort = rel as Sort
+
         return PandasSort.create(
-            convert(sort.input, sort.input.traitSet.replace(PandasRel.CONVENTION)),
+            convert(sort.input,
+                sort.input.traitSet.replace(PandasRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)),
             sort.collation,
             sort.offset,
             sort.fetch)

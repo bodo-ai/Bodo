@@ -2955,7 +2955,6 @@ def concat_overload(
         assert len(arr_types) == len(all_colnames)
 
         # generate concat for each output column
-        out_data = []
         for col_no, c in enumerate(all_colnames):
             args = []
             for i, df in enumerate(objs.types):
@@ -3027,9 +3026,6 @@ def concat_overload(
     # list of dataframes
     if isinstance(objs, types.List) and isinstance(objs.dtype, DataFrameType):
         check_runtime_cols_unsupported(objs.dtype, "pandas.concat()")
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            objs.dtype, "pandas.concat()"
-        )
         # TODO(ehsan): index
         df_type = objs.dtype
         for col_no, c in enumerate(df_type.columns):
