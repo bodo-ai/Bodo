@@ -1,8 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
-
 import com.bodosql.calcite.ir.*;
+import java.util.ArrayList;
 import java.util.List;
 import org.apache.calcite.rel.RelFieldCollation;
 
@@ -30,53 +29,35 @@ public class SortCodeGen {
       String limitStr,
       String offsetStr) {
     // StringBuilder for the final expr
-    StringBuilder sortString = new StringBuilder();
-    sortString.append(inVar.emit());
+    List<Expr> byList = new ArrayList<>();
+    List<Expr> ascendingList = new ArrayList<>();
+    List<Expr.StringLiteral> naPositionList = new ArrayList<>();
 
-    // Sort handles both limit and sort_values (possibly both).
-    // If the sortOrders is empty then we are not sorting
     if (!sortOrders.isEmpty()) {
-      // StringBuilder for the ascending section
-      StringBuilder orderString = new StringBuilder();
-      StringBuilder naPositionString = new StringBuilder();
-      sortString.append(".sort_values(by=[");
-      orderString.append("ascending=[");
-      naPositionString.append("na_position=[");
       for (RelFieldCollation order : sortOrders) {
         int index = order.getFieldIndex();
-        sortString.append(makeQuoted(colNames.get(index))).append(", ");
-        orderString.append(getAscendingExpr(order.getDirection()).emit()).append(", ");
-        naPositionString
-            .append(getNAPositionStringLiteral(order.nullDirection).emit())
-            .append(", ");
+        naPositionList.add(getNAPositionStringLiteral(order.nullDirection));
+        byList.add(new Expr.StringLiteral(colNames.get(index)));
+        ascendingList.add(getAscendingExpr(order.getDirection()));
       }
-      orderString.append("]");
-      naPositionString.append("]");
-      sortString
-          .append("], ")
-          .append(orderString)
-          .append(", ")
-          .append(naPositionString)
-          .append(")");
     }
-    if (!offsetStr.equals("")) {
-      // If offsetStr is not empty, we are taking a limit with an offset and need df.loc
-      sortString
-          .append(".iloc[")
-          .append(offsetStr)
-          .append(": ")
-          .append(offsetStr)
-          .append(" + ")
-          .append(limitStr)
-          .append(", :]");
-    } else if (!limitStr.equals("")) {
-      // If limitStr is not empty but offset is, we are taking a limit with no offset and can use
-      // head().
-      // TODO: Determine if we should use iloc here.
-      sortString.append(".head(").append(limitStr).append(")");
-    }
+    Expr sortExpr =
+        new Expr.SortValues(
+            inVar,
+            new Expr.List(byList),
+            new Expr.List(ascendingList),
+            new Expr.List(naPositionList));
 
-    return new Expr.Raw(sortString.toString());
+    if (!offsetStr.isEmpty()) {
+      Expr sliceStart = new Expr.Raw(offsetStr);
+      Expr sliceEnd = new Expr.Raw(offsetStr + " + " + limitStr);
+      Expr limitSlice = new Expr.Slice(List.of(sliceStart, sliceEnd));
+
+      sortExpr = new Expr.GetItem(new Expr.Attribute(sortExpr, "iloc"), limitSlice);
+    } else if (!limitStr.isEmpty()) {
+      sortExpr = new Expr.Method(sortExpr, "head", List.of(new Expr.Raw(limitStr)), List.of());
+    }
+    return sortExpr;
   }
 
   /**

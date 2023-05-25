@@ -2,7 +2,9 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
 import com.bodosql.calcite.ir.Variable;
+import java.util.List;
 
 /**
  * Class that returns the generated code for Filter expressions after all inputs have been visited.
@@ -19,26 +21,29 @@ public class FilterCodeGen {
    */
   public static Expr generateFilterCode(
       Variable inVar, Expr filterCode, BodoSQLExprType.ExprType filterExprType) {
-    StringBuilder filterBuilder = new StringBuilder();
-    // TODO: Parameterize indent?
-    filterBuilder.append(inVar.emit()).append("[(");
     // If we have a scalar we need to convert the filter to an array
+
+    Expr index;
     if (filterExprType == BodoSQLExprType.ExprType.SCALAR) {
-      filterBuilder
-          .append("bodo.utils.utils.full_type(len(")
-          .append(inVar.emit())
-          .append("), bodo.libs.bodosql_array_kernels.is_true(")
-          .append(filterCode.emit())
-          .append("), bodo.boolean_array_type)");
+      Expr.Len lenVar = new Expr.Len(inVar);
+      Expr isTrueKernel = ExprKt.BodoSQLKernel("is_true", List.of(filterCode), List.of());
+
+      Expr.Attribute outputType = new Expr.Attribute(new Expr.Raw("bodo"), "boolean_array_type");
+
+      index =
+          new Expr.Call("bodo.utils.utils.full_type", List.of(lenVar, isTrueKernel, outputType));
     } else {
-      filterBuilder.append(filterCode.emit());
+      index = filterCode;
     }
-    // Note: Pandas/Bodo treats NA values in a boolean array of a getitem operation as False.
-    filterBuilder.append(")]");
-    // Note the index may not match Spark/be reset in the final output. This is an expected
+    // Note: Pandas/Bodo treats NA values in a boolean array of a getitem operation
+    // as False.
+    // Note the index may not match Spark/be reset in the final output. This is an
+    // expected
     // difference because the
-    // index cannot influence the SQL queries. A user can call reset_index on the output if they
+    // index cannot influence the SQL queries. A user can call reset_index on the
+    // output if they
     // would like.
-    return new Expr.Raw(filterBuilder.toString());
+    Expr filter = new Expr.GetItem(inVar, index);
+    return filter;
   }
 }

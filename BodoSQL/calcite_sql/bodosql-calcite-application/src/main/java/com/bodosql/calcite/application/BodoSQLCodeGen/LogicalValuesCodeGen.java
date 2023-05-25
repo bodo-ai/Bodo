@@ -1,19 +1,18 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
-import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
+import com.bodosql.calcite.application.*;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
 import com.bodosql.calcite.ir.Variable;
+import java.util.*;
 import java.util.Collections;
 import java.util.List;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import com.bodosql.calcite.application.*;
-import com.bodosql.calcite.ir.Expr;
-import java.util.*;
-import org.apache.calcite.rel.type.*;
 
 /** Class that returns the generated code for Logical Values after all inputs have been visited. */
 public class LogicalValuesCodeGen {
@@ -26,13 +25,13 @@ public class LogicalValuesCodeGen {
    * @param pdVisitorClass The PandasCodeGenVisitor used to lower globals.
    * @return The code generated for the LogicalValues expression.
    */
-  public static Expr generateLogicalValuesCode(
+  public static Expr.PandasDataFrame generateLogicalValuesCode(
       List<String> argExprs, RelDataType rowType, PandasCodeGenVisitor pdVisitorClass) {
 
-    StringBuilder outputStr = new StringBuilder();
     List<String> columnNames = rowType.getFieldNames();
     List<RelDataTypeField> sqlTypes = rowType.getFieldList();
-    outputStr.append("pd.DataFrame({");
+    List<Expr.StringLiteral> dfKeys = new ArrayList<>();
+    List<Expr> dfValues = new ArrayList<>();
 
     final int columnLength;
     if (argExprs.size() == 0) {
@@ -48,16 +47,22 @@ public class LogicalValuesCodeGen {
       Variable global =
           pdVisitorClass.lowerAsGlobal(sqlTypeToBodoArrayType(sqlTypes.get(i).getType(), true));
       String colName = columnNames.get(i);
-      outputStr
-          .append(makeQuoted(colName))
-          .append(
-              String.format(
-                  ": bodo.utils.conversion.coerce_scalar_to_array(%s, %d, %s), ",
-                  argExprs.get(i), columnLength, global.getName()));
+
+      // TODO (allai5): need to refactor this
+      Expr expression = new Expr.Raw(argExprs.get(i));
+      Expr length = new Expr.IntegerLiteral(columnLength);
+
+      List<Expr> scalarToArrayArgs = List.of(expression, length, global);
+      Expr.Call value =
+          new Expr.Call("bodo.utils.conversion.coerce_scalar_to_array", scalarToArrayArgs);
+      dfKeys.add(new Expr.StringLiteral(colName));
+      dfValues.add(value);
     }
-    outputStr.append(
-        String.format(
-            "}, index=bodo.hiframes.pd_index_ext.init_range_index(0, %d, 1, None))", columnLength));
-    return new Expr.Raw(outputStr.toString());
+
+    Expr length = new Expr.IntegerLiteral(columnLength);
+    List<Expr> indexArgs =
+        List.of(new Expr.IntegerLiteral(0), length, new Expr.IntegerLiteral(1), Expr.None.INSTANCE);
+    Expr index = ExprKt.initRangeIndex(indexArgs, List.of());
+    return new Expr.PandasDataFrame(new Expr.Dict(dfKeys, dfValues), List.of(index));
   }
 }

@@ -42,7 +42,18 @@ abstract class Expr {
             val args = (posArgs + namedArgs).joinToString(separator = ", ")
             return "${callee}(${args})"
         }
+    }
 
+    data class Len(val expr: Expr) : Expr() {
+        override fun emit(): String {
+            return "len(${expr.emit()})"
+        }
+    }
+
+    data class Attribute(val inputVar: Expr, val attributeName: String): Expr() {
+        override fun emit(): String {
+            return "${inputVar.emit()}.${attributeName}"
+        }
     }
 
     /**
@@ -91,6 +102,31 @@ abstract class Expr {
 
     }
 
+
+    /**
+     * Represents a call to sort_values with the arguments that could change depending on the call.
+     *
+     * @param inputVar: The input value whose method is being invoked.
+     * @param ascending: Sort ascending vs. descending
+     * @param naPosition: Puts NaNs at the beginning if 'first'; 'last' puts NaNs at the end.
+     *
+     */
+    data class SortValues(val inputVar: Expr, val by: Expr.List, val ascending: Expr.List, val naPosition: Expr.List) : Expr() {
+
+        override fun emit(): String {
+            // Generate the keyword args
+            val keywordArgs = listOf(Pair("by", by), Pair("ascending", ascending),
+                                     Pair("na_position", naPosition))
+
+            return if (by.args.isEmpty() && ascending.args.isEmpty() && naPosition.args.isEmpty()) {
+                inputVar.emit();
+            } else {
+                Method(inputVar, "sort_values", listOf(), keywordArgs).emit();
+            }
+        }
+
+    }
+
     /**
      * Represents an array or DataFrame getitem call with the given
      * index.
@@ -98,13 +134,26 @@ abstract class Expr {
      * @param inputExpr: The input array/DataFrame.
      * @param index: The index into the array/DataFrame
      */
-    data class Getitem(val inputExpr: Expr, val index: Expr) : Expr() {
+    data class GetItem(val inputExpr: Expr, val index: Expr) : Expr() {
 
         override fun emit(): String {
             return "${inputExpr.emit()}[${index.emit()}]"
         }
 
     }
+
+
+    data class Slice(val args: kotlin.collections.List<Expr> = listOf()) : Expr() {
+
+        override fun emit(): String {
+            val slice = args.joinToString(separator = ":") { it.emit() }
+            if (slice.isEmpty()) {
+                return ":"
+            }
+            return slice
+        }
+    }
+
 
     /**
      * Represents the unary operator. This should only
@@ -202,6 +251,23 @@ abstract class Expr {
         }
     }
 
+    data class PandasDataFrame(val data: Expr, val index: kotlin.collections.List<Expr>): Expr() {
+        /*
+        New code shouldn't be using this IR, as we should be using init_dataframe
+        instead of constructing the pd.DataFrame() directly
+         */
+        override fun emit(): String {
+            return when (index.size) {
+                0 -> "pd.DataFrame(${data.emit()})"
+                1 -> "pd.DataFrame(${data.emit()}, index=${index[0].emit()})"
+                else -> {
+                    val indexStr = index.joinToString(separator = ", " ) { it.emit()}
+                    "pd.DataFrame(${data.emit()}, index=[${indexStr}])"
+                }
+            }
+        }
+    }
+
     /**
      * Represents a triple quoted String.
      * @param arg The body of the string.
@@ -273,7 +339,7 @@ abstract class Expr {
      * Represents an Integer Literal.
      * @param arg The value of the literal.
      */
-    data class IntegerLiteral(val arg: kotlin.Int) : Expr() {
+    data class IntegerLiteral(val arg: Int) : Expr() {
         override fun emit(): String = arg.toString()
 
     }
@@ -287,10 +353,28 @@ abstract class Expr {
     }
 
     /**
+     * Represents a Double Literal.
+     * @param arg The value of the literal.
+     */
+    data class DoubleLiteral(val arg: Double) : Expr() {
+        override fun emit(): String = arg.toString()
+
+    }
+
+    /**
      * Represents a Python None value.
      */
     object None : Expr() {
         override fun emit(): String = "None"
 
     }
+}
+
+
+fun BodoSQLKernel(callee: String, args: List<Expr> = listOf(), namedArgs: List<Pair<String, Expr>> = listOf()) : Expr {
+    return Expr.Call("bodo.libs.bodosql_array_kernels.${callee}", args, namedArgs);
+}
+
+fun initRangeIndex(args: List<Expr> = listOf(), namedArgs: List<Pair<String, Expr>> = listOf()) : Expr {
+    return Expr.Call("bodo.hiframes.pd_index_ext.init_range_index", args, namedArgs);
 }
