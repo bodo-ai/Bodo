@@ -58,10 +58,11 @@ public class Utils {
    * @return single quoted string
    */
   public static String makeQuoted(String unquotedString) {
-    if(unquotedString.length() > 1
+    if (unquotedString.length() > 1
         && unquotedString.charAt(0) == '"'
-        && unquotedString.charAt(unquotedString.length() - 1) == '"')
+        && unquotedString.charAt(unquotedString.length() - 1) == '"') {
       return unquotedString;
+    }
     return '"' + unquotedString + '"';
   }
 
@@ -308,7 +309,7 @@ public class Utils {
     for (String curColName : colNames) {
       Expr.StringLiteral colNameLiteral = new StringLiteral(curColName);
       keys.add(colNameLiteral);
-      values.add(new Expr.Getitem(inputVar, colNameLiteral));
+      values.add(new Expr.GetItem(inputVar, colNameLiteral));
     }
     for (String preGeneratedCol : colsToAddList) {
       Expr.StringLiteral colNameLiteral = new StringLiteral(preGeneratedCol);

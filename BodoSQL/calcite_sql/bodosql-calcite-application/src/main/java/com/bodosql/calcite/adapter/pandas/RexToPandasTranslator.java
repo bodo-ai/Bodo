@@ -668,7 +668,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       Op.Assign initLine =
           new Assign(
               new Variable(inputVar.getName() + "_" + usedCols.next()),
-              new Expr.Getitem(arrs, new Expr.IntegerLiteral(i)));
+              new Expr.GetItem(arrs, new Expr.IntegerLiteral(i)));
       builder.add(initLine);
     }
     // Pop the frame and generate the triple quoted string
