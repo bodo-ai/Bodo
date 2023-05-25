@@ -880,7 +880,6 @@ def test_read_partitions_cat_ordering(memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.parametrize("test_tz", [True, False])
 def test_partition_cols(test_tz, memory_leak_check):
-
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
@@ -944,10 +943,7 @@ def test_partition_cols(test_tz, memory_leak_check):
                 if bodo.get_rank() == 0:
                     # verify partitions are there
                     ds = pq.ParquetDataset(TEST_DIR)
-                    assert [
-                        ds.partitions.levels[i].name
-                        for i in range(len(ds.partitions.levels))
-                    ] == part_cols
+                    assert ds.partitioning.schema.names == part_cols
                     # read bodo output with pandas
                     df_test = pd.read_parquet(TEST_DIR)
                     # pandas reads the partition columns as categorical, but they
