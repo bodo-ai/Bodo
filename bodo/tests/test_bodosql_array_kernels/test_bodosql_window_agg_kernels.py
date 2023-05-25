@@ -970,7 +970,6 @@ def test_windowed_count_if(
             negative values are preceding rows, and positive values are following rows.
         upper_bound (int): The upper bound of the window being tested, with the same logic as above.
         memory_leak_check (): Fixture, see `conftest.py`.
-
     """
 
     def impl(S, lower, upper):

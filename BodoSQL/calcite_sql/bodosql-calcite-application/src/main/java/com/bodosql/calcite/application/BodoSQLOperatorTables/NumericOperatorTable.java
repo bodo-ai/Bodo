@@ -341,6 +341,12 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           ReturnTypes.DOUBLE_NULLABLE,
           OperandTypes.NUMERIC);
 
+  public static final SqlAggFunction BITOR_AGG =
+      SqlBasicAggFunction.create(
+              "BITOR_AGG", SqlKind.BIT_OR, ReturnTypes.ARG0_NULLABLE, OperandTypes.NUMERIC)
+          .withGroupOrder(Optionality.FORBIDDEN)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
   // TODO: Add support for `precision` and `scale` arguments
   public static final SqlFunction TO_NUMBER =
       new SqlFunction(
@@ -412,6 +418,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           BITSHIFTLEFT,
           BITSHIFTRIGHT,
           GETBIT,
+          BITOR_AGG,
           CEILING,
           DIV0,
           HAVERSINE,

@@ -830,3 +830,55 @@ def test_bool_agg(memory_leak_check):
 
     # Verify that fusion is working correctly.
     count_window_applies(pandas_code, 1, ["BOOLOR_AGG", "BOOLAND_AGG", "BOOLXOR_AGG"])
+
+
+def test_bit_agg(memory_leak_check):
+    """Tests the BITOR_AGG window function. This will in the future also test BITAND_AGG and BITXOR_AGG.
+
+    Args:
+        memory_leak_check (): Fixture, see `conftest.py`.
+    """
+    bit_agg_funcs = [
+        "BITOR_AGG",
+    ]
+
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series([1, 1, 1, 1, 1, 2, 3, 3, 4, 4], dtype=pd.Int32Dtype()),
+                "B": pd.Series(
+                    [1.0, 2.0, 3.0, 4.0, 5.0, 0.5, 0.6, 2.0, None, None],
+                    dtype=pd.Float32Dtype(),
+                ),
+            }
+        )
+    }
+
+    selects = []
+    for func in bit_agg_funcs:
+        selects.append(f"{func}(B) OVER (PARTITION BY A)")
+
+    query = f"SELECT {', '.join(selects)} FROM table1"
+
+    expected = pd.DataFrame(
+        {
+            0: pd.Series(
+                [7, 7, 7, 7, 7, 1, 3, 3, None, None],
+                dtype=pd.Int32Dtype(),
+            )
+        }
+    )
+
+    pandas_code = check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        sort_output=False,
+        expected_output=expected,
+        return_codegen=True,
+    )["pandas_code"]
+
+    # Verify that fusion is working correctly.
+    count_window_applies(pandas_code, 1, bit_agg_funcs)
