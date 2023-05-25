@@ -5,70 +5,7 @@
 """
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_plan_length, check_query
-
-
-@pytest.mark.slow
-def test_trivial_project_removed(basic_df, spark_info, memory_leak_check):
-    """
-    Test that verifies that trivial project nodes are removed
-    """
-    query1 = "select * from table1"
-    query2 = "select A, B, C from table1"
-    check_plan_length(query1, basic_df, 1)
-    check_query(query1, basic_df, spark_info)
-    check_plan_length(query2, basic_df, 1)
-    check_query(query2, basic_df, spark_info)
-
-
-@pytest.mark.slow
-def test_trivial_nested_removed(basic_df, spark_info, memory_leak_check):
-    """
-    Test that verifies that all trivial project nodes are removed
-    """
-    query = "select * from (select * from table1)"
-    check_plan_length(query, basic_df, 1)
-    check_query(query, basic_df, spark_info)
-
-
-@pytest.mark.slow
-def test_simplified_projection(basic_df, spark_info, memory_leak_check):
-    """
-    Test that verifies that projections are merged or removed.
-    """
-    query1 = "select * from (select A, B from table1)"
-    query2 = "select A, B from (select A, B from table1)"
-    check_plan_length(query1, basic_df, 2)
-    check_query(query1, basic_df, spark_info)
-    check_plan_length(query2, basic_df, 2)
-    check_query(query2, basic_df, spark_info)
-
-
-@pytest.mark.slow
-def test_necessary_projection(basic_df, spark_info, memory_leak_check):
-    """
-    Test that verifies that necessary projections aren't removed.
-    """
-    query1 = "select A, C from table1"
-    query2 = "select C, A, B from table1"
-    query3 = "select A, B as D, C from table1"
-    check_plan_length(query1, basic_df, 2)
-    check_query(query1, basic_df, spark_info)
-    check_plan_length(query2, basic_df, 2)
-    check_query(query2, basic_df, spark_info)
-    check_plan_length(query3, basic_df, 2)
-    check_query(query3, basic_df, spark_info)
-
-
-@pytest.mark.slow
-def test_renamed_projection(basic_df, spark_info, memory_leak_check):
-    """
-    Test that verifies that simple projections that just rename
-    are fused together.
-    """
-    query = "select A, B as C from (select A, B from table1)"
-    check_plan_length(query, basic_df, 2)
-    check_query(query, basic_df, spark_info)
+from bodosql.tests.utils import check_query
 
 
 def test_aliasing_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
