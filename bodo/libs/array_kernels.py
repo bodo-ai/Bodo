@@ -32,6 +32,7 @@ from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     init_categorical_array,
 )
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs import quantile_alg
@@ -57,6 +58,7 @@ from bodo.libs.str_arr_ext import (
     str_arr_set_na,
     string_array_type,
 )
+from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
@@ -94,6 +96,7 @@ max_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Max.value)
 min_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Min.value)
 or_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_Or.value)
 and_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
+bitor_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Bit_Or.value)
 
 
 def isna(arr, i):  # pragma: no cover
@@ -3220,6 +3223,78 @@ def boolxor_agg(A, parallel=False):  # pragma: no cover
         return None
 
     return impl
+
+
+@numba.generated_jit
+def bitor_agg(A, parallel=False):  # pragma: no cover
+    """Performs the BITOR_AGG operation on an array. This function
+    performs a bitwise or on every element of the array, reducing it to one value.
+
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+
+    Returns:
+        boolean: None if the array is all-null, otherwise True if there is
+                 at least one non-null entry.
+    """
+
+    func_text = "def impl(A, parallel=False):\n"
+
+    if bodo.utils.utils.is_array_typ(A):  # pragma: no cover
+        if isinstance(A, SeriesType):  # pragma: no cover
+            arr_data = A.data
+            func_text += "    A = bodo.utils.conversion.coerce_to_array(A)\n"
+        else:
+            arr_data = A
+    else:
+        raise_bodo_error("Input must be an array type")
+
+    if arr_data == bodo.dict_str_arr_type:
+        func_text += "    A = A._data\n"
+
+    func_text += "    result = 0\n"
+    func_text += "    non_null = False\n"
+    func_text += "    for i in range(len(A)):\n"
+    func_text += "        if not bodo.libs.array_kernels.isna(A, i):\n"
+    func_text += "            non_null = True\n"
+    if isinstance(arr_data.dtype, types.Integer):
+        func_text += "            result |= A[i]\n"
+    elif isinstance(arr_data.dtype, types.Float):
+        func_text += "            result |= np.int64(round_half_always_up(A[i], 0))\n"
+    elif arr_data.dtype == string_type:
+        func_text += (
+            "            result |= np.int64(round_half_always_up(float(A[i]), 0))\n"
+        )
+    else:
+        raise_bodo_error(
+            "Invalid type for bitor_agg--expected integer, float, or string that evaluates to a number."
+        )
+
+    func_text += "    if parallel:\n"
+    func_text += (
+        "        non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)\n"
+    )
+    func_text += (
+        "        result = bodo.libs.distributed_api.dist_reduce(result, bitor_op)\n"
+    )
+    func_text += "    if non_null:\n"
+    func_text += "        return result\n"
+    func_text += "    return None\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "pd": pd,
+            "bodo": bodo,
+            "or_op": or_op,
+            "bitor_op": bitor_op,
+            "round_half_always_up": bodo.libs.bodosql_array_kernels.round_half_always_up,
+        },
+        loc_vars,
+    )
+    return loc_vars["impl"]
 
 
 @overload(np.unique, inline="always", no_unliteral=True)

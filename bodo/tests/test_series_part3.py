@@ -86,6 +86,7 @@ def test_str_nullable_astype(type_name, memory_leak_check):
     Checks that casting from a String Series to a
     Nullable Integer works as expected.
     """
+
     # Generate the test code becuase the typename
     # must be a string constant
     def test_impl(S):
@@ -1255,3 +1256,75 @@ def test_bool_aggfuncs(memory_leak_check):
     ]
     for data, res in test_cases:
         check_func(impl, (data,), py_output=res, is_out_distributed=False)
+
+
+@pytest.mark.parametrize(
+    "S, answer",
+    [
+        pytest.param(
+            pd.Series([None] * 20, dtype=pd.Int32Dtype()), (None,), id="all_null"
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.Int32Dtype()), (23,), id="1234_16"
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, None] * 5, dtype=pd.Int32Dtype()),
+            (7,),
+            id="1234_null",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    4201237097,
+                    962326793,
+                    856422497,
+                    -244593951,
+                    -779400448,
+                    9981822901237097,
+                ],
+                dtype=pd.Int64Dtype(),
+            ),
+            (-67108887,),
+            id="bignums",
+        ),
+        pytest.param(
+            pd.Series([0.5, 0.5, 0.5, 0.5, 0.5], dtype=pd.Float64Dtype()),
+            (1,),
+            id="rounding",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    1567.8653501685835,
+                    9746.196149569489,
+                    7345.689816151691,
+                    3811.3918987611833,
+                    3900.786502418112,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            (16383,),
+            id="float",
+        ),
+        pytest.param(
+            pd.Series(["1", "2", "3", "4", "5"], dtype=pd.StringDtype()),
+            (7,),
+            id="strings",
+        ),
+    ],
+)
+def test_bit_aggfuncs(S, answer, memory_leak_check):
+    """Tests the BITOR_AGG window function array kernel implementation.
+    This will in the future also test BITAND_AGG and BITXOR_AGG.
+
+    Args:
+        S (pd.Series): The series that the test wil run on.
+        answer ([int]): Expected output from running BITOR_AGG on S.
+        memory_leak_check (): Fixture, see `conftest.py`.
+
+    """
+
+    def impl(S):
+        return (bodo.libs.array_kernels.bitor_agg(S),)
+
+    check_func(impl, (S,), py_output=answer, is_out_distributed=False)
