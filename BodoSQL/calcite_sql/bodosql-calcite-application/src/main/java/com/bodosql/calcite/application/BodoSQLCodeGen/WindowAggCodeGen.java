@@ -1052,11 +1052,11 @@ public class WindowAggCodeGen {
     if (isLead) {
       shiftAmount = new Expr.Unary("-", shiftAmount);
     }
-    
+
     // TODO: Refactor all variable generation to use the temporary variables.
     // This is only safe because we are inside a closure and adhere to our own conventions
     Variable outputArray = new Variable("arr" + i);
-    Expr.Getitem aggColRef = new Expr.Getitem(new Expr.Raw("sorted_df"), aggColName);
+    Expr.GetItem aggColRef = new Expr.GetItem(new Expr.Raw("sorted_df"), aggColName);
 
     if (isRespectNulls) {
       // If we are respecting nulls then we can call shift directly

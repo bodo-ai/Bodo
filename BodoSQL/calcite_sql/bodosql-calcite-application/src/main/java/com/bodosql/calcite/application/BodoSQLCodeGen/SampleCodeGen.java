@@ -2,6 +2,9 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import java.util.ArrayList;
+import java.util.List;
+import kotlin.Pair;
 import org.apache.calcite.plan.RelOptRowSamplingParameters;
 import org.apache.calcite.plan.RelOptSamplingParameters;
 
@@ -22,20 +25,15 @@ public class SampleCodeGen {
       throw new BodoSQLCodegenException("Error: SYSTEM/BLOCK sampling is not yet supported");
     }
 
-    StringBuilder sampleBuilder = new StringBuilder();
-
-    sampleBuilder
-        .append(expr.emit())
-        .append(".sample(frac=")
-        .append(params.getSamplingPercentage());
+    List<Pair<String, Expr>> args = new ArrayList<>();
+    args.add(new Pair("frac", new Expr.DoubleLiteral(params.getSamplingPercentage())));
 
     if (params.isRepeatable()) {
-      sampleBuilder.append(", random_state=").append(params.getRepeatableSeed());
+      args.add(new Pair("random_state", new Expr.IntegerLiteral(params.getRepeatableSeed())));
     }
+    Expr sampleMethod = new Expr.Method(expr, "sample", List.of(), args);
 
-    sampleBuilder.append(")");
-
-    return new Expr.Raw(sampleBuilder.toString());
+    return sampleMethod;
   }
 
   /**
