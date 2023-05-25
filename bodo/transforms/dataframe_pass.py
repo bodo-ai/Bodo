@@ -456,7 +456,6 @@ class DataFramePass:
 
                 # column is in extra arrays
                 if in_ind >= n_in_table_cols:
-
                     return compile_func_single_block(
                         eval(
                             f"lambda extra_arrs: extra_arrs[{in_ind - n_in_table_cols}]"
@@ -2773,7 +2772,7 @@ def _gen_init_df_dataframe_pass(columns, index=None, is_table_format=False):
         func_text,
         {
             "bodo": bodo,
-            "__col_name_meta_value_gen_init_df_2": ColNamesMetaType(columns),
+            "__col_name_meta_value_gen_init_df_2": ColNamesMetaType(tuple(columns)),
         },
         loc_vars,
     )
@@ -2798,7 +2797,6 @@ def _get_df_apply_used_cols(func, columns):
     use_all_cols = False
     for bl in lambda_ir.blocks.values():
         for stmt in bl.body:
-
             # ignore ir.Arg
             if is_assign(stmt) and isinstance(stmt.value, ir.Arg):
                 continue

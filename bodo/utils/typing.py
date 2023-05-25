@@ -6,6 +6,7 @@ import copy
 import itertools
 import operator
 import types as pytypes
+import typing
 import warnings
 from inspect import getfullargspec
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -1262,6 +1263,10 @@ types.MakeFunctionLiteral._literal_type_cache = types.MakeFunctionLiteral(lambda
 # see untyped_pass.py and df.pivot_table()
 class MetaType(types.Type):
     def __init__(self, meta):
+        # TODO: this may not work for custom types, checking __hash__ attribute exists
+        # may be better, but I'm uncertain if that's correct either
+        if not isinstance(meta, typing.Hashable):  # pragma: no cover
+            raise RuntimeError("Internal error: MetaType should be hashable")
         self.meta = meta
         super(MetaType, self).__init__("MetaType({})".format(meta))
 
@@ -1270,10 +1275,7 @@ class MetaType(types.Type):
 
     @property
     def key(self):
-        # XXX this is needed for _TypeMetaclass._intern to return the proper
-        # cached instance in case meta is changed
-        # (e.g. TestGroupBy -k pivot -k cross)
-        return tuple(self.meta)
+        return self.meta
 
     @property
     def mangling_args(self):
@@ -1297,6 +1299,8 @@ register_model(MetaType)(models.OpaqueModel)
 # This has no differences with MetaType, it exists purely to make the code more readable
 class ColNamesMetaType(MetaType):
     def __init__(self, meta):
+        if not isinstance(meta, typing.Hashable):  # pragma: no cover
+            raise RuntimeError("Internal error: ColNamesMetaType should be hashable")
         self.meta = meta
         types.Type.__init__(self, f"ColNamesMetaType({meta})")
 

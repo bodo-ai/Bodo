@@ -206,7 +206,7 @@ class UntypedPass:
             self._working_body.insert(0, meta_assign)
             pivot_call.kws = list(pivot_call.kws)
             pivot_call.kws.append(("_pivot_values", meta_var))
-            self.locals[meta_var.name] = bodo.utils.typing.MetaType(pivot_values)
+            self.locals[meta_var.name] = bodo.utils.typing.MetaType(tuple(pivot_values))
 
         # save arg name to catch invalid dist annotations
         if isinstance(rhs, ir.Arg):
