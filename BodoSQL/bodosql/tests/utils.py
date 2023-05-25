@@ -1262,15 +1262,6 @@ def generate_plan(query, dataframe_dict):
     return bc.generate_plan(query)
 
 
-def check_plan_length(query, dataframe_dict, expected_length):
-    """
-    Helper function that verifies a plan length for queries
-    with expected plan sizes.
-    """
-    plan = generate_plan(query, dataframe_dict)
-    assert plan.count("\n") == expected_length
-
-
 def _get_dist_df(df, var_length=False, check_typing_issues=True):
     """
     get distributed chunk for a dataframe df on current rank (for input to test functions).
