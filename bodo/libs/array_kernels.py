@@ -204,7 +204,6 @@ def setna(arr, ind, int_nan_const=0):  # pragma: no cover
 
 @overload(setna, no_unliteral=True)
 def setna_overload(arr, ind, int_nan_const=0):
-
     if isinstance(arr, types.Array) and isinstance(arr.dtype, types.Float):
         return setna
 
@@ -217,7 +216,6 @@ def setna_overload(arr, ind, int_nan_const=0):
         return _setnan_impl
 
     if isinstance(arr, DatetimeArrayType):
-
         nat = bodo.datetime64ns("NaT")
 
         def _setnan_impl(arr, ind, int_nan_const=0):  # pragma: no cover
@@ -406,7 +404,6 @@ def overload_copy_array_element(out_arr, out_ind, in_arr, in_ind):
         and isinstance(in_arr, DatetimeArrayType)
         and out_arr.tz == in_arr.tz
     ):
-
         # data values can be copied directly if timezones match (no Timestamp values)
         def impl_dt(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
             if bodo.libs.array_kernels.isna(in_arr, in_ind):
@@ -739,7 +736,6 @@ class QuantileType(AbstractTemplate):
 @lower_builtin(quantile, FloatingArrayType, types.float64)
 @lower_builtin(quantile, BooleanArrayType, types.float64)
 def lower_dist_quantile_seq(context, builder, sig, args):
-
     # store an int to specify data type
     typ_enum = numba_to_c_type(sig.args[0].dtype)
     typ_arg = cgutils.alloca_once_value(
@@ -787,7 +783,6 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 @lower_builtin(quantile_parallel, FloatingArrayType, types.float64, types.intp)
 @lower_builtin(quantile_parallel, BooleanArrayType, types.float64, types.intp)
 def lower_dist_quantile_parallel(context, builder, sig, args):
-
     # store an int to specify data type
     typ_enum = numba_to_c_type(sig.args[0].dtype)
     typ_arg = cgutils.alloca_once_value(
@@ -1464,7 +1459,6 @@ def get(arr, ind):  # pragma: no cover
 
 @overload(get, no_unliteral=True)
 def overload_get(arr, ind):
-
     if isinstance(arr, ArrayItemArrayType):
         arr_typ = arr.dtype
         out_dtype = arr_typ.dtype
@@ -1522,12 +1516,25 @@ def concat(arr_list):  # pragma: no cover
 
 @overload(concat, no_unliteral=True)
 def concat_overload(arr_list):
-
     # TODO: Support actually handling the possibles null values
     if isinstance(arr_list, bodo.NullableTupleType):
         return lambda arr_list: bodo.libs.array_kernels.concat(
             arr_list._data
         )  # pragma: no cover
+
+    if (
+        isinstance(arr_list, (types.UniTuple, types.List))
+        and arr_list.dtype == bodo.null_array_type
+    ):
+
+        def null_array_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            ret = bodo.libs.null_arr_ext.init_null_array(tot_len)
+            return ret
+
+        return null_array_concat_impl
 
     # array(item) arrays
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
@@ -1760,7 +1767,6 @@ def concat_overload(arr_list):
         isinstance(arr_list, types.BaseTuple)
         and all(is_str_arr_type(t) for t in arr_list.types)
     ):
-
         if isinstance(arr_list, types.BaseTuple):
             _arr_type = arr_list.types[0]
             for i in range(len(arr_list)):
@@ -2992,7 +2998,6 @@ def np_sort(A, axis=-1, kind=None, order=None):
     check_unsupported_args("np.sort", args_dict, args_default_dict, "numpy")
 
     def impl(A, axis=-1, kind=None, order=None):  # pragma: no cover
-
         return pd.Series(A).sort_values().values
 
     return impl

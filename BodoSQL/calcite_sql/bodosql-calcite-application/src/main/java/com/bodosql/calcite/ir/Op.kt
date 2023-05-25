@@ -27,6 +27,29 @@ interface Op {
 
     }
 
+
+    /**
+     * Represents an assignment of an expression to a tuple of variables
+     * variable.
+     * @param targets Target variables.
+     * @param expr Expression to evaluate.
+     */
+    data class TupleAssign(val targets: List<Variable>, val expr: Expr) : Op {
+        override fun emit(doc: Doc) {
+            //If we have no variables to assign to, this is a no-op
+            if (targets.isEmpty()) {
+                return
+            }
+            var tuple_builder: StringBuilder = StringBuilder("")
+            for (target: Variable in targets) {
+                tuple_builder.append(target.emit())
+                tuple_builder.append(", ")
+            }
+            doc.write("(${tuple_builder.toString()}) = ${expr.emit()}")
+        }
+
+    }
+
     /**
      * Represents an expression without a return value.
      * @param expr Expression to evaluate.
@@ -48,7 +71,6 @@ interface Op {
                 elseFrame.emit(doc.indent())
             }
         }
-
     }
 
     /**
@@ -67,7 +89,7 @@ interface Op {
     }
 
     /**
-     * Represents a While operation.
+     * Represents a while loop in python.
      */
     data class While(val cond: Expr, val body: Frame) : Op {
 

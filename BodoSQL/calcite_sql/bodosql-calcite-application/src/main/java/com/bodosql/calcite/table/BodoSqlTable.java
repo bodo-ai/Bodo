@@ -13,7 +13,11 @@ import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.schema.*;
+import org.apache.calcite.schema.ExtensibleTable;
+import org.apache.calcite.schema.Schema;
+import org.apache.calcite.schema.Statistic;
+import org.apache.calcite.schema.Statistics;
+import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlNode;
 
@@ -248,9 +252,11 @@ public abstract class BodoSqlTable implements ExtensibleTable {
   /**
    * Generate the code needed to read the table.
    *
+   * @param UseStreaming Should we generate code to read the table as streaming (currently only
+   *     supported for snowflake tables)
    * @return The generated code to read the table.
    */
-  public abstract Expr generateReadCode();
+  public abstract Expr generateReadCode(boolean UseStreaming);
 
   /**
    * Generate the code needed to read the table. This function is called by specialized IO

@@ -24,6 +24,8 @@ class CombineStreamsExchange(cluster: RelOptCluster, traits: RelTraitSet, input:
     }
 
     override fun emit(builder: Module.Builder, inputs: () -> List<Dataframe>): Dataframe {
+        // This should never be called, we need to handle CombineStreamsExchange
+        // in the visitor itself due to needing to mess with the visitor state slightly
         TODO("Not yet implemented")
     }
 

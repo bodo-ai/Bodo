@@ -129,10 +129,16 @@ public class LocalTableImpl extends BodoSqlTable {
    * Generate the code needed to read the table. Since each table is unique and not tied to a common
    * catalog, this table is initialized with the relevant read code.
    *
+   * @param UseStreaming Should we generate code to read the table as streaming (currently only
+   *     supported for snowflake tables)
    * @return The generated code to read the table.
    */
   @Override
-  public Expr generateReadCode() {
+  public Expr generateReadCode(boolean UseStreaming) {
+    if (UseStreaming) {
+      throw new RuntimeException(
+          "Internal error: Streaming not supported for non-snowflake tables");
+    }
     return new Expr.Raw(String.format(this.readCode, ""));
   }
 
