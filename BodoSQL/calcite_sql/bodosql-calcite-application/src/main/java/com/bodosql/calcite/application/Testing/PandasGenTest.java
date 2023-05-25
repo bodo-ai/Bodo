@@ -11,74 +11,80 @@ import java.util.ArrayList;
 /** Class for locally testing codegen. */
 public class PandasGenTest {
 
-    public static void main(String[] args) throws Exception {
+  public static void main(String[] args) throws Exception {
 
-        String sql = "select CURRENT_DATE()";
+    String sql = "select CURRENT_DATE()";
+    boolean useStreaming = false;
 
-        LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
-        ArrayList arr = new ArrayList();
-        BodoSQLColumnDataType dataType = BodoSQLColumnDataType.INT64;
-        BodoSQLColumnDataType paramType = BodoSQLColumnDataType.INT64;
-        BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataType, true);
-        arr.add(column);
-        BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataType, true);
-        arr.add(column2);
-        BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType, true);
-        arr.add(column3);
+    LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
+    ArrayList arr = new ArrayList();
+    BodoSQLColumnDataType dataType = BodoSQLColumnDataType.INT64;
+    BodoSQLColumnDataType paramType = BodoSQLColumnDataType.INT64;
+    BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataType, true);
+    arr.add(column);
+    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataType, true);
+    arr.add(column2);
+    BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType, true);
+    arr.add(column3);
 
-        BodoSqlTable table = new LocalTableImpl(
-                "table1", schema, arr, true, "table1", "TABLE_1 WRITE HERE (%s, %s)", false, "MEMORY");
+    BodoSqlTable table =
+        new LocalTableImpl(
+            "table1", schema, arr, true, "table1", "TABLE_1 WRITE HERE (%s, %s)", false, "MEMORY");
 
-        schema.addTable(table);
-        arr = new ArrayList();
-        arr.add(column);
-        BodoSQLColumnImpl column4 = new BodoSQLColumnImpl("B", dataType, true);
-        arr.add(column4);
-        BodoSQLColumnImpl column5 = new BodoSQLColumnImpl("C", dataType, true);
-        arr.add(column5);
+    schema.addTable(table);
+    arr = new ArrayList();
+    arr.add(column);
+    BodoSQLColumnImpl column4 = new BodoSQLColumnImpl("B", dataType, true);
+    arr.add(column4);
+    BodoSQLColumnImpl column5 = new BodoSQLColumnImpl("C", dataType, true);
+    arr.add(column5);
 
-        BodoSqlTable table2 = new LocalTableImpl(
-                "table2", schema, arr, true, "table2", "TABLE_2 WRITE HERE (%s, %s)", false, "MEMORY");
-        schema.addTable(table2);
-        BodoSqlTable table3 = new LocalTableImpl(
-                "table3", schema, arr, true, "table3", "TABLE_3 WRITE HERE (%s, %s)", false, "MEMORY");
+    BodoSqlTable table2 =
+        new LocalTableImpl(
+            "table2", schema, arr, true, "table2", "TABLE_2 WRITE HERE (%s, %s)", false, "MEMORY");
+    schema.addTable(table2);
+    BodoSqlTable table3 =
+        new LocalTableImpl(
+            "table3", schema, arr, true, "table3", "TABLE_3 WRITE HERE (%s, %s)", false, "MEMORY");
 
-        schema.addTable(table3);
+    schema.addTable(table3);
 
-        // Define the Parameter table
-        String paramTableName = "ParamTable";
-        arr = new ArrayList();
-        arr.add(column);
-        BodoSQLColumnImpl param1 = new BodoSQLColumnImpl("B", paramType, true);
-        arr.add(param1);
-        BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramType, true);
-        arr.add(param2);
-        BodoSqlTable paramTable = new LocalTableImpl(
-                paramTableName,
-                schema,
-                arr,
-                true,
-                paramTableName,
-                "PARAM_TABLE WRITE HERE (%s, %s)",
-                false,
-                "MEMORY");
+    // Define the Parameter table
+    String paramTableName = "ParamTable";
+    arr = new ArrayList();
+    arr.add(column);
+    BodoSQLColumnImpl param1 = new BodoSQLColumnImpl("B", paramType, true);
+    arr.add(param1);
+    BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramType, true);
+    arr.add(param2);
+    BodoSqlTable paramTable =
+        new LocalTableImpl(
+            paramTableName,
+            schema,
+            arr,
+            true,
+            paramTableName,
+            "PARAM_TABLE WRITE HERE (%s, %s)",
+            false,
+            "MEMORY");
 
-        schema.addTable(paramTable);
+    schema.addTable(paramTable);
 
-        RelationalAlgebraGenerator generator = new RelationalAlgebraGenerator(schema, paramTableName, false, false, 0);
-        System.out.println("SQL query:");
-        System.out.println(sql + "\n");
-        String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);
-        System.out.println("Unoptimized plan:");
-        System.out.println(unOptimizedPlanStr + "\n");
-        String optimizedPlanStr = generator.getRelationalAlgebraString(sql, true);
-        System.out.println("Optimized plan:");
-        System.out.println(optimizedPlanStr + "\n");
+    RelationalAlgebraGenerator generator =
+        new RelationalAlgebraGenerator(schema, paramTableName, useStreaming, false, 0);
+    System.out.println("SQL query:");
+    System.out.println(sql + "\n");
+    String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);
+    System.out.println("Unoptimized plan:");
+    System.out.println(unOptimizedPlanStr + "\n");
+    String optimizedPlanStr = generator.getRelationalAlgebraString(sql, true);
+    System.out.println("Optimized plan:");
+    System.out.println(optimizedPlanStr + "\n");
 
-        String pandasStr = generator.getPandasString(sql);
-        System.out.println("Generated code:");
-        System.out.println(pandasStr + "\n");
-        System.out.println("Lowered globals:");
-        System.out.println(generator.getLoweredGlobalVariables() + "\n");
-    }
+    String pandasStr = generator.getPandasString(sql);
+    System.out.println("Generated code:");
+    System.out.println(pandasStr + "\n");
+    System.out.println("Lowered globals:");
+    System.out.println(generator.getLoweredGlobalVariables() + "\n");
+  }
 }

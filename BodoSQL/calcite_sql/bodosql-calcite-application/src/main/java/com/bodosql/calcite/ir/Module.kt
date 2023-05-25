@@ -28,9 +28,7 @@ class Module(private val frame: Frame) {
         constructor() : this(symbolTable = SymbolTable(), functionFrame = CodegenFrame())
 
         private var activeFrame: Frame = functionFrame
-
         private var parentFrames: Stack<Frame> = Stack()
-
         private var assignedVariables: Set<Variable> = emptySet();
 
         /**
@@ -45,6 +43,13 @@ class Module(private val frame: Frame) {
                     throw Exception("Internal error in Assign.emit(): Attempted to perform an invalid variable shadow.")
                 }
                 assignedVariables.plus(targetVar)
+            } else if (op is Op.TupleAssign) {
+                for (targetVar: Variable in op.targets){
+                    if (assignedVariables.contains(targetVar)) {
+                        throw Exception("Internal error in Assign.emit(): Attempted to perform an invalid variable shadow.")
+                    }
+                    assignedVariables.plus(targetVar)
+                }
             }
         }
 
@@ -115,11 +120,13 @@ class Module(private val frame: Frame) {
             return Dataframe(v.name, rel)
         }
 
+
         /**
          * Construct a module from the built code.
          * @return The built module.
          */
         fun build(): Module {
+            require(parentFrames.empty()) { "Internal Error in module.build: parentFrames stack is not empty" }
             return Module(functionFrame)
         }
 

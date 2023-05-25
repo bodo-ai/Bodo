@@ -18,6 +18,7 @@ import org.apache.calcite.rel.type.RelRecordType
 class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
     ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits, input), PandasRel {
 
+
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode {
         return SnowflakeToPandasConverter(cluster, traitSet, sole(inputs))
     }

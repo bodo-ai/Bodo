@@ -3,12 +3,12 @@ package com.bodosql.calcite.catalog;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
-import java.sql.*;
-import java.util.*;
+import java.util.List;
+import java.util.Set;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.BodoTZInfo;
 
 public interface BodoSQLCatalog {
   /**
@@ -97,11 +97,13 @@ public interface BodoSQLCatalog {
   /**
    * Generates the code necessary to produce a read expression from the given catalog.
    *
+   * @param useStreaming Should we generate code to read the table as streaming (currently only
+   *     supported for snowflake tables)
    * @param schemaName Name of the schema to use when reading.
    * @param tableName Name of the table to use when reading.
    * @return The generated code to produce a read.
    */
-  Expr generateReadCode(String schemaName, String tableName);
+  Expr generateReadCode(String schemaName, String tableName, boolean useStreaming);
 
   /**
    * Close any connections to the remote DataBase. If there are no connections this should be a

@@ -79,7 +79,9 @@ class PandasJoin(
         fun getStreamingTrait(condition: RexNode, left: RelNode): BatchingProperty {
             // Note we call getRowType and getFieldNames explicitly because types are lazily evaluated.
             val isHashJoin = isBodoHashJoin(condition, left.getRowType().getFieldNames().size)
-            return if (isHashJoin) BatchingProperty.STREAMING else BatchingProperty.SINGLE_BATCH
+            //TODO: re-enable once codegen is added
+//            return if (isHashJoin) BatchingProperty.STREAMING else BatchingProperty.SINGLE_BATCH
+            return BatchingProperty.SINGLE_BATCH
         }
     }
 }

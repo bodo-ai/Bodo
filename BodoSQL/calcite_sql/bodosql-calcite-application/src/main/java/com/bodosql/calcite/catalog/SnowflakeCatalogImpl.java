@@ -18,11 +18,17 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
-import kotlin.*;
+import kotlin.Pair;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
@@ -555,11 +561,16 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The generated code to produce a read.
    */
   @Override
-  public Expr generateReadCode(String schemaName, String tableName) {
+  public Expr generateReadCode(String schemaName, String tableName, boolean useStreaming) {
+
+    String streamingArg = "";
+    if (useStreaming) {
+      streamingArg = "_bodo_chunksize=4000";
+    }
     return new Expr.Raw(
         String.format(
-            "pd.read_sql('%s', '%s', _bodo_is_table_input=True)",
-            tableName, generatePythonConnStr(schemaName)));
+            "pd.read_sql('%s', '%s', _bodo_is_table_input=True, %s)",
+            tableName, generatePythonConnStr(schemaName), streamingArg));
   }
 
   /**

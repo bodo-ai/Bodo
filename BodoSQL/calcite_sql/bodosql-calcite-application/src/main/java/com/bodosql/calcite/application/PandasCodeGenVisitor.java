@@ -62,10 +62,12 @@ import com.bodosql.calcite.ir.Expr.StringLiteral;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
+import com.bodosql.calcite.ir.StreamingPipelineFrame;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
+import com.bodosql.calcite.traits.BatchingProperty;
 import com.bodosql.calcite.traits.CombineStreamsExchange;
 import com.bodosql.calcite.traits.SeparateStreamExchange;
 import com.google.common.collect.ImmutableList;
@@ -114,8 +116,10 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Visitor class for parsed SQL nodes to generate Pandas code from SQL code. */
 public class PandasCodeGenVisitor extends RelVisitor {
-  /* Stack of generated variables df1, df2 , etc. */
+
+  /** Stack of generated variables df1, df2 , etc. */
   private final Stack<Variable> varGenStack = new Stack<>();
+
   /* Reserved column name for generating dummy columns. */
   // TODO: Add this to the docs as banned
   private final Module.Builder generatedCode;
@@ -126,6 +130,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // since we'll only be using these variables once per query
   private static final String icebergFileListVarName = "__bodo_Iceberg_file_list";
   private static final String icebergSnapshotIDName = "__bodo_Iceberg_snapshot_id";
+
+  private static final Expr BATCH_SIZE = new Expr.IntegerLiteral(4000);
 
   private static final String ROW_ID_COL_NAME = "_bodo_row_id";
   private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
@@ -147,6 +153,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // result, when finding nodes we wish to cache, we log variable names in this
   // map and load them inplace of segments of generated code.
   // This is currently only implemented for a subset of nodes.
+
   private final HashMap<Integer, Variable> varCache;
 
   /*
@@ -261,6 +268,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
+   * Generate the new temporary variable for step by step pandas codegen.
+   *
+   * @return variable
+   */
+  public Variable genReaderVar() {
+    return generatedCode.getSymbolTable().genReaderVar();
+  }
+
+  /**
    * Generate the new variable for a precomputed windowed aggregation column.
    *
    * @return variable
@@ -294,6 +310,25 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   private Variable genGroupbyApplyAggFnVar() {
     return generatedCode.getSymbolTable().genGroupbyApplyAggFnName();
+  }
+
+  /**
+   * Generate the new variable for a streaming accumulator variable
+   *
+   * @return variable
+   */
+  private Variable genBatchAccumulatorVar() {
+    return generatedCode.getSymbolTable().genBatchAccumulatorVar();
+  }
+
+  /**
+   * Generate a variable name for the flags keeping track of if a given streaming operation has been
+   * exhausted, and no longer has outputs.
+   *
+   * @return variable name
+   */
+  private Variable genFinishedStreamingFlag() {
+    return generatedCode.getSymbolTable().genFinishedStreamingFlag();
   }
 
   /**
@@ -356,11 +391,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   @Override
   public void visit(RelNode node, int ordinal, RelNode parent) {
-    // Skip exchange nodes for now. They need to be implemented.
-    while (node instanceof CombineStreamsExchange || node instanceof SeparateStreamExchange) {
-      // TODO: Actually implement
-      node = node.getInput(0);
-    }
 
     // If we have a SnowflakeToPandasConverter that directly
     // wraps a TableScan, let's extract it so we can use
@@ -409,12 +439,96 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else if (node instanceof Correlate) {
       throw new BodoSQLCodegenException(
           "Internal Error: BodoSQL does not support Correlated Queries");
+    } else if (node instanceof CombineStreamsExchange) {
+      this.visitCombineStreamsExchange((CombineStreamsExchange) node);
+    } else if (node instanceof SeparateStreamExchange) {
+      this.visitSeparateStreamExchange((SeparateStreamExchange) node);
     } else if (node instanceof PandasRel) {
       this.visitPandasRel((PandasRel) node);
     } else {
       throw new BodoSQLCodegenException(
           "Internal Error: Encountered Unsupported Calcite Node " + node.getClass().toString());
     }
+  }
+
+  private void visitCombineStreamsExchange(CombineStreamsExchange node) {
+    // For information on how this node handles codegen, please see:
+    // https://bodo.atlassian.net/wiki/spaces/B/pages/1337524225/Code+Generation+Design+WIP
+
+    // If we're in a distributed situation, we expect our child to return a distributed dataframe,
+    // and a flag that indicates if it's run out of output.
+    this.visit(node.getInput(0), 0, node);
+
+    Variable inputDFVar = varGenStack.pop();
+    // Generate the list we are accumulating into.
+    Variable batchAccumulatorVariable = this.genBatchAccumulatorVar();
+    StreamingPipelineFrame activePipeline = generatedCode.getCurrentStreamingPipeline();
+    activePipeline.addInitialization(
+        new Op.Assign(batchAccumulatorVariable, new Expr.List(List.of())));
+
+    // Append to the list at the end of the loop.
+    List<Expr> args = new ArrayList<>();
+    args.add(inputDFVar);
+    Op appendStatement =
+        new Op.Stmt(new Expr.Call.Method(batchAccumulatorVariable, "append", args, List.of()));
+    generatedCode.add(appendStatement);
+
+    // Pop the pipeline
+    StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
+    // Append the pipeline
+    generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
+    // Finally, concatenate the batches in the accumulator into one dataframe, so that the following
+    // operations that
+    // expect a single-batch dataframe can operate as needed.
+    Variable accumulatedDfVar = this.genDfVar();
+    kotlin.Pair<String, Expr.BooleanLiteral> ignoreIndex =
+        new kotlin.Pair<>("ignore_index", new Expr.BooleanLiteral(true));
+    Expr concatenatedDataFrame =
+        new Expr.Call("pd.concat", List.of(batchAccumulatorVariable), List.of(ignoreIndex));
+    generatedCode.add(new Op.Assign(accumulatedDfVar, concatenatedDataFrame));
+    this.varGenStack.push(accumulatedDfVar);
+  }
+
+  private void visitSeparateStreamExchange(SeparateStreamExchange node) {
+    // For information on how this node handles codegen, please see:
+    // https://bodo.atlassian.net/wiki/spaces/B/pages/1337524225/Code+Generation+Design+WIP
+
+    this.visit(node.getInput(0), 0, node);
+    // Since input is single-batch, we know the RHS of the pair must be null
+    Variable nonStreamingInput = this.varGenStack.pop();
+
+    // Create the variable that "drives" the loop
+    Variable exitCond = genFinishedStreamingFlag();
+    generatedCode.startStreamingPipelineFrame(exitCond);
+    StreamingPipelineFrame streamingInfo = generatedCode.getCurrentStreamingPipeline();
+    // Initialize the iteration.
+    Variable iteratorNumber = genGenericTempVar();
+    Op.Assign assn = new Op.Assign(iteratorNumber, new Expr.IntegerLiteral(0));
+    streamingInfo.addInitialization(assn);
+
+    Variable outputDfVar = genDfVar();
+    Expr sliceStart = new Expr.Binary("*", iteratorNumber, BATCH_SIZE);
+    Expr sliceEnd =
+        new Expr.Binary(
+            "*", new Expr.Binary("+", iteratorNumber, new Expr.IntegerLiteral(1)), BATCH_SIZE);
+
+    Expr slicedDfExpr = new Expr.DataFrameSlice(nonStreamingInput, sliceStart, sliceEnd);
+
+    Expr dfLen = new Expr.Call("len", List.of(nonStreamingInput), List.of());
+
+    Expr done = new Expr.Binary(">=", sliceStart, dfLen);
+
+    // Take the current slice of the dataframe
+    generatedCode.add(new Op.Assign(outputDfVar, slicedDfExpr));
+
+    // Check if we're at the end
+    generatedCode.add(new Op.Assign(exitCond, done));
+    // Increment the iterator variable
+    generatedCode.add(
+        new Op.Assign(
+            iteratorNumber, new Expr.Binary("+", iteratorNumber, new Expr.IntegerLiteral(1))));
+
+    this.varGenStack.push(outputDfVar);
   }
 
   /**
@@ -469,8 +583,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.genRelnodeTimerStart(node);
     Dataframe out = node.emit(generatedCode, getInputs);
     this.genRelnodeTimerStop(node);
-    varCache.put(node.getId(), out.getVariable());
-    varGenStack.push(out.getVariable());
+
+    Variable outVal = out.getVariable();
+    varCache.put(node.getId(), outVal);
+    varGenStack.push(outVal);
   }
 
   /**
@@ -505,32 +621,71 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node RelNode to be visited
    */
   private void visitLogicalFilter(Filter node) {
-    Variable outVar = genDfVar();
-    int nodeId = node.getId();
+
+    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+      this.visitStreamingLogicalFilter(node);
+    } else {
+      this.visitSingleBatchLogicalFilter(node);
+    }
+  }
+
+  /**
+   * Visitor method for logicalFilter nodes that are NOT streaming.
+   *
+   * @param node RelNode to be visited
+   */
+  private void visitSingleBatchLogicalFilter(Filter node) {
     if (this.isNodeCached(node)) {
+      Variable outVar = genDfVar();
+      int nodeId = node.getId();
       // If the node is in the cache load
       Variable cacheKey = this.varCache.get(nodeId);
-      this.generatedCode.add(new Op.Assign(outVar, cacheKey));
-      // Push the column names
+      this.generatedCode.add(new Assign(outVar, cacheKey));
+      varGenStack.push(outVar);
     } else {
-      RelNode input = node.getInput();
-      this.visit(input, 0, node);
-      this.genRelnodeTimerStart(node);
-      Variable inVar = varGenStack.pop();
-      // The hashset is unused because the result should always be empty.
-      // We assume filter is never within an apply.
-      RexToPandasTranslator translator = getRexTranslator(node, inVar.emit(), input);
-      Expr filterExpr = node.getCondition().accept(translator);
-      Expr filteredDfExpr =
-          generateFilterCode(
-              inVar,
-              filterExpr,
-              exprTypesMap.get(
-                  ExprTypeVisitor.generateRexNodeKey(node.getCondition(), node.getId())));
-      this.generatedCode.add(new Op.Assign(outVar, filteredDfExpr));
-      this.varCache.put(nodeId, outVar);
-      this.genRelnodeTimerStop(node);
+      visitLogicalFilterCommon(node);
     }
+  }
+
+  /**
+   * Visitor method for logicalFilter nodes that are streaming.
+   *
+   * @param node RelNode to be visited
+   */
+  private void visitStreamingLogicalFilter(Filter node) {
+    assert node.getTraitSet().contains(BatchingProperty.STREAMING)
+        : "Internal error in visitStreamingLogicalFilter: input node not streaming";
+    // TODO: determine how to handle caching for a streaming system
+    visitLogicalFilterCommon(node);
+  }
+
+  /**
+   * Code common to both the streaming and non-streaming logicalFilter nodes that are streaming.
+   * Handles visiting the input, appending the generated code, and pushing the output dataframe (and
+   * flag, if applicable) to the varGenStack.
+   *
+   * @param node RelNode to be visited
+   */
+  private void visitLogicalFilterCommon(Filter node) {
+
+    Variable outVar = genDfVar();
+    RelNode input = node.getInput();
+    this.visit(input, 0, node);
+    this.genRelnodeTimerStart(node);
+    Variable inVar = varGenStack.pop();
+    // The hashset is unused because the result should always be empty.
+    // We assume filter is never within an apply.
+    RexToPandasTranslator translator = getRexTranslator(node, inVar.emit(), input);
+    Expr expr = node.getCondition().accept(translator);
+    Expr filterExpr =
+        generateFilterCode(
+            inVar,
+            expr,
+            exprTypesMap.get(
+                ExprTypeVisitor.generateRexNodeKey(node.getCondition(), node.getId())));
+    this.generatedCode.add(new Op.Assign(outVar, filterExpr));
+    this.genRelnodeTimerStop(node);
+
     varGenStack.push(outVar);
   }
 
@@ -608,12 +763,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
     this.visit(lhs, 0, node);
-    Variable lhsExpr = varGenStack.pop();
+    Variable lhsVar = varGenStack.pop();
     List<String> lhsColNames = lhs.getRowType().getFieldNames();
 
     RelNode rhs = node.getInput(1);
     this.visit(rhs, 1, node);
-    Variable rhsExpr = varGenStack.pop();
+    Variable rhsVar = varGenStack.pop();
     List<String> rhsColNames = rhs.getRowType().getFieldNames();
 
     assert lhsColNames.size() == rhsColNames.size();
@@ -625,7 +780,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     this.generatedCode.addAll(
         generateExceptCode(
-            outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames, node.all, this));
+            outVar, lhsVar, lhsColNames, rhsVar, rhsColNames, colNames, node.all, this));
 
     varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
@@ -688,6 +843,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       RexToPandasTranslator translator = getRexTranslator(node, inVar.emit(), input);
       offsetStr = offset.accept(translator).emit();
     }
+
     Expr sortExpr = generateSortCode(inVar, colNames, sortOrders, limitStr, offsetStr);
     this.generatedCode.add(new Op.Assign(outVar, sortExpr));
     varGenStack.push(outVar);
@@ -700,161 +856,202 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node LogicalProject node to be visited
    */
   public void visitLogicalProject(Project node) {
+
+    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+      this.visitStreamingLogicalProject(node);
+    } else {
+      this.visitSingleBatchLogicalProject(node);
+    }
+  }
+
+  /**
+   * Visitor for a non-streaming LogicalProject node.
+   *
+   * @param node LogicalProject node to be visited
+   */
+  public void visitSingleBatchLogicalProject(Project node) {
+
+    if (this.isNodeCached(node)) {
+      int nodeId = node.getId();
+      Variable projectOutVar = this.genDfVar();
+      Variable cacheKey = this.varCache.get(nodeId);
+      Op outputCode = new Assign(projectOutVar, cacheKey);
+      this.generatedCode.add(outputCode);
+      varGenStack.push(projectOutVar);
+      return;
+    }
+
+    this.genRelnodeTimerStart(node);
+    this.visitLogicalProjectCommon(node);
+    this.genRelnodeTimerStop(node);
+  }
+
+  /**
+   * Visitor for a streaming LogicalProject node.
+   *
+   * @param node LogicalProject node to be visited
+   */
+  public void visitStreamingLogicalProject(Project node) {
+    assert node.getTraitSet().contains(BatchingProperty.STREAMING)
+        : "Internal error in visitLogicalProjectStreaming: Input node not streaming";
+    this.genRelnodeTimerStart(node);
+    this.visitLogicalProjectCommon(node);
+    this.genRelnodeTimerStop(node);
+  }
+
+  /**
+   * Helper function for the code that is common between a streaming and non-streaming
+   * LogicalProject node.
+   *
+   * @param node LogicalProject node to be visited
+   */
+  public void visitLogicalProjectCommon(Project node) {
     Variable projectOutVar = this.genDfVar();
     List<String> colNames = node.getInput().getRowType().getFieldNames();
     // Output column names selected.
     List<String> outputColumns = new ArrayList();
     int nodeId = node.getId();
-    boolean needsTimerStop = false;
-    if (this.isNodeCached(node)) {
-      Variable cacheKey = this.varCache.get(nodeId);
-      this.generatedCode.add(new Op.Assign(projectOutVar, cacheKey));
-    } else {
-      this.visit(node.getInput(), 0, node);
-      this.genRelnodeTimerStart(node);
-      needsTimerStop = true;
-      Variable projectInVar = varGenStack.pop();
-      // ChildExprs operations produced.
-      List<RexNodeVisitorInfo> childExprs = new ArrayList<>();
-      // ExprTypes used for code generation
-      List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
-      // Check for all InputRefs. If so then we optimize to output df.loc
-      boolean useLoc = true;
-      // Use a tree map so the ordering is consistent across ranks.
-      TreeMap<String, String> renameMap = new TreeMap<>();
-      HashSet<Integer> seenIdxs = new HashSet<>();
-      for (Pair<RexNode, String> named_r : node.getNamedProjects()) {
-        RexNode r = named_r.getKey();
-        String alias = named_r.getValue();
-        if (!(r instanceof RexInputRef)) {
-          // If we have a non input ref we can't use the loc path
-          useLoc = false;
-          break;
-        }
-        RexInputRef inputRef = (RexInputRef) r;
-        if (seenIdxs.contains(inputRef.getIndex())) {
-          /**
-           * When we have a situation with common subexpressions like "sum(A) as alias2, sum(A) as
-           * alias from table1 groupby D" Calcite generates a plan like: LogicalProject(alias2=[$1],
-           * alias=[$1]) LogicalAggregate(group=[{0}], alias=[SUM($1)]) In this case, we can't use
-           * loc, as it would lead to duplicate column names in the output dataframe See
-           * test_repeat_columns in BodoSQL/bodosql/tests/test_agg_groupby.py
-           */
-          useLoc = false;
-          break;
-        }
-        seenIdxs.add(inputRef.getIndex());
-        String colName = colNames.get(inputRef.getIndex());
-        // If we have a rename and useLoc=True
-        // we do a rename after df.loc.
-        if (!colName.equals(alias)) {
-          renameMap.put(colName, alias);
-        }
+    this.visit(node.getInput(), 0, node);
+    this.genRelnodeTimerStart(node);
+    Variable projectInVar = varGenStack.pop();
+    // ChildExprs operations produced.
+    List<RexNodeVisitorInfo> childExprs = new ArrayList<>();
+    // ExprTypes used for code generation
+    List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
+    // Check for all InputRefs. If so then we optimize to output df.loc
+    boolean useLoc = true;
+    // Use a tree map so the ordering is consistent across ranks.
+    TreeMap<String, String> renameMap = new TreeMap<>();
+    HashSet<Integer> seenIdxs = new HashSet<>();
+    for (Pair<RexNode, String> named_r : node.getNamedProjects()) {
+      RexNode r = named_r.getKey();
+      String alias = named_r.getValue();
+      if (!(r instanceof RexInputRef)) {
+        // If we have a non input ref we can't use the loc path
+        useLoc = false;
+        break;
       }
+      RexInputRef inputRef = (RexInputRef) r;
+      if (seenIdxs.contains(inputRef.getIndex())) {
+        /**
+         * When we have a situation with common subexpressions like "sum(A) as alias2, sum(A) as
+         * alias from table1 groupby D" Calcite generates a plan like: LogicalProject(alias2=[$1],
+         * alias=[$1]) LogicalAggregate(group=[{0}], alias=[SUM($1)]) In this case, we can't use
+         * loc, as it would lead to duplicate column names in the output dataframe See
+         * test_repeat_columns in BodoSQL/bodosql/tests/test_agg_groupby.py
+         */
+        useLoc = false;
+        break;
+      }
+      seenIdxs.add(inputRef.getIndex());
+      String colName = colNames.get(inputRef.getIndex());
+      // If we have a rename and useLoc=True
+      // we do a rename after df.loc.
+      if (!colName.equals(alias)) {
+        renameMap.put(colName, alias);
+      }
+    }
 
-      // for windowed aggregations, we put them all into the list, and pass the list to
-      // visitAggOverOp,
-      // which handles fusion of windowed aggregations.
-      List<RexOver> windowAggList = new ArrayList<>();
-      // We also need to keep track of the original indexes, so that we can properly update
-      // outputColumns and childExprs after processing the windowed aggregation
-      List<Integer> idx_list = new ArrayList<>();
+    // for windowed aggregations, we put them all into the list, and pass the list to
+    // visitAggOverOp,
+    // which handles fusion of windowed aggregations.
+    List<RexOver> windowAggList = new ArrayList<>();
+    // We also need to keep track of the original indexes, so that we can properly update
+    // outputColumns and childExprs after processing the windowed aggregation
+    List<Integer> idx_list = new ArrayList<>();
 
-      if (useLoc) {
-        // If we are just a doing a loc we may want to load from cache. Needed for caching/reusing
-        // joins.
-        Expr locExpr = generateLocCode(projectInVar, node.getProjects(), colNames, outputColumns);
-        if (!renameMap.isEmpty()) {
+    if (useLoc) {
+      // If we are just a doing a loc we may want to load from cache. Needed for caching/reusing
+      // joins.
+      Expr locExpr = generateLocCode(projectInVar, node.getProjects(), colNames, outputColumns);
+      if (!renameMap.isEmpty()) {
 
-          locExpr = generateRenameCode(locExpr, renameMap);
-          // Update the output columns with the mapping.
-          List<String> oldOutputColumns = outputColumns;
-          outputColumns = new ArrayList<>();
-          for (String col : oldOutputColumns) {
-            if (renameMap.containsKey(col)) {
-              outputColumns.add(renameMap.get(col));
-            } else {
-              outputColumns.add(col);
-            }
-          }
-        }
-        this.generatedCode.add(new Op.Assign(projectOutVar, locExpr));
-        // Currently we only cache projections if it has a loc. This is because the
-        // projection can cause functions that trigger data generation (e.g random
-        // values). In the future we should optimize this code to directly check for
-        // random data generation and cache in all other cases.
-        this.varCache.put(nodeId, projectOutVar);
-      } else {
-        List<RelDataTypeField> fields = node.getRowType().getFieldList();
-        List<RelDataType> sqlTypes = new ArrayList<>();
-        for (int i = 0; i < node.getNamedProjects().size(); i++) {
-          Pair<RexNode, String> named_r = node.getNamedProjects().get(i);
-          RexNode r = named_r.getKey();
-          outputColumns.add(named_r.getValue());
-          exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(r, node.getId())));
-          sqlTypes.add(fields.get(i).getType());
-
-          if (r instanceof RexOver) {
-            windowAggList.add((RexOver) r);
-            idx_list.add(i);
-            // append dummy values to childExprs.
-            // This value will be overwritten, once we are done processing the windowed aggregations
-            childExprs.add(new RexNodeVisitorInfo("DUMMY_VAL"));
-            continue;
-          }
-
-          /* Handles:
-              - "SELECT <COLUMNNAMES> FROM TABLE",
-              - "SELECT SUM(COLUMN), COUNT(COLUMN), MAX(COLUMN), MIN(COLUMN) FROM TABLE"
-              - "SELECT COLUMN +/-/* CONST FROM TABLE" (includes nesting expressions)
-          */
-          // The BodoCtx is unused because the result should always be empty.
-          // We assume project is never within an apply.
-          RexNodeVisitorInfo childExpr;
-          // Pass input column index for RexInputRef to generateProjectCode() directly instead of
-          // df["A"] codegen
-          // Allows generateProjectCode() to keep data in table format as much as possible
-          if (r instanceof RexInputRef) {
-            childExpr = new RexNodeVisitorInfo("", ((RexInputRef) r).getIndex());
+        locExpr = generateRenameCode(locExpr, renameMap);
+        // Update the output columns with the mapping.
+        List<String> oldOutputColumns = outputColumns;
+        outputColumns = new ArrayList<>();
+        for (String col : oldOutputColumns) {
+          if (renameMap.containsKey(col)) {
+            outputColumns.add(renameMap.get(col));
           } else {
-            childExpr =
-                new RexNodeVisitorInfo(
-                    r.accept(getRexTranslator(node, projectInVar.emit(), node.getInput())).emit());
+            outputColumns.add(col);
           }
-          childExprs.add(childExpr);
         }
-        // handle windowed Aggregations
-        Dataframe dfInput = new Dataframe(projectInVar.emit(), node.getInput());
-        List<Expr> windowAggInfo =
-            visitAggOverOp(windowAggList, colNames, node.getId(), dfInput, false, new BodoCtx());
-        // check that these all have the same len
-        assert windowAggInfo.size() == windowAggList.size()
-            && windowAggInfo.size() == idx_list.size();
-        for (int i = 0; i < windowAggList.size(); i++) {
-          int origIdx = idx_list.get(i);
-          // grab the original alias from the value stored value in childExprs
-          RexNodeVisitorInfo realChildExpr = new RexNodeVisitorInfo(windowAggInfo.get(i).emit());
-          // overwrite the dummy value that we stored earlier in childExpr
-          childExprs.set(origIdx, realChildExpr);
-        }
-
-        List<Op.Assign> projectAssigns =
-            generateProjectCode(
-                projectInVar,
-                projectOutVar,
-                outputColumns,
-                childExprs,
-                exprTypes,
-                sqlTypes,
-                this,
-                colNames.size());
-        this.generatedCode.addAll(projectAssigns);
       }
+      this.generatedCode.add(new Op.Assign(projectOutVar, locExpr));
+      // Currently we only cache projections if it has a loc. This is because the
+      // projection can cause functions that trigger data generation (e.g random
+      // values). In the future we should optimize this code to directly check for
+      // random data generation and cache in all other cases.
+      // NOTE: This varCache is currently unused in the streaming case.
+      this.varCache.put(nodeId, projectOutVar);
+    } else {
+      List<RelDataTypeField> fields = node.getRowType().getFieldList();
+      List<RelDataType> sqlTypes = new ArrayList<>();
+      for (int i = 0; i < node.getNamedProjects().size(); i++) {
+        Pair<RexNode, String> named_r = node.getNamedProjects().get(i);
+        RexNode r = named_r.getKey();
+        outputColumns.add(named_r.getValue());
+        exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(r, node.getId())));
+        sqlTypes.add(fields.get(i).getType());
+
+        if (r instanceof RexOver) {
+          windowAggList.add((RexOver) r);
+          idx_list.add(i);
+          // append dummy values to childExprs.
+          // This value will be overwritten, once we are done processing the windowed aggregations
+          childExprs.add(new RexNodeVisitorInfo("DUMMY_VAL"));
+          continue;
+        }
+
+        /* Handles:
+            - "SELECT <COLUMNNAMES> FROM TABLE",
+            - "SELECT SUM(COLUMN), COUNT(COLUMN), MAX(COLUMN), MIN(COLUMN) FROM TABLE"
+            - "SELECT COLUMN +/-/* CONST FROM TABLE" (includes nesting expressions)
+        */
+        // The BodoCtx is unused because the result should always be empty.
+        // We assume project is never within an apply.
+        RexNodeVisitorInfo childExpr;
+        // Pass input column index for RexInputRef to generateProjectCode() directly instead of
+        // df["A"] codegen
+        // Allows generateProjectCode() to keep data in table format as much as possible
+        if (r instanceof RexInputRef) {
+          childExpr = new RexNodeVisitorInfo("", ((RexInputRef) r).getIndex());
+        } else {
+          childExpr =
+              new RexNodeVisitorInfo(
+                  r.accept(getRexTranslator(node, projectInVar.emit(), node.getInput())).emit());
+        }
+        childExprs.add(childExpr);
+      }
+      // handle windowed Aggregations
+      Dataframe dfInput = new Dataframe(projectInVar.emit(), node.getInput());
+      List<Expr> windowAggInfo =
+          visitAggOverOp(windowAggList, colNames, node.getId(), dfInput, false, new BodoCtx());
+      // check that these all have the same len
+      assert windowAggInfo.size() == windowAggList.size()
+          && windowAggInfo.size() == idx_list.size();
+      for (int i = 0; i < windowAggList.size(); i++) {
+        int origIdx = idx_list.get(i);
+        // grab the original alias from the value stored value in childExprs
+        RexNodeVisitorInfo realChildExpr = new RexNodeVisitorInfo(windowAggInfo.get(i).emit());
+        // overwrite the dummy value that we stored earlier in childExpr
+        childExprs.set(origIdx, realChildExpr);
+      }
+
+      List<Op.Assign> projectAssigns =
+          generateProjectCode(
+              projectInVar,
+              projectOutVar,
+              outputColumns,
+              childExprs,
+              exprTypes,
+              sqlTypes,
+              this,
+              colNames.size());
+      this.generatedCode.addAll(projectAssigns);
     }
 
-    if (needsTimerStop) {
-      this.genRelnodeTimerStop(node);
-    }
     varGenStack.push(projectOutVar);
   }
 
@@ -2041,88 +2238,173 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
     boolean isTargetTableScan = node instanceof PandasTargetTableScan;
 
-    // Determine how many \n characters have appears. This indicates the line
-    // in which to insert the IO for table scans.
-    Variable outVar = this.genDfVar();
+    // Streaming snowflake read is handled in a separate function, because of the need to handle
+    // codegen in a
+    // more precise way due to streaming.
+    if (node instanceof SnowflakeTableScan
+        && node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+      visitStreamingSnowFlakeTableScan((SnowflakeTableScan) node);
+      return;
+    }
+
+    Variable outVar;
     int nodeId = node.getId();
     if (canLoadFromCache && this.isNodeCached(node)) {
+      outVar = this.genDfVar();
       Variable cacheKey = this.varCache.get(nodeId);
       this.generatedCode.add(new Op.Assign(outVar, cacheKey));
     } else {
       BodoSqlTable table;
+
       // TODO(jsternberg): The proper way to do this is to have the individual nodes
       // handle the code generation. Due to the way the code generation is constructed,
       // we can't really do that so we're just going to hack around it for now to avoid
-      // a large refactor.
+      // a large refactor
       if (node instanceof SnowflakeTableScan) {
         table = ((SnowflakeTableScan) node).getCatalogTable();
       } else {
         RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
         table = (BodoSqlTable) relTable.table();
       }
-      Expr readCode;
-      Op readAssign;
-      // Add the table to cached values
-      if (isTargetTableScan) {
-        // TODO: Properly restrict to Iceberg.
-        if (!(table instanceof LocalTableImpl) || !table.getDBType().equals("ICEBERG")) {
-          throw new BodoSQLCodegenException(
-              "Insert Into is only supported with Iceberg table destinations provided via"
-                  + " the the SQL TablePath API");
-        }
-        readCode = table.generateReadCode("_bodo_merge_into=True,");
-        this.fileListAndSnapshotIdArgs =
-            String.format(
-                "snapshot_id=%s, old_fnames=%s,", icebergSnapshotIDName, icebergFileListVarName);
 
-        // TODO: replace this with tuple assign instead of raw code
-        readAssign =
-            new Op.Code(
-                String.format(
-                    "%s, %s, %s = %s\n",
-                    outVar.emit(), icebergFileListVarName, icebergSnapshotIDName, readCode.emit()));
-        targetTableDf = outVar;
-      } else {
-        readCode = table.generateReadCode();
-        readAssign = new Op.Assign(outVar, readCode);
-      }
-
-      boolean readUsesIO = table.readRequiresIO();
-      if (this.verboseLevel >= 1 && readUsesIO) {
-        // If the user has set verbose level >= 1 and there is IO, we generate
-        // timers and print the read time.
-        Variable timerVar = this.genGenericTempVar();
-        String tableName = table.getName();
-        this.generatedCode.add(new Op.Assign(timerVar, new Expr.Raw("time.time()")));
-        this.generatedCode.add(readAssign);
-        // Generate the Debug message.
-        List<Expr> logMsgArgs =
-            List.of(
-                new Expr.StringLiteral("IO TIMING"),
-                new Expr.Raw(
-                    String.format(
-                        "f'Finished reading table %s in {time.time() - %s} seconds'",
-                        tableName, timerVar.emit())));
-        Expr.Call logMsgCall =
-            new Expr.Call("bodo.user_logging.log_message", logMsgArgs, List.of());
-        this.generatedCode.add(new Op.Stmt(logMsgCall));
-      } else {
-        this.generatedCode.add(readAssign);
-      }
-
-      Expr castExpr = table.generateReadCastCode(outVar);
-      if (!castExpr.equals(outVar)) {
-        // Generate a new outVar to avoid shadowing
-        outVar = this.genDfVar();
-        this.generatedCode.add(new Op.Assign(outVar, castExpr));
-      }
-
-      if (!isTargetTableScan) {
-        // Add the table to cached values. We only support this for regular
-        // tables and not the target table in merge into.
-        this.varCache.put(nodeId, outVar);
-      }
+      outVar = visitSingleBatchTableScanCommon(table, isTargetTableScan, nodeId);
     }
+
+    varGenStack.push(outVar);
+  }
+
+  /**
+   * Helper function that contains the code needed to perform a read of the specified
+   *
+   * @param table The BodoSqlTable to read
+   * @param isTargetTableScan Is the read a TargetTableScan (used in MERGE INTO)
+   * @param nodeId node id
+   * @return outVar The returned dataframe variable
+   */
+  public Variable visitSingleBatchTableScanCommon(
+      BodoSqlTable table, boolean isTargetTableScan, int nodeId) {
+    Expr readCode;
+    Op readAssign;
+
+    Variable readVar = this.genDfVar();
+    // Add the table to cached values
+    if (isTargetTableScan) {
+      // TODO: Properly restrict to Iceberg.
+      if (!(table instanceof LocalTableImpl) || !table.getDBType().equals("ICEBERG")) {
+        throw new BodoSQLCodegenException(
+            "Insert Into is only supported with Iceberg table destinations provided via"
+                + " the the SQL TablePath API");
+      }
+      readCode = table.generateReadCode("_bodo_merge_into=True,");
+      this.fileListAndSnapshotIdArgs =
+          String.format(
+              "snapshot_id=%s, old_fnames=%s,", icebergSnapshotIDName, icebergFileListVarName);
+
+      // TODO: replace this with tuple assign instead of raw code
+      readAssign =
+          new Op.Code(
+              String.format(
+                  "%s, %s, %s = %s\n",
+                  readVar.emit(), icebergFileListVarName, icebergSnapshotIDName, readCode.emit()));
+      targetTableDf = readVar;
+    } else {
+      readCode = table.generateReadCode(false);
+      readAssign = new Op.Assign(readVar, readCode);
+    }
+
+    boolean readUsesIO = table.readRequiresIO();
+    if (this.verboseLevel >= 1 && readUsesIO) {
+      // If the user has set verbose level >= 1 and there is IO, we generate
+      // timers and print the read time.
+      Variable timerVar = this.genGenericTempVar();
+      String tableName = table.getName();
+      this.generatedCode.add(new Op.Assign(timerVar, new Expr.Raw("time.time()")));
+      this.generatedCode.add(readAssign);
+      // Generate the Debug message.
+      List<Expr> logMsgArgs =
+          List.of(
+              new Expr.StringLiteral("IO TIMING"),
+              new Expr.Raw(
+                  String.format(
+                      "f'Finished reading table %s in {time.time() - %s} seconds'",
+                      tableName, timerVar.emit())));
+      Expr.Call logMsgCall = new Expr.Call("bodo.user_logging.log_message", logMsgArgs, List.of());
+      this.generatedCode.add(new Op.Stmt(logMsgCall));
+    } else {
+      this.generatedCode.add(readAssign);
+    }
+
+    Variable outVar;
+
+    Expr castExpr = table.generateReadCastCode(readVar);
+    if (!castExpr.equals(readVar)) {
+      // Generate a new outVar to avoid shadowing
+      outVar = this.genDfVar();
+      this.generatedCode.add(new Op.Assign(outVar, castExpr));
+    } else {
+      outVar = readVar;
+    }
+
+    if (!isTargetTableScan) {
+      // Add the table to cached values. We only support this for regular
+      // tables and not the target table in merge into.
+      this.varCache.put(nodeId, outVar);
+    }
+
+    return outVar;
+  }
+
+  public void visitStreamingSnowFlakeTableScan(SnowflakeTableScan node) {
+    Variable outVar = this.genDfVar();
+
+    BodoSqlTable table = node.getCatalogTable();
+    Expr readCode = table.generateReadCode(true);
+
+    Variable flagVar = genFinishedStreamingFlag();
+    // start the streaming pipeline
+    this.generatedCode.startStreamingPipelineFrame(flagVar);
+
+    StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
+    // Create the reader before the loop
+    Variable readerVar = this.genReaderVar();
+    currentPipeline.addInitialization(new Op.Assign(readerVar, readCode));
+
+    Variable dfChunkVar = this.genTableVar();
+
+    Call read_arrow_next_call =
+        new Call("bodo.io.arrow_reader.read_arrow_next", List.of(readerVar), List.of());
+    this.generatedCode.add(new Op.TupleAssign(List.of(dfChunkVar, flagVar), read_arrow_next_call));
+
+    Expr df_len = new Call("len", dfChunkVar);
+
+    Variable idx_var = genGenericTempVar();
+
+    List<Expr> argsList =
+        List.of(new Expr.IntegerLiteral(0), df_len, new Expr.IntegerLiteral(1), Expr.None.INSTANCE);
+
+    Call init_range_index_call =
+        new Call("bodo.hiframes.pd_index_ext.init_range_index", argsList, List.of());
+
+    this.generatedCode.add(new Op.Assign(idx_var, init_range_index_call));
+
+    Expr tableTuple = new Expr.Tuple(List.of(dfChunkVar));
+
+    List<String> columnNames = node.getRowType().getFieldNames();
+    List<Variable> columnNamesVar = new ArrayList<>();
+    for (int i = 0; i < columnNames.size(); i++) {
+      columnNamesVar.add(new Variable(columnNames.get(i)));
+    }
+    Expr.Tuple TupleExpr = new Expr.Tuple(columnNamesVar);
+
+    Expr colNamesMetaExpr = lowerAsColNamesMetaType(TupleExpr);
+
+    Call init_dataframe_call =
+        new Call(
+            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            List.of(tableTuple, idx_var, colNamesMetaExpr),
+            List.of());
+
+    this.generatedCode.add(new Op.Assign(outVar, init_dataframe_call));
 
     varGenStack.push(outVar);
   }
@@ -2227,7 +2509,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.genRelnodeTimerStart(node);
 
     this.generatedCode.add(new Op.Assign(outVar, generateSampleCode(inpExpr, node.getParams())));
-
     varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
   }
@@ -2251,6 +2532,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // don't generate code yet.
       while (n instanceof CombineStreamsExchange || n instanceof SeparateStreamExchange) {
         // TODO: Actually implement
+        // nothing change to allow me to open the pr
         n = n.getInput(0);
       }
 

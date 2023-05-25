@@ -13,6 +13,9 @@ package com.bodosql.calcite.ir
 class SymbolTable {
     private var dfVarId: Int = 1
     private var colVarId: Int = 1
+    private var accVarId: Int = 1
+    private var streamingFlagId: Int = 1
+    private var streamingReaderId: Int = 1
     private var groupByApplyFnId: Int = 1
     private var globalVarId: Int = 1
     private var idxVarId: Int = 1
@@ -36,6 +39,9 @@ class SymbolTable {
         return Variable("index_${idxVarId++}")
     }
 
+    fun genReaderVar(): Variable {
+        return Variable("__bodo_streaming_reader_${streamingReaderId++}")
+    }
     fun genGenericTempVar(): Variable {
         return Variable("_temp${dfVarId++}")
     }
@@ -43,6 +49,15 @@ class SymbolTable {
     fun genTempColumnVar(): Variable {
         return Variable("__bodo_generated_column__${colVarId++}")
     }
+
+    fun genBatchAccumulatorVar(): Variable {
+        return Variable("__bodo_streaming_batches_list_${accVarId++}")
+    }
+
+    fun genFinishedStreamingFlag(): Variable {
+        return Variable("__bodo_is_last_streaming_output_${streamingFlagId++}")
+    }
+
 
     fun genWindowedAggDf(): Variable {
         return Variable("__bodo_windowfn_generated_df_${dfVarId++}")

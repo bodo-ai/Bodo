@@ -18,21 +18,22 @@ class SnowflakeToPandasConverterRule private constructor(config: Config) : Conve
     }
 
     override fun convert(rel: RelNode): RelNode {
-        val newTraitSet = rel.traitSet.replace(outConvention).replace(BatchingProperty.SINGLE_BATCH)
-        val converter = SnowflakeToPandasConverter(rel.cluster, newTraitSet, rel)
+        val newTraitSet = rel.traitSet.replace(outConvention)
+        var converter: RelNode = SnowflakeToPandasConverter(rel.cluster, newTraitSet, rel)
         // In addition to the converter, add a projection to return the type
         // to the original type of the input relation.
         val projects = rel.rowType.fieldList.mapIndexed { index, field ->
             RexInputRef(index, field.type)
         }
-        var input: RelNode = converter
-        // If the batchingProperty is not included in the required output traits (e.g. streaming is disabled),
-        // then the `replace` above will ignore adding BatchingProperty.SINGLE_BATCH to the newTraitSet. As a result,
-        // we can check for the presence of the batchingProperty to check if streaming is enabled.
+
+
         if (newTraitSet.contains(BatchingProperty.SINGLE_BATCH)) {
-            // Check if we required batching. Replace will do nothing otherwise.
-            input = SeparateStreamExchange(converter.cluster, newTraitSet.replace(BatchingProperty.STREAMING), converter)
+            converter = SeparateStreamExchange(
+                converter.cluster, newTraitSet.replace(BatchingProperty.STREAMING), converter)
         }
-        return PandasProject.create(input, projects, rel.rowType)
+
+        return PandasProject.create(converter, projects, rel.rowType)
+
+
     }
 }

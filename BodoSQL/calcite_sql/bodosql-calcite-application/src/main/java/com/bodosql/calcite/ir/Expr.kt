@@ -56,6 +56,21 @@ abstract class Expr {
         }
     }
 
+
+    /**
+     * Represents a taking a slice of the rows of a dataframe.
+     *
+     * @param inputDf: The dataframe to be sliced
+     * @param lowerBound: The integer lower bound of the slice
+     * @param upperBound: The integer upper bound of the slice
+     */
+    data class DataFrameSlice(val inputDf: Expr, val lowerBound: Expr, val upperBound: Expr) : Expr() {
+
+        override fun emit(): String {
+            return "(${inputDf.emit()}).iloc[${lowerBound.emit()} : ${upperBound.emit()}]"
+        }
+    }
+
     /**
      * Represents a Python method call. This should be used as a generic call for certain methods that are unlikely to repeat.
      * For common operations (e.g. Groupby) we may want to implement an optimized implementation.
