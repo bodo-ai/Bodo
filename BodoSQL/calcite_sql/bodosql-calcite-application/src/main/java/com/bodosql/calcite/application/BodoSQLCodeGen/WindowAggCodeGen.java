@@ -72,7 +72,7 @@ public class WindowAggCodeGen {
 
   // A mapping of window function names to a method that can be
   // used to directly compute the result of the window function of interest
-  static HashMap<String, String> windowMethods = new HashMap<String, String>();
+  static HashMap<String, String> windowFunctions = new HashMap<String, String>();
 
   // Note: $SUM0 is included in addition to SUM because of some Calcite quirks
   static {
@@ -133,8 +133,9 @@ public class WindowAggCodeGen {
 
     // Window functions that are still implemented via taking slices in a loop
     // and calling a Pandas method on the result
-    windowMethods.put("KURTOSIS", ".kurtosis()");
-    windowMethods.put("SKEW", ".skew()");
+    windowFunctions.put("KURTOSIS", "%s.kurtosis()");
+    windowFunctions.put("SKEW", "%s.skew()");
+    windowFunctions.put("BITOR_AGG", "bodo.libs.array_kernels.bitor_agg(%s)");
   }
 
   /**
@@ -455,6 +456,7 @@ public class WindowAggCodeGen {
           // at the end.
         case "KURTOSIS":
         case "SKEW":
+        case "BITOR_AGG":
           needsToRevertSort |= hasOrder;
           loopAggNames.add(aggName);
           loopAggArgs.add(argsList);
@@ -802,7 +804,7 @@ public class WindowAggCodeGen {
    * @param aggNames List of the names of the window functions being called
    * @param argsLists List of lists of arguments to each window function call
    * @param arraysToSort List that the output array name should be added to
-   * @param aggOutputs List of names of arrays to store each window funciton output
+   * @param aggOutputs List of names of arrays to store each window function output
    * @param zeroExpr String representation of 0
    *     <p>TODO [BE-3949]: allow slice-reusing
    */
@@ -840,14 +842,18 @@ public class WindowAggCodeGen {
               "bodo.libs.int_arr_ext.alloc_int_array(" + partitionLength + ", bodo.uint32)\n");
           break;
 
+          // The functions that always have output int64
+        case "BITOR_AGG":
+          funcText.append(
+              "bodo.libs.int_arr_ext.alloc_int_array(" + partitionLength + ", bodo.int64)\n");
+          break;
+
           // Everything else has the same dtype as the input array
         default:
           funcText.append(sqlTypeToNullableBodoArray(partitionLength, typs.get(i)) + "\n");
       }
     }
 
-    // Handle all of the function calls where each row uses the same slice of
-    // the entire column
     // This hashset contains the indices of the aggregations
     // which are performed on a constant window, IE
     // "Between Unbounded Preceding and Unbounded Following"
@@ -883,12 +889,14 @@ public class WindowAggCodeGen {
       // Set the entire array equal to the result of calling the aggregation
       // method on the entire input column
       addIndent(funcText, 2);
+      String columnAggCall =
+          String.format(
+              windowFunctions.get(aggNames.get(i)),
+              "sorted_df[" + makeQuoted(argsLists.get(i).get(0).getExprString()) + "]");
       funcText
           .append(aggOutputs.get(i))
-          .append("[:] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(sorted_df[")
-          .append(makeQuoted(argsLists.get(i).get(0).getExprString()))
-          .append("]")
-          .append(windowMethods.get(aggNames.get(i)))
+          .append("[:] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(")
+          .append(columnAggCall)
           .append(")\n");
     }
 
@@ -980,7 +988,7 @@ public class WindowAggCodeGen {
       addIndent(funcText, 1);
 
       // Call the Pandas method on the slice and store the output
-      String columnAggCall = sliceName + windowMethods.get(aggNames.get(i));
+      String columnAggCall = String.format(windowFunctions.get(aggNames.get(i)), sliceName);
       addIndent(funcText, 3);
       funcText
           .append(aggOutputs.get(i))

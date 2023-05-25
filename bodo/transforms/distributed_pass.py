@@ -1816,7 +1816,7 @@ class DistributedPass:
             return
 
         if (
-            fdef[0] in {"boolor_agg", "booland_agg", "boolxor_agg"}
+            fdef[0] in {"boolor_agg", "booland_agg", "boolxor_agg", "bitor_agg"}
             and fdef[1] == "bodo.libs.array_kernels"
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
