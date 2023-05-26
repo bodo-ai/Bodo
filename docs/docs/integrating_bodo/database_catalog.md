@@ -48,10 +48,19 @@ The output of the SQL query is automatically saved in a distributed dataframe na
 overwritten every time a SQL query is run. 
 
 !!! warning
-    
+
     This is an experimental feature currently only available on AWS.
     
+## Viewing Database Catalogs Data
+
+To view the connection data stored in a catalog first connect to a cluster and then run the following in a code cell:
+
+```python
+import bodo_platform_utils
+bodo_platform_utils.catalog.get_data("catalog_name")
+```
+
+
 !!! seealso
 
     [Database Catalogs][database-catalogs], [BodoSDK Catalog API][catalog]
-    
