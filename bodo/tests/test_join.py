@@ -4627,7 +4627,205 @@ def test_merge_output_cast_key_order(memory_leak_check):
 
 
 @pytest_mark_snowflake
-def test_stream_join_basic(memory_leak_check):
+@pytest.mark.parametrize(
+    "build_outer,probe_outer,expected_df",
+    [
+        # Equivalent query:
+        # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+        # from lineitem inner join part on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
+        # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
+        # and p_size > {p_size_limit}
+        (
+            False,
+            False,
+            pd.DataFrame(
+                {
+                    "p_partkey": [183728],
+                    "p_comment": ["bold deposi"],
+                    "p_name": ["yellow turquoise cornflower coral saddle"],
+                    "p_size": [37],
+                    "l_partkey": [183728],
+                    "l_comment": ["bold deposi"],
+                    "l_orderkey": [685476],
+                }
+            ),
+        ),
+        # Equivalent query:
+        # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+        # from (
+        #     select  L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
+        # ) lineitem_filtered
+        # right outer join (
+        #     select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size = {p_size_limit} and p_partkey > {p_orderkey_start} and p_partkey < {p_orderkey_end}
+        # ) part_filtered
+        # on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
+        (
+            True,
+            False,
+            pd.DataFrame(
+                {
+                    "p_partkey": [183728, 183820, 183846],
+                    "p_comment": [
+                        "bold deposi",
+                        "s. quickly unusua",
+                        " foxes are",
+                    ],
+                    "p_name": [
+                        "yellow turquoise cornflower coral saddle",
+                        "tomato goldenrod black turquoise maroon",
+                        "cream dim blush moccasin drab",
+                    ],
+                    "p_size": [37] * 3,
+                    "l_partkey": [183728, pd.NA, pd.NA],
+                    "l_comment": [
+                        "bold deposi",
+                        pd.NA,
+                        pd.NA,
+                    ],
+                    "l_orderkey": [685476, pd.NA, pd.NA],
+                }
+            ),
+        ),
+        # Equivalent query:
+        # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+        # from lineitem left outer join (
+        #     select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > {p_size_limit}
+        # ) on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
+        # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
+        (
+            False,
+            True,
+            pd.DataFrame(
+                {
+                    "p_partkey": [pd.NA, pd.NA, pd.NA, 183728, pd.NA, pd.NA, pd.NA],
+                    "p_comment": [
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                        "bold deposi",
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                    ],
+                    "p_name": [
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                        "yellow turquoise cornflower coral saddle",
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                    ],
+                    "p_size": [pd.NA, pd.NA, pd.NA, 37, pd.NA, pd.NA, pd.NA],
+                    "l_partkey": [45677, 85880, 174117, 183728, 106836, 191705, 171506],
+                    "l_comment": [
+                        "requests wake permanently among the e",
+                        "te above the silent platelets. furiously",
+                        "lyly express accounts are blithely f",
+                        "bold deposi",
+                        "t, regular requests cajole ",
+                        "ve the blithely even requests haggle",
+                        "ding packages; ironic accounts ",
+                    ],
+                    "l_orderkey": [
+                        685476,
+                        685476,
+                        685476,
+                        685476,
+                        685476,
+                        685476,
+                        685476,
+                    ],
+                }
+            ),
+        ),
+        # Equivalent query:
+        # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+        # from (
+        #     select  L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
+        # ) lineitem_filtered
+        # full outer join (
+        #     select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size = {p_size_limit} and p_partkey > {p_orderkey_start} and p_partkey < {p_orderkey_end}
+        # ) part_filtered
+        # on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
+        (
+            True,
+            True,
+            pd.DataFrame(
+                {
+                    "p_partkey": [
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                        183728,
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                        183820,
+                        183846,
+                    ],
+                    "p_comment": [
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                        "bold deposi",
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                        "s. quickly unusua",
+                        " foxes are",
+                    ],
+                    "p_name": [
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                        "yellow turquoise cornflower coral saddle",
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                        "tomato goldenrod black turquoise maroon",
+                        "cream dim blush moccasin drab",
+                    ],
+                    "p_size": [pd.NA, pd.NA, pd.NA, 37, pd.NA, pd.NA, pd.NA, 37, 37],
+                    "l_partkey": [
+                        45677,
+                        85880,
+                        174117,
+                        183728,
+                        106836,
+                        191705,
+                        171506,
+                        pd.NA,
+                        pd.NA,
+                    ],
+                    "l_comment": [
+                        "requests wake permanently among the e",
+                        "te above the silent platelets. furiously",
+                        "lyly express accounts are blithely f",
+                        "bold deposi",
+                        "t, regular requests cajole ",
+                        "ve the blithely even requests haggle",
+                        "ding packages; ironic accounts ",
+                        pd.NA,
+                        pd.NA,
+                    ],
+                    "l_orderkey": [
+                        685476,
+                        685476,
+                        685476,
+                        685476,
+                        685476,
+                        685476,
+                        685476,
+                        pd.NA,
+                        pd.NA,
+                    ],
+                }
+            ),
+        ),
+    ],
+)
+def test_stream_join_basic(build_outer, probe_outer, expected_df, memory_leak_check):
     """ """
     import bodo
     import bodo.io.snowflake
@@ -4644,14 +4842,11 @@ def test_stream_join_basic(memory_leak_check):
         "SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"
     )
 
-    l_orderkey_start = 680_000
-    l_orderkey_end = 690_000
-    p_size_limit = 35
-    # Equivalent query:
-    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
-    # from lineitem inner join part on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
-    # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
-    # and p_size > {p_size_limit}
+    l_orderkey_start = 685_475
+    l_orderkey_end = 685_477
+    p_orderkey_start = 183_700
+    p_orderkey_end = 183_850
+    p_size_limit = 37
 
     build_keys_inds = bodo.utils.typing.MetaType((0, 1))
     probe_keys_inds = bodo.utils.typing.MetaType((0, 1))
@@ -4704,11 +4899,13 @@ def test_stream_join_basic(memory_leak_check):
             len(probe_arr_dtypes),
             build_keys_inds,
             probe_keys_inds,
+            build_outer,
+            probe_outer,
         )
 
         # read PART table and build join hash table
         reader1 = pd.read_sql(
-            f"SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE FROM PART where P_SIZE > {p_size_limit}",
+            f"SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE FROM PART where P_SIZE = {p_size_limit} and p_partkey > {p_orderkey_start} and p_partkey < {p_orderkey_end}",
             conn,
             _bodo_chunksize=4000,
         )
@@ -4761,22 +4958,13 @@ def test_stream_join_basic(memory_leak_check):
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
             saved_SF_READ_AUTO_DICT_ENCODE_ENABLED
         )
-    expected_df = pd.DataFrame(
-        {
-            "p_partkey": [183728],
-            "p_comment": ["bold deposi"],
-            "p_name": ["yellow turquoise cornflower coral saddle"],
-            "p_size": [37],
-            "l_partkey": [183728],
-            "l_comment": ["bold deposi"],
-            "l_orderkey": [685476],
-        }
-    )
     out_df = bodo.allgatherv(out_df)
     _test_equal(
         out_df,
         expected_df,
         check_dtype=False,
+        sort_output=True,
+        reset_index=True,
     )
 
 
