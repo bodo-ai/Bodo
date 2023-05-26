@@ -584,6 +584,12 @@ class STLBufferPoolAllocator {
 template <typename T>
 using vector = std::vector<T, STLBufferPoolAllocator<T>>;
 
+template <typename K, typename V, typename HASH_FCT = std::hash<K>,
+          typename EQ_FCT = std::equal_to<K>>
+using unordered_multimap =
+    std::unordered_multimap<K, V, HASH_FCT, EQ_FCT,
+                            STLBufferPoolAllocator<std::pair<const K, V>>>;
+
 /// Helper Functions for using BufferPool in Arrow
 
 /**

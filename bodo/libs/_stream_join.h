@@ -11,8 +11,9 @@
  * bodo_array_type format)
  * @return std::shared_ptr<table_info> allocated table
  */
-std::shared_ptr<table_info> alloc_table(std::vector<int8_t> arr_c_types,
-                                        std::vector<int8_t> arr_array_types);
+std::shared_ptr<table_info> alloc_table(
+    const std::vector<int8_t>& arr_c_types,
+    const std::vector<int8_t>& arr_array_types);
 struct JoinState;
 
 /**
@@ -49,9 +50,12 @@ struct ArrayBuildBuffer {
                 SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
                 size++;
                 data_array->length = size;
-                data_array->buffers[0]->Resize(size * siztype, false);
-                data_array->buffers[1]->Resize(
-                    arrow::bit_util::BytesForBits(size), false);
+                CHECK_ARROW_MEM(
+                    data_array->buffers[0]->Resize(size * siztype, false),
+                    "Resize failed!");
+                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
+                                    arrow::bit_util::BytesForBits(size), false),
+                                "Resize failed!");
             } break;
             case bodo_array_type::STRING: {
                 offset_t* curr_offsets = (offset_t*)data_array->data2();
@@ -73,12 +77,15 @@ struct ArrayBuildBuffer {
                 // update size state
                 size++;
                 data_array->length = size;
-                data_array->buffers[0]->Resize(data_array->n_sub_elems(),
-                                               false);
-                data_array->buffers[1]->Resize((size + 1) * sizeof(offset_t),
-                                               false);
-                data_array->buffers[2]->Resize(
-                    arrow::bit_util::BytesForBits(size), false);
+                CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
+                                    data_array->n_sub_elems(), false),
+                                "Resize Failed!");
+                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
+                                    (size + 1) * sizeof(offset_t), false),
+                                "Resize Failed!");
+                CHECK_ARROW_MEM(data_array->buffers[2]->Resize(
+                                    arrow::bit_util::BytesForBits(size), false),
+                                "Resize Failed!");
             } break;
                 // TODO[BSE-442]: support all array types
             default:
@@ -101,9 +108,13 @@ struct ArrayBuildBuffer {
                 if (min_capacity > capacity) {
                     int64_t new_capacity = std::max(min_capacity, capacity * 2);
                     uint64_t siztype = numpy_item_size[in_arr->dtype];
-                    data_array->buffers[0]->Reserve(new_capacity * siztype);
-                    data_array->buffers[1]->Reserve(
-                        arrow::bit_util::BytesForBits(new_capacity));
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[0]->Reserve(new_capacity * siztype),
+                        "Reserve failed!");
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[1]->Reserve(
+                            arrow::bit_util::BytesForBits(new_capacity)),
+                        "Reserve failed!");
                     capacity = new_capacity;
                 }
                 break;
@@ -111,10 +122,13 @@ struct ArrayBuildBuffer {
                 // update offset and null bitmap buffers
                 if (min_capacity > capacity) {
                     int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                    data_array->buffers[1]->Reserve((new_capacity + 1) *
-                                                    sizeof(offset_t));
-                    data_array->buffers[2]->Reserve(
-                        arrow::bit_util::BytesForBits(new_capacity));
+                    CHECK_ARROW_MEM(data_array->buffers[1]->Reserve(
+                                        (new_capacity + 1) * sizeof(offset_t)),
+                                    "Reserve failed!");
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[2]->Reserve(
+                            arrow::bit_util::BytesForBits(new_capacity)),
+                        "Reserve failed!");
                     capacity = new_capacity;
                 }
                 // update data buffer
@@ -124,8 +138,9 @@ struct ArrayBuildBuffer {
                 if (min_capacity_chars > capacity_chars) {
                     int64_t new_capacity_chars =
                         std::max(min_capacity_chars, capacity_chars * 2);
-                    data_array->buffers[0]->Reserve(new_capacity_chars *
-                                                    sizeof(int8_t));
+                    CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(
+                                        new_capacity_chars * sizeof(int8_t)),
+                                    "Reserve failed!");
                 }
             } break;
             // TODO[BSE-442]: support all array types
@@ -136,7 +151,7 @@ struct ArrayBuildBuffer {
     }
 
     ArrayBuildBuffer(std::shared_ptr<array_info> _data_array)
-        : size(0), capacity(0), data_array(_data_array) {}
+        : data_array(_data_array), size(0), capacity(0) {}
 };
 
 /**
@@ -152,13 +167,13 @@ struct TableBuildBuffer {
     // buffer wrappers around arrays of data table
     std::vector<ArrayBuildBuffer> array_buffers;
 
-    TableBuildBuffer(std::vector<int8_t> arr_c_types,
-                     std::vector<int8_t> arr_array_types) {
+    TableBuildBuffer(const std::vector<int8_t>& arr_c_types,
+                     const std::vector<int8_t>& arr_array_types) {
         // allocate empty initial table with provided data types
         data_table = alloc_table(arr_c_types, arr_array_types);
 
         // initialize array buffer wrappers
-        for (int i = 0; i < arr_c_types.size(); i++) {
+        for (size_t i = 0; i < arr_c_types.size(); i++) {
             array_buffers.emplace_back(data_table->columns[i]);
         }
     }
@@ -170,9 +185,10 @@ struct TableBuildBuffer {
      * @param in_table input table with the new row
      * @param row_ind index of new row in input table
      */
-    void AppendRow(std::shared_ptr<table_info>& in_table, int64_t row_ind) {
-        for (int i = 0; i < in_table->ncols(); i++) {
-            std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+    void AppendRow(const std::shared_ptr<table_info>& in_table,
+                   int64_t row_ind) {
+        for (size_t i = 0; i < in_table->ncols(); i++) {
+            const std::shared_ptr<array_info>& in_arr = in_table->columns[i];
             array_buffers[i].AppendRow(in_arr, row_ind);
         }
     }
@@ -184,8 +200,8 @@ struct TableBuildBuffer {
      *
      * @param in_table input table used for finding new buffer sizes to reserve
      */
-    void ReserveTable(std::shared_ptr<table_info>& in_table) {
-        for (int i = 0; i < in_table->ncols(); i++) {
+    void ReserveTable(const std::shared_ptr<table_info>& in_table) {
+        for (size_t i = 0; i < in_table->ncols(); i++) {
             std::shared_ptr<array_info>& in_arr = in_table->columns[i];
             array_buffers[i].ReserveArray(in_arr);
         }
@@ -194,7 +210,7 @@ struct TableBuildBuffer {
 
 struct HashHashJoinTable {
     /**
-     * provides row hashes for join hash table (std::unordered_multimap)
+     * provides row hashes for join hash table (bodo::unordered_multimap)
      *
      * Input row number iRow can refer to either build or probe table.
      * If iRow >= 0 then it is in the build table at index iRow.
@@ -210,7 +226,7 @@ struct HashHashJoinTable {
 
 struct KeyEqualHashJoinTable {
     /**
-     * provides row comparison for join hash table (std::unordered_multimap)
+     * provides row comparison for join hash table (bodo::unordered_multimap)
      *
      * Input row number iRow can refer to either build or probe table.
      * If iRow >= 0 then it is in the build table at index iRow.
@@ -223,7 +239,8 @@ struct KeyEqualHashJoinTable {
      */
     bool operator()(const int64_t iRowA, const int64_t iRowB) const;
     JoinState* join_state;
-    bool is_na_equal;
+    const bool is_na_equal;
+    const int64_t n_keys;
 };
 
 struct JoinState {
@@ -252,12 +269,12 @@ struct JoinState {
               std::vector<int8_t> probe_arr_c_types,
               std::vector<int8_t> probe_arr_array_types, int64_t n_keys_,
               bool build_table_outer_, bool probe_table_outer_)
-        : n_keys(n_keys_),
+        : build_table_buffer(build_arr_c_types, build_arr_array_types),
+          build_shuffle_buffer(build_arr_c_types, build_arr_array_types),
+          probe_shuffle_buffer(probe_arr_c_types, probe_arr_array_types),
+          n_keys(n_keys_),
           build_table_outer(build_table_outer_),
           probe_table_outer(probe_table_outer_),
           build_table({}, HashHashJoinTable(this),
-                      KeyEqualHashJoinTable(this, false)),
-          build_table_buffer(build_arr_c_types, build_arr_array_types),
-          build_shuffle_buffer(build_arr_c_types, build_arr_array_types),
-          probe_shuffle_buffer(probe_arr_c_types, probe_arr_array_types) {}
+                      KeyEqualHashJoinTable(this, false, n_keys_)) {}
 };
