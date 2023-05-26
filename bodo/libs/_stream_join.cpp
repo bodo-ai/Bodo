@@ -6,18 +6,18 @@
 
 uint32_t HashHashJoinTable::operator()(const int64_t iRow) const {
     if (iRow >= 0) {
-        return join_state->build_table_hashes[iRow];
+        return this->join_state->build_table_hashes[iRow];
     } else {
-        return join_state->probe_table_hashes[-iRow - 1];
+        return this->join_state->probe_table_hashes[-iRow - 1];
     }
 }
 
 bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
                                        const int64_t iRowB) const {
-    const std::shared_ptr<const table_info>& build_table =
-        join_state->build_table_buffer.data_table;
-    const std::shared_ptr<const table_info>& probe_table =
-        join_state->probe_table;
+    const std::shared_ptr<table_info>& build_table =
+        this->join_state->build_table_buffer.data_table;
+    const std::shared_ptr<table_info>& probe_table =
+        this->join_state->probe_table;
 
     bool is_build_A = iRowA >= 0;
     bool is_build_B = iRowB >= 0;
@@ -25,9 +25,9 @@ bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
     size_t jRowA = is_build_A ? iRowA : -iRowA - 1;
     size_t jRowB = is_build_B ? iRowB : -iRowB - 1;
 
-    const std::shared_ptr<const table_info>& table_A =
+    const std::shared_ptr<table_info>& table_A =
         is_build_A ? build_table : probe_table;
-    const std::shared_ptr<const table_info>& table_B =
+    const std::shared_ptr<table_info>& table_B =
         is_build_B ? build_table : probe_table;
 
     // Determine if NA columns should match. They should always
@@ -36,9 +36,9 @@ bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
     // is_na_equal.
     // TODO: Eliminate groups with NA columns with is_na_equal=False
     // from the hashmap.
-    bool set_na_equal = (is_build_A && is_build_B) || is_na_equal;
-    bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB,
-                              join_state->n_keys, set_na_equal);
+    bool set_na_equal = is_na_equal || (is_build_A && is_build_B);
+    bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB, this->n_keys,
+                              set_na_equal);
     return test;
 }
 
@@ -75,7 +75,7 @@ void join_build_consume_batch(JoinState* join_state,
     join_state->build_shuffle_buffer.ReserveTable(in_table);
     int64_t curr_build_size =
         join_state->build_table_buffer.data_table->nrows();
-    for (int64_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         if (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank ||
             !parallel) {
             join_state->build_table_hashes.emplace_back(
@@ -158,7 +158,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
 
     // probe hash table
     join_state->probe_shuffle_buffer.ReserveTable(in_table);
-    for (int64_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         if (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank ||
             !parallel) {
             auto range = join_state->build_table.equal_range(-i_row - 1);
@@ -209,7 +209,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             join_state->probe_table_hashes =
                 hash_keys_table(join_state->probe_table, join_state->n_keys,
                                 SEED_HASH_JOIN, parallel);
-            for (int64_t i_row = 0; i_row < new_data->nrows(); i_row++) {
+            for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
                 auto range = join_state->build_table.equal_range(-i_row - 1);
                 if (probe_table_outer && range.first == range.second) {
                     // Add unmatched rows from probe table to output table
@@ -272,8 +272,9 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     return std::make_shared<table_info>(out_arrs);
 }
 
-std::shared_ptr<table_info> alloc_table(std::vector<int8_t> arr_c_types,
-                                        std::vector<int8_t> arr_array_types) {
+std::shared_ptr<table_info> alloc_table(
+    const std::vector<int8_t>& arr_c_types,
+    const std::vector<int8_t>& arr_array_types) {
     std::vector<std::shared_ptr<array_info>> arrays;
 
     for (size_t i = 0; i < arr_c_types.size(); i++) {
