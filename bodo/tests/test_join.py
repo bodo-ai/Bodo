@@ -4653,7 +4653,8 @@ def test_stream_join_basic(memory_leak_check):
     # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
     # and p_size > {p_size_limit}
 
-    n_keys = 2
+    build_keys_inds = bodo.utils.typing.MetaType((0, 1))
+    probe_keys_inds = bodo.utils.typing.MetaType((0, 1))
     str_c_type = bodo.utils.utils.CTypeEnum.STRING.value
     int32_c_type = bodo.utils.utils.numba_to_c_type(bodo.int32)
     int8_c_type = bodo.utils.utils.numba_to_c_type(bodo.int8)
@@ -4701,7 +4702,8 @@ def test_stream_join_basic(memory_leak_check):
             probe_arr_dtypes.ctypes,
             probe_arr_array_types.ctypes,
             len(probe_arr_dtypes),
-            n_keys,
+            build_keys_inds,
+            probe_keys_inds,
         )
 
         # read PART table and build join hash table
@@ -4723,6 +4725,165 @@ def test_stream_join_basic(memory_leak_check):
         # read LINEITEM table and probe
         reader2 = pd.read_sql(
             f"SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY FROM LINEITEM where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}",
+            conn,
+            _bodo_chunksize=4000,
+        )
+        out_dfs = []
+        while True:
+            table2, is_last2 = read_arrow_next(reader2)
+            is_last2 = bodo.libs.distributed_api.dist_reduce(
+                is_last2,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            out_table = join_probe_consume_batch(
+                join_state, table2, out_table_type, is_last2
+            )
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df)
+            if is_last2:
+                break
+        delete_join_state(join_state)
+        return pd.concat(out_dfs)
+
+    # TODO[BSE-439]: Support dict-encoded strings
+    saved_SF_READ_AUTO_DICT_ENCODE_ENABLED = (
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
+    )
+    try:
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = False
+        out_df = test_stream_join(conn_str)
+    finally:
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
+            saved_SF_READ_AUTO_DICT_ENCODE_ENABLED
+        )
+    expected_df = pd.DataFrame(
+        {
+            "p_partkey": [183728],
+            "p_comment": ["bold deposi"],
+            "p_name": ["yellow turquoise cornflower coral saddle"],
+            "p_size": [37],
+            "l_partkey": [183728],
+            "l_comment": ["bold deposi"],
+            "l_orderkey": [685476],
+        }
+    )
+    out_df = bodo.allgatherv(out_df)
+    _test_equal(
+        out_df,
+        expected_df,
+        check_dtype=False,
+    )
+
+
+@pytest_mark_snowflake
+def test_stream_join_reorder(memory_leak_check):
+    """
+    Test stream join where the keys have to be reordered to the front of
+    the table.
+
+    Note: The state still has to be initialized with the correct final order.
+    """
+    import bodo
+    import bodo.io.snowflake
+    import bodo.tests.utils
+    from bodo.io.arrow_reader import read_arrow_next
+    from bodo.libs.stream_join import (
+        delete_join_state,
+        init_join_state,
+        join_build_consume_batch,
+        join_probe_consume_batch,
+    )
+
+    conn_str = bodo.tests.utils.get_snowflake_connection_string(
+        "SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"
+    )
+
+    l_orderkey_start = 680_000
+    l_orderkey_end = 690_000
+    p_size_limit = 35
+    # Equivalent query:
+    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # from lineitem inner join part on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
+    # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
+    # and p_size > {p_size_limit}
+
+    build_keys_inds = bodo.utils.typing.MetaType((3, 1))
+    probe_keys_inds = bodo.utils.typing.MetaType((0, 2))
+    str_c_type = bodo.utils.utils.CTypeEnum.STRING.value
+    int32_c_type = bodo.utils.utils.numba_to_c_type(bodo.int32)
+    int8_c_type = bodo.utils.utils.numba_to_c_type(bodo.int8)
+    build_arr_dtypes = np.array(
+        [int32_c_type, str_c_type, str_c_type, int8_c_type], np.int8
+    )
+    nullable_arr_type = bodo.utils.utils.CArrayTypeEnum.NULLABLE_INT_BOOL.value
+    str_arr_type = bodo.utils.utils.CArrayTypeEnum.STRING.value
+    build_arr_array_types = np.array(
+        [nullable_arr_type, str_arr_type, str_arr_type, nullable_arr_type], np.int8
+    )
+    probe_arr_dtypes = np.array([int32_c_type, str_c_type, int32_c_type], np.int8)
+    probe_arr_array_types = np.array(
+        [nullable_arr_type, str_arr_type, nullable_arr_type], np.int8
+    )
+    out_table_type = bodo.TableType(
+        (
+            bodo.IntegerArrayType(bodo.int32),
+            bodo.string_array_type,
+            bodo.string_array_type,
+            bodo.IntegerArrayType(bodo.int8),
+            bodo.IntegerArrayType(bodo.int32),
+            bodo.string_array_type,
+            bodo.IntegerArrayType(bodo.int32),
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "p_partkey",
+            "p_comment",
+            "p_name",
+            "p_size",
+            "l_partkey",
+            "l_comment",
+            "l_orderkey",
+        )
+    )
+
+    @bodo.jit
+    def test_stream_join(conn):
+        join_state = init_join_state(
+            build_arr_dtypes.ctypes,
+            build_arr_array_types.ctypes,
+            len(build_arr_dtypes),
+            probe_arr_dtypes.ctypes,
+            probe_arr_array_types.ctypes,
+            len(probe_arr_dtypes),
+            build_keys_inds,
+            probe_keys_inds,
+        )
+
+        # read PART table and build join hash table
+        reader1 = pd.read_sql(
+            f"SELECT P_NAME, P_COMMENT, P_SIZE, P_PARTKEY FROM PART where P_SIZE > {p_size_limit}",
+            conn,
+            _bodo_chunksize=4000,
+        )
+        while True:
+            table1, is_last1 = read_arrow_next(reader1)
+            is_last1 = bodo.libs.distributed_api.dist_reduce(
+                is_last1,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            join_build_consume_batch(join_state, table1, is_last1)
+            if is_last1:
+                break
+
+        # read LINEITEM table and probe
+        reader2 = pd.read_sql(
+            f"SELECT L_PARTKEY, L_ORDERKEY, L_COMMENT FROM LINEITEM where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}",
             conn,
             _bodo_chunksize=4000,
         )

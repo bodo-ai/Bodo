@@ -7,18 +7,18 @@ from typing import TYPE_CHECKING
 import llvmlite.binding as ll
 import numba
 import numpy as np
-from numba.core import types
-from numba.extending import models, register_model
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.extending import intrinsic, models, register_model
 
 import bodo
 from bodo.ext import stream_join_cpp
 from bodo.libs.array import (
     cpp_table_to_py_table,
     delete_table,
-    py_table_to_cpp_table,
+    py_data_to_cpp_table,
 )
-from bodo.libs.array import table_type as cpp_table_type
-from bodo.utils.typing import unwrap_typeref
+from bodo.utils.typing import BodoError, MetaType, unwrap_typeref
 
 if TYPE_CHECKING:  # pragma: no cover
     pass
@@ -37,39 +37,30 @@ ll.add_symbol("delete_join_state", stream_join_cpp.delete_join_state)
 
 
 class JoinStateType(types.Type):
-    """Opaque type for C++ JoinState pointer"""
+    """Type for C++ JoinState pointer"""
 
-    def __init__(self):
-        super().__init__(f"JoinStateType()")
+    def __init__(self, build_key_inds, probe_key_inds):
+        self.build_key_inds = build_key_inds
+        self.probe_key_inds = probe_key_inds
+        super().__init__(
+            f"JoinStateType(build_keys={build_key_inds}, probe_keys={probe_key_inds})"
+        )
 
 
 register_model(JoinStateType)(models.OpaqueModel)
-join_state_type = JoinStateType()
 
 
-_init_join_state = types.ExternalFunction(
-    "join_state_init_py_entry",
-    join_state_type(
-        types.voidptr,
-        types.voidptr,
-        types.int32,
-        types.voidptr,
-        types.voidptr,
-        types.int32,
-        types.int64,
-    ),
-)
-
-
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+@intrinsic
 def init_join_state(
+    typingctx,
     build_arr_dtypes,
     build_arr_array_types,
     n_build_arrs,
     probe_arr_dtypes,
     probe_arr_array_types,
     n_probe_arrs,
-    n_keys,
+    build_key_inds,
+    probe_key_inds,
 ):
     """Initialize C++ JoinState pointer
 
@@ -82,19 +73,44 @@ def init_join_state(
                                    (as provided by numba_to_c_type)
         probe_arr_array_types (int8*): pointer to array of ints representing array types
         n_probe_arrs (int32): number of probe columns
-        n_keys (int64): number of keys (assuming key columns are first in build table)
+        build_key_inds (MetaType(NTuple(int64))): Column indices for the keys on the build side.
+        probe_key_inds (MetaType(NTuple(int64))): Column indices for the keys on the probe side.
     """
+    build_keys = unwrap_typeref(build_key_inds).meta
+    probe_keys = unwrap_typeref(probe_key_inds).meta
+    if len(build_keys) != len(probe_keys):
+        raise BodoError(
+            "init_join_state(): Number of keys on build and probe sides must match"
+        )
 
-    def impl(
-        build_arr_dtypes,
-        build_arr_array_types,
-        n_build_arrs,
-        probe_arr_dtypes,
-        probe_arr_array_types,
-        n_probe_arrs,
-        n_keys,
-    ):  # pragma: no cover
-        join_state = _init_join_state(
+    def codegen(context, builder, sig, args):
+        (
+            build_arr_dtypes,
+            build_arr_array_types,
+            n_build_arrs,
+            probe_arr_dtypes,
+            probe_arr_array_types,
+            n_probe_arrs,
+            _,
+            _,
+        ) = args
+        n_keys = context.get_constant(types.int64, len(build_keys))
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(64),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="join_state_init_py_entry"
+        )
+        input_args = (
             build_arr_dtypes,
             build_arr_array_types,
             n_build_arrs,
@@ -103,16 +119,50 @@ def init_join_state(
             n_probe_arrs,
             n_keys,
         )
-        bodo.utils.utils.check_and_propagate_cpp_exception()
-        return join_state
+        ret = builder.call(fn_tp, input_args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
 
-    return impl
+    output_type = JoinStateType(build_keys, probe_keys)
+    sig = output_type(
+        types.voidptr,
+        types.voidptr,
+        types.int32,
+        types.voidptr,
+        types.voidptr,
+        types.int32,
+        build_key_inds,
+        probe_key_inds,
+    )
+    return sig, codegen
 
 
-_join_build_consume_batch = types.ExternalFunction(
-    "join_build_consume_batch_py_entry",
-    types.void(join_state_type, cpp_table_type, types.bool_, types.bool_),
-)
+@intrinsic
+def _join_build_consume_batch(
+    typingctx,
+    join_state,
+    cpp_table,
+    is_last,
+    parallel,
+):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="join_build_consume_batch_py_entry"
+        )
+        builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+    sig = types.void(join_state, cpp_table, is_last, parallel)
+    return sig, codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -124,20 +174,54 @@ def join_build_consume_batch(join_state, table, is_last, parallel=False):
         table (table_type): build table batch
         is_last (bool): is last batch
     """
-    table_type = table
+    # Generate the new table type putting the keys in the front
+    key_idxs = join_state.build_key_inds
+    total_idxs = []
+    for key_idx in key_idxs:
+        total_idxs.append(key_idx)
+
+    idx_set = set(key_idxs)
+    for i in range(len(table.arr_types)):
+        if i not in idx_set:
+            total_idxs.append(i)
+
+    in_col_inds = MetaType(tuple(total_idxs))
+    n_table_cols = len(table.arr_types)
 
     def impl(join_state, table, is_last, parallel=False):  # pragma: no cover
-        cpp_table = py_table_to_cpp_table(table, table_type)
+        cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
         _join_build_consume_batch(join_state, cpp_table, is_last, parallel)
-        bodo.utils.utils.check_and_propagate_cpp_exception()
 
     return impl
 
 
-_join_probe_consume_batch = types.ExternalFunction(
-    "join_probe_consume_batch_py_entry",
-    cpp_table_type(join_state_type, cpp_table_type, types.bool_, types.bool_),
-)
+@intrinsic
+def _join_probe_consume_batch(
+    typingctx,
+    join_state,
+    cpp_table,
+    is_last,
+    parallel,
+):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="join_probe_consume_batch_py_entry"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = cpp_table(join_state, cpp_table, is_last, parallel)
+    return sig, codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -156,17 +240,29 @@ def join_probe_consume_batch(
     Returns:
         table_type: output table batch
     """
-    in_table_type = table
+    # Generate the new table type putting the keys in the front
+    key_idxs = join_state.probe_key_inds
+    total_idxs = []
+    for key_idx in key_idxs:
+        total_idxs.append(key_idx)
+
+    idx_set = set(key_idxs)
+    for i in range(len(table.arr_types)):
+        if i not in idx_set:
+            total_idxs.append(i)
+
+    in_col_inds = MetaType(tuple(total_idxs))
+    n_table_cols = len(table.arr_types)
+
     n_out_arrs = len(unwrap_typeref(out_table_type).arr_types)
 
     def impl(
         join_state, table, out_table_type, is_last, parallel=False
     ):  # pragma: no cover
-        cpp_table = py_table_to_cpp_table(table, in_table_type)
+        cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
         out_cpp_table = _join_probe_consume_batch(
             join_state, cpp_table, is_last, parallel
         )
-        bodo.utils.utils.check_and_propagate_cpp_exception()
         out_table = cpp_table_to_py_table(
             out_cpp_table, np.arange(n_out_arrs), out_table_type
         )
@@ -176,7 +272,23 @@ def join_probe_consume_batch(
     return impl
 
 
-delete_join_state = types.ExternalFunction(
-    "delete_join_state",
-    types.void(join_state_type),
-)
+@intrinsic
+def delete_join_state(
+    typingctx,
+    join_state,
+):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="delete_join_state"
+        )
+        builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+    sig = types.void(join_state)
+    return sig, codegen
