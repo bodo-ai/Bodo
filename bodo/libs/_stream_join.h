@@ -231,11 +231,16 @@ struct JoinState {
     TableBuildBuffer build_shuffle_buffer;
     TableBuildBuffer probe_shuffle_buffer;
     int64_t n_keys;
+    const bool build_table_outer;
+    const bool probe_table_outer;
 
     // state for hashing and comparison classes
     std::shared_ptr<table_info> probe_table;
     std::vector<uint32_t> build_table_hashes;
     std::shared_ptr<uint32_t[]> probe_table_hashes;
+
+    // state for building output table
+    std::vector<bool> build_table_matched;
 
     // join hash table (key row number -> matching row numbers)
     std::unordered_multimap<int64_t, int64_t, HashHashJoinTable,
@@ -245,8 +250,11 @@ struct JoinState {
     JoinState(std::vector<int8_t> build_arr_c_types,
               std::vector<int8_t> build_arr_array_types,
               std::vector<int8_t> probe_arr_c_types,
-              std::vector<int8_t> probe_arr_array_types, int64_t n_keys_)
+              std::vector<int8_t> probe_arr_array_types, int64_t n_keys_,
+              bool build_table_outer_, bool probe_table_outer_)
         : n_keys(n_keys_),
+          build_table_outer(build_table_outer_),
+          probe_table_outer(probe_table_outer_),
           build_table({}, HashHashJoinTable(this),
                       KeyEqualHashJoinTable(this, false)),
           build_table_buffer(build_arr_c_types, build_arr_array_types),

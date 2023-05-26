@@ -121,6 +121,12 @@ void join_build_consume_batch(JoinState* join_state,
             join_state->build_table.emplace(i_row, i_row);
         }
     }
+
+    // initialize build_table_matched for outer joins on build_table
+    if (is_last && join_state->build_table_outer) {
+        join_state->build_table_matched.resize(
+            join_state->build_table_buffer.data_table->nrows(), false);
+    }
 }
 
 /**
@@ -132,6 +138,7 @@ void join_build_consume_batch(JoinState* join_state,
  * @param is_last is last batch
  * @return std::shared_ptr<table_info> output table batch
  */
+template <bool build_table_outer, bool probe_table_outer>
 std::shared_ptr<table_info> join_probe_consume_batch(
     JoinState* join_state, std::shared_ptr<table_info> in_table, bool is_last,
     bool parallel) {
@@ -155,7 +162,16 @@ std::shared_ptr<table_info> join_probe_consume_batch(
         if (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank ||
             !parallel) {
             auto range = join_state->build_table.equal_range(-i_row - 1);
+            if (probe_table_outer && range.first == range.second) {
+                // Add unmatched rows from probe table to output table
+                build_idxs.push_back(-1);
+                probe_idxs.push_back(i_row);
+                continue;
+            }
             for (auto it = range.first; it != range.second; ++it) {
+                if (build_table_outer) {
+                    join_state->build_table_matched[it->second] = true;
+                }
                 build_idxs.push_back(it->second);
                 probe_idxs.push_back(i_row);
             }
@@ -173,50 +189,79 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     build_idxs.clear();
     probe_idxs.clear();
 
-    if (is_last && parallel) {
-        // shuffle data of other ranks
-        std::shared_ptr<table_info> shuffle_table =
-            join_state->probe_shuffle_buffer.data_table;
-        mpi_comm_info comm_info_table(shuffle_table->columns);
-        std::shared_ptr<uint32_t[]> hashes = hash_keys_table(
-            shuffle_table, join_state->n_keys, SEED_HASH_PARTITION, parallel);
-        comm_info_table.set_counts(hashes, parallel);
-        std::shared_ptr<table_info> new_data = shuffle_table_kernel(
-            shuffle_table, hashes, comm_info_table, parallel);
-        shuffle_table.reset();
-        // TODO: clear probe_shuffle_buffer memory
+    if (is_last) {
+        if (parallel) {
+            // shuffle data of other ranks
+            std::shared_ptr<table_info> shuffle_table =
+                join_state->probe_shuffle_buffer.data_table;
+            mpi_comm_info comm_info_table(shuffle_table->columns);
+            std::shared_ptr<uint32_t[]> hashes =
+                hash_keys_table(shuffle_table, join_state->n_keys,
+                                SEED_HASH_PARTITION, parallel);
+            comm_info_table.set_counts(hashes, parallel);
+            std::shared_ptr<table_info> new_data = shuffle_table_kernel(
+                shuffle_table, hashes, comm_info_table, parallel);
+            shuffle_table.reset();
+            // TODO: clear probe_shuffle_buffer memory
 
-        // probe hash table with new data
-        join_state->probe_table = new_data;
-        join_state->probe_table_hashes =
-            hash_keys_table(join_state->probe_table, join_state->n_keys,
-                            SEED_HASH_JOIN, parallel);
-        for (int64_t i_row = 0; i_row < new_data->nrows(); i_row++) {
-            auto range = join_state->build_table.equal_range(-i_row - 1);
-            for (auto it = range.first; it != range.second; ++it) {
-                build_idxs.push_back(it->second);
-                probe_idxs.push_back(i_row);
+            // probe hash table with new data
+            join_state->probe_table = new_data;
+            join_state->probe_table_hashes =
+                hash_keys_table(join_state->probe_table, join_state->n_keys,
+                                SEED_HASH_JOIN, parallel);
+            for (int64_t i_row = 0; i_row < new_data->nrows(); i_row++) {
+                auto range = join_state->build_table.equal_range(-i_row - 1);
+                if (probe_table_outer && range.first == range.second) {
+                    // Add unmatched rows from probe table to output table
+                    build_idxs.push_back(-1);
+                    probe_idxs.push_back(i_row);
+                    continue;
+                }
+                for (auto it = range.first; it != range.second; ++it) {
+                    if (build_table_outer) {
+                        join_state->build_table_matched[it->second] = true;
+                    }
+                    build_idxs.push_back(it->second);
+                    probe_idxs.push_back(i_row);
+                }
             }
         }
 
-        std::shared_ptr<table_info> new_build_out_table = RetrieveTable(
-            join_state->build_table_buffer.data_table, build_idxs);
-        std::shared_ptr<table_info> new_probe_out_table =
-            RetrieveTable(new_data, probe_idxs);
+        if (build_table_outer) {
+            // Add unmatched rows from build table to output table
+            for (size_t i_row = 0;
+                 i_row < join_state->build_table_matched.size(); i_row++) {
+                if (!join_state->build_table_matched[i_row]) {
+                    build_idxs.push_back(i_row);
+                    probe_idxs.push_back(-1);
+                }
+            }
+        }
 
-        // append new build data
-        std::vector<std::shared_ptr<table_info>> build_tables(
-            {build_out_table, new_build_out_table});
-        build_out_table = concat_tables(build_tables);
-        build_tables.clear();
-        new_build_out_table.reset();
+        // These sizes should be the same
+        // Only perform the concat if there is data to concat
+        if (build_idxs.size() || probe_idxs.size()) {
+            // create output table using build and probe table indices (columns
+            // appended side by side)
+            std::shared_ptr<table_info> new_build_out_table = RetrieveTable(
+                join_state->build_table_buffer.data_table, build_idxs);
+            std::shared_ptr<table_info> new_probe_out_table =
+                RetrieveTable(join_state->probe_table, probe_idxs);
 
-        // append new probe data
-        std::vector<std::shared_ptr<table_info>> probe_tables(
-            {probe_out_table, new_probe_out_table});
-        probe_out_table = concat_tables(probe_tables);
-        probe_tables.clear();
-        new_probe_out_table.reset();
+            // append new build data
+            std::vector<std::shared_ptr<table_info>> build_tables(
+                {build_out_table, new_build_out_table});
+            build_out_table = concat_tables(build_tables);
+            build_tables.clear();
+            new_build_out_table.reset();
+
+            // append new probe data
+            std::vector<std::shared_ptr<table_info>> probe_tables(
+                {probe_out_table, new_probe_out_table});
+            probe_out_table = concat_tables(probe_tables);
+            probe_tables.clear();
+            new_probe_out_table.reset();
+        }
     }
 
     std::vector<std::shared_ptr<array_info>> out_arrs;
@@ -248,13 +293,14 @@ std::shared_ptr<table_info> alloc_table(std::vector<int8_t> arr_c_types,
  * @param arr_c_types array types of build table columns (Bodo_CTypes ints)
  * @param n_arrs number of build table columns
  * @param n_keys number of join keys
+ * @param build_table_outer whether to produce left outer join
+ * @param probe_table_outer whether to produce right outer join
  * @return JoinState* join state to return to Python
  */
-JoinState* join_state_init_py_entry(int8_t* build_arr_c_types,
-                                    int8_t* build_arr_array_types,
-                                    int n_build_arrs, int8_t* probe_arr_c_types,
-                                    int8_t* probe_arr_array_types,
-                                    int n_probe_arrs, int64_t n_keys) {
+JoinState* join_state_init_py_entry(
+    int8_t* build_arr_c_types, int8_t* build_arr_array_types, int n_build_arrs,
+    int8_t* probe_arr_c_types, int8_t* probe_arr_array_types, int n_probe_arrs,
+    int64_t n_keys, bool build_table_outer, bool probe_table_outer) {
     return new JoinState(
         std::vector<int8_t>(build_arr_c_types,
                             build_arr_c_types + n_build_arrs),
@@ -264,7 +310,7 @@ JoinState* join_state_init_py_entry(int8_t* build_arr_c_types,
                             probe_arr_c_types + n_probe_arrs),
         std::vector<int8_t>(probe_arr_array_types,
                             probe_arr_array_types + n_probe_arrs),
-        n_keys);
+        n_keys, build_table_outer, probe_table_outer);
 }
 
 /**
@@ -298,15 +344,36 @@ void join_build_consume_batch_py_entry(JoinState* join_state,
 table_info* join_probe_consume_batch_py_entry(JoinState* join_state,
                                               table_info* in_table,
                                               bool is_last, bool parallel) {
+#ifndef CONSUME_PROBE_BATCH
+#define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,         \
+                            build_table_outer_exp, probe_table_outer_exp) \
+    if (build_table_outer == build_table_outer_exp &&                     \
+        probe_table_outer == probe_table_outer_exp) {                     \
+        out = join_probe_consume_batch<build_table_outer_exp,             \
+                                       probe_table_outer_exp>(            \
+            join_state, std::unique_ptr<table_info>(in_table), is_last,   \
+            parallel);                                                    \
+    }
+#endif
+
     try {
-        std::shared_ptr<table_info> out = join_probe_consume_batch(
-            join_state, std::unique_ptr<table_info>(in_table), is_last,
-            parallel);
+        std::shared_ptr<table_info> out;
+
+        CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                            join_state->probe_table_outer, true, true)
+        CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                            join_state->probe_table_outer, true, false)
+        CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                            join_state->probe_table_outer, false, true)
+        CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                            join_state->probe_table_outer, false, false)
+
         return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
     }
+#undef CONSUME_PROBE_BATCH
 }
 
 /**

@@ -61,6 +61,8 @@ def init_join_state(
     n_probe_arrs,
     build_key_inds,
     probe_key_inds,
+    build_table_outer=False,
+    probe_table_outer=False,
 ):
     """Initialize C++ JoinState pointer
 
@@ -75,6 +77,8 @@ def init_join_state(
         n_probe_arrs (int32): number of probe columns
         build_key_inds (MetaType(NTuple(int64))): Column indices for the keys on the build side.
         probe_key_inds (MetaType(NTuple(int64))): Column indices for the keys on the probe side.
+        build_table_outer (bool): whether to produce left outer join output
+        probe_table_outer (bool): whether to produce right outer join output
     """
     build_keys = unwrap_typeref(build_key_inds).meta
     probe_keys = unwrap_typeref(probe_key_inds).meta
@@ -93,6 +97,8 @@ def init_join_state(
             n_probe_arrs,
             _,
             _,
+            build_table_outer,
+            probe_table_outer,
         ) = args
         n_keys = context.get_constant(types.int64, len(build_keys))
         fnty = lir.FunctionType(
@@ -105,6 +111,8 @@ def init_join_state(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(32),
                 lir.IntType(64),
+                lir.IntType(1),
+                lir.IntType(1),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -118,6 +126,8 @@ def init_join_state(
             probe_arr_array_types,
             n_probe_arrs,
             n_keys,
+            build_table_outer,
+            probe_table_outer,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -133,6 +143,8 @@ def init_join_state(
         types.int32,
         build_key_inds,
         probe_key_inds,
+        types.boolean,
+        types.boolean,
     )
     return sig, codegen
 
