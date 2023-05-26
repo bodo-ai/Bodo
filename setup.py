@@ -102,6 +102,14 @@ ind = [PREFIX_DIR + "/include"]
 lid = [PREFIX_DIR + "/lib"]
 # eca = ["-std=c++20", "-fsanitize=address"]
 # ela = ["-std=c++20", "-fsanitize=address"]
+
+# Pass --debug flag to setup.py to compile with debug symbols
+if "--debug" in sys.argv:
+    debug_flag = "-g"
+    sys.argv.remove("--debug")
+else:
+    debug_flag = "-g0"
+
 if is_win:
     eca = ["/std:c++20", "/O2"]
     eca_c = ["/O2"]
@@ -109,12 +117,12 @@ if is_win:
 else:
     if is_mac:
         # Mac on CI can't support AVX2
-        eca = ["-std=c++20", "-g0", "-O3"]
+        eca = ["-std=c++20", debug_flag, "-O3"]
     else:
         # -march=haswell is used to enable AVX2 support (required by SIMD bloom
         # filter implementation)
-        eca = ["-std=c++20", "-g0", "-O3", "-march=haswell"]
-    eca_c = ["-g0", "-O3"]
+        eca = ["-std=c++20", debug_flag, "-O3", "-march=haswell"]
+    eca_c = [debug_flag, "-O3"]
     ela = ["-std=c++20"]
 
 if develop_mode:
