@@ -57,7 +57,6 @@ public class AggCodeGen {
     equivalentPandasMethodMap.put(SqlKind.ANY_VALUE, "iloc");
 
     equivalentNumpyFuncMap.put(SqlKind.BIT_AND, "np.bitwise_and.reduce");
-    equivalentNumpyFuncMap.put(SqlKind.BIT_OR, "np.bitwise_or.reduce");
     equivalentNumpyFuncMap.put(SqlKind.BIT_XOR, "np.bitwise_xor.reduce");
     equivalentNumpyFuncMap.put(SqlKind.VAR_POP, "np.var");
     equivalentNumpyFuncMap.put(SqlKind.STDDEV_POP, "np.std");
@@ -74,6 +73,7 @@ public class AggCodeGen {
     equivalentHelperFnMap.put("BOOLOR_AGG", "boolor_agg");
     equivalentHelperFnMap.put("BOOLAND_AGG", "booland_agg");
     equivalentHelperFnMap.put("BOOLXOR_AGG", "boolxor_agg");
+    equivalentHelperFnMap.put("BITOR_AGG", "bitor_agg");
     // Calcite's SINGLE_VALUE returns input if it has only one value, otherwise raises an error
     // https://github.com/apache/calcite/blob/f14cf4c32b9079984a988bbad40230aa6a59b127/core/src/main/java/org/apache/calcite/sql/fun/SqlSingleValueAggFunction.java#L36
     equivalentHelperFnMap.put(
@@ -170,7 +170,8 @@ public class AggCodeGen {
         aggString.append(seriesBuilder).append(".sum()");
       } else if (aggFunc.equals("boolor_agg")
           || aggFunc.equals("booland_agg")
-          || aggFunc.equals("boolxor_agg")) {
+          || aggFunc.equals("boolxor_agg")
+          || aggFunc.equals("bitor_agg")) {
         aggString
             .append("bodo.libs.array_kernels.")
             .append(aggFunc)

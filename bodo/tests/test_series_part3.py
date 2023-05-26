@@ -1259,7 +1259,7 @@ def test_bool_aggfuncs(memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "S, answer",
+    "S, expected",
     [
         pytest.param(
             pd.Series([None] * 20, dtype=pd.Int32Dtype()), (None,), id="all_null"
@@ -1313,13 +1313,13 @@ def test_bool_aggfuncs(memory_leak_check):
         ),
     ],
 )
-def test_bit_aggfuncs(S, answer, memory_leak_check):
+def test_bit_aggfuncs(S, expected, memory_leak_check):
     """Tests the BITOR_AGG window function array kernel implementation.
     This will in the future also test BITAND_AGG and BITXOR_AGG.
 
     Args:
         S (pd.Series): The series that the test wil run on.
-        answer ([int]): Expected output from running BITOR_AGG on S.
+        expected ([int]): Expected output from running BITOR_AGG on S.
         memory_leak_check (): Fixture, see `conftest.py`.
 
     """
@@ -1327,4 +1327,4 @@ def test_bit_aggfuncs(S, answer, memory_leak_check):
     def impl(S):
         return (bodo.libs.array_kernels.bitor_agg(S),)
 
-    check_func(impl, (S,), py_output=answer, is_out_distributed=False)
+    check_func(impl, (S,), py_output=expected, is_out_distributed=False)

@@ -88,7 +88,6 @@ def test_agg_numeric(
 )
 @pytest.mark.slow
 def test_median(args, spark_info, memory_leak_check):
-
     df1 = pd.DataFrame(
         {
             "A": [1.0, 2.5, 1000.0, 100.0, 4.2, 1.001],
@@ -952,5 +951,77 @@ def test_boolor_booland_boolxor_agg(func, results, memory_leak_check):
         expected_output=answer,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "col, expected",
+    [
+        pytest.param(
+            pd.Series([None] * 20, dtype=pd.Int32Dtype()),
+            None,
+            id="all_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([1, 2, 4, 63, 4, None, 20], dtype=pd.Int32Dtype()), 63, id="ints"
+        ),
+        pytest.param(
+            pd.Series([-64, 1, 4, 8, 1, 4], dtype=pd.Int32Dtype()),
+            -51,
+            id="neg_ints",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(
+                [3625133335, 7285961799, 4755749177, 7850278502], dtype=pd.Int64Dtype()
+            ),
+            8522825599,
+            id="big_ints",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([2.0, 50.5, None, 602.4, 59.6, 0.1], dtype=pd.Float32Dtype()),
+            639,
+            id="floats",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(["2", "50.5", "601.5", None, "0", "2"]), 635, id="strings"
+        ),
+    ],
+)
+def test_bitor_agg(col, expected, memory_leak_check):
+    """Tests the BITOR_AGG aggregation function without groupby on string data.
+    This will in the future also test BITAND_AGG and BITXOR_AGG.
+
+    Args:
+        memory_leak_check (): Fixture, see `conftest.py`.
+    """
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": col,
+            }
+        )
+    }
+
+    query = "SELECT bitor_agg(A) from table1"
+
+    expected_df = pd.DataFrame(
+        {
+            0: expected,
+        },
+        index=np.arange(1),
+    )
+
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_df,
         is_out_distributed=False,
     )
