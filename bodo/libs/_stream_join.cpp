@@ -344,7 +344,8 @@ void join_build_consume_batch_py_entry(JoinState* join_state,
  */
 table_info* join_probe_consume_batch_py_entry(JoinState* join_state,
                                               table_info* in_table,
-                                              bool is_last, bool parallel) {
+                                              bool is_last, bool* out_is_last,
+                                              bool parallel) {
 #ifndef CONSUME_PROBE_BATCH
 #define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,         \
                             build_table_outer_exp, probe_table_outer_exp) \
@@ -358,6 +359,9 @@ table_info* join_probe_consume_batch_py_entry(JoinState* join_state,
 #endif
 
     try {
+        // TODO: Actually output out_is_last based on is_last + the state
+        // of the output buffer.
+        *out_is_last = is_last;
         std::shared_ptr<table_info> out;
 
         CONSUME_PROBE_BATCH(join_state->build_table_outer,
