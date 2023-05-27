@@ -78,6 +78,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_scalar_type,
     raise_bodo_error,
+    unwrap_typeref,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -2898,6 +2899,9 @@ class TypingTransforms:
                 rhs.loc,
             )
 
+        if func_mod == "bodo.libs.stream_join":
+            return self._run_call_stream_join(assign, rhs, func_name)
+
         return [assign]
 
     def _run_call_pd_datetime_array(self, assign, rhs, func_name, label):
@@ -4113,6 +4117,163 @@ class TypingTransforms:
         if args_var != "":
             find_build_tuple(self.func_ir, args_var)
         return apply_assign, args_var
+
+    def _run_call_stream_join(self, assign, rhs, func_name):  # pragma: no cover
+        """
+        Handle the typing pass information needed for updating the join state with
+        streaming join.
+        """
+        unresolved_types = (None, types.unknown, types.undefined)
+        if func_name == "init_join_state":
+            expected_arg = get_call_expr_arg(
+                "init_join_state",
+                rhs.args,
+                dict(rhs.kws),
+                4,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    output_type = unwrap_typeref(expected_type)
+                    if (
+                        output_type.build_table_type == types.unknown
+                        or output_type.probe_table_type == types.unknown
+                    ):
+                        self.needs_transform = True
+        elif func_name in ("join_build_consume_batch", "join_probe_consume_batch"):
+            is_build = func_name == "join_build_consume_batch"
+            join_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(join_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            # Fetch the join information from the definition
+            join_state = rhs.args[0]
+            join_def = guard(get_definition, self.func_ir, join_state)
+            if join_def is None:
+                # If we can't find the definition we need to transform
+                self.needs_transform = True
+                return [assign]
+            state_init = guard(find_callname, self.func_ir, join_def)
+            # Verify we are at init_join_state and we can fetch the call name.
+            if state_init != ("init_join_state", "bodo.libs.stream_join"):
+                self.needs_transform = True
+                return [assign]
+                # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_join_state",
+                join_def.args,
+                dict(join_def.kws),
+                4,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+            if is_build:
+                table_type = output_type.build_table_type
+            else:
+                table_type = output_type.probe_table_type
+            if input_table_type != table_type:
+                # We need to update the expected type
+                if is_build:
+                    new_type = bodo.libs.stream_join.JoinStateType(
+                        output_type.build_key_inds,
+                        output_type.probe_key_inds,
+                        output_type.build_outer,
+                        output_type.probe_outer,
+                        input_table_type,
+                        output_type.probe_table_type,
+                    )
+                else:
+                    new_type = bodo.libs.stream_join.JoinStateType(
+                        output_type.build_key_inds,
+                        output_type.probe_key_inds,
+                        output_type.build_outer,
+                        output_type.probe_outer,
+                        output_type.build_table_type,
+                        input_table_type,
+                    )
+                # Compile a new function.
+                func_text = """def impl(build_key_inds, probe_key_inds, build_outer, probe_outer):
+                    return bodo.libs.stream_join.init_join_state(
+                        build_key_inds,
+                        probe_key_inds,
+                        build_outer,
+                        probe_outer,
+                        _expected_state_type,
+                    )
+                """
+                loc_vars = {}
+                exec(
+                    func_text,
+                    {"bodo": bodo, "_expected_state_type": new_type},
+                    loc_vars,
+                )
+                func = loc_vars["impl"]
+                args = join_def.args[:4]
+
+                new_nodes = compile_func_single_block(
+                    func,
+                    args,
+                    join_state,
+                    self,
+                    extra_globals={"_expected_state_type": new_type},
+                )
+                # Find the label.
+                label = self.rhs_labels[join_def]
+                block = self.func_ir.blocks[label]
+                remove_line = -1
+                for i, stmt in enumerate(block.body):
+                    # Find the instruction
+                    if is_assign(stmt) and stmt.target.name == join_state.name:
+                        # Just want to set i here
+                        remove_line = i
+                        break
+                assert (
+                    remove_line != -1
+                ), "Could not find original join state to replace"
+                block.body = (
+                    block.body[:remove_line] + new_nodes + block.body[remove_line + 1 :]
+                )
+                # Replicate the changes that would occur to defintions and labels if this was
+                # done in the active block.
+
+                # Delete the old definition. Note the function may cause an intermediate assignment,
+                # so we need to delete all definitions.
+                assert (
+                    len(self.func_ir._definitions[join_state.name])
+                ) == 1, "There must be exactly 1 definition for join state."
+                del self.func_ir._definitions[join_state.name]
+                update_node_list_definitions(new_nodes, self.func_ir)
+                # Update the labels as well
+                for inst in new_nodes:
+                    if is_assign(inst):
+                        self.rhs_labels[inst.value] = label
+                self.needs_transform = True
+                self.changed = True
+
+        return [assign]
 
     def _run_call_bodosql_sql(
         self, assign, rhs, sql_context_var, func_name, label

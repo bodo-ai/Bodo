@@ -101,6 +101,8 @@ _numba_to_c_type_map = {
     types.int16: CTypeEnum.Int16.value,
     types.uint16: CTypeEnum.UInt16.value,
     int128_type: CTypeEnum.Int128.value,
+    bodo.hiframes.datetime_date_ext.datetime_date_type: CTypeEnum.Date.value,
+    types.unicode_type: CTypeEnum.STRING.value,
 }
 
 
@@ -160,9 +162,6 @@ def numba_to_c_type(t):
     if isinstance(t, bodo.libs.decimal_arr_ext.Decimal128Type):
         return CTypeEnum.Decimal.value
 
-    if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
-        return CTypeEnum.Date.value
-
     if isinstance(t, bodo.hiframes.time_ext.TimeType):
         return CTypeEnum.Time.value
 
@@ -171,6 +170,57 @@ def numba_to_c_type(t):
     #        return CTypeEnum.Timedelta.value
 
     return _numba_to_c_type_map[t]
+
+
+def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:
+    """
+    Derive the enum value for the array being passed to C++.
+
+    Args:
+        arr_type (types.ArrayCompatible): An array type that needs
+        to be passed to C++.
+
+    Returns:
+        int: The value for the CArrayTypeEnum value
+    """
+    if isinstance(arr_type, types.Array):
+        return CArrayTypeEnum.NUMPY.value
+    elif arr_type == bodo.string_array_type or arr_type == bodo.binary_array_type:
+        return CArrayTypeEnum.STRING.value
+    elif arr_type in (
+        bodo.null_array_type,
+        bodo.datetime_date_array_type,
+        bodo.boolean_array_type,
+    ) or isinstance(
+        arr_type,
+        (
+            bodo.IntegerArrayType,
+            bodo.FloatingArrayType,
+            bodo.DatetimeArrayType,
+            bodo.TimeArrayType,
+            bodo.DecimalArrayType,
+        ),
+    ):
+        return CArrayTypeEnum.NULLABLE_INT_BOOL.value
+    elif isinstance(arr_type, bodo.ArrayItemArrayType) and (
+        arr_type.dtype == bodo.string_array_type
+        or arr_type.dtype == bodo.binary_array_type
+    ):
+        # Special case for list of strings
+        return CArrayTypeEnum.LIST_STRING.value
+    elif isinstance(
+        arr_type, (bodo.StructArrayType, bodo.MapArrayType, bodo.TupleArrayType)
+    ):
+        # TODO: Confirm map + tuple array belongs here
+        return CArrayTypeEnum.STRUCT.value
+    elif isinstance(arr_type, bodo.CategoricalArrayType):
+        return CArrayTypeEnum.CATEGORICAL.value
+    elif isinstance(arr_type, bodo.ArrayItemArrayType):
+        return CArrayTypeEnum.ARRAY_ITEM.value
+    elif isinstance(arr_type, bodo.IntervalArrayType):
+        return CArrayTypeEnum.INTERVAL.value
+    else:  # pragma: no cover
+        raise BodoError("Unsupported Array Type in numba_to_c_array_type")
 
 
 def is_alloc_callname(func_name, mod_name):

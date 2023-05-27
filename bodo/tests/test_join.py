@@ -4850,21 +4850,6 @@ def test_stream_join_basic(build_outer, probe_outer, expected_df, memory_leak_ch
 
     build_keys_inds = bodo.utils.typing.MetaType((0, 1))
     probe_keys_inds = bodo.utils.typing.MetaType((0, 1))
-    str_c_type = bodo.utils.utils.CTypeEnum.STRING.value
-    int32_c_type = bodo.utils.utils.numba_to_c_type(bodo.int32)
-    int8_c_type = bodo.utils.utils.numba_to_c_type(bodo.int8)
-    build_arr_dtypes = np.array(
-        [int32_c_type, str_c_type, str_c_type, int8_c_type], np.int8
-    )
-    nullable_arr_type = bodo.utils.utils.CArrayTypeEnum.NULLABLE_INT_BOOL.value
-    str_arr_type = bodo.utils.utils.CArrayTypeEnum.STRING.value
-    build_arr_array_types = np.array(
-        [nullable_arr_type, str_arr_type, str_arr_type, nullable_arr_type], np.int8
-    )
-    probe_arr_dtypes = np.array([int32_c_type, str_c_type, int32_c_type], np.int8)
-    probe_arr_array_types = np.array(
-        [nullable_arr_type, str_arr_type, nullable_arr_type], np.int8
-    )
     out_table_type = bodo.TableType(
         (
             bodo.IntegerArrayType(bodo.int32),
@@ -4891,12 +4876,6 @@ def test_stream_join_basic(build_outer, probe_outer, expected_df, memory_leak_ch
     @bodo.jit
     def test_stream_join(conn):
         join_state = init_join_state(
-            build_arr_dtypes.ctypes,
-            build_arr_array_types.ctypes,
-            len(build_arr_dtypes),
-            probe_arr_dtypes.ctypes,
-            probe_arr_array_types.ctypes,
-            len(probe_arr_dtypes),
             build_keys_inds,
             probe_keys_inds,
             build_outer,
@@ -5002,21 +4981,6 @@ def test_stream_join_reorder(memory_leak_check):
 
     build_keys_inds = bodo.utils.typing.MetaType((3, 1))
     probe_keys_inds = bodo.utils.typing.MetaType((0, 2))
-    str_c_type = bodo.utils.utils.CTypeEnum.STRING.value
-    int32_c_type = bodo.utils.utils.numba_to_c_type(bodo.int32)
-    int8_c_type = bodo.utils.utils.numba_to_c_type(bodo.int8)
-    build_arr_dtypes = np.array(
-        [int32_c_type, str_c_type, str_c_type, int8_c_type], np.int8
-    )
-    nullable_arr_type = bodo.utils.utils.CArrayTypeEnum.NULLABLE_INT_BOOL.value
-    str_arr_type = bodo.utils.utils.CArrayTypeEnum.STRING.value
-    build_arr_array_types = np.array(
-        [nullable_arr_type, str_arr_type, str_arr_type, nullable_arr_type], np.int8
-    )
-    probe_arr_dtypes = np.array([int32_c_type, str_c_type, int32_c_type], np.int8)
-    probe_arr_array_types = np.array(
-        [nullable_arr_type, str_arr_type, nullable_arr_type], np.int8
-    )
     out_table_type = bodo.TableType(
         (
             bodo.IntegerArrayType(bodo.int32),
@@ -5043,14 +5007,10 @@ def test_stream_join_reorder(memory_leak_check):
     @bodo.jit
     def test_stream_join(conn):
         join_state = init_join_state(
-            build_arr_dtypes.ctypes,
-            build_arr_array_types.ctypes,
-            len(build_arr_dtypes),
-            probe_arr_dtypes.ctypes,
-            probe_arr_array_types.ctypes,
-            len(probe_arr_dtypes),
             build_keys_inds,
             probe_keys_inds,
+            False,
+            False,
         )
 
         # read PART table and build join hash table
