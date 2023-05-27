@@ -256,6 +256,25 @@ class JoinStateType(types.Type):
         """
         return len(self.probe_arr_ctypes)
 
+    @property
+    def output_type(self):
+        """Return the output type from generating this join.
+
+        Note: We must use build_indices and probe_indices to
+        account for key reordering.
+
+        Returns:
+            bodo.TableType: The type of the output table.
+        """
+        arr_types = []
+        for build_idx in self.build_indices:
+            arr_types.append(self.build_table_type.arr_types[build_idx])
+        for probe_idx in self.probe_indices:
+            arr_types.append(self.probe_table_type.arr_types[probe_idx])
+
+        out_table_type = bodo.TableType(tuple(arr_types))
+        return out_table_type
+
 
 register_model(JoinStateType)(models.OpaqueModel)
 
@@ -459,37 +478,39 @@ def _join_probe_consume_batch(
     parallel,
 ):
     def codegen(context, builder, sig, args):
+        out_is_last = cgutils.alloca_once(builder, lir.IntType(1))
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
+                lir.IntType(1).as_pointer(),
                 lir.IntType(1),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="join_probe_consume_batch_py_entry"
         )
-        ret = builder.call(fn_tp, args)
+        func_args = [args[0], args[1], args[2], out_is_last, args[3]]
+        table_ret = builder.call(fn_tp, func_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        items = [table_ret, builder.load(out_is_last)]
+        return context.make_tuple(builder, sig.return_type, items)
 
-    sig = cpp_table(join_state, cpp_table, is_last, parallel)
+    ret_type = types.Tuple([cpp_table, types.bool_])
+    sig = ret_type(join_state, cpp_table, is_last, parallel)
     return sig, codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def join_probe_consume_batch(
-    join_state, table, out_table_type, is_last, parallel=False
-):
+def join_probe_consume_batch(join_state, table, is_last, parallel=False):
     """Consume a probe table batch in streaming join (probe hash table and produce
     output rows)
 
     Args:
         join_state (JoinState): C++ JoinState pointer
         table (table_type): probe table batch
-        out_table_type (table_type|TypeRef): full type of output table batches
         is_last (bool): is last batch
 
     Returns:
@@ -497,21 +518,20 @@ def join_probe_consume_batch(
     """
     in_col_inds = MetaType(join_state.probe_indices)
     n_table_cols = join_state.num_probe_arrs
+    out_table_type = join_state.output_type
 
     n_out_arrs = len(unwrap_typeref(out_table_type).arr_types)
 
-    def impl(
-        join_state, table, out_table_type, is_last, parallel=False
-    ):  # pragma: no cover
+    def impl(join_state, table, is_last, parallel=False):  # pragma: no cover
         cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
-        out_cpp_table = _join_probe_consume_batch(
+        out_cpp_table, out_is_last = _join_probe_consume_batch(
             join_state, cpp_table, is_last, parallel
         )
         out_table = cpp_table_to_py_table(
             out_cpp_table, np.arange(n_out_arrs), out_table_type
         )
         delete_table(out_cpp_table)
-        return out_table
+        return out_table, out_is_last
 
     return impl
 

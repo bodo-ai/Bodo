@@ -4850,17 +4850,6 @@ def test_stream_join_basic(build_outer, probe_outer, expected_df, memory_leak_ch
 
     build_keys_inds = bodo.utils.typing.MetaType((0, 1))
     probe_keys_inds = bodo.utils.typing.MetaType((0, 1))
-    out_table_type = bodo.TableType(
-        (
-            bodo.IntegerArrayType(bodo.int32),
-            bodo.string_array_type,
-            bodo.string_array_type,
-            bodo.IntegerArrayType(bodo.int8),
-            bodo.IntegerArrayType(bodo.int32),
-            bodo.string_array_type,
-            bodo.IntegerArrayType(bodo.int32),
-        )
-    )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
             "p_partkey",
@@ -4911,9 +4900,7 @@ def test_stream_join_basic(build_outer, probe_outer, expected_df, memory_leak_ch
                 is_last2,
                 np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
             )
-            out_table = join_probe_consume_batch(
-                join_state, table2, out_table_type, is_last2
-            )
+            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -4921,7 +4908,11 @@ def test_stream_join_basic(build_outer, probe_outer, expected_df, memory_leak_ch
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df)
-            if is_last2:
+            is_last3 = bodo.libs.distributed_api.dist_reduce(
+                is_last3,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            if is_last3:
                 break
         delete_join_state(join_state)
         return pd.concat(out_dfs)
@@ -4981,17 +4972,6 @@ def test_stream_join_reorder(memory_leak_check):
 
     build_keys_inds = bodo.utils.typing.MetaType((3, 1))
     probe_keys_inds = bodo.utils.typing.MetaType((0, 2))
-    out_table_type = bodo.TableType(
-        (
-            bodo.IntegerArrayType(bodo.int32),
-            bodo.string_array_type,
-            bodo.string_array_type,
-            bodo.IntegerArrayType(bodo.int8),
-            bodo.IntegerArrayType(bodo.int32),
-            bodo.string_array_type,
-            bodo.IntegerArrayType(bodo.int32),
-        )
-    )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
             "p_partkey",
@@ -5042,9 +5022,7 @@ def test_stream_join_reorder(memory_leak_check):
                 is_last2,
                 np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
             )
-            out_table = join_probe_consume_batch(
-                join_state, table2, out_table_type, is_last2
-            )
+            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
             index_var = bodo.hiframes.pd_index_ext.init_range_index(
                 0, len(out_table), 1, None
             )
@@ -5052,7 +5030,11 @@ def test_stream_join_reorder(memory_leak_check):
                 (out_table,), index_var, col_meta
             )
             out_dfs.append(df)
-            if is_last2:
+            is_last3 = bodo.libs.distributed_api.dist_reduce(
+                is_last3,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            if is_last3:
                 break
         delete_join_state(join_state)
         return pd.concat(out_dfs)
