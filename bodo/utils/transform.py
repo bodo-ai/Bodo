@@ -350,6 +350,8 @@ no_side_effect_call_tuples = {
     ("__bodosql_replace_columns_dummy", "dataframe_impl", "hiframes", bodo),
     # Indexing
     ("scalar_optional_getitem", "indexing", "utils", bodo),
+    # Streaming join
+    ("init_join_state", "stream_join", "libs", bodo),
 }
 
 
