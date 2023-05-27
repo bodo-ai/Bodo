@@ -1510,11 +1510,31 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist, False)
             return
 
-        if fdef in (
-            ("join_build_consume_batch", "bodo.libs.stream_join"),
-            ("join_probe_consume_batch", "bodo.libs.stream_join"),
+        if fdef == (
+            "join_build_consume_batch",
+            "bodo.libs.stream_join",
         ):  # pragma: no cover
             self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
+            return
+
+        if fdef == (
+            "join_probe_consume_batch",
+            "bodo.libs.stream_join",
+        ):  # pragma: no cover
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            in_dist = array_dists[rhs.args[1].name]
+
+            # return is a tuple(table, bool)
+            out_dist = Distribution(
+                min(
+                    array_dists[lhs][0].value,
+                    in_dist.value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist, False)
             return
 
         if (
