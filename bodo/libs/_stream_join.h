@@ -43,20 +43,38 @@ struct ArrayBuildBuffer {
     void AppendRow(const std::shared_ptr<array_info>& in_arr, int64_t row_ind) {
         switch (in_arr->arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL: {
-                uint64_t siztype = numpy_item_size[in_arr->dtype];
-                char* out_ptr = data_array->data1() + siztype * size;
-                char* in_ptr = in_arr->data1() + siztype * row_ind;
-                memcpy(out_ptr, in_ptr, siztype);
-                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
-                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
-                size++;
-                data_array->length = size;
-                CHECK_ARROW_MEM(
-                    data_array->buffers[0]->Resize(size * siztype, false),
-                    "Resize failed!");
-                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
-                                    arrow::bit_util::BytesForBits(size), false),
-                                "Resize failed!");
+                if (in_arr->dtype == Bodo_CTypes::_BOOL) {
+                    arrow::bit_util::SetBitTo(
+                        (uint8_t*)data_array->data1(), size,
+                        GetBit((uint8_t*)in_arr->data1(), row_ind));
+                    size++;
+                    data_array->length = size;
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[0]->Resize(
+                            arrow::bit_util::BytesForBits(size), false),
+                        "Resize Failed!");
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[1]->Resize(
+                            arrow::bit_util::BytesForBits(size), false),
+                        "Resize Failed!");
+                } else {
+                    uint64_t size_type = numpy_item_size[in_arr->dtype];
+                    char* out_ptr = data_array->data1() + size_type * size;
+                    char* in_ptr = in_arr->data1() + size_type * row_ind;
+                    memcpy(out_ptr, in_ptr, size_type);
+                    bool bit =
+                        GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+                    SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+                    size++;
+                    data_array->length = size;
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[0]->Resize(size * size_type, false),
+                        "Resize Failed!");
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[1]->Resize(
+                            arrow::bit_util::BytesForBits(size), false),
+                        "Resize Failed!");
+                }
             } break;
             case bodo_array_type::STRING: {
                 offset_t* curr_offsets = (offset_t*)data_array->data2();
@@ -88,7 +106,17 @@ struct ArrayBuildBuffer {
                                     arrow::bit_util::BytesForBits(size), false),
                                 "Resize Failed!");
             } break;
-                // TODO[BSE-442]: support all array types
+            case bodo_array_type::NUMPY: {
+                uint64_t size_type = numpy_item_size[in_arr->dtype];
+                char* out_ptr = data_array->data1() + size_type * size;
+                char* in_ptr = in_arr->data1() + size_type * row_ind;
+                memcpy(out_ptr, in_ptr, size_type);
+                size++;
+                data_array->length = size;
+                CHECK_ARROW_MEM(
+                    data_array->buffers[0]->Resize(size * size_type, false),
+                    "Resize Failed!");
+            } break;
             default:
                 throw std::runtime_error("invalid array type in AppendRow " +
                                          std::to_string(in_arr->arr_type));
@@ -108,14 +136,25 @@ struct ArrayBuildBuffer {
             case bodo_array_type::NULLABLE_INT_BOOL:
                 if (min_capacity > capacity) {
                     int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                    uint64_t siztype = numpy_item_size[in_arr->dtype];
-                    CHECK_ARROW_MEM(
-                        data_array->buffers[0]->Reserve(new_capacity * siztype),
-                        "Reserve failed!");
-                    CHECK_ARROW_MEM(
-                        data_array->buffers[1]->Reserve(
-                            arrow::bit_util::BytesForBits(new_capacity)),
-                        "Reserve failed!");
+                    if (in_arr->dtype == Bodo_CTypes::_BOOL) {
+                        CHECK_ARROW_MEM(
+                            data_array->buffers[0]->Reserve(
+                                arrow::bit_util::BytesForBits(new_capacity)),
+                            "Reserve failed!");
+                        CHECK_ARROW_MEM(
+                            data_array->buffers[1]->Reserve(
+                                arrow::bit_util::BytesForBits(new_capacity)),
+                            "Reserve failed!");
+                    } else {
+                        uint64_t size_type = numpy_item_size[in_arr->dtype];
+                        CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(
+                                            new_capacity * size_type),
+                                        "Reserve failed!");
+                        CHECK_ARROW_MEM(
+                            data_array->buffers[1]->Reserve(
+                                arrow::bit_util::BytesForBits(new_capacity)),
+                            "Reserve failed!");
+                    }
                     capacity = new_capacity;
                 }
                 break;
@@ -144,7 +183,16 @@ struct ArrayBuildBuffer {
                                     "Reserve failed!");
                 }
             } break;
-            // TODO[BSE-442]: support all array types
+            case bodo_array_type::NUMPY: {
+                uint64_t size_type = numpy_item_size[in_arr->dtype];
+                if (min_capacity > capacity) {
+                    int64_t new_capacity = std::max(min_capacity, capacity * 2);
+                    CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(
+                                        new_capacity * size_type),
+                                    "Reserve failed!");
+                    capacity = new_capacity;
+                }
+            } break;
             default:
                 throw std::runtime_error("invalid array type in ReserveArray " +
                                          std::to_string(in_arr->arr_type));

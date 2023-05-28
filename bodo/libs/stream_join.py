@@ -27,6 +27,7 @@ from bodo.utils.typing import (
     is_overload_bool,
     is_overload_none,
     raise_bodo_error,
+    to_nullable_type,
     unwrap_typeref,
 )
 from bodo.utils.utils import numba_to_c_array_type, numba_to_c_type
@@ -285,9 +286,15 @@ class JoinStateType(types.Type):
         """
         arr_types = []
         for build_idx in self.build_indices:
-            arr_types.append(self.build_table_type.arr_types[build_idx])
+            arr_type = self.build_table_type.arr_types[build_idx]
+            if self.probe_outer:
+                arr_type = to_nullable_type(arr_type)
+            arr_types.append(arr_type)
         for probe_idx in self.probe_indices:
-            arr_types.append(self.probe_table_type.arr_types[probe_idx])
+            arr_type = self.probe_table_type.arr_types[probe_idx]
+            if self.build_outer:
+                arr_type = to_nullable_type(arr_type)
+            arr_types.append(arr_type)
 
         out_table_type = bodo.TableType(tuple(arr_types))
         return out_table_type
