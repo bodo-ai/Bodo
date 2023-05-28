@@ -23,6 +23,7 @@ from bodo.utils.typing import (
     BodoError,
     MetaType,
     get_overload_const_bool,
+    get_overload_const_str,
     is_overload_bool,
     is_overload_none,
     raise_bodo_error,
@@ -53,6 +54,8 @@ class JoinStateType(types.Type):
         self,
         build_key_inds,
         probe_key_inds,
+        build_column_names,
+        probe_column_names,
         build_outer,
         probe_outer,
         build_table_type=types.unknown,
@@ -60,12 +63,24 @@ class JoinStateType(types.Type):
     ):
         self.build_key_inds = build_key_inds
         self.probe_key_inds = probe_key_inds
+        self.build_column_names = build_column_names
+        self.probe_column_names = probe_column_names
         self.build_outer = build_outer
         self.probe_outer = probe_outer
         self.build_table_type = build_table_type
         self.probe_table_type = probe_table_type
         super().__init__(
-            f"JoinStateType(build_keys={build_key_inds}, probe_keys={probe_key_inds}, build_outer={build_outer}, probe_outer={probe_outer}, build_table={build_table_type}, probe_table={probe_table_type})"
+            (
+                f"JoinStateType("
+                f"build_keys={build_key_inds}, "
+                f"probe_keys={probe_key_inds}, "
+                f"build_column_names={build_column_names}, "
+                f"probe_column_names={probe_column_names}, "
+                f"build_outer={build_outer}, "
+                f"probe_outer={probe_outer}, "
+                f"build_table={build_table_type}, "
+                f"probe_table={probe_table_type})"
+            )
         )
 
     @property
@@ -73,6 +88,8 @@ class JoinStateType(types.Type):
         return (
             self.build_key_inds,
             self.probe_key_inds,
+            self.build_column_names,
+            self.probe_column_names,
             self.build_outer,
             self.probe_outer,
             self.build_table_type,
@@ -289,6 +306,7 @@ def _init_join_state(
     probe_arr_array_types,
     n_probe_arrs,
     output_state_type,
+    cfunc_cond_t,
 ):
     """Initialize C++ JoinState pointer
 
@@ -317,6 +335,7 @@ def _init_join_state(
             probe_arr_array_types,
             n_probe_arrs,
             _,
+            cfunc_cond,
         ) = args
         n_keys = context.get_constant(types.int64, output_type.n_keys)
         build_table_outer = context.get_constant(types.bool_, output_type.build_outer)
@@ -333,6 +352,7 @@ def _init_join_state(
                 lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(1),
+                lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -348,6 +368,7 @@ def _init_join_state(
             n_keys,
             build_table_outer,
             probe_table_outer,
+            cfunc_cond,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -361,6 +382,7 @@ def _init_join_state(
         types.voidptr,
         types.int32,
         output_state_type,
+        types.voidptr,
     )
     return sig, codegen
 
@@ -369,14 +391,22 @@ def _init_join_state(
 def init_join_state(
     build_key_inds,
     probe_key_inds,
+    build_colnames,
+    probe_colnames,
     build_outer,
     probe_outer,
     expected_state_type=None,
+    # The non-equality portion of the join condition. If None then
+    # the join is a pure hash join. Otherwise this is a string similar
+    # to the query string accepted by merge.
+    non_equi_condition=None,
 ):
     expected_state_type = unwrap_typeref(expected_state_type)
     if is_overload_none(expected_state_type):
         build_keys = unwrap_typeref(build_key_inds).meta
         probe_keys = unwrap_typeref(probe_key_inds).meta
+        build_column_names = unwrap_typeref(build_colnames).meta
+        probe_column_names = unwrap_typeref(probe_colnames).meta
         if len(build_keys) != len(probe_keys):
             raise BodoError(
                 "init_join_state(): Number of keys on build and probe sides must match"
@@ -389,6 +419,8 @@ def init_join_state(
         output_type = JoinStateType(
             build_keys,
             probe_keys,
+            build_column_names,
+            probe_column_names,
             get_overload_const_bool(build_outer),
             get_overload_const_bool(probe_outer),
         )
@@ -402,12 +434,79 @@ def init_join_state(
     probe_arr_array_types = output_type.probe_arr_array_types
     n_probe_arrs = output_type.num_probe_arrs
 
+    # handle non-equi conditions (reuse existing join code as much as possible)
+    if (
+        not is_overload_none(non_equi_condition)
+        and output_type.build_table_type != types.unknown
+        and output_type.probe_table_type != types.unknown
+    ):
+        from bodo.ir.join import (
+            add_join_gen_cond_cfunc_sym,
+            gen_general_cond_cfunc,
+            get_join_cond_addr,
+        )
+
+        gen_expr_const = get_overload_const_str(non_equi_condition)
+
+        left_logical_to_physical = output_type.build_indices
+        right_logical_to_physical = output_type.probe_indices
+        left_var_map = {c: i for i, c in enumerate(output_type.build_column_names)}
+        right_var_map = {c: i for i, c in enumerate(output_type.probe_column_names)}
+
+        # Generate a general join condition cfunc
+        general_cond_cfunc, _, _ = gen_general_cond_cfunc(
+            None,
+            left_logical_to_physical,
+            right_logical_to_physical,
+            gen_expr_const,
+            left_var_map,
+            None,
+            set(),
+            output_type.build_table_type,
+            right_var_map,
+            None,
+            set(),
+            output_type.probe_table_type,
+            compute_in_batch=not output_type.build_key_inds,
+        )
+        cfunc_native_name = general_cond_cfunc.native_name
+
+        def impl_nonequi(
+            build_key_inds,
+            probe_key_inds,
+            build_colnames,
+            probe_colnames,
+            build_outer,
+            probe_outer,
+            expected_state_type=None,
+            non_equi_condition=None,
+        ):  # pragma: no cover
+            cfunc_cond = add_join_gen_cond_cfunc_sym(
+                general_cond_cfunc, cfunc_native_name
+            )
+            cfunc_cond = get_join_cond_addr(cfunc_native_name)
+            return _init_join_state(
+                build_arr_dtypes.ctypes,
+                build_arr_array_types.ctypes,
+                n_build_arrs,
+                probe_arr_dtypes.ctypes,
+                probe_arr_array_types.ctypes,
+                n_probe_arrs,
+                output_type,
+                cfunc_cond,
+            )
+
+        return impl_nonequi
+
     def impl(
         build_key_inds,
         probe_key_inds,
+        build_colnames,
+        probe_colnames,
         build_outer,
         probe_outer,
         expected_state_type=None,
+        non_equi_condition=None,
     ):  # pragma: no cover
         return _init_join_state(
             build_arr_dtypes.ctypes,
@@ -417,6 +516,7 @@ def init_join_state(
             probe_arr_array_types.ctypes,
             n_probe_arrs,
             output_type,
+            0,
         )
 
     return impl

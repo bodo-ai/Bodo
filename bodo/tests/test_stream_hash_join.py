@@ -230,6 +230,16 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
 
     build_keys_inds = bodo.utils.typing.MetaType((0, 1))
     probe_keys_inds = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        ("p_partkey", "p_comment", "p_name", "p_size")
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "l_partkey",
+            "l_comment",
+            "l_orderkey",
+        )
+    )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
             "p_partkey",
@@ -247,6 +257,8 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
         join_state = init_join_state(
             build_keys_inds,
             probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
             build_outer,
             probe_outer,
         )
@@ -340,6 +352,21 @@ def test_hash_join_reorder(memory_leak_check):
 
     build_keys_inds = bodo.utils.typing.MetaType((3, 1))
     probe_keys_inds = bodo.utils.typing.MetaType((0, 2))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "p_name",
+            "p_comment",
+            "p_size",
+            "p_partkey",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "l_partkey",
+            "l_orderkey",
+            "l_comment",
+        )
+    )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
             "p_partkey",
@@ -357,6 +384,8 @@ def test_hash_join_reorder(memory_leak_check):
         join_state = init_join_state(
             build_keys_inds,
             probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
             False,
             False,
         )

@@ -2,6 +2,7 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
+#include "_join.h"
 
 /**
  * @brief allocate an empty table with provided column types
@@ -264,11 +265,14 @@ struct JoinState {
                             KeyEqualHashJoinTable>
         build_table;
 
+    cond_expr_fn_t cond_func;
+
     JoinState(std::vector<int8_t> build_arr_c_types,
               std::vector<int8_t> build_arr_array_types,
               std::vector<int8_t> probe_arr_c_types,
               std::vector<int8_t> probe_arr_array_types, int64_t n_keys_,
-              bool build_table_outer_, bool probe_table_outer_)
+              bool build_table_outer_, bool probe_table_outer_,
+              cond_expr_fn_t _cond_func)
         : build_table_buffer(build_arr_c_types, build_arr_array_types),
           build_shuffle_buffer(build_arr_c_types, build_arr_array_types),
           probe_shuffle_buffer(probe_arr_c_types, probe_arr_array_types),
@@ -276,5 +280,6 @@ struct JoinState {
           build_table_outer(build_table_outer_),
           probe_table_outer(probe_table_outer_),
           build_table({}, HashHashJoinTable(this),
-                      KeyEqualHashJoinTable(this, false, n_keys_)) {}
+                      KeyEqualHashJoinTable(this, false, n_keys_)),
+          cond_func(_cond_func) {}
 };
