@@ -4129,7 +4129,7 @@ class TypingTransforms:
                 "init_join_state",
                 rhs.args,
                 dict(rhs.kws),
-                4,
+                6,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4176,7 +4176,7 @@ class TypingTransforms:
                 "init_join_state",
                 join_def.args,
                 dict(join_def.kws),
-                4,
+                6,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4200,6 +4200,8 @@ class TypingTransforms:
                     new_type = bodo.libs.stream_join.JoinStateType(
                         output_type.build_key_inds,
                         output_type.probe_key_inds,
+                        output_type.build_column_names,
+                        output_type.probe_column_names,
                         output_type.build_outer,
                         output_type.probe_outer,
                         input_table_type,
@@ -4209,19 +4211,51 @@ class TypingTransforms:
                     new_type = bodo.libs.stream_join.JoinStateType(
                         output_type.build_key_inds,
                         output_type.probe_key_inds,
+                        output_type.build_column_names,
+                        output_type.probe_column_names,
                         output_type.build_outer,
                         output_type.probe_outer,
                         output_type.build_table_type,
                         input_table_type,
                     )
+                params = [
+                    "build_key_inds",
+                    "probe_key_inds",
+                    "build_column_names",
+                    "probe_column_names",
+                    "build_outer",
+                    "probe_outer",
+                ]
+                args = join_def.args[:6]
+                # Fetch the non-equality condition argument
+                non_equi_cond_var = get_call_expr_arg(
+                    "init_join_state",
+                    join_def.args,
+                    dict(join_def.kws),
+                    7,
+                    "non_equi_condition",
+                    default=None,
+                    use_default=True,
+                )
+                # If there is a non equality condition we need to include it in
+                # the function.
+                if non_equi_cond_var is not None:
+                    params.append("non_equi_condition")
+                    args.append(non_equi_cond_var)
+                    non_equi_val = "non_equi_condition"
+                else:
+                    non_equi_val = "None"
                 # Compile a new function.
-                func_text = """def impl(build_key_inds, probe_key_inds, build_outer, probe_outer):
+                func_text = f"""def impl({", ".join(params)}):
                     return bodo.libs.stream_join.init_join_state(
                         build_key_inds,
                         probe_key_inds,
+                        build_column_names,
+                        probe_column_names,
                         build_outer,
                         probe_outer,
-                        _expected_state_type,
+                        expected_state_type=_expected_state_type,
+                        non_equi_condition={non_equi_val},
                     )
                 """
                 loc_vars = {}
@@ -4231,7 +4265,6 @@ class TypingTransforms:
                     loc_vars,
                 )
                 func = loc_vars["impl"]
-                args = join_def.args[:4]
 
                 new_nodes = compile_func_single_block(
                     func,
