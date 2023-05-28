@@ -270,11 +270,13 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
  * @param ListIdx      : is the vector of indices to be selected.
  * @param n_cols_arg   : The number of columns selected. If -1 then all are
  * selected
+ * @param use_nullable_arr use nullable int/float output for Numpy array input
  * @return the table output.
  */
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    const std::span<const int64_t> ListIdx, int const& n_cols_arg = -1);
+    const std::span<const int64_t> ListIdx, int const& n_cols_arg = -1,
+    const bool use_nullable_arr = false);
 
 /**
  * @brief select rows and columns in input table specified by list of indices
@@ -283,11 +285,13 @@ std::shared_ptr<table_info> RetrieveTable(
  * @param in_table input table to select from
  * @param rowInds list of row indices to select
  * @param colInds list of column indices to select
+ * @param use_nullable_arr use nullable int/float output for Numpy array input
  * @return std::shared_ptr<table_info> output table with selected rows/columns
  */
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    const std::span<const int64_t> rowInds, std::vector<size_t> const& colInds);
+    const std::span<const int64_t> rowInds, std::vector<size_t> const& colInds,
+    const bool use_nullable_arr = false);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same

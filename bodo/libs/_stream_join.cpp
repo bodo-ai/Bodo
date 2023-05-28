@@ -183,9 +183,10 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     // create output table using build and probe table indices (columns appended
     // side by side)
     std::shared_ptr<table_info> build_out_table =
-        RetrieveTable(join_state->build_table_buffer.data_table, build_idxs);
+        RetrieveTable(join_state->build_table_buffer.data_table, build_idxs, -1,
+                      probe_table_outer);
     std::shared_ptr<table_info> probe_out_table =
-        RetrieveTable(in_table, probe_idxs);
+        RetrieveTable(in_table, probe_idxs, -1, build_table_outer);
     build_idxs.clear();
     probe_idxs.clear();
 
@@ -243,10 +244,11 @@ std::shared_ptr<table_info> join_probe_consume_batch(
         if (build_idxs.size() || probe_idxs.size()) {
             // create output table using build and probe table indices (columns
             // appended side by side)
-            std::shared_ptr<table_info> new_build_out_table = RetrieveTable(
-                join_state->build_table_buffer.data_table, build_idxs);
-            std::shared_ptr<table_info> new_probe_out_table =
-                RetrieveTable(join_state->probe_table, probe_idxs);
+            std::shared_ptr<table_info> new_build_out_table =
+                RetrieveTable(join_state->build_table_buffer.data_table,
+                              build_idxs, -1, probe_table_outer);
+            std::shared_ptr<table_info> new_probe_out_table = RetrieveTable(
+                join_state->probe_table, probe_idxs, -1, build_table_outer);
 
             // append new build data
             std::vector<std::shared_ptr<table_info>> build_tables(
