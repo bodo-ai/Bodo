@@ -79,7 +79,7 @@ if TYPE_CHECKING:  # pragma: no cover
 # This dict is used only when compiling
 join_gen_cond_cfunc = {}
 # Maps symbol name to cfunc address (used when compiling and loading from cache)
-# When compiling, this is populated in join.py::_gen_general_cond_cfunc
+# When compiling, this is populated in join.py::gen_general_cond_cfunc
 # When loading from cache, this is populated in numba_compat.py::resolve_join_general_cond_funcs
 # when the compiled result is loaded from cache
 join_gen_cond_cfunc_addr = {}
@@ -108,7 +108,7 @@ def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
         #   types.int64,
         #   types.int64,
         # )
-        # See: _gen_general_cond_cfunc
+        # See: gen_general_cond_cfunc
         sig = func.signature
         fnty = lir.FunctionType(
             lir.IntType(1),
@@ -1884,11 +1884,23 @@ def join_distributed_run(
 
     # Generate a general join condition function if it exists
     # and determine the data columns it needs.
-    general_cond_cfunc, left_col_nums, right_col_nums = _gen_general_cond_cfunc(
-        join_node,
+    general_cond_cfunc, left_col_nums, right_col_nums = gen_general_cond_cfunc(
         typemap,
         left_logical_physical_map,
         right_logical_physical_map,
+        join_node.gen_cond_expr,
+        join_node.left_var_map,
+        join_node.left_vars,
+        join_node.left_key_set,
+        typemap[join_node.left_vars[0].name]
+        if join_node.has_live_left_table_var
+        else None,
+        join_node.right_var_map,
+        join_node.right_vars,
+        join_node.right_key_set,
+        typemap[join_node.right_vars[0].name]
+        if join_node.has_live_right_table_var
+        else None,
         # cross join passes batches of input to condition function
         compute_in_batch=not join_node.left_keys,
     )
@@ -2025,11 +2037,19 @@ def join_distributed_run(
 distributed_pass.distributed_run_extensions[Join] = join_distributed_run
 
 
-def _gen_general_cond_cfunc(
-    join_node,
+def gen_general_cond_cfunc(
     typemap,
     left_logical_physical_map,
     right_logical_physical_map,
+    expr,
+    left_var_map,
+    left_vars,
+    left_key_set,
+    left_table_type,
+    right_var_map,
+    right_vars,
+    right_key_set,
+    right_table_type,
     compute_in_batch,
 ):
     """Generate cfunc for general join condition and return its address.
@@ -2040,15 +2060,25 @@ def _gen_general_cond_cfunc(
     left_ind=3, right_ind=7
 
     Args:
-        join_node (Join): The join node being used.
-        typemap (Dict[str, types.Type]): The type map for determine the code
-            to generate for each array
+        typemap (Optional[Dict[str, types.Type]]): The type map for determining array
+            types for condition columns (can be None if table types provided)
         left_logical_physical_map (Dict[int, int]): Mapping from the logical
             column number of the left table to the physical number of the C++
             table. This is done because of dead columns.
         right_logical_physical_map (Dict[int, int]): Mapping from the logical
             column number of the right table to the physical number of the C++
             table. This is done because of dead columns.
+        expr (str): general condition expression
+        left_var_map (Dict[str, int]): map column name to logical column number
+        left_vars (Optional[List[ir.Var]]): column variables for left table, needed if
+            left_table_type not provided to determine column array types
+        left_key_set (Set[int]): logical column indices for equality keys if any
+        left_table_type (types.Type): left table type if in table format
+        right_var_map (Dict[str, int]): map column name to logical column number
+        right_vars (Optional[List[ir.Var]]): column variables for left table, needed if
+            right_table_type not provided to determine column array types
+        right_key_set (Set[int]): logical column indices for equality keys if any
+        right_table_type (types.Type): right table type if in table format
         compute_in_batch (bool): process batches of input instead of a single row.
             Cross join implementation passes input batches currently.
 
@@ -2056,7 +2086,6 @@ def _gen_general_cond_cfunc(
         Tuple[cfunc, List[int], List[int]]: Triple containing the generated
             cfunc and the columns used by each table.
     """
-    expr = join_node.gen_cond_expr
     if not expr:
         return None, [], []
 
@@ -2087,29 +2116,29 @@ def _gen_general_cond_cfunc(
     expr, func_text, left_col_nums = _replace_column_accesses(
         expr,
         left_logical_physical_map,
-        join_node.left_var_map,
+        left_var_map,
         typemap,
-        join_node.left_vars,
+        left_vars,
         table_getitem_funcs,
         func_text,
         "left",
-        join_node.left_key_set,
+        left_key_set,
         na_check_name,
-        join_node.is_left_table,
+        left_table_type,
         indent,
     )
     expr, func_text, right_col_nums = _replace_column_accesses(
         expr,
         right_logical_physical_map,
-        join_node.right_var_map,
+        right_var_map,
         typemap,
-        join_node.right_vars,
+        right_vars,
         table_getitem_funcs,
         func_text,
         "right",
-        join_node.right_key_set,
+        right_key_set,
         na_check_name,
-        join_node.is_right_table,
+        right_table_type,
         indent,
     )
     # use short-circuit boolean operators to avoid invalid access of NA locations
@@ -2170,7 +2199,7 @@ def _replace_column_accesses(
     table_name,
     key_set,
     na_check_name,
-    is_table_var,
+    table_type,
     indent,
 ):
     """replace column accesses in join condition expression with an intrinsic that loads
@@ -2186,8 +2215,8 @@ def _replace_column_accesses(
         if cname not in expr:
             continue
         getitem_fname = f"getitem_{table_name}_val_{c_ind}"
-        if is_table_var:
-            array_typ = typemap[col_vars[0].name].arr_types[c_ind]
+        if table_type:
+            array_typ = table_type.arr_types[c_ind]
         else:
             array_typ = typemap[col_vars[c_ind].name]
 

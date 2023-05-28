@@ -301,7 +301,8 @@ std::shared_ptr<table_info> alloc_table(
 JoinState* join_state_init_py_entry(
     int8_t* build_arr_c_types, int8_t* build_arr_array_types, int n_build_arrs,
     int8_t* probe_arr_c_types, int8_t* probe_arr_array_types, int n_probe_arrs,
-    int64_t n_keys, bool build_table_outer, bool probe_table_outer) {
+    int64_t n_keys, bool build_table_outer, bool probe_table_outer,
+    cond_expr_fn_t cond_func) {
     return new JoinState(
         std::vector<int8_t>(build_arr_c_types,
                             build_arr_c_types + n_build_arrs),
@@ -311,7 +312,7 @@ JoinState* join_state_init_py_entry(
                             probe_arr_c_types + n_probe_arrs),
         std::vector<int8_t>(probe_arr_array_types,
                             probe_arr_array_types + n_probe_arrs),
-        n_keys, build_table_outer, probe_table_outer);
+        n_keys, build_table_outer, probe_table_outer, cond_func);
 }
 
 /**
