@@ -502,6 +502,18 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
     build_keys_inds = bodo.utils.typing.MetaType((0,))
     probe_keys_inds = bodo.utils.typing.MetaType((0,))
     kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
             "A",
@@ -516,6 +528,8 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
         join_state = init_join_state(
             build_keys_inds,
             probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
             build_outer,
             probe_outer,
         )
