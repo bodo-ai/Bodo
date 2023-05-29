@@ -2510,3 +2510,42 @@ def get_float_arr_type(base_float_type):
         return bodo.libs.float_arr_ext.FloatingArrayType(base_float_type)
     else:
         return types.Array(base_float_type, 1, "C")
+
+
+def is_bodosql_integer_arr_type(arr_typ: types.ArrayCompatible) -> bool:
+    """Returns if a given array type may represent
+    an integer type in BodoSQL. This is used when
+    casting is required.
+
+    Args:
+        arr_typ (types.ArrayCompatible): The type to check.
+
+    Returns:
+        bool: Is the array a decimal or integer array (nullable or non-nullable).
+    """
+    return isinstance(arr_typ, bodo.DecimalArrayType) or isinstance(
+        arr_typ.dtype, types.Integer
+    )
+
+
+def get_common_bodosql_integer_arr_type(
+    arr_typ1: types.ArrayCompatible, arr_typ2: types.ArrayCompatible
+) -> types.ArrayCompatible:
+    """Returns a common array type for two BodoSQL integer array representations
+    that have already been validated by is_bodosql_integer_type.
+
+    Args:
+        arr_typ1 (types.ArrayCompatible): An integer (nullable or non-nullable) or decimal array.
+        arr_typ2 (types.ArrayCompatible): An integer (nullable or non-nullable) or decimal array.
+
+    Returns:
+        types.ArrayCompatible: The output array with max bidwidth + correct nullability.
+    """
+    to_nullable = is_nullable(arr_typ1) or is_nullable(arr_typ2)
+    if arr_typ1.dtype.bitwidth > arr_typ2.dtype.bitwidth:
+        arr_typ = arr_typ1
+    else:
+        arr_typ = arr_typ2
+    if to_nullable:
+        arr_typ = to_nullable_type(arr_typ)
+    return arr_typ

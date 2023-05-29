@@ -3,7 +3,7 @@
 This file is mostly wrappers for C++ implementations.
 """
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 import llvmlite.binding as ll
 import numba
@@ -22,8 +22,11 @@ from bodo.libs.array import (
 from bodo.utils.typing import (
     BodoError,
     MetaType,
+    get_common_bodosql_integer_arr_type,
     get_overload_const_bool,
     get_overload_const_str,
+    is_bodosql_integer_arr_type,
+    is_nullable,
     is_overload_bool,
     is_overload_none,
     raise_bodo_error,
@@ -103,23 +106,23 @@ class JoinStateType(types.Type):
 
     # Methods used to compute the information needed for _init_join_state
 
-    def _derive_cpp_indices(self, key_idxs, table_type):
+    def _derive_cpp_indices(self, key_indices, num_cols):
         """Generate the indices used for the C++ table from the
         given Python table.
 
         Args:
-            key_idxs (N Tuple(int)): The indices of the key columns
-            table_type (TableType): The input table type.
+            key_indices (N Tuple(int)): The indices of the key columns
+            num_cols (int): The number of total columns in the array.
 
         Returns:
             N Tuple(int): Tuple giving the order of the output indices
         """
         total_idxs = []
-        for key_idx in key_idxs:
+        for key_idx in key_indices:
             total_idxs.append(key_idx)
 
-        idx_set = set(key_idxs)
-        for i in range(len(table_type.arr_types)):
+        idx_set = set(key_indices)
+        for i in range(num_cols):
             if i not in idx_set:
                 total_idxs.append(i)
         return tuple(total_idxs)
@@ -129,126 +132,286 @@ class JoinStateType(types.Type):
         if self.build_table_type == types.unknown:
             return ()
         else:
-            return self._derive_cpp_indices(self.build_key_inds, self.build_table_type)
+            return self._derive_cpp_indices(
+                self.build_key_inds, len(self.build_table_type.arr_types)
+            )
 
     @cached_property
     def probe_indices(self):
         if self.probe_table_type == types.unknown:
             return ()
         else:
-            return self._derive_cpp_indices(self.probe_key_inds, self.probe_table_type)
+            return self._derive_cpp_indices(
+                self.probe_key_inds, len(self.probe_table_type.arr_types)
+            )
 
-    def _derive_c_types(self, key_idxs, table_type) -> np.ndarray:
+    def _derive_input_type(
+        self, key_types, key_indices, table_type
+    ) -> List[types.ArrayCompatible]:
+        """Generate the input table type based on the given key types, key
+        indices, and table type.
+
+        Args:
+            key_types (List[types.ArrayCompatible]): The list of key types in order.
+            key_indices (N Tuple(int)): The indices of the key columns
+            table_type (TableType): The input table type.
+
+        Returns:
+            List[types.ArrayCompatible]: The list of array types for the input table (in order).
+        """
+        types = key_types.copy()
+        idx_set = set(key_indices)
+        for i in range(len(table_type.arr_types)):
+            # Append the data columns.
+            if i not in idx_set:
+                types.append(table_type.arr_types[i])
+        return types
+
+    @cached_property
+    def key_types(self) -> List[types.ArrayCompatible]:
+        """Generate the list of array types that should be used for the
+        keys to hash join. For build/probe the keys must match exactly.
+
+        Returns:
+            List[types.ArrayCompatible]: The list of array types used
+            by the keys.
+        """
+        build_table_type = self.build_table_type
+        probe_table_type = self.probe_table_type
+        if build_table_type == types.unknown or probe_table_type == types.unknown:
+            # This path may be reached if the typing transformations haven't fully finished.
+            return []
+        build_key_inds = self.build_key_inds
+        probe_key_inds = self.probe_key_inds
+        arr_types = []
+        num_keys = len(build_key_inds)
+        for i in range(num_keys):
+            build_arr_type = self.build_table_type.arr_types[build_key_inds[i]]
+            probe_arr_type = self.probe_table_type.arr_types[probe_key_inds[i]]
+            probe_nullable = is_nullable(probe_arr_type)
+            build_nullable = is_nullable(build_arr_type)
+            # Convert arrays if they aren't the same nullability.
+            if probe_nullable != build_nullable:
+                if probe_nullable:
+                    build_arr_type = to_nullable_type(build_arr_type)
+                if build_nullable:
+                    probe_arr_type = to_nullable_type(probe_arr_type)
+            if build_arr_type == probe_arr_type:
+                key_type = build_arr_type
+            elif is_bodosql_integer_arr_type(
+                build_arr_type
+            ) and is_bodosql_integer_arr_type(probe_arr_type):
+                # TODO: Future optimization. If the types don't match exactly and
+                # we don't have an outer join on the larger bitwidth side, we don't
+                # have to upcast and can instead filter + downcast. In particular we
+                # know that any type that doesn't fit in the smaller array type
+                # cannot have a match.
+                #
+                # Note: If we have an outer join we can't do this because we need to
+                # preserve the elements without matches.
+                #
+                key_type = get_common_bodosql_integer_arr_type(
+                    build_arr_type, probe_arr_type
+                )
+            else:
+                # TODO [BSE-439]: Support dict encoding + regular string
+                raise BodoError(
+                    "StreamingHashJoin: Build and probe keys must have the same types"
+                )
+            arr_types.append(key_type)
+        return arr_types
+
+    def _key_casted_table_type(self, key_types, key_indices, table_type):
+        """
+        Generate the table type produced by only casting
+        the keys to the shared key type and keeping all data columns the
+        same.
+
+        Args:
+            key_types (List[types.ArrayCompatible]): The list of array types used
+                by the keys.
+            key_indices (N Tuple(int)): The indices of the key columns
+            table_type (TableType): The table type without casting.
+
+        Returns:
+            TableType: The new table type.
+        """
+
+        # Assume most cases don't cast.
+        should_cast = False
+        for i, idx in enumerate(key_indices):
+            if key_types[i] != table_type.arr_types[idx]:
+                should_cast = True
+                break
+        if not should_cast:
+            # No need to generate a new type
+            return table_type
+        indices_map = {idx: i for i, idx in enumerate(key_indices)}
+        arr_types = []
+        for i in range(len(table_type.arr_types)):
+            if i in indices_map:
+                arr_types.append(key_types[indices_map[i]])
+            else:
+                arr_types.append(table_type.arr_types[i])
+        return bodo.TableType(tuple(arr_types))
+
+    @property
+    def key_casted_build_table_type(self):
+        """Generate the table type produced by only casting
+        the build keys to the shared key type and keeping all
+        data columns the same.
+
+        Returns:
+            TableType: The new table type.
+        """
+        if self.build_table_type == types.unknown:
+            return types.unknown
+        return self._key_casted_table_type(
+            self.key_types, self.build_key_inds, self.build_table_type
+        )
+
+    @property
+    def key_casted_probe_table_type(self):
+        """Generate the table type produced by only casting
+        the probe keys to the shared key type and keeping all
+        data columns the same.
+
+        Returns:
+            TableType: The new table type.
+        """
+        if self.probe_table_type == types.unknown:
+            return types.unknown
+        return self._key_casted_table_type(
+            self.key_types, self.probe_key_inds, self.probe_table_type
+        )
+
+    @cached_property
+    def build_reordered_arr_types(self) -> List[types.ArrayCompatible]:
+        """
+        Get the list of array types for the actual input to the C++ build table.
+        This is different from the build_table_type because the input to the C++
+        will reorder keys to the front and may cast keys to matching types.
+
+        Returns:
+            List[types.ArrayCompatible]: The list of array types for the build table.
+        """
+        if self.build_table_type == types.unknown:
+            return []
+        key_types = self.key_types
+        key_indices = self.build_key_inds
+        table = self.build_table_type
+        return self._derive_input_type(key_types, key_indices, table)
+
+    @cached_property
+    def probe_reordered_arr_types(self) -> List[types.ArrayCompatible]:
+        """
+        Get the list of array types for the actual input to the C++ probe table.
+        This is different from the probe_table_type because the input to the C++
+        will reorder keys to the front and may cast keys to matching types.
+
+        Returns:
+            List[types.ArrayCompatible]: The list of array types for the probe table.
+        """
+        if self.probe_table_type == types.unknown:
+            return []
+        key_types = self.key_types
+        key_indices = self.probe_key_inds
+        table = self.probe_table_type
+        return self._derive_input_type(key_types, key_indices, table)
+
+    def _derive_c_types(self, arr_types: List[types.ArrayCompatible]) -> np.ndarray:
         """Generate the CType Enum types for each array in the
         C++ build table via the indices.
 
         Args:
-            key_idxs (N Tuple(int)): The indices of the key columns
-            table_type (TableType): The input table type.
+            arr_types (List[types.ArrayCompatible]): The array types to use.
 
         Returns:
             List(int): List with the integer values of each CTypeEnum value.
         """
         return np.array(
-            [numba_to_c_type(table_type.arr_types[i].dtype) for i in key_idxs],
+            [numba_to_c_type(arr_type.dtype) for arr_type in arr_types],
             dtype=np.int8,
         )
 
-    @cached_property
+    @property
     def build_arr_ctypes(self) -> np.ndarray:
         """
         Fetch the CTypes used for each array in the build table.
 
-        Note: We must use build_indices to account for reordering
-        and/or duplicate keys.
+        Note: We must use build_reordered_arr_types to account for reordering
+        and/or cast keys.
 
         Returns:
             List(int): The ctypes for each array in the build table. Note
                 that C++ wants the actual integer but these are the values derived from
                 CTypeEnum.
         """
-        indices = self.build_indices
-        table = self.build_table_type
-        if table == types.unknown:
-            return np.array([], dtype=np.int8)
-        else:
-            return self._derive_c_types(indices, table)
+        return self._derive_c_types(self.build_reordered_arr_types)
 
-    @cached_property
+    @property
     def probe_arr_ctypes(self) -> np.ndarray:
         """
         Fetch the CTypes used for each array in the probe table.
 
-        Note: We must use probe_indices to account for reordering
-        and/or duplicate keys.
+        Note: We must use probe_reordered_arr_types to account for reordering
+        and/or cast keys.
 
         Returns:
             List(int): The ctypes for each array in the probe table. Note
                 that C++ wants the actual integer but these are the values derived from
                 CTypeEnum.
         """
-        indices = self.probe_indices
-        table = self.probe_table_type
-        if table == types.unknown:
-            return np.array([], dtype=np.int8)
-        else:
-            return self._derive_c_types(indices, table)
+        return self._derive_c_types(self.probe_reordered_arr_types)
 
-    def _derive_c_array_types(self, key_idxs, table_type) -> np.ndarray:
+    def _derive_c_array_types(
+        self, arr_types: List[types.ArrayCompatible]
+    ) -> np.ndarray:
         """Generate the CArrayTypeEnum Enum types for each array in the
         C++ build table via the indices.
 
         Args:
-            key_idxs (N Tuple(int)): The indices of the key columns
-            table_type (TableType): The input table type.
+            arr_types (List[types.ArrayCompatible]): The array types to use.
 
         Returns:
             List(int): List with the integer values of each CTypeEnum value.
         """
         return np.array(
-            [numba_to_c_array_type(table_type.arr_types[i]) for i in key_idxs],
+            [numba_to_c_array_type(arr_type) for arr_type in arr_types],
             dtype=np.int8,
         )
 
-    @cached_property
+    @property
     def build_arr_array_types(self) -> np.ndarray:
         """
         Fetch the CArrayTypeEnum used for each array in the build table.
 
-        Note: We must use build_indices to account for reordering
-        and/or duplicate keys.
+        Note: We must use build_reordered_arr_types to account for reordering
+        and/or cast keys.
+
 
         Returns:
             List(int): The CArrayTypeEnum for each array in the build table. Note
                 that C++ wants the actual integer but these are the values derived from
                 CArrayTypeEnum.
         """
-        indices = self.build_indices
-        table = self.build_table_type
-        if table == types.unknown:
-            return np.array([], dtype=np.int8)
-        else:
-            return self._derive_c_array_types(indices, table)
+        return self._derive_c_array_types(self.build_reordered_arr_types)
 
-    @cached_property
+    @property
     def probe_arr_array_types(self) -> np.ndarray:
         """
         Fetch the CArrayTypeEnum used for each array in the probe table.
 
-        Note: We must use probe_indices to account for reordering
-        and/or duplicate keys.
+        Note: We must use probe_reordered_arr_types to account for reordering
+        and/or cast keys.
+
 
         Returns:
             List(int): The CArrayTypeEnum for each array in the probe table. Note
                 that C++ wants the actual integer but these are the values derived from
                 CArrayTypeEnum.
         """
-        indices = self.probe_indices
-        table = self.probe_table_type
-        if table == types.unknown:
-            return np.array([], dtype=np.int8)
-        else:
-            return self._derive_c_array_types(indices, table)
+        return self._derive_c_array_types(self.probe_reordered_arr_types)
 
     @property
     def num_build_arrs(self) -> int:
@@ -260,7 +423,7 @@ class JoinStateType(types.Type):
 
         Return (int): The number of build arrays
         """
-        return len(self.build_arr_ctypes)
+        return len(self.build_reordered_arr_types)
 
     @property
     def num_probe_arrs(self) -> int:
@@ -272,26 +435,29 @@ class JoinStateType(types.Type):
 
         Return (int): The number of probe arrays
         """
-        return len(self.probe_arr_ctypes)
+        return len(self.probe_reordered_arr_types)
 
     @property
     def output_type(self):
         """Return the output type from generating this join.
 
-        Note: We must use build_indices and probe_indices to
-        account for key reordering.
+        Note: We must use build_arr_types and probe_arr_types to
+        account for key reordering + casting.
 
         Returns:
             bodo.TableType: The type of the output table.
         """
         arr_types = []
-        for build_idx in self.build_indices:
-            arr_type = self.build_table_type.arr_types[build_idx]
+        # Note: We can maintain the input key types in the output.
+        # Nothing should assume the original type if we cast an integer.
+        key_types = self.key_types
+        # Add build side
+        for arr_type in key_types + self.build_reordered_arr_types[self.n_keys :]:
             if self.probe_outer:
                 arr_type = to_nullable_type(arr_type)
             arr_types.append(arr_type)
-        for probe_idx in self.probe_indices:
-            arr_type = self.probe_table_type.arr_types[probe_idx]
+        # Add probe side
+        for arr_type in key_types + self.probe_reordered_arr_types[self.n_keys :]:
             if self.build_outer:
                 arr_type = to_nullable_type(arr_type)
             arr_types.append(arr_type)
@@ -568,9 +734,15 @@ def join_build_consume_batch(join_state, table, is_last, parallel=False):
     """
     in_col_inds = MetaType(join_state.build_indices)
     n_table_cols = join_state.num_build_arrs
+    cast_table_type = join_state.key_casted_build_table_type
+    if cast_table_type == types.unknown:
+        cast_table_type = table
 
     def impl(join_state, table, is_last, parallel=False):  # pragma: no cover
-        cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
+        cast_table = bodo.utils.table_utils.table_astype(
+            table, cast_table_type, False, False
+        )
+        cpp_table = py_data_to_cpp_table(cast_table, (), in_col_inds, n_table_cols)
         _join_build_consume_batch(join_state, cpp_table, is_last, parallel)
 
     return impl
@@ -625,12 +797,18 @@ def join_probe_consume_batch(join_state, table, is_last, parallel=False):
     """
     in_col_inds = MetaType(join_state.probe_indices)
     n_table_cols = join_state.num_probe_arrs
+    cast_table_type = join_state.key_casted_probe_table_type
+    if cast_table_type == types.unknown:
+        cast_table_type = table
     out_table_type = join_state.output_type
 
     n_out_arrs = len(unwrap_typeref(out_table_type).arr_types)
 
     def impl(join_state, table, is_last, parallel=False):  # pragma: no cover
-        cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
+        cast_table = bodo.utils.table_utils.table_astype(
+            table, cast_table_type, False, False
+        )
+        cpp_table = py_data_to_cpp_table(cast_table, (), in_col_inds, n_table_cols)
         out_cpp_table, out_is_last = _join_probe_consume_batch(
             join_state, cpp_table, is_last, parallel
         )

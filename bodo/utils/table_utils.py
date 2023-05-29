@@ -327,6 +327,13 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
     may_copy = not is_overload_false(copy)
     must_copy = is_overload_true(copy)
 
+    # If the types are exactly the same and we don't need a copy, then we can just
+    # return the input table
+    if table == new_table_typ and not may_copy:  # pragma: no cover
+        return (
+            lambda table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None: table
+        )
+
     # Define the globals for this kernel. These
     # will be updated throughout codegen.
     glbls: Dict[str, Any] = {"bodo": bodo}
@@ -354,6 +361,7 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
     func_text = (
         "def impl(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):\n"
     )
+
     # Allocate the new table and set its length
     func_text += f"  out_table = bodo.hiframes.table.init_table(new_table_typ, False)\n"
     func_text += (
