@@ -12,7 +12,7 @@ from bodo.libs.stream_join import (
     join_build_consume_batch,
     join_probe_consume_batch,
 )
-from bodo.tests.utils import _test_equal, pytest_mark_snowflake
+from bodo.tests.utils import _test_equal, check_func, pytest_mark_snowflake
 
 
 @pytest_mark_snowflake
@@ -483,9 +483,6 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
     types to nullable types.
 
     The codegen here is heavily influence by the BodoSQL generated code.
-
-    This is only tested sequentially because the parallel version shouldn't impact
-    anything.
     """
     df1 = pd.DataFrame(
         {
@@ -523,7 +520,6 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
         )
     )
 
-    @bodo.jit
     def test_hash_join(df1, df2):
         join_state = init_join_state(
             build_keys_inds,
@@ -584,7 +580,6 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
-    out_df = test_hash_join(df1, df2)
     # Generate expected output for each type of join
     left_outer = pd.DataFrame(
         {
@@ -622,9 +617,10 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
     else:
         inner = inner.astype({"A": "Int64", "B": "Int32"})
         expected_df = pd.concat([right_outer, inner])
-    _test_equal(
-        out_df,
-        expected_df,
+    check_func(
+        test_hash_join,
+        (df1, df2),
+        py_output=expected_df,
         reset_index=True,
         sort_output=True,
     )
@@ -676,7 +672,6 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
         )
     )
 
-    @bodo.jit
     def test_hash_join(df1, df2):
         join_state = init_join_state(
             build_keys_inds,
@@ -737,7 +732,6 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
-    out_df = test_hash_join(df1, df2)
     # Generate expected output for each type of join
     right_outer = pd.DataFrame(
         {
@@ -762,9 +756,168 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
     else:
         expected_df = inner
 
-    _test_equal(
-        out_df,
-        expected_df,
+    check_func(
+        test_hash_join,
+        (df1, df2),
+        py_output=expected_df,
+        reset_index=True,
+        sort_output=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "build_outer,probe_outer",
+    [
+        pytest.param(False, False, id="inner"),
+        pytest.param(True, True, id="full-outer"),
+        pytest.param(True, False, id="left", marks=pytest.mark.slow),
+        pytest.param(False, True, id="right", marks=pytest.mark.slow),
+    ],
+)
+def test_non_equi_join_cond(build_outer, probe_outer, memory_leak_check):
+    """Test streaming hash join with a non-equality condition."""
+    df1 = pd.DataFrame(
+        {
+            "A": np.array(list(range(2500)) * 5, dtype=np.int16),
+            "B": np.array(list(range(2500)) * 5, dtype=np.int32),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([2, 4] * 5, dtype="Int8"),
+            "D": np.array([4, 2] * 5, dtype=np.int8),
+        }
+    )
+    build_keys_inds = bodo.utils.typing.MetaType((0,))
+    probe_keys_inds = bodo.utils.typing.MetaType((0,))
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+    non_equi_cond = "(left.`A` < right.`D`)"
+
+    def test_hash_join(df1, df2):
+        join_state = init_join_state(
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            build_outer,
+            probe_outer,
+            non_equi_condition=non_equi_cond,
+        )
+        _temp1 = 0
+        is_last1 = False
+        while not is_last1:
+            batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            _temp1 = _temp1 + 1
+            is_last1 = bodo.libs.distributed_api.dist_reduce(
+                is_last1,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            table1 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
+                (),
+                kept_cols,
+                2,
+            )
+            join_build_consume_batch(join_state, table1, is_last1)
+
+        _temp2 = 0
+        out_dfs = []
+        is_last2 = False
+        is_last3 = False
+        while not is_last3:
+            batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            _temp2 = _temp2 + 1
+            is_last2 = bodo.libs.distributed_api.dist_reduce(
+                is_last2,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            table2 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
+                (),
+                kept_cols,
+                2,
+            )
+            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df_final)
+            is_last3 = bodo.libs.distributed_api.dist_reduce(
+                is_last3,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+        delete_join_state(join_state)
+        return pd.concat(out_dfs)
+
+    # Generate expected output for each type of join
+    left_missed_keys = list(set(range(2500)) - {2}) * 5
+    build_outer_df = pd.DataFrame(
+        {
+            "A": pd.array(left_missed_keys, dtype="Int16"),
+            "B": pd.array(left_missed_keys, dtype="int32"),
+            "C": pd.array([None] * len(left_missed_keys), dtype="Int16"),
+            "D": pd.array([None] * len(left_missed_keys), dtype="Int8"),
+        }
+    )
+    probe_outer_df = pd.DataFrame(
+        {
+            "A": pd.array([None] * 5, dtype="Int16"),
+            "B": pd.array([None] * 5, dtype="Int32"),
+            "C": pd.array([4] * 5, dtype="Int16"),
+            "D": pd.array([2] * 5, dtype="int8"),
+        }
+    )
+    inner = pd.DataFrame(
+        {
+            "A": pd.array([2] * 25, dtype="Int16"),
+            "B": np.array([2] * 25, dtype=np.int32),
+            "C": pd.array([2] * 25, dtype="Int16"),
+            "D": np.array([4] * 25, dtype=np.int8),
+        }
+    )
+    # Fuse the outputs and cast.
+    if build_outer and probe_outer:
+        build_outer_df = build_outer_df.astype({"B": "Int32"})
+        probe_outer_df = probe_outer_df.astype({"D": "Int8"})
+        inner = inner.astype({"B": "Int32", "D": "Int8"})
+        expected_df = pd.concat([build_outer_df, probe_outer_df, inner])
+    elif build_outer:
+        inner = inner.astype({"D": "Int8"})
+        expected_df = pd.concat([build_outer_df, inner])
+    elif probe_outer:
+        inner = inner.astype({"B": "Int32"})
+        expected_df = pd.concat([probe_outer_df, inner])
+    else:
+        expected_df = inner
+    check_func(
+        test_hash_join,
+        (df1, df2),
+        py_output=expected_df,
         reset_index=True,
         sort_output=True,
     )

@@ -264,8 +264,11 @@ class JoinStateType(types.Type):
         Returns:
             TableType: The new table type.
         """
-        if self.build_table_type == types.unknown:
-            return types.unknown
+        if (
+            self.build_table_type == types.unknown
+            or self.probe_table_type == types.unknown
+        ):
+            return self.build_table_type
         return self._key_casted_table_type(
             self.key_types, self.build_key_inds, self.build_table_type
         )
@@ -279,8 +282,11 @@ class JoinStateType(types.Type):
         Returns:
             TableType: The new table type.
         """
-        if self.probe_table_type == types.unknown:
-            return types.unknown
+        if (
+            self.build_table_type == types.unknown
+            or self.probe_table_type == types.unknown
+        ):
+            return self.probe_table_type
         return self._key_casted_table_type(
             self.key_types, self.probe_key_inds, self.probe_table_type
         )
@@ -608,10 +614,14 @@ def init_join_state(
     n_probe_arrs = output_type.num_probe_arrs
 
     # handle non-equi conditions (reuse existing join code as much as possible)
+    # Note we must account for how keys will be cast here.
+    build_table_type = output_type.key_casted_build_table_type
+    probe_table_type = output_type.key_casted_probe_table_type
+
     if (
         not is_overload_none(non_equi_condition)
-        and output_type.build_table_type != types.unknown
-        and output_type.probe_table_type != types.unknown
+        and build_table_type != types.unknown
+        and probe_table_type != types.unknown
     ):
         from bodo.ir.join import (
             add_join_gen_cond_cfunc_sym,
@@ -620,6 +630,15 @@ def init_join_state(
         )
 
         gen_expr_const = get_overload_const_str(non_equi_condition)
+
+        # Parse the query
+        _, _, parsed_gen_expr = bodo.hiframes.dataframe_impl._parse_merge_cond(
+            gen_expr_const,
+            output_type.build_column_names,
+            build_table_type.arr_types,
+            output_type.probe_column_names,
+            probe_table_type.arr_types,
+        )
 
         left_logical_to_physical = output_type.build_indices
         right_logical_to_physical = output_type.probe_indices
@@ -631,15 +650,15 @@ def init_join_state(
             None,
             left_logical_to_physical,
             right_logical_to_physical,
-            gen_expr_const,
+            str(parsed_gen_expr),
             left_var_map,
             None,
             set(),
-            output_type.build_table_type,
+            build_table_type,
             right_var_map,
             None,
             set(),
-            output_type.probe_table_type,
+            probe_table_type,
             compute_in_batch=not output_type.build_key_inds,
         )
         cfunc_native_name = general_cond_cfunc.native_name
