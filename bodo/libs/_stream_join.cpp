@@ -138,7 +138,8 @@ void join_build_consume_batch(JoinState* join_state,
  * @param is_last is last batch
  * @return std::shared_ptr<table_info> output table batch
  */
-template <bool build_table_outer, bool probe_table_outer>
+template <bool build_table_outer, bool probe_table_outer,
+          bool non_equi_condition>
 std::shared_ptr<table_info> join_probe_consume_batch(
     JoinState* join_state, std::shared_ptr<table_info> in_table, bool is_last,
     bool parallel) {
@@ -156,6 +157,20 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
 
+    // Fetch the raw array pointers from the arrays for passing
+    // to the non-equijoin condition
+    std::vector<array_info*> build_table_info_ptrs, probe_table_info_ptrs;
+    // Vectors for data
+    std::vector<void*> build_col_ptrs, probe_col_ptrs;
+    // Vectors for null bitmaps for fast null checking from the cfunc
+    std::vector<void*> build_null_bitmaps, probe_null_bitmaps;
+    if (non_equi_condition) {
+        std::tie(build_table_info_ptrs, build_col_ptrs, build_null_bitmaps) =
+            get_gen_cond_data_ptrs(join_state->build_table_buffer.data_table);
+        std::tie(probe_table_info_ptrs, probe_col_ptrs, probe_null_bitmaps) =
+            get_gen_cond_data_ptrs(in_table);
+    }
+
     // probe hash table
     join_state->probe_shuffle_buffer.ReserveTable(in_table);
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
@@ -168,11 +183,32 @@ std::shared_ptr<table_info> join_probe_consume_batch(
                 probe_idxs.push_back(i_row);
                 continue;
             }
+            // Initialize to true for pure hash join so the final branch
+            // is non-equality condition only.
+            bool has_match = !non_equi_condition;
             for (auto it = range.first; it != range.second; ++it) {
+                if (non_equi_condition) {
+                    // Check for matches with the non-equality portion.
+                    bool match = join_state->cond_func(
+                        build_table_info_ptrs.data(),
+                        probe_table_info_ptrs.data(), build_col_ptrs.data(),
+                        probe_col_ptrs.data(), build_null_bitmaps.data(),
+                        probe_null_bitmaps.data(), it->second, i_row);
+                    if (!match) {
+                        continue;
+                    }
+                    has_match = true;
+                }
                 if (build_table_outer) {
                     join_state->build_table_matched[it->second] = true;
                 }
                 build_idxs.push_back(it->second);
+                probe_idxs.push_back(i_row);
+            }
+            // non-equality condition only branch
+            if (!has_match && probe_table_outer) {
+                // Add unmatched rows from probe table to output table
+                build_idxs.push_back(-1);
                 probe_idxs.push_back(i_row);
             }
         } else {
@@ -210,6 +246,25 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             join_state->probe_table_hashes =
                 hash_keys_table(join_state->probe_table, join_state->n_keys,
                                 SEED_HASH_JOIN, parallel);
+
+            // Fetch the raw array pointers from the arrays for passing
+            // to the non-equijoin condition
+            std::vector<array_info*> build_table_info_ptrs,
+                probe_table_info_ptrs;
+            // Vectors for data
+            std::vector<void*> build_col_ptrs, probe_col_ptrs;
+            // Vectors for null bitmaps for fast null checking from the cfunc
+            std::vector<void*> build_null_bitmaps, probe_null_bitmaps;
+            if (non_equi_condition) {
+                std::tie(build_table_info_ptrs, build_col_ptrs,
+                         build_null_bitmaps) =
+                    get_gen_cond_data_ptrs(
+                        join_state->build_table_buffer.data_table);
+                std::tie(probe_table_info_ptrs, probe_col_ptrs,
+                         probe_null_bitmaps) =
+                    get_gen_cond_data_ptrs(join_state->probe_table);
+            }
+
             for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
                 auto range = join_state->build_table.equal_range(-i_row - 1);
                 if (probe_table_outer && range.first == range.second) {
@@ -218,11 +273,32 @@ std::shared_ptr<table_info> join_probe_consume_batch(
                     probe_idxs.push_back(i_row);
                     continue;
                 }
+                // Initialize to true for pure hash join so the final branch
+                // is non-equality condition only.
+                bool has_match = !non_equi_condition;
                 for (auto it = range.first; it != range.second; ++it) {
+                    if (non_equi_condition) {
+                        // Check for matches with the non-equality portion.
+                        bool match = join_state->cond_func(
+                            build_table_info_ptrs.data(),
+                            probe_table_info_ptrs.data(), build_col_ptrs.data(),
+                            probe_col_ptrs.data(), build_null_bitmaps.data(),
+                            probe_null_bitmaps.data(), it->second, i_row);
+                        if (!match) {
+                            continue;
+                        }
+                        has_match = true;
+                    }
                     if (build_table_outer) {
                         join_state->build_table_matched[it->second] = true;
                     }
                     build_idxs.push_back(it->second);
+                    probe_idxs.push_back(i_row);
+                }
+                // non-equality condition only branch
+                if (!has_match && probe_table_outer) {
+                    // Add unmatched rows from probe table to output table
+                    build_idxs.push_back(-1);
                     probe_idxs.push_back(i_row);
                 }
             }
@@ -351,11 +427,14 @@ table_info* join_probe_consume_batch_py_entry(JoinState* join_state,
                                               bool parallel) {
 #ifndef CONSUME_PROBE_BATCH
 #define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,         \
-                            build_table_outer_exp, probe_table_outer_exp) \
+                            has_non_equi_cond, build_table_outer_exp,     \
+                            probe_table_outer_exp, has_non_equi_cond_exp) \
     if (build_table_outer == build_table_outer_exp &&                     \
-        probe_table_outer == probe_table_outer_exp) {                     \
+        probe_table_outer == probe_table_outer_exp &&                     \
+        has_non_equi_cond == has_non_equi_cond_exp) {                     \
         out = join_probe_consume_batch<build_table_outer_exp,             \
-                                       probe_table_outer_exp>(            \
+                                       probe_table_outer_exp,             \
+                                       has_non_equi_cond_exp>(            \
             join_state, std::unique_ptr<table_info>(in_table), is_last,   \
             parallel);                                                    \
     }
@@ -366,15 +445,32 @@ table_info* join_probe_consume_batch_py_entry(JoinState* join_state,
         // of the output buffer.
         *out_is_last = is_last;
         std::shared_ptr<table_info> out;
+        bool contain_non_equi_cond = join_state->cond_func != NULL;
 
         CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer, true, true)
+                            join_state->probe_table_outer,
+                            contain_non_equi_cond, true, true, true)
         CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer, true, false)
+                            join_state->probe_table_outer,
+                            contain_non_equi_cond, true, true, false)
         CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer, false, true)
+                            join_state->probe_table_outer,
+                            contain_non_equi_cond, true, false, true)
         CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer, false, false)
+                            join_state->probe_table_outer,
+                            contain_non_equi_cond, true, false, false)
+        CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                            join_state->probe_table_outer,
+                            contain_non_equi_cond, false, true, true)
+        CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                            join_state->probe_table_outer,
+                            contain_non_equi_cond, false, true, false)
+        CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                            join_state->probe_table_outer,
+                            contain_non_equi_cond, false, false, true)
+        CONSUME_PROBE_BATCH(join_state->build_table_outer,
+                            join_state->probe_table_outer,
+                            contain_non_equi_cond, false, false, false)
 
         return new table_info(*out);
     } catch (const std::exception& e) {
