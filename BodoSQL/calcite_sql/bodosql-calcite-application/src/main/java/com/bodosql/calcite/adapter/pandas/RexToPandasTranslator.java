@@ -609,17 +609,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    */
   private Variable getCaseInputVar(BodoCtx translatorContext) {
     if (translatorContext.getColsToAddList().size() > 0) {
-      Variable newInputVar = builder.getSymbolTable().genDfVar();
       // Generate the new variable in the code
       List<String> colNames = input.getRel().getRowType().getFieldNames();
       Variable prevInputVar = input.getVariable();
-      Op.Assign newDataFrame =
-          new Assign(
-              newInputVar,
-              generateCombinedDf(prevInputVar, colNames, translatorContext.getColsToAddList()));
-      // Add the new variable to the generated code.
-      this.builder.add(newDataFrame);
-      return newInputVar;
+      return generateCombinedDf(
+          prevInputVar, colNames, translatorContext.getColsToAddList(), visitor, builder);
     } else {
       return input.getVariable();
     }
