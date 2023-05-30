@@ -331,3 +331,31 @@ struct JoinState {
                       KeyEqualHashJoinTable(this, false, n_keys_)),
           cond_func(_cond_func) {}
 };
+
+/**
+ * @brief Python wrapper to consume build table batch in nested loop join
+ *
+ * @param join_state join state pointer
+ * @param in_table build table batch
+ * @param is_last is last batch
+ */
+void nested_loop_join_build_consume_batch_py_entry(JoinState* join_state,
+                                                   table_info* in_table,
+                                                   bool is_last, bool parallel);
+
+/**
+ * @brief consume probe table batch in streaming nested loop join and produce
+ * output table batch Design doc:
+ * https://bodo.atlassian.net/wiki/spaces/B/pages/1373896721/Vectorized+Nested+Loop+Join+Design
+ *
+ * @param join_state join state pointer
+ * @param in_table probe table batch
+ * @param is_last is last batch
+ * @param is_parallel parallel flag
+ * @return std::shared_ptr<table_info> output table batch
+ */
+table_info* nested_loop_join_probe_consume_batch_py_entry(JoinState* join_state,
+                                                          table_info* in_table,
+                                                          bool is_last,
+                                                          bool* out_is_last,
+                                                          bool parallel);
