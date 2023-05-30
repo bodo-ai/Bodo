@@ -604,6 +604,7 @@ def test_hash_join_reorder(memory_leak_check):
 # Note we mark this as slow because the volume of data in
 # the output makes checking correctness slow.
 @pytest.mark.slow
+@pytest.mark.timeout(900)
 @pytest.mark.parametrize(
     "build_outer,probe_outer",
     [

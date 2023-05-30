@@ -10,7 +10,7 @@
  * @param in_table build table batch
  * @param is_last is last batch
  */
-void nested_loop_join_build_consume_batch(JoinState* join_state,
+void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
                                           std::shared_ptr<table_info> in_table,
                                           bool is_last, bool parallel) {
     // just add batch to build table buffer
@@ -30,7 +30,7 @@ void nested_loop_join_build_consume_batch(JoinState* join_state,
  * @return std::shared_ptr<table_info> output table batch
  */
 std::shared_ptr<table_info> nested_loop_join_local_chunk(
-    JoinState* join_state, std::shared_ptr<table_info> probe_table,
+    NestedLoopJoinState* join_state, std::shared_ptr<table_info> probe_table,
     bool parallel) {
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
@@ -71,8 +71,8 @@ std::shared_ptr<table_info> nested_loop_join_local_chunk(
 }
 
 std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
-    JoinState* join_state, std::shared_ptr<table_info> in_table, bool is_last,
-    bool parallel) {
+    NestedLoopJoinState* join_state, std::shared_ptr<table_info> in_table,
+    bool is_last, bool parallel) {
     if (parallel) {
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -94,10 +94,9 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
     }
 }
 
-void nested_loop_join_build_consume_batch_py_entry(JoinState* join_state,
-                                                   table_info* in_table,
-                                                   bool is_last,
-                                                   bool parallel) {
+void nested_loop_join_build_consume_batch_py_entry(
+    NestedLoopJoinState* join_state, table_info* in_table, bool is_last,
+    bool parallel) {
     try {
         nested_loop_join_build_consume_batch(
             join_state, std::shared_ptr<table_info>(in_table), is_last,
@@ -116,11 +115,9 @@ void nested_loop_join_build_consume_batch_py_entry(JoinState* join_state,
  * @param is_last is last batch
  * @return table_info* output table batch
  */
-table_info* nested_loop_join_probe_consume_batch_py_entry(JoinState* join_state,
-                                                          table_info* in_table,
-                                                          bool is_last,
-                                                          bool* out_is_last,
-                                                          bool parallel) {
+table_info* nested_loop_join_probe_consume_batch_py_entry(
+    NestedLoopJoinState* join_state, table_info* in_table, bool is_last,
+    bool* out_is_last, bool parallel) {
     try {
         // TODO: Actually output out_is_last based on is_last + the state
         // of the output buffer.
