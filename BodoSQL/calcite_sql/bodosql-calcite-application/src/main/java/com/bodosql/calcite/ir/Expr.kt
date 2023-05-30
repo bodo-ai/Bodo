@@ -13,9 +13,13 @@ abstract class Expr {
      * Represents raw python code to insert directly into the document.
      * @param code The code to insert directly into the document.
      */
-    data class Raw(val code: String) : Expr() {
+    class Raw(val code: String) : Expr() {
         override fun emit(): String = code
 
+    }
+
+    open class DelegateExpr(private val delegate: Expr) : Expr() {
+        override fun emit(): String = delegate.emit()
     }
 
     /**
@@ -32,28 +36,36 @@ abstract class Expr {
      * @param callee the function this expression will invoke.
      * @param args a list of expressions to be used as arguments.
      */
-    data class Call(val callee: String, val args: kotlin.collections.List<Expr> = listOf(), val namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf()) : Expr() {
+    class Call(val callee: Expr, val args: kotlin.collections.List<Expr> = listOf(), val namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf()) : Expr() {
+        constructor(callee: Expr, args: kotlin.collections.List<Expr>) : this(callee, args, listOf())
+        constructor(callee: Expr, vararg args: Expr) : this(callee, args.toList(), listOf())
+        constructor(callee: String, args: kotlin.collections.List<Expr>, namedArgs: kotlin.collections.List<Pair<String, Expr>>)
+                : this(Raw(callee), args, namedArgs)
         constructor(callee: String, args: kotlin.collections.List<Expr>) : this(callee, args, listOf())
-        constructor(callee: String, vararg args: Expr) : this(callee, args.toList(), listOf())
-        
+        constructor(callee: String, vararg args: Expr) : this(callee, args.toList())
+
         override fun emit(): String {
-            val posArgs = args.asSequence().map { it.emit() }
-            val namedArgs = namedArgs.asSequence().map { (name, value) -> "${name}=${value.emit()}" }
-            val args = (posArgs + namedArgs).joinToString(separator = ", ")
-            return "${callee}(${args})"
+            val args = sequenceOf(
+                this.args.asSequence().map { it.emit() },
+                this.namedArgs.asSequence().map { (name, value) -> "$name = ${value.emit()}" }
+            ).flatten().joinToString(separator = ", ")
+            return "${callee.emit()}(${args})"
         }
     }
 
-    data class Len(val expr: Expr) : Expr() {
-        override fun emit(): String {
-            return "len(${expr.emit()})"
-        }
-    }
+    class Len(expr: Expr) : DelegateExpr(
+        Call("len", expr)
+    )
 
-    data class Attribute(val inputVar: Expr, val attributeName: String): Expr() {
-        override fun emit(): String {
-            return "${inputVar.emit()}.${attributeName}"
-        }
+    /**
+     * Controls access to fields for an input. This can be used to access member variables
+     * or function definitions.
+     *
+     * @param inputVar the expression to access a field for.
+     * @param attributeName the field to access.
+     */
+    class Attribute(val inputVar: Expr, val attributeName: String): Expr() {
+        override fun emit(): String = "${inputVar.emit()}.${attributeName}"
     }
 
 
@@ -64,12 +76,12 @@ abstract class Expr {
      * @param lowerBound: The integer lower bound of the slice
      * @param upperBound: The integer upper bound of the slice
      */
-    data class DataFrameSlice(val inputDf: Expr, val lowerBound: Expr, val upperBound: Expr) : Expr() {
-
-        override fun emit(): String {
-            return "(${inputDf.emit()}).iloc[${lowerBound.emit()} : ${upperBound.emit()}]"
-        }
-    }
+    class DataFrameSlice(inputDf: Expr, lowerBound: Expr, upperBound: Expr) : DelegateExpr(
+        Index(
+            Attribute(inputDf, "iloc"),
+            Slice(lowerBound, upperBound)
+        )
+    )
 
     /**
      * Represents a Python method call. This should be used as a generic call for certain methods that are unlikely to repeat.
@@ -81,22 +93,13 @@ abstract class Expr {
      * @param namedArgs: The arguments to be passed as keyword arguments. Note we use a pair instead of a map
      * to ensure the order is deterministic.
      */
-    data class Method(val inputVar: Expr, val methodName: String, val args: kotlin.collections.List<Expr> = listOf(), val namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf()) : Expr() {
-
-
-        override fun emit(): String {
-            var regularArgs = ""
-            var keywordArgs = ""
-            if (this.args.isNotEmpty()) {
-                regularArgs = this.args.joinToString(separator = ", ", postfix = ", ") { it.emit() }
-            }
-            if (namedArgs.isNotEmpty()) {
-                keywordArgs = this.namedArgs.map{ Raw(it.first + " = " + it.second.emit())}.joinToString(separator = ", ") { it.emit() }
-            }
-            return "${inputVar.emit()}.$methodName(${regularArgs}${keywordArgs})"
-        }
-
-    }
+    class Method(
+        inputVar: Expr, methodName: String,
+        args: kotlin.collections.List<Expr> = listOf(),
+        namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf())
+        : DelegateExpr(
+            Call(Attribute(inputVar, methodName), args, namedArgs)
+        )
 
     /**
      * Represents a call to groupby with the arguments that could change depending on the call.
@@ -107,14 +110,26 @@ abstract class Expr {
      * @param dropna: Should NA values be dropped.
      *
      */
-    data class Groupby(val inputVar: Expr, val keys: Expr.List, val asIndex: Boolean, val dropna: Boolean) : Expr() {
+    class Groupby(inputVar: Expr, keys: List, asIndex: Boolean, dropna: Boolean)
+        : DelegateExpr(
+            Method(inputVar, "groupby", listOf(keys), listOf(
+                "as_index" to BooleanLiteral(asIndex),
+                "dropna" to BooleanLiteral(dropna),
+                "_is_bodosql" to BooleanLiteral(true),
+            ))
+        )
+
+    /**
+     * Represents an index operation into an expression. This it the equivalent
+     * of getitem most of the time.
+     */
+    class Index(val input: Expr, val args: kotlin.collections.List<Expr>) : Expr() {
+        constructor(input: Expr, vararg args: Expr) : this(input, args.toList())
 
         override fun emit(): String {
-            // Generate the keyword args
-            val keywordArgs = listOf(Pair("as_index", BooleanLiteral(asIndex)), Pair("dropna", BooleanLiteral(dropna)), Pair("_is_bodosql", BooleanLiteral(true)))
-            return Method(inputVar, "groupby", listOf(keys), keywordArgs).emit()
+            val index = args.joinToString(separator = ", ") { it.emit() }
+            return "${input.emit()}[$index]"
         }
-
     }
 
 
@@ -126,7 +141,7 @@ abstract class Expr {
      * @param naPosition: Puts NaNs at the beginning if 'first'; 'last' puts NaNs at the end.
      *
      */
-    data class SortValues(val inputVar: Expr, val by: Expr.List, val ascending: Expr.List, val naPosition: Expr.List) : Expr() {
+    class SortValues(val inputVar: Expr, val by: List, val ascending: List, val naPosition: List) : Expr() {
 
         override fun emit(): String {
             // Generate the keyword args
@@ -149,26 +164,9 @@ abstract class Expr {
      * @param inputExpr: The input array/DataFrame.
      * @param index: The index into the array/DataFrame
      */
-    data class GetItem(val inputExpr: Expr, val index: Expr) : Expr() {
-
-        override fun emit(): String {
-            return "${inputExpr.emit()}[${index.emit()}]"
-        }
-
-    }
-
-
-    data class Slice(val args: kotlin.collections.List<Expr> = listOf()) : Expr() {
-
-        override fun emit(): String {
-            val slice = args.joinToString(separator = ":") { it.emit() }
-            if (slice.isEmpty()) {
-                return ":"
-            }
-            return slice
-        }
-    }
-
+    class GetItem(inputExpr: Expr, index: Expr) : DelegateExpr(
+        Index(inputExpr, index)
+    )
 
     /**
      * Represents the unary operator. This should only
@@ -179,7 +177,7 @@ abstract class Expr {
      * not a name.
      * @param inputExpr: The input expression to apply the op to.
      */
-    data class Unary(val opString: String, val inputExpr: Expr) : Expr() {
+    class Unary(val opString: String, val inputExpr: Expr) : Expr() {
 
         override fun emit(): String {
             return "${opString}(${inputExpr.emit()})"
@@ -197,9 +195,11 @@ abstract class Expr {
      * @param input1: The first input to the op.
      * @param input2: The second input to the op.
      */
-    data class Binary(val opString: String, val input1: Expr, val input2: Expr) : Expr() {
+    class Binary(val opString: String, val input1: Expr, val input2: Expr) : Expr() {
 
         override fun emit(): String {
+            // TODO(jsternberg): As things get more complex in here, we'll have to mark
+            // operations with their precedence.
             return "(${input1.emit()} $opString ${input2.emit()})"
         }
 
@@ -211,45 +211,58 @@ abstract class Expr {
      * @param stop The stop Expr.
      * @param step The step Expr. Null if there is no step.
      */
-    data class Range(val start: Expr, val stop: Expr, val step: Expr? = null) : Expr() {
-        override fun emit(): String {
-            if (step == null) {
-                return "range(${start.emit()}, ${stop.emit()})"
-            } else {
-                return "range(${start.emit()}, ${stop.emit()}, ${step.emit()})"
-            }
-        }
-
-    }
-
+    class Range(start: Expr, stop: Expr, step: Expr? = null) : DelegateExpr(
+        Call("range", sequenceOf(start, stop, step).filterNotNull().toList())
+    )
 
     /**
      * Represents a tuple creation.
      * @param args The inputs to the tuple.
      */
-    data class Tuple(val args: kotlin.collections.List<Expr>) : Expr() {
-        override fun emit(): String {
-            if (args.isEmpty()) {
-                return "()"
-            }
-            // Note we use postfix to ensure tuples of length 1 work.
-            val tupleArgs = args.joinToString(separator = ", ", postfix = ",") { it.emit() }
-            return "(${tupleArgs})"
-        }
+    class Tuple(val args: kotlin.collections.List<Expr>) : Expr() {
+        constructor(vararg args: Expr) : this(args.toList())
 
+        override fun emit(): String = if (args.size == 1) {
+            // Special handling for length 1 so they aren't treated like
+            // parenthesis.
+            "(${args[0].emit()},)"
+        } else {
+            args.joinToString(separator = ", ", prefix = "(", postfix = ")") { it.emit() }
+        }
+    }
+
+    /**
+     * Represents the slice syntax of start:stop.
+     *
+     * This syntax DOES NOT perform the slice operation but is mostly meant to
+     * be a parameter to the index operation.
+     *
+     * @param start start index of the slice or null if empty
+     * @param stop stop index of the slice or null if empty
+     */
+    class Slice(val start: Expr? = null, val stop: Expr? = null, val step: Expr? = null) : Expr() {
+        /**
+         * Constructor without step mostly for Java.
+         */
+        constructor(start: Expr?, stop: Expr?) : this(start, stop, null)
+
+        override fun emit(): String {
+            val s = "${start?.emit() ?: ""}:${stop?.emit() ?: ""}"
+            return if (step != null)
+                "$s:${step.emit()}"
+            else s
+        }
     }
 
     /**
      * Represents a List creation.
      * @param args The inputs to the list.
      */
-    data class List(val args: kotlin.collections.List<Expr>) : Expr() {
-        override fun emit(): String {
-            val listArgs = args.joinToString(separator = ", ") { it.emit() }
-            return "[${listArgs}]"
-        }
+    class List(val args: kotlin.collections.List<Expr>) : Expr() {
+        constructor(vararg args: Expr) : this(args.toList())
 
-
+        override fun emit(): String =
+            args.joinToString(separator = ", ", prefix = "[", postfix = "]") { it.emit() }
     }
 
     /**
@@ -258,29 +271,19 @@ abstract class Expr {
      * @param keys The key inputs to the dictionary.
      * @param values The value inputs to the dictionary
      */
-    data class Dict(val keys: kotlin.collections.List<StringLiteral>, val values: kotlin.collections.List<Expr>) : Expr() {
-        override fun emit(): String {
-            val mergedValues = keys zip values
-            val dictArgs = mergedValues.joinToString(separator = ", ") { it.first.emit() + " : " + it.second.emit() }
-            return "{${dictArgs}}"
-        }
-    }
+    class Dict(val items: kotlin.collections.List<Pair<Expr, Expr>>) : Expr() {
+        constructor(items: Iterator<Map.Entry<Expr, Expr>>) : this(
+            items.asSequence()
+                .map { (k, v) -> k to v }
+                .toList()
+        )
 
-    data class PandasDataFrame(val data: Expr, val index: kotlin.collections.List<Expr>): Expr() {
-        /*
-        New code shouldn't be using this IR, as we should be using init_dataframe
-        instead of constructing the pd.DataFrame() directly
-         */
-        override fun emit(): String {
-            return when (index.size) {
-                0 -> "pd.DataFrame(${data.emit()})"
-                1 -> "pd.DataFrame(${data.emit()}, index=${index[0].emit()})"
-                else -> {
-                    val indexStr = index.joinToString(separator = ", " ) { it.emit()}
-                    "pd.DataFrame(${data.emit()}, index=[${indexStr}])"
-                }
+        constructor(vararg items: Pair<Expr, Expr>) : this(items.toList())
+
+        override fun emit(): String =
+            items.joinToString(separator = ", ", prefix = "{", postfix = "}") { (k, v) ->
+                "${k.emit()}: ${v.emit()}"
             }
-        }
     }
 
     /**
@@ -317,7 +320,7 @@ abstract class Expr {
      * double quotes.
      * @param arg The body of the string.
      */
-    data class StringLiteral(val arg: String) : Expr() {
+    class StringLiteral(val arg: String) : Expr() {
         override fun emit(): String {
             val literal = arg
                 .replace("""["\\\n\r\t\u0008\f]""".toRegex()) { m ->
@@ -339,22 +342,20 @@ abstract class Expr {
      * Represents a Boolean Literal.
      * @param arg The value of the literal.
      */
-    data class BooleanLiteral(val arg: Boolean) : Expr() {
-        override fun emit(): String {
+    class BooleanLiteral(val arg: Boolean) : Expr() {
+        override fun emit(): String =
             if (arg) {
-                return "True"
+                "True"
             } else {
-                return "False"
+                "False"
             }
-        }
-
     }
 
     /**
      * Represents an Integer Literal.
      * @param arg The value of the literal.
      */
-    data class IntegerLiteral(val arg: Int) : Expr() {
+    class IntegerLiteral(val arg: Int) : Expr() {
         override fun emit(): String = arg.toString()
 
     }
@@ -363,7 +364,7 @@ abstract class Expr {
      * Represents a Decimal Literal.
      * @param arg The value of the literal.
      */
-    data class DecimalLiteral(val arg: BigDecimal) : Expr() {
+    class DecimalLiteral(val arg: BigDecimal) : Expr() {
         override fun emit(): String = arg.toString()
     }
 
@@ -371,7 +372,7 @@ abstract class Expr {
      * Represents a Double Literal.
      * @param arg The value of the literal.
      */
-    data class DoubleLiteral(val arg: Double) : Expr() {
+    class DoubleLiteral(val arg: Double) : Expr() {
         override fun emit(): String = arg.toString()
 
     }
@@ -381,7 +382,6 @@ abstract class Expr {
      */
     object None : Expr() {
         override fun emit(): String = "None"
-
     }
 }
 
