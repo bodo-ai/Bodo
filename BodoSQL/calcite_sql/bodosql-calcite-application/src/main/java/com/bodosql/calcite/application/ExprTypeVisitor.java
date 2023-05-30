@@ -184,6 +184,7 @@ public class ExprTypeVisitor {
           "SUBSTRING_INDEX",
           "TIMEADD",
           "TIMESTAMPADD",
+          "TO_ARRAY",
           "TO_BINARY",
           "TO_BOOLEAN",
           "TO_DATE",

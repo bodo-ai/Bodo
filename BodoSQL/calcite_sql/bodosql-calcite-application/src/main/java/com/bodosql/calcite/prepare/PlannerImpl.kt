@@ -101,6 +101,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                         SinceEpochFnTable.instance(),
                         ThreeOperatorStringTable.instance(),
                         CastingOperatorTable.instance(),
+                        ArrayOperatorTable.instance(),
                     )
                 )
                 .typeSystem(config.typeSystem)
