@@ -99,7 +99,18 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
 
   @Override
   public RelDataType deriveSumType(RelDataTypeFactory typeFactory, RelDataType argumentType) {
-    return defaultTypeSystem.deriveSumType(typeFactory, argumentType);
+    switch (argumentType.getSqlTypeName()) {
+      case TINYINT:
+      case SMALLINT:
+      case INTEGER:
+      case BIGINT:
+        // Sum always returns an int64 in Bodo for integers
+        return typeFactory.createTypeWithNullability(
+            typeFactory.createSqlType(SqlTypeName.BIGINT), argumentType.isNullable());
+      default:
+        // By default match the calcite defaults. Other types may need to be updated in the future.
+        return defaultTypeSystem.deriveSumType(typeFactory, argumentType);
+    }
   }
 
   @Override
