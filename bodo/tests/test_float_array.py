@@ -11,11 +11,6 @@ from numba.core import types
 import bodo
 from bodo.tests.utils import check_func
 
-nullable_float_marker = pytest.mark.skipif(
-    not bodo.libs.float_arr_ext._use_nullable_float,
-    reason="nullable float not fully supported yet",
-)
-
 
 @pytest.fixture(
     params=[
@@ -153,7 +148,6 @@ def test_float_arr_int_array_indexing(float_dtype, index_arr, memory_leak_check)
         pytest.param(
             lambda arr: arr.iloc[1:3].astype(np.float32),
             id="iloc[1:3].astype(np.float32)",
-            marks=nullable_float_marker,
         ),
     ],
 )
@@ -163,7 +157,6 @@ def test_float_arr_series_iloc(iloc_fn, float_dtype, memory_leak_check):
     check_func(iloc_fn, (series,), check_dtype=False, dist_test=False)
 
 
-@nullable_float_marker
 def test_float_arr_coerce_scalar(memory_leak_check):
     arr_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
 
@@ -310,7 +303,6 @@ SERIES_BINOP_ARGS = [
 ]
 
 
-@nullable_float_marker
 @pytest.mark.slow
 @pytest.mark.parametrize(
     # avoiding isnat since only supported for datetime/timedelta
