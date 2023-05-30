@@ -15,7 +15,18 @@
 std::shared_ptr<table_info> alloc_table(
     const std::vector<int8_t>& arr_c_types,
     const std::vector<int8_t>& arr_array_types);
-struct JoinState;
+
+/**
+ * @brief Allocate an empty table with the same schema
+ * (arr_types and dtypes) as 'table'.
+ *
+ * @param table Reference table
+ * @return std::shared_ptr<table_info> Allocated table
+ */
+std::shared_ptr<table_info> alloc_table_like(
+    const std::shared_ptr<table_info>& table);
+
+class JoinPartition;
 
 /**
  * @brief Wrapper around array_info to turn it into build buffer.
@@ -194,8 +205,9 @@ struct ArrayBuildBuffer {
                 }
             } break;
             default:
-                throw std::runtime_error("invalid array type in ReserveArray " +
-                                         std::to_string(in_arr->arr_type));
+                throw std::runtime_error(
+                    "invalid array type in ReserveArray " +
+                    GetArrType_as_string(in_arr->arr_type));
         }
     }
 
@@ -270,7 +282,7 @@ struct HashHashJoinTable {
      * @return hash of row iRow
      */
     uint32_t operator()(const int64_t iRow) const;
-    JoinState* join_state;
+    JoinPartition* join_partition;
 };
 
 struct KeyEqualHashJoinTable {
@@ -287,49 +299,164 @@ struct KeyEqualHashJoinTable {
      * @return true if equal else false
      */
     bool operator()(const int64_t iRowA, const int64_t iRowB) const;
-    JoinState* join_state;
+    JoinPartition* join_partition;
     const bool is_na_equal;
     const int64_t n_keys;
 };
 
-struct JoinState {
-    TableBuildBuffer build_table_buffer;
-    TableBuildBuffer build_shuffle_buffer;
-    TableBuildBuffer probe_shuffle_buffer;
-    int64_t n_keys;
+/**
+ * @brief Holds the state of a single partition during
+ * a join execution. This includes the build table buffer,
+ * the hashtable (unordered_multimap), bitmap of the matches
+ * in build records, etc.
+ * 'top_bitmask' and 'num_top_bits' define the partition
+ * itself, i.e. a record is in this partition if the top
+ * 'num_top_bits' bits of its hash are 'top_bitmask'.
+ *
+ */
+class JoinPartition {
+   public:
+    explicit JoinPartition(size_t num_top_bits_, uint32_t top_bitmask_,
+                           const std::vector<int8_t>& build_arr_c_types,
+                           const std::vector<int8_t>& build_arr_array_types,
+                           const std::vector<int8_t>& probe_arr_c_types,
+                           const std::vector<int8_t>& probe_arr_array_types,
+                           const int64_t n_keys_, bool build_table_outer_,
+                           bool probe_table_outer_)
+        : build_table_buffer(build_arr_c_types, build_arr_array_types),
+          build_table({}, HashHashJoinTable(this),
+                      KeyEqualHashJoinTable(this, false, n_keys_)),
+          num_top_bits(num_top_bits_),
+          top_bitmask(top_bitmask_),
+          build_table_outer(build_table_outer_) {}
+
+    // Build state
+    TableBuildBuffer build_table_buffer;  // Append only buffer.
+    bodo::vector<uint32_t> build_table_join_hashes;
+
+    bodo::unordered_multimap<int64_t, int64_t, HashHashJoinTable,
+                             KeyEqualHashJoinTable>
+        build_table;  // join hash table (key row number -> matching row
+                      // numbers)
+
+    // Probe state (for outer joins)
+    bodo::vector<bool> build_table_matched;  // state for building output table
+
+    // Temporary state during probe step. These will be
+    // reset between iterations.
+    std::shared_ptr<table_info> probe_table;
+    // Join hashes corresponding to data in probe_table.
+    std::shared_ptr<uint32_t[]> probe_table_hashes;
+
+    /// @brief Get number of bits in the 'top_bitmask'.
+    size_t get_num_top_bits() const { return this->num_top_bits; }
+
+    /// @brief Get the 'top_bitmask'.
+    uint32_t get_top_bitmask() const { return this->top_bitmask; }
+
+    /// @brief Reserve space in build_table_buffer and build_table_join_hashes
+    /// to add all rows from in_table.
+    void ReserveBuildTable(const std::shared_ptr<table_info>& in_table);
+
+    /**
+     * @brief Add a row from in_table  to this partition.
+     * This includes populating the hash table.
+     *
+     * @param in_table Table from which we're adding the row.
+     * @param row_ind Index of the row to add.
+     * @param join_hash Join hash for the record.
+     */
+    void AppendBuildRow(const std::shared_ptr<table_info>& in_table,
+                        int64_t row_ind, const uint32_t& join_hash);
+
+    /**
+     * @brief Add all rows from in_table to this partition.
+     * This includes populating the hash table.
+     *
+     * @param in_table Table to insert.
+     * @param join_hashes Join hashes for the table records.
+     */
+    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
+                          const std::shared_ptr<uint32_t[]>& join_hashes);
+
+    /**
+     * @brief Finalize the build step for this partition.
+     * At this time, this just initializes the build_table_matched
+     * bitmap in the build_table_outer case.
+     *
+     */
+    void FinalizeBuild();
+
+   private:
+    const size_t num_top_bits = 0;
+    const uint32_t top_bitmask = 0ULL;
+    const bool build_table_outer = false;
+    // Tracks the current size of the build table, i.e.
+    // the number of rows from the build_table_buffer
+    // that have been added to the hash table.
+    int64_t curr_build_size = 0;
+};
+
+class JoinState {
+   public:
+    // Join properties
+    const int64_t n_keys;
+    cond_expr_fn_t cond_func;
+
+    JoinState(int64_t n_keys_, cond_expr_fn_t _cond_func)
+        : n_keys(n_keys_), cond_func(_cond_func) {}
+};
+
+class HashJoinState : public JoinState {
+   public:
+    // Join properties
     const bool build_table_outer;
     const bool probe_table_outer;
 
-    // state for hashing and comparison classes
-    std::shared_ptr<table_info> probe_table;
-    std::vector<uint32_t> build_table_hashes;
-    std::shared_ptr<uint32_t[]> probe_table_hashes;
+    // Partitioning information.
+    // For now, we just have one partition
+    // (the active one). In the future, there'll
+    // be a vector of partitions.
+    std::shared_ptr<JoinPartition> partition;
 
-    // state for building output table
-    std::vector<bool> build_table_matched;
+    // Shuffle state
+    TableBuildBuffer build_shuffle_buffer;
+    TableBuildBuffer probe_shuffle_buffer;
 
-    // join hash table (key row number -> matching row numbers)
-    std::unordered_multimap<int64_t, int64_t, HashHashJoinTable,
-                            KeyEqualHashJoinTable>
-        build_table;
+    // Dummy probe table. Useful for the build_table_outer case.
+    std::shared_ptr<table_info> dummy_probe_table;
 
-    cond_expr_fn_t cond_func;
-
-    JoinState(std::vector<int8_t> build_arr_c_types,
-              std::vector<int8_t> build_arr_array_types,
-              std::vector<int8_t> probe_arr_c_types,
-              std::vector<int8_t> probe_arr_array_types, int64_t n_keys_,
-              bool build_table_outer_, bool probe_table_outer_,
-              cond_expr_fn_t _cond_func)
-        : build_table_buffer(build_arr_c_types, build_arr_array_types),
-          build_shuffle_buffer(build_arr_c_types, build_arr_array_types),
-          probe_shuffle_buffer(probe_arr_c_types, probe_arr_array_types),
-          n_keys(n_keys_),
+    HashJoinState(std::vector<int8_t> build_arr_c_types,
+                  std::vector<int8_t> build_arr_array_types,
+                  std::vector<int8_t> probe_arr_c_types,
+                  std::vector<int8_t> probe_arr_array_types, int64_t n_keys_,
+                  bool build_table_outer_, bool probe_table_outer_,
+                  cond_expr_fn_t _cond_func)
+        : JoinState(n_keys_, _cond_func),
           build_table_outer(build_table_outer_),
           probe_table_outer(probe_table_outer_),
-          build_table({}, HashHashJoinTable(this),
-                      KeyEqualHashJoinTable(this, false, n_keys_)),
-          cond_func(_cond_func) {}
+          build_shuffle_buffer(build_arr_c_types, build_arr_array_types),
+          probe_shuffle_buffer(probe_arr_c_types, probe_arr_array_types),
+          dummy_probe_table(
+              alloc_table(probe_arr_c_types, probe_arr_array_types)) {
+        this->partition = std::make_shared<JoinPartition>(
+            0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
+            probe_arr_array_types, n_keys_, build_table_outer_,
+            probe_table_outer_);
+    }
+};
+
+class NestedLoopJoinState : public JoinState {
+   public:
+    // Build state
+    TableBuildBuffer build_table_buffer;  // Append only buffer.
+
+    NestedLoopJoinState(const std::vector<int8_t>& build_arr_c_types,
+                        const std::vector<int8_t>& build_arr_array_types,
+                        cond_expr_fn_t _cond_func)
+        : JoinState(
+              0, _cond_func),  // NestedLoopJoin is only used when n_keys is 0
+          build_table_buffer(build_arr_c_types, build_arr_array_types) {}
 };
 
 /**
@@ -339,9 +466,9 @@ struct JoinState {
  * @param in_table build table batch
  * @param is_last is last batch
  */
-void nested_loop_join_build_consume_batch_py_entry(JoinState* join_state,
-                                                   table_info* in_table,
-                                                   bool is_last, bool parallel);
+void nested_loop_join_build_consume_batch_py_entry(
+    NestedLoopJoinState* join_state, table_info* in_table, bool is_last,
+    bool parallel);
 
 /**
  * @brief consume probe table batch in streaming nested loop join and produce
@@ -354,8 +481,6 @@ void nested_loop_join_build_consume_batch_py_entry(JoinState* join_state,
  * @param is_parallel parallel flag
  * @return std::shared_ptr<table_info> output table batch
  */
-table_info* nested_loop_join_probe_consume_batch_py_entry(JoinState* join_state,
-                                                          table_info* in_table,
-                                                          bool is_last,
-                                                          bool* out_is_last,
-                                                          bool parallel);
+table_info* nested_loop_join_probe_consume_batch_py_entry(
+    NestedLoopJoinState* join_state, table_info* in_table, bool is_last,
+    bool* out_is_last, bool parallel);
