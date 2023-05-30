@@ -403,6 +403,12 @@ JoinState* join_state_init_py_entry(
 void join_build_consume_batch_py_entry(JoinState* join_state,
                                        table_info* in_table, bool is_last,
                                        bool parallel) {
+    // nested loop join is required if there are no equality keys
+    if (join_state->n_keys == 0) {
+        nested_loop_join_build_consume_batch_py_entry(join_state, in_table,
+                                                      is_last, parallel);
+        return;
+    }
     try {
         join_build_consume_batch(join_state,
                                  std::shared_ptr<table_info>(in_table), is_last,
@@ -425,6 +431,12 @@ table_info* join_probe_consume_batch_py_entry(JoinState* join_state,
                                               table_info* in_table,
                                               bool is_last, bool* out_is_last,
                                               bool parallel) {
+    // nested loop join is required if there are no equality keys
+    if (join_state->n_keys == 0) {
+        return nested_loop_join_probe_consume_batch_py_entry(
+            join_state, in_table, is_last, out_is_last, parallel);
+    }
+
 #ifndef CONSUME_PROBE_BATCH
 #define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,         \
                             has_non_equi_cond, build_table_outer_exp,     \
@@ -499,5 +511,7 @@ PyMODINIT_FUNC PyInit_stream_join_cpp(void) {
     SetAttrStringFromVoidPtr(m, join_build_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, join_probe_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, delete_join_state);
+    SetAttrStringFromVoidPtr(m, nested_loop_join_build_consume_batch_py_entry);
+    SetAttrStringFromVoidPtr(m, nested_loop_join_probe_consume_batch_py_entry);
     return m;
 }
