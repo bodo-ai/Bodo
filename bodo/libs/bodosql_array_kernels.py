@@ -9,6 +9,7 @@ from bodo.libs.bodosql_comparison_array_kernels import *  # noqa
 from bodo.libs.bodosql_datetime_array_kernels import *  # noqa
 from bodo.libs.bodosql_json_array_kernels import *  # noqa
 from bodo.libs.bodosql_like_array_kernels import *  # noqa
+from bodo.libs.bodosql_nested_data_kernels import *  #noqa
 from bodo.libs.bodosql_numeric_array_kernels import *  # noqa
 from bodo.libs.bodosql_other_array_kernels import *  # noqa
 from bodo.libs.bodosql_regexp_array_kernels import *  # noqa
@@ -201,6 +202,7 @@ broadcasted_fixed_arg_functions = {
     "subtract_numeric",
     "tan",
     "tanh",
+    "to_array",
     "to_boolean",
     "to_char",
     "to_binary",

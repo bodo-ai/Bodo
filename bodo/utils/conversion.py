@@ -13,18 +13,25 @@ from numba.extending import overload
 
 import bodo
 from bodo.hiframes.time_ext import TimeArrayType, cast_time_to_int
+from bodo.libs.array_item_arr_ext import (
+    ArrayItemArrayType,
+    array_to_repeated_array_item_array,
+)
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_dtype
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.nullable_tuple_ext import NullableTupleType
+from bodo.libs.str_arr_ext import get_utf8_size
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
     dtype_to_array_type,
+    get_overload_const_bool,
     get_overload_const_list,
     get_overload_const_str,
     is_heterogeneous_tuple_type,
     is_np_arr_typ,
+    is_overload_constant_bool,
     is_overload_constant_list,
     is_overload_constant_str,
     is_overload_none,
@@ -410,12 +417,14 @@ def overload_coerce_to_ndarray(
     )  # pragma: no cover
 
 
-def coerce_scalar_to_array(scalar, length, arr_type):  # pragma: no cover
+def coerce_scalar_to_array(
+    scalar, length, arr_type, dict_encode=True
+):  # pragma: no cover
     pass
 
 
 @overload(coerce_scalar_to_array)
-def overload_coerce_scalar_to_array(scalar, length, arr_type):
+def overload_coerce_scalar_to_array(scalar, length, arr_type, dict_encode=True):
     """
     Converts the given scalar to an array with the given length.
     If the scalar is None or optional then we generate the result
@@ -425,30 +434,45 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type):
     # The array type always needs to be nullable for the gen_na_array case.
     _arr_typ = to_nullable_type(unwrap_typeref(arr_type))
     if _arr_typ == bodo.null_array_type:
-        return lambda scalar, length, arr_type: bodo.libs.null_arr_ext.init_null_array(
+        return lambda scalar, length, arr_type, dict_encode=True: bodo.libs.null_arr_ext.init_null_array(
             length
         )  # pragma: no cover
 
+    if isinstance(_arr_typ, ArrayItemArrayType):
+        # If the output array is ArrayItemArray
+        data_arr_type = _arr_typ.dtype
+
+        def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
+            return array_to_repeated_array_item_array(scalar, length, data_arr_type)
+
+        return impl
+
     if scalar == types.none:
         # If the scalar is None we generate an array of all NA
-        def impl(scalar, length, arr_type):  # pragma: no cover
+        def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
             return bodo.libs.array_kernels.gen_na_array(length, _arr_typ, True)
 
     elif isinstance(scalar, types.Optional):
 
-        def impl(scalar, length, arr_type):  # pragma: no cover
+        def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
             if scalar is None:
                 return bodo.libs.array_kernels.gen_na_array(length, _arr_typ, True)
             else:
                 # If the data may be null both paths must produce the nullable array type.
                 return bodo.utils.conversion.coerce_to_array(
-                    bodo.utils.indexing.unoptional(scalar), True, True, length
+                    bodo.utils.indexing.unoptional(scalar),
+                    True,
+                    True,
+                    length,
+                    dict_encode,
                 )
 
     else:
 
-        def impl(scalar, length, arr_type):  # pragma: no cover
-            return bodo.utils.conversion.coerce_to_array(scalar, True, None, length)
+        def impl(scalar, length, arr_type, dict_encode=True):  # pragma: no cover
+            return bodo.utils.conversion.coerce_to_array(
+                scalar, True, None, length, dict_encode
+            )
 
     return impl
 
@@ -483,14 +507,22 @@ def overload_ndarray_if_nullable_arr(data):
 
 # TODO: use generated_jit with IR inlining
 def coerce_to_array(
-    data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None
+    data,
+    error_on_nonarray=True,
+    use_nullable_array=None,
+    scalar_to_arr_len=None,
+    dict_encode=True,
 ):  # pragma: no cover
     return data
 
 
 @overload(coerce_to_array, no_unliteral=True)
 def overload_coerce_to_array(
-    data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None
+    data,
+    error_on_nonarray=True,
+    use_nullable_array=None,
+    scalar_to_arr_len=None,
+    dict_encode=True,
 ):
     """
     convert data to Bodo arrays.
@@ -513,13 +545,13 @@ def overload_coerce_to_array(
 
     # series
     if isinstance(data, SeriesType):
-        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.hiframes.pd_series_ext.get_series_data(
+        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None, dict_encode=True: bodo.hiframes.pd_series_ext.get_series_data(
             data
         )  # pragma: no cover
 
     # string/binary/categorical Index
     if isinstance(data, (StringIndexType, BinaryIndexType, CategoricalIndexType)):
-        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.hiframes.pd_index_ext.get_index_data(
+        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None, dict_encode=True: bodo.hiframes.pd_index_ext.get_index_data(
             data
         )  # pragma: no cover
 
@@ -528,7 +560,7 @@ def overload_coerce_to_array(
         bodo.string_type,
         bodo.bytes_type,
     ):
-        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.str_arr_ext.str_arr_from_sequence(
+        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None, dict_encode=True: bodo.libs.str_arr_ext.str_arr_from_sequence(
             data
         )  # pragma: no cover
 
@@ -536,7 +568,7 @@ def overload_coerce_to_array(
     # TODO: Remove once we can iterate with an empty tuple (next condition will capture this case)
     # Related Task: https://bodo.atlassian.net/browse/BE-1936
     if isinstance(data, types.BaseTuple) and data.count == 0:
-        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.str_arr_ext.empty_str_arr(
+        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None, dict_encode=True: bodo.libs.str_arr_ext.empty_str_arr(
             data
         )  # pragma: no cover
 
@@ -548,7 +580,7 @@ def overload_coerce_to_array(
         isinstance(data, types.BaseTuple)
         and all(isinstance(t, types.StringLiteral) for t in data.types)
     ):
-        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.str_arr_ext.str_arr_from_sequence(
+        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None, dict_encode=True: bodo.libs.str_arr_ext.str_arr_from_sequence(
             data
         )  # pragma: no cover
 
@@ -574,10 +606,11 @@ def overload_coerce_to_array(
             bodo.libs.csr_matrix_ext.CSRMatrixType,
             bodo.DatetimeArrayType,
             TimeArrayType,
+            ArrayItemArrayType,
         ),
     ):
         return (
-            lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
+            lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None, dict_encode=True: data
         )  # pragma: no cover
 
     # list/tuple of tuples
@@ -592,6 +625,7 @@ def overload_coerce_to_array(
             error_on_nonarray=True,
             use_nullable_array=None,
             scalar_to_arr_len=None,
+            dict_encode=True,
         ):  # pragma: no cover
             n = len(data)
             arr = bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(n, (-1,), data_types)
@@ -613,6 +647,7 @@ def overload_coerce_to_array(
             error_on_nonarray=True,
             use_nullable_array=None,
             scalar_to_arr_len=None,
+            dict_encode=True,
         ):  # pragma: no cover
             n = len(data)
             nested_counts = init_nested_counts(data_arr_type)
@@ -646,22 +681,44 @@ def overload_coerce_to_array(
     if not is_overload_none(scalar_to_arr_len) and isinstance(
         data, (types.UnicodeType, types.StringLiteral)
     ):
+        if not is_overload_constant_bool(dict_encode):
+            raise BodoError("dict_code must be a constant bool value")
+        else:
+            dict_encode = get_overload_const_bool(dict_encode)
 
-        def impl_str(
-            data,
-            error_on_nonarray=True,
-            use_nullable_array=None,
-            scalar_to_arr_len=None,
-        ):  # pragma: no cover
-            n = scalar_to_arr_len
-            # Use str_arr_from_sequence to force rep/avoid equiv_set
-            dict_arr = bodo.libs.str_arr_ext.str_arr_from_sequence([data])
-            indices = bodo.libs.int_arr_ext.alloc_int_array(n, np.int32)
-            numba.parfors.parfor.init_prange()
-            for i in numba.parfors.parfor.internal_prange(n):
-                indices[i] = 0
-            A = bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True, True)
-            return A
+        if dict_encode:
+
+            def impl_str(
+                data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+                dict_encode=True,
+            ):  # pragma: no cover
+                n = scalar_to_arr_len
+                # Use str_arr_from_sequence to force rep/avoid equiv_set
+                dict_arr = bodo.libs.str_arr_ext.str_arr_from_sequence([data])
+                indices = bodo.libs.int_arr_ext.alloc_int_array(n, np.int32)
+                numba.parfors.parfor.init_prange()
+                for i in numba.parfors.parfor.internal_prange(n):
+                    indices[i] = 0
+                A = bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True, True)
+                return A
+
+        else:
+
+            def impl_str(
+                data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+                dict_encode=True,
+            ):  # pragma: no cover
+                n = scalar_to_arr_len
+                A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, get_utf8_size(data)* n)
+                for i in range(n):
+                    A[i] = data
+                return A
 
         return impl_str
 
@@ -679,6 +736,7 @@ def overload_coerce_to_array(
             error_on_nonarray=True,
             use_nullable_array=None,
             scalar_to_arr_len=None,
+            dict_encode=True,
         ):  # pragma: no cover
             n = len(data)
             A = np.empty(n, np.dtype("datetime64[ns]"))
@@ -696,6 +754,7 @@ def overload_coerce_to_array(
             error_on_nonarray=True,
             use_nullable_array=None,
             scalar_to_arr_len=None,
+            dict_encode=True,
         ):  # pragma: no cover
             n = len(data)
             A = np.empty(n, np.dtype("timedelta64[ns]"))
@@ -719,6 +778,7 @@ def overload_coerce_to_array(
             error_on_nonarray=True,
             use_nullable_array=None,
             scalar_to_arr_len=None,
+            dict_encode=True,
         ):  # pragma: no cover
             A = np.empty(scalar_to_arr_len, "datetime64[ns]")
             dt64_val = data.to_datetime64()
@@ -746,6 +806,7 @@ def overload_coerce_to_array(
             error_on_nonarray=True,
             use_nullable_array=None,
             scalar_to_arr_len=None,
+            dict_encode=True,
         ):  # pragma: no cover
             n = scalar_to_arr_len
             # NOTE: not using n to calculate n_chars since distributed pass will use
@@ -759,7 +820,7 @@ def overload_coerce_to_array(
         return impl_timestamp
 
     # assuming can be ndarray
-    return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.utils.conversion.coerce_to_ndarray(
+    return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None, dict_encode=True: bodo.utils.conversion.coerce_to_ndarray(
         data, error_on_nonarray, use_nullable_array, scalar_to_arr_len
     )  # pragma: no cover
 

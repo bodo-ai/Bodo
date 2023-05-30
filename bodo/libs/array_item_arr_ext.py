@@ -631,6 +631,38 @@ ArrayAnalysis._analyze_op_call_bodo_libs_array_item_arr_ext_pre_alloc_array_item
 )
 
 
+def array_to_repeated_array_item_array(scalar_arr, length, data_arr_type):  # pragma: no cover
+    pass
+
+
+@overload(array_to_repeated_array_item_array, no_unliteral=True)
+def overload_array_to_repeated_array_item_array(scalar_arr, length, data_arr_type):
+    """
+    Create an ArrayItemArray of length `length` by repeating scalar_arr `length` times
+
+    Args:
+        scalar_arr (array): The array to be repeated
+        length (int): Length of the output ArrayItemArray
+        data_arr_type(types.Type): Type of scalar_arr
+    Returns:
+        An ArrayItemArray(date_arr_type) of length `length`
+
+    Example:
+        array_to_repeated_array_item_array([1, 2], 3, types.Array(types.int32, 1, "C")) ->
+            [[1, 2], [1, 2], [1, 2]]
+    """
+    def impl(scalar_arr, length, data_arr_type):  # pragma: no cover
+        nested_counts = init_nested_counts(data_arr_type)
+        for i in range(length):
+            nested_counts = add_nested_counts(nested_counts, scalar_arr)
+        out_arr = pre_alloc_array_item_array(length, nested_counts, data_arr_type)
+        for i in range(length):
+            out_arr[i] = scalar_arr
+        return out_arr
+
+    return impl
+
+
 def init_array_item_array_codegen(context, builder, signature, args):
     """codegen for initializing an array(item) array from individual data/offset/bitmap
     arrays.

@@ -85,6 +85,10 @@ public class BodoArrayHelpers {
       case NULL:
         typeName = "bodo.null_array_type";
         break;
+      case ARRAY:
+        typeName = String.format("bodo.ArrayItemArrayType(%s)",
+          sqlTypeToBodoArrayType(type.getComponentType(), false).emit());
+        break;
       case BOOLEAN:
         // TODO: Add nullable support in the type
         typeName = "bodo.boolean_array_type";
