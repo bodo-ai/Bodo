@@ -39,6 +39,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.s
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateDatePart;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NestedDataCodeGen.generateToArrayFnCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateConvCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLeastGreatestCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLogFnInfo;
@@ -1112,6 +1113,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TO_DOUBLE":
           case "TRY_TO_DOUBLE":
             return generateToDoubleFnCode(operands, fnName);
+          case "TO_ARRAY":
+            return generateToArrayFnCode(this.visitor, fnOperation, operands);
           case "ASINH":
           case "ACOSH":
           case "ATANH":

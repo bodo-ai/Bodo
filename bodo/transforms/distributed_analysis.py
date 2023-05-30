@@ -945,6 +945,17 @@ class DistributedAnalysis:
             # This doesn't impact the distribution of any array.
             return
 
+        if fdef == ("array_to_repeated_array_item_array", "bodo.libs.array_item_arr_ext"):
+            # array_to_repeated_array_item_array is used to create an ArrayItemArray with an array.
+            # This requires the input array to be replicated.
+            self._set_REP(
+                rhs.args[0],
+                array_dists,
+                "The scalar array must be duplicated for array_to_repeated_array_item_array.",
+                rhs.loc,
+            )
+            return
+
         if (
             func_name == "predict_proba"
             and "bodo.libs.xgb_ext" in sys.modules
