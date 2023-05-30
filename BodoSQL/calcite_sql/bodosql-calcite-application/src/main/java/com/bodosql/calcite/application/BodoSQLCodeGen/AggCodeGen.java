@@ -282,7 +282,8 @@ public class AggCodeGen {
       // a dataframe
       // with a length of one, with no columns. When doing the concat, the rows present in
       // the other dataframes will be populated with NULL values.
-      aggString.append("pd.DataFrame(index=pd.RangeIndex(0,1,1))");
+      aggString.append(
+          "pd.DataFrame(index=bodo.hiframes.pd_index_ext.init_range_index(0, 1, 1, None))");
     }
 
     return new Expr.Raw(aggString.toString());

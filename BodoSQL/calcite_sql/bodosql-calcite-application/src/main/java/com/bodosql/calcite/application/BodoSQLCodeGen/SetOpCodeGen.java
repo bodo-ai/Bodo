@@ -367,14 +367,14 @@ public class SetOpCodeGen {
     // tableOnes = logical_table_to_table(get_dataframe_all_data(inputDfVar),
     // (colOnes,),
     // MetaType(...dummyColIdxs...), inputDfVar.shape[1])
-    // dfOnes = init_dataframe((tableOnes,), pd.RangeIndex(0, len(inputDfVar), 1),
+    // dfOnes = init_dataframe((tableOnes,), init_range_index(0, len(inputDfVar), 1, None),
     // ColNamesMetaType(...colNames..., "__bodo_dummy__"))
     // colCnt = dfOnes.groupby([...colNames...],
     // dropna=False).cumsum()["__bodo_dummy__"]
     // tableCnt = logical_table_to_table(get_dataframe_all_data(inputDfVar),
     // (colCnt,),
     // MetaType(...dummyColIdxs...), inputDfVar.shape[1])
-    // dfCnt = init_dataframe((tableCnt,), pd.RangeIndex(0, len(inputDfVar), 1),
+    // dfCnt = init_dataframe((tableCnt,), init_range_index(0, len(inputDfVar), 1, None),
     // ColNamesMetaType(...colNames..., "__bodo_dummy__"))
 
     // Generate temp vars
@@ -433,9 +433,9 @@ public class SetOpCodeGen {
         .append(dfOnes.emit())
         .append(" = bodo.hiframes.pd_dataframe_ext.init_dataframe((")
         .append(tableOnes.emit())
-        .append(",), pd.RangeIndex(0, len(")
+        .append(",), bodo.hiframes.pd_index_ext.init_range_index(0, len(")
         .append(inputDfVar.emit())
-        .append("), 1), ")
+        .append("), 1, None), ")
         .append(dummyColNamesGlobal.getName())
         .append(")\n");
 
@@ -466,9 +466,9 @@ public class SetOpCodeGen {
         .append(dfCnt.emit())
         .append(" = bodo.hiframes.pd_dataframe_ext.init_dataframe((")
         .append(tableCnt.emit())
-        .append(",), pd.RangeIndex(0, len(")
+        .append(",), bodo.hiframes.pd_index_ext.init_range_index(0, len(")
         .append(inputDfVar.emit())
-        .append("), 1), ")
+        .append("), 1, None), ")
         .append(dummyColNamesGlobal.getName())
         .append(")\n");
 
