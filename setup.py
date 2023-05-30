@@ -256,6 +256,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_str_ext.cpp",
     "bodo/libs/iceberg_transforms.cpp",
     "bodo/libs/_stream_join.cpp",
+    "bodo/libs/_stream_nested_loop_join.cpp",
 ]
 ext_metadata["depends"] += [
     "bodo/io/_bodo_file_reader.h",
