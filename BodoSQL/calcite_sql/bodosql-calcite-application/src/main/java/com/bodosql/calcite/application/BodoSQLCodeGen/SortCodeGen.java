@@ -51,7 +51,7 @@ public class SortCodeGen {
     if (!offsetStr.isEmpty()) {
       Expr sliceStart = new Expr.Raw(offsetStr);
       Expr sliceEnd = new Expr.Raw(offsetStr + " + " + limitStr);
-      Expr limitSlice = new Expr.Slice(List.of(sliceStart, sliceEnd));
+      Expr limitSlice = new Expr.Slice(sliceStart, sliceEnd);
 
       sortExpr = new Expr.GetItem(new Expr.Attribute(sortExpr, "iloc"), limitSlice);
     } else if (!limitStr.isEmpty()) {
