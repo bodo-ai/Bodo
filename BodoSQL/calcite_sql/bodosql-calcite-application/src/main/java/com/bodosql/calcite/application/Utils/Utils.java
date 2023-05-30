@@ -304,19 +304,20 @@ public class Utils {
       Variable inputVar, List<String> colNames, List<String> colsToAddList) {
     // TODO filter out the columns that don't need to be kept
     StringBuilder newDf = new StringBuilder("pd.DataFrame({");
-    List<Expr.StringLiteral> keys = new ArrayList<>();
-    List<Expr> values = new ArrayList<>();
+    List<kotlin.Pair<Expr, Expr>> items = new ArrayList<>();
     for (String curColName : colNames) {
       Expr.StringLiteral colNameLiteral = new StringLiteral(curColName);
-      keys.add(colNameLiteral);
-      values.add(new Expr.GetItem(inputVar, colNameLiteral));
+      items.add(new kotlin.Pair<>(
+          colNameLiteral,
+          new Expr.GetItem(inputVar, colNameLiteral)));
     }
     for (String preGeneratedCol : colsToAddList) {
       Expr.StringLiteral colNameLiteral = new StringLiteral(preGeneratedCol);
-      keys.add(colNameLiteral);
-      values.add(new Variable(preGeneratedCol));
+      items.add(new kotlin.Pair<>(
+          colNameLiteral,
+          new Variable(preGeneratedCol)));
     }
-    Expr.Dict dict = new Expr.Dict(keys, values);
+    Expr.Dict dict = new Expr.Dict(items);
     return new Expr.Call("pd.DataFrame", List.of(dict));
   }
 

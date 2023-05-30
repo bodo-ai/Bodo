@@ -25,13 +25,12 @@ public class LogicalValuesCodeGen {
    * @param pdVisitorClass The PandasCodeGenVisitor used to lower globals.
    * @return The code generated for the LogicalValues expression.
    */
-  public static Expr.PandasDataFrame generateLogicalValuesCode(
+  public static Expr generateLogicalValuesCode(
       List<String> argExprs, RelDataType rowType, PandasCodeGenVisitor pdVisitorClass) {
 
     List<String> columnNames = rowType.getFieldNames();
     List<RelDataTypeField> sqlTypes = rowType.getFieldList();
-    List<Expr.StringLiteral> dfKeys = new ArrayList<>();
-    List<Expr> dfValues = new ArrayList<>();
+    List<kotlin.Pair<Expr, Expr>> dfItems = new ArrayList<>();
 
     final int columnLength;
     if (argExprs.size() == 0) {
@@ -55,14 +54,15 @@ public class LogicalValuesCodeGen {
       List<Expr> scalarToArrayArgs = List.of(expression, length, global);
       Expr.Call value =
           new Expr.Call("bodo.utils.conversion.coerce_scalar_to_array", scalarToArrayArgs);
-      dfKeys.add(new Expr.StringLiteral(colName));
-      dfValues.add(value);
+      dfItems.add(new kotlin.Pair<>(new Expr.StringLiteral(colName), value));
     }
 
     Expr length = new Expr.IntegerLiteral(columnLength);
     List<Expr> indexArgs =
         List.of(new Expr.IntegerLiteral(0), length, new Expr.IntegerLiteral(1), Expr.None.INSTANCE);
     Expr index = ExprKt.initRangeIndex(indexArgs, List.of());
-    return new Expr.PandasDataFrame(new Expr.Dict(dfKeys, dfValues), List.of(index));
+    return new Expr.Call("pd.DataFrame",
+        List.of(new Expr.Dict(dfItems)),
+        List.of(new kotlin.Pair<String, Expr>("index", index)));
   }
 }
