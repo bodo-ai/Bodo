@@ -648,7 +648,6 @@ def test_write_parquet_dict_table(memory_leak_check):
 def test_write_parquet_row_group_size(memory_leak_check):
     """Test df.to_parquet(..., row_group_size=n)"""
     if bodo.get_rank() == 0:
-
         # We don't need to test the distributed case, because in the distributed
         # case each rank writes its own data to a separate file. row_group_size
         # is passed to Arrow WriteTable in the same way regardless

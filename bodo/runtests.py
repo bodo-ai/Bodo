@@ -106,6 +106,7 @@ weekly_modules = [
 # We don't run HDFS tests on CI, so exclude them.
 modules = list(set(all_modules) - set(weekly_modules) - set(["test_hdfs.py"]))
 
+
 # The '--cov-report=' option passed to pytest means that we want pytest-cov to
 # generate coverage files (".coverage" files used by `coverage` to generate
 # reports)

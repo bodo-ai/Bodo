@@ -37,11 +37,6 @@ from bodo.tests.utils import (
 from bodo.utils.testing import ensure_clean, ensure_clean2
 from bodo.utils.typing import BodoError, BodoWarning
 
-nullable_float_marker = pytest.mark.skipif(
-    not bodo.libs.float_arr_ext._use_nullable_float,
-    reason="nullable float not fully supported yet",
-)
-
 
 # ---------------------------- Test Different DataTypes ---------------------------- #
 @pytest.mark.parametrize(
@@ -70,9 +65,7 @@ def test_pq_nullable(fname, datapath, memory_leak_check):
         pytest.param("date32_1.pq", id="date32"),
         pytest.param("small_strings.pq", id="processes_greater_than_string_rows"),
         pytest.param("parquet_data_nonascii1.parquet", id="nonascii"),
-        pytest.param(
-            "nullable_float.pq", id="nullable_float", marks=nullable_float_marker
-        ),
+        pytest.param("nullable_float.pq", id="nullable_float"),
     ],
 )
 def test_pq_read_types(fname, datapath, memory_leak_check):
