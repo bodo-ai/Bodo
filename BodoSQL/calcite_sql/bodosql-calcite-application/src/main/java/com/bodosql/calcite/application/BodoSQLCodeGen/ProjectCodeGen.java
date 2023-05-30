@@ -9,6 +9,7 @@ import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
+import com.bodosql.calcite.ir.Expr.None;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
@@ -102,9 +103,15 @@ public class ProjectCodeGen {
     // Throw away previous Index and define a dummy Index since BodoSQL never uses Index values.
     // This avoids MultiIndex issues and allows Bodo to optimize more.
     Variable indexVar = pdVisitorClass.genIndexVar();
-    outAssigns.add(
-        new Op.Assign(
-            indexVar, new Expr.Raw(String.format("pd.RangeIndex(0, len(%s), 1)", inVar.emit()))));
+    Expr.IntegerLiteral zero = new Expr.IntegerLiteral(0);
+    Expr.IntegerLiteral one = new Expr.IntegerLiteral(1);
+
+    Expr.Len lenExpr = new Expr.Len(inVar);
+    Expr.Call indexCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_index_ext.init_range_index",
+            List.of(zero, lenExpr, one, None.INSTANCE));
+    outAssigns.add(new Op.Assign(indexVar, indexCall));
 
     // Generate array for scalar columns
     for (int i = 0; i < scalarSeriesNames.size(); i++) {
@@ -209,7 +216,9 @@ public class ProjectCodeGen {
     // If we have only scalar columns we need to provide an Index which matches
     // the size of the input Var.
     if (allScalars) {
-      projectString.append(String.format(", index=pd.RangeIndex(0, len(%s), 1)", inVar));
+      projectString.append(
+          String.format(
+              ", index=bodo.hiframes.pd_index_ext.init_range_index(0, len(%s), 1, None)", inVar));
     }
     projectString.append(")");
     return projectString.toString();
