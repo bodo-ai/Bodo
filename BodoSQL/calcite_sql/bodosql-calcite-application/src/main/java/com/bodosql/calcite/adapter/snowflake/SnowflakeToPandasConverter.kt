@@ -1,11 +1,10 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Expr
-import com.bodosql.calcite.ir.Module
-import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.application.PandasCodeGenVisitor
+import com.bodosql.calcite.ir.*
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.*
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterImpl
@@ -64,7 +63,11 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         })
     }
 
-    override fun emit(builder: Module.Builder, inputs: () -> List<Dataframe>): Dataframe {
+    override fun emit(
+        visitor: PandasCodeGenVisitor,
+        builder: Module.Builder,
+        inputs: () -> List<Dataframe>
+    ): Dataframe {
         // Use the snowflake dialect for generating the sql string.
         val rel2sql = RelToSqlConverter(SnowflakeSqlDialect.DEFAULT)
         val sql = rel2sql.visitRoot(input)
@@ -76,7 +79,17 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
             .toString()
 
         val input = input as SnowflakeRel
-        val expr = Expr.Call(
+
+        val currentNamedArgs: List<Pair<String, Expr>>;
+
+        // If we're in a streaming context, we need to add the '_bodo_chunksize'
+        // argument in order to properly return an iterator
+        if (this.getTraitSet().contains(BatchingProperty.STREAMING)) {
+            currentNamedArgs = listOf(Pair("_bodo_chunksize", PandasCodeGenVisitor.BATCH_SIZE));
+        } else {
+            currentNamedArgs = listOf();
+        }
+        val readExpr = Expr.Call(
             "pd.read_sql",
             args = listOf(
                 // First argument is the sql. This should escape itself.
@@ -85,12 +98,25 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
                 // We don't use a schema name because we've already fully qualified
                 // all table references and it's better if this doesn't have any
                 // potentially unexpected behavior.
-                Expr.StringLiteral(input.generatePythonConnStr("")),
-            )
+                Expr.StringLiteral(input.generatePythonConnStr(""),
+                ),
+            ),
+            namedArgs = currentNamedArgs,
         )
 
-        val df = builder.genDataframe(this)
-        builder.add(Op.Assign(df.variable, expr))
-        return df
+        if (this.getTraitSet().contains(BatchingProperty.STREAMING)) {
+            //In a streaming context, we need to handle generating the streaming frame
+            val readerVar = visitor.genReaderVar()
+            val columnNames = this.getRowType().fieldNames
+            val initOutput: Variable =
+                visitor.initStreamingIoLoop(readExpr, columnNames)
+            return Dataframe(initOutput.emit(), this)
+        }
+        else {
+            //Otherwise, just do the assignment, and return the output variable.
+            val df = Dataframe(visitor.genDfVar().emit(), this)
+            builder.add(Op.Assign(df.variable, readExpr))
+            return df
+        }
     }
 }

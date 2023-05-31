@@ -44,7 +44,7 @@ class SnowflakeAggregate private constructor(
             groupSet: ImmutableBitSet, groupSets: List<ImmutableBitSet>?, aggCalls: List<AggregateCall>,
             catalogTable: CatalogTableImpl
         ): SnowflakeAggregate {
-            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION)
+            val newTraitSet = traitSet.replace(SnowflakeRel.CONVENTION).replace(BatchingProperty.STREAMING)
             return SnowflakeAggregate(cluster, newTraitSet, input, groupSet, groupSets, aggCalls, catalogTable)
         }
     }
