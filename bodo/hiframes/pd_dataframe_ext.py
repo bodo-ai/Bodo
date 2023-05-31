@@ -1162,8 +1162,6 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     if n_cols == 1 and isinstance(data_tup_typ.types[0], TableType):
         n_cols = len(data_tup_typ.types[0].arr_types)
 
-    if len(column_names) != n_cols:
-        breakpoint()
     assert (
         len(column_names) == n_cols
     ), "init_dataframe(): number of column names does not match number of columns"
