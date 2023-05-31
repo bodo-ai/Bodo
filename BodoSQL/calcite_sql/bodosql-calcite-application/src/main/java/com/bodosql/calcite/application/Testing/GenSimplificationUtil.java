@@ -53,7 +53,7 @@ public class GenSimplificationUtil {
     schema.addTable(table);
 
     RelationalAlgebraGenerator generator =
-        new RelationalAlgebraGenerator(catalog, schema, "dummy_param_table_name", false, false, 0);
+        new RelationalAlgebraGenerator(catalog, schema, "dummy_param_table_name", false, 0);
 
     Pair<SqlNode, RelDataType> out = generator.validateQueryAndGetType(sql);
     SqlNode reducedOut = TypeEquivalentSimplifier.reduceToSimpleSqlNode(out.left, out.right);

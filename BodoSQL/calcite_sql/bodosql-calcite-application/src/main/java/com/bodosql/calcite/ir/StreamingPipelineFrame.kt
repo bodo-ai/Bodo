@@ -10,6 +10,8 @@ class StreamingPipelineFrame(var exitCond: Variable): Frame {
 
     /** Values to initialize before the loop generation. **/
     private var initializations: MutableList<Op.Assign> = mutableListOf()
+    /** Statements to execute after the loop termination. **/
+    private var terminations: MutableList<Op> = mutableListOf()
     /** Segment of code that will be updated for each operation. **/
     private var code: CodegenFrame = CodegenFrame()
 
@@ -33,6 +35,10 @@ class StreamingPipelineFrame(var exitCond: Variable): Frame {
         val cond = Expr.Unary("not", exitCond)
         /** Emit the while loop. **/
         Op.While(cond, code).emit(doc)
+        /** Emit any code at the end. **/
+        for (term in terminations) {
+            term.emit(doc)
+        }
 
     }
 
@@ -72,6 +78,16 @@ class StreamingPipelineFrame(var exitCond: Variable): Frame {
     fun addInitialization(assign: Op.Assign) {
         initializations.add(assign)
     }
+
+    /**
+     * Adds a new Op to be executed after the loop
+     * This is intended if we need to "clean up" state.
+     * @param assign Assignment to add.
+     */
+    fun addTermination(term: Op) {
+        terminations.add(term)
+    }
+
 
     /**
      * "Ends" the current section of the pipeline that is
