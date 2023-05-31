@@ -175,6 +175,7 @@ import bodo.ext
 import bodo.libs
 import bodo.libs.distributed_api
 import bodo.libs.timsort
+import bodo.libs.stream_join
 import bodo.io
 import bodo.io.np_io
 import bodo.io.csv_iterator_ext
@@ -349,5 +350,3 @@ from bodo.libs.memory import set_default_buffer_pool_as_arrow_memory_pool
 set_default_buffer_pool_as_arrow_memory_pool()
 # Flag to track if we should use the streaming plan in BodoSQL
 bodosql_use_streaming_plan = False
-# Flag to track if we should enable join streaming in BodoSQL when the streaming plan is enabled
-enable_join_streaming = False

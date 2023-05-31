@@ -1,6 +1,5 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.JoinCondVisitor.isBodoHashJoin
 import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Module
@@ -28,6 +27,8 @@ class PandasJoin(
 
     init {
         assert(convention == PandasRel.CONVENTION)
+        // Require streaming if we have enabled streaming.
+        traitSet.containsIfApplicable(BatchingProperty.STREAMING)
     }
 
     constructor(
@@ -71,22 +72,10 @@ class PandasJoin(
     companion object {
         fun create(left: RelNode, right: RelNode, condition: RexNode, joinType: JoinRelType): PandasJoin {
             val cluster = left.cluster
-            val streamingTrait = getStreamingTrait(condition, left)
+            val streamingTrait = BatchingProperty.STREAMING
             val traitSet = cluster.traitSetOf(PandasRel.CONVENTION).replace(streamingTrait)
             return PandasJoin(cluster, traitSet, left, right, condition, joinType)
         }
 
-        /**
-         * Determine the streaming Trait for a newly created Join.
-         * We support Streaming for hash joins and otherwise
-         * require Single-Batch.
-         */
-        fun getStreamingTrait(condition: RexNode, left: RelNode): BatchingProperty {
-            // Note we call getRowType and getFieldNames explicitly because types are lazily evaluated.
-            val isHashJoin = isBodoHashJoin(condition, left.getRowType().getFieldNames().size)
-            //TODO: re-enable once codegen is added
-//            return if (isHashJoin) BatchingProperty.STREAMING else BatchingProperty.SINGLE_BATCH
-            return BatchingProperty.SINGLE_BATCH
-        }
     }
 }

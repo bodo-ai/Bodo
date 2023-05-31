@@ -908,7 +908,7 @@ inline constexpr decltype(auto) type_dispatcher(
             }
         default:
             throw std::runtime_error("invalid array type " +
-                                     std::to_string(arr_type));
+                                     GetArrType_as_string(arr_type));
     }
 }
 #undef DISPATCH_CASE

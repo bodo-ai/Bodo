@@ -138,24 +138,14 @@ def bodosql_numeric_types(request):
             "table1": pd.DataFrame(
                 {
                     "A": [4, 1, 2, 3] * 4,
-                    "B": pd.array(
-                        [1.0, 2.0, 3.0, 4.0] * 4,
-                        "Float64"
-                        if bodo.libs.float_arr_ext._use_nullable_float
-                        else "float64",
-                    ),
+                    "B": pd.array([1.0, 2.0, 3.0, 4.0] * 4, "Float64"),
                     "C": ["bird", "dog", "flamingo", "cat"] * 4,
                 }
             ),
             "table2": pd.DataFrame(
                 {
                     "A": [3, 1, 2, 4] * 4,
-                    "B": pd.array(
-                        [1.0, 2.0, 4.0, 3.0] * 4,
-                        "Float64"
-                        if bodo.libs.float_arr_ext._use_nullable_float
-                        else "float64",
-                    ),
+                    "B": pd.array([1.0, 2.0, 4.0, 3.0] * 4, "Float64"),
                     "D": [
                         pd.Timestamp(2021, 5, 19),
                         pd.Timestamp(1999, 12, 31),
@@ -170,19 +160,21 @@ def bodosql_numeric_types(request):
         {
             "table1": pd.DataFrame(
                 {
-                    "A": [1, 1, 3, 3, 5, 7] * 2,
-                    "B": [1.0, 2.0, 4.0, 3.0] * 3,
+                    "A": pd.array([1, 1, 3, 3, 5, 7] * 2, dtype="Int64"),
+                    "B": pd.array([1.0, 2.0, 4.0, 3.0] * 3, dtype="Int64"),
                     "C": ["T1_1", "T1_2", "T1_3", "T1_4", "T1_5", "T1_6"] * 2,
                 }
             ),
             "table2": pd.DataFrame(
                 {
-                    "A": [2, 4, 6, 6, 1, 1] * 2,
-                    "B": [1.0, 2.0, 4.0, 3.0] * 3,
+                    "A": pd.array([2, 4, 6, 6, 1, 1] * 2, dtype="Int64"),
+                    "B": pd.array([1.0, 2.0, 4.0, 3.0] * 3, dtype="Int64"),
                     "D": ["T2_1", "T2_2", "T2_3", "T2_4", "T2_5", "T2_6"] * 2,
                 }
             ),
-            "table3": pd.DataFrame({"Y": [1, 2, 3, 4, 5, 6] * 2}),
+            "table3": pd.DataFrame(
+                {"Y": pd.array([1, 2, 3, 4, 5, 6] * 2, dtype="Int64")}
+            ),
         },
         pytest.param(
             {

@@ -25,12 +25,16 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.ge
 import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.generateWindowedAggFn;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.revertSortColumnName;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.usesOptimizedEngineKernel;
+import static com.bodosql.calcite.application.JoinCondVisitor.getStreamingJoinKeyIndices;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
+import static com.bodosql.calcite.application.JoinCondVisitor.visitNonEquiConditions;
 import static com.bodosql.calcite.application.Utils.AggHelpers.aggContainsFilter;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
+import static com.bodosql.calcite.application.Utils.Utils.integerLiteralArange;
 import static com.bodosql.calcite.application.Utils.Utils.isSnowflakeCatalogTable;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 import static com.bodosql.calcite.application.Utils.Utils.sqlTypenameToPandasTypename;
+import static com.bodosql.calcite.application.Utils.Utils.stringsToStringLiterals;
 
 import com.bodosql.calcite.adapter.pandas.PandasAggregate;
 import com.bodosql.calcite.adapter.pandas.PandasFilter;
@@ -58,6 +62,7 @@ import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Dataframe;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.Call;
+import com.bodosql.calcite.ir.Expr.IntegerLiteral;
 import com.bodosql.calcite.ir.Expr.StringLiteral;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
@@ -90,6 +95,7 @@ import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Correlate;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Intersect;
+import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.Minus;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Sort;
@@ -411,7 +417,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     if (node instanceof TableScan) {
       this.visitTableScan((TableScan) node, !(parent instanceof Filter));
     } else if (node instanceof PandasJoin) {
-      this.visitJoin((PandasJoin) node);
+      this.visitPandasJoin((PandasJoin) node);
     } else if (node instanceof PandasSort) {
       this.visitLogicalSort((Sort) node);
     } else if (node instanceof PandasProject) {
@@ -2438,7 +2444,20 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node join node being visited
    */
-  public void visitJoin(PandasJoin node) {
+  public void visitPandasJoin(PandasJoin node) {
+    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+      visitStreamingPandasJoin(node);
+    } else {
+      visitBatchedPandasJoin(node);
+    }
+  }
+
+  /**
+   * Visitor for Join without streaming.
+   *
+   * @param node join node being visited
+   */
+  public void visitBatchedPandasJoin(PandasJoin node) {
     /* get left/right tables */
     Variable outVar = this.genDfVar();
     int nodeId = node.getId();
@@ -2459,9 +2478,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       /** Generate the expression for the join condition in a format Bodo supports. */
       HashSet<String> mergeCols = new HashSet<>();
-      Pair<Expr, Boolean> joinCondInfo =
-          visitJoinCond(cond, leftColNames, rightColNames, mergeCols);
-      Expr joinCond = joinCondInfo.getKey();
+      Expr joinCond = visitJoinCond(cond, leftColNames, rightColNames, mergeCols);
 
       /* extract join type */
       String joinType = node.getJoinType().lowerName;
@@ -2490,6 +2507,148 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.genRelnodeTimerStop(node);
     }
     varGenStack.push(outVar);
+  }
+
+  /**
+   * Visitor for PandasJoin when it is a streaming join. Both nested loop and hash join use the same
+   * API calls and the decision is made based on the values of the arguments.
+   *
+   * <p>Note: Streaming doesn't support caching yet.
+   */
+  void visitStreamingPandasJoin(PandasJoin node) {
+    // Extract the Hash Join information
+    JoinInfo joinInfo = node.analyzeCondition();
+    Pair<Variable, Variable> keyIndices = getStreamingJoinKeyIndices(joinInfo, this);
+    List<String> buildNodeNames = node.getLeft().getRowType().getFieldNames();
+    List<String> probeNodeNames = node.getRight().getRowType().getFieldNames();
+    // Fetch the names for each child.
+    List<Expr.StringLiteral> buildColNames = stringsToStringLiterals(buildNodeNames);
+    List<Expr.StringLiteral> probeColNames = stringsToStringLiterals(probeNodeNames);
+    Variable buildNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(buildColNames));
+    Variable probeNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(probeColNames));
+    // Get the non equi-join info
+    Expr nonEquiCond =
+        visitNonEquiConditions(joinInfo.nonEquiConditions, buildNodeNames, probeNodeNames);
+    // Right now we must process nonEquiCond as a string.
+    String condString = nonEquiCond.emit();
+    final List<kotlin.Pair<String, Expr>> namedArgs;
+    if (condString.equals("")) {
+      // There is no join condition
+      namedArgs = List.of();
+    } else {
+      namedArgs =
+          List.of(new kotlin.Pair<>("non_equijoin_cond", new Expr.StringLiteral(condString)));
+    }
+
+    // Visit the batch side
+    this.visit(node.getLeft(), 0, node);
+    Variable buildDf = varGenStack.pop();
+    // Fetch the batch state
+    StreamingPipelineFrame batchPipeline = generatedCode.getCurrentStreamingPipeline();
+    // Create the state var.
+    Variable joinStateVar = genGenericTempVar();
+    Expr.BooleanLiteral isLeftOuter =
+        new Expr.BooleanLiteral(node.getJoinType().generatesNullsOnRight());
+    Expr.BooleanLiteral isRightOuter =
+        new Expr.BooleanLiteral(node.getJoinType().generatesNullsOnLeft());
+    Expr.Call stateCall =
+        new Expr.Call(
+            "bodo.libs.stream_join.init_join_state",
+            List.of(
+                keyIndices.left,
+                keyIndices.right,
+                buildNamesGlobal,
+                probeNamesGlobal,
+                isLeftOuter,
+                isRightOuter),
+            namedArgs);
+    Op.Assign joinInit = new Op.Assign(joinStateVar, stateCall);
+    batchPipeline.addInitialization(joinInit);
+    // Join needs the isLast to be global before calling the build side change.
+    batchPipeline.ensureExitCondSynchronized();
+    Variable batchExitCond = batchPipeline.getExitCond();
+    // Fetch the underlying table for the join.
+    Variable buildTable = genTableVar();
+    Expr.Call buildDfData =
+        new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(buildDf));
+    int numBuildCols = node.getLeft().getRowType().getFieldCount();
+    List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
+    Variable buildColNums = lowerAsMetaType(new Expr.Tuple(buildIndices));
+    Expr.Call buildTableCall =
+        new Expr.Call(
+            "bodo.hiframes.table.logical_table_to_table",
+            buildDfData,
+            new Expr.Tuple(List.of()),
+            buildColNums,
+            new Expr.IntegerLiteral(numBuildCols));
+    generatedCode.add(new Assign(buildTable, buildTableCall));
+    Expr.Call batchCall =
+        new Expr.Call(
+            "bodo.libs.stream_join.join_build_consume_batch",
+            List.of(joinStateVar, buildTable, batchExitCond));
+    generatedCode.add(new Op.Stmt(batchCall));
+    // Finalize and add the batch pipeline.
+    generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
+    // Visit the probe side
+    this.visit(node.getRight(), 1, node);
+    Variable probeDf = varGenStack.pop();
+    StreamingPipelineFrame probePipeline = generatedCode.getCurrentStreamingPipeline();
+    Variable oldFlag = probePipeline.getExitCond();
+    // Change the probe condition
+    Variable newFlag = genGenericTempVar();
+    probePipeline.endSection(newFlag);
+    // Fetch the underlying table for the join.
+    Variable probeTable = genTableVar();
+    Expr.Call probeDfData =
+        new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(probeDf));
+    int numProbeCols = node.getRight().getRowType().getFieldCount();
+    List<Expr.IntegerLiteral> probeIndices = integerLiteralArange(numProbeCols);
+    Variable leftColNums = lowerAsMetaType(new Expr.Tuple(probeIndices));
+    Expr.Call probeTableCall =
+        new Expr.Call(
+            "bodo.hiframes.table.logical_table_to_table",
+            probeDfData,
+            new Expr.Tuple(List.of()),
+            leftColNums,
+            new Expr.IntegerLiteral(numProbeCols));
+    generatedCode.add(new Assign(probeTable, probeTableCall));
+    // Add the probe side
+    Variable outTable = genTableVar();
+    Expr.Call probeCall =
+        new Expr.Call(
+            "bodo.libs.stream_join.join_probe_consume_batch",
+            List.of(joinStateVar, probeTable, oldFlag));
+    generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), probeCall));
+    // Generate an index.
+    Variable indexVar = genIndexVar();
+    Expr.Call lenCall = new Expr.Call("len", List.of(outTable));
+    Expr.IntegerLiteral zero = new IntegerLiteral(0);
+    Expr.IntegerLiteral one = new IntegerLiteral(1);
+    Expr.Call indexCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_index_ext.init_range_index",
+            List.of(zero, lenCall, one, Expr.None.INSTANCE));
+    generatedCode.add(new Op.Assign(indexVar, indexCall));
+    // Generate a DataFrame
+    Variable outDf = genDfVar();
+    Expr.Tuple tableTuple = new Expr.Tuple(List.of(outTable));
+    // Generate the column names global
+    List<Expr.StringLiteral> colNamesLiteral =
+        stringsToStringLiterals(node.getRowType().getFieldNames());
+    Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
+    Variable colNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
+    Expr.Call initDfCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            List.of(tableTuple, indexVar, colNamesMeta));
+    generatedCode.add(new Op.Assign(outDf, initDfCall));
+    // Append the code to delete the state
+    Op.Stmt deleteState =
+        new Op.Stmt(
+            new Expr.Call("bodo.libs.stream_join.delete_join_state", List.of(joinStateVar)));
+    probePipeline.addTermination(deleteState);
+    // Add the DF to the stack
+    this.varGenStack.push(outDf);
   }
 
   /**

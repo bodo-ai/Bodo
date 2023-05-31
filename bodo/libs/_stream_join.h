@@ -129,8 +129,9 @@ struct ArrayBuildBuffer {
                     "Resize Failed!");
             } break;
             default:
-                throw std::runtime_error("invalid array type in AppendRow " +
-                                         std::to_string(in_arr->arr_type));
+                throw std::runtime_error(
+                    "invalid array type in AppendRow " +
+                    GetArrType_as_string(in_arr->arr_type));
         }
     }
 

@@ -5,13 +5,14 @@ import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlKind;
@@ -28,32 +29,51 @@ import org.apache.calcite.util.Pair;
  * restricted to simple constants (string, int, float), arithmetic expressions, comparison operators
  * excluding nulleq, logical operators, and column accesses.
  *
- * <p>Returns a Pair<Str, Bool> containing the generated code and if there is an equality
- * expression.
+ * <p>Returns a Expr containing the generated code.
  */
 public class JoinCondVisitor {
-  public static Pair<Expr, Boolean> visitJoinCond(
+  public static Expr visitJoinCond(
       RexNode joinNode,
       List<String> leftColNames,
       List<String> rightColNames,
       HashSet<String> mergeCols) {
     /** General function for join conditions. */
     Expr outputString;
-    boolean hasEquals = false;
     if (joinNode instanceof RexInputRef) {
       outputString = visitJoinInputRef((RexInputRef) joinNode, leftColNames, rightColNames);
     } else if (joinNode instanceof RexLiteral) {
       outputString = visitJoinLiteral((RexLiteral) joinNode);
     } else if (joinNode instanceof RexCall) {
-      Pair<Expr, Boolean> callResult =
-          visitJoinCall((RexCall) joinNode, leftColNames, rightColNames, mergeCols);
-      outputString = callResult.getKey();
-      hasEquals = callResult.getValue();
+      outputString = visitJoinCall((RexCall) joinNode, leftColNames, rightColNames, mergeCols);
     } else {
       throw new BodoSQLCodegenException(
           "Internal Error: Calcite Plan Produced an unsupported Join Condition");
     }
-    return new Pair<>(outputString, hasEquals);
+    return outputString;
+  }
+
+  /**
+   * API Equivalent to visitJoinCond, but called from the nonEquiConditions of a join info.
+   *
+   * @param conds List of conditions that should be AND together.
+   * @param leftColNames The column names from the left table.
+   * @param rightColNames The column names from the right table.
+   * @return A Expr that is the body of a string to pass to the Bodo Runtime
+   */
+  public static Expr visitNonEquiConditions(
+      List<RexNode> conds, List<String> leftColNames, List<String> rightColNames) {
+    if (conds.size() == 0) {
+      return new Expr.Raw("");
+    }
+    // Create the hashset to enable calling visitJoinCond but the output
+    // will be unused.
+    HashSet<String> unused = new HashSet<>();
+    Expr result = visitJoinCond(conds.get(0), leftColNames, rightColNames, unused);
+    for (int i = 1; i < conds.size(); i++) {
+      Expr newCond = visitJoinCond(conds.get(i), leftColNames, rightColNames, unused);
+      result = new Expr.Binary("&", result, newCond);
+    }
+    return result;
   }
 
   public static Variable visitJoinInputRef(
@@ -109,7 +129,7 @@ public class JoinCondVisitor {
     }
   }
 
-  public static Pair<Expr, Boolean> visitJoinCall(
+  public static Expr visitJoinCall(
       RexCall joinNode,
       List<String> leftColNames,
       List<String> rightColNames,
@@ -122,14 +142,12 @@ public class JoinCondVisitor {
      * expression.
      */
     if (joinNode.getOperator() instanceof SqlBinaryOperator) {
-      boolean hasEquals = false;
       SqlOperator binOp = joinNode.getOperator();
       // Add () to ensure operator precedence
       String operator;
       switch (binOp.getKind()) {
         case EQUALS:
           operator = "==";
-          hasEquals = true;
           break;
         case NOT_EQUALS:
           operator = "!=";
@@ -171,26 +189,14 @@ public class JoinCondVisitor {
                   joinNode.getOperator()));
       }
       List<RexNode> operands = joinNode.getOperands();
-      Pair<Expr, Boolean> val1Info =
-          visitJoinCond(operands.get(0), leftColNames, rightColNames, mergeCols);
-      final Expr val1 = val1Info.getKey();
-      // OR is always treated as false because we can't handle it in the engine.
-      if (binOp.getKind() != SqlKind.OR) {
-        hasEquals = hasEquals || val1Info.getValue();
-      }
+      final Expr val1 = visitJoinCond(operands.get(0), leftColNames, rightColNames, mergeCols);
 
       // curExpr will be updated for each iteration of the loop
       // when the loop terminates, it will be an expression
       // equivalent to the full join call.
       Expr curExpr = val1;
       for (int i = 1; i < operands.size(); i++) {
-        Pair<Expr, Boolean> val2Info =
-            visitJoinCond(operands.get(i), leftColNames, rightColNames, mergeCols);
-        Expr val2 = val2Info.getKey();
-        // OR is always treated as false because we can't handle it in the engine.
-        if (binOp.getKind() != SqlKind.OR) {
-          hasEquals = hasEquals || val2Info.getValue();
-        }
+        Expr val2 = visitJoinCond(operands.get(i), leftColNames, rightColNames, mergeCols);
         curExpr = new Expr.Binary(operator, curExpr, val2);
 
         // If we have an equality with two InputRefs that are the same
@@ -210,36 +216,29 @@ public class JoinCondVisitor {
         }
       }
 
-      return new Pair<>(curExpr, hasEquals);
+      return curExpr;
     } else if (joinNode.getOperator() instanceof SqlPrefixOperator) {
       SqlOperator prefixOp = joinNode.getOperator();
       if (prefixOp.getKind() == SqlKind.NOT) {
-        Pair<Expr, Boolean> val1Info =
-            visitJoinCond(joinNode.operands.get(0), leftColNames, rightColNames, mergeCols);
-        Expr notCond = new Expr.Unary("~", val1Info.getKey());
-        return new Pair<>(notCond, val1Info.getValue());
+        Expr val1 = visitJoinCond(joinNode.operands.get(0), leftColNames, rightColNames, mergeCols);
+        Expr notCond = new Expr.Unary("~", val1);
+        return notCond;
       }
     } else if (joinNode.getOperator() instanceof SqlPostfixOperator) {
       SqlOperator postfixOp = joinNode.getOperator();
       if (postfixOp.getKind() == SqlKind.IS_NOT_TRUE) {
-        Pair<Expr, Boolean> val1Info =
-            visitJoinCond(joinNode.operands.get(0), leftColNames, rightColNames, mergeCols);
-        Expr notCond = new Expr.Unary("~", val1Info.getKey());
-        return new Pair<>(notCond, val1Info.getValue());
+        Expr val1 = visitJoinCond(joinNode.operands.get(0), leftColNames, rightColNames, mergeCols);
+        Expr notCond = new Expr.Unary("~", val1);
+        return notCond;
       }
     } else if (joinNode.getOperator() instanceof SqlFunction
         && joinNode.getOperator().toString().equals("POW")) {
       // TODO[BE-4274]: support all possible functions
       List<RexNode> operands = joinNode.getOperands();
-      Pair<Expr, Boolean> val1Info =
-          visitJoinCond(operands.get(0), leftColNames, rightColNames, mergeCols);
-      Expr val1 = val1Info.getKey();
-      Pair<Expr, Boolean> val2Info =
-          visitJoinCond(operands.get(1), leftColNames, rightColNames, mergeCols);
-      Expr val2 = val2Info.getKey();
-      boolean hasEquals = val1Info.getValue() || val2Info.getValue();
+      Expr val1 = visitJoinCond(operands.get(0), leftColNames, rightColNames, mergeCols);
+      Expr val2 = visitJoinCond(operands.get(1), leftColNames, rightColNames, mergeCols);
       Expr powerExpr = new Expr.Call("pow", List.of(val1, val2), List.of());
-      return new Pair<>(powerExpr, hasEquals);
+      return powerExpr;
     }
     throw new BodoSQLCodegenException(
         String.format(
@@ -247,61 +246,28 @@ public class JoinCondVisitor {
             joinNode.getOperator()));
   }
 
-  public static boolean enableStreamingJoin = false;
-
-  /** Determine if a condition for a join equates to a HashJoin inside Bodo. */
-  public static boolean isBodoHashJoin(RexNode condition, int numLeftCols) {
-    if (!enableStreamingJoin) {
-      return false;
+  /**
+   * For a Bodo join lower two global variables, one for the build table and one for the probe table
+   * containing the indices of the columns used for each comparison.
+   *
+   * @param info The join equality information.
+   * @param visitor The visitor used for lowering global variables
+   * @return A pair of variables that contain the selected indices.
+   */
+  public static Pair<Variable, Variable> getStreamingJoinKeyIndices(
+      JoinInfo info, PandasCodeGenVisitor visitor) {
+    // Define list of indices
+    List<Integer> leftKeys = info.leftKeys;
+    List<Integer> rightKeys = info.rightKeys;
+    List<Expr.IntegerLiteral> leftIndices = new ArrayList<>();
+    List<Expr.IntegerLiteral> rightIndices = new ArrayList<>();
+    for (int i = 0; i < leftKeys.size(); i++) {
+      leftIndices.add(new Expr.IntegerLiteral(leftKeys.get(i)));
+      rightIndices.add(new Expr.IntegerLiteral(rightKeys.get(i)));
     }
-    Boolean result =
-        condition.accept(
-            // We don't need deep traversal
-            new RexVisitorImpl<>(false) {
-              @Override
-              public Boolean visitCall(RexCall call) {
-                /**
-                 * We can only have a hash join if we either have an equality or AND of several
-                 * equalities.
-                 */
-                if (call.getOperator() instanceof SqlBinaryOperator) {
-                  if (call.getKind().equals(SqlKind.AND)) {
-                    // And is true if any value is valid. Note we can't
-                    // use visitArrayOr because it doesn't handle NULL properly
-                    for (RexNode operand : call.getOperands()) {
-                      Boolean b = operand.accept(this);
-                      // Evaluate null as False
-                      boolean isTrue = b != null && b;
-                      if (isTrue) {
-                        return true;
-                      }
-                    }
-                  } else if (call.getKind().equals(SqlKind.EQUALS)) {
-                    // Equals is valid if we have two RexInputRefs and they are from different
-                    // tables
-                    List<RexNode> operands = call.getOperands();
-                    if (operands.size() == 2) {
-                      RexNode first = operands.get(0);
-                      RexNode second = operands.get(1);
-                      if (first instanceof RexInputRef && second instanceof RexInputRef) {
-                        RexInputRef firstRef = (RexInputRef) first;
-                        RexInputRef secondRef = (RexInputRef) second;
-                        int firstColNum = firstRef.getIndex();
-                        int secondColNum = secondRef.getIndex();
-                        // We have a valid hash join condition if they come from different tables.
-                        return (firstColNum < numLeftCols && secondColNum >= numLeftCols)
-                            || (firstColNum >= numLeftCols && secondColNum < numLeftCols);
-                      }
-                    }
-                  }
-                  // All other cases are not supported. If there is code like (A == B) OR (A == B)
-                  // it will
-                  // be simplified by the plan.
-                }
-                return false;
-              }
-            });
-
-    return result != null && result;
+    // Convert the lists to globals and return them.
+    Variable leftVar = visitor.lowerAsMetaType(new Expr.Tuple(leftIndices));
+    Variable rightVar = visitor.lowerAsMetaType(new Expr.Tuple(rightIndices));
+    return new Pair<>(leftVar, rightVar);
   }
 }
