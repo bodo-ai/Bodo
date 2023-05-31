@@ -131,7 +131,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private static final String icebergFileListVarName = "__bodo_Iceberg_file_list";
   private static final String icebergSnapshotIDName = "__bodo_Iceberg_snapshot_id";
 
-  private static final Expr BATCH_SIZE = new Expr.IntegerLiteral(4000);
+  public static final Expr BATCH_SIZE = new Expr.IntegerLiteral(4000);
 
   private static final String ROW_ID_COL_NAME = "_bodo_row_id";
   private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
@@ -327,7 +327,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @return variable name
    */
-  private Variable genFinishedStreamingFlag() {
+  public Variable genFinishedStreamingFlag() {
     return generatedCode.getSymbolTable().genFinishedStreamingFlag();
   }
 
@@ -462,7 +462,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable inputDFVar = varGenStack.pop();
     // Generate the list we are accumulating into.
     Variable batchAccumulatorVariable = this.genBatchAccumulatorVar();
-    StreamingPipelineFrame activePipeline = generatedCode.getCurrentStreamingPipeline();
+    StreamingPipelineFrame activePipeline = this.generatedCode.getCurrentStreamingPipeline();
     activePipeline.addInitialization(
         new Op.Assign(batchAccumulatorVariable, new Expr.List(List.of())));
 
@@ -544,7 +544,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void visitPandasRel(PandasRel node) {
     // Determine if this node has already been cached.
     // If it has, just return that immediately.
-    if (isNodeCached(node)) {
+
+    // SnowflakeToPandas is a pandasRel,
+    // which does not support caching. For now, we've disabled
+    // caching for all PandasRels for this reason
+    if (isNodeCached(node) && !node.getTraitSet().contains(BatchingProperty.STREAMING)) {
       varGenStack.push(varCache.get(node.getId()));
       return;
     }
@@ -580,12 +584,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
         };
 
     // Construct the inputs and then invoke the emit function.
-    this.genRelnodeTimerStart(node);
-    Dataframe out = node.emit(generatedCode, getInputs);
-    this.genRelnodeTimerStop(node);
+
+    // Can't properly handle timers since some pandas Rels are streaming
+    Dataframe out = node.emit(this, generatedCode, getInputs);
 
     Variable outVal = out.getVariable();
-    varCache.put(node.getId(), outVal);
+    // Can't handle caching in streaming case (see above)
+    if (!node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+      varCache.put(node.getId(), outVal);
+    }
     varGenStack.push(outVal);
   }
 
@@ -2360,6 +2367,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
     BodoSqlTable table = node.getCatalogTable();
     Expr readCode = table.generateReadCode(true);
 
+    List<String> columnNames = node.getRowType().getFieldNames();
+
+    varGenStack.push(initStreamingIoLoop(readCode, columnNames));
+  }
+
+  /**
+   * Helper function that handles the setup for an IO loop that draws from a streaming iterator.
+   *
+   * <p>Handles: Creating the streaming Pipeline Calling read_arrow_next on the iterator object
+   * Converting the output table from read_arrow_next into a dataframe
+   *
+   * @param readCode The expression that evaluates to the streaming iterator object.
+   * @param columnNames The expected output column names.
+   * @return Dataframe variable for a fully initialized dataframe, containing a batch of data.
+   */
+  public Variable initStreamingIoLoop(Expr readCode, List<String> columnNames) {
+
     Variable flagVar = genFinishedStreamingFlag();
     // start the streaming pipeline
     this.generatedCode.startStreamingPipelineFrame(flagVar);
@@ -2389,14 +2413,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     Expr tableTuple = new Expr.Tuple(List.of(dfChunkVar));
 
-    List<String> columnNames = node.getRowType().getFieldNames();
-    List<Variable> columnNamesVar = new ArrayList<>();
+    List<Expr> columnNamesExpr = new ArrayList<>();
     for (int i = 0; i < columnNames.size(); i++) {
-      columnNamesVar.add(new Variable(columnNames.get(i)));
+      columnNamesExpr.add(new Expr.StringLiteral(columnNames.get(i)));
     }
-    Expr.Tuple TupleExpr = new Expr.Tuple(columnNamesVar);
+    Expr.Tuple TupleExpr = new Expr.Tuple(columnNamesExpr);
 
-    Expr colNamesMetaExpr = lowerAsColNamesMetaType(TupleExpr);
+    Expr colNamesMetaExpr = this.lowerAsColNamesMetaType(TupleExpr);
 
     Call init_dataframe_call =
         new Call(
@@ -2404,9 +2427,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
             List.of(tableTuple, idx_var, colNamesMetaExpr),
             List.of());
 
+    Variable outVar = this.genDfVar();
     this.generatedCode.add(new Op.Assign(outVar, init_dataframe_call));
 
-    varGenStack.push(outVar);
+    return outVar;
   }
 
   /**

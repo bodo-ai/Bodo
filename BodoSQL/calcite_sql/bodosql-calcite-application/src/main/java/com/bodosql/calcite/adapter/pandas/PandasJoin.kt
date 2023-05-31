@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.JoinCondVisitor.isBodoHashJoin
+import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.traits.BatchingProperty
@@ -50,7 +51,11 @@ class PandasJoin(
         return PandasJoin(cluster, traitSet, left, right, conditionExpr, joinType, rebalanceOutput)
     }
 
-    override fun emit(builder: Module.Builder, inputs: () -> List<Dataframe>): Dataframe {
+    override fun emit(
+        visitor: PandasCodeGenVisitor,
+        builder: Module.Builder,
+        inputs: () -> List<Dataframe>
+    ): Dataframe {
         TODO("Not yet implemented")
     }
 

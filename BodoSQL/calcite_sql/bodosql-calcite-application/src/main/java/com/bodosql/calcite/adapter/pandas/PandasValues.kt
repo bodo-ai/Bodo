@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Module
 import com.google.common.collect.ImmutableList
@@ -25,7 +26,11 @@ class PandasValues(
         return PandasValues(cluster, rowType, tuples, traitSet)
     }
 
-    override fun emit(builder: Module.Builder, inputs: () -> List<Dataframe>): Dataframe {
+    override fun emit(
+        visitor: PandasCodeGenVisitor,
+        builder: Module.Builder,
+        inputs: () -> List<Dataframe>
+    ): Dataframe {
         TODO("Not yet implemented")
     }
 
