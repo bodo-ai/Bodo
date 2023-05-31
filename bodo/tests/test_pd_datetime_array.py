@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.tests.timezone_common import sample_tz  # noqa
 from bodo.tests.utils import check_func, generate_comparison_ops_func
 from bodo.utils.typing import BodoError
@@ -66,6 +67,16 @@ def test_pd_datetime_arr_boxing(arr, memory_leak_check):
         return arr
 
     check_func(test_impl, (arr,))
+
+
+def test_pd_datetime_arr_invalid_tz():
+    with pytest.raises(
+        BodoError,
+        match="Timezone must be either a valid pytz type with a zone, a fixed offset, or None",
+    ):
+        # Make sure the timezone type returns a proper error.
+        # Can't do this via Numba since Pandas won't let us construct a mis-typed array
+        PandasDatetimeTZDtype(tz=())
 
 
 @pytest.mark.parametrize("arr", _dt_arrs)

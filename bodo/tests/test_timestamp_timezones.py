@@ -2,7 +2,6 @@
 
 import datetime
 import operator
-import re
 
 import numpy as np
 import pandas as pd
@@ -154,22 +153,21 @@ def test_tz_datetime_arr_unsupported():
     def impl(arr):
         return np.hstack([arr, arr])
 
-    non_tz_arr = pd.array([pd.Timestamp("2020-01-01")] * 10)
     tz_arr = pd.array([pd.Timestamp("2020-01-01", tz="US/Eastern")] * 10)
-
-    with pytest.raises(
-        BodoError,
-        match=re.escape(
-            "Cannot support timezone naive pd.arrays.DatetimeArray. Please convert to a numpy array with .astype('datetime64[ns]')"
-        ),
-    ):
-        bodo.jit(impl)(non_tz_arr)
 
     with pytest.raises(
         BodoError,
         match=".*Timezone-aware array not yet supported.*",
     ):
         bodo.jit(impl)(tz_arr)
+
+
+def test_tz_datetime_arr_no_tz_supported():
+    def impl(arr):
+        return arr
+
+    no_tz_arr = pd.array([pd.Timestamp("2020-01-01")] * 10)
+    bodo.jit(impl)(no_tz_arr)
 
 
 def test_tz_index_unsupported():
@@ -350,7 +348,6 @@ def test_datetime_timedelta_sub(representative_tz, memory_leak_check):
 
 
 def test_timestamp_now_with_tz_str(representative_tz, memory_leak_check):
-
     # Note: we have to lower this a global so that it's constant, since we require it to be
     # a constant at this time
     @bodo.jit()

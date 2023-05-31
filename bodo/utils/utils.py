@@ -39,6 +39,10 @@ from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.pd_datetime_arr_ext import (
+    DatetimeArrayType,
+    PandasDatetimeTZDtype,
+)
 from bodo.libs.str_arr_ext import (
     num_total_chars,
     pre_alloc_string_array,
@@ -161,6 +165,12 @@ def get_constant(func_ir, var, default=NOT_CONSTANT):
 def numba_to_c_type(t):
     if isinstance(t, bodo.libs.decimal_arr_ext.Decimal128Type):
         return CTypeEnum.Decimal.value
+
+    if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
+        return CTypeEnum.Date.value
+
+    if isinstance(t, PandasDatetimeTZDtype):
+        return CTypeEnum.Datetime.value
 
     if isinstance(t, bodo.hiframes.time_ext.TimeType):
         return CTypeEnum.Time.value
@@ -611,6 +621,14 @@ def empty_like_type_overload(n, arr):
             return bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
 
         return empty_like_type_datetime_date_arr
+
+    if isinstance(arr, DatetimeArrayType):
+        tz = arr.tz
+
+        def empty_like_pandas_datetime_arr(n, arr):  # pragma: no cover
+            return bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(n, tz)
+
+        return empty_like_pandas_datetime_arr
 
     if isinstance(arr, bodo.hiframes.time_ext.TimeArrayType):
         precision = arr.precision

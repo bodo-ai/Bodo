@@ -22,7 +22,11 @@ from bodo.libs.bool_arr_ext import boolean_dtype
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.nullable_tuple_ext import NullableTupleType
 from bodo.libs.str_arr_ext import get_utf8_size
-from bodo.utils.indexing import add_nested_counts, init_nested_counts
+from bodo.utils.indexing import (
+    add_nested_counts,
+    bitmap_size,
+    init_nested_counts,
+)
 from bodo.utils.typing import (
     BodoError,
     dtype_to_array_type,
@@ -715,7 +719,9 @@ def overload_coerce_to_array(
                 dict_encode=True,
             ):  # pragma: no cover
                 n = scalar_to_arr_len
-                A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, get_utf8_size(data)* n)
+                A = bodo.libs.str_arr_ext.pre_alloc_string_array(
+                    n, get_utf8_size(data) * n
+                )
                 for i in range(n):
                     A[i] = data
                 return A
@@ -782,10 +788,15 @@ def overload_coerce_to_array(
         ):  # pragma: no cover
             A = np.empty(scalar_to_arr_len, "datetime64[ns]")
             dt64_val = data.to_datetime64()
+            null_bitmap = np.full(
+                bitmap_size(scalar_to_arr_len),
+                0 if np.isnat(dt64_val) else 0xFF,
+                dtype=np.uint8,
+            )
             for i in numba.parfors.parfor.internal_prange(scalar_to_arr_len):
                 A[i] = dt64_val
             return bodo.libs.pd_datetime_arr_ext.init_pandas_datetime_array(
-                A, tz_literal
+                A, null_bitmap, tz_literal
             )
 
         return impl_timestamp_tz_aware
