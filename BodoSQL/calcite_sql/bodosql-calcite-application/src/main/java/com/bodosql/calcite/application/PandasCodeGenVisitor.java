@@ -137,7 +137,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private static final String icebergFileListVarName = "__bodo_Iceberg_file_list";
   private static final String icebergSnapshotIDName = "__bodo_Iceberg_snapshot_id";
 
-  public static final Expr BATCH_SIZE = new Expr.IntegerLiteral(4000);
+  public final Expr.IntegerLiteral BATCH_SIZE;
 
   private static final String ROW_ID_COL_NAME = "_bodo_row_id";
   private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
@@ -213,7 +213,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String originalSQLQuery,
       RelDataTypeSystem typeSystem,
       boolean debuggingDeltaTable,
-      int verboseLevel) {
+      int verboseLevel,
+      int batchSize) {
     super();
     this.exprTypesMap = exprTypesMap;
     this.searchMap = searchMap;
@@ -226,6 +227,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
     this.generatedCode = new Module.Builder();
+    this.BATCH_SIZE = new Expr.IntegerLiteral(batchSize);
   }
 
   /**
@@ -2321,7 +2323,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                   readVar.emit(), icebergFileListVarName, icebergSnapshotIDName, readCode.emit()));
       targetTableDf = readVar;
     } else {
-      readCode = table.generateReadCode(false);
+      readCode = table.generateReadCode(false, BATCH_SIZE);
       readAssign = new Op.Assign(readVar, readCode);
     }
 
@@ -2371,7 +2373,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable outVar = this.genDfVar();
 
     BodoSqlTable table = node.getCatalogTable();
-    Expr readCode = table.generateReadCode(true);
+    Expr readCode = table.generateReadCode(true, BATCH_SIZE);
 
     List<String> columnNames = node.getRowType().getFieldNames();
 

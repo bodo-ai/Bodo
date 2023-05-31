@@ -8,6 +8,7 @@ import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
+import com.bodosql.calcite.traits.BatchingProperty;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Properties;
@@ -45,7 +46,8 @@ public class SnowflakeGenTest {
     schema.addTable(table);
 
     RelationalAlgebraGenerator generator =
-        new RelationalAlgebraGenerator(catalog, schema, "dummy_param_table_name", false, 0);
+        new RelationalAlgebraGenerator(
+            catalog, schema, "dummy_param_table_name", false, 0, BatchingProperty.defaultBatchSize);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);

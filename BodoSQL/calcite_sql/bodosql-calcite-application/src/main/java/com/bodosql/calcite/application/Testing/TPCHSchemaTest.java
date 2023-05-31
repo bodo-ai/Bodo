@@ -4,6 +4,7 @@ import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.schema.LocalSchemaImpl;
 import com.bodosql.calcite.table.*;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
+import com.bodosql.calcite.traits.BatchingProperty;
 import java.util.ArrayList;
 
 public class TPCHSchemaTest {
@@ -157,7 +158,8 @@ public class TPCHSchemaTest {
     table = new LocalTableImpl("part", schema, arr, false, "part", "", false, "MEMORY");
     schema.addTable(table);
 
-    RelationalAlgebraGenerator generator = new RelationalAlgebraGenerator(schema, "", false, 0);
+    RelationalAlgebraGenerator generator =
+        new RelationalAlgebraGenerator(schema, "", false, 0, BatchingProperty.defaultBatchSize);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String planStr = generator.getRelationalAlgebraString(sql, true);

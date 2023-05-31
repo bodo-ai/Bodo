@@ -64,11 +64,14 @@ public class RelationalAlgebraGenerator {
   /** Store the typesystem being used to access timezone info during Pandas codegen */
   private final RelDataTypeSystem typeSystem;
 
-  /** Should the generated plan/code use streaming? * */
+  /** Should the generated plan/code use streaming? */
   private final boolean useStreaming;
 
-  /** The Bodo verbose level. This is used to control code generated and/or compilation info. * */
+  /** The Bodo verbose level. This is used to control code generated and/or compilation info. */
   private final int verboseLevel;
+
+  /** The batch size used for streaming. This is configurable for testing purposes. */
+  private final int streamingBatchSize;
 
   /**
    * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
@@ -136,10 +139,15 @@ public class RelationalAlgebraGenerator {
    *     gets stored in the {@link #planner}
    */
   public RelationalAlgebraGenerator(
-      BodoSqlSchema newSchema, String namedParamTableName, boolean useStreaming, int verboseLevel) {
+      BodoSqlSchema newSchema,
+      String namedParamTableName,
+      boolean useStreaming,
+      int verboseLevel,
+      int streamingBatchSize) {
     this.catalog = null;
     this.useStreaming = useStreaming;
     this.verboseLevel = verboseLevel;
+    this.streamingBatchSize = streamingBatchSize;
     // Enable/Disable join streaming.
     // TODO: Remove when join code generation is stable.
     System.setProperty("calcite.default.charset", "UTF-8");
@@ -165,10 +173,12 @@ public class RelationalAlgebraGenerator {
       BodoSqlSchema newSchema,
       String namedParamTableName,
       boolean useStreaming,
-      int verboseLevel) {
+      int verboseLevel,
+      int streamingBatchSize) {
     this.catalog = catalog;
     this.useStreaming = useStreaming;
     this.verboseLevel = verboseLevel;
+    this.streamingBatchSize = streamingBatchSize;
     // Enable/Disable join streaming.
     // TODO: Remove when join code generation is stable.
     System.setProperty("calcite.default.charset", "UTF-8");
@@ -415,7 +425,8 @@ public class RelationalAlgebraGenerator {
             originalSQL,
             this.typeSystem,
             debugDeltaTable,
-            this.verboseLevel);
+            this.verboseLevel,
+            this.streamingBatchSize);
     codegen.go(plan);
     String pandas_code = codegen.getGeneratedCode();
     return pandas_code;
