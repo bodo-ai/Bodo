@@ -68,7 +68,7 @@ class SnowflakeTableScan private constructor(cluster: RelOptCluster, traitSet: R
             // treated like the NONE convention by the HepPlanner. We'll then add it using
             // copy and a RelShuttle before invoking the VolcanoPlanner.
             // val traitSet = cluster.traitSetOf(SnowflakeRel.CONVENTION)
-            val traitSet = cluster.traitSet().replace(BatchingProperty.SINGLE_BATCH)
+            val traitSet = cluster.traitSet().replace(BatchingProperty.STREAMING)
             return SnowflakeTableScan(cluster, traitSet, table, catalogTable)
         }
     }
