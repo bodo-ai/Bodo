@@ -6,6 +6,7 @@ import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
+import com.bodosql.calcite.traits.BatchingProperty;
 import java.util.ArrayList;
 
 /** Class for locally testing codegen. */
@@ -71,7 +72,8 @@ public class PandasGenTest {
     schema.addTable(paramTable);
 
     RelationalAlgebraGenerator generator =
-        new RelationalAlgebraGenerator(schema, paramTableName, useStreaming, 0);
+        new RelationalAlgebraGenerator(
+            schema, paramTableName, useStreaming, 0, BatchingProperty.defaultBatchSize);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);

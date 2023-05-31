@@ -558,14 +558,21 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    *
    * @param schemaName Name of the schema to use when reading.
    * @param tableName Name of the table to use when reading.
+   * @param useStreaming Should we generate code to read the table as streaming (currently only
+   *     supported for snowflake tables)
+   * @param streamingBatchSize The batch size to use if streaming is enabled.
    * @return The generated code to produce a read.
    */
   @Override
-  public Expr generateReadCode(String schemaName, String tableName, boolean useStreaming) {
-
+  public Expr generateReadCode(
+      String schemaName,
+      String tableName,
+      boolean useStreaming,
+      Expr.IntegerLiteral streamingBatchSize) {
+    // TODO: Convert to use Expr.Call
     String streamingArg = "";
     if (useStreaming) {
-      streamingArg = "_bodo_chunksize=4000";
+      streamingArg = "_bodo_chunksize=" + streamingBatchSize.emit();
     }
     return new Expr.Raw(
         String.format(

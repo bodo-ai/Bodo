@@ -135,13 +135,15 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * Generate the code needed to read the table. This table type generates code common to all tables
    * in the catalog.
    *
-   * @param UseStreaming Should we generate code to read the table as streaming (currently only
+   * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
+   * @param streamingBatchSize The batch size to use if streaming is enabled.
    * @return The generated code to read the table.
    */
   @Override
-  public Expr generateReadCode(boolean UseStreaming) {
-    return this.getCatalogSchema().generateReadCode(this.getName(), UseStreaming);
+  public Expr generateReadCode(boolean useStreaming, Expr.IntegerLiteral streamingBatchSize) {
+    return this.getCatalogSchema()
+        .generateReadCode(this.getName(), useStreaming, streamingBatchSize);
   }
 
   /**

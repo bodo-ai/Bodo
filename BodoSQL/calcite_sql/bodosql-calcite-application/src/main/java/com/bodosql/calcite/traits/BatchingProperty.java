@@ -11,6 +11,9 @@ public class BatchingProperty implements RelTrait {
 
   private final Type type;
 
+  /** Default value used for internal testing. */
+  public static final int defaultBatchSize = 4000;
+
   @Override
   public RelTraitDef getTraitDef() {
     return BatchingPropertyTraitDef.INSTANCE;

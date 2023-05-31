@@ -252,11 +252,13 @@ public abstract class BodoSqlTable implements ExtensibleTable {
   /**
    * Generate the code needed to read the table.
    *
-   * @param UseStreaming Should we generate code to read the table as streaming (currently only
+   * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
+   * @param streamingBatchSize The batch size to use if streaming is enabled.
    * @return The generated code to read the table.
    */
-  public abstract Expr generateReadCode(boolean UseStreaming);
+  public abstract Expr generateReadCode(
+      boolean useStreaming, Expr.IntegerLiteral streamingBatchSize);
 
   /**
    * Generate the code needed to read the table. This function is called by specialized IO

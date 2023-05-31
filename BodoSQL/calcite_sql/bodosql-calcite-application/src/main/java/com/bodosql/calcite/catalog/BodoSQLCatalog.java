@@ -101,9 +101,16 @@ public interface BodoSQLCatalog {
    *     supported for snowflake tables)
    * @param schemaName Name of the schema to use when reading.
    * @param tableName Name of the table to use when reading.
+   * @param useStreaming Should we generate code to read the table as streaming (currently only
+   *     supported for snowflake tables)
+   * @param streamingBatchSize The batch size to use if streaming is enabled.
    * @return The generated code to produce a read.
    */
-  Expr generateReadCode(String schemaName, String tableName, boolean useStreaming);
+  Expr generateReadCode(
+      String schemaName,
+      String tableName,
+      boolean useStreaming,
+      Expr.IntegerLiteral streamingBatchSize);
 
   /**
    * Close any connections to the remote DataBase. If there are no connections this should be a
