@@ -40,7 +40,7 @@ def test_case(basic_df, spark_info, many_params_fixture, memory_leak_check):
 
     # Check pandas code has appropriate appliesc
     regexp = re.compile(
-        r".*bodosql_case_placeholder.*a=a, b=b, c=c, d=d, e=e, f=f, g=g.*"
+        r".*bodosql_case_placeholder.*a\s*=\s*a, b\s*=\s*b, c\s*=\s*c, d\s*=\s*d, e\s*=\s*e, f\s*=\s*f, g\s*=\s*g.*"
     )
     assert bool(regexp.search(pandas_code))
 
@@ -63,7 +63,7 @@ def test_repeated_param_usage(
     )["pandas_code"]
 
     # check pandas code has appropriate applies
-    regexp = re.compile(r".*bodosql_case_placeholder.*c=c")
+    regexp = re.compile(r".*bodosql_case_placeholder.*c\s*=\s*c")
     assert bool(regexp.search(pandas_code))
 
 
@@ -83,7 +83,7 @@ def test_nested_and_or(basic_df, spark_info, many_params_fixture, memory_leak_ch
     )["pandas_code"]
 
     # check pandas code has appropriate applies
-    regexp = re.compile(r".*bodosql_case_placeholder.*a=a, c=c")
+    regexp = re.compile(r".*bodosql_case_placeholder.*a\s*=\s*a, c\s*=\s*c")
     assert bool(regexp.search(pandas_code))
 
 
@@ -103,5 +103,7 @@ def test_nested_case(basic_df, spark_info, many_params_fixture, memory_leak_chec
     )["pandas_code"]
 
     # check pandas code has appropriate applies
-    regexp = re.compile(r".*bodosql_case_placeholder.*a=a, b=b, c=c, d=d, e=e")
+    regexp = re.compile(
+        r".*bodosql_case_placeholder.*a\s*=\s*a, b\s*=\s*b, c\s*=\s*c, d\s*=\s*d, e\s*=\s*e"
+    )
     assert bool(regexp.search(pandas_code))
