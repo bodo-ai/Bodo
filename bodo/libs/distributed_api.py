@@ -237,7 +237,14 @@ def isend(arr, size, pe, tag, cond=True):
     # nullable arrays
     if (
         isinstance(
-            arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
+            arr,
+            (
+                IntegerArrayType,
+                FloatingArrayType,
+                DecimalArrayType,
+                TimeArrayType,
+                DatetimeArrayType,
+            ),
         )
         or arr == datetime_date_array_type
     ):
@@ -861,7 +868,13 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
     if (
         isinstance(
             data,
-            (IntegerArrayType, FloatingArrayType, DecimalArrayType, bodo.TimeArrayType),
+            (
+                IntegerArrayType,
+                FloatingArrayType,
+                DecimalArrayType,
+                bodo.TimeArrayType,
+                DatetimeArrayType,
+            ),
         )
         or data == datetime_date_array_type
     ):
@@ -889,7 +902,6 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                     recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
                 displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
                 tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-
             c_gatherv(
                 data._data.ctypes,
                 np.int32(n_loc),
@@ -919,19 +931,6 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             return all_data
 
         return gatherv_impl_int_arr
-
-    if isinstance(data, DatetimeArrayType):
-        tz = data.tz
-
-        def impl_pd_datetime_arr(
-            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
-        ):  # pragma: no cover
-            gathered_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
-            return bodo.libs.pd_datetime_arr_ext.init_pandas_datetime_array(
-                gathered_data, tz
-            )
-
-        return impl_pd_datetime_arr
 
     # interval array
     if isinstance(data, IntervalArrayType):
