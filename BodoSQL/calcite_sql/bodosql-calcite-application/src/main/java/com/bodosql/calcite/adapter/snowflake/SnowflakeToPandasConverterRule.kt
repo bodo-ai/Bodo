@@ -2,8 +2,6 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.pandas.PandasProject
 import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.traits.BatchingProperty
-import com.bodosql.calcite.traits.SeparateStreamExchange
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rex.RexInputRef
@@ -25,13 +23,6 @@ class SnowflakeToPandasConverterRule private constructor(config: Config) : Conve
         val projects = rel.rowType.fieldList.mapIndexed { index, field ->
             RexInputRef(index, field.type)
         }
-
-
-        if (newTraitSet.contains(BatchingProperty.SINGLE_BATCH)) {
-            converter = SeparateStreamExchange(
-                converter.cluster, newTraitSet.replace(BatchingProperty.STREAMING), converter)
-        }
-
         return PandasProject.create(converter, projects, rel.rowType)
 
 
