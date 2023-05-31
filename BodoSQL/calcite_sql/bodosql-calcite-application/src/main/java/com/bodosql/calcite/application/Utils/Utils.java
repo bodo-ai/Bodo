@@ -408,8 +408,8 @@ public class Utils {
    * For example, table1_1[i] -> tmp_case_df2_1[i]
    *
    * @param expr The expression to replace table references
-   * @param oldTableName The old table name, that the input expr uses for table references
-   * @param newTableName The new table name, that the output expr will use for table references
+   * @param oldVar The old variable, whose name the input expr uses for table references
+   * @param newVar The new variable, whose name the output expr will use for table references
    * @return
    */
   public static String renameTableRef(String expr, Variable oldVar, Variable newVar) {
@@ -430,5 +430,33 @@ public class Utils {
       return catalogSchema.getCatalog() instanceof SnowflakeCatalogImpl;
     }
     return false;
+  }
+
+  /**
+   * Convert a list of strings to a list of string literals.
+   *
+   * @param arg The list of strings
+   * @return A list of string literals
+   */
+  public static List<StringLiteral> stringsToStringLiterals(List<String> arg) {
+    List<StringLiteral> output = new ArrayList<>(arg.size());
+    for (int i = 0; i < arg.size(); i++) {
+      output.add(new StringLiteral(arg.get(i)));
+    }
+    return output;
+  }
+
+  /**
+   * Given a non-negative number stop, create a list of integer literals from [0, stop).
+   *
+   * @param stop The end of range.
+   * @return A list of integer literals from [0, stop)
+   */
+  public static List<IntegerLiteral> integerLiteralArange(int stop) {
+    List<IntegerLiteral> output = new ArrayList<>(stop);
+    for (int i = 0; i < stop; i++) {
+      output.add(new IntegerLiteral(i));
+    }
+    return output;
   }
 }
