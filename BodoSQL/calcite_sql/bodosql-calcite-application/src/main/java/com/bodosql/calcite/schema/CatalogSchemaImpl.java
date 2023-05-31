@@ -144,10 +144,15 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
    * @param tableName The name of the table as the read source.
+   * @param useStreaming Should we generate code to read the table as streaming (currently only
+   *     supported for snowflake tables)
+   * @param streamingBatchSize The batch size to use if streaming is enabled.
    * @return The generated code to compute the read in Python.
    */
-  public Expr generateReadCode(String tableName, boolean useStreaming) {
-    return this.catalog.generateReadCode(this.getName(), tableName, useStreaming);
+  public Expr generateReadCode(
+      String tableName, boolean useStreaming, Expr.IntegerLiteral streamingBatchSize) {
+    return this.catalog.generateReadCode(
+        this.getName(), tableName, useStreaming, streamingBatchSize);
   }
 
   /** @return The catalog for the schema. */

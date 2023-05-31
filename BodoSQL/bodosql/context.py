@@ -1009,12 +1009,14 @@ class BodoSQLContext:
                 NAMED_PARAM_TABLE_NAME,
                 bodo.bodosql_use_streaming_plan,
                 verbose_level,
+                bodo.bodosql_streaming_batch_size,
             )
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
             NAMED_PARAM_TABLE_NAME,
             bodo.bodosql_use_streaming_plan,
             verbose_level,
+            bodo.bodosql_streaming_batch_size,
         )
         return generator
 

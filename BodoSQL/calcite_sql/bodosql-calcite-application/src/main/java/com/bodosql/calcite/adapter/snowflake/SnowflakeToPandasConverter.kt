@@ -85,7 +85,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         // If we're in a streaming context, we need to add the '_bodo_chunksize'
         // argument in order to properly return an iterator
         if (this.getTraitSet().contains(BatchingProperty.STREAMING)) {
-            currentNamedArgs = listOf(Pair("_bodo_chunksize", PandasCodeGenVisitor.BATCH_SIZE));
+            currentNamedArgs = listOf(Pair("_bodo_chunksize", visitor.BATCH_SIZE));
         } else {
             currentNamedArgs = listOf();
         }
