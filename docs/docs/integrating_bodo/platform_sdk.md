@@ -811,7 +811,88 @@ jobrun = client.job.submit_sql_job_run(CreateSQLJobRun(
             catalog="SNOWFLAKE_CATALOG",
             sqlQueryText="SELECT * FROM PUBLIC.TABLE LIMIT 10"))
 ```
+<br/>
 
+##### Job Run waiter {#job-waiter}
+
+`BodoClient.job.get_job_run_waiter()`
+
+Returns a waiter object that waits until the job run with the specified `uuid` finishes.
+To wait for job run to be finished, invoke the `waiter.wait()` function,
+which can take the following parameters.
+
+```python3
+from typing import Callable
+def wait(
+        self,
+        uuid,
+        on_success: Callable = None,
+        on_failure: Callable = None,
+        on_timeout: Callable = None,
+        check_period=10,
+        timeout=None
+):
+  pass
+```
+
+By default, it returns a job model if no callback is provided.  You can pass callable objects using the following
+parameters:
+
+- `on_success` - job object passed as argument to be executed on success
+- `on_failure` - job object passed as argument to be executed on failure
+- `on_timeout` - `job_uuid` passed as argument to be executed on timeout.
+
+Other options are:
+
+- `check_period` - seconds between status checks
+- `timeout` - threshold in seconds after which Timeout error will be raised, `None` means no timeout
+
+**Example 1. Success/Failure callbacks:**
+```python
+from bodosdk.models import WorkspaceKeys, CreateJobRun
+from bodosdk.client import get_bodo_client
+
+keys = WorkspaceKeys(
+    client_id='XYZ',
+    secret_key='XYZ'
+)
+client = get_bodo_client(keys)
+input_job = CreateJobRun(clusterUUID='<cluster-uuid>', batchJobDefinitionUUID='<batch-job-definition-uuid>')
+job_run = client.job.submit_batch_job_run(input_job)
+
+waiter = client.job.get_job_run_waiter()
+
+def success_callback(job):
+    print("in success callback", job.status)
+
+def failure_callback(job):
+    print('in failure callback', job.status)
+
+result = waiter.wait(job_run.uuid, on_success=success_callback, on_failure=failure_callback)
+```
+
+**Example 2. Timeout callback:**
+```python
+from bodosdk.models import WorkspaceKeys, CreateJobRun
+from bodosdk.client import get_bodo_client
+
+keys = WorkspaceKeys(
+    client_id='XYZ',
+    secret_key='XYZ'
+)
+client = get_bodo_client(keys)
+input_job = CreateJobRun(clusterUUID='<cluster-uuid>', batchJobDefinitionUUID='<batch-job-definition-uuid>')
+job_run = client.job.submit_batch_job_run(input_job)
+
+waiter = client.job.get_job_run_waiter()
+
+def timeout_callback(job_uuid):
+    print(f'Waiter timeout for {job_uuid}')
+    return job_uuid
+
+
+result = waiter.wait(job_run.status, on_timeout=timeout_callback, timeout=1)
+```
 
 
 ### Cluster resource {#cluster-resource}
