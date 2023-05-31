@@ -14,12 +14,18 @@ import bodo
 from bodo.utils.typing import BodoError
 
 
+@register_jitable  # do not marke inline as it causes conversion to fail
+def bitmap_size(n: int) -> int:  # pragma: no cover
+    """Get the number of bytes necessary to store an n-bit bitmap."""
+    return (n + 7) >> 3
+
+
 @register_jitable
 def get_new_null_mask_bool_index(old_mask, ind, n):  # pragma: no cover
     """create a new null bitmask for output of indexing using bool index 'ind'.
     'n' is the total number of elements in original array (not bytes).
     """
-    n_bytes = (n + 7) >> 3
+    n_bytes = bitmap_size(n)
     new_mask = np.empty(n_bytes, np.uint8)
     curr_bit = 0
     for i in range(len(ind)):
@@ -49,7 +55,7 @@ def get_new_null_mask_int_index(old_mask, ind, n):  # pragma: no cover
     """create a new null bitmask for output of indexing using integer index 'ind'.
     'n' is the total number of elements in original array (not bytes).
     """
-    n_bytes = (n + 7) >> 3
+    n_bytes = bitmap_size(n)
     new_mask = np.empty(n_bytes, np.uint8)
     curr_bit = 0
     for i in range(len(ind)):
@@ -80,7 +86,7 @@ def get_new_null_mask_slice_index(old_mask, ind, n):  # pragma: no cover
     """
     slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
     span = numba.cpython.unicode._slice_span(slice_idx)
-    n_bytes = (span + 7) >> 3
+    n_bytes = bitmap_size(span)
     new_mask = np.empty(n_bytes, np.uint8)
     curr_bit = 0
     for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
@@ -359,7 +365,6 @@ def none_optional_setitem_overload(A, idx, val):
         elif (
             bodo.utils.typing.is_list_like_index_type(idx) and idx.dtype == types.bool_
         ):
-
             # Handle string array specially because we need to copy the data
             if A == bodo.string_array_type:
 
@@ -403,7 +408,6 @@ def none_optional_setitem_overload(A, idx, val):
         )  # pragma: no cover
 
     elif isinstance(val, types.optional):
-
         if isinstance(idx, types.Integer):
 
             def impl_optional(A, idx, val):  # pragma: no cover
@@ -431,7 +435,6 @@ def none_optional_setitem_overload(A, idx, val):
         elif (
             bodo.utils.typing.is_list_like_index_type(idx) and idx.dtype == types.bool_
         ):
-
             # Handle string array specially because we need to copy the data
             if A == bodo.string_array_type:
 

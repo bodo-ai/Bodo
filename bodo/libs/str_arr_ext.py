@@ -9,6 +9,7 @@ offsets:           [0, 1, 3, 3, 6, 6, 8]
 import glob
 import operator
 
+import llvmlite.binding as ll
 import numba
 import numba.core.typing.typeof
 import numpy as np
@@ -35,6 +36,7 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
     ArrayItemArrayType,
@@ -60,6 +62,8 @@ from bodo.utils.typing import (
     parse_dtype,
     raise_bodo_error,
 )
+
+ll.add_symbol("bool_arr_to_bitmap", hstr_ext.bool_arr_to_bitmap)
 
 char_type = types.uint8
 char_arr_type = types.Array(char_type, 1, "C")
