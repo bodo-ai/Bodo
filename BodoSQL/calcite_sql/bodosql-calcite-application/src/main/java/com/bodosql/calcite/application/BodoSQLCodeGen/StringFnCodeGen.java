@@ -361,4 +361,9 @@ public class StringFnCodeGen {
     expr_code.append(")");
     return new Expr.Raw(expr_code.toString());
   }
+
+  public static Expr generateSplit(List<Expr> operands) {
+    assert operands.size() == 2;
+    return new Expr.Call("bodo.libs.bodosql_array_kernels.split", operands);
+  }
 }

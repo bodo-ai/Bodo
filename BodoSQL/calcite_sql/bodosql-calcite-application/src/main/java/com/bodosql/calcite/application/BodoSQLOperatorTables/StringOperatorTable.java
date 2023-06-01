@@ -576,6 +576,15 @@ public final class StringOperatorTable implements SqlOperatorTable {
           OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.STRING),
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction SPLIT =
+      new SqlFunction(
+          "SPLIT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.TO_ARRAY,
+          null,
+          OperandTypes.STRING_STRING,
+          SqlFunctionCategory.STRING);
+
   private List<SqlOperator> stringOperatorList =
       Arrays.asList(
           CONCAT,
@@ -608,6 +617,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           INSERT,
           POSITION,
           CHARINDEX,
+          SPLIT,
           SPLIT_PART,
           STRTOK,
           SUBSTRING_INDEX,
