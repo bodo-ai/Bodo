@@ -772,6 +772,8 @@ def _join_probe_consume_batch(
     typingctx,
     join_state,
     cpp_table,
+    kept_build_cols,
+    kept_probe_cols,
     is_last,
     parallel,
 ):
@@ -782,27 +784,51 @@ def _join_probe_consume_batch(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(1).as_pointer(),
                 lir.IntType(1),
             ],
         )
+        kept_build_cols_arr = cgutils.create_struct_proxy(sig.args[2])(
+            context, builder, value=args[2]
+        )
+        kept_probe_cols_arr = cgutils.create_struct_proxy(sig.args[3])(
+            context, builder, value=args[3]
+        )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="join_probe_consume_batch_py_entry"
         )
-        func_args = [args[0], args[1], args[2], out_is_last, args[3]]
+        func_args = [
+            args[0],
+            args[1],
+            kept_build_cols_arr.data,
+            kept_build_cols_arr.nitems,
+            kept_probe_cols_arr.data,
+            kept_probe_cols_arr.nitems,
+            args[4],
+            out_is_last,
+            args[5],
+        ]
         table_ret = builder.call(fn_tp, func_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         items = [table_ret, builder.load(out_is_last)]
         return context.make_tuple(builder, sig.return_type, items)
 
     ret_type = types.Tuple([cpp_table, types.bool_])
-    sig = ret_type(join_state, cpp_table, is_last, parallel)
+    sig = ret_type(
+        join_state, cpp_table, kept_build_cols, kept_probe_cols, is_last, parallel
+    )
     return sig, codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def join_probe_consume_batch(join_state, table, is_last, parallel=False):
+def join_probe_consume_batch(
+    join_state, table, is_last, used_cols=None, parallel=False
+):
     """Consume a probe table batch in streaming join (probe hash table and produce
     output rows)
 
@@ -810,6 +836,9 @@ def join_probe_consume_batch(join_state, table, is_last, parallel=False):
         join_state (JoinState): C++ JoinState pointer
         table (table_type): probe table batch
         is_last (bool): is last batch
+        used_cols (MetaType(tuple(int))): Indices of used columns in the output table.
+            This should only be set by the compiler.
+        parallel (bool): Is this a parallel join. This should only be set by the compiler.
 
     Returns:
         table_type: output table batch
@@ -821,19 +850,63 @@ def join_probe_consume_batch(join_state, table, is_last, parallel=False):
         cast_table_type = table
     out_table_type = join_state.output_type
 
-    n_out_arrs = len(unwrap_typeref(out_table_type).arr_types)
+    # Determine the number of columns in the build/probe tables.
+    build_table_type = join_state.build_table_type
+    if build_table_type == types.unknown:
+        num_build_cols = 0
+    else:
+        num_build_cols = len(build_table_type.arr_types)
+    num_probe_cols = len(cast_table_type.arr_types)
 
-    def impl(join_state, table, is_last, parallel=False):  # pragma: no cover
+    # Determine the live columns. TODO: add a used_cols and compute the result.
+    if is_overload_none(used_cols):
+        kept_build_cols = np.arange(num_build_cols, dtype=np.uint64)
+        kept_probe_cols = np.arange(num_probe_cols, dtype=np.uint64)
+        out_cols_arr = np.arange(len(out_table_type.arr_types), dtype=np.int64)
+    else:
+        # Used cols is a Meta Type with a sorted tuple of column indices.
+        # TODO: Use that this is sorted?
+        kept_cols = set(unwrap_typeref(used_cols).meta)
+
+        live_col_counter = 0
+        build_cols = []
+        probe_cols = []
+        out_cols = []
+
+        # Determine the live build cols
+        for i in range(num_build_cols):
+            if i in kept_cols:
+                build_cols.append(i)
+                out_cols.append(live_col_counter)
+                live_col_counter += 1
+            else:
+                out_cols.append(-1)
+
+        # Determine the live probe cols
+        for i in range(num_probe_cols):
+            output_idx = i + num_build_cols
+            if output_idx in kept_cols:
+                probe_cols.append(i)
+                out_cols.append(live_col_counter)
+                live_col_counter += 1
+            else:
+                out_cols.append(-1)
+        # Generate the arrays to include.
+        kept_build_cols = np.array(build_cols, dtype=np.uint64)
+        kept_probe_cols = np.array(probe_cols, dtype=np.uint64)
+        out_cols_arr = np.array(out_cols, dtype=np.int64)
+
+    def impl(
+        join_state, table, is_last, used_cols=None, parallel=False
+    ):  # pragma: no cover
         cast_table = bodo.utils.table_utils.table_astype(
             table, cast_table_type, False, False
         )
         cpp_table = py_data_to_cpp_table(cast_table, (), in_col_inds, n_table_cols)
         out_cpp_table, out_is_last = _join_probe_consume_batch(
-            join_state, cpp_table, is_last, parallel
+            join_state, cpp_table, kept_build_cols, kept_probe_cols, is_last, parallel
         )
-        out_table = cpp_table_to_py_table(
-            out_cpp_table, np.arange(n_out_arrs), out_table_type
-        )
+        out_table = cpp_table_to_py_table(out_cpp_table, out_cols_arr, out_table_type)
         delete_table(out_cpp_table)
         return out_table, out_is_last
 

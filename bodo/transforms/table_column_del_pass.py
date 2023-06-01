@@ -1433,6 +1433,50 @@ def remove_dead_columns(
                     # We do not set removed = True here, as this branch does not make
                     # any changes that could allow removal in dead code elimination.
                     continue
+                elif fdef == ("join_probe_consume_batch", "bodo.libs.stream_join"):
+                    # Prune any unused columns from the output of join_probe_consume_batch.
+                    # This avoids outputting unnecessary keys.
+
+                    table_key = (lhs_name, 0)
+                    used_columns = _find_used_columns(
+                        table_key,
+                        len(typemap[lhs_name][0].arr_types),
+                        lives,
+                        equiv_vars,
+                    )
+                    if used_columns is None:
+                        # if used_columns is None it means all columns are used.
+                        # As such, we can't do any column pruning
+                        new_body.append(stmt)
+                        continue
+
+                    nodes = compile_func_single_block(
+                        eval(
+                            "lambda join_state, table, is_last: bodo.libs.stream_join.join_probe_consume_batch(join_state, table, is_last, used_cols=used_columns)"
+                        ),
+                        rhs.args,
+                        stmt.target,
+                        typing_info=typing_info,
+                        extra_globals={
+                            "used_columns": bodo.utils.typing.MetaType(
+                                tuple(sorted(used_columns))
+                            )
+                        },
+                    )
+
+                    # Replace the variable in the return value to keep
+                    # distributed analysis consistent.
+                    nodes[-1].target = stmt.target
+                    # Update distributed analysis for the replaced function
+                    new_nodes = list(reversed(nodes))
+                    if dist_analysis:
+                        bodo.transforms.distributed_analysis.propagate_assign(
+                            dist_analysis.array_dists, new_nodes
+                        )
+                    new_body += new_nodes
+                    # We do not set removed = True here, as this branch does not make
+                    # any changes that could allow removal in dead code elimination.
+                    continue
 
         new_body.append(stmt)
 

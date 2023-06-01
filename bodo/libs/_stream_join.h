@@ -478,10 +478,16 @@ void nested_loop_join_build_consume_batch_py_entry(
  *
  * @param join_state join state pointer
  * @param in_table probe table batch
+ * @param kept_build_col_nums indices of kept columns in build table
+ * @param num_kept_build_cols Length of kept_build_col_nums
+ * @param kept_probe_col_nums indices of kept columns in probe table
+ * @param num_kept_probe_cols Length of kept_probe_col_nums
  * @param is_last is last batch
  * @param is_parallel parallel flag
- * @return std::shared_ptr<table_info> output table batch
+ * @return table_info* output table batch
  */
 table_info* nested_loop_join_probe_consume_batch_py_entry(
-    NestedLoopJoinState* join_state, table_info* in_table, bool is_last,
+    NestedLoopJoinState* join_state, table_info* in_table,
+    uint64_t* kept_build_col_nums, int64_t num_kept_build_cols,
+    uint64_t* kept_probe_col_nums, int64_t num_kept_probe_cols, bool is_last,
     bool* out_is_last, bool parallel);
