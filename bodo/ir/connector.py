@@ -487,6 +487,7 @@ def base_connector_remove_dead_columns(
     This is mapped to the used columns during distributed pass.
     """
     table_var_name = node.out_vars[0].name
+    table_key = (table_var_name, None)
 
     # Arrow reader is equivalent to tables for column elimination purposes
     assert isinstance(
@@ -498,7 +499,7 @@ def base_connector_remove_dead_columns(
     if possible_cols:
         # Compute all columns that are live at this statement.
         used_columns, use_all, cannot_del_cols = get_live_column_nums_block(
-            column_live_map, equiv_vars, table_var_name
+            column_live_map, equiv_vars, table_key
         )
         if not (use_all or cannot_del_cols):
             used_columns = trim_extra_used_columns(used_columns, len(possible_cols))
@@ -527,7 +528,7 @@ def base_connector_remove_dead_columns(
                 # This means that used_columns will track the offsets within the type,
                 # not the actual column numbers in the file. We keep these offsets separate
                 # while finalizing DCE and we will update the file with the actual columns later
-                # in distirbuted pass.
+                # in distributed pass.
                 #
                 # For more information see:
                 # https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns#User-Provided-Column-Pruning-at-the-Source
@@ -535,7 +536,8 @@ def base_connector_remove_dead_columns(
                 node.out_used_cols = list(sorted(used_columns))
                 # Return that this table was updated
 
-    """We return false in all cases, as no changes performed in the file will allow for dead code elimination to do work."""
+    # We return false in all cases, as no changes performed
+    # in the file will allow for dead code elimination to do work.
     return False
 
 
