@@ -19,7 +19,13 @@ import kotlin.math.abs
  * The row count for an operation is included as part of the cost, but is
  * not used for cost comparisons.
  */
-class Cost private constructor(private val rows: Double, private val cpu: Double, private val io: Double, val mem: Double, cost: Double?) : RelOptCost {
+class Cost private constructor(
+    private val rows: Double,
+    private val cpu: Double,
+    private val io: Double,
+    val mem: Double,
+    cost: Double?
+) : RelOptCost {
 
     /**
      * Initializes a cost with the given resources.
@@ -29,7 +35,13 @@ class Cost private constructor(private val rows: Double, private val cpu: Double
      * @param io amount of io resource utilized by this operation.
      * @param mem amount of mem resource utilized by this operation.
      */
-    constructor(rows: Double = 0.0, cpu: Double = 0.0, io: Double = 0.0, mem: Double = 0.0) : this(rows, cpu, io, mem, null)
+    constructor(rows: Double = 0.0, cpu: Double = 0.0, io: Double = 0.0, mem: Double = 0.0) : this(
+        rows,
+        cpu,
+        io,
+        mem,
+        null
+    )
 
     /**
      * The cost represents the single numeric value that determines
@@ -113,7 +125,8 @@ class Cost private constructor(private val rows: Double, private val cpu: Double
         return convert(other).let { c -> value / c.value }
     }
 
-    override fun toString(): String = "{${df(rows)} rows, ${df(cpu)} cpu, ${df(io)} io, ${df(mem)} mem}".format(rows, cpu, io, mem)
+    override fun toString(): String =
+        "{${df(rows)} rows, ${df(cpu)} cpu, ${df(io)} io, ${df(mem)} mem}".format(rows, cpu, io, mem)
 
     companion object {
         private val DECIMAL_FORMAT = DecimalFormat("#.###")
@@ -159,6 +172,17 @@ fun RelOptPlanner.makeCost(rows: Double = 1.0, cpu: Double = 0.0, io: Double = 0
  * This uses the parameters from the passed in cost but replaces
  * the number of rows.
  */
-fun RelOptPlanner.makeCost(rows: Double = 1.0, from: Cost): RelOptCost {
-    return makeCost(rows, cpu = from.cpu, io = from.io, mem = from.mem)
-}
+fun RelOptPlanner.makeCost(rows: Double = 1.0, from: RelOptCost): RelOptCost =
+    when (from) {
+        is Cost -> makeCost(rows, from = from)
+        else -> makeCost(rows, cpu = from.cpu, io = from.io)
+    }
+
+/**
+ * Convenience method for producing a cost from another cost.
+ *
+ * This uses the parameters from the passed in cost but replaces
+ * the number of rows.
+ */
+fun RelOptPlanner.makeCost(rows: Double = 1.0, from: Cost): RelOptCost =
+    makeCost(rows, cpu = from.cpu, io = from.io, mem = from.mem)
