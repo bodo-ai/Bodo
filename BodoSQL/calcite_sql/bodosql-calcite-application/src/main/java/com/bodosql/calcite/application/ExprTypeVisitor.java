@@ -175,6 +175,7 @@ public class ExprTypeVisitor {
           "RPAD",
           "RTRIM",
           "RTRIMMED_LENGTH",
+          "SPLIT",
           "SPLIT_PART",
           "STARTSWITH",
           "STRCMP",

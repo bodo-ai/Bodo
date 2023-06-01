@@ -1020,3 +1020,102 @@ def test_strtok(args, spark_info, memory_leak_check):
         check_dtype=False,
         expected_output=answer,
     )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "SELECT SPLIT('www.bodo.ai', '.')",
+                pd.Series([pd.array(["www", "bodo", "ai"])]),
+            ),
+            id="all_scalar",
+        ),
+        pytest.param(
+            (
+                "SELECT SPLIT(A, ' ') FROM table1",
+                pd.Series(
+                    [
+                        pd.array(["alphabet", "soup", "is", "delicious"]),
+                        pd.array(["aaeaaeieaaeioiea"]),
+                        pd.array(["A.BCD.E.FGH.I.JKLMN.O.PQRST.U.VWXYZ"]),
+                        pd.array(["415-555-1234,", "412-555-2345,", "937-555-3456"]),
+                        pd.array(['a', '', 'b', '', '', '', 'c', '', 'd', 'e', '', '', '', '', 'f',
+                                  'g', '', '', '', '', 'h', '', 'i', '', '', '', '', 'j', '']),
+                        None,
+                    ]
+                ),
+            ),
+            id="vector_scalar",
+        ),
+        pytest.param(
+            (
+                "SELECT SPLIT(A, B) FROM table1",
+                pd.Series(
+                    [
+                        pd.array(["alphabet", "soup", "is", "delicious"]),
+                        pd.array(['', '', 'ie', 'ioiea']),
+                        pd.array(["A", "BCD", "E", "FGH", "I", "JKLMN","O", "PQRST", "U", "VWXYZ"]),
+                        pd.array(['415', '555', '1234, 412', '555', '2345, 937', '555', '3456']),
+                        pd.array(['a  b', ' c  d e', '  f g', '  h  i', '  j ']),
+                        None,
+                    ]
+                ),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN A IS NULL THEN NULL ELSE SPLIT(A, B) END FROM table1",
+                pd.Series(
+                    [
+                        pd.array(["alphabet", "soup", "is", "delicious"]),
+                        pd.array(['', '', 'ie', 'ioiea']),
+                        pd.array(["A", "BCD", "E", "FGH", "I", "JKLMN","O", "PQRST", "U", "VWXYZ"]),
+                        pd.array(['415', '555', '1234, 412', '555', '2345, 937', '555', '3456']),
+                        pd.array(['a  b', ' c  d e', '  f g', '  h  i', '  j ']),
+                        None,
+                    ]
+                ),
+            ),
+            id="all_vector_with_case",
+            marks=pytest.mark.skip(reason="TODO: [BSE-511] Support ARRAY with CASE statement."),
+            # We don't support null ARRAY literal and astype conversion for ARRAY now
+        ),
+    ]
+)
+def test_split(args, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": [
+                    "alphabet soup is delicious",
+                    "aaeaaeieaaeioiea",
+                    "A.BCD.E.FGH.I.JKLMN.O.PQRST.U.VWXYZ",
+                    "415-555-1234, 412-555-2345, 937-555-3456",
+                    "a  b    c  d e     f g     h  i     j ",
+                    None,
+                ],
+                "B": [
+                    " ",
+                    "aae",
+                    ".",
+                    "-",
+                    "   ",
+                    "None",
+                ]
+            }
+        )
+    }
+    query, answer = args
+    answer = pd.DataFrame({0: answer})
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=answer,
+    )

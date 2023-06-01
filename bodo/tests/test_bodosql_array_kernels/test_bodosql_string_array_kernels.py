@@ -2687,3 +2687,59 @@ def test_trim_ltrim_rtrim(args, memory_leak_check):
             check_dtype=False,
             reset_index=True,
         )
+
+
+@pytest.mark.parametrize(
+    "string, separator",
+    [
+        pytest.param(
+            "127.0.0.1",
+            ".",
+            id="all_scalar",
+        ),
+        pytest.param(
+            pd.Series(["*as*14*xv*", None, "43qvtwe", "*****", "*.*N*D*E"] * 4),
+            "*",
+            id="vector_scalar",
+        ),
+        pytest.param(
+            pd.Series(["20230203", "", "124as", None, "ababababc"] * 4),
+            pd.Series(["20", "abc", None, "!@#%^&", "ba"] * 4),
+            id="all_vector",
+        ),
+        pytest.param(
+            "8.8.8.8",
+            pd.Series(["8", ".", ".8", "", None] * 4),
+            id="scalar_vector",
+        ),
+        pytest.param(
+            "empty separator",
+            "",
+            id="empty separator",
+        ),
+    ]
+)
+def test_split(string, separator, memory_leak_check):
+    is_out_distributed = True
+    def impl(string, separator):
+        return pd.Series(bodo.libs.bodosql_array_kernels.split(string, separator))
+
+    if not isinstance(string, pd.Series) and not isinstance(separator, pd.Series):
+        is_out_distributed = False
+        impl = lambda string, separator: bodo.libs.bodosql_array_kernels.split(string, separator)
+
+    def scalar_fn(string, separator):
+        if pd.isna(string) or pd.isna(separator):
+            return None
+        if separator == "":
+            return pd.array([string])
+        return pd.array(string.split(separator))
+
+    answer = vectorized_sol((string, separator), scalar_fn, pd.StringDtype())
+    check_func(
+        impl,
+        (string, separator),
+        py_output=answer,
+        check_dtype=False,
+        is_out_distributed=is_out_distributed,
+    )
