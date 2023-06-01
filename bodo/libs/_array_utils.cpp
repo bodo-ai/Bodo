@@ -1008,13 +1008,13 @@ std::shared_ptr<table_info> RetrieveTable(
 
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    const std::span<const int64_t> rowInds, std::vector<size_t> const& colInds,
-    const bool use_nullable_arr) {
+    const std::span<const int64_t> rowInds,
+    std::vector<uint64_t> const& colInds, const bool use_nullable_arr) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     for (size_t i_col : colInds) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
-        out_arrs.emplace_back(
-            RetrieveArray_SingleColumn(std::move(in_arr), rowInds));
+        out_arrs.emplace_back(RetrieveArray_SingleColumn(
+            std::move(in_arr), rowInds, use_nullable_arr));
         // Release reference (and potentially memory) for the column from this
         // table if this is the last table reference.
         reset_col_if_last_table_ref(in_table, i_col);

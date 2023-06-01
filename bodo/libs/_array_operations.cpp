@@ -310,7 +310,7 @@ std::shared_ptr<table_info> sort_values_table_local(
         ret_table = RetrieveTable(std::move(in_table), ListIdx, -1);
     } else {
         uint64_t n_cols = in_table->ncols();
-        std::vector<size_t> colInds;
+        std::vector<uint64_t> colInds;
         for (uint64_t i = 0; i < n_key; i++) {
             if (dead_keys[i]) {
                 // If this is the last reference to this
