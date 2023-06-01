@@ -48,6 +48,7 @@ def test_to_array_scalars(basic_df, memory_leak_check):
         check_names=False,
         check_dtype=False,
         sort_output=False,
+        is_out_distributed=False,
         expected_output=py_output,
     )
 
