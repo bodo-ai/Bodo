@@ -881,8 +881,9 @@ def join_remove_dead_column(join_node, column_live_map, equiv_vars, typemap):
     changed = False
     if join_node.has_live_out_table_var:
         table_var_name = join_node.get_out_table_var().name
+        table_key = (table_var_name, None)
         used_columns, use_all, cannot_del_cols = get_live_column_nums_block(
-            column_live_map, equiv_vars, table_var_name
+            column_live_map, equiv_vars, table_key
         )
         if not (use_all or cannot_del_cols):
             used_columns = trim_extra_used_columns(
@@ -938,13 +939,12 @@ def join_table_column_use(
     # get output's uses
     if join_node.has_live_out_table_var:
         out_table_var = join_node.get_out_table_var()
+        out_key = (out_table_var.name, None)
         (
             used_cols,
             use_all,
             cannot_del_cols,
-        ) = _compute_table_column_uses(
-            out_table_var.name, table_col_use_map, equiv_vars
-        )
+        ) = _compute_table_column_uses(out_key, table_col_use_map, equiv_vars)
     else:
         (used_cols, use_all, cannot_del_cols) = (
             set(),
@@ -954,12 +954,13 @@ def join_table_column_use(
 
     if join_node.has_live_left_table_var:
         left_table = join_node.left_vars[0].name
+        left_key = (left_table, None)
 
         (
             orig_used_cols,
             orig_use_all,
             orig_cannot_del_cols,
-        ) = block_use_map[left_table]
+        ) = block_use_map[left_key]
 
         # skip if input already uses all columns or cannot delete the table
         if not (orig_use_all or orig_cannot_del_cols):
@@ -985,7 +986,7 @@ def join_table_column_use(
                     range(join_node.n_left_table_cols)
                 ) - (left_used_cols | left_key_cols)
 
-            block_use_map[left_table] = (
+            block_use_map[left_key] = (
                 orig_used_cols | left_used_cols | left_key_cols,
                 use_all or cannot_del_cols,
                 False,
@@ -993,12 +994,13 @@ def join_table_column_use(
 
     if join_node.has_live_right_table_var:
         right_table = join_node.right_vars[0].name
+        right_key = (right_table, None)
 
         (
             orig_used_cols,
             orig_use_all,
             orig_cannot_del_cols,
-        ) = block_use_map[right_table]
+        ) = block_use_map[right_key]
 
         # skip if input already uses all columns or cannot delete the table
         if not (orig_use_all or orig_cannot_del_cols):
@@ -1024,7 +1026,7 @@ def join_table_column_use(
                     range(join_node.n_right_table_cols)
                 ) - (right_used_cols | right_key_cols)
 
-            block_use_map[right_table] = (
+            block_use_map[right_key] = (
                 orig_used_cols | right_used_cols | right_key_cols,
                 use_all or cannot_del_cols,
                 False,

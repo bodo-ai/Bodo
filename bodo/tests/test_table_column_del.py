@@ -15,7 +15,13 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import ColumnDelTestPipeline, check_func, reduce_sum
+from bodo.tests.utils import (
+    ColumnDelTestPipeline,
+    check_func,
+    get_snowflake_connection_string,
+    pytest_mark_snowflake,
+    reduce_sum,
+)
 from bodo.utils.utils import is_expr
 
 
@@ -1604,7 +1610,7 @@ def test_table_column_pruing_past_atype_setitem(datapath, memory_leak_check):
     Tests that dead setitems on tables are correctly converted to set_table_column_null, which
     allows for column pruning at the IO node.
 
-    This case checks that the setiem is converted even when using funtions that have no side
+    This case checks that the setitem is converted even when using functions that have no side
     effects.
     """
     filename = datapath(f"many_columns.parquet")
@@ -2705,3 +2711,68 @@ def test_parquet_tail(datapath, memory_leak_check):
         _check_column_dels(bodo_func, [])
         # There shouldn't be a need to load any columns.
         check_logger_msg(stream, f"Columns loaded []")
+
+
+@pytest_mark_snowflake
+def test_streaming_read_sql(memory_leak_check):
+    """
+    Tests support for dead column elimination with `pd.read_sql` used
+    in a streaming context. This is meant to be a test example of the
+    necessary operation, so this example is smaller functional test
+    without the proper control flow.
+    """
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "l_orderkey",
+            "l_partkey",
+            "l_suppkey",
+            "l_linenumber",
+            "l_quantity",
+            "l_extendedprice",
+            "l_discount",
+            "l_tax",
+            "l_returnflag",
+            "l_linestatus",
+            "l_shipdate",
+            "l_commitdate",
+            "l_receiptdate",
+            "l_shipinstruct",
+            "l_shipmode",
+            "l_comment",
+        )
+    )
+
+    def impl(conn):
+        reader = pd.read_sql("SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70", conn, _bodo_chunksize=4000)  # type: ignore
+        table, is_last = bodo.io.arrow_reader.read_arrow_next(reader)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(0, len(table), 1, None)
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (table,), index_var, col_meta
+        )
+        bodo.io.arrow_reader.arrow_reader_del(reader)
+        return df[["l_partkey"]]
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    py_output = pd.read_sql(
+        "SELECT l_partkey FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70",
+        conn,
+    )
+    check_func(
+        impl,
+        (conn,),
+        sort_output=True,
+        reset_index=True,
+        py_output=py_output,
+        check_dtype=False,
+    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func(conn)
+        # There shouldn't be any del_column calls
+        _check_column_dels(bodo_func, [[1]])
+        # There shouldn't be a need to load any columns.
+        check_logger_msg(stream, f"Columns loaded ['l_partkey']")

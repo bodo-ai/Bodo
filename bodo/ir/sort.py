@@ -827,13 +827,15 @@ def sort_table_column_use(
         return
 
     rhs_table = sort_node.in_vars[0].name
+    rhs_key = (rhs_table, None)
     lhs_table = sort_node.out_vars[0].name
+    lhs_key = (lhs_table, None)
 
     (
         orig_used_cols,
         orig_use_all,
         orig_cannot_del_cols,
-    ) = block_use_map[rhs_table]
+    ) = block_use_map[rhs_key]
 
     # skip if input already uses all columns or cannot delete the table
     if orig_use_all or orig_cannot_del_cols:
@@ -844,12 +846,12 @@ def sort_table_column_use(
         used_cols,
         use_all,
         cannot_del_cols,
-    ) = _compute_table_column_uses(lhs_table, table_col_use_map, equiv_vars)
+    ) = _compute_table_column_uses(lhs_key, table_col_use_map, equiv_vars)
 
     # key columns are always used in sorting
     table_key_set = set(i for i in sort_node.key_inds if i < sort_node.num_table_arrays)
 
-    block_use_map[rhs_table] = (
+    block_use_map[rhs_key] = (
         orig_used_cols | used_cols | table_key_set,
         use_all or cannot_del_cols,
         False,
@@ -878,9 +880,10 @@ def sort_remove_dead_column(sort_node, column_live_map, equiv_vars, typemap):
 
     n_table_cols = sort_node.num_table_arrays
     lhs_table = sort_node.out_vars[0].name
+    lhs_table_key = (lhs_table, None)
 
     used_columns = _find_used_columns(
-        lhs_table, n_table_cols, column_live_map, equiv_vars
+        lhs_table_key, n_table_cols, column_live_map, equiv_vars
     )
 
     # None means all columns are used so we can't prune any columns
