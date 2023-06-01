@@ -290,8 +290,8 @@ std::shared_ptr<table_info> RetrieveTable(
  */
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    const std::span<const int64_t> rowInds, std::vector<size_t> const& colInds,
-    const bool use_nullable_arr = false);
+    const std::span<const int64_t> rowInds,
+    std::vector<uint64_t> const& colInds, const bool use_nullable_arr = false);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same

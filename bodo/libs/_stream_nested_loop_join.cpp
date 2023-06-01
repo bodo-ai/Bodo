@@ -26,12 +26,17 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
  *
  * @param join_state join state pointer
  * @param probe_table probe table batch
+ * @param build_kept_cols Which columns to generate in the output on the build
+ * side.
+ * @param probe_kept_cols Which columns to generate in the output on the probe
+ * side.
  * @param is_parallel parallel flag for tracing purposes
  * @return std::shared_ptr<table_info> output table batch
  */
 std::shared_ptr<table_info> nested_loop_join_local_chunk(
     NestedLoopJoinState* join_state, std::shared_ptr<table_info> probe_table,
-    bool parallel) {
+    const std::vector<uint64_t>& build_kept_cols,
+    const std::vector<uint64_t>& probe_kept_cols, bool parallel) {
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
 
@@ -55,10 +60,10 @@ std::shared_ptr<table_info> nested_loop_join_local_chunk(
     // TODO[BSE-460]: pass outer join flags
     // similar to here:
     // https://github.com/Bodo-inc/Bodo/blob/a0bc325fc5e92eb4d9a43ad09d178eb7754b4eb7/bodo/libs/_stream_join.cpp#L223
-    std::shared_ptr<table_info> build_out_table =
-        RetrieveTable(join_state->build_table_buffer.data_table, build_idxs);
+    std::shared_ptr<table_info> build_out_table = RetrieveTable(
+        join_state->build_table_buffer.data_table, build_idxs, build_kept_cols);
     std::shared_ptr<table_info> probe_out_table =
-        RetrieveTable(probe_table, probe_idxs);
+        RetrieveTable(probe_table, probe_idxs, probe_kept_cols);
     build_idxs.clear();
     probe_idxs.clear();
 
@@ -72,7 +77,10 @@ std::shared_ptr<table_info> nested_loop_join_local_chunk(
 
 std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
     NestedLoopJoinState* join_state, std::shared_ptr<table_info> in_table,
-    bool is_last, bool parallel) {
+    const std::vector<uint64_t> build_kept_cols,
+    const std::vector<uint64_t> probe_kept_cols, bool is_last,
+
+    bool parallel) {
     if (parallel) {
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -85,12 +93,14 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
                 in_table, in_table, in_table->ncols(), parallel, p);
             std::shared_ptr<table_info> out_table_chunk =
                 nested_loop_join_local_chunk(join_state, bcast_probe_chunk,
+                                             build_kept_cols, probe_kept_cols,
                                              parallel);
             out_table_chunks.emplace_back(out_table_chunk);
         }
         return concat_tables(out_table_chunks);
     } else {
-        return nested_loop_join_local_chunk(join_state, in_table, parallel);
+        return nested_loop_join_local_chunk(
+            join_state, in_table, build_kept_cols, probe_kept_cols, parallel);
     }
 }
 
@@ -106,24 +116,22 @@ void nested_loop_join_build_consume_batch_py_entry(
     }
 }
 
-/**
- * @brief Python wrapper to consume probe table batch and produce output table
- * batch
- *
- * @param join_state join state pointer
- * @param in_table probe table batch
- * @param is_last is last batch
- * @return table_info* output table batch
- */
 table_info* nested_loop_join_probe_consume_batch_py_entry(
-    NestedLoopJoinState* join_state, table_info* in_table, bool is_last,
+    NestedLoopJoinState* join_state, table_info* in_table,
+    uint64_t* kept_build_col_nums, int64_t num_kept_build_cols,
+    uint64_t* kept_probe_col_nums, int64_t num_kept_probe_cols, bool is_last,
     bool* out_is_last, bool parallel) {
     try {
         // TODO: Actually output out_is_last based on is_last + the state
         // of the output buffer.
         *out_is_last = is_last;
+        std::vector<uint64_t> build_kept_cols(
+            kept_build_col_nums, kept_build_col_nums + num_kept_build_cols);
+        std::vector<uint64_t> probe_kept_cols(
+            kept_probe_col_nums, kept_probe_col_nums + num_kept_probe_cols);
         std::shared_ptr<table_info> out = nested_loop_join_probe_consume_batch(
-            join_state, std::unique_ptr<table_info>(in_table), is_last,
+            join_state, std::unique_ptr<table_info>(in_table),
+            std::move(build_kept_cols), std::move(probe_kept_cols), is_last,
             parallel);
 
         return new table_info(*out);

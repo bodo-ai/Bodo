@@ -155,14 +155,20 @@ void join_build_consume_batch(HashJoinState* join_state,
  *
  * @param join_state join state pointer
  * @param in_table probe table batch
+ * @param build_kept_cols Which columns to generate in the output on the build
+ * side.
+ * @param probe_kept_cols Which columns to generate in the output on the probe
+ * side.
  * @param is_last is last batch
+ * @param parallel parallel flag
  * @return std::shared_ptr<table_info> output table batch
  */
 template <bool build_table_outer, bool probe_table_outer,
           bool non_equi_condition>
 std::shared_ptr<table_info> join_probe_consume_batch(
     HashJoinState* join_state, std::shared_ptr<table_info> in_table,
-    bool is_last, bool parallel) {
+    const std::vector<uint64_t> build_kept_cols,
+    const std::vector<uint64_t> probe_kept_cols, bool is_last, bool parallel) {
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -250,9 +256,9 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     // appended side by side)
     std::shared_ptr<table_info> build_out_table =
         RetrieveTable(active_partition->build_table_buffer.data_table,
-                      build_idxs, -1, probe_table_outer);
-    std::shared_ptr<table_info> probe_out_table =
-        RetrieveTable(std::move(in_table), probe_idxs, -1, build_table_outer);
+                      build_idxs, build_kept_cols, probe_table_outer);
+    std::shared_ptr<table_info> probe_out_table = RetrieveTable(
+        std::move(in_table), probe_idxs, probe_kept_cols, build_table_outer);
     build_idxs.clear();
     probe_idxs.clear();
 
@@ -343,10 +349,11 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             active_partition->probe_table = nullptr;
             build_out_tables.emplace_back(
                 RetrieveTable(active_partition->build_table_buffer.data_table,
-                              build_idxs, -1, probe_table_outer));
+                              build_idxs, build_kept_cols, probe_table_outer));
             build_idxs.clear();
-            probe_out_tables.emplace_back(RetrieveTable(
-                std::move(new_data), probe_idxs, -1, build_table_outer));
+            probe_out_tables.emplace_back(
+                RetrieveTable(std::move(new_data), probe_idxs, probe_kept_cols,
+                              build_table_outer));
             probe_idxs.clear();
         }
 
@@ -484,36 +491,44 @@ void join_build_consume_batch_py_entry(JoinState* join_state,
  * @brief Python wrapper to consume probe table batch and produce output table
  * batch
  *
- * @param join_state join state pointer
+ * @param join_state_ join state pointer
  * @param in_table probe table batch
+ * @param kept_build_col_nums indices of kept columns in build table
+ * @param num_kept_build_cols Length of kept_build_col_nums
+ * @param kept_probe_col_nums indices of kept columns in probe table
+ * @param num_kept_probe_cols Length of kept_probe_col_nums
  * @param is_last is last batch
+ * @param is_parallel parallel flag
  * @return table_info* output table batch
  */
-table_info* join_probe_consume_batch_py_entry(JoinState* join_state_,
-                                              table_info* in_table,
-                                              bool is_last, bool* out_is_last,
-                                              bool parallel) {
+table_info* join_probe_consume_batch_py_entry(
+    JoinState* join_state_, table_info* in_table, uint64_t* kept_build_col_nums,
+    int64_t num_kept_build_cols, uint64_t* kept_probe_col_nums,
+    int64_t num_kept_probe_cols, bool is_last, bool* out_is_last,
+    bool parallel) {
     // nested loop join is required if there are no equality keys
     if (join_state_->n_keys == 0) {
         return nested_loop_join_probe_consume_batch_py_entry(
-            (NestedLoopJoinState*)join_state_, in_table, is_last, out_is_last,
-            parallel);
+            (NestedLoopJoinState*)join_state_, in_table, kept_build_col_nums,
+            num_kept_build_cols, kept_probe_col_nums, num_kept_probe_cols,
+            is_last, out_is_last, parallel);
     }
 
     HashJoinState* join_state = (HashJoinState*)join_state_;
 
 #ifndef CONSUME_PROBE_BATCH
-#define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,         \
-                            has_non_equi_cond, build_table_outer_exp,     \
-                            probe_table_outer_exp, has_non_equi_cond_exp) \
-    if (build_table_outer == build_table_outer_exp &&                     \
-        probe_table_outer == probe_table_outer_exp &&                     \
-        has_non_equi_cond == has_non_equi_cond_exp) {                     \
-        out = join_probe_consume_batch<build_table_outer_exp,             \
-                                       probe_table_outer_exp,             \
-                                       has_non_equi_cond_exp>(            \
-            join_state, std::unique_ptr<table_info>(in_table), is_last,   \
-            parallel);                                                    \
+#define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,            \
+                            has_non_equi_cond, build_table_outer_exp,        \
+                            probe_table_outer_exp, has_non_equi_cond_exp)    \
+    if (build_table_outer == build_table_outer_exp &&                        \
+        probe_table_outer == probe_table_outer_exp &&                        \
+        has_non_equi_cond == has_non_equi_cond_exp) {                        \
+        out = join_probe_consume_batch<build_table_outer_exp,                \
+                                       probe_table_outer_exp,                \
+                                       has_non_equi_cond_exp>(               \
+            join_state, std::unique_ptr<table_info>(in_table),               \
+            std::move(build_kept_cols), std::move(probe_kept_cols), is_last, \
+            parallel);                                                       \
     }
 #endif
 
@@ -523,6 +538,10 @@ table_info* join_probe_consume_batch_py_entry(JoinState* join_state_,
         *out_is_last = is_last;
         std::shared_ptr<table_info> out;
         bool contain_non_equi_cond = join_state->cond_func != NULL;
+        std::vector<uint64_t> build_kept_cols(
+            kept_build_col_nums, kept_build_col_nums + num_kept_build_cols);
+        std::vector<uint64_t> probe_kept_cols(
+            kept_probe_col_nums, kept_probe_col_nums + num_kept_probe_cols);
 
         CONSUME_PROBE_BATCH(join_state->build_table_outer,
                             join_state->probe_table_outer,
