@@ -18,6 +18,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         c_bool isInRange(uint8_t* ptr) const
         uint8_t* getFrameAddress(uint64_t idx) const
         uint64_t getFrameIndex(uint8_t* ptr) const
+        uint8_t** getSwip(uint64_t idx) const
         int64_t AllocateFrame(uint8_t** swip)
         void FreeFrame(uint64_t idx)
         void FreeFrame(uint8_t* ptr)
@@ -25,8 +26,8 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         uint64_t getNumBlocks() const
         c_bool isFrameMapped(uint64_t idx) const
         c_bool isFramePinned(uint64_t idx) const
-    
-    
+
+
     cdef cppclass CBufferPoolOptions" bodo::BufferPoolOptions":
         uint64_t memory_size
         uint64_t min_size_class

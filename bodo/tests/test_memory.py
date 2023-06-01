@@ -215,8 +215,8 @@ def test_mmap_smallest_size_class_allocation():
     # Verify that the correct frame is allocated.
     assert size_class.is_in_range(alloc1)
     assert size_class.get_frame_index(alloc1) == 0
-    alloc1_frame = size_class.get_alloc_for_frame(0)
-    assert alloc1.has_same_ptr(alloc1_frame)
+    assert alloc1.has_same_ptr(size_class.build_alloc_for_frame(0))
+    assert size_class.get_swip_at_frame(0) == alloc1.get_swip_as_int()
 
     # Verify that the correct bits are set
     assert size_class.is_frame_mapped(0)
@@ -235,8 +235,8 @@ def test_mmap_smallest_size_class_allocation():
     # Verify that the correct frame is allocated.
     assert size_class.is_in_range(alloc2)
     assert size_class.get_frame_index(alloc2) == 1
-    alloc2_frame = size_class.get_alloc_for_frame(1)
-    assert alloc2.has_same_ptr(alloc2_frame)
+    assert alloc2.has_same_ptr(size_class.build_alloc_for_frame(1))
+    assert size_class.get_swip_at_frame(1) == alloc2.get_swip_as_int()
 
     # Verify that the correct bits are set
     assert size_class.is_frame_mapped(0)
@@ -291,8 +291,8 @@ def test_mmap_medium_size_classes_allocation():
     # Verify that the correct frame is allocated.
     assert size_class_16.is_in_range(alloc1)
     assert size_class_16.get_frame_index(alloc1) == 0
-    alloc1_frame = size_class_16.get_alloc_for_frame(0)
-    assert alloc1.has_same_ptr(alloc1_frame)
+    assert alloc1.has_same_ptr(size_class_16.build_alloc_for_frame(0))
+    assert size_class_16.get_swip_at_frame(0) == alloc1.get_swip_as_int()
 
     # Allocate 16KiB
     alloc2: BufferPoolAllocation = pool.allocate(16 * 1024)
@@ -310,8 +310,8 @@ def test_mmap_medium_size_classes_allocation():
     # Verify that the correct frame is allocated.
     assert size_class_16.is_in_range(alloc2)
     assert size_class_16.get_frame_index(alloc2) == 1
-    alloc2_frame = size_class_16.get_alloc_for_frame(1)
-    assert alloc2.has_same_ptr(alloc2_frame)
+    assert alloc2.has_same_ptr(size_class_16.build_alloc_for_frame(1))
+    assert size_class_16.get_swip_at_frame(1) == alloc2.get_swip_as_int()
 
     # Allocated 31KiB (in the 32KiB Size Class)
     alloc3: BufferPoolAllocation = pool.allocate(31 * 1024)
@@ -328,7 +328,7 @@ def test_mmap_medium_size_classes_allocation():
     # Verify that the correct frame is allocated.
     assert size_class_32.is_in_range(alloc3)
     assert size_class_32.get_frame_index(alloc3) == 0
-    alloc3_frame = size_class_32.get_alloc_for_frame(0)
+    alloc3_frame = size_class_32.build_alloc_for_frame(0)
     assert alloc3.has_same_ptr(alloc3_frame)
 
     pool.free(alloc1)
@@ -374,8 +374,8 @@ def test_mmap_largest_size_class_allocation():
     # Verify that the correct frame is allocated.
     assert size_class.is_in_range(alloc1)
     assert size_class.get_frame_index(alloc1) == 0
-    alloc1_frame = size_class.get_alloc_for_frame(0)
-    assert alloc1.has_same_ptr(alloc1_frame)
+    assert alloc1.has_same_ptr(size_class.build_alloc_for_frame(0))
+    assert size_class.get_swip_at_frame(0) == alloc1.get_swip_as_int()
 
     # Verify that the correct bits are set
     assert size_class.is_frame_mapped(0)
@@ -632,7 +632,7 @@ def test_multiple_allocations():
 
     # Allocate all frames
     allocations = []
-    for i in range(14):
+    for _ in range(14):
         allocation: BufferPoolAllocation = pool.allocate(524200)
         allocations.append(allocation)
 
@@ -769,9 +769,12 @@ def test_reallocate_same_size_mmap():
     assert pool.max_memory() == 16 * 1024
 
     pool.reallocate(10 * 1024, allocation)
+    size_class: SizeClass = pool.get_size_class(1)
 
     assert pool.bytes_allocated() == 16 * 1024
     assert pool.max_memory() == 16 * 1024
+    assert size_class.get_swip_at_frame(0) == allocation.get_swip_as_int()
+    assert size_class.get_swip_at_frame(0) != orig_allocation_copy.get_swip_as_int()
     assert allocation == orig_allocation_copy
 
     pool.free(allocation)
@@ -808,6 +811,8 @@ def test_reallocate_malloc_to_mmap():
     size_class: SizeClass = pool.get_size_class(1)
     assert size_class.is_frame_mapped(0)
     assert size_class.is_frame_pinned(0)
+    assert size_class.get_swip_at_frame(0) == allocation.get_swip_as_int()
+    assert size_class.get_swip_at_frame(0) != orig_allocation_copy.get_swip_as_int()
 
     assert pool.bytes_allocated() == 16 * 1024
     assert pool.max_memory() == (5 * 1024) + (16 * 1024)
@@ -896,6 +901,9 @@ def test_reallocate_larger_mem_same_size_class():
         assert not size_class.is_frame_mapped(frame_idx)
         assert not size_class.is_frame_pinned(frame_idx)
 
+    assert size_class.get_swip_at_frame(0) == allocation.get_swip_as_int()
+    assert size_class.get_swip_at_frame(0) != orig_allocation_copy.get_swip_as_int()
+
     assert pool.bytes_allocated() == 16 * 1024
     assert pool.max_memory() == 16 * 1024
 
@@ -953,6 +961,9 @@ def test_reallocate_smaller_mem_same_size_class():
     for frame_idx in range(2, size_class.get_num_blocks()):
         assert not size_class.is_frame_mapped(frame_idx)
         assert not size_class.is_frame_pinned(frame_idx)
+
+    assert size_class.get_swip_at_frame(1) == allocation.get_swip_as_int()
+    assert size_class.get_swip_at_frame(1) != orig_allocation_copy.get_swip_as_int()
 
     assert pool.bytes_allocated() == 16 * 1024
     assert pool.max_memory() == 2 * 16 * 1024
@@ -1188,6 +1199,7 @@ def test_reallocate_smaller_mem_diff_size_class():
     assert size_class_1MiB.is_frame_pinned(0)
     assert not size_class_16KiB.is_frame_mapped(0)
     assert not size_class_16KiB.is_frame_pinned(0)
+    assert size_class_1MiB.get_swip_at_frame(0) == allocation.get_swip_as_int()
 
     assert pool.bytes_allocated() == 1024 * 1024
     assert pool.max_memory() == 1024 * 1024
@@ -1199,6 +1211,10 @@ def test_reallocate_smaller_mem_diff_size_class():
     assert not size_class_1MiB.is_frame_pinned(0)
     assert size_class_16KiB.is_frame_mapped(0)
     assert size_class_16KiB.is_frame_pinned(0)
+    assert size_class_16KiB.get_swip_at_frame(0) == allocation.get_swip_as_int()
+    assert (
+        size_class_16KiB.get_swip_at_frame(0) != orig_allocation_copy.get_swip_as_int()
+    )
 
     assert pool.bytes_allocated() == 16 * 1024
     assert pool.max_memory() == (1024 * 1024) + (16 * 1024)
@@ -1243,8 +1259,10 @@ def test_reallocate_larger_mem_diff_size_class():
 
     assert size_class_1MiB.is_frame_mapped(0)
     assert size_class_1MiB.is_frame_pinned(0)
+    assert size_class_1MiB.get_swip_at_frame(0) == allocation.get_swip_as_int()
     assert not size_class_16KiB.is_frame_mapped(0)
     assert not size_class_16KiB.is_frame_pinned(0)
+    assert size_class_16KiB.get_swip_at_frame(0) is None
 
     assert pool.bytes_allocated() == 1024 * 1024
     assert pool.max_memory() == (1024 * 1024) + (16 * 1024)

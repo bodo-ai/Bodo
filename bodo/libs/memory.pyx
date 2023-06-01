@@ -17,7 +17,7 @@ import pyarrow as pa
 from pyarrow.lib import frombytes
 
 
-cdef class BufferPoolAllocation():
+cdef class BufferPoolAllocation:
     """
     A class for storing information about allocations
     made through the BufferPool. In particular, it
@@ -30,13 +30,12 @@ cdef class BufferPoolAllocation():
     point.
     """
 
-    cdef:
-        # Pointer to the allocated memory region
-        uint8_t* ptr
-        # Size of the allocation
-        int size
-        # Alignment for the allocation
-        int alignment
+    # Pointer to the allocated memory region
+    cdef uint8_t* ptr    
+    # Size of the allocation
+    cdef int size
+    # Alignment for the allocation
+    cdef int alignment
     
     def __init__(self):
         """
@@ -67,6 +66,7 @@ cdef class BufferPoolAllocation():
         """
         Copy over the fields from another instance.
         """
+        cdef BufferPoolAllocation new_object
         new_object = BufferPoolAllocation()
         new_object.set_ptr(other.ptr)
         new_object.set_size(other.size)
@@ -93,7 +93,6 @@ cdef class BufferPoolAllocation():
         """
         return <int64_t>self.ptr
 
-
     def get_ptr_as_int(self) -> int:
         """
         Get the pointer as an integer. This is
@@ -101,8 +100,13 @@ cdef class BufferPoolAllocation():
         is correct.
         """
         return int(self.c_ptr_as_int())
-
     
+    cdef int64_t c_swip_as_int(self):
+        return <int64_t> &self.ptr
+
+    def get_swip_as_int(self) -> int:
+        return int(self.c_swip_as_int())
+
     def __eq__(self, other: BufferPoolAllocation) -> bool:
         """
         Check if two BufferPoolAllocations instances are
@@ -130,6 +134,11 @@ cdef class BufferPoolAllocation():
         """
         return self.ptr == other.ptr
 
+    def __repr__(self):
+        cdef size_t ptr
+        ptr = <size_t> self.ptr
+        return f"BufferPoolAllocation({ptr}, size={self.size}, alignment={self.alignment})"
+
 
 cdef class SizeClass(_Weakrefable):
     """
@@ -139,11 +148,10 @@ cdef class SizeClass(_Weakrefable):
     NOTE: This is only for unit-testing purposes at this point.
     """
 
-    cdef:
-        # Store a pointer to the C++ instance.
-        # All APIs will use this to build wrappers
-        # around the C++ class.
-        CSizeClass* c_size_class
+    # Store a pointer to the C++ instance.
+    # All APIs will use this to build wrappers
+    # around the C++ class.
+    cdef CSizeClass* c_size_class
     
     cdef void cinit(self, CSizeClass* c_size_class):
         """
@@ -171,27 +179,44 @@ cdef class SizeClass(_Weakrefable):
         of this SizeClass.
         This is a wrapper around c_is_in_range.
         """
-        cdef:
-            uint8_t* ptr = allocation.ptr
+        cdef uint8_t* ptr = allocation.ptr
         return self.c_is_in_range(ptr)
 
-    cdef BufferPoolAllocation c_get_alloc_for_frame(self, idx: int):
+    cdef BufferPoolAllocation c_build_alloc_for_frame(self, int idx):
+        cdef BufferPoolAllocation allocation
         allocation = BufferPoolAllocation()
         allocation.set_ptr(self.c_size_class.getFrameAddress(idx))
         allocation.set_size(self.c_size_class.getBlockSize())
         return allocation
     
-    def get_alloc_for_frame(self, idx: int) -> BufferPoolAllocation:
+    def build_alloc_for_frame(self, idx: int) -> BufferPoolAllocation:
         """
-        Get a BufferPoolAllocation instance that has the
+        Create a BufferPoolAllocation instance that has the
         information corresponding to the frame at index 'idx'
         of this SizeClass. In particular, the 'ptr' will point
         to the start of the frame and 'size' will be the block
         size of this SizeClass.
-        This is a wrapper around c_get_alloc_for_frame.
+        This is a wrapper around c_build_alloc_for_frame.
         """
-        return self.c_get_alloc_for_frame(idx)
-    
+        return self.c_build_alloc_for_frame(idx)
+
+    cdef int64_t c_get_swip_at_frame(self, int idx):
+        cdef uint8_t** ptr = self.c_size_class.getSwip(idx)
+        if ptr == nullptr:
+            return -1
+
+        return <int64_t> ptr
+
+    def get_swip_at_frame(self, idx: int) -> int | None:
+        """
+        Get the BufferPoolAllocation instance that is currently
+        allocated in the frame at index 'idx' of this SizeClass.
+        """
+        res = int(self.c_get_swip_at_frame(idx))
+        if res == -1:
+            return None
+        return res
+
     def get_frame_index(self, allocation: BufferPoolAllocation) -> int:
         """
         Wrapper around 'getFrameIndex' function in the C++ class.

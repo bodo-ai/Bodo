@@ -102,6 +102,8 @@ bool SizeClass::isFramePinned(uint64_t idx) const {
     return ::arrow::bit_util::GetBit(this->pinned_bitmask_.data(), idx);
 }
 
+uint8_t** SizeClass::getSwip(uint64_t idx) const { return this->swips_[idx]; }
+
 uint64_t SizeClass::getFrameIndex(uint8_t* ptr) const {
     if (!this->isInRange(ptr)) {
         throw std::runtime_error("Pointer is not in size-class");
@@ -632,9 +634,9 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
         return ::arrow::Status::OutOfMemory("realloc overflows size_t");
     }
 
-    uint8_t* previous_ptr = *ptr;
+    uint8_t* old_memory_ptr = *ptr;
 
-    if (previous_ptr == kZeroSizeArea) {
+    if (old_memory_ptr == kZeroSizeArea) {
         if (old_size > 0) {  // neither 0 nor -1 (unknown)
             // TODO: Add compiler hint that this path is not likely.
             std::cerr << "Expected size of allocation pointing to ZeroArea to "
@@ -645,13 +647,13 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     }
 
     if (new_size == 0) {
-        this->Free(previous_ptr, old_size, alignment);
+        this->Free(old_memory_ptr, old_size, alignment);
         *ptr = kZeroSizeArea;
         return ::arrow::Status::OK();
     }
 
     auto [is_mmap_alloc, size_class_idx, frame_idx, old_size_aligned] =
-        this->get_alloc_details(previous_ptr, old_size, alignment);
+        this->get_alloc_details(old_memory_ptr, old_size, alignment);
 
     // In case of an mmap frame: if new_size still fits, it's a NOP.
     // Note that we only do this when new_size >= old_size, because
@@ -666,17 +668,20 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
         return ::arrow::Status::OK();
     }
 
-    uint8_t* out = nullptr;
     // Allocate new_size
-    CHECK_ARROW_MEM(this->Allocate(new_size, alignment, &out),
+    // Point ptr to the new memory. We have a pointer to old
+    // memory in old_memory_ptr that we can use for the memcpy.
+    CHECK_ARROW_MEM(this->Allocate(new_size, alignment, ptr),
                     "Allocation failed!");
+
+    uint8_t* new_memory_ptr = *ptr;
     // Copy over the contents
-    memcpy(out, *ptr, static_cast<size_t>(std::min(new_size, old_size)));
+    memcpy(new_memory_ptr, old_memory_ptr,
+           static_cast<size_t>(std::min(new_size, old_size)));
     // Free original memory (re-use information from get_alloc_details output)
-    this->free_helper(*ptr, is_mmap_alloc, size_class_idx, frame_idx,
+    this->free_helper(old_memory_ptr, is_mmap_alloc, size_class_idx, frame_idx,
                       old_size_aligned);
-    // Point ptr to the new memory
-    *ptr = out;
+
     return ::arrow::Status::OK();
 }
 
