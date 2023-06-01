@@ -2226,12 +2226,13 @@ def agg_table_column_use(
         return
 
     rhs_table = agg_node.in_vars[0].name
+    rhs_key = (rhs_table, None)
 
     (
         orig_used_cols,
         orig_use_all,
         orig_cannot_del_cols,
-    ) = block_use_map[rhs_table]
+    ) = block_use_map[rhs_key]
 
     # skip if input already uses all columns or cannot delete the table
     if orig_use_all or orig_cannot_del_cols:
@@ -2239,13 +2240,12 @@ def agg_table_column_use(
 
     # get output's data column uses, which are only in first variable (table or array)
     if agg_node.is_output_table and agg_node.out_vars[0] is not None:
+        out_var_key = (agg_node.out_vars[0].name, None)
         (
             out_used_cols,
             out_use_all,
             out_cannot_del_cols,
-        ) = _compute_table_column_uses(
-            agg_node.out_vars[0].name, table_col_use_map, equiv_vars
-        )
+        ) = _compute_table_column_uses(out_var_key, table_col_use_map, equiv_vars)
         # we don't simply propagate use_all since all of output columns may not use all
         # of input columns (groupby has explicit column selection support)
         if out_use_all or out_cannot_del_cols:
@@ -2270,7 +2270,7 @@ def agg_table_column_use(
     in_used_cols |= table_in_key_set | orig_used_cols
     in_use_all = len(set(range(agg_node.n_in_table_arrays)) - in_used_cols) == 0
 
-    block_use_map[rhs_table] = (
+    block_use_map[rhs_key] = (
         in_used_cols,
         in_use_all,
         False,
@@ -2287,11 +2287,10 @@ def agg_remove_dead_column(agg_node, column_live_map, equiv_vars, typemap):
 
     Args:
         agg_node (Aggregate): Aggregate node to update
-        column_live_map (Dict[str, Tuple[Set[int], bool, bool]]): column uses of each
-            table variable for current block.
-        equiv_vars (Dict[str, Set[str]]): Dictionary
-            mapping table variable names to a set of
-            other table name aliases.
+        column_live_map (Dict[Tuple[str, Optional[int]], Tuple[Set[int], bool, bool]]): column uses of each
+            table found by the key for the current block.
+        equiv_vars (Dict[Tuple[str, Optional[int]], Set[Tuple[str, Optional[int]]]]): Dictionary
+            mapping tables to a set other tables via the key.
         typemap (dict[str, types.Type]): typemap of variables
     """
     if not agg_node.is_output_table or agg_node.out_vars[0] is None:
@@ -2299,9 +2298,10 @@ def agg_remove_dead_column(agg_node, column_live_map, equiv_vars, typemap):
 
     n_table_cols = agg_node.n_out_table_arrays
     lhs_table = agg_node.out_vars[0].name
+    lhs_key = (lhs_table, None)
 
     used_columns = _find_used_columns(
-        lhs_table, n_table_cols, column_live_map, equiv_vars
+        lhs_key, n_table_cols, column_live_map, equiv_vars
     )
 
     # None means all columns are used so we can't prune any columns
