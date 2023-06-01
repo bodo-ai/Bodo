@@ -119,6 +119,15 @@ class SizeClass {
     uint64_t getFrameIndex(uint8_t* ptr) const;
 
     /**
+     * @brief Get the Swip at frame idx. This is a helper
+     * function for testing.
+     *
+     * @param idx The frame to get the current swip for
+     * @return uint8_t** The current swip pointer
+     */
+    uint8_t** getSwip(uint64_t idx) const;
+
+    /**
      * @brief Find and allocate an unmapped frame.
      * The frame will be marked as mapped and pinned.
      * If provided, the 'swip' will be stored as part
