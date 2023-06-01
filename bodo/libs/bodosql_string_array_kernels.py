@@ -1888,3 +1888,57 @@ def _install_one_arg_str_fn_overloads():
 
 
 _install_one_arg_str_fn_overloads()
+
+
+@numba.generated_jit(nopython=True)
+def split(string, separator):  # pragma: no cover
+    """Handles cases where SPLIT receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [string, separator]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.split",
+                ["string", "separator"],
+                i,
+            )
+
+    def impl(string, separator):
+        return split_util(string, separator)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def split_util(string, separator):  # pragma: no cover
+    """A dedicated kernel for the SQL function SPLIT which takes in a
+           string, (or string column) and a separator string (or string column) ans
+           returns the result strings in arrays
+
+    Args:
+        string (string array/series/scalar): the strings(s) to be split
+        separator (string array/series/scalar): the separator to split the string
+
+    Returns:
+        An ArrayItemArray of string array: the result string arrays
+    """
+
+    verify_string_arg(string, "SPLIT", "string")
+    verify_string_arg(separator, "SPLIT", "separator")
+    arg_names = ["string", "separator"]
+    arg_types = [string, separator]
+    propagate_null = [True] * 2
+    out_dtype = bodo.ArrayItemArrayType(bodo.string_array_type)
+    scalar_text = "if arg1 == '':\n"
+    scalar_text += "    str_list = [arg0]\n"
+    scalar_text += "else:\n"
+    scalar_text += "    str_list = arg0.split(arg1)\n"
+    scalar_text += "res[i] = bodo.libs.str_arr_ext.str_list_to_array(str_list)"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )

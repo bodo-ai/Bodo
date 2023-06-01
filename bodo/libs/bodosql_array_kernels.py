@@ -190,6 +190,7 @@ broadcasted_fixed_arg_functions = {
     "sin",
     "sinh",
     "space",
+    "split",
     "split_part",
     "sqrt",
     "square",
