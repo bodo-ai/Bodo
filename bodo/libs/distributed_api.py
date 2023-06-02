@@ -357,7 +357,14 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
     # nullable arrays
     if (
         isinstance(
-            arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
+            arr,
+            (
+                IntegerArrayType,
+                FloatingArrayType,
+                DecimalArrayType,
+                TimeArrayType,
+                DatetimeArrayType,
+            ),
         )
         or arr == datetime_date_array_type
     ):
@@ -374,17 +381,6 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
             return (data_req, null_req)
 
         return impl_nullable
-
-    # TZ-Aware Timestamp arrays
-    if isinstance(arr, DatetimeArrayType):
-
-        def impl_tz_arr(arr, size, pe, tag, cond=True):  # pragma: no cover
-            # Just recv the underlying data. TZ info is all in the type.
-            data_arr = arr._data
-            type_enum = get_type_enum(data_arr)
-            return _irecv(data_arr.ctypes, size, type_enum, pe, tag, cond)
-
-        return impl_tz_arr
 
     # string arrays
     if arr in [binary_array_type, string_array_type]:
@@ -2199,7 +2195,10 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
         return scatterv_impl_bool_arr
 
     if (
-        isinstance(data, (IntegerArrayType, FloatingArrayType, DecimalArrayType))
+        isinstance(
+            data,
+            (IntegerArrayType, FloatingArrayType, DecimalArrayType, DatetimeArrayType),
+        )
         or data == datetime_date_array_type
     ):
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
@@ -2570,7 +2569,7 @@ def bcast_overload(data, root=MPI_ROOT):
 
     # nullable int/float/bool/date/time arrays
     if isinstance(
-        data, (IntegerArrayType, FloatingArrayType, TimeArrayType)
+        data, (IntegerArrayType, FloatingArrayType, TimeArrayType, DatetimeArrayType)
     ) or data in (
         boolean_array_type,
         datetime_date_array_type,
@@ -2582,16 +2581,6 @@ def bcast_overload(data, root=MPI_ROOT):
             return
 
         return bcast_impl_int_arr
-
-    # TZ-Aware Timestamp arrays
-    if isinstance(data, DatetimeArrayType):
-
-        def bcast_impl_tz_arr(data, root=MPI_ROOT):  # pragma: no cover
-            # Just bcast the underlying data. TZ info is all in the type.
-            bcast(data._data, root)
-            return
-
-        return bcast_impl_tz_arr
 
     # string arrays
     if is_str_arr_type(data) or data == binary_array_type:

@@ -223,6 +223,7 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         def _setnan_impl(arr, ind, int_nan_const=0):  # pragma: no cover
             arr._data[ind] = nat
+            bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
 
         return _setnan_impl
 
