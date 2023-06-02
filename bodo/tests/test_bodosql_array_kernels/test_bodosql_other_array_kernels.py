@@ -586,6 +586,183 @@ def test_nullif(args, memory_leak_check):
     )
 
 
+def test_random_seedless_vector(memory_leak_check):
+    """Tests that the random_seedless kernel is generating an array of one
+    million random 64 bit integers with the following checks:
+
+
+     - The input length matches the output length
+     - The smallest randomly chosen value is within 0.1% of the
+       smallest possible int64
+     - The largest randomly chosen value is within 0.1% of the
+       largest possible int64
+     - At most 5 duplicate values are generated
+    """
+
+    def min_max_test(A):
+        R = pd.Series(bodo.libs.bodosql_array_kernels.random_seedless(A))
+        min_val = R.min()
+        max_val = R.max()
+        return min_val, max_val, len(R)
+
+    def unique_test(A):
+        R = pd.Series(bodo.libs.bodosql_array_kernels.random_seedless(A))
+        total_vals = len(R)
+        distinct_vals = R.nunique()
+        return total_vals - distinct_vals
+
+    n = 10**6
+    A = pd.DataFrame({0: pd.Series(np.arange(n))})
+    min_max_result = (np.float64(-(2**63)), np.float64((2**63) - 1), np.uint64(n))
+    check_func(min_max_test, (A,), py_output=min_max_result, rtol=0.001)
+    unique_target = np.float64(5)
+    check_func(unique_test, (A,), py_output=unique_target, atol=5)
+
+
+def test_random_seedless_scalar(memory_leak_check):
+    """Tests that the random_seedless kernel is generating one million random 64
+    bit integers (one at a time) with the following checks:
+
+      - The input length matches the output length
+      - The smallest randomly chosen value is within 0.1% of the
+        smallest possible int64
+      - The largest randomly chosen value is within 0.1% of the
+        largest possible int64
+      - At most 5 duplicate values are generated
+    """
+
+    def min_max_test(n):
+        L = []
+        for _ in range(n):
+            L.append(bodo.libs.bodosql_array_kernels.random_seedless(None))
+        R = pd.Series(L)
+        min_val = R.min()
+        max_val = R.max()
+        return min_val, max_val, len(R)
+
+    def unique_test(n):
+        L = []
+        for _ in range(n):
+            L.append(bodo.libs.bodosql_array_kernels.random_seedless(None))
+        R = pd.Series(L)
+        total_vals = len(R)
+        distinct_vals = R.nunique()
+        return total_vals - distinct_vals
+
+    n = 10**6
+    min_max_result = (np.float64(-(2**63)), np.float64((2**63) - 1), np.uint64(n))
+    check_func(min_max_test, (n,), py_output=min_max_result, rtol=0.001, only_seq=True)
+    unique_target = np.float64(5)
+    check_func(unique_test, (n,), py_output=unique_target, atol=5, only_seq=True)
+
+
+def test_uniform_min_max(memory_leak_check):
+    """Tests the uniform kernel with the following checks:
+    - None of the outputs are less than the lower bound
+    - None of the outputs are more than the upper bound
+    """
+
+    def impl():
+        gen = np.arange(10**6)
+        R1 = pd.Series(bodo.libs.bodosql_array_kernels.uniform(0, 9, gen))
+        R2 = pd.Series(bodo.libs.bodosql_array_kernels.uniform(-2048, 2048, gen))
+        R3 = pd.Series(bodo.libs.bodosql_array_kernels.uniform(-1.0, 1.0, gen))
+        R4 = pd.Series(bodo.libs.bodosql_array_kernels.uniform(0, 12345678.9, gen))
+        min1, max1 = R1.min(), R1.max()
+        min2, max2 = R2.min(), R2.max()
+        min3, max3 = R3.min(), R3.max()
+        min4, max4 = R4.min(), R4.max()
+        return (
+            min1,
+            max1,
+            min2,
+            max2,
+            min3 >= -1.0,
+            max3 <= 1.0,
+            min4 >= 0,
+            max4 <= 12345678.9,
+        )
+
+    min_max_result = (0, 9, -2048, 2048, True, True, True, True)
+    check_func(
+        impl,
+        (),
+        py_output=min_max_result,
+        is_out_distributed=False,
+    )
+
+
+def test_uniform_distribution(memory_leak_check):
+    """Tests the uniform kernel with the following checks:
+    - The mean is approximately (lower + upper) / 12
+    - The variance is approximately ((upper - lower) ** 2) / 12
+    - The skew is approximately 0.0
+    """
+
+    def impl():
+        gen = np.arange(10**6)
+        R1 = pd.Series(bodo.libs.bodosql_array_kernels.uniform(-2048, 2048, gen))
+        R2 = pd.Series(bodo.libs.bodosql_array_kernels.uniform(0.0, 100.0, gen))
+        avg1, var1, skew1 = R1.mean(), R1.var(), R1.skew()
+        avg2, var2, skew2 = R2.mean(), R2.var(), R2.skew()
+        return avg1, var1, skew1, avg2, var2, skew2
+
+    distribution_result = (0.0, 1398101.3, 0.0, 50.0, 833.3, 0.0)
+    check_func(
+        impl,
+        (),
+        py_output=distribution_result,
+        is_out_distributed=False,
+        atol=0.1,
+        rtol=0.01,
+    )
+
+
+def test_uniform_count(memory_leak_check):
+    """Tests the uniform kernel with the following checks:
+    - Each value in the domain (for integers) appears approximately the
+      same number of times.
+    """
+
+    def impl():
+        gen = np.arange(10**6)
+        R = pd.Series(bodo.libs.bodosql_array_kernels.uniform(0, 99, gen))
+        C = R.value_counts().sort_index().astype("Float64")
+        return C
+
+    count_result = pd.Series([10000.0] * 100)
+    check_func(
+        impl,
+        (),
+        py_output=count_result,
+        rtol=0.1,
+    )
+
+
+def test_uniform_generation(memory_leak_check):
+    """Tests the uniform kernel with the following checks:
+    - Duplicate gen values result in duplicate outputs
+    """
+
+    def impl(gen):
+        R1 = pd.Series(
+            bodo.libs.bodosql_array_kernels.uniform(2.718281828, 3.1415926, gen)
+        )
+        R2 = pd.Series(
+            bodo.libs.bodosql_array_kernels.uniform(2.718281828, 3.1415926, gen)
+        )
+        return R1 == R2
+
+    np.random.seed(42)
+    gen = np.random.randint(0, 1000, 10**6)
+    generation_result = pd.Series([True] * 10**6)
+    check_func(
+        impl,
+        (gen,),
+        py_output=generation_result,
+    )
+
+
 @pytest.mark.parametrize(
     "args",
     [

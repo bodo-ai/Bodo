@@ -4,11 +4,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
-
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
-import org.apache.calcite.sql.fun.SqlCoalesceFunction;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -293,6 +291,19 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction SINH = SqlLibraryOperators.SINH;
   public static final SqlFunction TANH = SqlLibraryOperators.TANH;
 
+  public static final SqlFunction UNIFORM =
+      new SqlFunction(
+          "UNIFORM",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.LEAST_RESTRICTIVE,
+          null,
+          OperandTypes.sequence(
+              "UNIFORM(NUMERIC, NUMERIC, NUMERIC)",
+              OperandTypes.NUMERIC,
+              OperandTypes.NUMERIC,
+              OperandTypes.NUMERIC),
+          SqlFunctionCategory.NUMERIC);
+
   public static final SqlFunction GREATEST =
       new SqlLeastGreatestFunction("GREATEST", SqlKind.GREATEST);
 
@@ -402,6 +413,15 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
           SqlFunctionCategory.NUMERIC);
 
+  public static final SqlFunction RANDOM =
+      new SqlFunction(
+          "RANDOM",
+          SqlKind.RANDOM,
+          ReturnTypes.BIGINT,
+          null,
+          OperandTypes.NILADIC,
+          SqlFunctionCategory.NUMERIC);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           ACOSH,
@@ -435,6 +455,8 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SQUARE,
           TRUNC,
           WIDTH_BUCKET,
+          UNIFORM,
+          RANDOM,
           GREATEST,
           LEAST,
           VARIANCE_POP,
@@ -501,7 +523,8 @@ public final class NumericOperatorTable implements SqlOperatorTable {
         super(-1);
       }
 
-      public static LeastGreatestOperandTypeChecker INSTANCE = new LeastGreatestOperandTypeChecker();
+      public static LeastGreatestOperandTypeChecker INSTANCE =
+          new LeastGreatestOperandTypeChecker();
 
       @Override
       public boolean checkOperandTypes(SqlCallBinding callBinding, boolean throwOnFailure) {

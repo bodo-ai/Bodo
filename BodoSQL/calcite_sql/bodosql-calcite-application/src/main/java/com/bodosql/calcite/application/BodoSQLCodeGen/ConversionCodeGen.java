@@ -85,8 +85,7 @@ public class ConversionCodeGen {
         .append(", ");
     if (operandsInfo.size() == 2) {
       exprCode.append(operandsInfo.get(1).emit());
-    }
-    else {
+    } else {
       exprCode.append("None");
     }
     exprCode.append(")");

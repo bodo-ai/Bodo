@@ -3,9 +3,13 @@
 Implements miscellaneous array kernels that are specific to BodoSQL
 """
 
+
 import numba
-from numba.core import types
-from numba.extending import overload
+from llvmlite import ir
+from numba.core import cgutils, types
+from numba.core.typing import signature
+from numba.cpython.randomimpl import get_next_int32, get_state_ptr
+from numba.extending import intrinsic, overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
@@ -152,7 +156,6 @@ def booland_util(A, B):
         scalar_text += "   res[i] = False\n"
 
     elif bodo.utils.utils.is_array_typ(A, True):
-
         # A & B are both vectors
         if bodo.utils.utils.is_array_typ(B, True):
             scalar_text = "if bodo.libs.array_kernels.isna(A, i) and bodo.libs.array_kernels.isna(B, i):\n"
@@ -228,7 +231,6 @@ def boolor_util(A, B):
         scalar_text += "   res[i] = True\n"
 
     elif bodo.utils.utils.is_array_typ(A, True):
-
         # A & B are both vectors
         if bodo.utils.utils.is_array_typ(B, True):
             scalar_text = "if bodo.libs.array_kernels.isna(A, i) and bodo.libs.array_kernels.isna(B, i):\n"
@@ -500,7 +502,6 @@ def equal_null_util(A, B):
             scalar_text = "res[i] = False"
 
     elif B == bodo.none:
-
         # A is a vector, B = null
         if bodo.utils.utils.is_array_typ(A, True):
             scalar_text = "res[i] = bodo.libs.array_kernels.isna(A, i)"
@@ -510,7 +511,6 @@ def equal_null_util(A, B):
             scalar_text = "res[i] = False"
 
     elif bodo.utils.utils.is_array_typ(A, True):
-
         # A & B are both vectors
         if bodo.utils.utils.is_array_typ(B, True):
             scalar_text = "if bodo.libs.array_kernels.isna(A, i) and bodo.libs.array_kernels.isna(B, i):\n"
@@ -762,3 +762,149 @@ def ensure_single_value(A):  # pragma: no cover
         raise ValueError("Expected single value in column")
 
     return A
+
+
+@intrinsic
+def gen_random_int64(typingcontext):
+    """A subset of the numba implementation of random.randrange.
+    Designed to always output 1 random 64-bit integer, with the
+    start/stop/step being assumed as int_min/int_max/1 and all of the
+    checks that are required for arbitrary values removed.
+
+    The implementation obtains a pointer to the randomization state for
+    Python's random module (as opposed to the seperate pointer for numpy)
+    and uses it to generate two more random 32-bit integers which are
+    then concatenated.
+
+    The code was derived from the following:
+    https://github.com/numba/numba/blob/e4ff3cf5fcb59e91fc7d46c340f2e7eb664dd0c0/numba/cpython/randomimpl.py
+
+    This monkeypatch was required because the standard numba implementation
+    of random.randrange was not conducive to producing random integers
+    from the entire domain of 64 bit integers due to several arithmetic
+    checks that were in place to verify the inputs. These checks are useful
+    for arbitrary inputs which could be invalid, but in this case are unecessary
+    (because the constants are known) and harmful (because they cause an
+    overflow whcih in turn leads to invalid results)
+    """
+    int_ty = types.Integer.from_bitwidth(64, True)
+
+    def codegen(context, builder, sig, args):
+        int64_t = ir.IntType(64)
+        c32 = ir.Constant(int64_t, 32)
+        state_ptr = get_state_ptr(context, builder, "py")
+        ret = cgutils.alloca_once_value(builder, ir.Constant(int64_t, 0))
+        low = get_next_int32(context, builder, state_ptr)
+        high = get_next_int32(context, builder, state_ptr)
+        total = builder.add(
+            builder.zext(low, int64_t), builder.shl(builder.zext(high, int64_t), c32)
+        )
+        builder.store(total, ret)
+        return builder.load(ret)
+
+    return signature(int_ty), codegen
+
+
+@numba.generated_jit(nopython=True)
+def random_seedless(A):
+    """Kernel for the BodoSQL function RANDOM() when no seed is provided.
+       No wrapper funciton is required
+
+
+    Args:
+        A (any series/array/scalar): either a null input to indicate that the
+        output is scalar, or a vector input whose length should be matched by
+        the output.
+
+    Returns:
+        int64 array/scalar: either one random value (if the input was a scalar)
+        or an array of random values (if the input was a vector) where the
+        length matches the input. The values are random 64 bit integers.
+
+    """
+    if A == bodo.none:
+
+        def impl(A):  # pragma: no cover
+            return np.int64(gen_random_int64())
+
+    else:
+
+        def impl(A):  # pragma: no cover
+            n = len(A)
+            res = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
+            numba.parfors.parfor.init_prange()
+            for i in numba.parfors.parfor.internal_prange(n):
+                res[i] = gen_random_int64()
+            return res
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def uniform(lo, hi, gen):
+    """Handles cases where UNIFORM receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(gen, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.uniform_util", ["lo", "hi", "gen"], 2
+        )
+
+    def impl(lo, hi, gen):  # pragma: no cover
+        return uniform_util(lo, hi, gen)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def uniform_util(lo, hi, gen):
+    """Kernel for the BodoSQL function UNIFORM()
+
+    Args:
+        lo (int/float scalar): the lower bound of the distribution
+        hi (int/float scalar): the upper bound of the distribution
+        gen (int64 scalar/array): the generating sequence for the randomness.
+        If a scalar, then one random value is produced. If a vector, then one
+        value is produced for each value in the array. The generating sequence
+        works such that two rows with the same value for gen will produce the
+        same random output, but if the rows are distinct then the outputs are
+        random (e.g. gen is related to the seed for the randomness).
+
+    Returns:
+        int/float array/scalar: a uniform distribution of integers from the domain
+        [lo,hi]. If both lo and hi are integers then the output is an integer,
+        otherwise it is a float. Duplicate inputs for the gen input will result
+        in duplicate outputs.
+
+    Important note: this function uses the NumPy random module instead of the
+    random module because if the same module were used as the random kernel,
+    then any seed-setting done with this kernel could affect the random kernel.
+    """
+    lo_int = isinstance(lo, types.Integer)
+    hi_int = isinstance(hi, types.Integer)
+    lo_float = isinstance(lo, types.Float)
+    hi_float = isinstance(hi, types.Float)
+    assert lo_int or lo_float, "Input 'lo' to UNIFORM must be a scalar number"
+    assert hi_int or hi_float, "Input 'hi' to UNIFORM must be a scalar number"
+
+    verify_int_arg(gen, "UNIFORM", "gen")
+
+    arg_names = ["lo", "hi", "gen"]
+    arg_types = [lo, hi, gen]
+    propagate_null = [False] * 3
+
+    scalar_text = "np.random.seed(arg2)\n"
+
+    if lo_int and hi_int:
+        scalar_text += f"res[i] = np.random.randint(arg0, arg1+1)"
+        out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
+    else:
+        scalar_text += f"res[i] = np.random.uniform(arg0, arg1)"
+        out_dtype = bodo.utils.typing.get_float_arr_type(bodo.float64)
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
