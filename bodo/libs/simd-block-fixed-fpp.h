@@ -3,6 +3,10 @@
 // Bodo changes:
 // - Added bloom_size_bytes() function to get the size of the bloom filter
 //   given the number of unique elements I want to insert (before constructing).
+// - Added num_elements_for_bytes() function to get the number of elements to
+// specify
+//   the number of elements that should be specified to get a bloom filter of
+//   the given size (before constructing).
 // - Added bloom_filter_supported() function to check AVX2 support at runtime.
 // - Added SimdBlockFilterFixed::union_reduction() to do a global MPI bitwise OR
 //   allreduce of the filter across ranks.
@@ -21,7 +25,7 @@
 // 1. Each block is a split Bloom filter - see Section 2.1 of Broder and
 // Mitzenmacher's "Network Applications of Bloom Filters: A Survey".
 //
-// 2. The number of bits set per Add() is contant in order to take advantage of
+// 2. The number of bits set per Add() is constant in order to take advantage of
 // SIMD instructions.
 
 #pragma once
@@ -78,6 +82,14 @@ static inline size_t bloom_size_bytes(size_t n_bits) {
     return (bucketCount * BLOOM_SIZEOF_BUCKET);
 }
 
+static inline size_t num_elements_for_bytes(size_t n_bytes) {
+    if (n_bytes < BLOOM_SIZEOF_BUCKET) {
+        return 1;
+    }
+    size_t num_buckets = n_bytes / BLOOM_SIZEOF_BUCKET;
+    return num_buckets * 24;
+}
+
 template <typename HashFamily = ::hashing::SimpleMixSplit>
 class SimdBlockFilterFixed {
    private:
@@ -120,7 +132,8 @@ class SimdBlockFilterFixed {
         Bucket* recv_directory_;
         const int recv_malloc_failed = posix_memalign(
             reinterpret_cast<void**>(&recv_directory_), 64, alloc_size);
-        if (recv_malloc_failed) throw ::std::bad_alloc();
+        if (recv_malloc_failed)
+            throw ::std::bad_alloc();
         MPI_Allreduce(directory_, recv_directory_,
                       static_cast<int>(SizeInBytes() / sizeof(uint64_t)),
                       MPI_UINT64_T, MPI_BOR, MPI_COMM_WORLD);
@@ -152,7 +165,8 @@ SimdBlockFilterFixed<HashFamily>::SimdBlockFilterFixed(const int bits)
     alloc_size = bucketCount * sizeof(Bucket);
     const int malloc_failed =
         posix_memalign(reinterpret_cast<void**>(&directory_), 64, alloc_size);
-    if (malloc_failed) throw ::std::bad_alloc();
+    if (malloc_failed)
+        throw ::std::bad_alloc();
     memset(directory_, 0, alloc_size);
 }
 
@@ -327,7 +341,8 @@ SimdBlockFilterFixed64<HashFamily>::SimdBlockFilterFixed64(const int bits)
     const size_t alloc_size = bucketCount * sizeof(Bucket);
     const int malloc_failed =
         posix_memalign(reinterpret_cast<void**>(&directory_), 64, alloc_size);
-    if (malloc_failed) throw ::std::bad_alloc();
+    if (malloc_failed)
+        throw ::std::bad_alloc();
     memset(directory_, 0, alloc_size);
 }
 
@@ -379,7 +394,7 @@ template <typename HashFamily>
            _mm256_testc_si256(bucket.second, mask.second);
 }
 
-//#endif //__AVX2__
+// #endif //__AVX2__
 
 ///////////////////
 // 16-byte version ARM
@@ -392,6 +407,14 @@ template <typename HashFamily>
 static inline size_t bloom_size_bytes(size_t n_bits) {
     size_t bucketCount = ::std::max(size_t(1), n_bits / 10);
     return (bucketCount * BLOOM_SIZEOF_BUCKET);
+}
+
+static inline size_t num_elements_for_bytes(size_t n_bytes) {
+    if (n_bytes <= BLOOM_SIZEOF_BUCKET) {
+        return 1;
+    }
+    size_t num_buckets = n_bytes / BLOOM_SIZEOF_BUCKET;
+    return num_buckets * 10;
 }
 
 template <typename HashFamily = ::hashing::SimpleMixSplit>
@@ -430,7 +453,8 @@ class SimdBlockFilterFixed {
         Bucket* recv_directory_;
         const int recv_malloc_failed = posix_memalign(
             reinterpret_cast<void**>(&recv_directory_), 64, alloc_size);
-        if (recv_malloc_failed) throw ::std::bad_alloc();
+        if (recv_malloc_failed)
+            throw ::std::bad_alloc();
         MPI_Allreduce(directory_, recv_directory_,
                       static_cast<int>(SizeInBytes() / sizeof(uint64_t)),
                       MPI_UINT64_T, MPI_BOR, MPI_COMM_WORLD);
@@ -452,7 +476,8 @@ SimdBlockFilterFixed<HashFamily>::SimdBlockFilterFixed(const int bits)
     alloc_size = bucketCount * sizeof(Bucket);
     const int malloc_failed =
         posix_memalign(reinterpret_cast<void**>(&directory_), 64, alloc_size);
-    if (malloc_failed) throw ::std::bad_alloc();
+    if (malloc_failed)
+        throw ::std::bad_alloc();
     memset(directory_, 0, alloc_size);
 }
 
@@ -509,7 +534,7 @@ template <typename HashFamily>
     return vget_lane_u64(result, 0) == 0;
 }
 
-//#endif // __aarch64__
+// #endif // __aarch64__
 
 ///////////////////////////////////////////////////////////////////
 /// 16-byte version (not very good)
@@ -551,7 +576,8 @@ SimdBlockFilterFixed16<HashFamily>::SimdBlockFilterFixed16(const int bits)
     const size_t alloc_size = bucketCount * sizeof(Bucket);
     const int malloc_failed =
         posix_memalign(reinterpret_cast<void**>(&directory_), 64, alloc_size);
-    if (malloc_failed) throw ::std::bad_alloc();
+    if (malloc_failed)
+        throw ::std::bad_alloc();
     memset(directory_, 0, alloc_size);
 }
 
@@ -596,10 +622,12 @@ template <typename HashFamily>
     return _mm_testc_si128(bucketvalue, mask);
 }
 
-//#endif // #ifdef __SSE41__
+// #endif // #ifdef __SSE41__
 #else
 
 static inline size_t bloom_size_bytes(size_t n_bits) { return 0; }
+
+static inline size_t num_elements_for_bytes(size_t n_bytes) { return 0; }
 
 template <typename HashFamily = ::hashing::SimpleMixSplit>
 class SimdBlockFilterFixed {
