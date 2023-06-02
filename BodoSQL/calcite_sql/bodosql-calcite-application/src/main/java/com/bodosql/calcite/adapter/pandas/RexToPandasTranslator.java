@@ -3,9 +3,7 @@ package com.bodosql.calcite.adapter.pandas;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.generateBinOpCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateTryCastCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getDoubleArgCondFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getSingleArgCondFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitIf;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getCondFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitVariadic;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateStrToDateCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.generateTimestampFnCode;
@@ -43,8 +41,10 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.NestedDataCodeGen.g
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateConvCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLeastGreatestCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLogFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateRandomFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateToNumberCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateTryToNumberCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateUniformFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.getDoubleArgNumericFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.getSingleArgNumericFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.generatePostfixOpCode;
@@ -75,6 +75,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.get
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getDoubleArgTrigFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getSingleArgTrigFnInfo;
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
+import static com.bodosql.calcite.application.Utils.Utils.expectScalarArgument;
 import static com.bodosql.calcite.application.Utils.Utils.generateCombinedDf;
 import static com.bodosql.calcite.application.Utils.Utils.isWindowedAggFn;
 import static com.bodosql.calcite.application.Utils.Utils.renameTableRef;
@@ -777,7 +778,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       exprTypes.add(visitor.exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, nodeId)));
     }
 
-    // Handle IF, COALESCE, DECODE and their variants separately
+    // Handle functions that do not care about nulls seperately
     if (fnName == "COALESCE"
         || fnName == "NVL"
         || fnName == "NVL2"
@@ -790,18 +791,20 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         || fnName == "IFNULL"
         || fnName == "IF"
         || fnName == "IFF"
-        || fnName == "DECODE") {
-      List<String> codeExprs = new ArrayList<>();
+        || fnName == "DECODE"
+        || fnName == "HASH") {
+      List<Expr> codeExprs = new ArrayList<>();
       BodoCtx localCtx = new BodoCtx();
       int j = 0;
       for (RexNode operand : fnOperation.operands) {
         Expr operandInfo = operand.accept(this);
-        String expr = operandInfo.emit();
         // Need to unbox scalar timestamp values.
         if (isSingleRow || (exprTypes.get(j) == BodoSQLExprType.ExprType.SCALAR)) {
-          expr = "bodo.utils.conversion.unbox_if_tz_naive_timestamp(" + expr + ")";
+          operandInfo =
+              new Expr.Call(
+                  "bodo.utils.conversion.unbox_if_tz_naive_timestamp", List.of(operandInfo));
         }
-        codeExprs.add(expr);
+        codeExprs.add(operandInfo);
         j++;
       }
 
@@ -809,16 +812,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       switch (fnName) {
         case "IF":
         case "IFF":
-          result = visitIf(fnOperation, codeExprs);
-          break;
         case "BOOLNOT":
-          result = getSingleArgCondFnInfo(fnName, codeExprs.get(0));
-          break;
         case "BOOLAND":
         case "BOOLOR":
         case "BOOLXOR":
         case "EQUAL_NULL":
-          result = getDoubleArgCondFnInfo(fnName, codeExprs.get(0), codeExprs.get(1));
+          result = getCondFnInfo(fnName, codeExprs);
           break;
         case "COALESCE":
         case "ZEROIFNULL":
@@ -826,6 +825,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         case "NVL":
         case "NVL2":
         case "DECODE":
+        case "HASH":
           result = visitVariadic(fnOperation, codeExprs);
           break;
         default:
@@ -901,6 +901,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
       case POSITION:
         return generatePosition(operands);
+      case RANDOM:
+        return generateRandomFnInfo(input.getVariable().getName(), isSingleRow);
       case OTHER:
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
@@ -1188,6 +1190,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return new Expr.Raw("np.random.rand()");
           case "PI":
             return new Expr.Raw("np.pi");
+          case "UNIFORM":
+            assert operands.size() == 3;
+            expectScalarArgument(exprTypes.get(0), "UNIFORM", "lo");
+            expectScalarArgument(exprTypes.get(1), "UNIFORM", "hi");
+            return generateUniformFnInfo(operands);
           case "CONCAT":
             return generateConcatFnInfo(operands);
           case "CONCAT_WS":
@@ -1490,7 +1497,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                 generateExtractCode(fnName, operands.get(0).emit(), isTime, isDate));
           case "REGR_VALX":
           case "REGR_VALY":
-            return getDoubleArgCondFnInfo(fnName, operands.get(0).emit(), operands.get(1).emit());
+            return getCondFnInfo(fnName, operands);
         }
       default:
         throw new BodoSQLCodegenException(

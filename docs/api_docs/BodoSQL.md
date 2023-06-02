@@ -1291,6 +1291,14 @@ BodoSQL Currently supports the following Numeric Functions:
     Returns `NULL` if either input is `NULL`, otherwise `Y`
 
 
+#### HASH
+-   `#!sql HASH(A, B, C, ...)`
+
+    Takes in a variable number of arguments of any type and returns a hash
+    value that considers the values in each column. The hash function is
+    deterministic across multiple ranks or multiple sessions.
+
+
 #### TO_NUMBER
 -   `#!sql TO_NUMBER(EXPR)`
 
@@ -1329,6 +1337,45 @@ BodoSQL Currently supports the following Numeric Functions:
 -   `#!sql TRY_TO_DECIMAL(EXPR)`
 
     Equivalent to `#!sql TRY_TO_NUMBER(EXPR)`
+
+
+###  Data Generation Functions
+
+BodoSQL Currently supports the following data generaiton functions:
+    
+#### RANDOM
+-   `#!sql RANDOM()`
+
+    Outputs a random 64-bit integer. If used inside of a select statement with
+    a table, the number of random values will match the number of rows in the
+    input table (and each value should be randomly and independently generated). 
+    Note that running with multiple processors may affect the randomization
+    results.
+
+    !!! note
+        Currently, BodoSQL does not support the format of `#!sql RANDOM()` that
+        takes in a seed value.
+<<<<<<< HEAD
+=======
+    
+    !!! note
+        At present, aliases to `RANDOM` calls occasionally produce unexpected
+        behavior. For certain SQL operations, calling `RANDOM` and storing the
+        result with an alias, then later re-using that alias may result in
+        another call to `RANDOM`. This behavior is somewhat rare.
+>>>>>>> aca0c059c15e69b3c281f53ba9bd719d435c70b3
+
+
+#### UNIFORM
+-   `#!sql UNIFORM(lo, hi, gen)`
+
+    Outputs a random number uniformly distributed in the interval `[lo, hi]`. 
+    If `lo` and `hi` are both integers, then the output is an integer between
+    `lo` and `hi` (including both endpoints). If either `lo` or `hi` is a float,
+    the output is a random float between them. The values of `gen` are used to
+    seed the randomness, so if `gen` is all distinct values (or is randomly
+    generated) then the output of `UNIFORM` should be random. However, if 2
+    rows have the same `gen` value they will produce the same output value.
 
 
 ### Aggregation Functions

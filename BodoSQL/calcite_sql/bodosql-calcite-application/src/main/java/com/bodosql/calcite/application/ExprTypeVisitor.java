@@ -135,6 +135,7 @@ public class ExprTypeVisitor {
           "FORMAT",
           "GETBIT",
           "GREATEST",
+          "HASH",
           "HAVERSINE",
           "JSON_EXTRACT_PATH_TEXT",
           "IF",
@@ -217,6 +218,7 @@ public class ExprTypeVisitor {
           "TIMESTAMP_TZ_FROM_PARTS",
           "TIMESTAMPTZFROMPARTS",
           "TRY_TO_DOUBLE",
+          "UNIFORM",
           "WEEKDAY",
           "WIDTH_BUCKET",
           "YEAROFWEEK",
@@ -461,6 +463,10 @@ public class ExprTypeVisitor {
           // Aggregation functions return scalars
           exprTypes.put(key, BodoSQLExprType.ExprType.SCALAR);
         }
+      } else if (fnName.equals("RANDOM")) {
+        // Random is typed as if it outputs a column because it can output
+        // either a column or a scalar even when it takes in no arguments.
+        exprTypes.put(key, BodoSQLExprType.ExprType.COLUMN);
       } else if (fnName.equals("RAND")
           || fnName.equals("PI")
           || fnName.equals("CURRENT_TIMESTAMP")

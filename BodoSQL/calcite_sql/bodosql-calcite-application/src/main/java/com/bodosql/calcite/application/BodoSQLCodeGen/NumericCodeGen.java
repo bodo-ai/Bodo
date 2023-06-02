@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.ExprKt;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -200,5 +201,35 @@ public class NumericCodeGen {
     // LEAST and GREATEST take in a variable number of arguments,
     // so we wrap these arguments in a tuple as input
     return new Expr.Call(kernelName, List.of(new Expr.Tuple(operands)));
+  }
+
+  /**
+   * Function that returns the RexVisitorInfo for a RANDOM Function Call.
+   *
+   * @param inputName name of the DataFrame whose length the random output column must match (if not
+   *     a single row)
+   * @param isSingleRow true if the output should be a scalar
+   * @return The RexVisitorInfo that matches the RANDOM expression.
+   */
+  public static Expr generateRandomFnInfo(String inputName, boolean isSingleRow) {
+    StringBuilder exprStrBuilder = new StringBuilder();
+    exprStrBuilder.append("bodo.libs.bodosql_array_kernels.random_seedless(");
+    if (isSingleRow) {
+      exprStrBuilder.append("None");
+    } else {
+      exprStrBuilder.append(inputName);
+    }
+    exprStrBuilder.append(")");
+    return new Expr.Raw(exprStrBuilder.toString());
+  }
+
+  /**
+   * Helper function that handles codegen for the UNIFORM function
+   *
+   * @param operands The list of expressions for each argument
+   * @return The Expr corresponding to the function call
+   */
+  public static Expr generateUniformFnInfo(List<Expr> operands) {
+    return ExprKt.BodoSQLKernel("uniform", operands, List.of());
   }
 }

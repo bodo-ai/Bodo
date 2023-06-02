@@ -7,9 +7,10 @@ from bodo.libs.bodosql_array_kernel_utils import *  # noqa
 from bodo.libs.bodosql_casting_array_kernels import *  # noqa
 from bodo.libs.bodosql_comparison_array_kernels import *  # noqa
 from bodo.libs.bodosql_datetime_array_kernels import *  # noqa
+from bodo.libs.bodosql_hash_array_kernels import *  # noqa
 from bodo.libs.bodosql_json_array_kernels import *  # noqa
 from bodo.libs.bodosql_like_array_kernels import *  # noqa
-from bodo.libs.bodosql_nested_data_kernels import *  #noqa
+from bodo.libs.bodosql_nested_data_kernels import *  # noqa
 from bodo.libs.bodosql_numeric_array_kernels import *  # noqa
 from bodo.libs.bodosql_other_array_kernels import *  # noqa
 from bodo.libs.bodosql_regexp_array_kernels import *  # noqa
@@ -229,6 +230,7 @@ broadcasted_fixed_arg_functions = {
     "try_to_double",
     "try_to_timestamp",
     "tz_aware_interval_add",
+    "uniform",
     "upper",
     "weekday",
     "width_bucket",
@@ -239,4 +241,4 @@ broadcasted_fixed_arg_functions = {
 }
 
 
-broadcasted_variadic_functions = {"coalesce", "decode", "greatest", "least"}
+broadcasted_variadic_functions = {"coalesce", "decode", "sql_hash", "greatest", "least"}
