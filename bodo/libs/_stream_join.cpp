@@ -486,7 +486,7 @@ JoinState* join_state_init_py_entry(
                                 build_arr_c_types + n_build_arrs),
             std::vector<int8_t>(build_arr_array_types,
                                 build_arr_array_types + n_build_arrs),
-            cond_func);
+            build_table_outer, probe_table_outer, cond_func);
     }
 
     return new HashJoinState(

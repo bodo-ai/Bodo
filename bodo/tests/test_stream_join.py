@@ -331,7 +331,142 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
 
 
 @pytest_mark_snowflake
-def test_nested_loop_join(memory_leak_check):
+@pytest.mark.parametrize(
+    "build_outer,probe_outer,expected_df",
+    [
+        # Equivalent query:
+        # select *
+        # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
+        # inner join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
+        # on P_PARTKEY > L_PARTKEY + 197800
+        (
+            False,
+            False,
+            pd.DataFrame(
+                {
+                    "p_partkey": [199978, 199995],
+                    "p_comment": ["ess, i", "packa"],
+                    "p_name": [
+                        "linen magenta saddle slate turquoise",
+                        "blanched floral red maroon papaya",
+                    ],
+                    "p_size": [50, 50],
+                    "l_partkey": [2132, 2132],
+                    "l_comment": ["lites. fluffily even de", "lites. fluffily even de"],
+                    "l_orderkey": [1, 1],
+                }
+            ),
+        ),
+        # Equivalent query:
+        # select *
+        # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
+        # right join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
+        # on P_PARTKEY > L_PARTKEY + 197800
+        (
+            True,
+            False,
+            pd.DataFrame(
+                {
+                    "p_partkey": [199978, 199995, 199843, 199847, 199898],
+                    "p_comment": [
+                        "ess, i",
+                        "packa",
+                        "refully f",
+                        " reques",
+                        "around the",
+                    ],
+                    "p_name": [
+                        "linen magenta saddle slate turquoise",
+                        "blanched floral red maroon papaya",
+                        "pale orchid deep linen chocolate",
+                        "hot black red powder smoke",
+                        "firebrick brown gainsboro orchid medium",
+                    ],
+                    "p_size": [50, 50, 50, 50, 50],
+                    "l_partkey": [2132, 2132, pd.NA, pd.NA, pd.NA],
+                    "l_comment": [
+                        "lites. fluffily even de",
+                        "lites. fluffily even de",
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                    ],
+                    "l_orderkey": [1, 1, pd.NA, pd.NA, pd.NA],
+                }
+            ),
+        ),
+        # Equivalent query:
+        # select *
+        # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
+        # left join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
+        # on P_PARTKEY > L_PARTKEY + 197800
+        (
+            False,
+            True,
+            pd.DataFrame(
+                {
+                    "p_partkey": [199978, 199995, pd.NA],
+                    "p_comment": ["ess, i", "packa", pd.NA],
+                    "p_name": [
+                        "linen magenta saddle slate turquoise",
+                        "blanched floral red maroon papaya",
+                        pd.NA,
+                    ],
+                    "p_size": [50, 50, pd.NA],
+                    "l_partkey": [2132, 2132, 15635],
+                    "l_comment": [
+                        "lites. fluffily even de",
+                        "lites. fluffily even de",
+                        "arefully slyly ex",
+                    ],
+                    "l_orderkey": [1, 1, 1],
+                }
+            ),
+        ),
+        # Equivalent query:
+        # select *
+        # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
+        # full outer join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
+        # on P_PARTKEY > L_PARTKEY + 197800
+        (
+            True,
+            True,
+            pd.DataFrame(
+                {
+                    "p_partkey": [199978, 199995, 199843, 199847, 199898, pd.NA],
+                    "p_comment": [
+                        "ess, i",
+                        "packa",
+                        "refully f",
+                        " reques",
+                        "around the",
+                        pd.NA,
+                    ],
+                    "p_name": [
+                        "linen magenta saddle slate turquoise",
+                        "blanched floral red maroon papaya",
+                        "pale orchid deep linen chocolate",
+                        "hot black red powder smoke",
+                        "firebrick brown gainsboro orchid medium",
+                        pd.NA,
+                    ],
+                    "p_size": [50, 50, 50, 50, 50, pd.NA],
+                    "l_partkey": [2132, 2132, pd.NA, pd.NA, pd.NA, 15635],
+                    "l_comment": [
+                        "lites. fluffily even de",
+                        "lites. fluffily even de",
+                        pd.NA,
+                        pd.NA,
+                        pd.NA,
+                        "arefully slyly ex",
+                    ],
+                    "l_orderkey": [1, 1, pd.NA, pd.NA, pd.NA, 1],
+                }
+            ),
+        ),
+    ],
+)
+def test_nested_loop_join(build_outer, probe_outer, expected_df, memory_leak_check):
     """
     Test streaming nested loop join
     """
@@ -340,7 +475,9 @@ def test_nested_loop_join(memory_leak_check):
     )
 
     l_orderkey_end = 2
+    l_partkey_end = 20_000
     p_size_limit = 49
+    p_partkey_limit = 199_840
 
     build_keys_inds = bodo.utils.typing.MetaType(())
     probe_keys_inds = bodo.utils.typing.MetaType(())
@@ -365,8 +502,6 @@ def test_nested_loop_join(memory_leak_check):
             "l_orderkey",
         )
     )
-    build_outer = False
-    probe_outer = False
     non_equi_condition = "(left.p_partkey) > ((right.l_partkey) + 197800)"
 
     # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
@@ -386,7 +521,7 @@ def test_nested_loop_join(memory_leak_check):
 
         # read PART table
         reader1 = pd.read_sql(
-            f"SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE FROM PART where P_SIZE > {p_size_limit}",
+            f"SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE FROM PART where P_SIZE > {p_size_limit} and P_PARTKEY > {p_partkey_limit}",
             conn,
             _bodo_chunksize=4000,
         )
@@ -402,7 +537,7 @@ def test_nested_loop_join(memory_leak_check):
 
         # read LINEITEM table and probe
         reader2 = pd.read_sql(
-            f"SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY FROM LINEITEM where l_orderkey < {l_orderkey_end}",
+            f"SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY FROM LINEITEM where l_orderkey < {l_orderkey_end} and l_partkey < {l_partkey_end}",
             conn,
             _bodo_chunksize=4000,
         )
@@ -441,20 +576,6 @@ def test_nested_loop_join(memory_leak_check):
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
             saved_SF_READ_AUTO_DICT_ENCODE_ENABLED
         )
-    expected_df = pd.DataFrame(
-        {
-            "p_partkey": [199978, 199995],
-            "p_comment": ["ess, i", "packa"],
-            "p_name": [
-                "linen magenta saddle slate turquoise",
-                "blanched floral red maroon papaya",
-            ],
-            "p_size": [50, 50],
-            "l_partkey": [2132, 2132],
-            "l_comment": ["lites. fluffily even de", "lites. fluffily even de"],
-            "l_orderkey": [1, 1],
-        }
-    )
     out_df = bodo.allgatherv(out_df)
     _test_equal(
         out_df,
