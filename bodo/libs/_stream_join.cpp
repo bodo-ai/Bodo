@@ -86,7 +86,8 @@ void JoinPartition::FinalizeBuild() {
  */
 void join_build_consume_batch(HashJoinState* join_state,
                               std::shared_ptr<table_info> in_table,
-                              bool is_last, bool parallel) {
+                              bool use_bloom_filter, bool is_last,
+                              bool parallel) {
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -108,6 +109,11 @@ void join_build_consume_batch(HashJoinState* join_state,
     std::shared_ptr<JoinPartition>& active_partition = join_state->partition;
     active_partition->ReserveBuildTable(in_table);
     join_state->build_shuffle_buffer.ReserveTable(in_table);
+    // Add to the bloom filter.
+    if (use_bloom_filter) {
+        join_state->global_bloom_filter->AddAll(batch_hashes_join, 0,
+                                                in_table->nrows());
+    }
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         if (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank ||
             !parallel) {
@@ -141,6 +147,11 @@ void join_build_consume_batch(HashJoinState* join_state,
         // Add new batch of data to partition (bulk insert)
         active_partition->ReserveBuildTable(new_data);
         active_partition->AppendBuildBatch(new_data, batch_hashes_join);
+        // Finalize the bloom filter
+        if (use_bloom_filter) {
+            // Make the bloom filter global.
+            join_state->global_bloom_filter->union_reduction();
+        }
     }
 
     // Finalize build on the active partition if it's the last input batch.
@@ -164,7 +175,7 @@ void join_build_consume_batch(HashJoinState* join_state,
  * @return std::shared_ptr<table_info> output table batch
  */
 template <bool build_table_outer, bool probe_table_outer,
-          bool non_equi_condition>
+          bool non_equi_condition, bool use_bloom_filter>
 std::shared_ptr<table_info> join_probe_consume_batch(
     HashJoinState* join_state, std::shared_ptr<table_info> in_table,
     const std::vector<uint64_t> build_kept_cols,
@@ -205,6 +216,20 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     // probe hash table
     join_state->probe_shuffle_buffer.ReserveTable(in_table);
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        // Check bloom filter
+        if (use_bloom_filter) {
+            // We use active_partition->probe_table_hashes because all paths in
+            // probe compute for the SEED_HASH_JOIN.
+            if (!join_state->global_bloom_filter->Find(
+                    active_partition->probe_table_hashes[i_row])) {
+                if (probe_table_outer) {
+                    // Add unmatched rows from probe table to output table
+                    build_idxs.push_back(-1);
+                    probe_idxs.push_back(i_row);
+                }
+                continue;
+            }
+        }
         if (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank ||
             !parallel) {
             auto range = active_partition->build_table.equal_range(-i_row - 1);
@@ -305,6 +330,20 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             }
 
             for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
+                if (use_bloom_filter) {
+                    // We use active_partition->probe_table_hashes because all
+                    // paths in probe compute for the SEED_HASH_JOIN.
+                    if (!join_state->global_bloom_filter->Find(
+                            active_partition->probe_table_hashes[i_row])) {
+                        if (probe_table_outer) {
+                            // Add unmatched rows from probe table to output
+                            // table
+                            build_idxs.push_back(-1);
+                            probe_idxs.push_back(i_row);
+                        }
+                        continue;
+                    }
+                }
                 auto range =
                     active_partition->build_table.equal_range(-i_row - 1);
                 if (probe_table_outer && range.first == range.second) {
@@ -465,23 +504,27 @@ JoinState* join_state_init_py_entry(
 /**
  * @brief Python wrapper to consume build table batch
  *
- * @param join_state join state pointer
+ * @param join_state_ join state pointer
  * @param in_table build table batch
  * @param is_last is last batch
  */
-void join_build_consume_batch_py_entry(JoinState* join_state,
+void join_build_consume_batch_py_entry(JoinState* join_state_,
                                        table_info* in_table, bool is_last,
                                        bool parallel) {
     // nested loop join is required if there are no equality keys
-    if (join_state->n_keys == 0) {
+    if (join_state_->n_keys == 0) {
         nested_loop_join_build_consume_batch_py_entry(
-            (NestedLoopJoinState*)join_state, in_table, is_last, parallel);
+            (NestedLoopJoinState*)join_state_, in_table, is_last, parallel);
         return;
     }
+
+    HashJoinState* join_state = (HashJoinState*)join_state_;
+
     try {
-        join_build_consume_batch((HashJoinState*)join_state,
-                                 std::shared_ptr<table_info>(in_table), is_last,
-                                 parallel);
+        bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
+        join_build_consume_batch(join_state,
+                                 std::unique_ptr<table_info>(in_table),
+                                 has_bloom_filter, is_last, parallel);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -518,14 +561,16 @@ table_info* join_probe_consume_batch_py_entry(
 
 #ifndef CONSUME_PROBE_BATCH
 #define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,            \
-                            has_non_equi_cond, build_table_outer_exp,        \
-                            probe_table_outer_exp, has_non_equi_cond_exp)    \
+                            has_non_equi_cond, use_bloom_filter,             \
+                            build_table_outer_exp, probe_table_outer_exp,    \
+                            has_non_equi_cond_exp, use_bloom_filter_exp)     \
     if (build_table_outer == build_table_outer_exp &&                        \
         probe_table_outer == probe_table_outer_exp &&                        \
-        has_non_equi_cond == has_non_equi_cond_exp) {                        \
-        out = join_probe_consume_batch<build_table_outer_exp,                \
-                                       probe_table_outer_exp,                \
-                                       has_non_equi_cond_exp>(               \
+        has_non_equi_cond == has_non_equi_cond_exp &&                        \
+        use_bloom_filter == use_bloom_filter_exp) {                          \
+        out = join_probe_consume_batch<                                      \
+            build_table_outer_exp, probe_table_outer_exp,                    \
+            has_non_equi_cond_exp, use_bloom_filter_exp>(                    \
             join_state, std::unique_ptr<table_info>(in_table),               \
             std::move(build_kept_cols), std::move(probe_kept_cols), is_last, \
             parallel);                                                       \
@@ -538,35 +583,61 @@ table_info* join_probe_consume_batch_py_entry(
         *out_is_last = is_last;
         std::shared_ptr<table_info> out;
         bool contain_non_equi_cond = join_state->cond_func != NULL;
+
+        bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
         std::vector<uint64_t> build_kept_cols(
             kept_build_col_nums, kept_build_col_nums + num_kept_build_cols);
         std::vector<uint64_t> probe_kept_cols(
             kept_probe_col_nums, kept_probe_col_nums + num_kept_probe_cols);
 
-        CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer,
-                            contain_non_equi_cond, true, true, true)
-        CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer,
-                            contain_non_equi_cond, true, true, false)
-        CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer,
-                            contain_non_equi_cond, true, false, true)
-        CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer,
-                            contain_non_equi_cond, true, false, false)
-        CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer,
-                            contain_non_equi_cond, false, true, true)
-        CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer,
-                            contain_non_equi_cond, false, true, false)
-        CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer,
-                            contain_non_equi_cond, false, false, true)
-        CONSUME_PROBE_BATCH(join_state->build_table_outer,
-                            join_state->probe_table_outer,
-                            contain_non_equi_cond, false, false, false)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, true, true, true, true)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, true, true, true, false)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, true, true, false, true)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, true, true, false, false)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, true, false, true, true)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, true, false, true, false)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, true, false, false, true)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, true, false, false, false)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, false, true, true, true)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, false, true, true, false)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, false, true, false, true)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, false, true, false, false)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, false, false, true, true)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, false, false, true, false)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, false, false, false, true)
+        CONSUME_PROBE_BATCH(
+            join_state->build_table_outer, join_state->probe_table_outer,
+            contain_non_equi_cond, has_bloom_filter, false, false, false, false)
 
         return new table_info(*out);
     } catch (const std::exception& e) {

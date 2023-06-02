@@ -3,12 +3,15 @@
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_join.h"
+#include "simd-block-fixed-fpp.h"
+
+using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
 
 /**
  * @brief allocate an empty table with provided column types
  *
  * @param arr_c_types vector of ints for column dtypes (in Bodo_CTypes format)
- * @param arr_array_types vector of ints for colmn array types (in
+ * @param arr_array_types vector of ints for colmun array types (in
  * bodo_array_type format)
  * @return std::shared_ptr<table_info> allocated table
  */
@@ -427,6 +430,10 @@ class HashJoinState : public JoinState {
     // Dummy probe table. Useful for the build_table_outer case.
     std::shared_ptr<table_info> dummy_probe_table;
 
+    // Global bloom-filter. This is built during the build step
+    // and used during the probe step.
+    std::unique_ptr<BloomFilter> global_bloom_filter;
+
     HashJoinState(std::vector<int8_t> build_arr_c_types,
                   std::vector<int8_t> build_arr_array_types,
                   std::vector<int8_t> probe_arr_c_types,
@@ -444,6 +451,25 @@ class HashJoinState : public JoinState {
             0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
             probe_arr_array_types, n_keys_, build_table_outer_,
             probe_table_outer_);
+        this->global_bloom_filter = create_bloom_filter();
+    }
+
+    std::unique_ptr<BloomFilter> create_bloom_filter() {
+        if (bloom_filter_supported()) {
+            // Estimate the number of rows to specify based on
+            // the target size in bytes in the env or 1MB
+            // if not provided.
+            int64_t target_bytes = 1000000;
+            char* env_target_bytes =
+                std::getenv("BODO_STREAM_JOIN_BLOOM_FILTER_TARGET_BYTES");
+            if (env_target_bytes) {
+                target_bytes = std::stoi(env_target_bytes);
+            }
+            int64_t num_entries = num_elements_for_bytes(target_bytes);
+            return std::make_unique<BloomFilter>(num_entries);
+        } else {
+            return nullptr;
+        }
     }
 };
 

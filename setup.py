@@ -297,7 +297,7 @@ ext_metadata["depends"] += [
     "bodo/libs/hyperloglog.hpp",
     "bodo/libs/iceberg_transforms.h",
     "bodo/libs/_stream_join.h",
-    "bodo/libs/simd-block-fixed.h",
+    "bodo/libs/simd-block-fixed-fpp.h",
 ]
 
 # We cannot compile with -Werror yet because _fsspec_reader.cpp
