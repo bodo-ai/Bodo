@@ -18,6 +18,12 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
         {join_state->build_table_buffer.data_table, in_table});
     join_state->build_table_buffer.data_table = concat_tables(tables);
     tables.clear();
+    if (is_last && join_state->build_table_outer) {
+        join_state->build_table_matched.resize(
+            arrow::bit_util::BytesForBits(
+                join_state->build_table_buffer.data_table->nrows()),
+            0);
+    }
 }
 
 /**
@@ -40,9 +46,11 @@ std::shared_ptr<table_info> nested_loop_join_local_chunk(
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
 
-    // TODO[BSE-460]: support outer joins
-    bodo::vector<uint8_t> build_row_is_matched(0, 0);
-    bodo::vector<uint8_t> probe_row_is_matched(0, 0);
+    bodo::vector<uint8_t> probe_table_matched(0, 0);
+    if (join_state->probe_table_outer) {
+        probe_table_matched.resize(
+            arrow::bit_util::BytesForBits(probe_table->nrows()), 0);
+    }
 
     // cfunc is passed in batch format for nested loop join
     // see here:
@@ -52,14 +60,16 @@ std::shared_ptr<table_info> nested_loop_join_local_chunk(
     cond_expr_fn_batch_t cond_func =
         (cond_expr_fn_batch_t)join_state->cond_func;
 
-    nested_loop_join_table_local(join_state->build_table_buffer.data_table,
-                                 probe_table, false, false, cond_func, parallel,
-                                 build_idxs, probe_idxs, build_row_is_matched,
-                                 probe_row_is_matched);
+    nested_loop_join_table_local(
+        join_state->build_table_buffer.data_table, probe_table,
+        join_state->build_table_outer, join_state->probe_table_outer, cond_func,
+        parallel, build_idxs, probe_idxs, join_state->build_table_matched,
+        probe_table_matched);
+    if (join_state->probe_table_outer) {
+        add_unmatched_rows(probe_table_matched, probe_table->nrows(),
+                           probe_idxs, build_idxs, parallel);
+    }
 
-    // TODO[BSE-460]: pass outer join flags
-    // similar to here:
-    // https://github.com/Bodo-inc/Bodo/blob/a0bc325fc5e92eb4d9a43ad09d178eb7754b4eb7/bodo/libs/_stream_join.cpp#L223
     std::shared_ptr<table_info> build_out_table = RetrieveTable(
         join_state->build_table_buffer.data_table, build_idxs, build_kept_cols);
     std::shared_ptr<table_info> probe_out_table =
@@ -81,6 +91,7 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
     const std::vector<uint64_t> probe_kept_cols, bool is_last,
 
     bool parallel) {
+    std::shared_ptr<table_info> out_table;
     if (parallel) {
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -97,11 +108,39 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
                                              parallel);
             out_table_chunks.emplace_back(out_table_chunk);
         }
-        return concat_tables(out_table_chunks);
+        out_table = concat_tables(out_table_chunks);
     } else {
-        return nested_loop_join_local_chunk(
+        out_table = nested_loop_join_local_chunk(
             join_state, in_table, build_kept_cols, probe_kept_cols, parallel);
     }
+
+    if (join_state->build_table_outer && is_last) {
+        // Add unmatched rows from build table
+        // for outer join
+        bodo::vector<int64_t> build_idxs;
+        bodo::vector<int64_t> probe_idxs;
+        add_unmatched_rows(join_state->build_table_matched,
+                           join_state->build_table_buffer.data_table->nrows(),
+                           build_idxs, probe_idxs, false);
+
+        std::shared_ptr<table_info> build_out_outer = RetrieveTable(
+            join_state->build_table_buffer.data_table, build_idxs);
+        std::shared_ptr<table_info> probe_out_outer =
+            RetrieveTable(in_table, probe_idxs);
+        build_idxs.clear();
+        probe_idxs.clear();
+
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        out_arrs.insert(out_arrs.end(), build_out_outer->columns.begin(),
+                        build_out_outer->columns.end());
+        out_arrs.insert(out_arrs.end(), probe_out_outer->columns.begin(),
+                        probe_out_outer->columns.end());
+        std::shared_ptr<table_info> outer_table =
+            std::make_shared<table_info>(out_arrs);
+        out_table = concat_tables({out_table, outer_table});
+    }
+
+    return out_table;
 }
 
 void nested_loop_join_build_consume_batch_py_entry(

@@ -406,17 +406,19 @@ class JoinState {
     // Join properties
     const int64_t n_keys;
     cond_expr_fn_t cond_func;
+    const bool build_table_outer;
+    const bool probe_table_outer;
 
-    JoinState(int64_t n_keys_, cond_expr_fn_t _cond_func)
-        : n_keys(n_keys_), cond_func(_cond_func) {}
+    JoinState(int64_t n_keys_, bool build_table_outer_, bool probe_table_outer_,
+              cond_expr_fn_t _cond_func)
+        : n_keys(n_keys_),
+          cond_func(_cond_func),
+          build_table_outer(build_table_outer_),
+          probe_table_outer(probe_table_outer_) {}
 };
 
 class HashJoinState : public JoinState {
    public:
-    // Join properties
-    const bool build_table_outer;
-    const bool probe_table_outer;
-
     // Partitioning information.
     // For now, we just have one partition
     // (the active one). In the future, there'll
@@ -440,9 +442,9 @@ class HashJoinState : public JoinState {
                   std::vector<int8_t> probe_arr_array_types, int64_t n_keys_,
                   bool build_table_outer_, bool probe_table_outer_,
                   cond_expr_fn_t _cond_func)
-        : JoinState(n_keys_, _cond_func),
-          build_table_outer(build_table_outer_),
-          probe_table_outer(probe_table_outer_),
+        : JoinState(n_keys_, build_table_outer_, probe_table_outer_,
+                    _cond_func),
+
           build_shuffle_buffer(build_arr_c_types, build_arr_array_types),
           probe_shuffle_buffer(probe_arr_c_types, probe_arr_array_types),
           dummy_probe_table(
@@ -476,13 +478,17 @@ class HashJoinState : public JoinState {
 class NestedLoopJoinState : public JoinState {
    public:
     // Build state
-    TableBuildBuffer build_table_buffer;  // Append only buffer.
+    TableBuildBuffer build_table_buffer;        // Append only buffer.
+    bodo::vector<uint8_t> build_table_matched;  // state for building output
+                                                // table (for outer joins)
 
     NestedLoopJoinState(const std::vector<int8_t>& build_arr_c_types,
                         const std::vector<int8_t>& build_arr_array_types,
+                        bool build_table_outer_, bool probe_table_outer_,
                         cond_expr_fn_t _cond_func)
-        : JoinState(
-              0, _cond_func),  // NestedLoopJoin is only used when n_keys is 0
+        : JoinState(0, build_table_outer_, probe_table_outer_,
+                    _cond_func),  // NestedLoopJoin is only used when
+                                  // n_keys is 0
           build_table_buffer(build_arr_c_types, build_arr_array_types) {}
 };
 
