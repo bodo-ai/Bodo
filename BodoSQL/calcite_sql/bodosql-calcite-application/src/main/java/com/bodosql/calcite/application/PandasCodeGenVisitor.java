@@ -1401,21 +1401,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       for (int i = 0; i < aggCallList.size(); i++) {
         AggregateCall aggregateCall = aggCallList.get(i);
 
-        // Check our assumptions about the aggregateCall names
-        // I have never seen this be true in a finalized calcite plan, but ensure that we throw a
-        // reasonable error
-        // just in case
         if (aggregateCall.getName() == null) {
           aggCallNames.add(expectedOutputCols.get(groupingVariables.size() + i));
-        } else if (!aggregateCall
-            .getName()
-            .equals(expectedOutputCols.get(groupingVariables.size() + i))) {
-          // In the case that the aggregateCall is named, it always has the same name as the
-          // expected
-          // output column.
-          throw new BodoSQLCodegenException(
-              "Unexpected Calcite plan generated: Unable to find aggregateCall name not present in"
-                  + " the expected location in the output column names.");
         } else {
           aggCallNames.add(aggregateCall.getName());
         }

@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.Utils;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.ir.Expr;
@@ -100,6 +101,14 @@ public class Utils {
    */
   public static String escapePythonQuotes(String inputStr) {
     return inputStr.replaceAll("(?<!\\\\)\"", "\\\\\"");
+  }
+
+  public static void expectScalarArgument(
+      BodoSQLExprType.ExprType exprType, String fnName, String argName) {
+    if (exprType != BodoSQLExprType.ExprType.SCALAR) {
+      throw new BodoSQLCodegenException(
+          "Error: argument '" + argName + "' to function " + fnName + " must be a scalar.");
+    }
   }
 
   /**

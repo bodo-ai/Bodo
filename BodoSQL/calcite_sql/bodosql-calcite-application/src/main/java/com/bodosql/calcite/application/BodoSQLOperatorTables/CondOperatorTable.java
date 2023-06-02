@@ -302,6 +302,15 @@ public class CondOperatorTable implements SqlOperatorTable {
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+    public static final SqlFunction HASH =
+        new SqlFunction(
+            "HASH",
+            SqlKind.OTHER_FUNCTION,
+            ReturnTypes.BIGINT,
+            null,
+            OperandTypes.VARIADIC,
+            SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlBasicAggFunction CONDITIONAL_CHANGE_EVENT =
       SqlBasicAggFunction.create(
           "CONDITIONAL_CHANGE_EVENT",
@@ -375,6 +384,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           NVL2,
           ZEROIFNULL,
           DECODE,
+          HASH,
           MIN_ROW_NUMBER_FILTER);
 
   @Override
