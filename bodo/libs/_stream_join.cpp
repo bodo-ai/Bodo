@@ -92,12 +92,27 @@ void join_build_consume_batch(HashJoinState* join_state,
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
+    std::shared_ptr<JoinPartition>& active_partition = join_state->partition;
+
+    // unify dictionaries to allow consistent hashing and fast key comparison
+    // using indices
+    // NOTE: build_table_buffer, build_shuffle_buffer and probe_shuffle_buffer
+    // use the same dictionary object for consistency
+    in_table = active_partition->build_table_buffer.UnifyDictionaryArrays(
+        in_table, join_state->n_keys);
+
     // get hashes of the new batch (different hashes for partitioning and hash
     // table to reduce conflict)
-    std::shared_ptr<uint32_t[]> batch_hashes_partition = hash_keys_table(
-        in_table, join_state->n_keys, SEED_HASH_PARTITION, parallel);
-    std::shared_ptr<uint32_t[]> batch_hashes_join =
-        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_JOIN, parallel);
+    // NOTE: partition hashes need to be consistent across ranks so need to use
+    // dictionary hashes
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes = active_partition->build_table_buffer.GetDictionaryHashes(
+            join_state->n_keys);
+    std::shared_ptr<uint32_t[]> batch_hashes_partition =
+        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_PARTITION,
+                        parallel, true, dict_hashes);
+    std::shared_ptr<uint32_t[]> batch_hashes_join = hash_keys_table(
+        in_table, join_state->n_keys, SEED_HASH_JOIN, parallel, false);
 
     // insert batch into hash table of the active partition
     // TODO[BSE-441]: see if appending all selected rows upfront to the build
@@ -106,12 +121,11 @@ void join_build_consume_batch(HashJoinState* join_state,
     // TODO[BSE-441]: tune initial buffer buffer size and expansion strategy
     // using heuristics (e.g. SQL planner statistics)
 
-    std::shared_ptr<JoinPartition>& active_partition = join_state->partition;
     active_partition->ReserveBuildTable(in_table);
     join_state->build_shuffle_buffer.ReserveTable(in_table);
     // Add to the bloom filter.
     if (use_bloom_filter) {
-        join_state->global_bloom_filter->AddAll(batch_hashes_join, 0,
+        join_state->global_bloom_filter->AddAll(batch_hashes_partition, 0,
                                                 in_table->nrows());
     }
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
@@ -131,6 +145,13 @@ void join_build_consume_batch(HashJoinState* join_state,
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             join_state->build_shuffle_buffer.data_table;
+        // make dictionaries global for shuffle
+        for (size_t i = 0; i < shuffle_table->ncols(); i++) {
+            std::shared_ptr<array_info> arr = shuffle_table->columns[i];
+            if (arr->arr_type == bodo_array_type::DICT) {
+                make_dictionary_global_and_unique(arr, parallel);
+            }
+        }
         mpi_comm_info comm_info_table(shuffle_table->columns);
         std::shared_ptr<uint32_t[]> hashes = hash_keys_table(
             shuffle_table, join_state->n_keys, SEED_HASH_PARTITION, parallel);
@@ -140,9 +161,13 @@ void join_build_consume_batch(HashJoinState* join_state,
         hashes.reset();
         // TODO: clear build_shuffle_buffer memory
 
+        // unify dictionaries to allow consistent hashing and fast key
+        // comparison using indices
+        new_data = active_partition->build_table_buffer.UnifyDictionaryArrays(
+            new_data, join_state->n_keys);
         // compute hashes of the new data
         std::shared_ptr<uint32_t[]> batch_hashes_join = hash_keys_table(
-            new_data, join_state->n_keys, SEED_HASH_JOIN, parallel);
+            new_data, join_state->n_keys, SEED_HASH_JOIN, parallel, false);
 
         // Add new batch of data to partition (bulk insert)
         active_partition->ReserveBuildTable(new_data);
@@ -187,13 +212,28 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     // Update active partition state (temporarily) for hashing and comparison
     // functions.
     std::shared_ptr<JoinPartition>& active_partition = join_state->partition;
-    active_partition->probe_table = in_table;
-    // Compute join hashes
-    active_partition->probe_table_hashes =
-        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_JOIN, parallel);
 
-    std::shared_ptr<uint32_t[]> batch_hashes_partition = hash_keys_table(
-        in_table, join_state->n_keys, SEED_HASH_PARTITION, parallel);
+    // unify dictionaries to allow consistent hashing and fast key comparison
+    // using indices
+    // NOTE: build_table_buffer, build_shuffle_buffer and probe_shuffle_buffer
+    // use the same dictionary object for consistency
+    in_table = join_state->probe_shuffle_buffer.UnifyDictionaryArrays(
+        in_table, join_state->n_keys);
+
+    active_partition->probe_table = in_table;
+
+    // Compute join hashes
+    active_partition->probe_table_hashes = hash_keys_table(
+        in_table, join_state->n_keys, SEED_HASH_JOIN, parallel, false);
+
+    // NOTE: partition hashes need to be consistent across ranks so need to use
+    // dictionary hashes
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes = join_state->probe_shuffle_buffer.GetDictionaryHashes(
+            join_state->n_keys);
+    std::shared_ptr<uint32_t[]> batch_hashes_partition =
+        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_PARTITION,
+                        parallel, true, dict_hashes);
 
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
@@ -218,10 +258,10 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         // Check bloom filter
         if (use_bloom_filter) {
-            // We use active_partition->probe_table_hashes because all paths in
-            // probe compute for the SEED_HASH_JOIN.
+            // We use batch_hashes_partition to use consistent hashing across
+            // ranks for dict-encoded string arrays
             if (!join_state->global_bloom_filter->Find(
-                    active_partition->probe_table_hashes[i_row])) {
+                    batch_hashes_partition[i_row])) {
                 if (probe_table_outer) {
                     // Add unmatched rows from probe table to output table
                     build_idxs.push_back(-1);
@@ -296,6 +336,13 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             // shuffle data of other ranks
             std::shared_ptr<table_info> shuffle_table =
                 join_state->probe_shuffle_buffer.data_table;
+            // make dictionaries global for shuffle
+            for (size_t i = 0; i < shuffle_table->ncols(); i++) {
+                std::shared_ptr<array_info> arr = shuffle_table->columns[i];
+                if (arr->arr_type == bodo_array_type::DICT) {
+                    make_dictionary_global_and_unique(arr, parallel);
+                }
+            }
             mpi_comm_info comm_info_table(shuffle_table->columns);
             std::shared_ptr<uint32_t[]> hashes =
                 hash_keys_table(shuffle_table, join_state->n_keys,
@@ -306,10 +353,28 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             hashes.reset();
             // TODO: clear probe_shuffle_buffer memory
 
+            // unify dictionaries to allow consistent hashing and fast key
+            // comparison using indices NOTE: only key arrays need unified since
+            // probe_shuffle_buffer isn't used anymore
+            new_data = join_state->probe_shuffle_buffer.UnifyDictionaryArrays(
+                new_data, join_state->n_keys, true);
+
+            // NOTE: partition hashes need to be consistent across ranks so need
+            // to use dictionary hashes
+            std::shared_ptr<
+                bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+                new_data_dict_hashes =
+                    join_state->probe_shuffle_buffer.GetDictionaryHashes(
+                        join_state->n_keys);
+            std::shared_ptr<uint32_t[]> new_data_hashes_partition =
+                hash_keys_table(new_data, join_state->n_keys,
+                                SEED_HASH_PARTITION, parallel, true,
+                                new_data_dict_hashes);
+
             // probe hash table with new data
             active_partition->probe_table = new_data;
             active_partition->probe_table_hashes = hash_keys_table(
-                new_data, join_state->n_keys, SEED_HASH_JOIN, parallel);
+                new_data, join_state->n_keys, SEED_HASH_JOIN, parallel, false);
 
             // Fetch the raw array pointers from the arrays for passing
             // to the non-equijoin condition
@@ -331,10 +396,10 @@ std::shared_ptr<table_info> join_probe_consume_batch(
 
             for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
                 if (use_bloom_filter) {
-                    // We use active_partition->probe_table_hashes because all
-                    // paths in probe compute for the SEED_HASH_JOIN.
+                    // We use partition hashes to use consistent hashing across
+                    // ranks for dict-encoded string arrays
                     if (!join_state->global_bloom_filter->Find(
-                            active_partition->probe_table_hashes[i_row])) {
+                            new_data_hashes_partition[i_row])) {
                         if (probe_table_outer) {
                             // Add unmatched rows from probe table to output
                             // table

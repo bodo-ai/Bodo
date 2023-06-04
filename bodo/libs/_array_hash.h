@@ -14,10 +14,11 @@
 #define SEED_HASH_PIVOT_SHUFFLE 0xb0d01285
 #define SEED_HASH_CONTAINER 0xb0d01284
 
-void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
-                        std::shared_ptr<array_info> array, size_t n_rows,
-                        const uint32_t seed, bool global_dict_needed,
-                        bool is_parallel);
+void hash_array_combine(
+    std::unique_ptr<uint32_t[]>& out_hashes, std::shared_ptr<array_info> array,
+    size_t n_rows, const uint32_t seed, bool global_dict_needed,
+    bool is_parallel,
+    std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr);
 
 /**
  * Function for the computation of hashes for keys
@@ -25,12 +26,23 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
  * @param key_arrs: input keys to hashThe hashes on output.
  * @param seed: the seed of the computation.
  * @param is_parallel: whether we run in parallel or not.
+ * @param global_dict_needed: Specifies whether the dictionary of dict-encoded
+ * string arrays has to be global or not (for correctness or for performance
+ * -for example avoiding collisions after shuffling-). Throws an error if not
+ * global.
+ * @param dict_hashes: dictionary hashes for dict-encoded string arrays. Integer
+ * indices are hashed if not specified (which can cause errors if used across
+ * arrays with incompatible dictionaries).
+ * NOTE: dict_hashes vector has nullptr elements for other array types (length
+ * is number of key columns).
  * @return hash keys
  *
  */
 std::unique_ptr<uint32_t[]> hash_keys(
     std::vector<std::shared_ptr<array_info>> const& key_arrs,
-    const uint32_t seed, bool is_parallel, bool global_dict_needed = true);
+    const uint32_t seed, bool is_parallel, bool global_dict_needed = true,
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes = nullptr);
 
 std::unique_ptr<uint32_t[]> coherent_hash_keys(
     std::vector<std::shared_ptr<array_info>> const& key_arrs,
@@ -40,7 +52,8 @@ std::unique_ptr<uint32_t[]> coherent_hash_keys(
 void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
                 std::shared_ptr<array_info> array, size_t n_rows,
                 const uint32_t seed, bool is_parallel, bool global_dict_needed,
-                bool use_murmurhash = false);
+                bool use_murmurhash = false,
+                std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr);
 
 /**
  * Function for the getting table keys and returning its hashes
@@ -49,16 +62,28 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
  * @param num_keys : the number of keys
  * @param seed: the seed of the computation.
  * @param is_parallel: whether we run in parallel or not.
+ * @param global_dict_needed: Specifies whether the dictionary of dict-encoded
+ * string arrays has to be global or not (for correctness or for performance
+ * -for example avoiding collisions after shuffling-). Throws an error if not
+ * global.
+ * @param dict_hashes: dictionary hashes for dict-encoded string arrays. Integer
+ * indices are hashed if not specified (which can cause errors if used across
+ * arrays with incompatible dictionaries).
+ * NOTE: dict_hashes vector has nullptr elements for other array types (length
+ * is number of key columns).
  * @return hash keys
  *
  */
 inline std::unique_ptr<uint32_t[]> hash_keys_table(
     std::shared_ptr<table_info> in_table, size_t num_keys, uint32_t seed,
-    bool is_parallel) {
+    bool is_parallel, bool global_dict_needed = true,
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes = nullptr) {
     tracing::Event ev("hash_keys_table", is_parallel);
     std::vector<std::shared_ptr<array_info>> key_arrs(
         in_table->columns.begin(), in_table->columns.begin() + num_keys);
-    return hash_keys(key_arrs, seed, is_parallel);
+    return hash_keys(key_arrs, seed, is_parallel, global_dict_needed,
+                     dict_hashes);
 }
 
 inline std::unique_ptr<uint32_t[]> coherent_hash_keys_table(
