@@ -1,4 +1,5 @@
 #pragma once
+#include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
@@ -46,6 +47,23 @@ struct ArrayBuildBuffer {
     // Total capacity for data elements (including current elements,
     // capacity>=size should always be true)
     int64_t capacity;
+
+    // NOTE: dictionary state can be shared across buffers that require the same
+    // dictionary hash table used for dictionary unification of new batches
+    // (only for dictionary-encoded string arrays)
+    std::shared_ptr<std::unordered_map<std::string, dict_indices_t, string_hash,
+                                       std::equal_to<>>>
+        dict_str_to_ind;
+    // dictionary buffer to allow appending new dictionary values (only for
+    // dictionary-encoded string arrays)
+    std::shared_ptr<ArrayBuildBuffer> dict_buff;
+    // dictionary indices buffer for appending dictionary indices (only for
+    // dictionary-encoded string arrays)
+    std::shared_ptr<ArrayBuildBuffer> dict_indices;
+    // hashes of dictionary elements (not actual array elements) to allow
+    // consistent hashing (only for dictionary-encoded string arrays that are
+    // key columns)
+    std::shared_ptr<bodo::vector<uint32_t>> dict_hashes;
 
     /**
      * @brief Append a new data element to the buffer, assuming
@@ -120,6 +138,15 @@ struct ArrayBuildBuffer {
                                     arrow::bit_util::BytesForBits(size), false),
                                 "Resize Failed!");
             } break;
+            case bodo_array_type::DICT: {
+                if (data_array->child_arrays[0] != in_arr->child_arrays[0]) {
+                    throw std::runtime_error(
+                        "dictionary not unified in AppendRow");
+                }
+                dict_indices->AppendRow(in_arr->child_arrays[1], row_ind);
+                size++;
+                data_array->length = size;
+            } break;
             case bodo_array_type::NUMPY: {
                 uint64_t size_type = numpy_item_size[in_arr->dtype];
                 char* out_ptr = data_array->data1() + size_type * size;
@@ -145,7 +172,7 @@ struct ArrayBuildBuffer {
      *
      * @param in_arr input array used for finding new buffer sizes to reserve
      */
-    void ReserveArray(std::shared_ptr<array_info>& in_arr) {
+    void ReserveArray(const std::shared_ptr<array_info>& in_arr) {
         int64_t min_capacity = size + in_arr->length;
         switch (in_arr->arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL:
@@ -198,6 +225,13 @@ struct ArrayBuildBuffer {
                                     "Reserve failed!");
                 }
             } break;
+            case bodo_array_type::DICT: {
+                if (data_array->child_arrays[0] != in_arr->child_arrays[0]) {
+                    throw std::runtime_error(
+                        "dictionary not unified in ReserveArray");
+                }
+                dict_indices->ReserveArray(in_arr->child_arrays[1]);
+            } break;
             case bodo_array_type::NUMPY: {
                 uint64_t size_type = numpy_item_size[in_arr->dtype];
                 if (min_capacity > capacity) {
@@ -215,8 +249,134 @@ struct ArrayBuildBuffer {
         }
     }
 
+    /**
+     * @brief unify dictionary of input array with buffer by appending its new
+     * dictionary values to buffer's dictionary and transposing input's indices.
+     *
+     * @param in_arr input array
+     * @param is_key input is a key column of its table
+     * @return std::shared_ptr<array_info> input array with its dictionary
+     * replaced and indices transposed
+     */
+    std::shared_ptr<array_info> UnifyDictionaryArray(
+        const std::shared_ptr<array_info>& in_arr, bool is_key) {
+        if (in_arr->arr_type != bodo_array_type::DICT) {
+            throw std::runtime_error(
+                "UnifyDictionaryArray: DICT array expected");
+        }
+
+        std::shared_ptr<array_info> batch_dict = in_arr->child_arrays[0];
+        dict_buff->ReserveArray(batch_dict);
+
+        // check/update dictionary hash table and create transpose map
+        std::vector<dict_indices_t> transpose_map;
+        transpose_map.reserve(batch_dict->length);
+        char* data = batch_dict->data1();
+        offset_t* offsets = (offset_t*)batch_dict->data2();
+        for (int64_t i = 0; i < batch_dict->length; i++) {
+            // handle nulls in the dictionary
+            if (!batch_dict->get_null_bit(i)) {
+                transpose_map.emplace_back(-1);
+                continue;
+            }
+            offset_t start_offset = offsets[i];
+            offset_t end_offset = offsets[i + 1];
+            int64_t len = end_offset - start_offset;
+            std::string_view val(&data[start_offset], len);
+            // get existing index if already in hash table
+            if (dict_str_to_ind->contains(val)) {
+                dict_indices_t ind = dict_str_to_ind->find(val)->second;
+                transpose_map.emplace_back(ind);
+            } else {
+                // insert into hash table if not exists
+                dict_indices_t ind = dict_str_to_ind->size();
+                // TODO: remove std::string() after upgrade to C++23
+                (*dict_str_to_ind)[std::string(val)] = ind;
+                transpose_map.emplace_back(ind);
+                dict_buff->AppendRow(batch_dict, i);
+                if (is_key) {
+                    uint32_t hash;
+                    hash_string_32(&data[start_offset], (const int)len,
+                                   SEED_HASH_PARTITION, &hash);
+                    dict_hashes->emplace_back(hash);
+                }
+            }
+        }
+
+        // create output batch array with common dictionary and new transposed
+        // indices
+        const std::shared_ptr<array_info>& in_indices_arr =
+            in_arr->child_arrays[1];
+        std::shared_ptr<array_info> out_indices_arr =
+            alloc_nullable_array(in_arr->length, Bodo_CTypes::INT32, 0);
+        dict_indices_t* in_inds = (dict_indices_t*)in_indices_arr->data1();
+        dict_indices_t* out_inds = (dict_indices_t*)out_indices_arr->data1();
+        for (int64_t i = 0; i < in_indices_arr->length; i++) {
+            if (!in_indices_arr->get_null_bit(i)) {
+                out_indices_arr->set_null_bit(i, false);
+                out_inds[i] = -1;
+                continue;
+            }
+            dict_indices_t ind = transpose_map[in_inds[i]];
+            out_inds[i] = ind;
+            if (ind == -1) {
+                out_indices_arr->set_null_bit(i, false);
+            } else {
+                out_indices_arr->set_null_bit(i, true);
+            }
+        }
+        return std::make_shared<array_info>(
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
+            out_indices_arr->length,
+            std::vector<std::shared_ptr<BodoBuffer>>({}),
+            std::vector<std::shared_ptr<array_info>>(
+                {dict_buff->data_array, out_indices_arr}),
+            0, 0, 0, false,
+            /*_has_deduped_local_dictionary=*/true, false);
+    }
+
+    /**
+     * @brief replace dictionary state of this buffer with state of input buffer
+     * (use shared objects)
+     *
+     * @param in_arr_buff input buffer
+     */
+    void replaceDictionary(const ArrayBuildBuffer& in_arr_buff) {
+        if (in_arr_buff.data_array->arr_type != bodo_array_type::DICT) {
+            throw std::runtime_error("replaceDictionary: DICT array expected");
+        }
+        dict_buff = in_arr_buff.dict_buff;
+        dict_hashes = in_arr_buff.dict_hashes;
+        dict_str_to_ind = in_arr_buff.dict_str_to_ind;
+        data_array->child_arrays[0] = in_arr_buff.data_array->child_arrays[0];
+    }
+
+    /**
+     * @brief Get dictionary hashes if dict-encoded string array, otherwise null
+     * pointer
+     *
+     * @return std::shared_ptr<bodo::vector<uint32_t>> dictionary hashes or null
+     * pointer
+     */
+    std::shared_ptr<bodo::vector<uint32_t>> GetDictionaryHashes() {
+        if (data_array->arr_type != bodo_array_type::DICT) {
+            return nullptr;
+        }
+        return dict_hashes;
+    }
+
     ArrayBuildBuffer(std::shared_ptr<array_info> _data_array)
-        : data_array(_data_array), size(0), capacity(0) {}
+        : data_array(_data_array), size(0), capacity(0) {
+        if (_data_array->arr_type == bodo_array_type::DICT) {
+            dict_buff = std::make_shared<ArrayBuildBuffer>(
+                _data_array->child_arrays[0]);
+            dict_indices = std::make_shared<ArrayBuildBuffer>(
+                _data_array->child_arrays[1]);
+            dict_hashes = std::make_shared<bodo::vector<uint32_t>>();
+            dict_str_to_ind = std::make_shared<std::unordered_map<
+                std::string, dict_indices_t, string_hash, std::equal_to<>>>();
+        }
+    }
 };
 
 /**
@@ -270,6 +430,77 @@ struct TableBuildBuffer {
             std::shared_ptr<array_info>& in_arr = in_table->columns[i];
             array_buffers[i].ReserveArray(in_arr);
         }
+    }
+
+    /**
+     * @brief unify dictionaries of input table with this buffer by appending
+     * its new dictionary values to buffer's dictionaries and transposing
+     * input's indices.
+     *
+     * @param in_table input table
+     * @param n_keys number of keys of input table
+     * @param only_keys only unify key columns
+     * @return std::shared_ptr<table_info> input table with dictionaries unified
+     * with buffer
+     */
+    std::shared_ptr<table_info> UnifyDictionaryArrays(
+        const std::shared_ptr<table_info>& in_table, const int64_t n_keys,
+        bool only_keys = false) {
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        out_arrs.reserve(in_table->ncols());
+        for (size_t i = 0; i < in_table->ncols(); i++) {
+            std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+            std::shared_ptr<array_info> out_arr;
+            if (in_arr->arr_type != bodo_array_type::DICT ||
+                (only_keys && i >= n_keys)) {
+                out_arr = in_arr;
+            } else {
+                out_arr =
+                    array_buffers[i].UnifyDictionaryArray(in_arr, i < n_keys);
+            }
+            out_arrs.emplace_back(out_arr);
+        }
+        return std::make_shared<table_info>(out_arrs);
+    }
+
+    /**
+     * @brief replace dictionaries of this buffer with input table's
+     * dictionaries (use shared objects)
+     *
+     * @param in_table_buff input buffer
+     * @param n_cols number of columns to replace (starting from zero)
+     */
+    void replaceDictionaries(const TableBuildBuffer& in_table_buff,
+                             const size_t n_cols) {
+        for (size_t i = 0; i < n_cols; i++) {
+            const ArrayBuildBuffer& in_arr_buff =
+                in_table_buff.array_buffers[i];
+            if (in_arr_buff.data_array->arr_type == bodo_array_type::DICT) {
+                array_buffers[i].replaceDictionary(in_arr_buff);
+            }
+        }
+    }
+
+    /**
+     * @brief Get dictionary hashes of dict-encoded string key columns (nullptr
+     * for other key columns). NOTE: output vector does not have values for data
+     * columns (length is n_keys).
+     *
+     * @param n_keys
+     * @return
+     * std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+     */
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+    GetDictionaryHashes(const int64_t n_keys) {
+        std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+            dict_hashes = std::make_shared<
+                bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>();
+        for (size_t i = 0; i < n_keys; i++) {
+            std::shared_ptr<bodo::vector<uint32_t>> dict_hash =
+                array_buffers[i].GetDictionaryHashes();
+            dict_hashes->emplace_back(dict_hash);
+        }
+        return dict_hashes;
     }
 };
 
@@ -453,6 +684,16 @@ class HashJoinState : public JoinState {
             0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
             probe_arr_array_types, n_keys_, build_table_outer_,
             probe_table_outer_);
+
+        // Use the same dictionary object in build_table_buffer,
+        // build_shuffle_buffer and probe_shuffle_buffer for consistency (to
+        // allow comparing indices)
+        build_shuffle_buffer.replaceDictionaries(
+            this->partition->build_table_buffer,
+            this->partition->build_table_buffer.data_table->ncols());
+        probe_shuffle_buffer.replaceDictionaries(
+            this->partition->build_table_buffer, n_keys);
+
         this->global_bloom_filter = create_bloom_filter();
     }
 

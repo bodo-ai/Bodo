@@ -527,11 +527,15 @@ void hash_arrow_array(std::unique_ptr<uint32_t[]>& out_hashes,
  * after shuffling-). This is context-dependent.
  * @param use_murmurhash: use murmurhash3_x86_32 hashes (used by Iceberg).
  * Default: false
+ * @param dict_hashes: dictionary hashes for dict-encoded string arrays. Integer
+ * indices are hashed if not specified (which can cause errors if used across
+ * arrays with incompatible dictionaries). Default: nullptr.
  */
 void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
                 std::shared_ptr<array_info> array, size_t n_rows,
                 const uint32_t seed, bool is_parallel, bool global_dict_needed,
-                bool use_murmurhash) {
+                bool use_murmurhash,
+                std::shared_ptr<bodo::vector<uint32_t>> dict_hashes) {
     // dispatch to proper function
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
@@ -556,6 +560,28 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
                                  is_parallel, use_murmurhash);
     }
     if (array->arr_type == bodo_array_type::DICT) {
+        // Use provided dictionary indices if specified, otherwise hash indices
+        if (dict_hashes != nullptr) {
+            if (use_murmurhash) {
+                throw std::runtime_error(
+                    "hash_array: use_murmurhash=true not supported when "
+                    "dictionary hashes are provided");
+            }
+            uint32_t na_hash;
+            hash_na_val(seed, &na_hash);
+            uint8_t* null_bitmask =
+                (uint8_t*)array->child_arrays[1]->null_bitmask();
+            dict_indices_t* dict_inds =
+                (dict_indices_t*)array->child_arrays[1]->data1();
+            for (size_t i = 0; i < n_rows; i++) {
+                if (!GetBit(null_bitmask, i)) {
+                    out_hashes[i] = na_hash;
+                } else {
+                    out_hashes[i] = (*dict_hashes)[dict_inds[i]];
+                }
+            }
+            return;
+        }
         if ((array->has_global_dictionary &&
              array->has_deduped_local_dictionary) ||
             !is_parallel || !global_dict_needed) {
@@ -789,7 +815,8 @@ static void hash_array_combine_string(std::unique_ptr<uint32_t[]>& out_hashes,
 void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
                         std::shared_ptr<array_info> array, size_t n_rows,
                         const uint32_t seed, bool global_dict_needed,
-                        bool is_parallel) {
+                        bool is_parallel,
+                        std::shared_ptr<bodo::vector<uint32_t>> dict_hashes) {
     // dispatch to proper function
     // TODO: general dispatcher
     if (array->arr_type == bodo_array_type::STRUCT ||
@@ -807,6 +834,26 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
             (uint8_t*)array->null_bitmask(), n_rows, seed);
     }
     if (array->arr_type == bodo_array_type::DICT) {
+        // Use provided dictionary indices if specified, otherwise hash indices
+        if (dict_hashes != nullptr) {
+            uint32_t na_hash;
+            hash_na_val(seed, &na_hash);
+            uint8_t* null_bitmask =
+                (uint8_t*)array->child_arrays[1]->null_bitmask();
+            dict_indices_t* dict_inds =
+                (dict_indices_t*)array->child_arrays[1]->data1();
+
+            uint32_t out_hash = 0;
+            for (size_t i = 0; i < n_rows; i++) {
+                if (!GetBit(null_bitmask, i)) {
+                    out_hash = na_hash;
+                } else {
+                    out_hash = (*dict_hashes)[dict_inds[i]];
+                }
+                hash_combine_boost(out_hashes[i], out_hash);
+            }
+            return;
+        }
         if ((array->has_global_dictionary &&
              array->has_deduped_local_dictionary) ||
             !global_dict_needed || !is_parallel) {
@@ -1357,17 +1404,21 @@ std::unique_ptr<uint32_t[]> coherent_hash_keys(
 
 std::unique_ptr<uint32_t[]> hash_keys(
     std::vector<std::shared_ptr<array_info>> const& key_arrs,
-    const uint32_t seed, bool is_parallel, bool global_dict_needed) {
+    const uint32_t seed, bool is_parallel, bool global_dict_needed,
+    std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+        dict_hashes) {
     tracing::Event ev("hash_keys", is_parallel);
     size_t n_rows = (size_t)key_arrs[0]->length;
     std::unique_ptr<uint32_t[]> hashes = std::make_unique<uint32_t[]>(n_rows);
     // hash first array
     hash_array(hashes, key_arrs[0], n_rows, seed, is_parallel,
-               global_dict_needed);
+               global_dict_needed, false,
+               dict_hashes == nullptr ? nullptr : (*dict_hashes)[0]);
     // combine other array hashes
     for (size_t i = 1; i < key_arrs.size(); i++) {
-        hash_array_combine(hashes, key_arrs[i], n_rows, seed,
-                           global_dict_needed, is_parallel);
+        hash_array_combine(
+            hashes, key_arrs[i], n_rows, seed, global_dict_needed, is_parallel,
+            dict_hashes == nullptr ? nullptr : (*dict_hashes)[i]);
     }
     return hashes;
 }
