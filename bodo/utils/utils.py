@@ -231,6 +231,8 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:
         return CArrayTypeEnum.ARRAY_ITEM.value
     elif isinstance(arr_type, bodo.IntervalArrayType):
         return CArrayTypeEnum.INTERVAL.value
+    elif arr_type == bodo.dict_str_arr_type:
+        return CArrayTypeEnum.DICT.value
     else:  # pragma: no cover
         raise BodoError("Unsupported Array Type in numba_to_c_array_type")
 
