@@ -79,8 +79,8 @@ class PandasJoin(
         // of rows we are estimated to produce. The join condition itself will influence
         // the estimated row count.
         val rows = mq.getRowCount(this)
-        val outputCost = Cost(mem = mq.getAverageRowSize(this) ?: 0.0)
-            .multiplyBy(rows)
+        val averageRowSize = mq.getAverageRowSize(this)
+        val outputCost = Cost(mem = averageRowSize ?: 0.0).multiplyBy(rows)
 
         // Final cost is these two combined.
         val totalCost = conditionCost.plus(outputCost)

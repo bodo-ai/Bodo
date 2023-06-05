@@ -24,6 +24,7 @@ package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.pandas.PandasJoin
 import com.bodosql.calcite.adapter.pandas.PandasJoinRule
+import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.adapter.pandas.PandasRules
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
@@ -32,6 +33,7 @@ import com.bodosql.calcite.application.bodo_sql_rules.*
 import com.bodosql.calcite.plan.CostFactory
 import com.bodosql.calcite.rel.metadata.PandasRelMdParallelism
 import com.bodosql.calcite.rel.metadata.PandasRelMdSize
+import com.bodosql.calcite.rel.metadata.PandasRelMetadataProvider
 import com.bodosql.calcite.sql.parser.SqlBodoParserImpl
 import com.bodosql.calcite.sql.validate.implicit.BodoTypeCoercionImpl
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
@@ -438,23 +440,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 )
                 .build(),
             true,
-            ChainedRelMetadataProvider.of(
-                listOf(
-                    // Inject information about the number of ranks
-                    // for Pandas queries as the parallelism attribute.
-                    ReflectiveRelMetadataProvider.reflectiveSource(
-                        // TODO(jsternberg): Just using 2 as a default until
-                        // we add a way to inject that from the caller.
-                        PandasRelMdParallelism(2),
-                        BuiltInMetadata.Parallelism.Handler::class.java
-                    ),
-                    ReflectiveRelMetadataProvider.reflectiveSource(
-                        PandasRelMdSize(),
-                        BuiltInMetadata.Size.Handler::class.java
-                    ),
-                    DefaultRelMetadataProvider.INSTANCE,
-                )
-            )
+            PandasRelMetadataProvider(),
         ),
         DecorrelateProgram(),
     )
@@ -573,19 +559,7 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
             materializations: List<RelOptMaterialization>,
             lattices: List<RelOptLattice>
         ): RelNode {
-            val metadataProvider = ChainedRelMetadataProvider.of(
-                listOf(
-                    ReflectiveRelMetadataProvider.reflectiveSource(
-                        PandasRelMdParallelism(2),
-                        BuiltInMetadata.Parallelism.Handler::class.java
-                    ),
-                    ReflectiveRelMetadataProvider.reflectiveSource(
-                        PandasRelMdSize(),
-                        BuiltInMetadata.Size.Handler::class.java
-                    ),
-                    DefaultRelMetadataProvider.INSTANCE,
-                )
-            )
+            val metadataProvider = PandasRelMetadataProvider()
             rel.cluster.invalidateMetadataQuery()
             rel.cluster.metadataProvider = metadataProvider
             return program.run(planner, rel, requiredOutputTraits, materializations, lattices)
