@@ -70,10 +70,12 @@ std::shared_ptr<table_info> nested_loop_join_local_chunk(
                            probe_idxs, build_idxs, parallel);
     }
 
-    std::shared_ptr<table_info> build_out_table = RetrieveTable(
-        join_state->build_table_buffer.data_table, build_idxs, build_kept_cols);
+    std::shared_ptr<table_info> build_out_table =
+        RetrieveTable(join_state->build_table_buffer.data_table, build_idxs,
+                      build_kept_cols, join_state->probe_table_outer);
     std::shared_ptr<table_info> probe_out_table =
-        RetrieveTable(probe_table, probe_idxs, probe_kept_cols);
+        RetrieveTable(probe_table, probe_idxs, probe_kept_cols,
+                      join_state->build_table_outer);
     build_idxs.clear();
     probe_idxs.clear();
 
@@ -123,10 +125,12 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
                            join_state->build_table_buffer.data_table->nrows(),
                            build_idxs, probe_idxs, false);
 
-        std::shared_ptr<table_info> build_out_outer = RetrieveTable(
-            join_state->build_table_buffer.data_table, build_idxs);
+        std::shared_ptr<table_info> build_out_outer =
+            RetrieveTable(join_state->build_table_buffer.data_table, build_idxs,
+                          build_kept_cols, join_state->probe_table_outer);
         std::shared_ptr<table_info> probe_out_outer =
-            RetrieveTable(in_table, probe_idxs);
+            RetrieveTable(in_table, probe_idxs, probe_kept_cols,
+                          join_state->build_table_outer);
         build_idxs.clear();
         probe_idxs.clear();
 
