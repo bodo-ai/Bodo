@@ -1,6 +1,6 @@
 # Bodo Installation and Setup
 
-You can use Bodo through our managed cloud platform or on-Prem.
+We offer two options for installation and use of Bodo: the Bodo Platform (recommended), which is Bodo's proprietary cloud platform that is meticulously managed and consistently enhanced, or a local install for your on-premise needs.
 
 <div class="grid cards" markdown>
 
