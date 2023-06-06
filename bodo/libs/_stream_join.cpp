@@ -473,12 +473,12 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             }
             build_out_tables.emplace_back(
                 RetrieveTable(active_partition->build_table_buffer.data_table,
-                              build_idxs, -1, probe_table_outer));
+                              build_idxs, build_kept_cols, probe_table_outer));
             build_idxs.clear();
             // Use the dummy probe table since all indices are -1
             probe_out_tables.emplace_back(
-                RetrieveTable(join_state->dummy_probe_table, probe_idxs, -1,
-                              build_table_outer));
+                RetrieveTable(join_state->dummy_probe_table, probe_idxs,
+                              probe_kept_cols, build_table_outer));
             probe_idxs.clear();
         }
 
