@@ -4040,7 +4040,6 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
 
 
 @pytest.mark.tz_aware
-@pytest.mark.skip(reason="[BE-4239] Fix how BodoSQL processes Interval Month literals")
 def test_tz_aware_subdate_interval_month(memory_leak_check):
     """
     Test subdate on tz-aware data with a Month Interval argument.
