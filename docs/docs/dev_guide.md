@@ -17,8 +17,9 @@ important concepts briefly.
 Installation
 ------------
 
-We recommend trying Bodo through Bodo Platform's [free hosted trial](https://platform.bodo.ai/){target="blank"}
-or install locally using `pip`:
+We recommend trying Bodo by signing up for a [personalized 1:1 demo](https://www.bodo.ai/see-it-in-action){target="blank"} where you will get a step-by-step guide on how to use the Bodo cloud platform. If you prefer to do it yourself,  see how to [get started with the Bodo platform](quick_start_platform.md)
+
+If you prefer a local install, you can also use `pip`:
 
 ```console
 pip install bodo
