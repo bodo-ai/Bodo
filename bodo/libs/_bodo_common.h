@@ -566,7 +566,8 @@ std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
 std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes);
 
-std::unique_ptr<array_info> alloc_string_array(int64_t length, int64_t n_chars,
+std::unique_ptr<array_info> alloc_string_array(Bodo_CTypes::CTypeEnum typ_enum,
+                                               int64_t length, int64_t n_chars,
                                                int64_t extra_null_bytes = 0);
 
 std::unique_ptr<array_info> alloc_list_string_array(
@@ -586,14 +587,14 @@ std::unique_ptr<array_info> alloc_dict_string_array(
  * @brief Create a string array from
  * a null bitmap and a vector of strings.
  *
- * @param grp_info The group info.
+ * @param typ_enum The dtype (String or Binary).
  * @param null_bitmap The null bitmap for the array.
  * @param list_string The vector of strings.
  * @return std::shared_ptr<array_info> A string type array info constructed from
  * the vector of strings.
  */
 std::unique_ptr<array_info> create_string_array(
-    bodo::vector<uint8_t> const& null_bitmap,
+    Bodo_CTypes::CTypeEnum typ_enum, bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<std::string> const& list_string);
 
 /**

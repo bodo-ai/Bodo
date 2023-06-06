@@ -107,8 +107,7 @@ _numba_to_c_type_map = {
     int128_type: CTypeEnum.Int128.value,
     bodo.hiframes.datetime_date_ext.datetime_date_type: CTypeEnum.Date.value,
     types.unicode_type: CTypeEnum.STRING.value,
-    # Bytes is represent as string in C++
-    bodo.libs.binary_arr_ext.bytes_type: CTypeEnum.STRING.value,
+    bodo.libs.binary_arr_ext.bytes_type: CTypeEnum.BINARY.value,
 }
 
 
