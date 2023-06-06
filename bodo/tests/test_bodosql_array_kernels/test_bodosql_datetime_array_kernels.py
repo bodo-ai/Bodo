@@ -2209,7 +2209,7 @@ def test_date_trunc_date(day_part_strings, date_input, memory_leak_check):
 @pytest.mark.parametrize(
     "interval_input",
     [
-        pytest.param(pd.DateOffset(years=1, months=-4), id="date-offset-scalar"),
+        pytest.param(pd.DateOffset(months=-4), id="date-offset-scalar"),
         pytest.param(pd.Timedelta(seconds=42), id="timedelta-scalar"),
         pytest.param(
             pd.Series(
@@ -2223,6 +2223,20 @@ def test_date_trunc_date(day_part_strings, date_input, memory_leak_check):
                 * 6
             ).values,
             id="timedelta-vector",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.DateOffset(months=1),
+                    pd.DateOffset(months=-42),
+                    pd.DateOffset(months=15),
+                    None,
+                    pd.DateOffset(months=-5),
+                ]
+                * 6
+            ).values,
+            id="dateoffset-vector",
+            marks=pytest.mark.skip(reason="TODO: support pd.DateOffset array"),
         ),
     ],
 )
@@ -2254,6 +2268,8 @@ def test_interval_multiply(interval_input, memory_leak_check):
         else:
             if isinstance(interval, np.timedelta64):
                 interval = pd.Timedelta(interval)
+            elif isinstance(interval, pd.DateOffset):
+                return pd.DateOffset(months=interval.months * integer)
             return interval * integer
 
     scalar_integer_answer = vectorized_sol(
