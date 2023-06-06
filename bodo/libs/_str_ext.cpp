@@ -928,8 +928,8 @@ array_info* str_to_dict_str_array(array_info* str_arr) {
     delete str_arr;
 
     // Create Dictionary String Values
-    std::shared_ptr<array_info> values_arr =
-        alloc_string_array(num_dict_strs, total_dict_chars);
+    std::shared_ptr<array_info> values_arr = alloc_string_array(
+        Bodo_CTypes::STRING, num_dict_strs, total_dict_chars);
     int64_t n_null_bytes = (num_dict_strs + 7) >> 3;
     memset(values_arr->null_bitmask(), 0xFF, n_null_bytes);  // No nulls
 

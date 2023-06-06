@@ -440,7 +440,10 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
 /// Column builder for string arrays
 class StringBuilder : public TableBuilder::BuilderColumn {
    public:
-    StringBuilder() {}
+    /**
+     * @param dtype : Bodo type of input array. Either STRING or BINARY.
+     */
+    StringBuilder(Bodo_CTypes::CTypeEnum dtype) : dtype(dtype) {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // Reserve some space up front in case of multiple chunks.
@@ -480,8 +483,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
     virtual std::shared_ptr<array_info> get_output() {
         if (out_array == nullptr) {
             if (arrays.empty()) {
-                // Handle empty call to concatenate
-                out_array = alloc_string_array(0, 0);
+                out_array = alloc_string_array(dtype, 0, 0);
                 return out_array;
             }
             arrow::Result<std::shared_ptr<arrow::Array>> res =
@@ -494,6 +496,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
     }
 
    private:
+    Bodo_CTypes::CTypeEnum dtype;
     arrow::ArrayVector arrays;
 };
 
@@ -567,7 +570,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         // copy from Arrow arrays to Bodo array
 
         // copy dictionary
-        StringBuilder dictionary_builder;
+        StringBuilder dictionary_builder(Bodo_CTypes::STRING);
         arrow::ArrayVector dict_v{dictionary};
         dictionary_builder.append(
             std::make_shared<arrow::ChunkedArray>(dict_v));
@@ -749,7 +752,9 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
 /// Column builder for list of string arrays
 class ListStringBuilder : public TableBuilder::BuilderColumn {
    public:
-    ListStringBuilder() { string_builder = new StringBuilder(); }
+    ListStringBuilder() {
+        string_builder = new StringBuilder(Bodo_CTypes::STRING);
+    }
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // get child (StringArray) chunks and pass them to StringBuilder
@@ -917,7 +922,14 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                     field->type(), num_rows));
             }
         } else if (arrow::is_base_binary_like(type)) {
-            columns.push_back(new StringBuilder());
+            Bodo_CTypes::CTypeEnum dtype;
+            if (type == arrow::Type::STRING ||
+                type == arrow::Type::LARGE_STRING) {
+                dtype = Bodo_CTypes::STRING;
+            } else {
+                dtype = Bodo_CTypes::BINARY;
+            }
+            columns.push_back(new StringBuilder(dtype));
         } else if (type == arrow::Type::LIST &&
                    arrow::is_binary_like(
                        field->type()->field(0)->type()->id())) {
@@ -948,7 +960,7 @@ TableBuilder::TableBuilder(std::shared_ptr<table_info> table,
         } else if (arr->arr_type == bodo_array_type::DICT) {
             columns.push_back(new DictionaryEncodedStringBuilder(num_rows));
         } else if (arr->arr_type == bodo_array_type::STRING) {
-            columns.push_back(new StringBuilder());
+            columns.push_back(new StringBuilder(arr->dtype));
         } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
             columns.push_back(new ListStringBuilder());
         } else if (arr->arr_type == bodo_array_type::STRUCT ||

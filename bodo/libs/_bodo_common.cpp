@@ -284,7 +284,8 @@ std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
     return arr;
 }
 
-std::unique_ptr<array_info> alloc_string_array(int64_t length, int64_t n_chars,
+std::unique_ptr<array_info> alloc_string_array(Bodo_CTypes::CTypeEnum typ_enum,
+                                               int64_t length, int64_t n_chars,
                                                int64_t extra_null_bytes) {
     // allocate data/offsets/null_bitmap arrays
     std::unique_ptr<BodoBuffer> data_buffer =
@@ -303,7 +304,7 @@ std::unique_ptr<array_info> alloc_string_array(int64_t length, int64_t n_chars,
     offsets_ptr[length] = n_chars;
 
     return std::make_unique<array_info>(
-        bodo_array_type::STRING, Bodo_CTypes::STRING, length,
+        bodo_array_type::STRING, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {std::move(data_buffer), std::move(offsets_buffer),
              std::move(null_bitmap_buffer)}));
@@ -313,8 +314,8 @@ std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
     bool has_global_dictionary, bool has_deduped_local_dictionary) {
     // dictionary
-    std::shared_ptr<array_info> dict_data_arr =
-        alloc_string_array(n_keys, n_chars_keys, 0);
+    std::shared_ptr<array_info> dict_data_arr = alloc_string_array(
+        Bodo_CTypes::CTypeEnum::STRING, n_keys, n_chars_keys, 0);
     // indices
     std::shared_ptr<array_info> indices_data_arr =
         alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
@@ -328,7 +329,7 @@ std::unique_ptr<array_info> alloc_dict_string_array(
 }
 
 std::unique_ptr<array_info> create_string_array(
-    bodo::vector<uint8_t> const& null_bitmap,
+    Bodo_CTypes::CTypeEnum typ_enum, bodo::vector<uint8_t> const& null_bitmap,
     bodo::vector<std::string> const& list_string) {
     size_t len = list_string.size();
     // Calculate the number of characters for allocating the string.
@@ -342,7 +343,7 @@ std::unique_ptr<array_info> create_string_array(
     }
     size_t extra_bytes = 0;
     std::unique_ptr<array_info> out_col =
-        alloc_string_array(len, nb_char, extra_bytes);
+        alloc_string_array(typ_enum, len, nb_char, extra_bytes);
     // update string array payload to reflect change
     char* data_o = out_col->data1();
     offset_t* offsets_o = (offset_t*)out_col->data2();
@@ -624,7 +625,8 @@ std::unique_ptr<array_info> alloc_array(int64_t length, int64_t n_sub_elems,
                                            extra_null_bytes);
 
         case bodo_array_type::STRING:
-            return alloc_string_array(length, n_sub_elems, extra_null_bytes);
+            return alloc_string_array(dtype, length, n_sub_elems,
+                                      extra_null_bytes);
 
         case bodo_array_type::NULLABLE_INT_BOOL:
             return alloc_nullable_array(length, dtype, extra_null_bytes);

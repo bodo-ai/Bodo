@@ -307,7 +307,7 @@ void cumulative_computation_string(std::shared_ptr<array_info> arr,
         ListString[i] = null_bit_val_vec[i].second;
     }
     std::shared_ptr<array_info> new_out_col =
-        create_string_array(Vmask, ListString);
+        create_string_array(out_arr->dtype, Vmask, ListString);
     *out_arr = std::move(*new_out_col);
 }
 
@@ -391,7 +391,7 @@ void cumulative_computation_dict_encoded_string(
         ListString[i] = null_bit_val_vec[i].second;
     }
     std::shared_ptr<array_info> new_out_col =
-        create_string_array(Vmask, ListString);
+        create_string_array(out_arr->dtype, Vmask, ListString);
     *out_arr = std::move(*new_out_col);
 }
 
