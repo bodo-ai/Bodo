@@ -2614,17 +2614,19 @@ def overload_interval_multiply_util(interval_arg, integer_arg):
                 "interval_multiply(): Integer array cannot be provided if multiplying a date offset."
             )
         out_dtype = bodo.date_offset_type
+        # all year to month intervals are based on month
+        scalar_text = f"res[i] = pd.DateOffset(months=arg0._months * arg1)\n"
     else:
         out_dtype = types.Array(bodo.timedelta64ns, 1, "C")
 
-    unbox_str = (
-        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-        if is_interval_arr or is_integer_arr
-        else ""
-    )
-    box_str = "bodo.utils.conversion.box_if_dt64" if is_interval_arr else ""
+        unbox_str = (
+            "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+            if is_interval_arr or is_integer_arr
+            else ""
+        )
+        box_str = "bodo.utils.conversion.box_if_dt64" if is_interval_arr else ""
 
-    scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) * arg1)\n"
+        scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) * arg1)\n"
     return gen_vectorized(
         arg_names,
         arg_types,
