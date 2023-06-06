@@ -2526,7 +2526,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       namedArgs = List.of();
     } else {
       namedArgs =
-          List.of(new kotlin.Pair<>("non_equijoin_cond", new Expr.StringLiteral(condString)));
+          List.of(new kotlin.Pair<>("non_equi_condition", new Expr.StringLiteral(condString)));
     }
 
     // Visit the batch side
