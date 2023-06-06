@@ -1705,7 +1705,7 @@ void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
     // to get the length of the dictionary.
     size_t n_strings = next_index - 1;
     std::shared_ptr<array_info> new_dict =
-        alloc_string_array(n_strings, n_chars, 0);
+        alloc_string_array(Bodo_CTypes::STRING, n_strings, n_chars, 0);
     offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2();
 
     // Initialize the offset and string index to the end of the base dictionary
@@ -1828,7 +1828,7 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
     arr2_hashes.reset();
 
     std::shared_ptr<array_info> new_dict =
-        alloc_string_array(n_strings, n_chars, 0);
+        alloc_string_array(Bodo_CTypes::STRING, n_strings, n_chars, 0);
     offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2();
 
     // Initialize the offset and string index to the end of arr1's dictionary

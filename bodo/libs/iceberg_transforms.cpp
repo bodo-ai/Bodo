@@ -335,7 +335,7 @@ std::shared_ptr<array_info> array_transform_truncate_W(
             n_chars += std::min(str_len, (offset_t)width);
         }
         // Allocate output array
-        out_arr = alloc_string_array(nRow, n_chars, 0);
+        out_arr = alloc_string_array(in_arr->dtype, nRow, n_chars, 0);
         // Copy over truncated strings to the new array
         offset_t* out_offsets = (offset_t*)out_arr->data2();
         out_offsets[0] = 0;

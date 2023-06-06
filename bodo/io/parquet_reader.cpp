@@ -285,7 +285,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         // allocate and fill the dictionary for the
         // dictionary-encoded input_file_name column
         this->input_file_name_col_dict_arr = alloc_string_array(
-            this->file_paths.size(),
+            Bodo_CTypes::STRING, this->file_paths.size(),
             this->input_file_name_col_dict_arr_total_chars, 0);
         offset_t* offsets =
             (offset_t*)this->input_file_name_col_dict_arr->data2();

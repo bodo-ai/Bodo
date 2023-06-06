@@ -2246,8 +2246,9 @@ std::shared_ptr<array_info> get_replace_regex_slice(
     }
     // Allocate the output array. We add 1 because regex_replace
     // may insert a null terminator
+    // TODO: Can this ever be Binary?
     std::shared_ptr<array_info> out_arr =
-        alloc_string_array(out_arr_len, num_chars, 0);
+        alloc_string_array(Bodo_CTypes::STRING, out_arr_len, num_chars, 0);
     offset_t* const out_data2 = reinterpret_cast<offset_t*>(out_arr->data2());
     // Initialize the first offset to 0
     out_data2[0] = 0;

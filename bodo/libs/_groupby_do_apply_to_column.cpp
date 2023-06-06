@@ -222,7 +222,7 @@ void apply_sum_to_column_string(std::shared_ptr<array_info> in_col,
     size_t num_groups = grp_info.num_groups;
     int64_t n_chars = in_col->n_sub_elems();
     std::shared_ptr<array_info> out_arr =
-        alloc_string_array(num_groups, n_chars, 0);
+        alloc_string_array(out_col->dtype, num_groups, n_chars, 0);
     size_t n_bytes = (num_groups + 7) >> 3;
     memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
 
@@ -370,7 +370,7 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
     // Create an intermediate array since the output array is immutable
     // and copy the data over.
     std::shared_ptr<array_info> new_out_col =
-        create_string_array(V, ListString);
+        create_string_array(out_col->dtype, V, ListString);
     *out_col = std::move(*new_out_col);
 }
 
@@ -409,7 +409,7 @@ void apply_sum_to_column_dict(std::shared_ptr<array_info> in_col,
     }
 
     std::shared_ptr<array_info> out_arr =
-        alloc_string_array(num_groups, n_chars, 0);
+        alloc_string_array(out_col->dtype, num_groups, n_chars, 0);
     memset(out_arr->null_bitmask(), 0xff, n_bytes);  // null not possible
     char* data_o = out_arr->data1();
     offset_t* offsets_o = (offset_t*)out_arr->data2();
@@ -621,7 +621,7 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
         SetBitTo(bitmask_vec.data(), it.second - 1, true);
     }
     std::shared_ptr<array_info> dict_arr =
-        create_string_array(bitmask_vec, ListString);
+        create_string_array(Bodo_CTypes::STRING, bitmask_vec, ListString);
     std::shared_ptr<array_info> new_out_col =
         create_dict_string_array(dict_arr, indices_arr);
     // Create an intermediate array since the output array is immutable
