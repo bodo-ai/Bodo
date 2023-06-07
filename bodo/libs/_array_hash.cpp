@@ -524,7 +524,8 @@ void hash_arrow_array(std::unique_ptr<uint32_t[]>& out_hashes,
  * @param global_dict_needed: this only applies to hashing of dictionary-encoded
  * arrays. This parameter specifies whether the dictionary has to be global
  * or not (for correctness or for performance -for example avoiding collisions
- * after shuffling-). This is context-dependent.
+ * after shuffling-). This is context-dependent. This is ignored if dict_hashes
+ * are provided
  * @param use_murmurhash: use murmurhash3_x86_32 hashes (used by Iceberg).
  * Default: false
  * @param dict_hashes: dictionary hashes for dict-encoded string arrays. Integer
