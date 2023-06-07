@@ -1227,7 +1227,7 @@ BodoSQL Currently supports the following Numeric Functions:
 -   `#!sql BITSHIFTLEFT(A, B)`
 
     Returns the bitwise-leftshift of its inputs.
-    
+
     !!! note
         - The output is always of type int64.
         - Undefined behavior when B is negative or too large.
@@ -1342,20 +1342,20 @@ BodoSQL Currently supports the following Numeric Functions:
 ###  Data Generation Functions
 
 BodoSQL Currently supports the following data generaiton functions:
-    
+
 #### RANDOM
 -   `#!sql RANDOM()`
 
     Outputs a random 64-bit integer. If used inside of a select statement with
     a table, the number of random values will match the number of rows in the
-    input table (and each value should be randomly and independently generated). 
+    input table (and each value should be randomly and independently generated).
     Note that running with multiple processors may affect the randomization
     results.
 
     !!! note
         Currently, BodoSQL does not support the format of `#!sql RANDOM()` that
         takes in a seed value.
-    
+
     !!! note
         At present, aliases to `RANDOM` calls occasionally produce unexpected
         behavior. For certain SQL operations, calling `RANDOM` and storing the
@@ -1366,7 +1366,7 @@ BodoSQL Currently supports the following data generaiton functions:
 #### UNIFORM
 -   `#!sql UNIFORM(lo, hi, gen)`
 
-    Outputs a random number uniformly distributed in the interval `[lo, hi]`. 
+    Outputs a random number uniformly distributed in the interval `[lo, hi]`.
     If `lo` and `hi` are both integers, then the output is an integer between
     `lo` and `hi` (including both endpoints). If either `lo` or `hi` is a float,
     the output is a random float between them. The values of `gen` are used to
@@ -1390,8 +1390,8 @@ all types:
 #### ANY_VALUE
 -   `#!sql ANY_VALUE`
 
-    Select an arbitrary value. 
-    
+    Select an arbitrary value.
+
     !!! note
         Currently, BodoSQL always selects the first value, but this is subject to change at any time.
 
@@ -1461,7 +1461,7 @@ numeric types
     and `q` can be any scalar float between zero and one.
 
     The approximation is calculated using the t-digest algorithm.
-    
+
     !!! note
         Currently, BodoSQL only supports this function without a GroupBy.
 
@@ -1497,7 +1497,7 @@ numeric types
 
     Compute the logical OR of the boolean value of every input
     in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
-    returning True if there is at least 1 non-zero entry. This is supported for 
+    returning True if there is at least 1 non-zero entry. This is supported for
     numeric and boolean types.
 
 #### BOOLAND_AGG
@@ -1505,7 +1505,7 @@ numeric types
 
     Compute the logical AND of the boolean value of every input
     in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
-    returning True if all non-`#!sql NULL` entries are also non-zero. This is supported for 
+    returning True if all non-`#!sql NULL` entries are also non-zero. This is supported for
     numeric and boolean types.
 
 #### BOOLXOR_AGG
@@ -1513,7 +1513,7 @@ numeric types
 
     Returns `#!sql NULL` if there are no non-`#!sql NULL` entries, otherwise
     returning True if exactly one non-`#!sql NULL` entry is also non-zero (this is
-    counterintuitive to how the logical XOR is normally thought of). This is 
+    counterintuitive to how the logical XOR is normally thought of). This is
     supported for numeric and boolean types.
 
 All aggregate functions have the syntax:
@@ -1628,7 +1628,7 @@ BodoSQL currently supports the following Timestamp functions:
 
     Note: month does not have to be in the 1-12 range, and day does not have to
     be in the 1-31 range. Values out of bounds are overflowed logically,
-    e.g. `(2020, 14, -1)` will output January 31st, 2021. 
+    e.g. `(2020, 14, -1)` will output January 31st, 2021.
 
 
 #### DATEFROMPARTS
@@ -1974,7 +1974,7 @@ BodoSQL currently supports the following Timestamp functions:
     Returns the amount of time that has passed since `timestamp_val1` until
     `timestamp_val2` in terms of the unit specified, ignoring all smaller units.
     E.g., December 31 of 2020 and January 1 of 2021 count as 1 year apart.
-    
+
     !!! note
         For all units larger than `#!sql NANOSECOND`, the output type is `#!sql INTEGER`
         instead of `#!sql BIGINT`, so any difference values that cannot be stored as
@@ -2036,12 +2036,12 @@ BodoSQL currently supports the following Timestamp functions:
 -   `#!sql TIMEFROMPARTS(integer_hour_val, integer_minute_val, integer_second_val [, integer_nanoseconds_val])`
 
     See TIME_FROM_PARTS.
-    
+
     ```sql
     TIMEFROMPARTS(12, 34, 56, 987654321)
     12:34:56.987654321
     ```
-    
+
 
 ###  String Functions
 
@@ -2173,13 +2173,13 @@ BodoSQL currently supports the following string functions:
 #### LTRIM
 -   `#!sql LTRIM(str[, chars])`
 
-    Removes leading characters from a string column/literal str. 
+    Removes leading characters from a string column/literal str.
     These characters are specified by chars or are whitespace.
 
 #### RTRIM
 -   `#!sql RTRIM(str[, chars])`
 
-    Removes trailing characters from a string column/literal str. 
+    Removes trailing characters from a string column/literal str.
     These characters are specified by chars or are whitespace.
 
 #### TRIM
@@ -2294,9 +2294,9 @@ BodoSQL currently supports the following string functions:
 -   `#!sql POSITION(str1, str2)`
 
     Returns the 1-indexed location where `str1` first occurs in `str2`, or 0 if
-    there is no occurrences of `str1` in `str2`. 
+    there is no occurrences of `str1` in `str2`.
 
-    !!! note 
+    !!! note
         BodoSQL oes not currently support alternate syntax `#!sql POSITION(str1, str2)`, or binary data.
 
 
@@ -2305,8 +2305,8 @@ BodoSQL currently supports the following string functions:
 
     Equivalent to `#!sql POSITION(str1, str2)` when 2 arguments are provided. When the
     optional third argument is provided, it only starts searching at that index.
-    
-    !!! note 
+
+    !!! note
         Not currently supported on binary data.
 
 
@@ -2329,7 +2329,7 @@ BodoSQL currently supports the following string functions:
     the first `len` characters after `pos` in the process. If `len` is zero,
     inserts `str2` into `str1` without deleting any characters. If `pos` is one,
     prepends `str2` to `str1`. If `pos` is larger than the length of `str1`, appends
-    `str2` to `str1`. 
+    `str2` to `str1`.
 
     !!! note
         Behavior when `pos` or `len` are negative is not well-defined at this time.
@@ -2601,9 +2601,9 @@ BodoSQL currently supports the following JSON functions:
     When `Arg0` is `Arg1`, outputs `Arg2`. When `Arg0` is `Arg3`,
     outputs `Arg4`. Repeats until it runs out of pairs of arguments.
     At this point, if there is one remaining argument, this is used
-    as a default value. If not, then the output is `NULL`. 
+    as a default value. If not, then the output is `NULL`.
 
-    !!! note 
+    !!! note
         Treats `NULL` as a literal value that can be matched on.
 
     Therefore, the following:
@@ -2611,7 +2611,7 @@ BodoSQL currently supports the following JSON functions:
     ```sql
     DECODE(A, NULL, 0, 'x', 1, 'y', 2, 'z', 3, -1)
     ```
-    
+
     Is logically equivalent to:
 
     ```sql
@@ -2746,7 +2746,7 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
 (if there is an `#!sql ORDER BY` clause).
 !!! note
     `#!sql RANGE BETWEEN` is not currently supported.
-    
+
 Currently, BodoSQL supports the following Window functions:
 
 !!!note
@@ -2802,21 +2802,21 @@ Currently, BodoSQL supports the following Window functions:
 #### COVAR_SAMP
 -   `#!sql COVAR_SAMP(Y, X)`
 
-    Compute the sample covariance over the window of both inputs, or `NULL` if 
+    Compute the sample covariance over the window of both inputs, or `NULL` if
     the window is empty.
 
 
 #### COVAR_POP
 -   `#!sql COVAR_POP(Y, X)`
 
-    Compute the population covariance over the window of both inputs, or `NULL` if 
+    Compute the population covariance over the window of both inputs, or `NULL` if
     the window is empty.
 
 
 #### CORR
 -   `#!sql CORR(Y, X)`
 
-    Compute the correlation over the window of both inputs, or `NULL` if 
+    Compute the correlation over the window of both inputs, or `NULL` if
     the window is empty. Equivalent to `#!sql COVAR(Y, X) / (STDDEV_POP(Y) * STDDEV_POP(X))`
 
 
@@ -2859,7 +2859,7 @@ Currently, BodoSQL supports the following Window functions:
     Returns the most frequent element in the window, or `NULL` if the window is
     empty.
 
-    !!! note 
+    !!! note
         In case of a tie, BodoSQL will choose a value arbitrarily based on performance considerations.
 
 #### SKEW
@@ -2906,7 +2906,7 @@ Currently, BodoSQL supports the following Window functions:
     there are fewer than N rows the follow the current row in
     the window, it returns FILL_VALUE. N must be a literal
     non-negative integer if specified. FILL_VALUE must be a
-    scalar if specified. 
+    scalar if specified.
 
     !!!note
         - At this time Bodo does not support the `#!sql IGNORE NULLS` keyword.
@@ -2921,9 +2921,9 @@ Currently, BodoSQL supports the following Window functions:
     there are fewer than N rows that precede the current row in
     the window, it returns FILL_VALUE. N must be a literal
     non-negative integer if specified. FILL_VALUE must be a
-    scalar if specified. 
+    scalar if specified.
 
-    !!! note 
+    !!! note
         - At this time BodoSQL does not support the `#!sql IGNORE NULLS` keyword.
         - This function cannot be used with `#!sql ROWS BETWEEN`.
 
@@ -2955,9 +2955,9 @@ Currently, BodoSQL supports the following Window functions:
 -   `#!sql ANY_VALUE(COLUMN_EXPRESSION)`
 
     Select an arbitrary value in the window or `NULL` if the window
-    is empty. 
+    is empty.
 
-    !!! note 
+    !!! note
         Currently, BodoSQL always selects the first value, but this is subject to change at any time.
 
 
@@ -3165,12 +3165,12 @@ BodoSQL currently supports the following casting/conversion functions:
     - `'ZETA'` contains non-hex characters `Z` and `T`
     - `'#fizz'` is 5 characters, which is not an even number and contains non-hex
     characters `#`, `i` and `z`
-    
+
 
 #### TRY_TO_BINARY
 -  `TRY_TO_BINARY(COLUMN_EXPRESSION)`
 
-    See `TO_BINARY`. The only difference is that `TRY_TO_BINARY` will return `NULL` upon 
+    See `TO_BINARY`. The only difference is that `TRY_TO_BINARY` will return `NULL` upon
     encountering an invalid expression instead of raising an exception.
 
 

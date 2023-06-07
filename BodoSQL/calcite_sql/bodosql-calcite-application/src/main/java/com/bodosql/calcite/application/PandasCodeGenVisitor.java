@@ -399,23 +399,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   @Override
   public void visit(RelNode node, int ordinal, RelNode parent) {
-
-    // If we have a SnowflakeToPandasConverter that directly
-    // wraps a TableScan, let's extract it so we can use
-    // visitTableScan.
-    //
-    // Ideally, we would not require this. But, because there might
-    // be some special logic in the generation of the filter pushdown
-    // that we don't want to interfere with (yet), let's intercept
-    // it so we aren't changing this code pathway quite yet.
-    //
-    // In the future, we really want to move filter pushdowns into
-    // Calcite itself as that will be an easier and more reliable
-    // way to do code generation.
-    if (node instanceof SnowflakeToPandasConverter && node.getInput(0) instanceof TableScan) {
-      node = node.getInput(0);
-    }
-
     if (node instanceof TableScan) {
       this.visitTableScan((TableScan) node, !(parent instanceof Filter));
     } else if (node instanceof PandasJoin) {
@@ -2697,29 +2680,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Perform BFS to search all children
     Stack<RelNode> nodeStack = new Stack<>();
     nodeStack.add(node);
+    // TODO[BSE-534] : Avoid visiting all the children. This was done as a precaution and
+    // shouldn't be necessary.
     while (!nodeStack.isEmpty()) {
       RelNode n = nodeStack.pop();
-
-      // We skip CombineStreamsExchange and SeparateStreamExchange for now because they
-      // don't generate code yet.
-      while (n instanceof CombineStreamsExchange || n instanceof SeparateStreamExchange) {
-        // TODO: Actually implement
-        // nothing change to allow me to open the pr
-        n = n.getInput(0);
-      }
-
-      // SnowflakeToPandasConverter is weird and this should be removed
-      // once we refactor the code generation logic for direct table reads.
-      // Since this node typically represents an SQL call, we never actually
-      // visit the children and so the children couldn't possibly be cached.
-      // On the other hand, we have a special code generation for direct table
-      // reads that we would need to check.
-      // If we see the input to SnowflakeToPandasConverter is a TableScan,
-      // skip this node and go directly to the TableScan. Otherwise, check it as
-      // normal.
-      if (n instanceof SnowflakeToPandasConverter && n.getInput(0) instanceof TableScan) {
-        n = n.getInput(0);
-      }
       if (!this.varCache.containsKey(n.getId())) {
         return false;
       }

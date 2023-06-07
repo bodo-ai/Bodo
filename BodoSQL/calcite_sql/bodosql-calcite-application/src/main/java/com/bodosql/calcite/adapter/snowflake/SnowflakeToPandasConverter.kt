@@ -68,6 +68,47 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         builder: Module.Builder,
         inputs: () -> List<Dataframe>
     ): Dataframe {
+        if (isStreaming()) {
+            return generateStreamingDataFrame(visitor)
+        } else {
+            return generateNonStreamingDataFrame(visitor, builder)
+        }
+    }
+
+    /**
+     * Generate the required read expression for processing the P
+     */
+    private fun generateReadExpr(visitor: PandasCodeGenVisitor): Expr.Call {
+        if (input is SnowflakeTableScan) {
+            // The input is a table.
+            return sqlReadTable(input as SnowflakeTableScan, visitor)
+        } else {
+            return readSql(visitor)
+        }
+    }
+
+    /**
+     * Generate the code required to read a table. This path is necessary because the Snowflake
+     * API allows for more accurate sampling when operating directly on a table.
+     */
+    private fun sqlReadTable(tableScan: SnowflakeTableScan, visitor: PandasCodeGenVisitor): Expr.Call {
+        val relInput = input as SnowflakeRel
+        val catalogTable = tableScan.catalogTable
+        val tableName = catalogTable.name
+        val schemaName = catalogTable.schema.name
+        val args = listOf(
+            Expr.StringLiteral(tableName),
+            Expr.StringLiteral(relInput.generatePythonConnStr(schemaName))
+        )
+        return Expr.Call("pd.read_sql", args, getNamedArgs(visitor, true))
+    }
+
+    /**
+     * Generate a read expression for SQL operations that will be pushed into Snowflake. The currently
+     * supported operations consist of Aggregates and filters.
+     */
+    private fun readSql(visitor: PandasCodeGenVisitor): Expr.Call {
+        val relInput = input as SnowflakeRel
         // Use the snowflake dialect for generating the sql string.
         val rel2sql = RelToSqlConverter(SnowflakeSqlDialect.DEFAULT)
         val sql = rel2sql.visitRoot(input)
@@ -77,46 +118,61 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
                     .withDialect(SnowflakeSqlDialect.DEFAULT)
             }
             .toString()
-
-        val input = input as SnowflakeRel
-
-        val currentNamedArgs: List<Pair<String, Expr>>;
-
-        // If we're in a streaming context, we need to add the '_bodo_chunksize'
-        // argument in order to properly return an iterator
-        if (this.getTraitSet().contains(BatchingProperty.STREAMING)) {
-            currentNamedArgs = listOf(Pair("_bodo_chunksize", visitor.BATCH_SIZE));
-        } else {
-            currentNamedArgs = listOf();
-        }
-        val readExpr = Expr.Call(
-            "pd.read_sql",
-            args = listOf(
-                // First argument is the sql. This should escape itself.
-                Expr.StringLiteral(sql),
-                // Second argument is the connection string.
-                // We don't use a schema name because we've already fully qualified
-                // all table references and it's better if this doesn't have any
-                // potentially unexpected behavior.
-                Expr.StringLiteral(input.generatePythonConnStr(""),
-                ),
-            ),
-            namedArgs = currentNamedArgs,
+        val args = listOf(
+            Expr.StringLiteral(sql),
+            // We don't use a schema name because we've already fully qualified
+            // all table references and it's better if this doesn't have any
+            // potentially unexpected behavior.
+            Expr.StringLiteral(relInput.generatePythonConnStr(""))
         )
+        return Expr.Call("pd.read_sql", args, getNamedArgs(visitor, false))
+    }
 
-        if (this.getTraitSet().contains(BatchingProperty.STREAMING)) {
-            //In a streaming context, we need to handle generating the streaming frame
-            val readerVar = visitor.genReaderVar()
-            val columnNames = this.getRowType().fieldNames
-            val initOutput: Variable =
-                visitor.initStreamingIoLoop(readExpr, columnNames)
-            return Dataframe(initOutput.emit(), this)
+    private fun getNamedArgs(visitor: PandasCodeGenVisitor, isTable: Boolean): List<Pair<String, Expr>> {
+        return listOf(
+            "_bodo_is_table_input" to Expr.BooleanLiteral(isTable),
+            "_bodo_chunksize" to getStreamingBatchArg(visitor),
+        )
+    }
+
+    /**
+     * Generate the argument that will be passed for '_bodo_chunksize' in a read_sql call. If
+     * we are not streaming Python expects None.
+     */
+    private fun getStreamingBatchArg(visitor: PandasCodeGenVisitor) : Expr {
+        if (isStreaming()) {
+            return visitor.BATCH_SIZE
+        } else {
+            return Expr.None
         }
-        else {
-            //Otherwise, just do the assignment, and return the output variable.
-            val df = Dataframe(visitor.genDfVar().emit(), this)
-            builder.add(Op.Assign(df.variable, readExpr))
-            return df
-        }
+    }
+
+    /**
+     * Generate the DataFrame for streaming code. The code leverages the code generation process
+     * from initStreamingIoLoop and does not yet support RelNode caching.
+     */
+    private fun generateStreamingDataFrame(visitor: PandasCodeGenVisitor): Dataframe {
+        val readExpr = generateReadExpr(visitor)
+        val columnNames = this.getRowType().fieldNames
+        val initOutput: Variable =
+            visitor.initStreamingIoLoop(readExpr, columnNames)
+        return Dataframe(initOutput.name, this)
+    }
+
+    /**
+     * Generate the DataFrame for the non-streaming code.
+     */
+    private fun generateNonStreamingDataFrame(visitor: PandasCodeGenVisitor, builder: Module.Builder): Dataframe {
+        val readExpr = generateReadExpr(visitor)
+        val df = builder.genDataframe(this)
+        builder.add(Op.Assign(df.variable, readExpr))
+        return df
+    }
+
+    /**
+     * Is this used in a streaming operation
+     */
+    private fun isStreaming(): Boolean {
+        return traitSet.contains(BatchingProperty.STREAMING)
     }
 }
