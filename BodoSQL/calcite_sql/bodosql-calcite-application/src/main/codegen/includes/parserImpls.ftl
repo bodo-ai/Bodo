@@ -135,6 +135,35 @@ boolean CascadeOpt() :
     { return cascade; }
 }
 
+SqlDdl SqlTruncate() :
+{
+    final Span s;
+    final SqlDdl ddl;
+}
+{
+    <TRUNCATE> { s = span(); }
+    (
+        ddl = SqlTruncateTable(s)
+    )
+    {
+        return ddl;
+    }
+}
+
+SqlTruncateTable SqlTruncateTable(Span s) :
+{
+    final boolean ifExists;
+    final SqlIdentifier id;
+}
+{
+    <TABLE>
+    ifExists = IfExistsOpt()
+    id = CompoundIdentifier()
+    {
+        return new SqlTruncateTable(s.end(this), ifExists, id);
+    }
+}
+
 SqlDrop SqlDropTable(Span s, boolean replace) :
 {
     final boolean ifExists;
