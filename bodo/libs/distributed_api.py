@@ -218,6 +218,16 @@ def isend(arr, size, pe, tag, cond=True):
 
         return impl
 
+    # Primitive array
+    if isinstance(arr, bodo.libs.primitive_arr_ext.PrimitiveArrayType):
+
+        def impl(arr, size, pe, tag, cond=True):  # pragma: no cover
+            np_arr = bodo.libs.primitive_arr_ext.primitive_to_np(arr)
+            type_enum = get_type_enum(np_arr)
+            return _isend(np_arr.ctypes, size, type_enum, pe, tag, cond)
+
+        return impl
+
     if arr == boolean_array_type:
         # Nullable booleans need their own implementation because the
         # data array stores 1 bit per boolean. As a result, the data array
@@ -335,6 +345,16 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
         def impl(arr, size, pe, tag, cond=True):  # pragma: no cover
             type_enum = get_type_enum(arr)
             return _irecv(arr.ctypes, size, type_enum, pe, tag, cond)
+
+        return impl
+
+    # Primitive array
+    if isinstance(arr, bodo.libs.primitive_arr_ext.PrimitiveArrayType):
+
+        def impl(arr, size, pe, tag, cond=True):  # pragma: no cover
+            np_arr = bodo.libs.primitive_arr_ext.primitive_to_np(arr)
+            type_enum = get_type_enum(np_arr)
+            return _irecv(np_arr.ctypes, size, type_enum, pe, tag, cond)
 
         return impl
 
@@ -927,6 +947,18 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             return all_data
 
         return gatherv_impl_int_arr
+
+    # primitive array
+    if isinstance(data, bodo.libs.primitive_arr_ext.PrimitiveArrayType):
+
+        def gatherv_prim_arr_impl(
+            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+        ):  # pragma: no cover
+            np_arr = bodo.libs.primitive_arr_ext.primitive_to_np(data)
+            all_data = bodo.gatherv(np_arr, allgather, warn_if_rep, root)
+            return bodo.libs.primitive_arr_ext.np_to_primitive(all_data)
+
+        return gatherv_prim_arr_impl
 
     # interval array
     if isinstance(data, IntervalArrayType):

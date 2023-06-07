@@ -50,6 +50,7 @@ from bodo.libs.binary_arr_ext import (
     binary_array_type,
     pre_alloc_binary_array,
 )
+from bodo.libs.primitive_arr_ext import PrimitiveArrayType
 from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
     BodoArrayIterator,
@@ -66,11 +67,11 @@ from bodo.utils.typing import (
 ll.add_symbol("bool_arr_to_bitmap", hstr_ext.bool_arr_to_bitmap)
 
 char_type = types.uint8
-char_arr_type = types.Array(char_type, 1, "C")
+char_arr_type = PrimitiveArrayType(char_type)
 offset_arr_type = types.Array(offset_type, 1, "C")
 null_bitmap_arr_type = types.Array(types.uint8, 1, "C")
 
-data_ctypes_type = types.ArrayCTypes(char_arr_type)
+data_ctypes_type = types.ArrayCTypes(types.Array(char_type, 1, "C"))
 offset_ctypes_type = types.ArrayCTypes(offset_arr_type)
 
 
@@ -135,9 +136,7 @@ lower_builtin("getiter", string_array_type)(numba.np.arrayobj.getiter_array)
 @intrinsic
 def init_str_arr(typingctx, data_typ=None):
     """create a new string array from input data array(char) array data"""
-    assert isinstance(data_typ, ArrayItemArrayType) and data_typ.dtype == types.Array(
-        char_type, 1, "C"
-    )
+    assert isinstance(data_typ, ArrayItemArrayType) and data_typ.dtype == char_arr_type
 
     def codegen(context, builder, sig, args):
         (data_arr,) = args
@@ -423,9 +422,10 @@ def num_total_chars(typingctx, in_arr_typ=None):
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
         payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
-        offsets_ptr = context.make_helper(
-            builder, offset_arr_type, payload.offsets
-        ).data
+        offsets_ptr = builder.bitcast(
+            context.nrt.meminfo_data(builder, payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
         return _get_num_total_chars(builder, offsets_ptr, payload.n_arrays)
 
     return types.uint64(in_arr_typ), codegen
@@ -438,17 +438,36 @@ def get_offset_ptr(typingctx, in_arr_typ=None):
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
         payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
-        offsets_arr = context.make_helper(builder, offset_arr_type, payload.offsets)
         # # Create new ArrayCType structure
         ctinfo = context.make_helper(builder, offset_ctypes_type)
         ctinfo.data = builder.bitcast(
-            offsets_arr.data, lir.IntType(offset_type.bitwidth).as_pointer()
+            context.nrt.meminfo_data(builder, payload.offsets),
+            lir.IntType(offset_type.bitwidth).as_pointer(),
         )
-        ctinfo.meminfo = offsets_arr.meminfo
+        ctinfo.meminfo = payload.offsets
         res = ctinfo._getvalue()
         return impl_ret_borrowed(context, builder, offset_ctypes_type, res)
 
     return offset_ctypes_type(in_arr_typ), codegen
+
+
+def get_data_ptr_cg(context, builder, data_arr):
+    """Codegen for getting data pointer of string array's char array.
+    Handles primitive array's offset attribute.
+
+    Args:
+        context (BaseContext): codegen context
+        builder (IRBuilder): codegen builder
+        data_arr (struct proxy(PrimitiveArrayType)): input primitive array struct proxy
+
+    Returns:
+        ll_voidptr: data pointer of char array
+    """
+    meminfo_ptr = context.nrt.meminfo_data(builder, data_arr.meminfo)
+    return builder.inttoptr(
+        builder.add(builder.ptrtoint(meminfo_ptr, lir.IntType(64)), data_arr.offset),
+        lir.IntType(8).as_pointer(),
+    )
 
 
 @intrinsic
@@ -462,7 +481,7 @@ def get_data_ptr(typingctx, in_arr_typ=None):
 
         # Create new ArrayCType structure
         ctinfo = context.make_helper(builder, data_ctypes_type)
-        ctinfo.data = data_arr.data
+        ctinfo.data = get_data_ptr_cg(context, builder, data_arr)
         ctinfo.meminfo = data_arr.meminfo
         res = ctinfo._getvalue()
         return impl_ret_borrowed(context, builder, data_ctypes_type, res)
@@ -481,8 +500,9 @@ def get_data_ptr_ind(typingctx, in_arr_typ, int_t=None):
 
         # Create new ArrayCType structure
         ctinfo = context.make_helper(builder, data_ctypes_type)
-        ctinfo.data = builder.gep(data_arr.data, [ind])
         ctinfo.meminfo = data_arr.meminfo
+        data_ptr = get_data_ptr_cg(context, builder, data_arr)
+        ctinfo.data = builder.gep(data_ptr, [ind])
         res = ctinfo._getvalue()
         return impl_ret_borrowed(context, builder, data_ctypes_type, res)
 
@@ -516,12 +536,10 @@ def get_null_bitmap_ptr(typingctx, in_arr_typ=None):
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
         payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
-        null_bitmap_arr = context.make_helper(
-            builder, null_bitmap_arr_type, payload.null_bitmap
-        )
+
         ctinfo = context.make_helper(builder, data_ctypes_type)
-        ctinfo.data = null_bitmap_arr.data
-        ctinfo.meminfo = null_bitmap_arr.meminfo
+        ctinfo.data = context.nrt.meminfo_data(builder, payload.null_bitmap)
+        ctinfo.meminfo = payload.null_bitmap
         res = ctinfo._getvalue()
         return impl_ret_borrowed(context, builder, data_ctypes_type, res)
 
@@ -535,9 +553,10 @@ def getitem_str_offset(typingctx, in_arr_typ, ind_t=None):
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
         payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
-        offsets_ptr = context.make_helper(
-            builder, offset_arr_type, payload.offsets
-        ).data
+        offsets_ptr = builder.bitcast(
+            context.nrt.meminfo_data(builder, payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
         return builder.load(builder.gep(offsets_ptr, [ind]))
 
     return offset_type(in_arr_typ, ind_t), codegen
@@ -555,9 +574,12 @@ def setitem_str_offset(typingctx, str_arr_typ, ind_t, val_t=None):
         payload = _get_str_binary_arr_payload(
             context, builder, in_str_arr, string_array_type
         )
-        offsets = context.make_helper(builder, offset_arr_type, payload.offsets).data
+        offsets_ptr = builder.bitcast(
+            context.nrt.meminfo_data(builder, payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
 
-        builder.store(val, builder.gep(offsets, [ind]))
+        builder.store(val, builder.gep(offsets_ptr, [ind]))
         return context.get_dummy_value()
 
     return types.void(string_array_type, ind_t, offset_type), codegen
@@ -606,22 +628,22 @@ def copy_str_arr_slice(typingctx, out_str_arr_typ, in_str_arr_typ, ind_t=None):
             context, builder, out_str_arr, string_array_type
         )
 
-        in_offsets = context.make_helper(
-            builder, offset_arr_type, in_payload.offsets
-        ).data
-        out_offsets = context.make_helper(
-            builder, offset_arr_type, out_payload.offsets
-        ).data
+        in_offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, in_payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
+        out_offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, out_payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
 
-        in_data = context.make_helper(builder, char_arr_type, in_payload.data).data
-        out_data = context.make_helper(builder, char_arr_type, out_payload.data).data
+        in_data_arr = context.make_helper(builder, char_arr_type, in_payload.data)
+        out_data_arr = context.make_helper(builder, char_arr_type, out_payload.data)
+        in_data = get_data_ptr_cg(context, builder, in_data_arr)
+        out_data = get_data_ptr_cg(context, builder, out_data_arr)
 
-        in_null_bitmap = context.make_helper(
-            builder, null_bitmap_arr_type, in_payload.null_bitmap
-        ).data
-        out_null_bitmap = context.make_helper(
-            builder, null_bitmap_arr_type, out_payload.null_bitmap
-        ).data
+        in_null_bitmap = context.nrt.meminfo_data(builder, in_payload.null_bitmap)
+        out_null_bitmap = context.nrt.meminfo_data(builder, out_payload.null_bitmap)
 
         ind_p1 = builder.add(ind, context.get_constant(types.intp, 1))
         cgutils.memcpy(builder, out_offsets, in_offsets, ind_p1)
@@ -655,11 +677,14 @@ def copy_data(typingctx, str_arr_typ, out_str_arr_typ=None):
         out_payload = _get_str_binary_arr_payload(
             context, builder, out_str_arr, string_array_type
         )
-        in_offsets = context.make_helper(
-            builder, offset_arr_type, in_payload.offsets
-        ).data
-        in_data = context.make_helper(builder, char_arr_type, in_payload.data).data
-        out_data = context.make_helper(builder, char_arr_type, out_payload.data).data
+        in_offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, in_payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
+        in_data_arr = context.make_helper(builder, char_arr_type, in_payload.data)
+        out_data_arr = context.make_helper(builder, char_arr_type, out_payload.data)
+        in_data = get_data_ptr_cg(context, builder, in_data_arr)
+        out_data = get_data_ptr_cg(context, builder, out_data_arr)
         num_total_chars = _get_num_total_chars(builder, in_offsets, in_payload.n_arrays)
 
         cgutils.memcpy(
@@ -688,16 +713,16 @@ def copy_non_null_offsets(typingctx, str_arr_typ, out_str_arr_typ=None):
             context, builder, out_str_arr, string_array_type
         )
 
-        in_offsets = context.make_helper(
-            builder, offset_arr_type, in_payload.offsets
-        ).data
-        out_offsets = context.make_helper(
-            builder, offset_arr_type, out_payload.offsets
-        ).data
+        in_offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, in_payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
+        out_offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, out_payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
 
-        in_null_bitmap = context.make_helper(
-            builder, null_bitmap_arr_type, in_payload.null_bitmap
-        ).data
+        in_null_bitmap = context.nrt.meminfo_data(builder, in_payload.null_bitmap)
 
         n = in_payload.n_arrays
         zero = context.get_constant(offset_type, 0)
@@ -1238,9 +1263,10 @@ def set_all_offsets_to_0(typingctx, arr_typ=None):
             n_arrays_plus_1,
             bytes_per_offset_entry,
         )
-        null_offsets_ptr = context.make_array(offset_arr_type)(
-            context, builder, payload.offsets
-        ).data
+        null_offsets_ptr = builder.bitcast(
+            context.nrt.meminfo_data(builder, payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
         cgutils.memset(builder, null_offsets_ptr, n_bytes, 0)
         return context.get_dummy_value()
 
@@ -1270,9 +1296,8 @@ def set_bitmap_all_NA(typingctx, arr_typ=None):
             builder.add(n_arrays, lir.Constant(lir.IntType(64), 7)),
             lir.Constant(lir.IntType(64), 3),
         )
-        null_bitmap_ptr = context.make_array(null_bitmap_arr_type)(
-            context, builder, payload.null_bitmap
-        ).data
+        null_bitmap_ptr = context.nrt.meminfo_data(builder, payload.null_bitmap)
+
         # NA is represented with 0
         cgutils.memset(builder, null_bitmap_ptr, n_bytes, 0)
         return context.get_dummy_value()
@@ -1384,15 +1409,19 @@ def set_string_array_range(
             context, builder, out_arr, string_array_type
         )
 
-        in_offsets = context.make_helper(
-            builder, offset_arr_type, in_payload.offsets
-        ).data
-        out_offsets = context.make_helper(
-            builder, offset_arr_type, out_payload.offsets
-        ).data
+        in_offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, in_payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
+        out_offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, out_payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
 
-        in_data = context.make_helper(builder, char_arr_type, in_payload.data).data
-        out_data = context.make_helper(builder, char_arr_type, out_payload.data).data
+        in_data_arr = context.make_helper(builder, char_arr_type, in_payload.data)
+        out_data_arr = context.make_helper(builder, char_arr_type, out_payload.data)
+        in_data = get_data_ptr_cg(context, builder, in_data_arr)
+        out_data = get_data_ptr_cg(context, builder, out_data_arr)
 
         num_total_chars = _get_num_total_chars(builder, in_offsets, in_payload.n_arrays)
 
@@ -1490,15 +1519,13 @@ def box_str_arr(typ, val, c):
     )
     box_fname = "np_array_from_string_array"
     fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
-    offsets_ptr = c.context.make_array(offset_arr_type)(
-        c.context, c.builder, payload.offsets
-    ).data
-    data_ptr = c.context.make_array(char_arr_type)(
-        c.context, c.builder, payload.data
-    ).data
-    null_bitmap_ptr = c.context.make_array(null_bitmap_arr_type)(
-        c.context, c.builder, payload.null_bitmap
-    ).data
+    offsets_ptr = c.builder.bitcast(
+        c.context.nrt.meminfo_data(c.builder, payload.offsets),
+        c.context.get_data_type(offset_type).as_pointer(),
+    )
+    data_arr = c.context.make_helper(c.builder, char_arr_type, payload.data)
+    data_ptr = get_data_ptr_cg(c.context, c.builder, data_arr)
+    null_bitmap_ptr = c.context.nrt.meminfo_data(c.builder, payload.null_bitmap)
     arr = c.builder.call(
         fn_get,
         [
@@ -1525,9 +1552,7 @@ def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
         payload = _get_str_binary_arr_payload(context, builder, in_str_arr, str_arr_typ)
-        null_bitmap_ptr = context.make_array(null_bitmap_arr_type)(
-            context, builder, payload.null_bitmap
-        ).data
+        null_bitmap_ptr = context.nrt.meminfo_data(builder, payload.null_bitmap)
 
         # (null_bitmap[i / 8] & kBitmask[i % 8]) == 0;
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1564,11 +1589,12 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
         bit_ind = builder.urem(ind, lir.Constant(lir.IntType(64), 8))
-        null_bitmap_ptr = context.make_array(null_bitmap_arr_type)(
-            context, builder, payload.null_bitmap
-        ).data
+        null_bitmap_ptr = context.nrt.meminfo_data(builder, payload.null_bitmap)
 
-        offsets = context.make_helper(builder, offset_arr_type, payload.offsets).data
+        offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
 
         byte_ptr = builder.gep(null_bitmap_ptr, [byte_ind], inbounds=True)
         byte = builder.load(byte_ptr)
@@ -1623,9 +1649,7 @@ def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
         bit_ind = builder.urem(ind, lir.Constant(lir.IntType(64), 8))
-        null_bitmap_ptr = context.make_array(null_bitmap_arr_type)(
-            context, builder, payload.null_bitmap
-        ).data
+        null_bitmap_ptr = context.nrt.meminfo_data(builder, payload.null_bitmap)
         byte_ptr = builder.gep(null_bitmap_ptr, [byte_ind], inbounds=True)
         byte = builder.load(byte_ptr)
         ll_typ_mask = lir.ArrayType(lir.IntType(8), 8)
@@ -1670,9 +1694,7 @@ def set_null_bits_to_value(typingctx, arr_typ, value_typ=None):
             builder.add(payload.n_arrays, lir.Constant(lir.IntType(64), 7)),
             lir.Constant(lir.IntType(64), 8),
         )
-        null_bitmap_ptr = context.make_array(null_bitmap_arr_type)(
-            context, builder, payload.null_bitmap
-        ).data
+        null_bitmap_ptr = context.nrt.meminfo_data(builder, payload.null_bitmap)
         cgutils.memset(builder, null_bitmap_ptr, n_bytes, value)
         return context.get_dummy_value()
 
@@ -1716,15 +1738,14 @@ def move_str_binary_arr_payload(typingctx, to_arr_typ, from_arr_typ=None):
         )
         to_payload = _get_str_binary_arr_payload(context, builder, to_arr, sig.args[0])
 
+        array_item_data_type = ArrayItemArrayType(char_arr_type)
+        payload_type = ArrayItemArrayPayloadType(array_item_data_type)
+
         # incref data of from_str_arr (not the meminfo, which is not copied)
-        context.nrt.incref(builder, char_arr_type, from_payload.data)
-        context.nrt.incref(builder, offset_arr_type, from_payload.offsets)
-        context.nrt.incref(builder, null_bitmap_arr_type, from_payload.null_bitmap)
+        context.nrt.incref(builder, payload_type, from_payload._getvalue())
 
         # decref data of to_str_arr (not the meminfo, which is still used)
-        context.nrt.decref(builder, char_arr_type, to_payload.data)
-        context.nrt.decref(builder, offset_arr_type, to_payload.offsets)
-        context.nrt.decref(builder, null_bitmap_arr_type, to_payload.null_bitmap)
+        context.nrt.decref(builder, payload_type, to_payload._getvalue())
 
         # copy payload
         builder.store(builder.load(from_meminfo_data_ptr), to_meminfo_data_ptr)
@@ -1762,8 +1783,12 @@ def setitem_str_arr_ptr(typingctx, str_arr_t, ind_t, ptr_t, len_t=None):
     def codegen(context, builder, sig, args):
         arr, ind, ptr, length = args
         payload = _get_str_binary_arr_payload(context, builder, arr, sig.args[0])
-        offsets = context.make_helper(builder, offset_arr_type, payload.offsets).data
-        data = context.make_helper(builder, char_arr_type, payload.data).data
+        offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
+        data_arr = context.make_helper(builder, char_arr_type, payload.data)
+        data = get_data_ptr_cg(context, builder, data_arr)
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
@@ -2527,8 +2552,12 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
         # TODO: return tuple with value and error and avoid array arg?
         out_ptr, arr, ind, _dtype = args
         payload = _get_str_binary_arr_payload(context, builder, arr, string_array_type)
-        offsets = context.make_helper(builder, offset_arr_type, payload.offsets).data
-        data = context.make_helper(builder, char_arr_type, payload.data).data
+        offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
+        data_arr = context.make_helper(builder, char_arr_type, payload.data)
+        data = get_data_ptr_cg(context, builder, data_arr)
 
         fnty = lir.FunctionType(
             lir.IntType(32),
@@ -2553,7 +2582,7 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
 
 @unbox(BinaryArrayType)
 @unbox(StringArrayType)
-def unbox_str_series(typ, val, c):
+def unbox_str_array(typ, val, c):
     """
     Unbox a numpy object array with string object values.
     """
@@ -2583,6 +2612,7 @@ def unbox_str_series(typ, val, c):
 
     # alloc values in payload
     payload = cgutils.create_struct_proxy(payload_type)(c.context, c.builder)
+    char_arr = cgutils.create_struct_proxy(char_arr_type)(c.context, c.builder)
 
     # TODO: check python errors
     # function signature: NRT_MemInfo* string_array_from_sequence(PyObject* obj)
@@ -2592,9 +2622,10 @@ def unbox_str_series(typ, val, c):
         [
             lir.IntType(8).as_pointer(),
             lir.IntType(64).as_pointer(),
-            c.context.get_value_type(char_arr_type).as_pointer(),
-            c.context.get_value_type(offset_arr_type).as_pointer(),
-            c.context.get_value_type(null_bitmap_arr_type).as_pointer(),
+            lir.IntType(64).as_pointer(),
+            c.context.get_value_type(types.MemInfoPointer(char_type)).as_pointer(),
+            c.context.get_value_type(types.MemInfoPointer(offset_type)).as_pointer(),
+            c.context.get_value_type(types.MemInfoPointer(types.uint8)).as_pointer(),
             lir.IntType(32),
         ],
     )
@@ -2606,13 +2637,16 @@ def unbox_str_series(typ, val, c):
         [
             val,
             payload._get_ptr_by_name("n_arrays"),
-            payload._get_ptr_by_name("data"),
+            char_arr._get_ptr_by_name("length"),
+            char_arr._get_ptr_by_name("meminfo"),
             payload._get_ptr_by_name("offsets"),
             payload._get_ptr_by_name("null_bitmap"),
             is_bytes,
         ],
     )
 
+    char_arr.offset = c.context.get_constant(types.int64, 0)
+    payload.data = char_arr._getvalue()
     c.builder.store(payload._getvalue(), meminfo_data_ptr)
     array_item_array.meminfo = meminfo
     string_array.data = array_item_array._getvalue()
@@ -2650,12 +2684,57 @@ def lower_constant_str_arr(context, builder, typ, pyval):
 
     # get lowered constants for required attributes
     n_const = context.get_constant(types.int64, n)
-    char_const_arr = context.get_constant_generic(builder, char_arr_type, char_arr)
-    offsets_const_arr = context.get_constant_generic(
-        builder, offset_arr_type, offset_arr
+
+    # create constant meminfos for offsets and nulls
+    # see here: https://github.com/Bodo-inc/Bodo/blob/90e1bcfa82d588f08e2d2dd27f9b28266015da42/bodo/numba_compat.py#L4445
+    chars_const = cgutils.create_constant_array(
+        lir.IntType(8), bytearray(char_arr.data)
     )
-    nulls_const_arr = context.get_constant_generic(
-        builder, null_bitmap_arr_type, nulls_arr
+    chars_const = cgutils.global_constant(
+        builder, ".const.str_array.chars", chars_const
+    )
+
+    offsets_const = cgutils.create_constant_array(
+        lir.IntType(8), bytearray(offset_arr.data)
+    )
+    offsets_const = cgutils.global_constant(
+        builder, ".const.str_array.offsets", offsets_const
+    )
+
+    nulls_const = cgutils.create_constant_array(
+        lir.IntType(8), bytearray(nulls_arr.data)
+    )
+    nulls_const = cgutils.global_constant(
+        builder, ".const.str_array.nullbitmap", nulls_const
+    )
+
+    minus_one = context.get_constant(types.int64, -1)
+    null_ptr = context.get_constant_null(types.voidptr)
+    offsets_meminfo = lir.Constant.literal_struct(
+        [minus_one, null_ptr, null_ptr, offsets_const, minus_one]
+    )
+    offsets_meminfo = cgutils.global_constant(
+        builder, ".const.offsets_meminfo", offsets_meminfo
+    ).bitcast(cgutils.voidptr_t)
+    nulls_meminfo = lir.Constant.literal_struct(
+        [minus_one, null_ptr, null_ptr, nulls_const, minus_one]
+    )
+    nulls_meminfo = cgutils.global_constant(
+        builder, ".const.nulls_meminfo", nulls_meminfo
+    ).bitcast(cgutils.voidptr_t)
+    chars_meminfo = lir.Constant.literal_struct(
+        [minus_one, null_ptr, null_ptr, chars_const, minus_one]
+    )
+    chars_meminfo = cgutils.global_constant(
+        builder, ".const.chars_meminfo", chars_meminfo
+    ).bitcast(cgutils.voidptr_t)
+
+    char_arr_const = lir.Constant.literal_struct(
+        [
+            context.get_constant(types.int64, len(char_arr)),
+            chars_meminfo,
+            context.get_constant(types.int64, 0),
+        ]
     )
 
     # create array(item) data array
@@ -2663,7 +2742,7 @@ def lower_constant_str_arr(context, builder, typ, pyval):
     # create a constant payload with the same data model as ArrayItemArrayPayloadType
     # "n_arrays", "data", "offsets", "null_bitmap"
     payload = lir.Constant.literal_struct(
-        [n_const, char_const_arr, offsets_const_arr, nulls_const_arr]
+        [n_const, char_arr_const, offsets_meminfo, nulls_meminfo]
     )
     payload = cgutils.global_constant(builder, ".const.payload", payload).bitcast(
         cgutils.voidptr_t

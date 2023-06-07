@@ -450,6 +450,7 @@ def is_array_typ(var_typ, include_index_series=True):
             (
                 IntegerArrayType,
                 FloatingArrayType,
+                bodo.libs.primitive_arr_ext.PrimitiveArrayType,
                 bodo.libs.decimal_arr_ext.DecimalArrayType,
                 bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
                 bodo.libs.array_item_arr_ext.ArrayItemArrayType,
@@ -956,6 +957,12 @@ def overload_alloc_type(n, t, s=None):
     # nullable int array
     if isinstance(typ, IntegerArrayType):
         return lambda n, t, s=None: bodo.libs.int_arr_ext.alloc_int_array(
+            n, dtype
+        )  # pragma: no cover
+
+    # primitive array
+    if isinstance(typ, bodo.libs.primitive_arr_ext.PrimitiveArrayType):
+        return lambda n, t, s=None: bodo.libs.primitive_arr_ext.alloc_primitive_array(
             n, dtype
         )  # pragma: no cover
 

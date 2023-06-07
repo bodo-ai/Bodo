@@ -236,7 +236,6 @@ def to_arr_obj_if_list_obj(c, context, builder, val, typ):
     is_list = list_check(builder, context, val)
     is_list_cond = builder.icmp_unsigned("!=", is_list, lir.Constant(is_list.type, 0))
     with builder.if_then(is_list_cond):
-
         # get np.array to convert list items to array
         mod_name = context.insert_const_string(builder.module, "numpy")
         np_mod_obj = c.pyapi.import_module_noblock(mod_name)
@@ -283,7 +282,6 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
 
     # get counts for struct value (e.g. counts for strings or array items in struct)
     if isinstance(typ, (StructType, types.BaseTuple)):
-
         # get pd.NA object to check for new NA kind
         mod_name = context.insert_const_string(builder.module, "pandas")
         pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
@@ -499,6 +497,91 @@ def gen_allocate_array(context, builder, arr_type, n_elems, c=None):
     else:
         out_arr = context.compile_internal(builder, impl, sig, args)
     return out_arr
+
+
+def gen_alloc_meminfo(context, builder, length, dtype):
+    """Allocate a meminfo for 'length' elements of type 'dtype'.
+    Implementation similar to bodo.utils.utils._empty_nd_impl.
+
+    Args:
+        context (BaseContext): codegen context
+        builder (IRBuilder): codegen builder
+        length (lir.IntType): number of element
+        dtype (types.Type): element types
+
+    Returns:
+        ll_voidptr: allocated meminfo
+    """
+
+    ll_type = context.get_data_type(dtype)
+    itemsize = context.get_constant(types.intp, context.get_abi_sizeof(ll_type))
+
+    # Check overflow, numpy also does this after checking order
+    allocsize_mult = builder.smul_with_overflow(length, itemsize)
+    allocsize = builder.extract_value(allocsize_mult, 0)
+    overflow = builder.extract_value(allocsize_mult, 1)
+
+    with builder.if_then(overflow, likely=False):
+        cgutils.printf(
+            builder,
+            (
+                "meminfo is too big; `length * itemsize` is larger than"
+                " the maximum possible size."
+            ),
+        )
+
+    align_val = context.get_preferred_array_alignment(dtype)
+    align = context.get_constant(types.uint32, align_val)
+    meminfo = context.nrt.meminfo_alloc_aligned(builder, size=allocsize, align=align)
+    return meminfo
+
+
+def meminfo_to_np_arr(context, builder, meminfo, offset, length, arrtype):
+    """Wrap meminfo in a Numpy array of type 'arrtype'.
+    Implementation similar to bodo.utils.utils._empty_nd_impl.
+
+    Args:
+        context (BaseContext): codegen context
+        builder (IRBuilder): codegen builder
+        meminfo (ll_voidptr): input meminfo
+        offset (lir.IntType): data pointer offset from meminfo data pointer
+        length (lir.IntType): number of element
+        arrtype (types.Type): Numpy array type to wrap
+
+    Returns:
+        lir.LiteralStructType: Numpy array that wraps meminfo
+    """
+
+    from numba.np.arrayobj import get_itemsize, populate_array
+
+    assert (
+        arrtype.ndim == 1 and arrtype.layout == "C"
+    ), "meminfo_to_np_arr: 1D array type with C layout expected"
+
+    arr = context.make_array(arrtype)(context, builder)
+
+    datatype = context.get_data_type(arrtype.dtype)
+    itemsize = context.get_constant(types.intp, get_itemsize(context, arrtype))
+
+    meminfo_ptr = context.nrt.meminfo_data(builder, meminfo)
+    data = builder.inttoptr(
+        builder.add(builder.ptrtoint(meminfo_ptr, lir.IntType(64)), offset),
+        lir.IntType(8).as_pointer(),
+    )
+    intp_t = context.get_value_type(types.intp)
+    shape_array = cgutils.pack_array(builder, (length,), ty=intp_t)
+    strides_array = cgutils.pack_array(builder, (itemsize,), ty=intp_t)
+
+    populate_array(
+        arr,
+        data=builder.bitcast(data, datatype.as_pointer()),
+        shape=shape_array,
+        strides=strides_array,
+        itemsize=itemsize,
+        meminfo=meminfo,
+    )
+
+    return arr._getvalue()
 
 
 def is_ll_eq(builder, val1, val2):

@@ -28,6 +28,7 @@ from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     _get_array_item_arr_payload,
     define_array_item_dtor,
+    offset_type,
 )
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array_type
@@ -40,7 +41,6 @@ from bodo.libs.str_arr_ext import (
     _get_str_binary_arr_payload,
     char_arr_type,
     null_bitmap_arr_type,
-    offset_arr_type,
     string_array_type,
 )
 from bodo.libs.struct_arr_ext import (
@@ -234,10 +234,6 @@ def array_to_info_codegen(context, builder, sig, args):
         inner_arr_info = array_to_info_codegen(
             context, builder, array_info_type(arr_type.dtype), (inner_arr,)
         )
-        offsets = context.make_helper(builder, offset_arr_type, payload.offsets)
-        null_bitmap = context.make_helper(
-            builder, null_bitmap_arr_type, payload.null_bitmap
-        )
 
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
@@ -256,8 +252,8 @@ def array_to_info_codegen(context, builder, sig, args):
             [
                 payload.n_arrays,
                 inner_arr_info,
-                offsets.meminfo,
-                null_bitmap.meminfo,
+                payload.offsets,
+                payload.null_bitmap,
             ],
         )
 
@@ -313,11 +309,8 @@ def array_to_info_codegen(context, builder, sig, args):
     # StringArray
     if arr_type in (string_array_type, binary_array_type):
         payload = _get_str_binary_arr_payload(context, builder, in_arr, arr_type)
-        data = context.make_helper(builder, char_arr_type, payload.data)
-        offsets = context.make_helper(builder, offset_arr_type, payload.offsets)
-        null_bitmap = context.make_helper(
-            builder, null_bitmap_arr_type, payload.null_bitmap
-        )
+        char_arr = context.make_helper(builder, char_arr_type, payload.data)
+        # TODO: make sure char_arr.offset is zero since not supported in C++
 
         is_bytes = context.get_constant(types.int32, int(arr_type == binary_array_type))
         fnty = lir.FunctionType(
@@ -337,9 +330,9 @@ def array_to_info_codegen(context, builder, sig, args):
             fn_tp,
             [
                 payload.n_arrays,
-                data.meminfo,
-                offsets.meminfo,
-                null_bitmap.meminfo,
+                char_arr.meminfo,
+                payload.offsets,
+                payload.null_bitmap,
                 is_bytes,
             ],
         )
@@ -735,8 +728,8 @@ def _lower_info_to_array_item_array(context, builder, arr_type, in_info):
         [
             lir.IntType(8).as_pointer(),  # info
             lir.IntType(64).as_pointer(),  # n_arrays
-            context.get_value_type(offset_arr_type).as_pointer(),
-            context.get_value_type(null_bitmap_arr_type).as_pointer(),
+            context.get_value_type(types.MemInfoPointer(offset_type)).as_pointer(),
+            context.get_value_type(types.MemInfoPointer(types.uint8)).as_pointer(),
         ],
     )
     fn_tp = cgutils.get_or_insert_function(
@@ -1295,15 +1288,17 @@ def _gen_info_to_string_array(context, builder, arr_type, info_ptr):
 
     # alloc values in payload
     payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+    char_arr = cgutils.create_struct_proxy(char_arr_type)(context, builder)
 
     fnty = lir.FunctionType(
         lir.VoidType(),
         [
             lir.IntType(8).as_pointer(),  # info
             lir.IntType(64).as_pointer(),  # n_arrays
-            context.get_value_type(char_arr_type).as_pointer(),
-            context.get_value_type(offset_arr_type).as_pointer(),
-            context.get_value_type(null_bitmap_arr_type).as_pointer(),
+            lir.IntType(64).as_pointer(),  # n_chars
+            context.get_value_type(types.MemInfoPointer(types.uint8)).as_pointer(),
+            context.get_value_type(types.MemInfoPointer(offset_type)).as_pointer(),
+            context.get_value_type(types.MemInfoPointer(types.uint8)).as_pointer(),
         ],
     )
     fn_tp = cgutils.get_or_insert_function(
@@ -1314,7 +1309,8 @@ def _gen_info_to_string_array(context, builder, arr_type, info_ptr):
         [
             info_ptr,
             payload._get_ptr_by_name("n_arrays"),
-            payload._get_ptr_by_name("data"),
+            char_arr._get_ptr_by_name("length"),
+            char_arr._get_ptr_by_name("meminfo"),
             payload._get_ptr_by_name("offsets"),
             payload._get_ptr_by_name("null_bitmap"),
         ],
@@ -1323,6 +1319,9 @@ def _gen_info_to_string_array(context, builder, arr_type, info_ptr):
         builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
     )  # pragma: no cover
 
+    # C++ string array doesn't support offsets
+    char_arr.offset = context.get_constant(types.int64, 0)
+    payload.data = char_arr._getvalue()
     builder.store(payload._getvalue(), meminfo_data_ptr)
     array_item_array.meminfo = meminfo
     string_array.data = array_item_array._getvalue()
