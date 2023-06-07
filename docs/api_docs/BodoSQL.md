@@ -1355,15 +1355,12 @@ BodoSQL Currently supports the following data generaiton functions:
     !!! note
         Currently, BodoSQL does not support the format of `#!sql RANDOM()` that
         takes in a seed value.
-<<<<<<< HEAD
-=======
     
     !!! note
         At present, aliases to `RANDOM` calls occasionally produce unexpected
         behavior. For certain SQL operations, calling `RANDOM` and storing the
         result with an alias, then later re-using that alias may result in
         another call to `RANDOM`. This behavior is somewhat rare.
->>>>>>> aca0c059c15e69b3c281f53ba9bd719d435c70b3
 
 
 #### UNIFORM
