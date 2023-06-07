@@ -65,7 +65,8 @@ void hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
  * @param global_dict_needed: Specifies whether the dictionary of dict-encoded
  * string arrays has to be global or not (for correctness or for performance
  * -for example avoiding collisions after shuffling-). Throws an error if not
- * global.
+ * global. This is ignored for the DICT columns for which non-null dict_hashes
+ * are provided.
  * @param dict_hashes: dictionary hashes for dict-encoded string arrays. Integer
  * indices are hashed if not specified (which can cause errors if used across
  * arrays with incompatible dictionaries).

@@ -516,7 +516,7 @@ def _init_join_state(
             _,
             cfunc_cond,
         ) = args
-        n_keys = context.get_constant(types.int64, output_type.n_keys)
+        n_keys = context.get_constant(types.uint64, output_type.n_keys)
         build_table_outer = context.get_constant(types.bool_, output_type.build_outer)
         probe_table_outer = context.get_constant(types.bool_, output_type.probe_outer)
         fnty = lir.FunctionType(
