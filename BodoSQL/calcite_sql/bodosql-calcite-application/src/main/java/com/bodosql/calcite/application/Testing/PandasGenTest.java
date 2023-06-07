@@ -15,7 +15,7 @@ public class PandasGenTest {
   public static void main(String[] args) throws Exception {
 
     String sql = "select CURRENT_DATE()";
-    boolean useStreaming = false;
+    int plannerChoice = RelationalAlgebraGenerator.HEURISTIC_PLANNER;
 
     LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
@@ -73,7 +73,7 @@ public class PandasGenTest {
 
     RelationalAlgebraGenerator generator =
         new RelationalAlgebraGenerator(
-            schema, paramTableName, useStreaming, 0, BatchingProperty.defaultBatchSize);
+            schema, paramTableName, plannerChoice, 0, BatchingProperty.defaultBatchSize);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);

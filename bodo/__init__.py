@@ -349,7 +349,11 @@ COMPLEX_CASE_THRESHOLD = 100
 from bodo.libs.memory import set_default_buffer_pool_as_arrow_memory_pool
 
 set_default_buffer_pool_as_arrow_memory_pool()
-# Flag to track if we should use the streaming plan in BodoSQL
+# Flag to track if we should use the volcano plan in BodoSQL.
+bodosql_use_volcano_plan = False
+# Flag to track if we should use the streaming plan in BodoSQL.
+# Takes precedence over bodosql_use_volcano_plan and potentially
+# implies bodosql_use_volcano_plan.
 bodosql_use_streaming_plan = False
 # Number of rows to process at once for BodoSQL. This is used to test
 # the streaming plan in BodoSQL on the existing unit tests that may only
