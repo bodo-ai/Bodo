@@ -234,8 +234,8 @@ array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
 }
 
 array_info* info_to_array_item_array(array_info* info, int64_t* length,
-                                     numpy_arr_payload* offsets_arr,
-                                     numpy_arr_payload* null_bitmap_arr) {
+                                     NRT_MemInfo** offsets_arr,
+                                     NRT_MemInfo** null_bitmap_arr) {
     if (info->arr_type != bodo_array_type::LIST_STRING &&
         info->arr_type != bodo_array_type::ARRAY_ITEM) {
         PyErr_SetString(
@@ -250,19 +250,11 @@ array_info* info_to_array_item_array(array_info* info, int64_t* length,
     // Python data model
     NRT_MemInfo* offsets_meminfo = info->buffers[0]->getMeminfo();
     incref_meminfo(offsets_meminfo);
-    int64_t n_offsets = info->length + 1;
-    int64_t offset_itemsize = numpy_item_size[Bodo_CType_offset];
-    *offsets_arr = make_numpy_array_payload(
-        offsets_meminfo, NULL, n_offsets, offset_itemsize,
-        (char*)offsets_meminfo->data, n_offsets, offset_itemsize);
+    *offsets_arr = offsets_meminfo;
 
     NRT_MemInfo* nulls_meminfo = info->buffers[1]->getMeminfo();
     incref_meminfo(nulls_meminfo);
-    int64_t n_null_bytes = (info->length + 7) >> 3;
-    int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
-    *null_bitmap_arr = make_numpy_array_payload(
-        nulls_meminfo, NULL, n_null_bytes, null_itemsize,
-        (char*)nulls_meminfo->data, n_null_bytes, null_itemsize);
+    *null_bitmap_arr = nulls_meminfo;
 
     // Passing raw pointer to Python without giving ownership.
     // info_to_array() uses it to convert the child array recursively,
@@ -311,9 +303,9 @@ array_info* get_child_info(array_info* in_info, int64_t i) {
 }
 
 void info_to_string_array(array_info* info, int64_t* length,
-                          numpy_arr_payload* data_arr,
-                          numpy_arr_payload* offsets_arr,
-                          numpy_arr_payload* null_bitmap_arr) {
+                          int64_t* out_n_chars, NRT_MemInfo** data_arr,
+                          NRT_MemInfo** offsets_arr,
+                          NRT_MemInfo** null_bitmap_arr) {
     if (info->arr_type != bodo_array_type::STRING) {
         PyErr_SetString(PyExc_RuntimeError,
                         "_array.cpp::info_to_string_array: "
@@ -321,32 +313,21 @@ void info_to_string_array(array_info* info, int64_t* length,
         return;
     }
     *length = info->length;
+    *out_n_chars = info->n_sub_elems();
 
     // create Numpy arrays for char/offset/null_bitmap buffers as expected by
     // Python data model
     NRT_MemInfo* data_meminfo = info->buffers[0]->getMeminfo();
     incref_meminfo(data_meminfo);
-    int64_t n_chars = info->n_sub_elems();
-    int64_t char_itemsize = numpy_item_size[Bodo_CTypes::INT8];
-    *data_arr = make_numpy_array_payload(
-        data_meminfo, NULL, n_chars, char_itemsize, (char*)data_meminfo->data,
-        n_chars, char_itemsize);
+    *data_arr = data_meminfo;
 
     NRT_MemInfo* offsets_meminfo = info->buffers[1]->getMeminfo();
     incref_meminfo(offsets_meminfo);
-    int64_t n_offsets = info->length + 1;
-    int64_t offset_itemsize = numpy_item_size[Bodo_CType_offset];
-    *offsets_arr = make_numpy_array_payload(
-        offsets_meminfo, NULL, n_offsets, offset_itemsize,
-        (char*)offsets_meminfo->data, n_offsets, offset_itemsize);
+    *offsets_arr = offsets_meminfo;
 
     NRT_MemInfo* nulls_meminfo = info->buffers[2]->getMeminfo();
     incref_meminfo(nulls_meminfo);
-    int64_t n_null_bytes = (info->length + 7) >> 3;
-    int64_t null_itemsize = numpy_item_size[Bodo_CTypes::UINT8];
-    *null_bitmap_arr = make_numpy_array_payload(
-        nulls_meminfo, NULL, n_null_bytes, null_itemsize,
-        (char*)nulls_meminfo->data, n_null_bytes, null_itemsize);
+    *null_bitmap_arr = nulls_meminfo;
 }
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
@@ -490,10 +471,9 @@ std::shared_ptr<array_info> string_array_from_pyarrow(PyObject* pyarrow_arr) {
  * @param is_bytes whether the contents are bytes objects instead of str
  */
 void string_array_from_sequence(PyObject* obj, int64_t* length,
-                                numpy_arr_payload* data_arr,
-                                numpy_arr_payload* offsets_arr,
-                                numpy_arr_payload* null_bitmap_arr,
-                                int is_bytes) {
+                                int64_t* out_n_chars, NRT_MemInfo** data_arr,
+                                NRT_MemInfo** offsets_arr,
+                                NRT_MemInfo** null_bitmap_arr, int is_bytes) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -508,8 +488,8 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
         // empty sequence, this is not an error, need to set size
         std::shared_ptr<array_info> out_arr = alloc_array(
             0, 0, -1, bodo_array_type::STRING, Bodo_CTypes::STRING, 0, 0);
-        info_to_string_array(out_arr.get(), length, data_arr, offsets_arr,
-                             null_bitmap_arr);
+        info_to_string_array(out_arr.get(), length, out_n_chars, data_arr,
+                             offsets_arr, null_bitmap_arr);
         return;
     }
 
@@ -549,8 +529,8 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
 
         std::shared_ptr<array_info> arr =
             string_array_from_pyarrow(pyarrow_arr_large_str);
-        info_to_string_array(arr.get(), length, data_arr, offsets_arr,
-                             null_bitmap_arr);
+        info_to_string_array(arr.get(), length, out_n_chars, data_arr,
+                             offsets_arr, null_bitmap_arr);
         Py_DECREF(pyarrow_chunked_arr);
         Py_DECREF(pyarrow_arr);
         Py_DECREF(pyarrow_arr_large_str);
@@ -621,9 +601,10 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
     Py_DECREF(C_NA);
     Py_DECREF(pd_mod);
 
-    *data_arr = outbuf_payload;
-    *offsets_arr = offsets_payload;
-    *null_bitmap_arr = null_bitmap_payload;
+    *out_n_chars = len;
+    *data_arr = outbuf_payload.meminfo;
+    *offsets_arr = offsets_payload.meminfo;
+    *null_bitmap_arr = null_bitmap_payload.meminfo;
     return;
 #undef CHECK
 }

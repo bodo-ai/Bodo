@@ -682,17 +682,7 @@ def test_hash_join_reorder(memory_leak_check):
         delete_join_state(join_state)
         return pd.concat(out_dfs)
 
-    # TODO[BSE-528]: Fix passing dict-encoded strings to Python JIT that can change
-    saved_SF_READ_AUTO_DICT_ENCODE_ENABLED = (
-        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
-    )
-    try:
-        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = False
-        out_df = test_hash_join(conn_str)
-    finally:
-        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
-            saved_SF_READ_AUTO_DICT_ENCODE_ENABLED
-        )
+    out_df = test_hash_join(conn_str)
     expected_df = pd.DataFrame(
         {
             "p_partkey": [183728],

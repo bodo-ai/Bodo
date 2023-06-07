@@ -145,6 +145,11 @@ void join_build_consume_batch(HashJoinState* join_state,
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             join_state->build_shuffle_buffer.data_table;
+        // NOTE: shuffle hashes need to be consistent with partition hashes
+        // above
+        std::shared_ptr<uint32_t[]> hashes =
+            hash_keys_table(shuffle_table, join_state->n_keys,
+                            SEED_HASH_PARTITION, parallel, true, dict_hashes);
         // make dictionaries global for shuffle
         for (size_t i = 0; i < shuffle_table->ncols(); i++) {
             std::shared_ptr<array_info> arr = shuffle_table->columns[i];
@@ -153,8 +158,6 @@ void join_build_consume_batch(HashJoinState* join_state,
             }
         }
         mpi_comm_info comm_info_table(shuffle_table->columns);
-        std::shared_ptr<uint32_t[]> hashes = hash_keys_table(
-            shuffle_table, join_state->n_keys, SEED_HASH_PARTITION, parallel);
         comm_info_table.set_counts(hashes, parallel);
         std::shared_ptr<table_info> new_data = shuffle_table_kernel(
             std::move(shuffle_table), hashes, comm_info_table, parallel);
@@ -336,6 +339,11 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             // shuffle data of other ranks
             std::shared_ptr<table_info> shuffle_table =
                 join_state->probe_shuffle_buffer.data_table;
+            // NOTE: shuffle hashes need to be consistent with partition hashes
+            // above
+            std::shared_ptr<uint32_t[]> hashes = hash_keys_table(
+                shuffle_table, join_state->n_keys, SEED_HASH_PARTITION,
+                parallel, true, dict_hashes);
             // make dictionaries global for shuffle
             for (size_t i = 0; i < shuffle_table->ncols(); i++) {
                 std::shared_ptr<array_info> arr = shuffle_table->columns[i];
@@ -344,9 +352,6 @@ std::shared_ptr<table_info> join_probe_consume_batch(
                 }
             }
             mpi_comm_info comm_info_table(shuffle_table->columns);
-            std::shared_ptr<uint32_t[]> hashes =
-                hash_keys_table(shuffle_table, join_state->n_keys,
-                                SEED_HASH_PARTITION, parallel);
             comm_info_table.set_counts(hashes, parallel);
             std::shared_ptr<table_info> new_data = shuffle_table_kernel(
                 std::move(shuffle_table), hashes, comm_info_table, parallel);

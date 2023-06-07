@@ -26,8 +26,7 @@ from bodo.libs.str_arr_ext import (
     _memcpy,
     char_arr_type,
     get_data_ptr,
-    null_bitmap_arr_type,
-    offset_arr_type,
+    get_data_ptr_cg,
     string_array_type,
 )
 from bodo.utils.typing import BodoError, is_list_like_index_type
@@ -109,7 +108,6 @@ str_arr_model_members = [
 @register_model(StringArraySplitViewType)
 class StringArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-
         models.StructModel.__init__(self, dmm, fe_type, str_arr_model_members)
 
 
@@ -173,13 +171,13 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
             builder.module, fnty, name="str_arr_split_view_impl"
         )
 
-        offsets = context.make_helper(
-            builder, offset_arr_type, in_str_arr_payload.offsets
-        ).data
-        data = context.make_helper(builder, char_arr_type, in_str_arr_payload.data).data
-        null_bitmap = context.make_helper(
-            builder, null_bitmap_arr_type, in_str_arr_payload.null_bitmap
-        ).data
+        offsets = builder.bitcast(
+            context.nrt.meminfo_data(builder, in_str_arr_payload.offsets),
+            context.get_data_type(offset_type).as_pointer(),
+        )
+        data_arr = context.make_helper(builder, char_arr_type, in_str_arr_payload.data)
+        data_ptr = get_data_ptr_cg(context, builder, data_arr)
+        null_bitmap = context.nrt.meminfo_data(builder, in_str_arr_payload.null_bitmap)
 
         sep_val = context.get_constant(types.int8, ord(sep_typ.literal_value))
         builder.call(
@@ -188,7 +186,7 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
                 meminfo_data_ptr,
                 in_str_arr_payload.n_arrays,
                 offsets,
-                data,
+                data_ptr,
                 null_bitmap,
                 sep_val,
             ],

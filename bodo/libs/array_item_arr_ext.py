@@ -34,10 +34,12 @@ import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.libs import array_ext
 from bodo.utils.cg_helpers import (
+    gen_alloc_meminfo,
     gen_allocate_array,
     get_array_elem_counts,
     get_bitmap_bit,
     is_na_value,
+    meminfo_to_np_arr,
     pyarray_setitem,
     seq_getitem,
     set_bitmap_bit,
@@ -66,11 +68,11 @@ np_offset_type = numba.np.numpy_support.as_dtype(offset_type)
 
 class ArrayItemArrayType(types.ArrayCompatible):
     def __init__(self, dtype):
-        assert bodo.utils.utils.is_array_typ(dtype, False)
+        assert bodo.utils.utils.is_array_typ(
+            dtype, False
+        ), "ArrayItemArrayType dtype should be an array type"
         self.dtype = dtype
-        super(ArrayItemArrayType, self).__init__(
-            name="ArrayItemArrayType({})".format(dtype)
-        )
+        super(ArrayItemArrayType, self).__init__(name=f"ArrayItemArrayType({dtype})")
 
     @property
     def as_array(self):
@@ -94,7 +96,7 @@ class ArrayItemArrayPayloadType(types.Type):
     def __init__(self, array_type):
         self.array_type = array_type
         super(ArrayItemArrayPayloadType, self).__init__(
-            name="ArrayItemArrayPayloadType({})".format(array_type)
+            name=f"ArrayItemArrayPayloadType({array_type})"
         )
 
     @property
@@ -117,8 +119,8 @@ class ArrayItemArrayPayloadModel(models.StructModel):
             # (similar to std::vector).
             # Use offsets[n] to get total number of elements instead of len(data_arr).
             ("data", fe_type.array_type.dtype),
-            ("offsets", types.Array(offset_type, 1, "C")),
-            ("null_bitmap", types.Array(types.uint8, 1, "C")),
+            ("offsets", types.MemInfoPointer(offset_type)),
+            ("null_bitmap", types.MemInfoPointer(types.uint8)),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -141,7 +143,7 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     fn = cgutils.get_or_insert_function(
-        mod, fnty, name=".dtor.array_item.{}".format(array_item_type.dtype)
+        mod, fnty, name=f".dtor.array_item.{array_item_type.dtype}"
     )
 
     # End early if the dtor is already defined
@@ -156,11 +158,8 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
     # get payload struct
     ptrty = context.get_value_type(payload_type).as_pointer()
     payload_ptr = builder.bitcast(base_ptr, ptrty)
-    payload = context.make_helper(builder, payload_type, ref=payload_ptr)
 
-    context.nrt.decref(builder, array_item_type.dtype, payload.data)
-    context.nrt.decref(builder, types.Array(offset_type, 1, "C"), payload.offsets)
-    context.nrt.decref(builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap)
+    context.nrt.decref(builder, payload_type, builder.load(payload_ptr))
 
     builder.ret_void()
     return fn
@@ -212,10 +211,12 @@ def construct_array_item_array(
 
     # alloc offsets
     n_arrays_plus_1 = builder.add(n_arrays, lir.Constant(lir.IntType(64), 1))
-    offsets = bodo.utils.utils._empty_nd_impl(
-        context, builder, types.Array(offset_type, 1, "C"), [n_arrays_plus_1]
+    offsets_meminfo = gen_alloc_meminfo(context, builder, n_arrays_plus_1, offset_type)
+
+    offsets_ptr = builder.bitcast(
+        context.nrt.meminfo_data(builder, offsets_meminfo),
+        context.get_data_type(offset_type).as_pointer(),
     )
-    offsets_ptr = offsets.data
     # offsets[0] = 0
     builder.store(context.get_constant(offset_type, 0), offsets_ptr)
     # offsets[n] = n_elems
@@ -225,18 +226,19 @@ def construct_array_item_array(
         ),
         builder.gep(offsets_ptr, [n_arrays]),
     )
-    payload.offsets = offsets._getvalue()
+    payload.offsets = offsets_meminfo
 
     # alloc null bitmap
     n_bitmask_bytes = builder.udiv(
         builder.add(n_arrays, lir.Constant(lir.IntType(64), 7)),
         lir.Constant(lir.IntType(64), 8),
     )
-    null_bitmap = bodo.utils.utils._empty_nd_impl(
-        context, builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
+    null_bitmap_meminfo = gen_alloc_meminfo(
+        context, builder, n_bitmask_bytes, types.uint8
     )
-    null_bitmap_ptr = null_bitmap.data
-    payload.null_bitmap = null_bitmap._getvalue()
+
+    null_bitmap_ptr = context.nrt.meminfo_data(builder, null_bitmap_meminfo)
+    payload.null_bitmap = null_bitmap_meminfo
 
     builder.store(payload._getvalue(), meminfo_data_ptr)
 
@@ -522,12 +524,11 @@ def box_array_item_arr(typ, val, c):
 
     payload = _get_array_item_arr_payload(c.context, c.builder, typ, val)
     data_arr = payload.data
-    offsets_ptr = c.context.make_helper(
-        c.builder, types.Array(offset_type, 1, "C"), payload.offsets
-    ).data
-    null_bitmap_ptr = c.context.make_helper(
-        c.builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap
-    ).data
+    offsets_ptr = c.builder.bitcast(
+        c.context.nrt.meminfo_data(c.builder, payload.offsets),
+        c.context.get_data_type(offset_type).as_pointer(),
+    )
+    null_bitmap_ptr = c.context.nrt.meminfo_data(c.builder, payload.null_bitmap)
 
     # use C boxing when possible to avoid compilation and runtime overheads
     # otherwise, use generic llvm/Numba unboxing
@@ -631,7 +632,9 @@ ArrayAnalysis._analyze_op_call_bodo_libs_array_item_arr_ext_pre_alloc_array_item
 )
 
 
-def array_to_repeated_array_item_array(scalar_arr, length, data_arr_type):  # pragma: no cover
+def array_to_repeated_array_item_array(
+    scalar_arr, length, data_arr_type
+):  # pragma: no cover
     pass
 
 
@@ -651,6 +654,7 @@ def overload_array_to_repeated_array_item_array(scalar_arr, length, data_arr_typ
         array_to_repeated_array_item_array([1, 2], 3, types.Array(types.int32, 1, "C")) ->
             [[1, 2], [1, 2], [1, 2]]
     """
+
     def impl(scalar_arr, length, data_arr_type):  # pragma: no cover
         nested_counts = init_nested_counts(data_arr_type)
         for i in range(length):
@@ -690,14 +694,18 @@ def init_array_item_array_codegen(context, builder, signature, args):
     payload = cgutils.create_struct_proxy(payload_type)(context, builder)
     payload.n_arrays = n_arrays
     payload.data = data
-    payload.offsets = offsets
-    payload.null_bitmap = null_bitmap
-    builder.store(payload._getvalue(), meminfo_data_ptr)
+    # unwrap meminfos from Numpy arrays to store in payload
+    payload.offsets = context.make_array(types.Array(offset_type, 1, "C"))(
+        context, builder, offsets
+    ).meminfo
+    payload.null_bitmap = context.make_array(types.Array(types.uint8, 1, "C"))(
+        context, builder, null_bitmap
+    ).meminfo
+    payload_val = payload._getvalue()
+    builder.store(payload_val, meminfo_data_ptr)
 
     # increase refcount of stored values
-    context.nrt.incref(builder, signature.args[1], data)
-    context.nrt.incref(builder, signature.args[2], offsets)
-    context.nrt.incref(builder, signature.args[3], null_bitmap)
+    context.nrt.incref(builder, payload_type, payload_val)
 
     array_item_array = context.make_helper(builder, array_item_type)
     array_item_array.meminfo = meminfo
@@ -706,10 +714,12 @@ def init_array_item_array_codegen(context, builder, signature, args):
 
 @intrinsic
 def init_array_item_array(
-    typingctx, n_arrays_typ, data_type, offsets_typ, null_bitmap_typ=None
+    typingctx, n_arrays_typ, data_type, offsets_typ, null_bitmap_typ
 ):
     """Create a ArrayItemArray with provided offsets, data and null bitmap values."""
-    assert null_bitmap_typ == types.Array(types.uint8, 1, "C")
+    assert null_bitmap_typ == types.Array(
+        types.uint8, 1, "C"
+    ), "init_array_item_array: null_bitmap should be Numpy array of uint8 values"
 
     ret_typ = ArrayItemArrayType(data_type)
     sig = ret_typ(types.int64, data_type, offsets_typ, null_bitmap_typ)
@@ -718,12 +728,25 @@ def init_array_item_array(
 
 @intrinsic
 def get_offsets(typingctx, arr_typ=None):
-    assert isinstance(arr_typ, ArrayItemArrayType)
+    assert isinstance(
+        arr_typ, ArrayItemArrayType
+    ), "get_offsets: ArrayItemArrayType expected"
 
     def codegen(context, builder, sig, args):
         (arr,) = args
         payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
-        return impl_ret_borrowed(context, builder, sig.return_type, payload.offsets)
+        n_arrays_plus_1 = builder.add(
+            payload.n_arrays, lir.Constant(lir.IntType(64), 1)
+        )
+        offsets_arr = meminfo_to_np_arr(
+            context,
+            builder,
+            payload.offsets,
+            lir.Constant(lir.IntType(64), 0),
+            n_arrays_plus_1,
+            types.Array(offset_type, 1, "C"),
+        )
+        return impl_ret_borrowed(context, builder, sig.return_type, offsets_arr)
 
     return types.Array(offset_type, 1, "C")(arr_typ), codegen
 
@@ -736,9 +759,7 @@ def get_offsets_ind(typingctx, arr_typ, ind_t=None):
     def codegen(context, builder, sig, args):
         (arr, ind) = args
         payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
-        data_ptr = context.make_array(types.Array(offset_type, 1, "C"))(
-            context, builder, payload.offsets
-        ).data
+        data_ptr = context.nrt.meminfo_data(builder, payload.offsets)
         offsets = builder.bitcast(
             data_ptr, lir.IntType(offset_type.bitwidth).as_pointer()
         )
@@ -770,7 +791,19 @@ def get_null_bitmap(typingctx, arr_typ=None):
     def codegen(context, builder, sig, args):
         (arr,) = args
         payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
-        return impl_ret_borrowed(context, builder, sig.return_type, payload.null_bitmap)
+        n_bitmask_bytes = builder.udiv(
+            builder.add(payload.n_arrays, lir.Constant(lir.IntType(64), 7)),
+            lir.Constant(lir.IntType(64), 8),
+        )
+        null_bitmap_arr = meminfo_to_np_arr(
+            context,
+            builder,
+            payload.null_bitmap,
+            lir.Constant(lir.IntType(64), 0),
+            n_bitmask_bytes,
+            types.Array(types.uint8, 1, "C"),
+        )
+        return impl_ret_borrowed(context, builder, sig.return_type, null_bitmap_arr)
 
     return types.Array(types.uint8, 1, "C")(arr_typ), codegen
 
@@ -1050,6 +1083,8 @@ def array_item_arr_setitem(A, idx, val):
             val_offsets = get_offsets(val)
             val_data = get_data(val)
             val_null_bitmap = get_null_bitmap(val)
+            # NOTE: need to avoid len(val_data) in case over-allocated
+            val_data_len = np.int64(val_offsets[len(val)])
 
             n = len(A)
             slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
@@ -1060,10 +1095,10 @@ def array_item_arr_setitem(A, idx, val):
             if start == 0:
                 offsets[start] = 0
             start_offset = offsets[start]
-            required_capacity = start_offset + len(val_data)
+            required_capacity = start_offset + val_data_len
             ensure_data_capacity(A, start_offset, required_capacity)
             data = get_data(A)
-            data[start_offset : start_offset + len(val_data)] = val_data
+            data[start_offset : start_offset + val_data_len] = val_data
 
             # copy offsets (n+1 elements)
             offsets[start : stop + 1] = val_offsets + start_offset
