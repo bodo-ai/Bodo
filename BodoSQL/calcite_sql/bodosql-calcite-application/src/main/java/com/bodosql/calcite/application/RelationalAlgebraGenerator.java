@@ -4,6 +4,7 @@ import com.bodosql.calcite.adapter.pandas.PandasRel;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.prepare.PlannerImpl;
+import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.google.common.collect.ImmutableList;
@@ -64,8 +65,8 @@ public class RelationalAlgebraGenerator {
   /** Store the typesystem being used to access timezone info during Pandas codegen */
   private final RelDataTypeSystem typeSystem;
 
-  /** Should the generated plan/code use streaming? */
-  private final boolean useStreaming;
+  /** Which planner should be utilized. */
+  private final PlannerType plannerType;
 
   /** The Bodo verbose level. This is used to control code generated and/or compilation info. */
   private final int verboseLevel;
@@ -116,10 +117,9 @@ public class RelationalAlgebraGenerator {
   public void setupPlanner(
       List<SchemaPlus> defaultSchemas,
       String namedParamTableName,
-      RelDataTypeSystem typeSystem,
-      Boolean useStreaming) {
+      RelDataTypeSystem typeSystem) {
     PlannerImpl.Config config =
-        new PlannerImpl.Config(defaultSchemas, typeSystem, namedParamTableName, useStreaming);
+        new PlannerImpl.Config(defaultSchemas, typeSystem, namedParamTableName, plannerType);
     try {
       this.planner = new PlannerImpl(config);
     } catch (Exception e) {
@@ -141,11 +141,11 @@ public class RelationalAlgebraGenerator {
   public RelationalAlgebraGenerator(
       BodoSqlSchema newSchema,
       String namedParamTableName,
-      boolean useStreaming,
+      int plannerType,
       int verboseLevel,
       int streamingBatchSize) {
     this.catalog = null;
-    this.useStreaming = useStreaming;
+    this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
     this.streamingBatchSize = streamingBatchSize;
     // Enable/Disable join streaming.
@@ -160,8 +160,12 @@ public class RelationalAlgebraGenerator {
             });
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
     this.typeSystem = typeSystem;
-    setupPlanner(defaultSchemas, namedParamTableName, typeSystem, useStreaming);
+    setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
   }
+
+  public static final int HEURISTIC_PLANNER = 1;
+  public static final int VOLCANO_PLANNER = 2;
+  public static final int STREAMING_PLANNER = 3;
 
   /**
    * Constructor for the relational algebra generator class that accepts a Catalog and Schema
@@ -172,11 +176,15 @@ public class RelationalAlgebraGenerator {
       BodoSQLCatalog catalog,
       BodoSqlSchema newSchema,
       String namedParamTableName,
-      boolean useStreaming,
+      // int is a bad choice for this variable, but we're limited by either
+      // forcing py4j to initialize another Java object or use some plain old data
+      // that it can use so we're choosing the latter.
+      // Something like this can be replaced with a more formal API like GRPC and protobuf.
+      int plannerType,
       int verboseLevel,
       int streamingBatchSize) {
     this.catalog = catalog;
-    this.useStreaming = useStreaming;
+    this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
     this.streamingBatchSize = streamingBatchSize;
     // Enable/Disable join streaming.
@@ -227,7 +235,7 @@ public class RelationalAlgebraGenerator {
     BodoTZInfo tzInfo = catalog.getDefaultTimezone();
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem(tzInfo);
     this.typeSystem = typeSystem;
-    setupPlanner(defaultSchemas, namedParamTableName, typeSystem, useStreaming);
+    setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
   }
 
   /**
@@ -442,5 +450,17 @@ public class RelationalAlgebraGenerator {
 
   public HashMap<String, String> getLoweredGlobalVariables() {
     return this.loweredGlobalVariables;
+  }
+
+  private static PlannerType choosePlannerType(int plannerType) {
+    switch (plannerType) {
+    case VOLCANO_PLANNER:
+      return PlannerType.VOLCANO;
+    case STREAMING_PLANNER:
+      return PlannerType.STREAMING;
+    case HEURISTIC_PLANNER:
+    default:
+      return PlannerType.HEURISTIC;
+    }
   }
 }

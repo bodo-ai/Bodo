@@ -4,7 +4,7 @@ import re
 import time
 import traceback
 import warnings
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import List, Optional, Tuple, Union
 
 import numba
@@ -147,6 +147,18 @@ _numba_to_sql_param_type_map = {
     bodo.date_offset_type: SqlTypeEnum.DateOffset.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
 }
+
+# Hacky way to get the planner type option to Java.
+# I don't want to access the Java enum class or the constants
+# defined in Java that are used for this decision from Python
+# so we're going to redefine the enum here.
+#
+# Not intended as a public API.
+class _PlannerType(IntEnum):
+    Default = 0
+    Heuristic = 1
+    Volcano = 2
+    Streaming = 3
 
 
 def construct_tz_aware_column_type(typ, col_name, nullable):
@@ -1002,19 +1014,24 @@ class BodoSQLContext:
         Creates a generator from the given schema
         """
         verbose_level = bodo.user_logging.get_verbose_level()
+        planner_type = _PlannerType.Default.value
+        if bodo.bodosql_use_streaming_plan:
+            planner_type = _PlannerType.Streaming.value
+        elif bodo.bodosql_use_volcano_plan:
+            planner_type = _PlannerType.Volcano.value
         if self.catalog is not None:
             return RelationalAlgebraGeneratorClass(
                 self.catalog.get_java_object(),
                 self.schema,
                 NAMED_PARAM_TABLE_NAME,
-                bodo.bodosql_use_streaming_plan,
+                planner_type,
                 verbose_level,
                 bodo.bodosql_streaming_batch_size,
             )
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
             NAMED_PARAM_TABLE_NAME,
-            bodo.bodosql_use_streaming_plan,
+            planner_type,
             verbose_level,
             bodo.bodosql_streaming_batch_size,
         )
