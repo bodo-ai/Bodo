@@ -149,8 +149,9 @@ def pre_alloc_binary_array(n_bytestrs, n_chars):  # pragma: no cover
 @intrinsic
 def init_binary_arr(typingctx, data_typ=None):
     """create a new binary array from input data array(char) array data"""
-    assert isinstance(data_typ, ArrayItemArrayType) and data_typ.dtype == types.Array(
-        types.uint8, 1, "C"
+    assert (
+        isinstance(data_typ, ArrayItemArrayType)
+        and data_typ.dtype == bodo.libs.str_arr_ext.char_arr_type
     )
 
     def codegen(context, builder, sig, args):
@@ -167,8 +168,11 @@ def init_binary_arr(typingctx, data_typ=None):
 def init_bytes_type(typingctx, data_typ, length_type):
     """create a new bytes array from input data array(uint8) data and length,
     where it is assumed that length <= len(data)"""
-    assert data_typ == types.Array(types.uint8, 1, "C")
-    assert length_type == types.int64
+    assert (
+        data_typ == types.Array(types.uint8, 1, "C")
+        or data_typ == bodo.libs.str_arr_ext.char_arr_type
+    ), "init_bytes_type: invalid input type"
+    assert length_type == types.int64, "init_bytes_type: invalid length type"
 
     def codegen(context, builder, sig, args):
         # Convert input/output to structs to reference fields
@@ -176,6 +180,21 @@ def init_bytes_type(typingctx, data_typ, length_type):
             context, builder, value=args[0]
         )
         length = args[1]
+
+        if sig.args[0] == bodo.libs.str_arr_ext.char_arr_type:
+            from numba.np.arrayobj import get_itemsize
+
+            np_arr_type = types.Array(types.uint8, 1, "C")
+            intp_t = context.get_value_type(types.intp)
+            itemsize = context.get_constant(
+                types.intp, get_itemsize(context, np_arr_type)
+            )
+            strides = cgutils.pack_array(builder, (itemsize,), ty=intp_t)
+            data_ptr = bodo.libs.str_arr_ext.get_data_ptr_cg(context, builder, int_arr)
+        else:
+            strides = int_arr.strides
+            data_ptr = int_arr.data
+
         bytes_array = cgutils.create_struct_proxy(bytes_type)(context, builder)
 
         # Initialize the fields of the byte array (mostly copied from Numba)
@@ -187,10 +206,10 @@ def init_bytes_type(typingctx, data_typ, length_type):
         bytes_array.shape = cgutils.pack_array(
             builder, [length], context.get_value_type(types.intp)
         )
-        bytes_array.strides = int_arr.strides
+        bytes_array.strides = strides
 
         # Memcpy the data from int array to bytes array, truncating if necessary.
-        cgutils.memcpy(builder, bytes_array.data, int_arr.data, length)
+        cgutils.memcpy(builder, bytes_array.data, data_ptr, length)
         return bytes_array._getvalue()
 
     return bytes_type(data_typ, length_type), codegen

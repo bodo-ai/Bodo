@@ -152,12 +152,11 @@ def unbox_map_array(typ, val, c):
     )
 
     # get null and offset array pointers to pass to unboxing
-    null_bitmap_ptr = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-        c.context, c.builder, data_payload.null_bitmap
-    ).data
-    offsets_ptr = c.context.make_array(types.Array(offset_type, 1, "C"))(
-        c.context, c.builder, data_payload.offsets
-    ).data
+    null_bitmap_ptr = c.context.nrt.meminfo_data(c.builder, data_payload.null_bitmap)
+    offsets_ptr = c.builder.bitcast(
+        c.context.nrt.meminfo_data(c.builder, data_payload.offsets),
+        c.context.get_data_type(offset_type).as_pointer(),
+    )
 
     # get key/value array pointers to pass to C
     struct_arr_payload = _get_struct_arr_payload(
@@ -323,12 +322,11 @@ def box_map_arr(typ, val, c):
     )
 
     # get null and offset array pointers to pass to boxing
-    null_bitmap_ptr = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-        c.context, c.builder, data_payload.null_bitmap
-    ).data
-    offsets_ptr = c.context.make_array(types.Array(offset_type, 1, "C"))(
-        c.context, c.builder, data_payload.offsets
-    ).data
+    null_bitmap_ptr = c.context.nrt.meminfo_data(c.builder, data_payload.null_bitmap)
+    offsets_ptr = c.builder.bitcast(
+        c.context.nrt.meminfo_data(c.builder, data_payload.offsets),
+        c.context.get_data_type(offset_type).as_pointer(),
+    )
 
     # get key/value arrays
     struct_arr_payload = _get_struct_arr_payload(
@@ -344,7 +342,6 @@ def box_map_arr(typ, val, c):
         and t.dtype in (types.int64, types.float64, types.bool_, datetime_date_type)
         for t in (typ.key_arr_type, typ.value_arr_type)
     ):
-
         key_arr_ptr = c.context.make_array(data_arr_type.dtype.data[0])(
             c.context, c.builder, key_arr
         ).data
