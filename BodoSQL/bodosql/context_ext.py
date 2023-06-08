@@ -50,7 +50,7 @@ from bodo.utils.typing import (
 
 class BodoSQLContextType(types.Type):
     """Data type for compiling BodoSQLContext.
-    Requires table names and dataframe types.
+    Requires table names and DataFrame types.
     """
 
     def __init__(self, names, dataframes, catalog):

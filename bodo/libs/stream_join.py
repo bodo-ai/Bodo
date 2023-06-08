@@ -3,7 +3,7 @@
 This file is mostly wrappers for C++ implementations.
 """
 from functools import cached_property
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Set, Tuple
 
 import llvmlite.binding as ll
 import numba
@@ -473,9 +473,9 @@ class JoinStateType(types.Type):
         return self._derive_c_array_types(self.probe_reordered_arr_types)
 
     @property
-    def num_build_arrs(self) -> int:
+    def num_build_input_arrs(self) -> int:
         """
-        Determine the number of build arrays.
+        Determine the actual number of build arrays in the input.
 
         Note: We use build_reordered_arr_types in case the same column
         is used as a key in multiple comparisons.
@@ -485,9 +485,9 @@ class JoinStateType(types.Type):
         return len(self.build_reordered_arr_types)
 
     @property
-    def num_probe_arrs(self) -> int:
+    def num_probe_input_arrs(self) -> int:
         """
-        Determine the number of probe arrays.
+        Determine the actual number of probe arrays in the input.
 
         Note: We use probe_reordered_arr_types in case the same column
         is used as a key in multiple comparisons.
@@ -496,33 +496,202 @@ class JoinStateType(types.Type):
         """
         return len(self.probe_reordered_arr_types)
 
-    @property
-    def output_type(self):
-        """Return the output type from generating this join.
+    def _compute_table_output_arrays(
+        self, key_indices, table_type, make_nullable: bool
+    ):
+        """Compute one side of the output arrays for the output table.
 
-        Note: We must use build_arr_types and probe_arr_types to
-        account for key reordering + casting.
+        Args:
+            key_indices (N Tuple(int)): The indices of the key columns
+            table_type (TableType): The input table type for that side.
+            make_nullable (bool): Should the output be converted to nullable types.
 
         Returns:
-            bodo.TableType: The type of the output table.
+            List[types.ArrayCompatible]: The list of output array types.
         """
         arr_types = []
         # Note: We can maintain the input key types in the output.
         # Nothing should assume the original type if we cast an integer.
         key_types = self.key_types
-        # Add build side
-        for arr_type in key_types + self.build_reordered_arr_types[self.n_keys :]:
-            if self.probe_outer:
+        key_map = {key: key_types[i] for i, key in enumerate(key_indices)}
+        for i in range(len(table_type.arr_types)):
+            if i in key_map:
+                arr_type = key_map[i]
+            else:
+                arr_type = table_type.arr_types[i]
+            if make_nullable:
                 arr_type = to_nullable_type(arr_type)
             arr_types.append(arr_type)
-        # Add probe side
-        for arr_type in key_types + self.probe_reordered_arr_types[self.n_keys :]:
-            if self.build_outer:
-                arr_type = to_nullable_type(arr_type)
-            arr_types.append(arr_type)
+        return arr_types
 
+    @property
+    def build_output_arrays(self) -> List[types.ArrayCompatible]:
+        """Determine the output array types in the correct order for
+        the build side. This is used to generate the output type.
+
+        Returns:
+            List[types.ArrayCompatible]: The list of output array types.
+        """
+        return self._compute_table_output_arrays(
+            self.build_key_inds, self.build_table_type, self.probe_outer
+        )
+
+    @property
+    def probe_output_arrays(self) -> List[types.ArrayCompatible]:
+        """Determine the output array types in the correct order for
+        the probe side. This is used to generate the output type.
+
+        Returns:
+            List[types.ArrayCompatible]: The list of output array types.
+        """
+        return self._compute_table_output_arrays(
+            self.probe_key_inds, self.probe_table_type, self.build_outer
+        )
+
+    @property
+    def output_type(self):
+        """Return the output type from generating this join. BodoSQL
+        expects the output type to have the same columns as the input
+        types and in the same locations. This means keys may not necessarily
+        be in the front.
+
+        Returns:
+            bodo.TableType: The type of the output table.
+        """
+        arr_types = self.build_output_arrays + self.probe_output_arrays
         out_table_type = bodo.TableType(tuple(arr_types))
         return out_table_type
+
+    def _get_table_live_col_arrs(
+        self,
+        key_indices,
+        table_type,
+        kept_cols: Set[int],
+        live_col_offset: int,
+        kept_check_offset: int,
+    ) -> Tuple[List[int], List[int], int]:
+        """Compute the column indices for telling C++ which columns to keep live in
+        the output and where to find each column for each input table. This returns
+        3 values, two of which are lists. The first list will be passed to RetrieveTable
+        in C++ to prune/reorder columns to match the output type for the column. The second
+        list will then match each column to its C++ location (or -1 if it is dead).
+
+        The general idea is since key columns are moved to the front for compute and potentially
+        duplicated, the first list will reorder the columns back to map the original type
+        (except for any dead columns) so the second list only has to determine if a column is
+        live (and how many prior live columns exist) and can be filled in type order.
+
+        Args:
+            key_indices (N Tuple(int)): The indices of the key columns
+            table_type (TableType): The input table type for that side
+            kept_cols (Set[int]): Set of indices for which columns are live in the output
+                table.
+            live_col_offset (int): Offset to add to the number of live columns.
+            kept_check_offset (int): Offset to apply to a column index to check
+                if it is in kept_cols.
+
+        Returns:
+            Tuple[List[int], List[int], int]: Returns a tuple of 3 values:
+                - The list of C++ column indices for the table that should be included
+                  in the output table. This may reorder or drop columns.
+                - The list of C++ column indices for the output table that maps each input
+                  column to its C++ column. If a column is dead it will have the value of -1.
+                - The number of live columns in the output table.
+        """
+
+        output_cols = []
+        table_cols = []
+        key_map = {idx: i for i, idx in enumerate(key_indices)}
+        data_offset = self.n_keys
+        num_cols = len(table_type.arr_types)
+        live_col_counter = live_col_offset
+        # Determine the live cols
+        for i in range(num_cols):
+            # Find the physical index of the column
+            # + update the data offset if it is not a key
+            if i in key_map:
+                physical_index = key_map[i]
+            else:
+                physical_index = data_offset
+                data_offset += 1
+            # Update the results based on if the column is live.
+            checked_index = i + kept_check_offset
+            if checked_index in kept_cols:
+                table_cols.append(physical_index)
+                output_cols.append(live_col_counter)
+                live_col_counter += 1
+            else:
+                output_cols.append(-1)
+        return (
+            table_cols,
+            output_cols,
+            live_col_counter,
+        )
+
+    def get_output_live_col_arrs(
+        self, used_cols
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Generate Numpy arrays of indices to lower to the runtime indicating
+        which columns should be live from the output of build, probe, and the overall
+        output type. The build and probe arrays are passed to RetrieveTable to
+        avoid generating the output columns and reorder columns so they match
+        the expected output type.
+
+        Args:
+            used_cols (Union[MetaType, types.None]): The used cols value
+                passed to the join to prune unused columns. If none all columns
+                in the original output type should be used. Otherwise the metatype
+                contains the live columns.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray, np.ndarray]: Returns a tuple of 3 values:
+                - The array of C++ column indices for the build table that should be included
+                  in the output table. This may reorder or drop columns.
+                - The array of C++ column indices for the build table that should be included
+                  in the output table. This may reorder or drop columns.
+                - The array of C++ column indices for the output table that maps each input
+                  column to its C++ column. If a column is dead it will have the value of -1.
+        """
+        if (
+            self.build_table_type == types.unknown
+            or self.probe_table_type == types.unknown
+        ):
+            # Only compute when the types are final.
+            return (
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+                np.array([], dtype=np.int64),
+            )
+        out_table_type = self.output_type
+        num_output_cols = len(out_table_type.arr_types)
+        if is_overload_none(used_cols):
+            # All of the original inputs are kept
+            kept_cols = set(range(num_output_cols))
+        else:
+            # Used cols is a Meta Type with a sorted tuple of column indices.
+            kept_cols = set(unwrap_typeref(used_cols).meta)
+
+        out_cols = []
+        # Compute the build side
+        build_cols, build_output, live_col_counter = self._get_table_live_col_arrs(
+            self.build_key_inds, self.build_table_type, kept_cols, 0, 0
+        )
+        # Compute the probe side
+        probe_cols, probe_output, _ = self._get_table_live_col_arrs(
+            self.probe_key_inds,
+            self.probe_table_type,
+            kept_cols,
+            live_col_counter,
+            len(self.build_table_type.arr_types),
+        )
+        out_cols = build_output + probe_output
+
+        # Return the results as arrays
+        return (
+            np.array(build_cols, dtype=np.int64),
+            np.array(probe_cols, dtype=np.int64),
+            np.array(out_cols, dtype=np.int64),
+        )
 
 
 register_model(JoinStateType)(models.OpaqueModel)
@@ -661,10 +830,10 @@ def init_join_state(
 
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
-    n_build_arrs = output_type.num_build_arrs
+    n_build_arrs = output_type.num_build_input_arrs
     probe_arr_dtypes = output_type.probe_arr_ctypes
     probe_arr_array_types = output_type.probe_arr_array_types
-    n_probe_arrs = output_type.num_probe_arrs
+    n_probe_arrs = output_type.num_probe_input_arrs
 
     # handle non-equi conditions (reuse existing join code as much as possible)
     # Note we must account for how keys will be cast here.
@@ -804,7 +973,7 @@ def join_build_consume_batch(join_state, table, is_last, parallel=False):
         is_last (bool): is last batch
     """
     in_col_inds = MetaType(join_state.build_indices)
-    n_table_cols = join_state.num_build_arrs
+    n_table_cols = join_state.num_build_input_arrs
     cast_table_type = join_state.key_casted_build_table_type
     if cast_table_type == types.unknown:
         cast_table_type = table
@@ -905,57 +1074,18 @@ def join_probe_consume_batch(
         table_type: output table batch
     """
     in_col_inds = MetaType(join_state.probe_indices)
-    n_table_cols = join_state.num_probe_arrs
+    n_table_cols = join_state.num_probe_input_arrs
     cast_table_type = join_state.key_casted_probe_table_type
     if cast_table_type == types.unknown:
         cast_table_type = table
     out_table_type = join_state.output_type
 
-    # Determine the number of columns in the build/probe tables.
-    build_table_type = join_state.build_table_type
-    if build_table_type == types.unknown:
-        num_build_cols = 0
-    else:
-        num_build_cols = len(build_table_type.arr_types)
-    num_probe_cols = len(cast_table_type.arr_types)
-
-    # Determine the live columns. TODO: add a used_cols and compute the result.
-    if is_overload_none(used_cols):
-        kept_build_cols = np.arange(num_build_cols, dtype=np.uint64)
-        kept_probe_cols = np.arange(num_probe_cols, dtype=np.uint64)
-        out_cols_arr = np.arange(len(out_table_type.arr_types), dtype=np.int64)
-    else:
-        # Used cols is a Meta Type with a sorted tuple of column indices.
-        # TODO: Use that this is sorted?
-        kept_cols = set(unwrap_typeref(used_cols).meta)
-
-        live_col_counter = 0
-        build_cols = []
-        probe_cols = []
-        out_cols = []
-
-        # Determine the live build cols
-        for i in range(num_build_cols):
-            if i in kept_cols:
-                build_cols.append(i)
-                out_cols.append(live_col_counter)
-                live_col_counter += 1
-            else:
-                out_cols.append(-1)
-
-        # Determine the live probe cols
-        for i in range(num_probe_cols):
-            output_idx = i + num_build_cols
-            if output_idx in kept_cols:
-                probe_cols.append(i)
-                out_cols.append(live_col_counter)
-                live_col_counter += 1
-            else:
-                out_cols.append(-1)
-        # Generate the arrays to include.
-        kept_build_cols = np.array(build_cols, dtype=np.uint64)
-        kept_probe_cols = np.array(probe_cols, dtype=np.uint64)
-        out_cols_arr = np.array(out_cols, dtype=np.int64)
+    # Determine the live columns.
+    (
+        kept_build_cols,
+        kept_probe_cols,
+        out_cols_arr,
+    ) = join_state.get_output_live_col_arrs(used_cols)
 
     def impl(
         join_state, table, is_last, used_cols=None, parallel=False
