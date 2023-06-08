@@ -6777,6 +6777,7 @@ def test_boolor_booland_boolxor_agg(t_val, f_val, dtype, memory_leak_check):
             ),
         }
     )
+
     check_func(
         impl,
         (df,),
@@ -6784,6 +6785,66 @@ def test_boolor_booland_boolxor_agg(t_val, f_val, dtype, memory_leak_check):
         reset_index=True,
         py_output=expected_output,
         check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "data, dtype",
+    [
+        pytest.param(
+            [42, 100, 60, 5, 15, 70, 3, 213, 6, None], pd.Int32Dtype(), id="int32"
+        ),
+        pytest.param(
+            [41.5, 100.4, 60.0, 5.0, 15.21, 69.53, 3.2, 213.1, 5.8, None],
+            pd.Float32Dtype(),
+            id="floats",
+        ),
+        pytest.param(
+            ["41.5", "100", "60", "5", "15", "69.53", "3.2", "213.1", "5.8", None],
+            pd.StringDtype(),
+            id="strings",
+        ),
+    ],
+)
+def test_bitor_agg(data, dtype, memory_leak_check):
+    """Tests the BITOR_AGG aggregation function with groupby on string data.
+    This will in the future also test BITAND_AGG and BITXOR_AGG.
+
+    Args:
+        col (pd.Series): Input column
+        expected (int): Bitwise-or'd expected output
+        memory_leak_check (): Fixture, see `conftest.py`.
+    """
+
+    def impl(df):
+        # Note this flag + code format is chosen because
+        # these are the generated SQL flags
+        return df.groupby(["key"], as_index=False, dropna=False).agg(
+            or_out=pd.NamedAgg(column="data", aggfunc="bitor_agg"),
+        )
+
+    df = pd.DataFrame(
+        {
+            "key": pd.Series([1, 1, 1, 2, 2, 2, 3, 3, 3, 4]),
+            "data": pd.Series(data, dtype=dtype),
+        }
+    )
+
+    expected = pd.DataFrame(
+        {
+            "key": pd.Series([1, 2, 3, 4]),
+            "or_out": pd.Series([126, 79, 215, None], dtype=pd.Int32Dtype()),
+        }
+    )
+
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        py_output=expected,
+        check_names=False,
+        check_dtype=False,  # Output type depends on input type.
     )
 
 

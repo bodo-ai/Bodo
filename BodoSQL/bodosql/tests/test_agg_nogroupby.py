@@ -997,6 +997,8 @@ def test_bitor_agg(col, expected, memory_leak_check):
     This will in the future also test BITAND_AGG and BITXOR_AGG.
 
     Args:
+        col (pd.Series): Input column
+        expected (int): Bitwise-or'd expected output
         memory_leak_check (): Fixture, see `conftest.py`.
     """
     ctx = {

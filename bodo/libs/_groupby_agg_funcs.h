@@ -3,6 +3,7 @@
 #ifndef _GROUPBY_AGG_FUNCS_H_INCLUDED
 #define _GROUPBY_AGG_FUNCS_H_INCLUDED
 
+#include <concepts>
 #include <span>
 #include "_array_utils.h"
 #include "_groupby_ftypes.h"
@@ -68,6 +69,21 @@ struct aggfunc {
      * @param[in] second input value.
      */
     static void apply(T& v1, T& v2) {}
+};
+
+/**
+ * This template is used for functions that have (possibly) different
+ * input and output types, T_in and T_out, and don't require additional
+ * arguments.
+ */
+template <typename T_out, typename T_in, int dtype, int ftype>
+struct casted_aggfunc {
+    /**
+     * Apply the function.
+     * @param[in,out] v1: current aggregate value, holds the result
+     * @param[in] v2: other input value.
+     */
+    static void apply(T_out& v1, T_in& v2);
 };
 
 /**
@@ -781,6 +797,33 @@ struct boolxor_agg<T, dtype> {
             SetBitTo((uint8_t*)two_arr->data1(), i_grp, old_one);
         }
     }
+};
+
+// bitor_agg
+
+template <typename T_out, typename T_in, int dtype>
+    requires std::integral<T_in> && std::same_as<T_in, T_out>
+struct casted_aggfunc<T_out, T_in, dtype, Bodo_FTypes::bitor_agg> {
+    /**
+     * Applies BITOR_AGG for *integer* inputs.
+     * For integers, T_out and T_in should be the same dtype.
+     *
+     * @param[in,out] v1: current aggregate value, holds the result
+     * @param[in] v2: other input value.
+     */
+    static void apply(T_out& v1, T_in& v2) { v1 |= v2; }
+};
+
+template <typename T_in, int dtype>
+    requires std::floating_point<T_in>
+struct casted_aggfunc<int64_t, T_in, dtype, Bodo_FTypes::bitor_agg> {
+    /**
+     * Applies BITOR_AGG for *floating point* inputs.
+     *
+     * @param[in,out] v1: current aggregate value, holds the result
+     * @param[in] v2: other input value.
+     */
+    static void apply(int64_t& v1, T_in& v2) { v1 |= std::lround(v2); }
 };
 
 // Non inlined operations over multiple columns

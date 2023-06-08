@@ -1492,6 +1492,15 @@ numeric types
 
     Compute the kurtosis of a column
 
+#### BITOR_AGG
+-   `#!sql BITOR_AGG`
+    
+    Compute the bitwise OR of every input
+    in a group, returning `#!sql NULL` if there are no non-`#!sql NULL` entries.
+    Accepts floating point values, integer values, and strings. Strings are interpreted
+    directly as numbers, converting to 64-bit floating point numbers.
+
+
 #### BOOLOR_AGG
 -   `#!sql BOOLOR_AGG`
 
@@ -2875,6 +2884,13 @@ Currently, BodoSQL supports the following Window functions:
     Compute the skew over the window, or `NULL` if the window contains fewer
     than 4 non-`NULL` entries.
 
+#### BITOR_AGG
+-   `#!sql BITOR_AGG`
+    
+    Outputs the bitwise OR of every input
+    in the window, or `#!sql NULL` if the window has no non-`#!sql NULL` elements.
+    Accepts floating point values, integer values, and strings. Strings are interpreted
+    directly as numbers, converting to 64-bit floating point numbers.
 
 #### BOOLOR_AGG
 -   `#!sql BOOLOR_AGG`
