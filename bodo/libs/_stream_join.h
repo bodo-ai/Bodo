@@ -444,7 +444,6 @@ struct KeyEqualHashJoinTable {
      */
     bool operator()(const int64_t iRowA, const int64_t iRowB) const;
     JoinPartition* join_partition;
-    const bool is_na_equal;
     const uint64_t n_keys;
 };
 
@@ -475,7 +474,7 @@ class JoinPartition {
         : build_table_buffer(build_arr_c_types, build_arr_array_types,
                              build_table_dict_builders),
           build_table({}, HashHashJoinTable(this),
-                      KeyEqualHashJoinTable(this, false, n_keys_)),
+                      KeyEqualHashJoinTable(this, n_keys_)),
           probe_table_buffer(probe_arr_c_types, probe_arr_array_types,
                              probe_table_dict_builders),
           num_top_bits(num_top_bits_),
