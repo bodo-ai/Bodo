@@ -12,6 +12,7 @@ from libcpp cimport bool as c_bool
 from libcpp cimport nullptr
 from libcpp.memory cimport make_shared, shared_ptr, unique_ptr
 from libcpp.string cimport string as c_string
+from libcpp.vector cimport vector
 from pyarrow.includes.common cimport CStatus
 
 

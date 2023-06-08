@@ -6,6 +6,7 @@
 # so that in memory.pyx file, they can be used to implement Python classes,
 # functions and helpers.
 
+
 from pyarrow.includes.libarrow cimport CMemoryPool
 
 from bodo.libs.common cimport *
@@ -26,6 +27,21 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         uint64_t getNumBlocks() const
         c_bool isFrameMapped(uint64_t idx) const
         c_bool isFramePinned(uint64_t idx) const
+    
+
+    cdef enum CStorageType" bodo::StorageType":
+        Local = 1
+
+
+    cdef cppclass CStorageOptions" bodo::StorageOptions":
+        int64_t usable_size
+        c_string location
+        CStorageType type
+        
+        CStorageOptions()
+        
+        @staticmethod
+        shared_ptr[CStorageOptions] Defaults(uint8_t tier)
 
 
     cdef cppclass CBufferPoolOptions" bodo::BufferPoolOptions":
@@ -33,6 +49,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         uint64_t min_size_class
         uint64_t max_num_size_classes
         c_bool ignore_max_limit_during_allocation
+        vector[shared_ptr[CStorageOptions]] storage_options
 
         CBufferPoolOptions()
         
@@ -41,11 +58,17 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
 
 
     cdef cppclass CBufferPool" bodo::BufferPool"(CMemoryPool):
+        void Cleanup()
+
         CStatus Allocate(int64_t size, int64_t alignment, uint8_t** out)
         CStatus Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr)
         void Free(uint8_t* buffer, int64_t size, int64_t alignment)
+        CStatus Pin(uint8_t** ptr)
+        void Unpin(uint8_t* ptr)
+
         # put overloads under a different name to avoid cython bug with multiple
         # layers of inheritance
+        uint64_t get_bytes_pinned" bytes_pinned"()
         int64_t get_bytes_allocated" bytes_allocated"()
         int64_t get_max_memory" max_memory"()
         c_string get_backend_name" backend_name"()
