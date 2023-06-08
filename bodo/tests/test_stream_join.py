@@ -615,13 +615,13 @@ def test_hash_join_reorder(memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(
         (
-            "p_partkey",
-            "p_comment",
             "p_name",
+            "p_comment",
             "p_size",
+            "p_partkey",
             "l_partkey",
-            "l_comment",
             "l_orderkey",
+            "l_comment",
         )
     )
 
@@ -685,13 +685,13 @@ def test_hash_join_reorder(memory_leak_check):
     out_df = test_hash_join(conn_str)
     expected_df = pd.DataFrame(
         {
-            "p_partkey": [183728],
-            "p_comment": ["bold deposi"],
             "p_name": ["yellow turquoise cornflower coral saddle"],
+            "p_comment": ["bold deposi"],
             "p_size": [37],
+            "p_partkey": [183728],
             "l_partkey": [183728],
-            "l_comment": ["bold deposi"],
             "l_orderkey": [685476],
+            "l_comment": ["bold deposi"],
         }
     )
     out_df = bodo.allgatherv(out_df)
