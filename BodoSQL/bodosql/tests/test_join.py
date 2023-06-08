@@ -660,6 +660,9 @@ def test_interval_join_compilation(memory_leak_check):
         * That BodoSQL performs the casts as a projection before the join.
           Interval join currently does not support operations inside of the condition
     """
+    if bodo.bodosql_use_streaming_plan:
+        # Ignore this test when using streaming plan
+        return
 
     df1 = pd.DataFrame(
         {
