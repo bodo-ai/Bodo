@@ -81,7 +81,7 @@ bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
     // is_na_equal.
     // TODO: Eliminate groups with NA columns with is_na_equal=False
     // from the hashmap.
-    bool set_na_equal = this->is_na_equal || (is_build_A && is_build_B);
+    bool set_na_equal = (is_build_A && is_build_B);
     bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB, this->n_keys,
                               set_na_equal);
     return test;
@@ -1476,7 +1476,6 @@ table_info* join_probe_consume_batch_py_entry(
         CONSUME_PROBE_BATCH(
             join_state->build_table_outer, join_state->probe_table_outer,
             contain_non_equi_cond, has_bloom_filter, false, false, false, false)
-
         return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
