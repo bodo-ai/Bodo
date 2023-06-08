@@ -1274,3 +1274,114 @@ def test_join_key_prune(memory_leak_check):
         reset_index=True,
         sort_output=True,
     )
+
+
+def test_key_multicast(memory_leak_check):
+    """
+    Test stream join where a key is used in multiple comparisons. Since we use
+    1 column for a column used in multiple comparisons, we need to make sure
+    that both uses of the key share a common type.
+
+    The codegen here is heavily influence by the BodoSQL generated code.
+    """
+    df1 = pd.DataFrame({"A": np.array([1, 2, 3, 4, 5] * 2500, dtype=np.int8)})
+    df2 = pd.DataFrame(
+        {
+            "C": np.array([2, 6] * 2500, dtype=np.int64),
+            "D": np.array([2, 6] * 2500, dtype=np.int32),
+        }
+    )
+    build_keys_inds = bodo.utils.typing.MetaType((0, 0))
+    probe_keys_inds = bodo.utils.typing.MetaType((0, 1))
+    kept_cols1 = bodo.utils.typing.MetaType((0,))
+    kept_cols2 = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(("A",))
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "C",
+            "D",
+        )
+    )
+
+    def test_hash_join(df1, df2):
+        join_state = init_join_state(
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+        )
+        _temp1 = 0
+        is_last1 = False
+        while not is_last1:
+            batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            _temp1 = _temp1 + 1
+            is_last1 = bodo.libs.distributed_api.dist_reduce(
+                is_last1,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            table1 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
+                (),
+                kept_cols1,
+                2,
+            )
+            join_build_consume_batch(join_state, table1, is_last1)
+
+        _temp2 = 0
+        out_dfs = []
+        is_last2 = False
+        is_last3 = False
+        while not is_last3:
+            batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            _temp2 = _temp2 + 1
+            is_last2 = bodo.libs.distributed_api.dist_reduce(
+                is_last2,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            table2 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
+                (),
+                kept_cols2,
+                2,
+            )
+            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df_final)
+            is_last3 = bodo.libs.distributed_api.dist_reduce(
+                is_last3,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+        delete_join_state(join_state)
+        return pd.concat(out_dfs)
+
+    # Everything should be upcast to int64.
+    expected_df = pd.DataFrame(
+        {
+            "A": [2] * 2500 * 2500,
+            "C": [2] * 2500 * 2500,
+            "D": [2] * 2500 * 2500,
+        }
+    )
+    check_func(
+        test_hash_join,
+        (df1, df2),
+        py_output=expected_df,
+        reset_index=True,
+        sort_output=True,
+    )
