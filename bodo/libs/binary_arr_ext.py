@@ -181,6 +181,7 @@ def init_bytes_type(typingctx, data_typ, length_type):
         )
         length = args[1]
 
+        # char_arr_type (PrimitiveArrayType) input case
         if sig.args[0] == bodo.libs.str_arr_ext.char_arr_type:
             from numba.np.arrayobj import get_itemsize
 
@@ -192,6 +193,7 @@ def init_bytes_type(typingctx, data_typ, length_type):
             strides = cgutils.pack_array(builder, (itemsize,), ty=intp_t)
             data_ptr = bodo.libs.str_arr_ext.get_data_ptr_cg(context, builder, int_arr)
         else:
+            # Numpy array input case
             strides = int_arr.strides
             data_ptr = int_arr.data
 
