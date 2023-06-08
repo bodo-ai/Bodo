@@ -1650,7 +1650,6 @@ def sync_dtypes(py_out, bodo_out_dtypes):
         isinstance(dtype, pd.api.extensions.ExtensionDtype) for dtype in bodo_out_dtypes
     ):
         for i, (py_dtype, bodo_dtype) in enumerate(zip(py_out_dtypes, bodo_out_dtypes)):
-
             if isinstance(bodo_dtype, np.dtype) and py_dtype == bodo_dtype:
                 continue
             if (
@@ -2422,6 +2421,7 @@ def compose_decos(decos):
 
 # Determine if we are re-running a test due to a flaky failure.
 pytest_snowflake_is_rerunning = False
+
 
 # Determine wether we want to re-run a test due to a flaky failure,
 # and set the pytest_snowflake_is_rerunning flag.
