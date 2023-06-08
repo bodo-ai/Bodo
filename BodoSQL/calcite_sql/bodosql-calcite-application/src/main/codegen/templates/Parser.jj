@@ -4650,6 +4650,7 @@ SqlLiteral SpecialLiteral() :
     <NULL> { return SqlLiteral.createNull(getPos()); }
 }
 
+
 /**
  * Parses a string literal. The literal may be continued onto several
  * lines.  For a simple literal, the result is an SqlLiteral.  For a continued
@@ -8282,6 +8283,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < REGR_SYY: "REGR_SYY" >
 |   < RELATIVE: "RELATIVE" >
 |   < RELEASE: "RELEASE" >
+|   < RENAME: "RENAME" >
 |   < REPEATABLE: "REPEATABLE" >
 |   < REPLACE: "REPLACE" >
 |   < RESET: "RESET" >
@@ -8427,6 +8429,7 @@ SqlPostfixOperator PostfixRowOperator() :
 |   < SUBSTRING_REGEX: "SUBSTRING_REGEX" >
 |   < SUCCEEDS: "SUCCEEDS" >
 |   < SUM: "SUM" >
+|   < SWAP: "SWAP" >
 |   < SYMMETRIC: "SYMMETRIC" >
 |   < SYSTEM: "SYSTEM" >
 |   < SYSTEM_TIME: "SYSTEM_TIME" >
