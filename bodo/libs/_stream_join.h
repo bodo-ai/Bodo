@@ -131,38 +131,32 @@ struct ArrayBuildBuffer {
     void AppendRow(const std::shared_ptr<array_info>& in_arr, int64_t row_ind) {
         switch (in_arr->arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL: {
+                // Set null bit
+                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+                // set data value
+                int64_t new_data_size = 0;
                 if (in_arr->dtype == Bodo_CTypes::_BOOL) {
                     arrow::bit_util::SetBitTo(
                         (uint8_t*)data_array->data1(), size,
                         GetBit((uint8_t*)in_arr->data1(), row_ind));
-                    size++;
-                    data_array->length = size;
-                    CHECK_ARROW_MEM(
-                        data_array->buffers[0]->Resize(
-                            arrow::bit_util::BytesForBits(size), false),
-                        "Resize Failed!");
-                    CHECK_ARROW_MEM(
-                        data_array->buffers[1]->Resize(
-                            arrow::bit_util::BytesForBits(size), false),
-                        "Resize Failed!");
+                    new_data_size = arrow::bit_util::BytesForBits(size + 1);
                 } else {
                     uint64_t size_type = numpy_item_size[in_arr->dtype];
                     char* out_ptr = data_array->data1() + size_type * size;
                     char* in_ptr = in_arr->data1() + size_type * row_ind;
                     memcpy(out_ptr, in_ptr, size_type);
-                    bool bit =
-                        GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
-                    SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
-                    size++;
-                    data_array->length = size;
-                    CHECK_ARROW_MEM(
-                        data_array->buffers[0]->Resize(size * size_type, false),
-                        "Resize Failed!");
-                    CHECK_ARROW_MEM(
-                        data_array->buffers[1]->Resize(
-                            arrow::bit_util::BytesForBits(size), false),
-                        "Resize Failed!");
+                    new_data_size = size_type * (size + 1);
                 }
+                // Resize buffers
+                size++;
+                data_array->length = size;
+                CHECK_ARROW_MEM(
+                    data_array->buffers[0]->Resize(new_data_size, false),
+                    "Resize Failed!");
+                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
+                                    arrow::bit_util::BytesForBits(size), false),
+                                "Resize Failed!");
             } break;
             case bodo_array_type::STRING: {
                 offset_t* curr_offsets = (offset_t*)data_array->data2();
