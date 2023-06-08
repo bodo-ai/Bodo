@@ -310,7 +310,7 @@ def array_to_info_codegen(context, builder, sig, args):
     if arr_type in (string_array_type, binary_array_type):
         payload = _get_str_binary_arr_payload(context, builder, in_arr, arr_type)
         char_arr = context.make_helper(builder, char_arr_type, payload.data)
-        # TODO: make sure char_arr.offset is zero since not supported in C++
+        # TODO: make sure char_arr.meminfo_offset is zero since not supported in C++
 
         is_bytes = context.get_constant(types.int32, int(arr_type == binary_array_type))
         fnty = lir.FunctionType(
@@ -1320,7 +1320,7 @@ def _gen_info_to_string_array(context, builder, arr_type, info_ptr):
     )  # pragma: no cover
 
     # C++ string array doesn't support offsets
-    char_arr.offset = context.get_constant(types.int64, 0)
+    char_arr.meminfo_offset = context.get_constant(types.int64, 0)
     payload.data = char_arr._getvalue()
     builder.store(payload._getvalue(), meminfo_data_ptr)
     array_item_array.meminfo = meminfo
