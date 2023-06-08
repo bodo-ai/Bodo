@@ -937,6 +937,8 @@ void nested_loop_join_build_consume_batch_py_entry(
  * @param num_kept_build_cols Length of kept_build_col_nums
  * @param kept_probe_col_nums indices of kept columns in probe table
  * @param num_kept_probe_cols Length of kept_probe_col_nums
+ * @param[out] total_rows Store the number of rows in the output batch in case
+ *        all columns are dead.
  * @param is_last is last batch
  * @param is_parallel parallel flag
  * @return table_info* output table batch
@@ -944,5 +946,5 @@ void nested_loop_join_build_consume_batch_py_entry(
 table_info* nested_loop_join_probe_consume_batch_py_entry(
     NestedLoopJoinState* join_state, table_info* in_table,
     uint64_t* kept_build_col_nums, int64_t num_kept_build_cols,
-    uint64_t* kept_probe_col_nums, int64_t num_kept_probe_cols, bool is_last,
-    bool* out_is_last, bool parallel);
+    uint64_t* kept_probe_col_nums, int64_t num_kept_probe_cols,
+    int64_t* total_rows, bool is_last, bool* out_is_last, bool parallel);

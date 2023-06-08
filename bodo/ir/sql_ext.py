@@ -1550,7 +1550,7 @@ def _gen_sql_reader_py(
         if is_dead_table:
             func_text += "  table_var = None\n"
         else:
-            func_text += f"  table_var = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
+            func_text += f"  table_var = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id}, 0)\n"
             if len(out_used_cols) == 0:
                 # Set the table length using the total rows if don't load any columns
                 func_text += f"  table_var = set_table_len(table_var, local_rows)\n"
@@ -1635,7 +1635,7 @@ def _gen_sql_reader_py(
             table_idx = map_cpp_to_py_table_column_idxs(
                 col_names=col_names, out_used_cols=out_used_cols
             )
-            func_text += f"  table_var = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
+            func_text += f"  table_var = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id}, 0)\n"
             if len(out_used_cols) == 0:
                 if index_column_name:
                     # Set the table length using the index var if we load that column.
