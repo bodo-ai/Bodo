@@ -31,6 +31,7 @@ static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
     {Bodo_FTypes::nunique, Bodo_FTypes::sum},  // used in nunique_mode = 2
     {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg},
     {Bodo_FTypes::booland_agg, Bodo_FTypes::booland_agg},
+    {Bodo_FTypes::bitor_agg, Bodo_FTypes::bitor_agg},
     {Bodo_FTypes::count_if, Bodo_FTypes::sum}};
 
 int get_combine_func(int update_ftype) { return combine_funcs[update_ftype]; }

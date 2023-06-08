@@ -291,11 +291,41 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
                         getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
                 }
             }
-            return;
+            break;
+        }
+        case Bodo_FTypes::bitor_agg: {
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = get_group_for_row(grp_info, i);
+                if ((i_grp != -1) && in_col->get_null_bit(i)) {
+                    // Get isolated string from data_i
+                    offset_t start_offset = offsets_i[i];
+                    offset_t end_offset = offsets_i[i + 1];
+                    offset_t len = end_offset - start_offset;
+                    std::string substr(&data_i[start_offset], len);
+
+                    double double_substr = 0;
+                    try {
+                        double_substr = stod(substr);
+                    } catch (...) {
+                        throw std::runtime_error(
+                            "Failed to cast string to double. Use of bitor_agg "
+                            "with strings requires that the strings are "
+                            "castable to numeric types.");
+                    }
+
+                    // Get output value and perform operation on it
+                    int64_t& out_val = getv<int64_t>(out_col, i_grp);
+                    casted_aggfunc<int64_t, double, Bodo_CTypes::FLOAT64,
+                                   ftype>::apply(out_val, double_substr);
+                    out_col->set_null_bit(i_grp, true);
+                }
+            }
+            break;
         }
         // optimized groupby sum for strings (concatenation)
         case Bodo_FTypes::sum: {
-            return apply_sum_to_column_string(in_col, out_col, grp_info);
+            apply_sum_to_column_string(in_col, out_col, grp_info);
+            break;
         }
         case Bodo_FTypes::idxmax:
         case Bodo_FTypes::idxmin:
@@ -340,6 +370,14 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
                     }
                 }
             }
+            // TODO: Avoid creating the output array for
+            // idxmin/idxmax/idxmin_na_first/idxmax_na_first
+            // Determining the number of characters in output.
+            // Create an intermediate array since the output array is immutable
+            // and copy the data over.
+            std::shared_ptr<array_info> new_out_col =
+                create_string_array(out_col->dtype, V, ListString);
+            *out_col = std::move(*new_out_col);
             break;
         }
         default:
@@ -363,15 +401,11 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
                     }
                 }
             }
+            std::shared_ptr<array_info> new_out_col =
+                create_string_array(out_col->dtype, V, ListString);
+            *out_col = std::move(*new_out_col);
+            break;
     }
-    // TODO: Avoid creating the output array for
-    // idxmin/idxmax/idxmin_na_first/idxmax_na_first
-    // Determining the number of characters in output.
-    // Create an intermediate array since the output array is immutable
-    // and copy the data over.
-    std::shared_ptr<array_info> new_out_col =
-        create_string_array(out_col->dtype, V, ListString);
-    *out_col = std::move(*new_out_col);
 }
 
 /**
@@ -451,7 +485,8 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
     size_t num_groups = grp_info.num_groups;
     size_t n_bytes = (num_groups + 7) >> 3;
     std::shared_ptr<array_info> indices_arr = nullptr;
-    if (ftype != Bodo_FTypes::count && ftype != Bodo_FTypes::sum) {
+    if (ftype != Bodo_FTypes::count && ftype != Bodo_FTypes::sum &&
+        ftype != Bodo_FTypes::bitor_agg) {
         // Allocate the indices. Count and sum don't use this array.
         indices_arr = alloc_nullable_array(num_groups, Bodo_CTypes::INT32, 0);
     }
@@ -467,6 +502,40 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
                     // Note: int is unused since we would only use an NA check.
                     count_agg<int, Bodo_CTypes::STRING>::apply(
                         getv<int64_t>(out_col, i_grp), getv<int>(in_col, i));
+                }
+            }
+            return;
+        }
+        case Bodo_FTypes::bitor_agg: {
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = get_group_for_row(grp_info, i);
+                // Get index of the string data
+                int32_t& dict_idx = getv<int32_t>(in_col->child_arrays[1], i);
+                if ((i_grp != -1) && in_col->child_arrays[1]->get_null_bit(i)) {
+                    // Get isolated string from data_i
+                    offset_t start_offset = offsets_i[dict_idx];
+                    offset_t end_offset = offsets_i[dict_idx + 1];
+                    offset_t len = end_offset - start_offset;
+                    std::string substr(&data_i[start_offset], len);
+
+                    // Can potentially cache converted doubles due to properties
+                    // of dictionary encoded strings:
+                    // https://github.com/Bodo-inc/Bodo/pull/5471/files/f14a47db40b3abbcb968b6de84ab4ddb0b2f1e83#r1212472922
+                    double double_substr = 0;
+                    try {
+                        double_substr = stod(substr);
+                    } catch (...) {
+                        throw std::runtime_error(
+                            "Failed to cast string to double. Use of bitor_agg "
+                            "with strings requires that the strings are "
+                            "castable to numeric types.");
+                    }
+
+                    // Get output value and perform operation on it
+                    int64_t& out_val = getv<int64_t>(out_col, i_grp);
+                    casted_aggfunc<int64_t, double, Bodo_CTypes::FLOAT64,
+                                   ftype>::apply(out_val, double_substr);
+                    out_col->set_null_bit(i_grp, true);
                 }
             }
             return;
@@ -1035,6 +1104,33 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             }
             break;
         }
+        case Bodo_FTypes::bitor_agg: {
+            for (size_t i = 0; i < in_col->length; i++) {
+                int64_t i_grp = get_group_for_row(grp_info, i);
+                if (i_grp != -1) {
+                    T val2 = getv<T>(in_col, i);
+                    // Skip NA values
+                    // We treat NaN as NA in this case, since it is a runtime
+                    // error in snowflake anyway.
+                    if (!isnan_alltype<T, dtype>(val2)) {
+                        // If we have an integer
+                        if (std::is_integral<T>::value) {
+                            // output type = input type
+                            T& val1 = getv<T>(out_col, i_grp);
+                            casted_aggfunc<T, T, dtype, ftype>::apply(val1,
+                                                                      val2);
+                        } else {
+                            // otherwise, always use int64_t
+                            int64_t& val1 = getv<int64_t>(out_col, i_grp);
+                            casted_aggfunc<int64_t, T, dtype, ftype>::apply(
+                                val1, val2);
+                        }
+                        out_col->set_null_bit(i_grp, true);
+                    }
+                }
+            }
+            break;
+        }
         case Bodo_FTypes::count_if: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
@@ -1334,6 +1430,21 @@ void apply_to_column_nullable(
             out_col->set_null_bit(i_grp, true);                                \
             aux_cols[0]->set_null_bit(i_grp, true);                            \
             break;                                                             \
+        case Bodo_FTypes::bitor_agg: {                                         \
+            T val2 = getv<T>(in_col, i);                                       \
+            if (!isnan_alltype<T, dtype>(val2)) {                              \
+                if (std::is_integral<T>::value) {                              \
+                    T& val1 = getv<T>(out_col, i_grp);                         \
+                    casted_aggfunc<T, T, dtype, ftype>::apply(val1, val2);     \
+                } else {                                                       \
+                    int64_t& val1 = getv<int64_t>(out_col, i_grp);             \
+                    casted_aggfunc<int64_t, T, dtype, ftype>::apply(val1,      \
+                                                                    val2);     \
+                }                                                              \
+                out_col->set_null_bit(i_grp, true);                            \
+            }                                                                  \
+            break;                                                             \
+        }                                                                      \
         case Bodo_FTypes::count_if: {                                          \
             bool data_bit = GetBit((uint8_t*)in_col->data1(), i);              \
             bool_sum(getv<int64_t>(out_col, i_grp), data_bit);                 \
@@ -1493,6 +1604,11 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
                                                             aux_cols, grp_info);
             case Bodo_FTypes::idxmax_na_first:
                 return apply_to_column<int, Bodo_FTypes::idxmax_na_first,
+                                       Bodo_CTypes::STRING>(in_col, out_col,
+                                                            aux_cols, grp_info);
+
+            case Bodo_FTypes::bitor_agg:
+                return apply_to_column<int, Bodo_FTypes::bitor_agg,
                                        Bodo_CTypes::STRING>(in_col, out_col,
                                                             aux_cols, grp_info);
         }
@@ -1864,10 +1980,6 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::idxmax_na_first,
                                  Bodo_CTypes::DECIMAL)
             break;
-        case Bodo_FTypes::count_if:
-            // count_if requires a boolean input.
-            APPLY_TO_COLUMN_CALL(Bodo_FTypes::count_if, Bodo_CTypes::_BOOL)
-            break;
         case Bodo_FTypes::boolor_agg:
             // boolor_agg
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolor_agg, Bodo_CTypes::_BOOL)
@@ -1912,6 +2024,24 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::FLOAT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::boolxor_agg, Bodo_CTypes::DECIMAL)
+            break;
+        case Bodo_FTypes::bitor_agg:
+            // BITOR_AGG
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::INT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::UINT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::INT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::UINT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::INT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::UINT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::INT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::UINT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::FLOAT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::FLOAT64)
+            // TODO: add decimal????
+            break;
+        case Bodo_FTypes::count_if:
+            // count_if requires a boolean input.
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::count_if, Bodo_CTypes::_BOOL)
             break;
         case Bodo_FTypes::mean_eval:
             // EVAL step for MEAN. This transforms each group from several

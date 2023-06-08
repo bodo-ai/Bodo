@@ -376,6 +376,16 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             None,
             f"For {func_name}, only columns of type integer, float, Decimal, or boolean type are allowed",
         )
+    elif func_name == "bitor_agg":
+        if isinstance(in_dtype, types.Integer):
+            return to_nullable_type(dtype_to_array_type(in_dtype)), "ok"
+        elif isinstance(in_dtype, (types.Float)) or in_dtype == types.unicode_type:
+            return to_nullable_type(dtype_to_array_type(types.int64)), "ok"
+        else:
+            return (
+                None,
+                f"For {func_name}, only columns of type integer, float, or strings (that evaluate to numbers) are allowed",
+            )
     elif func_name == "count_if":
         if in_dtype == types.boolean:
             return types.Array(types.int64, 1, "C"), "ok"
@@ -1467,7 +1477,6 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             numba.core.registry.cpu_target.target_context,
         )[0]
 
-
     @bound_function("groupby.std", no_unliteral=True)
     def resolve_std(self, grp, args, kws):
         return resolve_gb(
@@ -2234,7 +2243,6 @@ def overload_reverse_shuffle(data, shuffle_info):
 def groupby_value_counts(
     grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True
 ):
-
     unsupported_args = dict(normalize=normalize, sort=sort, bins=bins, dropna=dropna)
     arg_defaults = dict(normalize=False, sort=True, bins=None, dropna=True)
     check_unsupported_args(
