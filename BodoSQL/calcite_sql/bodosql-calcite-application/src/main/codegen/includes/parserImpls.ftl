@@ -47,19 +47,20 @@ SqlNodeList ExtendColumnList() :
 {
     final Span s;
     List<SqlNode> list = new ArrayList<SqlNode>();
+    SqlNode col;
 }
 {
     <LPAREN> { s = span(); }
-    ColumnWithType(list)
+    col = ColumnWithType() { list.add(col); }
     (
-        <COMMA> ColumnWithType(list)
+        <COMMA> col = ColumnWithType() { list.add(col); }
     )*
     <RPAREN> {
         return new SqlNodeList(list, s.end(this));
     }
 }
 
-void ColumnWithType(List<SqlNode> list) :
+SqlNode ColumnWithType() :
 {
     SqlIdentifier id;
     SqlDataTypeSpec type;
@@ -75,8 +76,8 @@ void ColumnWithType(List<SqlNode> list) :
         }
     ]
     {
-        list.add(SqlDdlNodes.column(s.add(id).end(this), id,
-            type.withNullable(nullable), null, null));
+        return SqlDdlNodes.column(s.add(id).end(this), id,
+            type.withNullable(nullable), null, null);
     }
 }
 
@@ -109,6 +110,35 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
         return new SqlBodoCreateTable(s.end(this), replace, tableType,
             ifNotExists, id, columnList, query);
     }
+}
+
+SqlAlterTable SqlAlterTable() :
+{
+    boolean ifExists;
+    SqlIdentifier table;
+    SqlIdentifier renameName = null;
+    SqlIdentifier swapName = null;
+    SqlNode addCol  = null;
+    SqlIdentifier renameColOriginal = null;
+    SqlIdentifier renameColNew = null;
+    SqlNodeList dropCols = null;
+}
+{
+    <ALTER> <TABLE>
+    ifExists = IfExistsOpt()
+    table = CompoundIdentifier()
+    (
+        ( <RENAME> <TO> renameName = SimpleIdentifier() 
+        { return new SqlAlterTableRenameTable(getPos(), ifExists, table, renameName); })
+    |   ( <SWAP> <WITH> swapName = CompoundIdentifier() 
+        { return new SqlAlterTableSwapTable(getPos(), ifExists, table, swapName); })
+    |   ( <ADD> [ <COLUMN> ] addCol = ColumnWithType() 
+        { return new SqlAlterTableAddCol(getPos(), ifExists, table, addCol); })
+    |   ( <RENAME> [ <COLUMN> ] renameColOriginal = SimpleIdentifier() <TO> renameColNew = SimpleIdentifier() 
+        { return new SqlAlterTableRenameCol(getPos(), ifExists, table, renameColOriginal, renameColNew); })
+    |   ( <DROP> [ <COLUMN> ] { dropCols = new SqlNodeList(getPos()); } SimpleIdentifierCommaList(dropCols)
+        { return new SqlAlterTableDropCol(getPos(), ifExists, table, dropCols); })
+    )
 }
 
 boolean IfExistsOpt() :

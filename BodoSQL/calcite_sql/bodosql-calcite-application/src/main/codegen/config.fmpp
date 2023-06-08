@@ -30,6 +30,12 @@ data: {
       "com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable",
       "com.bodosql.calcite.sql.SqlBodoCreateTable",
       "com.bodosql.calcite.sql.ddl.SqlDropTable",
+      "com.bodosql.calcite.sql.ddl.SqlAlterTable",
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable",
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableSwapTable",
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableAddCol",
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameCol",
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableDropCol",
       "com.bodosql.calcite.sql.ddl.SqlTruncateTable",
       "com.bodosql.calcite.sql.fun.SqlBodoOperatorTable",
       "org.apache.calcite.sql.SqlCreate",
@@ -50,6 +56,8 @@ data: {
     # List of non-reserved keywords to add;
     # items in this list become non-reserved
     nonReservedKeywordsToAdd: [
+        "SWAP",
+        "RENAME",
         "IF",
         "VALUES",
         "VALUE",
@@ -95,6 +103,7 @@ data: {
     ]
 
     statementParserMethods: [
+        "SqlAlterTable()",
         "SqlTruncate()",
     ]
 
