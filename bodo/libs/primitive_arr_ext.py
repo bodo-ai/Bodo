@@ -60,7 +60,7 @@ class PrimitiveArrayModel(models.StructModel):
         members = [
             ("length", types.int64),
             ("meminfo", types.MemInfoPointer(fe_type.dtype)),
-            ("offset", types.int64),
+            ("meminfo_offset", types.int64),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -99,7 +99,7 @@ def alloc_primitive_array(typingctx, n_typ, dtype_typ):
         out_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
         out_arr.length = n
         out_arr.meminfo = data_arr.meminfo
-        out_arr.offset = context.get_constant(types.int64, 0)
+        out_arr.meminfo_offset = context.get_constant(types.int64, 0)
 
         return out_arr._getvalue()
 
@@ -124,9 +124,11 @@ def primitive_to_np(typingctx, primitive_arr_t):
             builder, primitive_arr_t, primitive_arr
         )
         meminfo = primitive_arr_struct.meminfo
-        offset = primitive_arr_struct.offset
+        meminfo_offset = primitive_arr_struct.meminfo_offset
         n = primitive_arr_struct.length
-        np_arr = meminfo_to_np_arr(context, builder, meminfo, offset, n, np_arr_type)
+        np_arr = meminfo_to_np_arr(
+            context, builder, meminfo, meminfo_offset, n, np_arr_type
+        )
         return impl_ret_borrowed(context, builder, np_arr_type, np_arr)
 
     return np_arr_type(primitive_arr_t), codegen
@@ -151,7 +153,7 @@ def np_to_primitive(typingctx, np_arr_t):
         out_arr.length = builder.extract_value(np_arr_struct.shape, 0)
         out_arr.meminfo = np_arr_struct.meminfo
         meminfo_data_ptr = context.nrt.meminfo_data(builder, np_arr_struct.meminfo)
-        out_arr.offset = builder.sub(
+        out_arr.meminfo_offset = builder.sub(
             builder.ptrtoint(np_arr_struct.data, lir.IntType(64)),
             builder.ptrtoint(meminfo_data_ptr, lir.IntType(64)),
         )

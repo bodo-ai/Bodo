@@ -536,7 +536,7 @@ def gen_alloc_meminfo(context, builder, length, dtype):
     return meminfo
 
 
-def meminfo_to_np_arr(context, builder, meminfo, offset, length, arrtype):
+def meminfo_to_np_arr(context, builder, meminfo, meminfo_offset, length, arrtype):
     """Wrap meminfo in a Numpy array of type 'arrtype'.
     Implementation similar to bodo.utils.utils._empty_nd_impl.
 
@@ -544,7 +544,7 @@ def meminfo_to_np_arr(context, builder, meminfo, offset, length, arrtype):
         context (BaseContext): codegen context
         builder (IRBuilder): codegen builder
         meminfo (ll_voidptr): input meminfo
-        offset (lir.IntType): data pointer offset from meminfo data pointer
+        meminfo_offset (lir.IntType): data pointer offset from meminfo data pointer
         length (lir.IntType): number of element
         arrtype (types.Type): Numpy array type to wrap
 
@@ -565,7 +565,7 @@ def meminfo_to_np_arr(context, builder, meminfo, offset, length, arrtype):
 
     meminfo_ptr = context.nrt.meminfo_data(builder, meminfo)
     data = builder.inttoptr(
-        builder.add(builder.ptrtoint(meminfo_ptr, lir.IntType(64)), offset),
+        builder.add(builder.ptrtoint(meminfo_ptr, lir.IntType(64)), meminfo_offset),
         lir.IntType(8).as_pointer(),
     )
     intp_t = context.get_value_type(types.intp)

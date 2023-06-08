@@ -465,7 +465,9 @@ def get_data_ptr_cg(context, builder, data_arr):
     """
     meminfo_ptr = context.nrt.meminfo_data(builder, data_arr.meminfo)
     return builder.inttoptr(
-        builder.add(builder.ptrtoint(meminfo_ptr, lir.IntType(64)), data_arr.offset),
+        builder.add(
+            builder.ptrtoint(meminfo_ptr, lir.IntType(64)), data_arr.meminfo_offset
+        ),
         lir.IntType(8).as_pointer(),
     )
 
@@ -2645,7 +2647,7 @@ def unbox_str_array(typ, val, c):
         ],
     )
 
-    char_arr.offset = c.context.get_constant(types.int64, 0)
+    char_arr.meminfo_offset = c.context.get_constant(types.int64, 0)
     payload.data = char_arr._getvalue()
     c.builder.store(payload._getvalue(), meminfo_data_ptr)
     array_item_array.meminfo = meminfo
