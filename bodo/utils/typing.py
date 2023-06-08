@@ -2529,23 +2529,27 @@ def is_bodosql_integer_arr_type(arr_typ: types.ArrayCompatible) -> bool:
 
 
 def get_common_bodosql_integer_arr_type(
-    arr_typ1: types.ArrayCompatible, arr_typ2: types.ArrayCompatible
+    arr_typs: List[types.ArrayCompatible],
 ) -> types.ArrayCompatible:
-    """Returns a common array type for two BodoSQL integer array representations
+    """Returns a common array type for the BodoSQL integer array representations
     that have already been validated by is_bodosql_integer_type.
 
     Args:
-        arr_typ1 (types.ArrayCompatible): An integer (nullable or non-nullable) or decimal array.
-        arr_typ2 (types.ArrayCompatible): An integer (nullable or non-nullable) or decimal array.
+        arr_typs (List[types.ArrayCompatible]): A list of integer (nullable or non-nullable) or decimal array to unify.
 
     Returns:
         types.ArrayCompatible: The output array with max bidwidth + correct nullability.
     """
-    to_nullable = is_nullable(arr_typ1) or is_nullable(arr_typ2)
-    if arr_typ1.dtype.bitwidth > arr_typ2.dtype.bitwidth:
-        arr_typ = arr_typ1
+    # Make sure arrays have the same nullability.
+    are_nullable = [is_nullable(arr_typ) for arr_typ in arr_typs]
+    if any([nullable for nullable in are_nullable]):
+        to_nullable = True
     else:
-        arr_typ = arr_typ2
+        to_nullable = False
+    bitwidths = [arr_typ.dtype.bitwidth for arr_typ in arr_typs]
+    max_bitwidth = max(bitwidths)
+    typ_idx = bitwidths.index(max_bitwidth)
+    arr_typ = arr_typs[typ_idx]
     if to_nullable:
         arr_typ = to_nullable_type(arr_typ)
     return arr_typ

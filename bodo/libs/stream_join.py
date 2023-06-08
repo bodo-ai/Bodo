@@ -2,6 +2,7 @@
 """Support for streaming join (a.k.a. vectorized join).
 This file is mostly wrappers for C++ implementations.
 """
+from collections import defaultdict
 from functools import cached_property
 from typing import TYPE_CHECKING, Dict, List, Set, Tuple
 
@@ -219,6 +220,54 @@ class JoinStateType(types.Type):
                 types.append(table_type.arr_types[i])
         return types
 
+    @staticmethod
+    def _derive_common_key_type(
+        input_types: List[types.ArrayCompatible],
+    ) -> types.ArrayCompatible:
+        """Derive a common key type for a list of array input types.
+        This is used for unifying the build/probe key types and for
+        unifying the key types for duplicated columns.
+
+        Args:
+            input_types (List[types.ArrayCompatible]): List of array types
+            to unify.
+
+        Raises:
+            BodoError: The keys cannot be unified.
+
+        Returns:
+            types.ArrayCompatible: The final output array type.
+        """
+        assert len(input_types) > 0, "At least 1 key type must be provided"
+        are_nullable = [is_nullable(t) for t in input_types]
+        # Make sure arrays have the same nullability.
+        if any([nullable for nullable in are_nullable]):
+            input_types = [to_nullable_type(t) for t in input_types]
+        # Check if all array types are the same.
+        if all([t == input_types[0] for t in input_types]):
+            common_type = input_types[0]
+        else:
+            are_bodosql_integer_arr_types = [
+                is_bodosql_integer_arr_type(t) for t in input_types
+            ]
+            if all(are_bodosql_integer_arr_types):
+                # TODO: Future optimization. If the types don't match exactly and
+                # we don't have an outer join on the larger bitwidth side, we don't
+                # have to upcast and can instead filter + downcast. In particular we
+                # know that any type that doesn't fit in the smaller array type
+                # cannot have a match.
+                #
+                # Note: If we have an outer join we can't do this because we need to
+                # preserve the elements without matches.
+                #
+                common_type = get_common_bodosql_integer_arr_type(input_types)
+            else:
+                # TODO [BSE-439]: Support dict encoding + regular string
+                raise BodoError(
+                    "StreamingHashJoin: Build and probe keys must have the same types"
+                )
+        return common_type
+
     @cached_property
     def key_types(self) -> List[types.ArrayCompatible]:
         """Generate the list of array types that should be used for the
@@ -237,40 +286,48 @@ class JoinStateType(types.Type):
         probe_key_inds = self.probe_key_inds
         arr_types = []
         num_keys = len(build_key_inds)
+        # Check if a key is used more than once.
+        seen_build_keys = defaultdict(int)
+        seen_probe_keys = defaultdict(int)
         for i in range(num_keys):
-            build_arr_type = self.build_table_type.arr_types[build_key_inds[i]]
-            probe_arr_type = self.probe_table_type.arr_types[probe_key_inds[i]]
-            probe_nullable = is_nullable(probe_arr_type)
-            build_nullable = is_nullable(build_arr_type)
-            # Convert arrays if they aren't the same nullability.
-            if probe_nullable != build_nullable:
-                if probe_nullable:
-                    build_arr_type = to_nullable_type(build_arr_type)
-                if build_nullable:
-                    probe_arr_type = to_nullable_type(probe_arr_type)
-            if build_arr_type == probe_arr_type:
-                key_type = build_arr_type
-            elif is_bodosql_integer_arr_type(
-                build_arr_type
-            ) and is_bodosql_integer_arr_type(probe_arr_type):
-                # TODO: Future optimization. If the types don't match exactly and
-                # we don't have an outer join on the larger bitwidth side, we don't
-                # have to upcast and can instead filter + downcast. In particular we
-                # know that any type that doesn't fit in the smaller array type
-                # cannot have a match.
-                #
-                # Note: If we have an outer join we can't do this because we need to
-                # preserve the elements without matches.
-                #
-                key_type = get_common_bodosql_integer_arr_type(
-                    build_arr_type, probe_arr_type
-                )
-            else:
-                # TODO [BSE-439]: Support dict encoding + regular string
-                raise BodoError(
-                    "StreamingHashJoin: Build and probe keys must have the same types"
-                )
+            build_key_index = build_key_inds[i]
+            probe_key_index = probe_key_inds[i]
+            seen_build_keys[build_key_index] += 1
+            seen_probe_keys[probe_key_index] += 1
+            build_arr_type = self.build_table_type.arr_types[build_key_index]
+            probe_arr_type = self.probe_table_type.arr_types[probe_key_index]
+            key_type = self._derive_common_key_type([build_arr_type, probe_arr_type])
             arr_types.append(key_type)
+
+        # Check if a key is used more than once. If so we need to
+        # unify those keys.
+        if len(seen_build_keys) != num_keys or len(seen_probe_keys) != num_keys:
+            # Find the key indices that need to match
+            kept_build_keys = set()
+            kept_probe_keys = set()
+            for key, val in seen_build_keys.items():
+                if val > 1:
+                    kept_build_keys.add(key)
+            for key, val in seen_probe_keys.items():
+                if val > 1:
+                    kept_probe_keys.add(key)
+            # Find the indices of those keys
+            indices_to_match = []
+            for i in range(num_keys):
+                build_key_index = build_key_inds[i]
+                probe_key_index = probe_key_inds[i]
+                if (
+                    build_key_index in kept_build_keys
+                    or probe_key_index in kept_probe_keys
+                ):
+                    indices_to_match.append(i)
+            common_key_type = self._derive_common_key_type(
+                [arr_types[i] for i in indices_to_match]
+            )
+            # Update the key types
+            for i in indices_to_match:
+                arr_types[i] = common_key_type
+
         return arr_types
 
     @staticmethod
