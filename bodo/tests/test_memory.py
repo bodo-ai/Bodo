@@ -1,18 +1,31 @@
+import math
 import mmap
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.lib
 import pytest
 
+import bodo
 from bodo.libs.memory import (
     BufferPool,
     BufferPoolAllocation,
     BufferPoolOptions,
     SizeClass,
+    StorageOptions,
     get_arrow_memory_pool_wrapper_for_buffer_pool,
     set_default_buffer_pool_as_arrow_memory_pool,
 )
 from bodo.tests.utils import temp_env_override
+
+# Python doesn't always raise exceptions, particularly
+# when raised inside of `del` statements and sometimes
+# when not handled correctly in Cython before v3.
+# PyTest can capture them as warnings, but to be extra
+# safe, we can treat those warnings as exceptions
+pytestmark = pytest.mark.filterwarnings(
+    "error::pytest.PytestUnraisableExceptionWarning"
+)
 
 
 def test_default_buffer_pool_options():
@@ -35,7 +48,7 @@ def test_default_buffer_pool_options():
         assert options.memory_size > 0
         assert options.min_size_class == 64
         assert options.max_num_size_classes == 21
-        assert options.ignore_max_limit_during_allocation
+        assert not options.ignore_max_limit_during_allocation
 
     # Check that specifying the memory explicitly works as
     # expected.
@@ -138,6 +151,181 @@ def test_default_buffer_pool_options():
         assert options.memory_size == int(5.0 * total_mem)
 
 
+def test_default_storage_options(tmp_path: Path):
+    """
+    Test that the default StorageOptions instance
+    has expected attributes.
+    """
+
+    # Check if no location is provided, nothing is returned
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": None,
+        }
+    ):
+        assert StorageOptions.defaults(1) is None
+
+    # Check that just specifying location is not enough as well
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": None,
+        }
+    ):
+        assert StorageOptions.defaults(1) is None
+
+    # Check that specifying the memory explicitly works as
+    # expected.
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "50",
+        }
+    ):
+        options: StorageOptions = StorageOptions.defaults(1)
+        assert options.location == bytes(tmp_path)
+        assert options.usable_size == math.floor(
+            (2 * 1024 * 1024 * 1024) / bodo.get_size()
+        )
+
+    # Check that default percentage is 0.9
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": None,
+        }
+    ):
+        options: StorageOptions = StorageOptions.defaults(1)
+        assert options.location == bytes(tmp_path)
+        assert math.isclose(
+            options.usable_size, (0.9 * (4 * 1024 * 1024 * 1024) / bodo.get_size())
+        )
+
+    # Check that distributing ranks across drives works
+    # Note that this test only works when under 4 ranks
+    if bodo.get_size() < 4:
+        loc_a = tmp_path / "a"
+        loc_b = tmp_path / "b"
+        loc_c: Path = tmp_path / "c"
+        locs = [str(loc_a), str(loc_b), str(loc_c)]
+        with temp_env_override(
+            {
+                "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": ",".join(locs),
+                "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "4",
+                "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+            }
+        ):
+            options: StorageOptions = StorageOptions.defaults(1)
+            assert options.location == bytes(locs[bodo.get_rank()], "utf-8")
+            assert options.usable_size == (4 * 1024 * 1024 * 1024)
+
+    # Check that not specifying a storage env vars doesn't
+    # create a option in BufferPoolOptions
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
+            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": None,
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert len(options.storage_options) == 0
+
+    # Check that not specifying a storage env vars doesn't
+    # create a option in BufferPoolOptions
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
+            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_2_DRIVES": str(tmp_path / "inner"),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_2_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_3_DRIVES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_3_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_4_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_4_SPACE_PER_DRIVE_GiB": "4",
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert len(options.storage_options) == 2
+        assert options.storage_options[0].location == bytes(tmp_path)
+        assert options.storage_options[1].location == bytes(tmp_path / "inner")
+
+    # Check that not specifying a storage env vars doesn't
+    # create a option in BufferPoolOptions
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
+            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_2_DRIVES": str(tmp_path / "inner"),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_2_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_3_DRIVES": str(tmp_path / "inner2"),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_3_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_4_DRIVES": str(tmp_path / "inner3"),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_4_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_5_DRIVES": str(tmp_path / "inner4"),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_5_SPACE_PER_DRIVE_GiB": "4",
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert len(options.storage_options) == 4
+        assert options.storage_options[0].location == bytes(tmp_path)
+        assert options.storage_options[1].location == bytes(tmp_path / "inner")
+        assert options.storage_options[2].location == bytes(tmp_path / "inner2")
+        assert options.storage_options[3].location == bytes(tmp_path / "inner3")
+
+    # Check that the disable spilling flag works and enables
+    # ignore_max_limit_during_allocation
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
+            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_DISABLE_SPILLING": "1",
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert len(options.storage_options) == 0
+        assert options.ignore_max_limit_during_allocation
+
+    # Check that the disable spilling flag works and can override
+    # ignore_max_limit_during_allocation
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": None,
+            "BODO_BUFFER_POOL_MEMORY_USABLE_PERCENT": None,
+            "BODO_BUFFER_POOL_MIN_SIZE_CLASS_KiB": None,
+            "BODO_BUFFER_POOL_MAX_NUM_SIZE_CLASSES": None,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": str(tmp_path),
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "4",
+            "BODO_BUFFER_POOL_DISABLE_SPILLING": "1",
+            "BODO_BUFFER_POOL_IGNORE_MAX_ALLOCATION_LIMIT": "0",
+        }
+    ):
+        options = BufferPoolOptions.defaults()
+        assert len(options.storage_options) == 0
+        assert not options.ignore_max_limit_during_allocation
+
+
 def test_malloc_allocation():
     """
     Test that small allocations that go through
@@ -184,7 +372,8 @@ def test_malloc_allocation():
     # Max memory should still be the same
     assert pool.max_memory() == 5 * 1024
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -257,7 +446,8 @@ def test_mmap_smallest_size_class_allocation():
     # Max memory should still be the same
     assert pool.max_memory() == 8 * 1024 * 2
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -341,7 +531,8 @@ def test_mmap_medium_size_classes_allocation():
     # Max memory should still be the same
     assert pool.max_memory() == ((16 * 1024 * 2) + (32 * 1024))
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -388,7 +579,8 @@ def test_mmap_largest_size_class_allocation():
     assert pool.max_memory() == 4 * 1024 * 1024
     assert pool.bytes_allocated() == 0
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -431,7 +623,8 @@ def test_larger_than_pool_allocation():
                 frame_idx
             ), f"Frame at index {frame_idx} is pinned even though it shouldn't be!"
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -510,109 +703,6 @@ def test_alignment():
         _: BufferPoolAllocation = pool.allocate(20 * 1024, 48)
 
 
-def test_larger_than_available_space_allocation():
-    """
-    Test that trying to allocate more memory than
-    space available in the buffer pool raises the expected
-    error.
-
-    NOTE: This test will need to be modified once we have spill support.
-    """
-    # Allocate a very small pool for testing
-    options = BufferPoolOptions(memory_size=4, min_size_class=4)
-    pool: BufferPool = BufferPool.from_options(options)
-
-    # Allocate 3.5 MiB
-    allocation_1: BufferPoolAllocation = pool.allocate(1024 * 1024)
-    allocation_2: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
-    allocation_3: BufferPoolAllocation = pool.allocate(512 * 1024)
-
-    # Verify stats
-    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
-    assert pool.max_memory() == 3.5 * 1024 * 1024
-
-    # Trying to allocate 1MiB should fail
-    with pytest.raises(
-        pyarrow.lib.ArrowMemoryError,
-        match="Allocation failed. Not enough space in the buffer pool.",
-    ):
-        _: BufferPoolAllocation = pool.allocate(1024 * 1024)
-
-    # Verify stats after failed allocation attempt
-    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
-    assert pool.max_memory() == 3.5 * 1024 * 1024
-
-    pool.free(allocation_1)
-    pool.free(allocation_2)
-    pool.free(allocation_3)
-
-    # Delete pool (to be conservative)
-    del pool
-
-
-def test_larger_than_available_space_allocation_limit_ignored():
-    """
-    Test that trying to allocate more memory than
-    space available in the buffer pool doesn't raise
-    an error when ignore_max_limit_during_allocation is True
-    and there actually is enough space in physical memory (and
-    a buffer frame of appropriate size is available in the pool).
-    Also verifies that if all frames are taken up, the appropriate
-    error is raised even if ignore_max_limit_during_allocation is
-    True.
-
-    NOTE: This test might need to be modified once we have spill support.
-    """
-    # Allocate a very small pool for testing
-    options = BufferPoolOptions(
-        memory_size=4, min_size_class=4, ignore_max_limit_during_allocation=True
-    )
-    pool: BufferPool = BufferPool.from_options(options)
-
-    # Allocate 3.5 MiB
-    allocation_1: BufferPoolAllocation = pool.allocate(1024 * 1024)
-    allocation_2: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
-    allocation_3: BufferPoolAllocation = pool.allocate(512 * 1024)
-
-    # Verify stats
-    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
-    assert pool.max_memory() == 3.5 * 1024 * 1024
-
-    # This allocation should now go through since there should be
-    # a free 1MiB frame available.
-    allocation_4: BufferPoolAllocation = pool.allocate(1024 * 1024)
-
-    # Verify stats after allocation attempt
-    assert pool.bytes_allocated() == 4.5 * 1024 * 1024
-    assert pool.max_memory() == 4.5 * 1024 * 1024
-
-    # Try to fill up all 1MiB frames:
-    allocation_5: BufferPoolAllocation = pool.allocate(1024 * 1024)
-    allocation_6: BufferPoolAllocation = pool.allocate(1024 * 1024)
-
-    # Try allocating again:
-    # Trying to allocate 1MiB should fail
-    with pytest.raises(
-        pyarrow.lib.ArrowMemoryError,
-        match="Could not find an empty frame of required size!",
-    ):
-        _: BufferPoolAllocation = pool.allocate(1024 * 1024)
-
-    # Verify stats after allocation attempt
-    assert pool.bytes_allocated() == 6.5 * 1024 * 1024
-    assert pool.max_memory() == 6.5 * 1024 * 1024
-
-    pool.free(allocation_1)
-    pool.free(allocation_2)
-    pool.free(allocation_3)
-    pool.free(allocation_4)
-    pool.free(allocation_5)
-    pool.free(allocation_6)
-
-    # Delete pool (to be conservative)
-    del pool
-
-
 def test_multiple_allocations():
     """
     Try to make multiple allocations in the same SizeClass
@@ -669,7 +759,8 @@ def test_multiple_allocations():
             assert size_class.is_frame_pinned(frame_idx)
             pool.free(allocations[frame_idx])
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -701,7 +792,8 @@ def test_verify_pool_attributes():
     # Just run release_unused to make sure it doesn't raise any exceptions
     pool.release_unused()
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -743,7 +835,8 @@ def test_reallocate_same_size_malloc():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -779,7 +872,8 @@ def test_reallocate_same_size_mmap():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -821,7 +915,8 @@ def test_reallocate_malloc_to_mmap():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -859,7 +954,8 @@ def test_reallocate_mmap_to_malloc():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -915,7 +1011,8 @@ def test_reallocate_larger_mem_same_size_class():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -973,7 +1070,8 @@ def test_reallocate_smaller_mem_same_size_class():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -1031,7 +1129,8 @@ def test_reallocate_0_to_mmap():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -1092,7 +1191,8 @@ def test_reallocate_0_to_malloc():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -1129,7 +1229,8 @@ def test_reallocate_malloc_to_0():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -1173,7 +1274,8 @@ def test_reallocate_mmap_to_0():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -1224,7 +1326,8 @@ def test_reallocate_smaller_mem_diff_size_class():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -1272,7 +1375,8 @@ def test_reallocate_larger_mem_diff_size_class():
 
     pool.free(allocation)
 
-    # Delete pool (to be conservative)
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
     del pool
 
 
@@ -1332,9 +1436,634 @@ def test_pyarrow_allocation():
         assert not size_class_16KiB.is_frame_mapped(0)
         assert not size_class_16KiB.is_frame_pinned(0)
 
-        # Delete pool (to be conservative)
+        # Cleanup and delete pool (to be conservative)
+        pool.cleanup()
         del pool
 
     finally:
         # Restore default buffer pool as arrow memory pool
         set_default_buffer_pool_as_arrow_memory_pool()
+
+
+def test_pin_unpin():
+    """
+    Test that the Buffer Pool tracks pinned
+    and unpinned frames correctly
+    """
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(memory_size=4, min_size_class=1024)
+    pool: BufferPool = BufferPool.from_options(options)
+    size_class_1MiB: SizeClass = pool.get_size_class(0)
+
+    # Create a single allocation
+    allocation = pool.allocate(1000 * 1024)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 1024 * 1024
+    assert pool.bytes_allocated() == 1024 * 1024
+    assert pool.max_memory() == 1024 * 1024
+    assert size_class_1MiB.is_frame_pinned(0)
+
+    # Unpin and check stats again
+    pool.unpin(allocation)
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 1024 * 1024
+    assert pool.max_memory() == 1024 * 1024
+    assert not size_class_1MiB.is_frame_pinned(0)
+
+    # Pin and check stats again
+    pool.pin(allocation)
+    assert pool.bytes_pinned() == 1024 * 1024
+    assert pool.bytes_allocated() == 1024 * 1024
+    assert pool.max_memory() == 1024 * 1024
+    assert size_class_1MiB.is_frame_pinned(0)
+
+    # Cleanup and delete pool (to be conservative)
+    pool.free(allocation)
+    pool.cleanup()
+    del pool
+
+
+def test_oom_all_mem_pinned():
+    """
+    Test that trying to allocate more memory than
+    space available raises an OOM error when all
+    memory is pinned.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(memory_size=4, min_size_class=1024)
+    pool: BufferPool = BufferPool.from_options(options)
+    size_class_1MiB: SizeClass = pool.get_size_class(0)
+    size_class_2MiB: SizeClass = pool.get_size_class(1)
+
+    # Allocate 3.5 MiB
+    allocation_1: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    allocation_2: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation_3: BufferPoolAllocation = pool.allocate(512 * 1024)
+
+    # Verify stats
+    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
+    assert pool.max_memory() == 3.5 * 1024 * 1024
+    assert size_class_1MiB.is_frame_pinned(0)
+    assert size_class_2MiB.is_frame_pinned(0)
+
+    # Trying to allocate 1MiB should fail
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Allocation failed. Not enough space in the buffer pool.",
+    ):
+        _: BufferPoolAllocation = pool.allocate(600 * 1024)
+
+    # Verify stats after failed allocation attempt
+    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
+    assert pool.max_memory() == 3.5 * 1024 * 1024
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+    pool.free(allocation_3)
+
+    assert pool.bytes_allocated() == 0
+
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
+    del pool
+
+
+def test_oom_some_mem_unpinned():
+    """
+    Test that trying to allocate more memory than
+    space available raises an OOM error, even when
+    some memory is unpinned (but not enough space still
+    and no storage managers provided).
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(memory_size=4, min_size_class=1024)
+    pool: BufferPool = BufferPool.from_options(options)
+    size_class_1MiB: SizeClass = pool.get_size_class(0)
+    size_class_2MiB: SizeClass = pool.get_size_class(1)
+
+    # Allocate 3.5 MiB
+    allocation_1: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    allocation_2: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation_3: BufferPoolAllocation = pool.allocate(512 * 1024)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 3.5 * 1024 * 1024
+    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
+    assert pool.max_memory() == 3.5 * 1024 * 1024
+    assert size_class_1MiB.is_frame_pinned(0)
+    assert size_class_2MiB.is_frame_pinned(0)
+
+    # Unpinning 2MiB
+    pool.unpin(allocation_1)
+
+    # Trying to allocate 2MiB should fail
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Allocation failed. Not enough space in the buffer pool.",
+    ):
+        _: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+
+    # Verify stats after failed allocation attempt
+    assert pool.bytes_pinned() == 2.5 * 1024 * 1024
+    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
+    assert pool.max_memory() == 3.5 * 1024 * 1024
+    assert not size_class_1MiB.is_frame_pinned(0)
+    assert size_class_2MiB.is_frame_pinned(0)
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+    pool.free(allocation_3)
+
+    assert pool.bytes_allocated() == 0
+
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
+    del pool
+
+
+def test_oom_no_storage():
+    """
+    Test that trying to allocate more memory than
+    space available raises an OOM error when no
+    storage managers are provided.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(memory_size=4, min_size_class=1024)
+    pool: BufferPool = BufferPool.from_options(options)
+    size_class_2MiB: SizeClass = pool.get_size_class(1)
+
+    # Allocate and Unpin 4 MiB
+    allocation_1: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation_2: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    pool.unpin(allocation_1)
+    pool.unpin(allocation_2)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert not size_class_2MiB.is_frame_pinned(0)
+    assert not size_class_2MiB.is_frame_pinned(1)
+
+    # Trying to allocate 2MiB should fail
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Allocation failed. No storage locations provided to evict to.",
+    ):
+        _: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+
+    # Verify stats after failed allocation attempt
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert not size_class_2MiB.is_frame_pinned(0)
+    assert not size_class_2MiB.is_frame_pinned(1)
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+
+    assert pool.bytes_allocated() == 0
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
+    del pool
+
+
+def test_larger_than_available_space_allocation_limit_ignored():
+    """
+    Test that trying to allocate more memory than
+    space available in the buffer pool doesn't raise
+    an error when ignore_max_limit_during_allocation is True
+    and there actually is enough space in physical memory (and
+    a buffer frame of appropriate size is available in the pool).
+    Also verifies that if all frames are taken up, the appropriate
+    error is raised even if ignore_max_limit_during_allocation is
+    True.
+    """
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=4, ignore_max_limit_during_allocation=True
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Allocate 3.5 MiB
+    allocation_1: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    allocation_2: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation_3: BufferPoolAllocation = pool.allocate(512 * 1024)
+
+    # Verify stats
+    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
+    assert pool.max_memory() == 3.5 * 1024 * 1024
+
+    # This allocation should now go through since there should be
+    # a free 1MiB frame available.
+    allocation_4: BufferPoolAllocation = pool.allocate(1024 * 1024)
+
+    # Verify stats after allocation attempt
+    assert pool.bytes_allocated() == 4.5 * 1024 * 1024
+    assert pool.max_memory() == 4.5 * 1024 * 1024
+
+    # Try to fill up all 1MiB frames:
+    allocation_5: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    allocation_6: BufferPoolAllocation = pool.allocate(1024 * 1024)
+
+    # Try allocating again:
+    # Trying to allocate 1MiB should fail
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Could not find an empty frame of required size!",
+    ):
+        _: BufferPoolAllocation = pool.allocate(1024 * 1024)
+
+    # Verify stats after allocation attempt
+    assert pool.bytes_allocated() == 6.5 * 1024 * 1024
+    assert pool.max_memory() == 6.5 * 1024 * 1024
+
+    # Unpinning and pinning should continue working
+    pool.unpin(allocation_6)
+    pool.pin(allocation_6)
+
+    # Unpinning and a new allocation should be fine
+    pool.unpin(allocation_6)
+    allocation_7: BufferPoolAllocation = pool.allocate(512 * 1024)
+    pool.pin(allocation_6)
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+    pool.free(allocation_3)
+    pool.free(allocation_4)
+    pool.free(allocation_5)
+    pool.free(allocation_6)
+    pool.free(allocation_7)
+
+    # Delete pool (to be conservative)
+    del pool
+
+
+def test_allocate_spill_eq_block(tmp_path: Path):
+    """
+    Test that trying to allocate more memory than
+    space available leads to spilling an equal-size frame
+    """
+
+    # Allocate a very small pool for testing
+    local_opt = StorageOptions(usable_size=5 * 1024 * 1024, location=bytes(tmp_path))
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+    size_class_1MiB: SizeClass = pool.get_size_class(0)
+    size_class_2MiB: SizeClass = pool.get_size_class(1)
+
+    # Allocate 3.5 MiB
+    allocation_1: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    allocation_2: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation_3: BufferPoolAllocation = pool.allocate(512 * 1024)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 3.5 * 1024 * 1024
+    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
+    assert pool.max_memory() == 3.5 * 1024 * 1024
+    assert size_class_1MiB.is_frame_pinned(0)
+    assert size_class_2MiB.is_frame_pinned(0)
+
+    # Unpinning 2MiB
+    pool.unpin(allocation_2)
+    assert not size_class_2MiB.is_frame_pinned(0)
+    assert not allocation_2.is_nullptr() and allocation_2.is_in_memory()
+
+    # Trying to allocate 2MiB should cause allocation_2 to spill
+    allocation_4: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+
+    # Verify stats after allocation + spill
+    assert pool.bytes_pinned() == 3.5 * 1024 * 1024
+    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
+    assert pool.max_memory() == 3.5 * 1024 * 1024
+    assert size_class_1MiB.is_frame_pinned(0)
+    assert size_class_2MiB.is_frame_pinned(0)  # allocation_4
+    assert not allocation_2.is_nullptr() and not allocation_2.is_in_memory()
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+    pool.free(allocation_3)
+    pool.free(allocation_4)
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
+    del pool
+
+
+def test_allocate_spill_smaller_blocks(tmp_path: Path):
+    """
+    Test that trying to allocate more memory than
+    space available leads to spilling multiple smaller-size
+    frames
+    """
+
+    # Allocate a very small pool for testing
+    local_opt = StorageOptions(usable_size=5 * 1024 * 1024, location=bytes(tmp_path))
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+    size_class_1MiB: SizeClass = pool.get_size_class(0)
+    size_class_2MiB: SizeClass = pool.get_size_class(1)
+
+    # Allocate 3.5 MiB
+    allocation_1: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    allocation_2: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    allocation_3: BufferPoolAllocation = pool.allocate(1024 * 1024)
+    allocation_4: BufferPoolAllocation = pool.allocate(512 * 1024)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 3.5 * 1024 * 1024
+    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
+    assert pool.max_memory() == 3.5 * 1024 * 1024
+    assert size_class_1MiB.is_frame_pinned(0)
+    assert size_class_1MiB.is_frame_pinned(1)
+    assert size_class_1MiB.is_frame_pinned(2)
+
+    # Unpinning 2MiB
+    pool.unpin(allocation_2)
+    pool.unpin(allocation_3)
+    assert not size_class_1MiB.is_frame_pinned(1)
+    assert not size_class_1MiB.is_frame_pinned(2)
+    assert not allocation_2.is_nullptr() and allocation_2.is_in_memory()
+    assert not allocation_3.is_nullptr() and allocation_3.is_in_memory()
+
+    # Trying to allocate 2MiB should cause allocation_2 and allocation_3 to spill
+    allocation_5: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+
+    # Verify stats after allocation + spill
+    assert pool.bytes_pinned() == 3.5 * 1024 * 1024
+    assert pool.bytes_allocated() == 3.5 * 1024 * 1024
+    assert pool.max_memory() == 3.5 * 1024 * 1024
+    assert size_class_1MiB.is_frame_pinned(0)
+    assert size_class_2MiB.is_frame_pinned(0)
+    assert not allocation_2.is_nullptr() and not allocation_2.is_in_memory()
+    assert not allocation_3.is_nullptr() and not allocation_3.is_in_memory()
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+    pool.free(allocation_3)
+    pool.free(allocation_4)
+    pool.free(allocation_5)
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
+    del pool
+
+
+def test_allocate_spill_larger_block(tmp_path: Path):
+    """
+    Test that trying to allocate more memory than
+    space available leads to spilling an larger-size frame
+    """
+
+    # Allocate a very small pool for testing
+    local_opt = StorageOptions(usable_size=5 * 1024 * 1024, location=bytes(tmp_path))
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+    size_class_1MiB: SizeClass = pool.get_size_class(0)
+    size_class_2MiB: SizeClass = pool.get_size_class(1)
+
+    # Allocate 3 MiB
+    allocation_1: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation_2: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert size_class_2MiB.is_frame_pinned(0)
+    assert size_class_2MiB.is_frame_pinned(1)
+
+    # Unpinning 2MiB
+    pool.unpin(allocation_1)
+    assert not size_class_2MiB.is_frame_pinned(0)
+    assert not allocation_1.is_nullptr() and allocation_1.is_in_memory()
+    assert pool.bytes_pinned() == 2 * 1024 * 1024
+
+    # Trying to allocate 1MiB should cause allocation_1 to spill
+    allocation_3: BufferPoolAllocation = pool.allocate(1024 * 1024)
+
+    # Verify stats after allocation + spill
+    assert pool.bytes_pinned() == 3 * 1024 * 1024
+    assert pool.bytes_allocated() == 3 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert size_class_2MiB.is_frame_pinned(1)  # allocation_2
+    assert size_class_1MiB.is_frame_pinned(0)  # allocation_3
+    assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+    pool.free(allocation_3)
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
+    del pool
+
+
+def test_repin_eviction(tmp_path: Path):
+    """
+    Test that unpinning, filling up the pool,
+    and repinning leads to an eviction if possible
+    """
+
+    # Allocate a very small pool for testing
+    local_opt = StorageOptions(usable_size=5 * 1024 * 1024, location=bytes(tmp_path))
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+    size_class_1MiB: SizeClass = pool.get_size_class(0)
+    size_class_2MiB: SizeClass = pool.get_size_class(1)
+
+    # Allocate 3 MiB
+    allocation_1: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation_2: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert size_class_2MiB.is_frame_pinned(0)
+    assert size_class_2MiB.is_frame_pinned(1)
+
+    # Unpinning 1MiB
+    pool.unpin(allocation_1)
+    assert not size_class_2MiB.is_frame_pinned(0)
+    assert not allocation_1.is_nullptr() and allocation_1.is_in_memory()
+    assert pool.bytes_pinned() == 2 * 1024 * 1024
+
+    # Trying to allocate 1MiB should cause allocation_1 to spill
+    allocation_3: BufferPoolAllocation = pool.allocate(1024 * 1024)
+
+    # Verify stats after allocation + spill
+    assert pool.bytes_pinned() == 3 * 1024 * 1024
+    assert pool.bytes_allocated() == 3 * 1024 * 1024
+    assert size_class_2MiB.is_frame_pinned(1)  # allocation_2
+    assert size_class_1MiB.is_frame_pinned(0)  # allocation_3
+    assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
+
+    # Repinning now should fail
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Pin failed. Not enough space in the buffer pool.",
+    ):
+        pool.pin(allocation_1)
+
+    # Repin allocation_1 after unpinning allocation_3
+    pool.unpin(allocation_3)
+    pool.pin(allocation_1)
+
+    # Verify stats after repin
+    assert pool.bytes_pinned() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert size_class_2MiB.is_frame_pinned(0)  # allocation_1
+    assert size_class_2MiB.is_frame_pinned(1)  # allocation_2
+    assert not size_class_1MiB.is_frame_pinned(0)  # allocation_3
+    assert not allocation_3.is_nullptr() and not allocation_3.is_in_memory()
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+    pool.free(allocation_3)
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
+    del pool
+
+
+def test_eviction_readback_contents(tmp_path: Path):
+    """
+    Test that the contents of a block
+    after being evicted and read-back into memory
+    are still the same
+    """
+
+    # Allocate a very small pool for testing
+    local_opt = StorageOptions(usable_size=5 * 1024 * 1024, location=bytes(tmp_path))
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+    size_class_4MiB: SizeClass = pool.get_size_class(2)
+
+    # Allocate 4 MiB frame and write contents
+    write_bytes = b"Hello BufferPool from Bodo!"
+    allocation_1: BufferPoolAllocation = pool.allocate(3.5 * 1024 * 1024)
+    allocation_1.write_bytes(write_bytes)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert size_class_4MiB.is_frame_pinned(0)
+
+    # Unpin and evict frame
+    pool.unpin(allocation_1)
+    allocation_2: BufferPoolAllocation = pool.allocate(1024 * 1024)
+
+    # Verify stats after allocation + spill
+    assert pool.bytes_pinned() == 1 * 1024 * 1024
+    assert pool.bytes_allocated() == 1 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
+
+    # Repin allocation_1 and read contents
+    pool.unpin(allocation_2)
+    pool.pin(allocation_1)
+    read_bytes: bytes = allocation_1.read_bytes(len(write_bytes))
+
+    # Verify stats after repin
+    assert pool.bytes_pinned() == 4 * 1024 * 1024
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert size_class_4MiB.is_frame_pinned(0)
+
+    # Compare contents
+    assert write_bytes == read_bytes
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    # Cleanup and delete pool (to be conservative)
+    pool.cleanup()
+    del pool
+
+
+def test_local_spill_file(tmp_path: Path):
+    """
+    Test if the location and contents of the local spill files
+    are correct
+    """
+
+    # Allocate a very small pool for testing
+    local_opt = StorageOptions(usable_size=4 * 1024 * 1024, location=bytes(tmp_path))
+    options = BufferPoolOptions(
+        memory_size=4, min_size_class=1024, storage_options=[local_opt]
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Allocate 4 MiB frame, write contents, and evict
+    write_bytes = b"Hello BufferPool from Bodo!"
+    allocation_1: BufferPoolAllocation = pool.allocate(3.5 * 1024 * 1024)
+    allocation_1.write_bytes(write_bytes)
+    pool.unpin(allocation_1)
+    allocation_2: BufferPoolAllocation = pool.allocate(1024 * 1024)
+
+    # Verify stats
+    assert pool.bytes_pinned() == 1 * 1024 * 1024
+    assert pool.bytes_allocated() == 1 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
+
+    # Look for spilled file in expected location
+    # First Folder Expected to Have Prepended Rank
+    paths = list(tmp_path.glob(f"{bodo.get_rank()}-*"))
+    assert len(paths) == 1
+    inner_path = paths[0]
+    # Block File should be in {size_class}/{block_id}
+    block_file = inner_path / str(4 * 1024 * 1024) / "0"
+    assert block_file.is_file()
+
+    # Check file contents
+    expected_contents = (
+        "Hello BufferPool from Bodo!" + (4 * 1024 * 1024 - len(write_bytes)) * "\x00"
+    )
+    assert block_file.read_text() == expected_contents
+
+    pool.free(allocation_1)
+    pool.free(allocation_2)
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    # Make sure free deletes any spill files as well
+    assert len(list(elem for elem in tmp_path.iterdir() if elem.is_file())) == 0
+
+    # Cleanup
+    pool.cleanup()
+    assert len(list(tmp_path.iterdir())) == 0
+
+    # Delete pool (to be conservative)
+    del pool
