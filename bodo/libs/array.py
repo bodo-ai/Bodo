@@ -1407,9 +1407,14 @@ def array_from_cpp_table(typingctx, table_t, ind_t, array_type_t):
 
 
 @intrinsic
-def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type_t):
+def cpp_table_to_py_table(
+    typingctx, cpp_table_t, table_idx_arr_t, py_table_type_t, default_length_t
+):
     """Extract columns of a C++ table and create a Python table.
     table_index_arr specifies which columns to extract
+
+    default_length_t: Holds the length to set if all columns are dead. If an API doesn't support
+    this then the caller should pass 0.
     """
     assert cpp_table_t == table_type, "invalid cpp table type"
     assert (
@@ -1417,10 +1422,11 @@ def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type
         and table_idx_arr_t.dtype == types.int64
     ), "invalid table index array"
     assert isinstance(py_table_type_t, types.TypeRef), "invalid py table ref"
+    assert default_length_t == types.int64, "invalid length type"
     py_table_type = py_table_type_t.instance_type
 
     def codegen(context, builder, sig, args):
-        cpp_table, table_idx_arr, _ = args
+        cpp_table, table_idx_arr, _, default_length = args
 
         # create python table
         table = cgutils.create_struct_proxy(py_table_type)(context, builder)
@@ -1429,8 +1435,7 @@ def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type
             context, builder, table_idx_arr
         )
         neg_one = context.get_constant(types.int64, -1)
-        zero = context.get_constant(types.int64, 0)
-        len_ptr = cgutils.alloca_once_value(builder, zero)
+        len_ptr = cgutils.alloca_once_value(builder, default_length)
 
         # generate code for each block
         for t, blk in py_table_type.type_to_blk.items():
@@ -1505,7 +1510,10 @@ def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type
         table.len = builder.load(len_ptr)
         return table._getvalue()
 
-    return py_table_type(cpp_table_t, table_idx_arr_t, py_table_type_t), codegen
+    return (
+        py_table_type(cpp_table_t, table_idx_arr_t, py_table_type_t, default_length_t),
+        codegen,
+    )
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -1995,7 +2003,7 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
     tuple_inputs = ", ".join(tables)
     func_text += f"  out_cpp_table = bodo.libs.array.union_tables_cpp([{tuple_inputs}], drop_duplicates, is_parallel)\n"
     # Step 3 convert the C++ table to a Python table.
-    func_text += f"  out_py_table = bodo.libs.array.cpp_table_to_py_table(out_cpp_table, out_col_inds, out_table_typ)\n"
+    func_text += f"  out_py_table = bodo.libs.array.cpp_table_to_py_table(out_cpp_table, out_col_inds, out_table_typ, 0)\n"
     # Step 4 free the output C++ table without modifying the refcounts.
     func_text += f"  bodo.libs.array.delete_table(out_cpp_table)\n"
     func_text += f"  return out_py_table\n"

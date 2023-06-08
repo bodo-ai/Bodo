@@ -973,6 +973,8 @@ void join_build_consume_batch(HashJoinState* join_state,
  * side.
  * @param probe_kept_cols Which columns to generate in the output on the probe
  * side.
+ * @param[out] total_rows Store the number of rows in the output batch in case
+ *        all columns are dead.
  * @param is_last is last batch
  * @param parallel parallel flag
  * @return std::shared_ptr<table_info> output table batch
@@ -982,8 +984,8 @@ template <bool build_table_outer, bool probe_table_outer,
 std::shared_ptr<table_info> join_probe_consume_batch(
     HashJoinState* join_state, std::shared_ptr<table_info> in_table,
     const std::vector<uint64_t> build_kept_cols,
-    const std::vector<uint64_t> probe_kept_cols, const bool is_last,
-    const bool parallel) {
+    const std::vector<uint64_t> probe_kept_cols, int64_t* total_rows,
+    const bool is_last, const bool parallel) {
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -1085,6 +1087,9 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     // Free hash memory
     batch_hashes_partition.reset();
     batch_hashes_join.reset();
+
+    // Set the output size.
+    int64_t batch_rows = build_idxs.size();
 
     // create output table using build and probe table indices (columns
     // appended side by side)
@@ -1207,6 +1212,10 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             // Reset active partition state
             active_partition->probe_table_hashes = nullptr;
             active_partition->probe_table = nullptr;
+
+            // Update the output size
+            batch_rows += build_idxs.size();
+
             batch_hashes_join.reset();
             batch_hashes_partition.reset();
             build_out_tables.emplace_back(
@@ -1223,6 +1232,10 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             // Add unmatched rows from build table to output table
             generate_build_table_outer_rows_for_partition(
                 active_partition.get(), build_idxs, probe_idxs);
+
+            // Update the output size
+            batch_rows += build_idxs.size();
+
             build_out_tables.emplace_back(
                 RetrieveTable(active_partition->build_table_buffer.data_table,
                               build_idxs, build_kept_cols, probe_table_outer));
@@ -1272,6 +1285,8 @@ std::shared_ptr<table_info> join_probe_consume_batch(
                     build_out_table->columns.end());
     out_arrs.insert(out_arrs.end(), probe_out_table->columns.begin(),
                     probe_out_table->columns.end());
+    // Set the output size
+    *total_rows = batch_rows;
     return std::make_shared<table_info>(out_arrs);
 }
 
@@ -1378,6 +1393,8 @@ void join_build_consume_batch_py_entry(JoinState* join_state_,
  * @param num_kept_build_cols Length of kept_build_col_nums
  * @param kept_probe_col_nums indices of kept columns in probe table
  * @param num_kept_probe_cols Length of kept_probe_col_nums
+ * @param[out] total_rows Store the number of rows in the output batch in case
+ *        all columns are dead.
  * @param is_last is last batch
  * @param is_parallel parallel flag
  * @return table_info* output table batch
@@ -1385,33 +1402,33 @@ void join_build_consume_batch_py_entry(JoinState* join_state_,
 table_info* join_probe_consume_batch_py_entry(
     JoinState* join_state_, table_info* in_table, uint64_t* kept_build_col_nums,
     int64_t num_kept_build_cols, uint64_t* kept_probe_col_nums,
-    int64_t num_kept_probe_cols, bool is_last, bool* out_is_last,
-    bool parallel) {
+    int64_t num_kept_probe_cols, int64_t* total_rows, bool is_last,
+    bool* out_is_last, bool parallel) {
     // nested loop join is required if there are no equality keys
     if (join_state_->n_keys == 0) {
         return nested_loop_join_probe_consume_batch_py_entry(
             (NestedLoopJoinState*)join_state_, in_table, kept_build_col_nums,
             num_kept_build_cols, kept_probe_col_nums, num_kept_probe_cols,
-            is_last, out_is_last, parallel);
+            total_rows, is_last, out_is_last, parallel);
     }
 
     HashJoinState* join_state = (HashJoinState*)join_state_;
 
 #ifndef CONSUME_PROBE_BATCH
-#define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,            \
-                            has_non_equi_cond, use_bloom_filter,             \
-                            build_table_outer_exp, probe_table_outer_exp,    \
-                            has_non_equi_cond_exp, use_bloom_filter_exp)     \
-    if (build_table_outer == build_table_outer_exp &&                        \
-        probe_table_outer == probe_table_outer_exp &&                        \
-        has_non_equi_cond == has_non_equi_cond_exp &&                        \
-        use_bloom_filter == use_bloom_filter_exp) {                          \
-        out = join_probe_consume_batch<                                      \
-            build_table_outer_exp, probe_table_outer_exp,                    \
-            has_non_equi_cond_exp, use_bloom_filter_exp>(                    \
-            join_state, std::unique_ptr<table_info>(in_table),               \
-            std::move(build_kept_cols), std::move(probe_kept_cols), is_last, \
-            parallel);                                                       \
+#define CONSUME_PROBE_BATCH(build_table_outer, probe_table_outer,         \
+                            has_non_equi_cond, use_bloom_filter,          \
+                            build_table_outer_exp, probe_table_outer_exp, \
+                            has_non_equi_cond_exp, use_bloom_filter_exp)  \
+    if (build_table_outer == build_table_outer_exp &&                     \
+        probe_table_outer == probe_table_outer_exp &&                     \
+        has_non_equi_cond == has_non_equi_cond_exp &&                     \
+        use_bloom_filter == use_bloom_filter_exp) {                       \
+        out = join_probe_consume_batch<                                   \
+            build_table_outer_exp, probe_table_outer_exp,                 \
+            has_non_equi_cond_exp, use_bloom_filter_exp>(                 \
+            join_state, std::unique_ptr<table_info>(in_table),            \
+            std::move(build_kept_cols), std::move(probe_kept_cols),       \
+            total_rows, is_last, parallel);                               \
     }
 #endif
 

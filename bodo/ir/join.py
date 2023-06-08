@@ -648,7 +648,7 @@ def join_distributed_analysis(join_node, array_dists):
     contained in the Join IR node
     """
 
-    # left and right inputs can have 1D or 1D_Var seperately (q26 case)
+    # left and right inputs can have 1D or 1D_Var separately (q26 case)
     # input columns have same distribution
     left_dist = Distribution.OneD
     right_dist = Distribution.OneD
