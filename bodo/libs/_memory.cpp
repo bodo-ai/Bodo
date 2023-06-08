@@ -1,20 +1,170 @@
 #include "_memory.h"
 #include <arrow/util/bit_util.h>
-#include <mpi.h>
 #include <sys/mman.h>
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
+#include <sstream>
+
+#define MAX_NUM_STORAGE_MANAGERS 4
+
+#define CHECK_ARROW_AND_ASSIGN(expr, msg, lhs)  \
+    {                                           \
+        auto res = expr;                        \
+        CHECK_ARROW_MEM_RET(res.status(), msg); \
+        lhs = std::move(res).ValueOrDie();      \
+    }
 
 namespace bodo {
 
+//// Helper Functions
+/**
+ * @brief Determine if buffer pointer is unswizzled
+ * @return True if ptr is unswizzled, false otherwise
+ */
+inline bool is_unswizzled(Swip ptr) {
+    uint64_t ptr_val = reinterpret_cast<uint64_t>(ptr);
+    return (ptr_val >> 63) == 1ull;
+}
+
+/**
+ * @brief Extract encoded info from a swip pointer
+ * that could have been unswizzled.
+ *
+ * @param ptr Swip pointer that could be unswizzled
+ * @return std::optional<std::tuple<uint8_t, uint8_t, uint64_t>>
+ * - std::nullopt if pointer is swizzled (not evicted)
+ * - std::tuple   if pointer is unswizzled
+ *   - uint8_t  for size class index
+ *   - uint8_t  for storage class index
+ *   - uint64_t for block id
+ */
+std::optional<std::tuple<uint8_t, uint8_t, uint64_t>> extract_swip_ptr(
+    Swip ptr) {
+    if (!is_unswizzled(ptr)) {
+        return {};
+    }
+
+    uint64_t ptr_val = reinterpret_cast<uint64_t>(ptr);
+    uint8_t size_class = (ptr_val >> 57) & 0b111111ull;
+    uint8_t storage_class = (ptr_val >> 55) & 0b11ull;
+    uint64_t block_id = ptr_val & (0x7F'FF'FF'FF'FF'FF'FFull);
+    return std::make_tuple(size_class, storage_class, block_id);
+}
+
+/**
+ * @brief Construct unswizzled swip pointer from components
+ *
+ * @param size_class_idx Index of size class block is from
+ * @param storage_class_idx Storage class block will be written to
+ * @param block_id Unique index of Block
+ * @return Swip Unswizzled swip pointer
+ */
+Swip construct_unswizzled_swip(uint8_t size_class_idx,
+                               uint8_t storage_class_idx, uint64_t block_id) {
+    uint64_t size_class_enc = static_cast<uint64_t>(size_class_idx) << 57;
+    uint64_t storage_class_enc = static_cast<uint64_t>(storage_class_idx) << 55;
+    return (Swip)((1ull << 63) | size_class_enc | storage_class_enc | block_id);
+}
+
+//// StorageManager
+
+arrow::Status LocalStorageManager::ReadBlock(uint64_t block_id, int64_t n_bytes,
+                                             uint8_t* out_ptr) {
+    // Construct File Path
+    std::filesystem::path fname = this->location / this->uuid /
+                                  std::to_string(n_bytes) /
+                                  std::to_string(block_id);
+
+    // Read File Contents to Frame
+    std::shared_ptr<arrow::io::InputStream> in_stream;
+    CHECK_ARROW_AND_ASSIGN(
+        this->fs.OpenInputStream(fname.string()),
+        "LocalStorageManager::ReadBlock: Unable to Open FileReader -",
+        in_stream);
+
+    int64_t n_bytes_read;
+    CHECK_ARROW_AND_ASSIGN(
+        in_stream->Read(n_bytes, (void*)out_ptr),
+        "LocalStorageManager::ReadBlock: Unable to Read Block File -",
+        n_bytes_read);
+
+    CHECK_ARROW_MEM_RET(
+        in_stream->Close(),
+        "LocalStorageManager::ReadBlock: Unable to Close FileReader -");
+
+    if (n_bytes_read != n_bytes) {
+        return arrow::Status::Invalid(
+            "LocalStorageManager::ReadBlock: Read Fewer Bytes than Expected");
+    }
+
+    return this->DeleteBlock(block_id, n_bytes);
+}
+
+arrow::Result<uint64_t> LocalStorageManager::WriteBlock(uint8_t* in_ptr,
+                                                        uint64_t n_bytes) {
+    if (!this->CanSpillTo(n_bytes)) {
+        return arrow::Status::OutOfMemory(
+            "Can not spill to storage manager. Not enough space available");
+    }
+
+    uint64_t block_id = this->GetNewBlockID();
+
+    // Construct File Path
+    std::filesystem::path fpath =
+        this->location / this->uuid / std::to_string(n_bytes);
+    std::filesystem::path fname = fpath / std::to_string(block_id);
+
+    CHECK_ARROW_MEM_RET(
+        this->fs.CreateDir(fpath.string(), true),
+        "LocalStorageManager::WriteBlock: Unable to Create Directory -");
+
+    std::shared_ptr<arrow::io::OutputStream> out_stream;
+    CHECK_ARROW_AND_ASSIGN(
+        this->fs.OpenOutputStream(fname.string()),
+        "LocalStorageManager::WriteBlock: Unable to Open FileWriter -",
+        out_stream);
+
+    CHECK_ARROW_MEM_RET(
+        out_stream->Write(in_ptr, (int64_t)n_bytes),
+        "LocalStorageManager::WriteBlock: Unable to Write Block to File -");
+
+    CHECK_ARROW_MEM_RET(
+        out_stream->Close(),
+        "LocalStorageManager::WriteBlock: Unable to Close Writer -");
+
+    this->UpdateSpilledBytes(n_bytes);
+    return block_id;
+}
+
+arrow::Status LocalStorageManager::DeleteBlock(uint64_t block_id,
+                                               int64_t n_bytes) {
+    // Construct File Path
+    std::filesystem::path fname = this->location / this->uuid /
+                                  std::to_string(n_bytes) /
+                                  std::to_string(block_id);
+
+    CHECK_ARROW_MEM_RET(
+        this->fs.DeleteFile(fname.string()),
+        "LocalStorageManager::DeleteBlock: Unable to Delete Block File -");
+
+    this->UpdateSpilledBytes(-n_bytes);
+    return arrow::Status::OK();
+}
+
 //// SizeClass
 
-SizeClass::SizeClass(size_t capacity, size_t block_size)
-    : capacity_(capacity),
+SizeClass::SizeClass(
+    uint8_t idx,
+    const std::span<std::unique_ptr<StorageManager>> storage_managers,
+    size_t capacity, size_t block_size)
+    : idx_(idx),
+      capacity_(capacity),
       block_size_(block_size),
       byteSize_(capacity * block_size),
       bitmask_nbytes_((this->capacity_ + 7) >> 3),
+      // Storage Managers View
+      storage_managers_(storage_managers),
       // Initialize the bitmasks as all 0s
       mapped_bitmask_(bitmask_nbytes_),
       pinned_bitmask_(bitmask_nbytes_),
@@ -72,14 +222,14 @@ uint8_t* SizeClass::getFrameAddress(uint64_t idx) const {
     return this->address_ + (idx * this->block_size_);
 }
 
-inline void SizeClass::pinFrame(uint64_t idx) {
+inline void SizeClass::markFrameAsPinned(uint64_t idx) {
     if (!::arrow::bit_util::GetBit(this->mapped_bitmask_.data(), idx)) {
         throw std::runtime_error("Cannot pin an unmapped frame.");
     }
     ::arrow::bit_util::SetBitTo(this->pinned_bitmask_.data(), idx, true);
 }
 
-inline void SizeClass::unpinFrame(uint64_t idx) {
+inline void SizeClass::markFrameAsUnpinned(uint64_t idx) {
     if (!::arrow::bit_util::GetBit(this->mapped_bitmask_.data(), idx)) {
         throw std::runtime_error("Cannot unpin an unmapped frame.");
     }
@@ -142,41 +292,27 @@ int64_t SizeClass::findUnmappedFrame() noexcept {
 }
 
 int64_t SizeClass::AllocateFrame(OwningSwip swip) {
-    // Get a lock on the SizeClass state for the duration
-    // of this function. This is cheaper than getting it
-    // for individual sub-operations and avoids potential
-    // deadlocks. 'scoped_lock' guarantees that the lock
-    // will be released when the function ends (even if
-    // there's an exception).
-    std::scoped_lock lock(this->mtx_);
     int64_t frame_idx = this->findUnmappedFrame();
     if (frame_idx == -1) {
         return -1;
     }
     // Mark the frame as mapped
     this->markFrameAsMapped(frame_idx);
-    // Pin the frame (default behavior)
-    this->pinFrame(frame_idx);
+    // Mark the frame as pinned (default behavior)
+    this->markFrameAsPinned(frame_idx);
     // Assign the swip (if there is one)
     this->swips_[frame_idx] = swip;
     return frame_idx;
 }
 
 void SizeClass::FreeFrame(uint64_t idx) {
-    // Get a lock on the SizeClass state for the duration
-    // of this function. This is cheaper than getting it
-    // for individual sub-operations and avoids potential
-    // deadlocks. 'scoped_lock' guarantees that the lock
-    // will be released when the function ends (even if
-    // there's an exception).
-    std::scoped_lock lock(this->mtx_);
     if (idx >= this->capacity_) {
         throw std::runtime_error("FreeFrame: Frame Index is out of bounds!");
     }
     // Advise away the frame
     this->adviseAwayFrame(idx);
-    // Unpin the frame (in case it was)
-    this->unpinFrame(idx);
+    // Mark the frame as unpinned (in case it was pinned)
+    this->markFrameAsUnpinned(idx);
     // Mark the frame as unmapped
     this->markFrameAsUnmapped(idx);
     // Reset the swip (if there was one)
@@ -188,16 +324,94 @@ void SizeClass::FreeFrame(uint8_t* ptr) {
     this->FreeFrame(frame_idx);
 }
 
-//// BufferPoolOptions
+void SizeClass::PinFrame(uint64_t idx) {
+    if (idx >= this->capacity_) {
+        throw std::runtime_error("PinFrame: Frame Index is out of bounds!");
+    }
+
+    this->markFrameAsPinned(idx);
+}
+
+void SizeClass::UnpinFrame(uint64_t idx) {
+    if (idx >= this->capacity_) {
+        throw std::runtime_error("UnpinFrame: Frame Index is out of bounds!");
+    }
+
+    this->markFrameAsUnpinned(idx);
+}
+
+arrow::Status SizeClass::EvictFrame(uint64_t idx) {
+    if (idx >= this->capacity_) {
+        throw std::runtime_error("EvictFrame: Frame Index is out of bounds!");
+    }
+    if (this->isFramePinned(idx)) {
+        throw std::runtime_error("EvictFrame: Frame is not unpinned!");
+    }
+
+    auto ptr = this->getFrameAddress(idx);
+    int64_t size = static_cast<int64_t>(this->getBlockSize());
+
+    arrow::Result<uint64_t> block_id = arrow::Status::OutOfMemory(
+        "No storage locations provided to evict to.");
+    uint8_t manager_id;
+    for (manager_id = 0; manager_id < this->storage_managers_.size();
+         manager_id++) {
+        block_id = this->storage_managers_[manager_id]->WriteBlock(ptr, size);
+        if (block_id.ok()) {
+            break;
+        }
+    }
+
+    if (!block_id.ok()) {
+        return block_id.status();
+    }
+
+    // Construct the Swip
+    OwningSwip swip = this->swips_[idx];
+    *swip = construct_unswizzled_swip(this->idx_, manager_id,
+                                      block_id.ValueOrDie());
+    this->swips_[idx] = nullptr;
+
+    // Mark the frame as unmapped
+    this->markFrameAsUnmapped(idx);
+    // Advise away the frame
+    this->adviseAwayFrame(idx);
+    return arrow::Status::OK();
+}
+
+arrow::Status SizeClass::ReadbackToFrame(OwningSwip swip, uint64_t frame_idx,
+                                         uint64_t block_idx,
+                                         uint8_t manager_idx) {
+    int64_t size = static_cast<int64_t>(this->getBlockSize());
+
+    auto ptr = this->getFrameAddress(frame_idx);
+    CHECK_ARROW_MEM_RET(
+        this->storage_managers_[manager_idx]->ReadBlock(block_idx, size, ptr),
+        "SizeClass::ReadbackToFrame: Failed to Read Spill Block from Storage "
+        "-");
+
+    // Mark the frame as mapped
+    this->markFrameAsMapped(frame_idx);
+    // Mark the frame as pinned (default behavior)
+    this->markFrameAsPinned(frame_idx);
+    // Assign the Swip
+    *swip = ptr;
+    this->swips_[frame_idx] = swip;
+
+    return arrow::Status::OK();
+}
+
+//// StorageOptions and BufferPoolOptions
 
 /**
- * @brief Get the number of ranks on this node.
+ * @brief Get the number of ranks on this node and the
+ * current rank's position.
+ *
  * We do this by creating sub-communicators based
  * on shared-memory. This is a collective operation
  * and therefore all ranks must call it.
- *
  */
-static int dist_get_ranks_on_node() {
+static std::tuple<int, int> dist_get_ranks_on_node() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized) {
@@ -205,9 +419,10 @@ static int dist_get_ranks_on_node() {
     }
 
     int npes_node;
+    int rank_on_node;
     MPI_Comm shmcomm;
 
-    // Split comm, into comms that has same shared memory.
+    // Split comm into comms that has same shared memory.
     // This is a collective operation and all ranks must call it.
     MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL,
                         &shmcomm);
@@ -215,9 +430,104 @@ static int dist_get_ranks_on_node() {
     // By definition, all ranks on the same node will get the same
     // output.
     MPI_Comm_size(shmcomm, &npes_node);
+    MPI_Comm_rank(shmcomm, &rank_on_node);
 
     MPI_Comm_free(&shmcomm);
-    return npes_node;
+    return std::make_tuple(npes_node, rank_on_node);
+}
+
+std::shared_ptr<StorageOptions> StorageOptions::Defaults(uint8_t tier) {
+    std::shared_ptr<StorageOptions> options = nullptr;
+    // TODO: Use fmt::format when available
+
+    // Get the comma-delimited list of drive locations for this storage option
+    std::vector<std::string> locations;
+    auto location_env_str = std::string("BODO_BUFFER_POOL_STORAGE_CONFIG_") +
+                            std::to_string(tier) + std::string("_DRIVES");
+    if (const char* location_env_ = std::getenv(location_env_str.c_str())) {
+        std::stringstream ss(location_env_);
+        while (ss.good()) {
+            std::string substr;
+            std::getline(ss, substr, ',');
+
+            // TODO: Check for StorageType
+            if (substr.starts_with("s3://") || substr.starts_with("abfs://")) {
+                std::cerr << "Spilling to S3 or ABFS is not supported yet"
+                          << std::endl;
+                return nullptr;
+            }
+
+            locations.push_back(substr);
+        }
+    } else {
+        // If no location env, assume that no storage option was
+        // defined for this tier.
+        return nullptr;
+    }
+
+    // Compute the number of bytes available for this storage location
+    auto gb_available_env_str =
+        std::string("BODO_BUFFER_POOL_STORAGE_CONFIG_") + std::to_string(tier) +
+        std::string("_SPACE_PER_DRIVE_GiB");
+
+    if (const char* gb_available_env_ =
+            std::getenv(gb_available_env_str.c_str())) {
+        // Create Options
+        options = std::make_shared<StorageOptions>();
+
+        // Assign Location
+        auto [num_ranks_on_node, rank_on_node] = dist_get_ranks_on_node();
+        int loc_idx = rank_on_node % locations.size();
+        options->location = locations[loc_idx];
+
+        // Parse GB Storage Numbers
+        int gb_in_storage = std::stoi(gb_available_env_);
+
+        // If gb_in_storage < 0, assume unlimited storage
+        // Indicated by a -1
+        if (gb_in_storage < 0) {
+            options->usable_size = -1;
+            return options;
+        }
+
+        int64_t bytes_in_storage = gb_in_storage * 1024ll * 1024ll * 1024ll;
+
+        // What percentage of the total available space in storage
+        // should be used for the buffer pool. For now, the default
+        // will be 90% unless specified by the environment variable
+        double space_percent = 0.90;
+        auto space_percent_env_str =
+            std::string("BODO_BUFFER_POOL_STORAGE_CONFIG_") +
+            std::to_string(tier) + std::string("_USABLE_PERCENTAGE");
+        if (const char* space_percent_env_ =
+                std::getenv(space_percent_env_str.c_str())) {
+            // We expect this to be in percentages and not fraction,
+            // i.e. it should be set to 45 if we want to use 45% (or 0.45)
+            // of the total available space.
+            space_percent = std::stod(space_percent_env_) / 100.0;
+        }
+        double bytes_available = bytes_in_storage * space_percent;
+
+        // Determine the number of bytes each rank gets by evenly
+        // distributing ranks to available locations in a round
+        // robin fashion
+        // Ex: If node has 5 ranks and 3 locations of 20GB each
+        // - Rank 0 and 3 use Location 1 and max 10GB
+        // - Rank 1 and 4 use Location 2 and max 10GB
+        // - Rank 2 uses Location 3 and max 20GB
+
+        // Compute Even Storage for Ranks Using Same Location
+        int leftover_ranks = num_ranks_on_node % locations.size();
+        int min_ranks_per_loc =
+            (num_ranks_on_node - leftover_ranks) / locations.size();
+        int num_ranks_on_loc =
+            min_ranks_per_loc + (rank_on_node < leftover_ranks);
+        int64_t storage_for_rank =
+            static_cast<int64_t>(bytes_available / (double)num_ranks_on_loc);
+        options->usable_size = storage_for_rank;
+    }
+
+    return options;
 }
 
 BufferPoolOptions BufferPoolOptions::Defaults() {
@@ -250,7 +560,7 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         }
 
         // Get number of ranks on this node.
-        int num_ranks_on_node = dist_get_ranks_on_node();
+        auto [num_ranks_on_node, _] = dist_get_ranks_on_node();
         // Get total memory size of the node.
         size_t mem_on_node =
             static_cast<size_t>(get_total_node_memory() / (1024.0 * 1024.0));
@@ -275,22 +585,41 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         options.max_num_size_classes = std::stoi(max_num_size_classes_env_);
     }
 
+    // Disable Storage Manager Parsing
+    // Useful for debugging purposes
+    bool disable_spilling = false;
+    if (const char* disable_spilling_env_ =
+            std::getenv("BODO_BUFFER_POOL_DISABLE_SPILLING")) {
+        if (std::strcmp(disable_spilling_env_, "1") == 0) {
+            options.ignore_max_limit_during_allocation = true;
+            disable_spilling = true;
+        }
+    }
+
     // BufferPool's equal allocation per rank
     // approach can cause issues for existing Bodo workloads
-    // until we have spill support. In particular,
+    // until we have full spill support. In particular,
     // we might preemptively disallow allocations on a rank
-    // in case of skew. Until we have spill support,
-    // we want to be able to attempt allocation
-    // even if it's beyond the allocated limit.
-    options.ignore_max_limit_during_allocation = true;
-
-    char* ignore_max_limit_env_ =
-        std::getenv("BODO_BUFFER_POOL_IGNORE_MAX_ALLOCATION_LIMIT");
-    if (ignore_max_limit_env_) {
+    // in case of skew. Thus, we want to be able to attempt
+    // allocation even if it's beyond the allocated limit.
+    if (const char* ignore_max_limit_env_ =
+            std::getenv("BODO_BUFFER_POOL_IGNORE_MAX_ALLOCATION_LIMIT")) {
         if (std::strcmp(ignore_max_limit_env_, "1") == 0) {
             options.ignore_max_limit_during_allocation = true;
         } else {
             options.ignore_max_limit_during_allocation = false;
+        }
+    }
+
+    if (!disable_spilling) {
+        // Parse Storage Managers
+        for (uint8_t i = 1; i <= MAX_NUM_STORAGE_MANAGERS; i++) {
+            auto storage_option = StorageOptions::Defaults(i);
+            if (storage_option != nullptr) {
+                options.storage_options.push_back(storage_option);
+            } else {
+                break;
+            }
         }
     }
 
@@ -303,6 +632,21 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
     : options_(std::move(options)),
       // Convert MiB to bytes
       memory_size_bytes_(options.memory_size * 1024 * 1024) {
+    for (auto storage_option : this->options_.storage_options) {
+        std::unique_ptr<StorageManager> manager;
+
+        switch (storage_option->type) {
+            case StorageType::Local:
+                manager = std::make_unique<LocalStorageManager>(storage_option);
+                break;
+        }
+
+        CHECK_ARROW_MEM(manager->Initialize(),
+                        "Failed to Initialize Storage Manager:");
+        // std::move is needed to push a unique_ptr
+        this->storage_managers_.push_back(std::move(manager));
+    }
+
     this->Initialize();
 }
 
@@ -361,7 +705,7 @@ void BufferPool::Initialize() {
     // Take the minumum of this, and the number specified in options_
     // to get the actual number of size-classes.
     // The absolute max is 63 (since it needs to be encodable in 6 bits).
-    uint64_t num_size_classes = static_cast<uint8_t>(std::min(
+    uint8_t num_size_classes = static_cast<uint8_t>(std::min(
         std::min(this->options_.max_num_size_classes, max_num_size_classes),
         (uint64_t)63));
 
@@ -369,11 +713,12 @@ void BufferPool::Initialize() {
     this->size_classes_.reserve(num_size_classes);
     this->size_class_bytes_.reserve(num_size_classes);
     uint64_t size_class_bytes_i = min_size_class_bytes;
-    for (size_t i = 0; i < num_size_classes; i++) {
+    for (uint8_t i = 0; i < num_size_classes; i++) {
         uint64_t num_blocks = static_cast<uint64_t>(this->memory_size_bytes_ /
                                                     size_class_bytes_i);
         this->size_classes_.emplace_back(
-            std::make_unique<SizeClass>(num_blocks, size_class_bytes_i));
+            std::make_unique<SizeClass>(i, std::span(this->storage_managers_),
+                                        num_blocks, size_class_bytes_i));
         this->size_class_bytes_.emplace_back(size_class_bytes_i);
         size_class_bytes_i *= 2;
     }
@@ -395,6 +740,12 @@ int64_t BufferPool::max_memory() const { return stats_.max_memory(); }
 
 int64_t BufferPool::bytes_allocated() const { return stats_.bytes_allocated(); }
 
+uint64_t BufferPool::bytes_pinned() const { return this->bytes_pinned_.load(); }
+
+inline void BufferPool::update_pinned_bytes(int64_t diff) {
+    this->bytes_pinned_.fetch_add(diff);
+}
+
 std::string BufferPool::backend_name() const { return "bodo"; }
 
 int64_t BufferPool::find_size_class_idx(int64_t size) const {
@@ -410,6 +761,74 @@ int64_t BufferPool::find_size_class_idx(int64_t size) const {
 inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
                                      size_t capacity) {
     memset(ptr + size, 0, static_cast<size_t>(capacity - size));
+}
+
+arrow::Status BufferPool::evict(uint64_t size_class_idx) {
+    // Attempt to evict smaller size classes
+    uint64_t bytes_rem = this->size_class_bytes_[size_class_idx];
+    std::vector<uint64_t> evicting_frames_size_class;
+    std::vector<uint64_t> evicting_frame_idxs;
+
+    for (int64_t i = size_class_idx; i >= 0; i--) {
+        auto& size_class = this->size_classes_[i];
+        auto num_frames = size_class->getNumBlocks();
+        auto size_bytes = this->size_class_bytes_[i];
+
+        for (uint64_t j = 0; j < num_frames; j++) {
+            if (bytes_rem <= 0) {
+                break;
+            }
+
+            if (size_class->isFrameMapped(j) && !size_class->isFramePinned(j)) {
+                bytes_rem -= size_bytes;
+                evicting_frames_size_class.push_back(i);
+                evicting_frame_idxs.push_back(j);
+            }
+        }
+
+        if (bytes_rem <= 0) {
+            break;
+        }
+    }
+
+    if (bytes_rem <= 0) {
+        for (uint32_t i = 0; i < evicting_frame_idxs.size(); i++) {
+            auto evict_status =
+                this->size_classes_[evicting_frames_size_class[i]]->EvictFrame(
+                    evicting_frame_idxs[i]);
+            if (!evict_status.ok()) {
+                return evict_status;
+            }
+
+            this->stats_.UpdateAllocatedBytes(
+                -this->size_class_bytes_[evicting_frames_size_class[i]]);
+        }
+
+        return arrow::Status::OK();
+    }
+
+    // There are not enough small frames to evict to free up enough
+    // space. Thus, we need to find one larger frame to evict instead
+    for (auto i = size_class_idx + 1; i < this->num_size_classes(); i++) {
+        auto& size_class = this->size_classes_[i];
+        auto num_frames = size_class->getNumBlocks();
+        for (uint64_t j = 0; j < num_frames; j++) {
+            if (size_class->isFrameMapped(j) && !size_class->isFramePinned(j)) {
+                auto evict_status = size_class->EvictFrame(j);
+                if (!evict_status.ok()) {
+                    return evict_status;
+                }
+
+                this->stats_.UpdateAllocatedBytes(-this->size_class_bytes_[i]);
+                return arrow::Status::OK();
+            }
+        }
+    }
+
+    // We couldn't find enough smaller frames
+    // or 1 larger frame to evict
+    return arrow::Status::OutOfMemory(
+        "Unable to evict enough frames to free up the required space");
 }
 
 ::arrow::Status BufferPool::Allocate(int64_t size, int64_t alignment,
@@ -437,16 +856,38 @@ inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
 
     const int64_t aligned_size = this->size_align(size, alignment);
 
+    // Get a lock on the BufferPool state for the duration
+    // of this function. 'scoped_lock' guarantees that the
+    // lock will be released when the function ends (even if
+    // there's an exception).
+    std::scoped_lock lock(this->mtx_);
+
     if (aligned_size <= static_cast<int64_t>(this->malloc_threshold_)) {
         // Use malloc
 
-        // Only check and throw an error if ignore_max_limit_during_allocation
-        // is false.
+        // If non-pinned memory is less than needed, immediately fail
         if (!this->options_.ignore_max_limit_during_allocation &&
-            (aligned_size > (static_cast<int64_t>(this->memory_size_bytes_) -
-                             this->bytes_allocated()))) {
+            aligned_size > static_cast<int64_t>(this->memory_size_bytes_ -
+                                                this->bytes_pinned())) {
             return ::arrow::Status::OutOfMemory(
                 "Allocation failed. Not enough space in the buffer pool.");
+        }
+
+        // If available memory is less than needed, start spilling
+        int64_t bytes_available_in_mem =
+            static_cast<int64_t>(this->memory_size_bytes_) -
+            this->bytes_allocated();
+        if (!this->options_.ignore_max_limit_during_allocation &&
+            aligned_size > bytes_available_in_mem) {
+            auto evict_status = this->evict(0);
+            if (!evict_status.ok()) {
+                if (evict_status.IsOutOfMemory()) {
+                    return evict_status.WithMessage("Allocation failed. " +
+                                                    evict_status.message());
+                } else {
+                    return evict_status;
+                }
+            }
         }
 
         // There's essentially two options:
@@ -471,6 +912,9 @@ inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
                 "Failed to allocate required bytes.");
         }
         *out = static_cast<uint8_t*>(result);
+
+        // Update statistics
+        this->update_pinned_bytes(aligned_size);
         this->stats_.UpdateAllocatedBytes(aligned_size);
 
         // Zero-pad to match Arrow
@@ -502,27 +946,42 @@ inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
 
         uint64_t size_class_bytes = this->size_class_bytes_[size_class_idx];
 
-        // Only check and throw an error if ignore_max_limit_during_allocation
-        // is false.
+        // If non-pinned memory is less than needed, immediately fail
         if (!this->options_.ignore_max_limit_during_allocation &&
-            (size_class_bytes >
-             (this->memory_size_bytes_ -
-              static_cast<uint64_t>(this->bytes_allocated())))) {
+            size_class_bytes >
+                (this->memory_size_bytes_ - this->bytes_pinned())) {
             return ::arrow::Status::OutOfMemory(
                 "Allocation failed. Not enough space in the buffer pool.");
         }
 
-        // Allocate in the identified size-class.
-        // We're guaranteed to be able to find a frame.
-        // Proof: We allocated memory_size // block_size many blocks. Say all
-        // frames were taken, that would mean that block_size * num_blocks many
-        // bytes are allocated. Allocating another block would mean that total
-        // memory usage would be greater than memory_size, but we already
-        // checked that there's sufficient memory available for this allocation.
+        // If available memory is less than needed, start spilling
+        uint64_t bytes_available_in_mem =
+            this->memory_size_bytes_ -
+            static_cast<uint64_t>(this->bytes_allocated());
+        if (!this->options_.ignore_max_limit_during_allocation &&
+            size_class_bytes > bytes_available_in_mem) {
+            int64_t rem_bytes = size_class_bytes - bytes_available_in_mem;
+            int64_t rem_class_idx = this->find_size_class_idx(rem_bytes);
+            auto evict_status = this->evict(rem_class_idx);
+            if (!evict_status.ok()) {
+                if (evict_status.IsOutOfMemory()) {
+                    return evict_status.WithMessage("Allocation failed. " +
+                                                    evict_status.message());
+                } else {
+                    return evict_status;
+                }
+            }
+        }
 
+        // Allocate in the identified size-class.
+        // Due to the previous check, we're guaranteed to be able to find a
+        // frame. Proof: We allocated memory_size // block_size many blocks. Say
+        // all frames were taken, that would mean that block_size * num_blocks
+        // many bytes are allocated. Allocating another block would mean that
+        // total memory usage would be greater than memory_size, but we already
+        // checked that there's sufficient memory available for this allocation.
         int64_t frame_idx =
             this->size_classes_[size_class_idx]->AllocateFrame(out);
-
         if (frame_idx == -1) {
             return ::arrow::Status::OutOfMemory(
                 "Could not find an empty frame of required size!");
@@ -541,6 +1000,8 @@ inline void BufferPool::zero_padding(uint8_t* ptr, size_t size,
         // TODO When adding eviction support and re-using a "mapped" page,
         // make sure to zero pad the buffer.
 
+        // Update statistics
+        this->update_pinned_bytes(size_class_bytes);
         this->stats_.UpdateAllocatedBytes(size_class_bytes);
     }
     return ::arrow::Status::OK();
@@ -587,13 +1048,20 @@ std::tuple<bool, int64_t, int64_t, int64_t> BufferPool::get_alloc_details(
 void BufferPool::free_helper(uint8_t* ptr, bool is_mmap_alloc,
                              int64_t size_class_idx, int64_t frame_idx,
                              int64_t size_aligned) {
+    bool frame_pinned;
     if (is_mmap_alloc) {
+        frame_pinned =
+            this->size_classes_[size_class_idx]->isFramePinned(frame_idx);
         this->size_classes_[size_class_idx]->FreeFrame(frame_idx);
     } else {
+        frame_pinned = true;
         ::free(ptr);
     }
 
     if (size_aligned != -1) {
+        if (frame_pinned) {
+            this->update_pinned_bytes(-size_aligned);
+        }
         this->stats_.UpdateAllocatedBytes(-size_aligned);
     }
 }
@@ -611,6 +1079,28 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     }
     if (size == 0) {
         // Should never happen, but just in case.
+        return;
+    }
+
+    // Get a lock on the BufferPool state for the duration
+    // of this function. 'scoped_lock' guarantees that the
+    // lock will be released when the function ends (even if
+    // there's an exception).
+    std::scoped_lock lock(this->mtx_);
+
+    // Evicted frames should be deleted directly from disk
+    auto swip_info = extract_swip_ptr(buffer);
+    if (swip_info.has_value()) {
+        auto [size_class_idx, storage_manager_idx, block_id] =
+            swip_info.value();
+        auto status = this->storage_managers_[storage_manager_idx]->DeleteBlock(
+            block_id, this->size_class_bytes_[size_class_idx]);
+
+        // For simplicity of free, we will print any failures as warnings for
+        // now
+        if (!status.ok()) {
+            std::cerr << "Free Failed. " << status.ToString() << std::endl;
+        }
         return;
     }
 
@@ -652,6 +1142,16 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
         return ::arrow::Status::OK();
     }
 
+    if (is_unswizzled(old_memory_ptr)) {
+        auto status = this->Pin(ptr);
+        if (!status.IsOutOfMemory()) {
+            return arrow::Status::OutOfMemory(
+                "Reallocate failed. Not enough space to pin old allocation.");
+        } else if (!status.ok()) {
+            return status;
+        }
+    }
+
     auto [is_mmap_alloc, size_class_idx, frame_idx, old_size_aligned] =
         this->get_alloc_details(old_memory_ptr, old_size, alignment);
 
@@ -674,15 +1174,131 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     CHECK_ARROW_MEM(this->Allocate(new_size, alignment, ptr),
                     "Allocation failed!");
 
+    // Get a lock on the BufferPool state for the duration
+    // of this function. 'scoped_lock' guarantees that the
+    // lock will be released when the function ends (even if
+    // there's an exception).
+    std::scoped_lock lock(this->mtx_);
+
     uint8_t* new_memory_ptr = *ptr;
+
     // Copy over the contents
     memcpy(new_memory_ptr, old_memory_ptr,
            static_cast<size_t>(std::min(new_size, old_size)));
+
     // Free original memory (re-use information from get_alloc_details output)
     this->free_helper(old_memory_ptr, is_mmap_alloc, size_class_idx, frame_idx,
                       old_size_aligned);
 
     return ::arrow::Status::OK();
+}
+
+::arrow::Status BufferPool::Pin(uint8_t** ptr) {
+    // Handle zero case.
+    if (*ptr == kZeroSizeArea) {
+        return arrow::Status::OK();
+    }
+
+    // Get a lock on the BufferPool state for the duration
+    // of this function. 'scoped_lock' guarantees that the
+    // lock will be released when the function ends (even if
+    // there's an exception).
+    std::scoped_lock lock(this->mtx_);
+
+    auto swip_info = extract_swip_ptr(*ptr);
+
+    if (swip_info.has_value()) {
+        // If ptr is unswizzled, then we have to load the
+        // associated block into memory, and then mark as
+        // pinned
+        auto [size_class_idx, storage_manager_idx, block_id] =
+            swip_info.value();
+        auto& size_class = this->size_classes_[size_class_idx];
+        uint64_t block_bytes = this->size_class_bytes_[size_class_idx];
+
+        // Determine if there is enough space in memory to
+        // read-back evicted block
+        // If non-pinned memory is less than needed, immediately fail
+        if (block_bytes > (this->memory_size_bytes_ - this->bytes_pinned())) {
+            return ::arrow::Status::OutOfMemory(
+                "Pin failed. Not enough space in the buffer pool.");
+        }
+
+        if (block_bytes >
+            (this->memory_size_bytes_ - this->bytes_allocated())) {
+            int64_t rem_bytes =
+                block_bytes - (static_cast<int64_t>(this->memory_size_bytes_) -
+                               this->bytes_allocated());
+            int64_t rem_class_idx = this->find_size_class_idx(rem_bytes);
+            CHECK_ARROW_MEM_RET(this->evict(rem_class_idx),
+                                "Pin failed. Error when evicting frame:");
+        }
+
+        // Find an available frame in the size class
+        int64_t frame_idx = size_class->findUnmappedFrame();
+        if (frame_idx == -1) {
+            // TODO: Should be impossible at this point, fatal error
+            return ::arrow::Status::OutOfMemory(
+                "Pin failed. Unable to find available frame");
+        }
+
+        // Load Block from Storage into Frame
+        CHECK_ARROW_MEM_RET(
+            size_class->ReadbackToFrame(ptr, frame_idx, block_id,
+                                        storage_manager_idx),
+            "Pin failed. Error when unevicting pinned location.");
+
+        this->update_pinned_bytes(block_bytes);
+        this->stats_.UpdateAllocatedBytes(block_bytes);
+        return arrow::Status::OK();
+
+    } else {
+        // If ptr is swizzled, then just need to mark the
+        // associated frame as pinned
+        auto [is_pool_alloc, size_class_idx, frame_idx, _] =
+            this->get_alloc_details(*ptr, -1);
+
+        // If allocated through malloc, Pin is No-op
+        if (!is_pool_alloc) {
+            return arrow::Status::OK();
+        }
+
+        if (!this->size_classes_[size_class_idx]->isFramePinned(frame_idx)) {
+            this->size_classes_[size_class_idx]->PinFrame(frame_idx);
+            this->update_pinned_bytes(this->size_class_bytes_[size_class_idx]);
+        }
+        return arrow::Status::OK();
+    }
+}
+
+void BufferPool::Unpin(uint8_t* ptr) {
+    // Handle zero case.
+    if (ptr == kZeroSizeArea) {
+        return;
+    }
+
+    // Get a lock on the BufferPool state for the duration
+    // of this function. 'scoped_lock' guarantees that the
+    // lock will be released when the function ends (even if
+    // there's an exception).
+    std::scoped_lock lock(this->mtx_);
+
+    // If ptr is unswizzled, then it should already be unpinned
+    if (is_unswizzled(ptr)) {
+        // TODO: Should we include a check?
+        return;
+    }
+
+    auto [is_pool_alloc, size_class_idx, frame_idx, _] =
+        this->get_alloc_details(ptr, -1);
+
+    // If allocated through malloc, Unpin is No-op
+    if (!is_pool_alloc) {
+        return;
+    }
+
+    this->size_classes_[size_class_idx]->UnpinFrame(frame_idx);
+    this->update_pinned_bytes(-this->size_class_bytes_[size_class_idx]);
 }
 
 SizeClass* BufferPool::GetSizeClass_Unsafe(uint64_t idx) const {

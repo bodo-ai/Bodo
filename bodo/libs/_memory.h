@@ -2,18 +2,39 @@
 #ifndef BODO_MEMORY_INCLUDED
 #define BODO_MEMORY_INCLUDED
 
+#include <atomic>
+#include <filesystem>
+#include <iostream>
+#include <mutex>
+#include <optional>
+#include <span>
+
 #include <arrow/compute/api.h>
+#include <arrow/filesystem/api.h>
 #include <arrow/io/api.h>
 #include <arrow/memory_pool.h>
 #include <arrow/stl_allocator.h>
-#include <iostream>
-#include <mutex>
+
+#include <boost/uuid/uuid.hpp>             // uuid class
+#include <boost/uuid/uuid_generators.hpp>  // generators
+#include <boost/uuid/uuid_io.hpp>          // streaming operators etc.
+
+#include <mpi.h>
 
 // TODO Tell the compiler that the branch is unlikely.
 #define CHECK_ARROW_MEM(expr, msg)                                      \
     if (!(expr.ok())) {                                                 \
         std::string err_msg = std::string(msg) + " " + expr.ToString(); \
         throw std::runtime_error(err_msg);                              \
+    }
+
+#define CHECK_ARROW_MEM_RET(expr, msg)                                      \
+    {                                                                       \
+        auto stat = expr;                                                   \
+        if (!stat.ok()) {                                                   \
+            std::string err_msg = std::string(msg) + " " + stat.ToString(); \
+            return stat.WithMessage(err_msg);                               \
+        }                                                                   \
     }
 
 // Fraction of the smallest mmap-ed SizeClass
@@ -34,6 +55,24 @@ static int64_t zero_size_area[1];
 static uint8_t* const kZeroSizeArea =
     reinterpret_cast<uint8_t*>(&zero_size_area);
 
+/// @brief Enum to Indicate which Manager to Use
+enum StorageType : uint8_t { Local = 0 };
+
+/// @brief Options for Storage Manager Implementations
+struct StorageOptions {
+    /// @brief Amount of bytes allowed to be spilled to
+    /// storage location
+    int64_t usable_size = 1024ll * 1024ll * 1024ll;
+
+    /// @brief Location / folder to write block spill files
+    std::string location;
+
+    /// @brief Type of StorageManager to use
+    StorageType type = StorageType::Local;
+
+    static std::shared_ptr<StorageOptions> Defaults(uint8_t tier);
+};
+
 /// @brief Options for the Buffer Pool implementation
 struct BufferPoolOptions {
     /// @brief Total available memory (in MiB) for the buffer pool.
@@ -53,13 +92,166 @@ struct BufferPoolOptions {
 
     /// @brief Whether or not to enforce the specified
     /// memory limit during allocations. This is useful
-    /// until we have spill support.
+    /// for debugging purposes.
     bool ignore_max_limit_during_allocation = false;
 
-    // XXX BlockStorageConfig will be added later when
-    // spilling support is added.
+    /// @brief Config for Storage Managers
+    std::vector<std::shared_ptr<StorageOptions>> storage_options;
 
     static BufferPoolOptions Defaults();
+};
+
+/// Abstract Class / Interface for Storage Managers
+/// Storage Managers manage the reading + writing of blocks
+/// from a storage location as well as size limitations
+class StorageManager {
+   public:
+    StorageManager(const std::shared_ptr<StorageOptions> options)
+        : options(options) {
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        // Generate Unique UUID per Rank
+        boost::uuids::uuid _uuid = boost::uuids::random_generator()();
+        std::string uuid = boost::uuids::to_string(_uuid);
+
+        this->uuid = std::to_string(rank) + "-" + uuid;
+    }
+
+    // Required otherwise won't compile
+    // All cleanup operations occur within the Cleanup virtual function
+    // so that exceptions can be safely raised
+    // Cleanup runs at program exit. However, if we never want cleanup
+    // to raise errors, we should move it back to the destructor
+    // TODO: Revisit in the future
+    virtual ~StorageManager() = default;
+
+    /// @brief Initialize the Manager by Setting Up any
+    /// Background Resources
+    virtual arrow::Status Initialize() = 0;
+
+    /// @brief How many bytes are available to be stored in this
+    /// storage location. -1 indicates unlimited
+    inline int64_t usable_size() const { return options->usable_size; }
+
+    /**
+     * @brief Read a block with id block_id and size of n_bytes
+     * from storage, write its contents to out_ptr, and delete
+     * block from storage.
+     *
+     * @param[in] block_id Index of block to read from storage
+     * @param[in] n_bytes Size of block in bytes
+     * @param[out] out_ptr Location to write contents to
+     * @return arrow::Status Ok if success, otherwise a potential
+     * filesystem error raised during read.
+     */
+    virtual arrow::Status ReadBlock(uint64_t block_id, int64_t n_bytes,
+                                    uint8_t* out_ptr) = 0;
+
+    /**
+     * @brief Write the contents of a frame located at in_ptr
+     * and size frame_size to storage, and return the new block id.
+     *
+     * @param in_ptr Location of frame to write
+     * @param frame_size Size of frame in bytes
+     * @return arrow::Result<uint64_t> Block ID of contents if success.
+     * Otherwise a potential filesystem error raised during write
+     */
+    virtual arrow::Result<uint64_t> WriteBlock(uint8_t* in_ptr,
+                                               uint64_t frame_size) = 0;
+
+    /**
+     * @brief Delete a block with id block_id and size of n_bytes from
+     * storage.
+     *
+     * @param block_id Index of block to delete from storage
+     * @param n_bytes Size of block in bytes
+     * @return arrow::Status Ok if success, otherwise a potential
+     * filesystem error raised during delete.
+     */
+    virtual arrow::Status DeleteBlock(uint64_t block_id, int64_t n_bytes) = 0;
+
+    /**
+     * @brief Is there space available in this storage location for
+     * allocations to be spilled to it
+     *
+     * @param amount Bytes to potentially be spilled
+     * @return true If allocation can be spilled to it
+     * @return false If allocation can not be spilled here
+     */
+    bool CanSpillTo(uint64_t amount) {
+        return options->usable_size < 0 ||
+               (curr_spilled_bytes + amount) <=
+                   static_cast<uint64_t>(options->usable_size);
+    }
+
+    /**
+     * @brief Update the current number of spilled bytes to this
+     * storage location by diff
+     *
+     * @param diff The number of bytes added or removed from this
+     * storage location.
+     */
+    void UpdateSpilledBytes(int64_t diff) { curr_spilled_bytes += diff; }
+
+    /// @brief Get the next available block id for this storage location
+    uint64_t GetNewBlockID() { return this->block_id_counter++; }
+
+    /// @brief Cleanup any leftover spill files
+    /// Expected to run during program exit and can throw
+    /// an error on fail
+    virtual void Cleanup() = 0;
+
+   protected:
+    /// @brief Rank and process-unique identifier for
+    /// spilling. Can be used for location handling
+    std::string uuid;
+
+    /// @brief Configuration Options
+    std::shared_ptr<StorageOptions> options;
+
+   private:
+    /// @brief Increment every time we write a block to disk
+    uint64_t block_id_counter = 0;
+
+    /// @brief Current # of bytes spilled to storage
+    uint64_t curr_spilled_bytes = 0;
+};
+
+/// Storage Manager for Local Disk-based Filesystems
+class LocalStorageManager final : public StorageManager {
+   public:
+    explicit LocalStorageManager(const std::shared_ptr<StorageOptions> options)
+        : StorageManager(options), location(options->location) {}
+
+    virtual arrow::Status Initialize() override {
+        return this->fs.CreateDir((this->location / this->uuid).string());
+    }
+
+    // Required otherwise won't compile
+    virtual ~LocalStorageManager() override = default;
+
+    virtual arrow::Status ReadBlock(uint64_t block_id, int64_t n_bytes,
+                                    uint8_t* out_ptr) override;
+
+    virtual arrow::Result<uint64_t> WriteBlock(uint8_t* in_ptr,
+                                               uint64_t frame_size) override;
+
+    virtual arrow::Status DeleteBlock(uint64_t block_id,
+                                      int64_t n_bytes) override;
+
+    virtual void Cleanup() override {
+        CHECK_ARROW_MEM(
+            this->fs.DeleteDir((this->location / this->uuid).string()),
+            "LocalStorageManager::Cleanup: Failed to delete spill directory");
+    }
+
+   private:
+    /// @brief Location to write spill contents to
+    std::filesystem::path location;
+
+    /// @brief LocalFileSystem handler for reading and writing
+    ::arrow::fs::LocalFileSystem fs;
 };
 
 typedef uint8_t* Swip;
@@ -68,20 +260,24 @@ typedef Swip* OwningSwip;
 /// @brief Represents a range of virtual addresses used for allocating
 /// buffer frames of a fixed size. Very similar to Velox's SizeClass
 /// (https://github.com/facebookincubator/velox/blob/8324ac7f1839db009def00e7450f38c2591dd4bb/velox/common/memory/MmapAllocator.h#L141).
-class SizeClass {
+class SizeClass final {
    public:
     /**
      * @brief Create a new mmap-ed SizeClass for the Buffer Pool.
      *
+     * @param idx Relative index / ordering of SizeClass
+     * @param storage_managers Fixed-view span of Storage Managers
+     *  to spill frames to. Owned by the Buffer Pool
      * @param capacity Number of frames to allocate
      * @param block_size Size of each frame (in bytes).
      */
-    SizeClass(size_t capacity, size_t block_size);
+    SizeClass(uint8_t idx,
+              const std::span<std::unique_ptr<StorageManager>> storage_managers,
+              size_t capacity, size_t block_size);
 
     /**
      * @brief Delete the SizeClass and unmap the allocated
      * virtual address space.
-     *
      */
     ~SizeClass();
 
@@ -166,6 +362,54 @@ class SizeClass {
      */
     void FreeFrame(uint8_t* ptr);
 
+    /**
+     * @brief Pin the frame at index idx.
+     * This is essentially a public wrapper for
+     * markFrameAsPinned.
+     *
+     * @param idx Frame index to pin.
+     */
+    void PinFrame(uint64_t idx);
+
+    /**
+     * @brief Unpin the frame at index idx.
+     * This is essentially a public wrapper for
+     * markFrameAsUnpinned.
+     *
+     * @param idx Frame index to unpin.
+     */
+    void UnpinFrame(uint64_t idx);
+
+    /**
+     * @brief Evict the frame at index idx from
+     * memory and write contents to first available
+     * storage location.
+     *
+     * Will throw an error if the frame is pinned
+     *
+     * @param idx Frame index to evict
+     * @return
+     *   arrow::Status::Ok If the frame was successfully evicted
+     *   arrow::Status::OutOfMemory If eviction failed because
+     *     no storage space is available
+     *   arrow::Status If eviction failed for an unexpected reason
+     */
+    arrow::Status EvictFrame(uint64_t idx);
+
+    /**
+     * @brief Read block block_idx from storage manager
+     * manager_idx into an available frame in the size class
+     *
+     * @param[in, out] swip Swip pointer to update with memory
+     *   location of the block's data
+     * @param frame_idx Index of frame to write block to
+     * @param block_idx Index of block to read into memory
+     * @param manager_idx Index of manager that is handling the block
+     * @return OK or potentially raised filesystem error
+     */
+    arrow::Status ReadbackToFrame(OwningSwip swip, uint64_t frame_idx,
+                                  uint64_t block_idx, uint8_t manager_idx);
+
     /// @brief Get size of each frame (in bytes)
     inline uint64_t getBlockSize() const { return this->block_size_; }
 
@@ -180,11 +424,20 @@ class SizeClass {
     /// Note: Not thread safe.
     bool isFramePinned(uint64_t idx) const;
 
+    /**
+     * @brief Find the index of the first unmapped
+     * frame in this SizeClass. Note that this only
+     * finds the frame but doesn't mark it as
+     * mapped.
+     *
+     * @return int64_t Index of the first unmapped frame. -1 if no unmapped
+     * frame was found.
+     */
+    int64_t findUnmappedFrame() noexcept;
+
    private:
-    /// NOTE: The private functions are not thread safe
-    /// on their own. They assume that the thread entered
-    /// through some public function and obtained a
-    /// lock to read/modify the state.
+    /// @brief Size Class Index
+    const uint8_t idx_;
 
     /// @brief Number of buffer frames.
     const uint64_t capacity_;
@@ -198,6 +451,11 @@ class SizeClass {
     /// @brief Number of bytes for mapped_bitmask / pinned_bitmask /
     /// priority_hint
     const uint64_t bitmask_nbytes_;
+
+    /// @brief Const Pointer to Storage Managers
+    /// Buffer Pool owns and is responsible for them, but SizeClass
+    /// needs to call on them for eviction
+    const std::span<std::unique_ptr<StorageManager>> storage_managers_;
 
     /// @brief Start of address range for this size class.
     uint8_t* address_;
@@ -221,59 +479,28 @@ class SizeClass {
     /// done by STL containers).
     std::vector<OwningSwip> swips_;
 
-    /**
-     * @brief Helper function to mark the frame at
-     * index idx as "mapped", i.e. taken.
-     *
-     */
+    /// @brief Helper function to mark the frame at
+    /// index idx as "mapped", i.e. taken.
     inline void markFrameAsMapped(uint64_t idx);
 
-    /**
-     * @brief Helper function to mark the frame at
-     * index idx as unmapped, i.e. not taken.
-     *
-     */
+    /// @brief Helper function to mark the frame at
+    /// index idx as unmapped, i.e. not taken.
     inline void markFrameAsUnmapped(uint64_t idx);
 
-    /**
-     * @brief Pin the frame at index idx.
-     *
-     */
-    inline void pinFrame(uint64_t idx);
+    /// @brief Helper function to mark the frame at
+    /// index idx as pinned.
+    inline void markFrameAsPinned(uint64_t idx);
 
-    /**
-     * @brief Unpin the frame at index idx.
-     *
-     */
-    inline void unpinFrame(uint64_t idx);
+    /// @brief Helper function to mark the frame at
+    /// index idx as unpinned.
+    inline void markFrameAsUnpinned(uint64_t idx);
 
     /**
      * @brief Inform OS that the frame at index idx is
      * not required. We will do this using madvise
      * on the frame with the MADV_DONTNEED flag.
-     *
      */
     void adviseAwayFrame(uint64_t idx);
-
-    /**
-     * @brief Find the index of the first unmapped
-     * frame in this SizeClass. Note that this only
-     * finds the frame but doesn't mark it as
-     * mapped.
-     *
-     * @return int64_t Index of the first unmapped frame. -1 if no unmapped
-     * frame was found.
-     */
-    int64_t findUnmappedFrame() noexcept;
-
-    // Simple mutex to make the SizeClass state (various bitmaps, etc.)
-    // thread-safe. Bodo itself doesn't use threading, but Arrow/PyArrow do use
-    // threading during IO, etc., so the BufferPool needs to be thread safe.
-    // Having the mutex at the SizeClass level reduces overall overheads
-    // since allocations/frees in different SizeClass-es
-    // won't slow down each other. This is similar to how Velox manages
-    // thread safety in its Memory Allocator.
-    std::mutex mtx_;
 };
 
 class BufferPool final : public ::arrow::MemoryPool {
@@ -344,6 +571,11 @@ class BufferPool final : public ::arrow::MemoryPool {
     /// this allocator.
     virtual int64_t bytes_allocated() const override;
 
+    /// @brief The number of bytes currently pinned by this
+    /// allocator. Pinned bytes can never be spilled to disk
+    /// TODO: Get inline to work correctly
+    uint64_t bytes_pinned() const;
+
     /// @brief Get peak memory allocation in this memory pool
     virtual int64_t max_memory() const override;
 
@@ -381,7 +613,35 @@ class BufferPool final : public ::arrow::MemoryPool {
     BufferPool(BufferPool const&) = delete;
     BufferPool& operator=(BufferPool const&) = delete;
 
-    // XXX Add functions for Pin/Unpin when we add eviction/swizzling support.
+    /// @brief Cleanup any external resources
+    /// Needs to be outside of the destructor to allow
+    /// for exception propagation to work
+    void Cleanup() {
+        for (auto& manager : this->storage_managers_) {
+            manager->Cleanup();
+        }
+    }
+
+    /**
+     * @brief Pin a previously allocated region to memory.
+     * This will ensure that the allocation will never be
+     * spilled to storage
+     *
+     * @param[in, out] ptr Location of swip pointer containing
+     *   allocation to pin
+     * @return ::arrow::Status If the pin succeeded, if it
+     *   failed due to OOM, or failed for another reason
+     */
+    ::arrow::Status Pin(uint8_t** ptr);
+
+    /**
+     * @brief Unpin a previously allocation from memory.
+     * This allows future allocations to evict this
+     * allocation from memory to storage.
+     *
+     * @param[in, out] ptr Swip pointer to allocation to unpin
+     */
+    void Unpin(uint8_t* ptr);
 
     // XXX Add Reserve/Release functions, or re-use planned
     // functions RegisterOffPoolUsage and DeregisterOffPoolUsage
@@ -419,6 +679,12 @@ class BufferPool final : public ::arrow::MemoryPool {
     /// Ordered by the frame size (ascending).
     std::vector<std::unique_ptr<SizeClass>> size_classes_;
 
+    /// @brief Storage Managers to Spill Block To
+    /// In order of priority. Only use next manager if all previous
+    /// ones are out of space.
+    /// Maximum number of storage managers allowed is 4
+    std::vector<std::unique_ptr<StorageManager>> storage_managers_;
+
    private:
     /// @brief Threshold for allocation through malloc. Allocations of this size
     /// and lower will go through malloc
@@ -427,9 +693,19 @@ class BufferPool final : public ::arrow::MemoryPool {
     /// @brief Total memory size in bytes.
     uint64_t memory_size_bytes_;
 
+    /// @brief Number of bytes currently pinned
+    /// TODO: Integrate into stats_ class at some point?
+    std::atomic<uint64_t> bytes_pinned_;
+
     /// @brief Vector of block sizes of the allocated SizeClass-es for easy
     /// access.
     std::vector<uint64_t> size_class_bytes_;
+
+    /// @brief Simple mutex to make the BufferPool thread-safe.
+    /// Bodo itself doesn't use threading, but Arrow/PyArrow do use
+    /// threading during IO, etc., so the BufferPool needs to be thread safe.
+    /// TODO: Expand the mutex to allow for more flexible threading
+    std::mutex mtx_;
 
     /**
      * @brief Helper function for initializing
@@ -515,6 +791,30 @@ class BufferPool final : public ::arrow::MemoryPool {
      * @param capacity Capacity actually allocated.
      */
     inline void zero_padding(uint8_t* ptr, size_t size, size_t capacity);
+
+    /**
+     * @brief Evict enough memory for a frame from size class
+     * size_class_idx.
+     *
+     * This function assumes that there is not enough available
+     * memory to allocate a frame of the specified size class. It
+     * will attempt to evict unpinned frames from size classes of
+     * the specified size and below if that would be enough. If
+     * not, it will then try to evict frames of larger size classes.
+     *
+     * @param size_class_idx Size Class of Frame to make space
+     * available for
+     */
+    arrow::Status evict(uint64_t size_class_idx);
+
+    /**
+     * @brief Atomically update the number of pinned bytes in the
+     * BufferPool by the diff.
+     *
+     * @param diff The number of bytes to add to the current pinned
+     * byte count.
+     */
+    inline void update_pinned_bytes(int64_t diff);
 };
 
 /// Helper Tools for using BufferPool in STL Containers

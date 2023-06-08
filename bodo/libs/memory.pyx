@@ -11,6 +11,8 @@
 # our BufferPool with PyArrow and for unit testing purposes.
 
 from cython.operator cimport dereference as deref
+from libc.stdlib cimport malloc
+from libc.string cimport strcpy
 from pyarrow.lib cimport MemoryPool, _Weakrefable, check_status
 
 import pyarrow as pa
@@ -100,6 +102,19 @@ cdef class BufferPoolAllocation:
         is correct.
         """
         return int(self.c_ptr_as_int())
+
+    def is_nullptr(self) -> bool:
+        """
+        Does the allocation point to nullptr
+        """
+        return self.get_ptr_as_int() == 0
+
+    def is_in_memory(self) -> bool:
+        """
+        Check if the frame is currently
+        in memory (by checking the swip ptr)
+        """
+        return self.get_ptr_as_int() > 0
     
     cdef int64_t c_swip_as_int(self):
         return <int64_t> &self.ptr
@@ -133,6 +148,28 @@ cdef class BufferPoolAllocation:
         Check if this and 'other' and point to the same memory region.
         """
         return self.ptr == other.ptr
+
+    cdef bytes read(self, int n_bytes):
+        cdef char* contents = <char *> malloc((n_bytes + 1) * sizeof(char))
+        # TODO: Malloc fails?
+        strcpy(contents, <char*> self.ptr)
+        return contents
+
+    cdef void write(self, char* contents):
+        strcpy(<char*> self.ptr, contents)
+
+    def read_bytes(self, n_bytes: int) -> bytes:
+        """
+        Read n bytes of the allocation 
+        """
+        contents = self.read(n_bytes)
+        return contents
+
+    def write_bytes(self, contents: bytes) -> None:
+        """
+        Write some contents to the allocation
+        """
+        self.write(contents)
 
     def __repr__(self):
         cdef size_t ptr
@@ -260,6 +297,49 @@ cdef class SizeClass(_Weakrefable):
         return is_pinned
         
 
+cdef class StorageOptions(_Weakrefable):
+    """
+    Simple Python class around the StorageOptions class in C++.
+    NOTE: Only for unit-testing purposes
+    """
+
+    cdef:
+        # Underlying C++ object for storing the information.
+        shared_ptr[CStorageOptions] options
+
+    def __init__(self, location, usable_size=None):
+        """
+        Constructor for StorageOptions.
+        If the attributes are not provided, they default
+        to values set in C++.
+        """
+        self.options = make_shared[CStorageOptions]()
+        deref(self.options).location = location
+        if usable_size is not None:
+            deref(self.options).usable_size = usable_size
+
+    cdef void cinit(self, shared_ptr[CStorageOptions] options):
+        self.options = options
+
+    @property
+    def location(self):
+        return deref(self.options).location
+    
+    @property
+    def usable_size(self):
+        return deref(self.options).usable_size
+
+    @staticmethod
+    def defaults(rank):
+        cdef:
+            StorageOptions options = StorageOptions.__new__(StorageOptions)
+            shared_ptr[CStorageOptions] default_options = CStorageOptions.Defaults(rank)
+        if default_options == nullptr:
+            return None
+        options.cinit(default_options)
+        return options
+
+
 cdef class BufferPoolOptions(_Weakrefable):
     """
     Simple Python class around the BufferPoolOptions class in C++.
@@ -274,7 +354,8 @@ cdef class BufferPoolOptions(_Weakrefable):
                  memory_size=None, 
                  min_size_class=None,
                  max_num_size_classes=None,
-                 ignore_max_limit_during_allocation=None):
+                 ignore_max_limit_during_allocation=None,
+                 storage_options=None):
         """
         Constructor for BufferPoolOptions.
         If the attributes are not provided, they default
@@ -289,6 +370,22 @@ cdef class BufferPoolOptions(_Weakrefable):
             self.options.max_num_size_classes = max_num_size_classes
         if ignore_max_limit_during_allocation is not None:
             self.options.ignore_max_limit_during_allocation = ignore_max_limit_during_allocation
+        if storage_options is not None:
+            for option in storage_options:
+                self.c_add_storage(option)
+
+    cdef void c_add_storage(self, StorageOptions option):
+        self.options.storage_options.push_back(option.options)
+
+    def c_storage_option(self, i):
+        cdef:
+            shared_ptr[CStorageOptions] c_opt = self.options.storage_options[i]
+            StorageOptions options = StorageOptions.__new__(StorageOptions)
+        options.cinit(c_opt)
+        return options
+
+    cdef int c_storage_options_len(self):
+       return self.options.storage_options.size()
 
     cdef void cinit(self, CBufferPoolOptions options):
         self.options = options
@@ -304,10 +401,17 @@ cdef class BufferPoolOptions(_Weakrefable):
     @property
     def max_num_size_classes(self):
         return self.options.max_num_size_classes
-    
+
     @property
     def ignore_max_limit_during_allocation(self):
         return self.options.ignore_max_limit_during_allocation
+
+    @property
+    def storage_options(self):
+        res = []
+        for i in range(self.c_storage_options_len()):
+            res.append(self.c_storage_option(i))
+        return res
 
     @staticmethod
     def defaults():
@@ -376,6 +480,16 @@ cdef class BufferPool(MemoryPool):
         # Set the shared_ptr for the instance.
         pool.cinit(c_pool)
         return pool
+
+    def cleanup(self):
+        return deref(self.c_pool).Cleanup()
+
+    def bytes_pinned(self) -> int:
+        """
+        Get the number of bytes currently pinned in the
+        BufferPool.
+        """
+        return deref(self.c_pool).get_bytes_pinned()
 
     def bytes_allocated(self) -> int:
         """
@@ -446,12 +560,18 @@ cdef class BufferPool(MemoryPool):
         allocation.alignment = alignment
         return allocation
     
-    cdef void c_free(self, BufferPoolAllocation allocation):
+    cdef void c_free(self, BufferPoolAllocation allocation) noexcept:
         deref(self.c_pool).Free(allocation.ptr, allocation.size, allocation.alignment)
     
-    cdef void c_reallocate(self, int new_size, BufferPoolAllocation allocation):
+    cdef void c_reallocate(self, int new_size, BufferPoolAllocation allocation) except *:
         check_status(deref(self.c_pool).Reallocate(allocation.size, new_size, allocation.alignment, &(allocation.ptr)))
         allocation.size = new_size
+
+    cdef void c_pin(self, BufferPoolAllocation allocation) except *:
+        check_status(deref(self.c_pool).Pin(&(allocation.ptr)))
+
+    cdef void c_unpin(self, BufferPoolAllocation allocation) noexcept:
+        deref(self.c_pool).Unpin(allocation.ptr)
 
     def allocate(self, size, alignment=64) -> BufferPoolAllocation:
         """
@@ -475,6 +595,19 @@ cdef class BufferPool(MemoryPool):
         The BufferPoolAllocation instance is updated in place.
         """
         self.c_reallocate(new_size, allocation)
+
+    def pin(self, allocation: BufferPoolAllocation):
+        """
+        Pin a previous allocation to memory
+        """
+        self.c_pin(allocation)
+
+    def unpin(self, allocation: BufferPoolAllocation):
+        """
+        Unpin a previous allocation to memory, allowing
+        it to be spilled if storage managers are provided
+        """
+        self.c_unpin(allocation)
 
 
 def default_buffer_pool():
