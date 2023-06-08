@@ -3,7 +3,7 @@
 This file is mostly wrappers for C++ implementations.
 """
 from functools import cached_property
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Dict, List
 
 import llvmlite.binding as ll
 import numba
@@ -106,7 +106,8 @@ class JoinStateType(types.Type):
 
     # Methods used to compute the information needed for _init_join_state
 
-    def _derive_cpp_indices(self, key_indices, num_cols):
+    @staticmethod
+    def _derive_cpp_indices(key_indices, num_cols):
         """Generate the indices used for the C++ table from the
         given Python table.
 
@@ -145,8 +146,59 @@ class JoinStateType(types.Type):
                 self.probe_key_inds, len(self.probe_table_type.arr_types)
             )
 
+    @staticmethod
+    def _input_table_logical_to_physical_map(key_indices, table_type) -> Dict[int, int]:
+        """Return a dictionary mapping a logical Python index to a
+        physical C++ index for the given input table.
+
+        Args:
+            key_indices (N Tuple(int)): The indices of the key columns
+            table_type (TableType): The input table type.
+
+        Returns:
+            Dict[int, int]: Dictionary mapping logical to physical indices.
+        """
+        index_map = {}
+        # In C++ the keys have been moved to the front of the table
+        key_map = {idx: i for i, idx in enumerate(key_indices)}
+        data_offset = len(key_indices)
+        num_cols = len(table_type.arr_types)
+        for i in range(num_cols):
+            if i in key_map:
+                physical_index = key_map[i]
+            else:
+                physical_index = data_offset
+                data_offset += 1
+            index_map[i] = physical_index
+        return index_map
+
+    def build_logical_to_physical_map(self) -> Dict[int, int]:
+        """Return a dictionary mapping a logical Python index to a
+        physical C++ index for the build table. This assumes all
+        columns are live and is used for non-equality joins.
+
+        Returns:
+            Dict[int, int]: Dictionary mapping logical to physical indices.
+        """
+        return self._input_table_logical_to_physical_map(
+            self.build_key_inds, self.build_table_type
+        )
+
+    def probe_logical_to_physical_map(self) -> Dict[int, int]:
+        """Return a dictionary mapping a logical Python index to a
+        physical C++ index for the probe table. This assumes all
+        columns are live and is used for non-equality joins.
+
+        Returns:
+            Dict[int, int]: Dictionary mapping logical to physical indices.
+        """
+        return self._input_table_logical_to_physical_map(
+            self.probe_key_inds, self.probe_table_type
+        )
+
+    @staticmethod
     def _derive_input_type(
-        self, key_types, key_indices, table_type
+        key_types, key_indices, table_type
     ) -> List[types.ArrayCompatible]:
         """Generate the input table type based on the given key types, key
         indices, and table type.
@@ -221,7 +273,8 @@ class JoinStateType(types.Type):
             arr_types.append(key_type)
         return arr_types
 
-    def _key_casted_table_type(self, key_types, key_indices, table_type):
+    @staticmethod
+    def _key_casted_table_type(key_types, key_indices, table_type):
         """
         Generate the table type produced by only casting
         the keys to the shared key type and keeping all data columns the
@@ -246,11 +299,11 @@ class JoinStateType(types.Type):
         if not should_cast:
             # No need to generate a new type
             return table_type
-        indices_map = {idx: i for i, idx in enumerate(key_indices)}
+        keys_map = {idx: key_types[i] for i, idx in enumerate(key_indices)}
         arr_types = []
         for i in range(len(table_type.arr_types)):
-            if i in indices_map:
-                arr_types.append(key_types[indices_map[i]])
+            if i in keys_map:
+                arr_types.append(keys_map[i])
             else:
                 arr_types.append(table_type.arr_types[i])
         return bodo.TableType(tuple(arr_types))
@@ -325,7 +378,8 @@ class JoinStateType(types.Type):
         table = self.probe_table_type
         return self._derive_input_type(key_types, key_indices, table)
 
-    def _derive_c_types(self, arr_types: List[types.ArrayCompatible]) -> np.ndarray:
+    @staticmethod
+    def _derive_c_types(arr_types: List[types.ArrayCompatible]) -> np.ndarray:
         """Generate the CType Enum types for each array in the
         C++ build table via the indices.
 
@@ -370,9 +424,8 @@ class JoinStateType(types.Type):
         """
         return self._derive_c_types(self.probe_reordered_arr_types)
 
-    def _derive_c_array_types(
-        self, arr_types: List[types.ArrayCompatible]
-    ) -> np.ndarray:
+    @staticmethod
+    def _derive_c_array_types(arr_types: List[types.ArrayCompatible]) -> np.ndarray:
         """Generate the CArrayTypeEnum Enum types for each array in the
         C++ build table via the indices.
 
@@ -424,8 +477,8 @@ class JoinStateType(types.Type):
         """
         Determine the number of build arrays.
 
-        Note: We use build_indices in case the same column is used as a key in
-        multiple comparisons.
+        Note: We use build_reordered_arr_types in case the same column
+        is used as a key in multiple comparisons.
 
         Return (int): The number of build arrays
         """
@@ -436,8 +489,8 @@ class JoinStateType(types.Type):
         """
         Determine the number of probe arrays.
 
-        Note: We use probe_indices in case the same column is used as a key in
-        multiple comparisons.
+        Note: We use probe_reordered_arr_types in case the same column
+        is used as a key in multiple comparisons.
 
         Return (int): The number of probe arrays
         """
@@ -639,9 +692,8 @@ def init_join_state(
             output_type.probe_column_names,
             probe_table_type.arr_types,
         )
-
-        left_logical_to_physical = output_type.build_indices
-        right_logical_to_physical = output_type.probe_indices
+        left_logical_to_physical = output_type.build_logical_to_physical_map()
+        right_logical_to_physical = output_type.probe_logical_to_physical_map()
         left_var_map = {c: i for i, c in enumerate(output_type.build_column_names)}
         right_var_map = {c: i for i, c in enumerate(output_type.probe_column_names)}
 
