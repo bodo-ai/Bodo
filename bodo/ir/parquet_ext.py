@@ -786,7 +786,7 @@ def _gen_pq_reader_py(
     if is_dead_table:
         func_text += "    T = None\n"
     else:
-        func_text += f"    T = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
+        func_text += f"    T = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id}, 0)\n"
         if len(out_used_cols) == 0:
             # Set the table length using the total rows if don't load any columns
             func_text += f"    T = set_table_len(T, local_rows)\n"

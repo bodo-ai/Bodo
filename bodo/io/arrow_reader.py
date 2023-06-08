@@ -106,7 +106,7 @@ def read_arrow_next(arrow_reader, used_cols=None):  # pragma: no cover
         f"""\
     def func(arrow_reader, used_cols=None):
         out_table, is_last_out, num_rows = arrow_reader_read_py_entry(arrow_reader)
-        table_var = cpp_table_to_py_table(out_table, {table_idx_var}, {py_table_type_var})
+        table_var = cpp_table_to_py_table(out_table, {table_idx_var}, {py_table_type_var}, num_rows)
         delete_table(out_table)
         table_var = set_table_len(table_var, num_rows)
         return table_var, is_last_out

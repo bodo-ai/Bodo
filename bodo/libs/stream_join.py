@@ -826,6 +826,7 @@ def _join_probe_consume_batch(
     cpp_table,
     kept_build_cols,
     kept_probe_cols,
+    total_rows,
     is_last,
     parallel,
 ):
@@ -840,6 +841,7 @@ def _join_probe_consume_batch(
                 lir.IntType(64),
                 lir.IntType(64).as_pointer(),
                 lir.IntType(64),
+                lir.IntType(8).as_pointer(),  # total_rows
                 lir.IntType(1),
                 lir.IntType(1).as_pointer(),
                 lir.IntType(1),
@@ -862,8 +864,9 @@ def _join_probe_consume_batch(
             kept_probe_cols_arr.data,
             kept_probe_cols_arr.nitems,
             args[4],
-            out_is_last,
             args[5],
+            out_is_last,
+            args[6],
         ]
         table_ret = builder.call(fn_tp, func_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -872,7 +875,13 @@ def _join_probe_consume_batch(
 
     ret_type = types.Tuple([cpp_table, types.bool_])
     sig = ret_type(
-        join_state, cpp_table, kept_build_cols, kept_probe_cols, is_last, parallel
+        join_state,
+        cpp_table,
+        kept_build_cols,
+        kept_probe_cols,
+        types.voidptr,
+        is_last,
+        parallel,
     )
     return sig, codegen
 
@@ -955,10 +964,20 @@ def join_probe_consume_batch(
             table, cast_table_type, False, False
         )
         cpp_table = py_data_to_cpp_table(cast_table, (), in_col_inds, n_table_cols)
+        # Store the total rows in the output table in case all columns are dead.
+        total_rows_np = np.array([0], dtype=np.int64)
         out_cpp_table, out_is_last = _join_probe_consume_batch(
-            join_state, cpp_table, kept_build_cols, kept_probe_cols, is_last, parallel
+            join_state,
+            cpp_table,
+            kept_build_cols,
+            kept_probe_cols,
+            total_rows_np.ctypes,
+            is_last,
+            parallel,
         )
-        out_table = cpp_table_to_py_table(out_cpp_table, out_cols_arr, out_table_type)
+        out_table = cpp_table_to_py_table(
+            out_cpp_table, out_cols_arr, out_table_type, total_rows_np[0]
+        )
         delete_table(out_cpp_table)
         return out_table, out_is_last
 
