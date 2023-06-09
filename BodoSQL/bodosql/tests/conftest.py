@@ -369,6 +369,42 @@ def bodosql_datetime_types(request):
             "table1": pd.DataFrame(
                 {
                     "A": [
+                        bodo.Time(19, 53, 6, 15),
+                        bodo.Time(14, 28, 57),
+                        bodo.Time(8, 2, 5, 0, 1, 4),
+                        None,
+                    ]
+                    * 3,
+                    "B": [
+                        bodo.Time(5, 13, 29),
+                        None,
+                        bodo.Time(22, 7, 16),
+                    ]
+                    * 4,
+                    "C": [
+                        None,
+                        bodo.Time(13, 37, 45),
+                        bodo.Time(1, 47, 59, 290, 574, 817),
+                    ]
+                    * 4,
+                }
+            ),
+        },
+    ]
+)
+def bodosql_time_types(request):
+    """
+    Fixture used to test bodo.Time type.
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        {
+            "table1": pd.DataFrame(
+                {
+                    "A": [
                         pd.NaT,
                         pd.Timestamp("2020-01-16 22:06:10.378782"),
                         pd.Timestamp("2000-01-21 02:23:16.009049"),
