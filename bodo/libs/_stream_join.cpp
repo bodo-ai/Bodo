@@ -2,6 +2,7 @@
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_distributed.h"
 #include "_shuffle.h"
 
 /* --------------------------- Helper Functions --------------------------- */
@@ -345,7 +346,9 @@ void JoinPartition::FinalizeBuild() {
     this->BuildHashTable();
     if (this->build_table_outer) {
         this->build_table_matched.resize(
-            this->build_table_buffer.data_table->nrows(), false);
+            arrow::bit_util::BytesForBits(
+                this->build_table_buffer.data_table->nrows()),
+            0);
     }
     // TODO Unpin all state
 }
@@ -421,7 +424,7 @@ inline void handle_probe_input_for_partition(
             has_match = true;
         }
         if (build_table_outer) {
-            partition->build_table_matched[it->second] = true;
+            SetBitTo(partition->build_table_matched, it->second, 1);
         }
         build_idxs.push_back(it->second);
         probe_idxs.push_back(i_row);
@@ -439,6 +442,8 @@ inline void handle_probe_input_for_partition(
  * for the `build_table_outer` case. Essentially finds
  * all the build records that didn't match, and adds them to the output (with
  * NULL on the probe side).
+ * @Tparam requires_reduction Whether the build matches require a reduction
+ * because the probe table is distributed but the build table is replicated.
  *
  * @param partition Join partition to produce the output for.
  * @param[in, out] build_idxs Build table indices for the output. This will be
@@ -446,15 +451,26 @@ inline void handle_probe_input_for_partition(
  * @param[in, out] probe_idxs Probe table indices for the output. This will be
  * updated in place.
  */
+template <bool requires_reduction>
 void generate_build_table_outer_rows_for_partition(
-    const JoinPartition* partition, bodo::vector<int64_t>& build_idxs,
+    JoinPartition* partition, bodo::vector<int64_t>& build_idxs,
     bodo::vector<int64_t>& probe_idxs) {
+    if (requires_reduction) {
+        MPI_Allreduce_bool_or(partition->build_table_matched);
+    }
+    int n_pes, my_rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+
     // Add unmatched rows from build table to output table
-    for (size_t i_row = 0; i_row < partition->build_table_matched.size();
-         i_row++) {
-        if (!partition->build_table_matched[i_row]) {
-            build_idxs.push_back(i_row);
-            probe_idxs.push_back(-1);
+    for (size_t i_row = 0;
+         i_row < partition->build_table_buffer.data_table->nrows(); i_row++) {
+        if ((!requires_reduction || ((i_row % n_pes) == my_rank))) {
+            bool has_match = GetBit(partition->build_table_matched, i_row);
+            if (!has_match) {
+                build_idxs.push_back(i_row);
+                probe_idxs.push_back(-1);
+            }
         }
     }
 }
@@ -464,7 +480,8 @@ template <bool build_table_outer, bool probe_table_outer,
 std::tuple<std::shared_ptr<table_info>, std::shared_ptr<table_info>>
 JoinPartition::FinalizeProbeForInactivePartition(
     cond_expr_fn_t cond_func, const std::vector<uint64_t>& build_kept_cols,
-    const std::vector<uint64_t>& probe_kept_cols) {
+    const std::vector<uint64_t>& probe_kept_cols,
+    const bool build_needs_reduction) {
     // XXX Currently, there's a single table_buffer, but in the future,
     // there'll probably be multiple buffers.
     this->probe_table = this->probe_table_buffer.data_table;
@@ -500,8 +517,13 @@ JoinPartition::FinalizeProbeForInactivePartition(
 
     if (build_table_outer) {
         // Add unmatched rows from build table to output table
-        generate_build_table_outer_rows_for_partition(this, build_idxs,
-                                                      probe_idxs);
+        if (build_needs_reduction) {
+            generate_build_table_outer_rows_for_partition<true>(
+                this, build_idxs, probe_idxs);
+        } else {
+            generate_build_table_outer_rows_for_partition<false>(
+                this, build_idxs, probe_idxs);
+        }
     }
 
     std::shared_ptr<table_info> build_out_table =
@@ -530,8 +552,10 @@ HashJoinState::HashJoinState(std::vector<int8_t> build_arr_c_types,
                              std::vector<int8_t> probe_arr_array_types,
                              uint64_t n_keys_, bool build_table_outer_,
                              bool probe_table_outer_, cond_expr_fn_t _cond_func,
+                             bool build_parallel_, bool probe_parallel_,
                              size_t max_partition_depth_)
-    : JoinState(n_keys_, build_table_outer_, probe_table_outer_, _cond_func),
+    : JoinState(n_keys_, build_table_outer_, probe_table_outer_, _cond_func,
+                build_parallel_, probe_parallel_),
       max_partition_depth(max_partition_depth_),
       dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)) {
     this->key_dict_builders.resize(this->n_keys);
@@ -744,13 +768,17 @@ HashJoinState::FinalizeProbeForInactivePartitions(
     std::vector<std::shared_ptr<table_info>> probe_out_tables;
     build_out_tables.reserve(this->partitions.size() - 1);
     probe_out_tables.reserve(this->partitions.size() - 1);
+    // We need a reduction of build misses if the probe table is distributed
+    // and the build table is not.
+    bool build_needs_reduction = this->probe_parallel && !this->build_parallel;
 
     for (size_t i = 1; i < this->partitions.size(); i++) {
         auto [build_out_table, probe_out_table] =
             this->partitions[i]
                 ->FinalizeProbeForInactivePartition<
                     build_table_outer, probe_table_outer, non_equi_condition>(
-                    this->cond_func, build_kept_cols, probe_kept_cols);
+                    this->cond_func, build_kept_cols, probe_kept_cols,
+                    build_needs_reduction);
         build_out_tables.push_back(build_out_table);
         probe_out_tables.push_back(probe_out_table);
     }
@@ -840,8 +868,7 @@ HashJoinState::GetDictionaryHashesForKeys() {
  */
 void join_build_consume_batch(HashJoinState* join_state,
                               std::shared_ptr<table_info> in_table,
-                              bool use_bloom_filter, bool is_last,
-                              bool parallel) {
+                              bool use_bloom_filter, bool is_last) {
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -868,9 +895,10 @@ void join_build_consume_batch(HashJoinState* join_state,
     // the dictionaries entirely when dict_hashes are provided.
     std::shared_ptr<uint32_t[]> batch_hashes_partition =
         hash_keys_table(in_table, join_state->n_keys, SEED_HASH_PARTITION,
-                        parallel, false, dict_hashes);
+                        join_state->build_parallel, false, dict_hashes);
     std::shared_ptr<uint32_t[]> batch_hashes_join =
-        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_JOIN, parallel,
+        hash_keys_table(in_table, join_state->n_keys, SEED_HASH_JOIN,
+                        join_state->build_parallel,
                         /*global_dict_needed*/ false);
 
     // Insert batch into the correct partition.
@@ -888,8 +916,8 @@ void join_build_consume_batch(HashJoinState* join_state,
                                                 in_table->nrows());
     }
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        if (hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank ||
-            !parallel) {
+        if (!join_state->build_parallel ||
+            hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank) {
             join_state->AppendBuildRow(in_table, i_row,
                                        batch_hashes_join[i_row],
                                        batch_hashes_partition[i_row]);
@@ -905,27 +933,28 @@ void join_build_consume_batch(HashJoinState* join_state,
         join_state->SplitPartition(0);
     }
 
-    if (is_last && parallel) {
+    if (is_last && join_state->build_parallel) {
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             join_state->build_shuffle_buffer.data_table;
         // NOTE: shuffle hashes need to be consistent with partition hashes
         // above
-        std::shared_ptr<uint32_t[]> shuffle_hashes =
-            hash_keys_table(shuffle_table, join_state->n_keys,
-                            SEED_HASH_PARTITION, parallel, true, dict_hashes);
+        std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
+            shuffle_table, join_state->n_keys, SEED_HASH_PARTITION,
+            join_state->build_parallel, true, dict_hashes);
         // make dictionaries global for shuffle
         for (size_t i = 0; i < shuffle_table->ncols(); i++) {
             std::shared_ptr<array_info> arr = shuffle_table->columns[i];
             if (arr->arr_type == bodo_array_type::DICT) {
-                make_dictionary_global_and_unique(arr, parallel);
+                make_dictionary_global_and_unique(arr,
+                                                  join_state->build_parallel);
             }
         }
         mpi_comm_info comm_info_table(shuffle_table->columns);
-        comm_info_table.set_counts(shuffle_hashes, parallel);
+        comm_info_table.set_counts(shuffle_hashes, join_state->build_parallel);
         std::shared_ptr<table_info> new_data =
             shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
-                                 comm_info_table, parallel);
+                                 comm_info_table, join_state->build_parallel);
         shuffle_hashes.reset();
         // TODO: clear build_shuffle_buffer memory
 
@@ -933,16 +962,18 @@ void join_build_consume_batch(HashJoinState* join_state,
         // comparison using indices
         new_data = join_state->UnifyBuildTableDictionaryArrays(new_data);
         // compute hashes of the new data
-        std::shared_ptr<uint32_t[]> batch_hashes_join = hash_keys_table(
-            new_data, join_state->n_keys, SEED_HASH_JOIN, parallel, false);
+        std::shared_ptr<uint32_t[]> batch_hashes_join =
+            hash_keys_table(new_data, join_state->n_keys, SEED_HASH_JOIN,
+                            join_state->build_parallel, false);
         dict_hashes = join_state->GetDictionaryHashesForKeys();
         // NOTE: Partition hashes need to be consistent across ranks, so need to
         // use dictionary hashes. Since we are using dictionary hashes, we don't
         // need dictionaries to be global. In fact, hash_keys_table will ignore
         // the dictionaries entirely when dict_hashes are provided.
-        std::shared_ptr<uint32_t[]> batch_hashes_partition = hash_keys_table(
-            new_data, join_state->n_keys, SEED_HASH_PARTITION, parallel,
-            /*global_dict_needed*/ false, dict_hashes);
+        std::shared_ptr<uint32_t[]> batch_hashes_partition =
+            hash_keys_table(new_data, join_state->n_keys, SEED_HASH_PARTITION,
+                            join_state->build_parallel,
+                            /*global_dict_needed*/ false, dict_hashes);
 
         // Add new batch of data to partitions (bulk insert)
         join_state->ReserveBuildTable(new_data);
@@ -985,7 +1016,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     HashJoinState* join_state, std::shared_ptr<table_info> in_table,
     const std::vector<uint64_t> build_kept_cols,
     const std::vector<uint64_t> probe_kept_cols, int64_t* total_rows,
-    const bool is_last, const bool parallel) {
+    const bool is_last) {
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -1006,9 +1037,13 @@ std::shared_ptr<table_info> join_probe_consume_batch(
 
     active_partition->probe_table = in_table;
 
+    // Determine if a shuffle could be required.
+    const bool shuffle_required =
+        join_state->build_parallel && join_state->probe_parallel;
+
     // Compute join hashes
     std::shared_ptr<uint32_t[]> batch_hashes_join = hash_keys_table(
-        in_table, join_state->n_keys, SEED_HASH_JOIN, parallel, false);
+        in_table, join_state->n_keys, SEED_HASH_JOIN, shuffle_required, false);
     active_partition->probe_table_hashes = batch_hashes_join.get();
 
     // Compute partitioning hashes:
@@ -1018,7 +1053,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
         dict_hashes = join_state->GetDictionaryHashesForKeys();
     std::shared_ptr<uint32_t[]> batch_hashes_partition =
         hash_keys_table(in_table, join_state->n_keys, SEED_HASH_PARTITION,
-                        parallel, true, dict_hashes);
+                        shuffle_required, true, dict_hashes);
 
     join_state->probe_shuffle_buffer.ReserveTable(in_table);
     // XXX This is temporary until we have proper buffers.
@@ -1044,8 +1079,20 @@ std::shared_ptr<table_info> join_probe_consume_batch(
 
     // probe hash table
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        // If just build_parallel = False then we have a broadcast join on the
+        // build side. So process all rows.
+        //
+        // If just probe_parallel = False and build_parallel = True then we
+        // still need to check batch_hashes_partition to know which rows to
+        // process.
+        bool process_on_rank =
+            !join_state->build_parallel ||
+            hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank;
+        // Check the bloom filter if we would need to shuffle data
+        // or if we would process the row.
+        bool check_bloom_filter = shuffle_required || process_on_rank;
         // Check bloom filter
-        if (use_bloom_filter) {
+        if (use_bloom_filter && check_bloom_filter) {
             // We use batch_hashes_partition to use consistent hashing across
             // ranks for dict-encoded string arrays
             if (!join_state->global_bloom_filter->Find(
@@ -1058,8 +1105,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
                 continue;
             }
         }
-        if (!parallel ||
-            hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank) {
+        if (process_on_rank) {
             // TODO Add a fast path without this check for the single partition
             // case.
             if (active_partition->is_in_partition(
@@ -1075,7 +1121,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
                     in_table, i_row, batch_hashes_join[i_row],
                     batch_hashes_partition[i_row]);
             }
-        } else {
+        } else if (shuffle_required) {
             join_state->probe_shuffle_buffer.AppendRow(in_table, i_row);
         }
     }
@@ -1101,12 +1147,12 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     build_idxs.clear();
     probe_idxs.clear();
 
-    if (is_last && (build_table_outer || parallel)) {
+    if (is_last && (build_table_outer || shuffle_required)) {
         std::vector<std::shared_ptr<table_info>> build_out_tables(
             {build_out_table});
         std::vector<std::shared_ptr<table_info>> probe_out_tables(
             {probe_out_table});
-        if (parallel) {
+        if (shuffle_required) {
             // shuffle data of other ranks
             std::shared_ptr<table_info> shuffle_table =
                 join_state->probe_shuffle_buffer.data_table;
@@ -1114,19 +1160,19 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             // above
             std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
                 shuffle_table, join_state->n_keys, SEED_HASH_PARTITION,
-                parallel, true, dict_hashes);
+                shuffle_required, true, dict_hashes);
             // make dictionaries global for shuffle
             for (size_t i = 0; i < shuffle_table->ncols(); i++) {
                 std::shared_ptr<array_info> arr = shuffle_table->columns[i];
                 if (arr->arr_type == bodo_array_type::DICT) {
-                    make_dictionary_global_and_unique(arr, parallel);
+                    make_dictionary_global_and_unique(arr, shuffle_required);
                 }
             }
             mpi_comm_info comm_info_table(shuffle_table->columns);
-            comm_info_table.set_counts(shuffle_hashes, parallel);
+            comm_info_table.set_counts(shuffle_hashes, shuffle_required);
             std::shared_ptr<table_info> new_data =
                 shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
-                                     comm_info_table, parallel);
+                                     comm_info_table, shuffle_required);
             shuffle_hashes.reset();
             // TODO: clear probe_shuffle_buffer memory
 
@@ -1147,13 +1193,15 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             // hash_keys_table will ignore the dictionaries entirely when
             // dict_hashes are provided.
             std::shared_ptr<uint32_t[]> batch_hashes_partition =
-                hash_keys_table(
-                    new_data, join_state->n_keys, SEED_HASH_PARTITION, parallel,
-                    /*global_dict_needed*/ false, new_data_dict_hashes);
+                hash_keys_table(new_data, join_state->n_keys,
+                                SEED_HASH_PARTITION, shuffle_required,
+                                /*global_dict_needed*/ false,
+                                new_data_dict_hashes);
 
             // probe hash table with new data
-            std::shared_ptr<uint32_t[]> batch_hashes_join = hash_keys_table(
-                new_data, join_state->n_keys, SEED_HASH_JOIN, parallel, false);
+            std::shared_ptr<uint32_t[]> batch_hashes_join =
+                hash_keys_table(new_data, join_state->n_keys, SEED_HASH_JOIN,
+                                shuffle_required, false);
             active_partition->probe_table = new_data;
             active_partition->probe_table_hashes = batch_hashes_join.get();
 
@@ -1229,9 +1277,18 @@ std::shared_ptr<table_info> join_probe_consume_batch(
         }
 
         if (build_table_outer) {
+            // We need a reduction of build misses if the probe table is
+            // distributed and the build table is not.
+            bool build_needs_reduction =
+                join_state->probe_parallel && !join_state->build_parallel;
             // Add unmatched rows from build table to output table
-            generate_build_table_outer_rows_for_partition(
-                active_partition.get(), build_idxs, probe_idxs);
+            if (build_needs_reduction) {
+                generate_build_table_outer_rows_for_partition<true>(
+                    active_partition.get(), build_idxs, probe_idxs);
+            } else {
+                generate_build_table_outer_rows_for_partition<false>(
+                    active_partition.get(), build_idxs, probe_idxs);
+            }
 
             // Update the output size
             batch_rows += build_idxs.size();
@@ -1325,13 +1382,17 @@ std::shared_ptr<table_info> alloc_table_like(
  * @param n_keys number of join keys
  * @param build_table_outer whether to produce left outer join
  * @param probe_table_outer whether to produce right outer join
+ * @param cond_func pointer to function that evaluates non-equality condition.
+ *                  If there is no non-equality condition, this should be NULL.
+ * @param build_parallel whether the build table is distributed
+ * @param probe_parallel whether the probe table is distributed
  * @return JoinState* join state to return to Python
  */
 JoinState* join_state_init_py_entry(
     int8_t* build_arr_c_types, int8_t* build_arr_array_types, int n_build_arrs,
     int8_t* probe_arr_c_types, int8_t* probe_arr_array_types, int n_probe_arrs,
     uint64_t n_keys, bool build_table_outer, bool probe_table_outer,
-    cond_expr_fn_t cond_func) {
+    cond_expr_fn_t cond_func, bool build_parallel, bool probe_parallel) {
     // nested loop join is required if there are no equality keys
     if (n_keys == 0) {
         return new NestedLoopJoinState(
@@ -1339,7 +1400,8 @@ JoinState* join_state_init_py_entry(
                                 build_arr_c_types + n_build_arrs),
             std::vector<int8_t>(build_arr_array_types,
                                 build_arr_array_types + n_build_arrs),
-            build_table_outer, probe_table_outer, cond_func);
+            build_table_outer, probe_table_outer, cond_func, build_parallel,
+            probe_parallel);
     }
 
     return new HashJoinState(
@@ -1351,7 +1413,8 @@ JoinState* join_state_init_py_entry(
                             probe_arr_c_types + n_probe_arrs),
         std::vector<int8_t>(probe_arr_array_types,
                             probe_arr_array_types + n_probe_arrs),
-        n_keys, build_table_outer, probe_table_outer, cond_func);
+        n_keys, build_table_outer, probe_table_outer, cond_func, build_parallel,
+        probe_parallel);
 }
 
 /**
@@ -1362,12 +1425,11 @@ JoinState* join_state_init_py_entry(
  * @param is_last is last batch
  */
 void join_build_consume_batch_py_entry(JoinState* join_state_,
-                                       table_info* in_table, bool is_last,
-                                       bool parallel) {
+                                       table_info* in_table, bool is_last) {
     // nested loop join is required if there are no equality keys
     if (join_state_->n_keys == 0) {
         nested_loop_join_build_consume_batch_py_entry(
-            (NestedLoopJoinState*)join_state_, in_table, is_last, parallel);
+            (NestedLoopJoinState*)join_state_, in_table, is_last);
         return;
     }
 
@@ -1377,7 +1439,7 @@ void join_build_consume_batch_py_entry(JoinState* join_state_,
         bool has_bloom_filter = join_state->global_bloom_filter != nullptr;
         join_build_consume_batch(join_state,
                                  std::unique_ptr<table_info>(in_table),
-                                 has_bloom_filter, is_last, parallel);
+                                 has_bloom_filter, is_last);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -1396,20 +1458,19 @@ void join_build_consume_batch_py_entry(JoinState* join_state_,
  * @param[out] total_rows Store the number of rows in the output batch in case
  *        all columns are dead.
  * @param is_last is last batch
- * @param is_parallel parallel flag
  * @return table_info* output table batch
  */
 table_info* join_probe_consume_batch_py_entry(
     JoinState* join_state_, table_info* in_table, uint64_t* kept_build_col_nums,
     int64_t num_kept_build_cols, uint64_t* kept_probe_col_nums,
     int64_t num_kept_probe_cols, int64_t* total_rows, bool is_last,
-    bool* out_is_last, bool parallel) {
+    bool* out_is_last) {
     // nested loop join is required if there are no equality keys
     if (join_state_->n_keys == 0) {
         return nested_loop_join_probe_consume_batch_py_entry(
             (NestedLoopJoinState*)join_state_, in_table, kept_build_col_nums,
             num_kept_build_cols, kept_probe_col_nums, num_kept_probe_cols,
-            total_rows, is_last, out_is_last, parallel);
+            total_rows, is_last, out_is_last);
     }
 
     HashJoinState* join_state = (HashJoinState*)join_state_;
@@ -1428,7 +1489,7 @@ table_info* join_probe_consume_batch_py_entry(
             has_non_equi_cond_exp, use_bloom_filter_exp>(                 \
             join_state, std::unique_ptr<table_info>(in_table),            \
             std::move(build_kept_cols), std::move(probe_kept_cols),       \
-            total_rows, is_last, parallel);                               \
+            total_rows, is_last);                                         \
     }
 #endif
 

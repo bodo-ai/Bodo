@@ -522,12 +522,28 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
-        if fdef in (
-            ("join_build_consume_batch", "bodo.libs.stream_join"),
-            ("join_probe_consume_batch", "bodo.libs.stream_join"),
-        ) and self._is_1D_or_1D_Var_arr(rhs.args[1].name):
-            self._set_last_arg_to_true(assign.value)
-            return [assign]
+        if (
+            fdef == ("init_join_state", "bodo.libs.stream_join")
+            and lhs in self._dist_analysis.array_dists
+        ):
+            build_dist, probe_dist = self._dist_analysis.array_dists[lhs]
+            distributed_dists = (Distribution.OneD, Distribution.OneD_Var)
+            # Check if the build and probe arrays are distributed
+            if build_dist in distributed_dists or probe_dist in distributed_dists:
+                build_parallel = build_dist in distributed_dists
+                probe_parallel = probe_dist in distributed_dists
+                # Whichever is distributed update the args in the signature to True.
+                call_type = self.calltypes.pop(rhs)
+                assert call_type.args[-2] == types.Omitted(False) and call_type.args[
+                    -1
+                ] == types.Omitted(False)
+                self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+                    self.typingctx,
+                    call_type.args[:-2]
+                    + (types.Omitted(build_parallel), types.Omitted(probe_parallel)),
+                    {},
+                )
+                return [assign]
 
         if (
             func_name == "fit"
