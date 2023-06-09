@@ -558,7 +558,9 @@ HashJoinState::HashJoinState(std::vector<int8_t> build_arr_c_types,
     : JoinState(n_keys_, build_table_outer_, probe_table_outer_, cond_func_,
                 build_parallel_, probe_parallel_, output_batch_size_),
       max_partition_depth(max_partition_depth_),
-      dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)) {
+      dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)),
+      build_iter(0),
+      probe_iter(0) {
     this->key_dict_builders.resize(this->n_keys);
 
     // Create dictionary builders for key columns:
@@ -939,7 +941,9 @@ void join_build_consume_batch(HashJoinState* join_state,
         join_state->SplitPartition(0);
     }
 
-    if (is_last && join_state->build_parallel) {
+    if (shuffle_this_iter(join_state->build_parallel, is_last,
+                          join_state->build_shuffle_buffer.data_table,
+                          join_state->build_iter)) {
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             join_state->build_shuffle_buffer.data_table;
@@ -962,7 +966,7 @@ void join_build_consume_batch(HashJoinState* join_state,
             shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                                  comm_info_table, join_state->build_parallel);
         shuffle_hashes.reset();
-        // TODO: clear build_shuffle_buffer memory
+        join_state->build_shuffle_buffer.Clear();
 
         // unify dictionaries to allow consistent hashing and fast key
         // comparison using indices
@@ -996,8 +1000,10 @@ void join_build_consume_batch(HashJoinState* join_state,
 
     // Finalize build on all partitions if it's the last input batch.
     if (is_last) {
+        // TODO: clear probe_shuffle_buffer memory
         join_state->FinalizeBuild();
     }
+    join_state->build_iter++;
 }
 
 /**
@@ -1044,12 +1050,12 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     active_partition->probe_table = in_table;
 
     // Determine if a shuffle could be required.
-    const bool shuffle_required =
+    const bool shuffle_possible =
         join_state->build_parallel && join_state->probe_parallel;
 
     // Compute join hashes
     std::shared_ptr<uint32_t[]> batch_hashes_join = hash_keys_table(
-        in_table, join_state->n_keys, SEED_HASH_JOIN, shuffle_required, false);
+        in_table, join_state->n_keys, SEED_HASH_JOIN, shuffle_possible, false);
     active_partition->probe_table_hashes = batch_hashes_join.get();
 
     // Compute partitioning hashes:
@@ -1059,7 +1065,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
         dict_hashes = join_state->GetDictionaryHashesForKeys();
     std::shared_ptr<uint32_t[]> batch_hashes_partition =
         hash_keys_table(in_table, join_state->n_keys, SEED_HASH_PARTITION,
-                        shuffle_required, true, dict_hashes);
+                        shuffle_possible, true, dict_hashes);
 
     join_state->probe_shuffle_buffer.ReserveTable(in_table);
     // XXX This is temporary until we have proper buffers.
@@ -1096,7 +1102,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank;
         // Check the bloom filter if we would need to shuffle data
         // or if we would process the row.
-        bool check_bloom_filter = shuffle_required || process_on_rank;
+        bool check_bloom_filter = shuffle_possible || process_on_rank;
         // Check bloom filter
         if (use_bloom_filter && check_bloom_filter) {
             // We use batch_hashes_partition to use consistent hashing across
@@ -1127,7 +1133,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
                     in_table, i_row, batch_hashes_join[i_row],
                     batch_hashes_partition[i_row]);
             }
-        } else if (shuffle_required) {
+        } else if (shuffle_possible) {
             join_state->probe_shuffle_buffer.AppendRow(in_table, i_row);
         }
     }
@@ -1153,13 +1159,17 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     build_idxs.clear();
     probe_idxs.clear();
 
-    if (!join_state->probe_input_finalized && is_last &&
-        (build_table_outer || shuffle_required)) {
+    bool build_outer_this_iter = is_last && build_table_outer;
+    bool shuffle = shuffle_this_iter(
+        shuffle_possible, is_last, join_state->probe_shuffle_buffer.data_table,
+        join_state->probe_iter);
+    if (!join_state->probe_input_finalized &&
+        (build_outer_this_iter || shuffle)) {
         std::vector<std::shared_ptr<table_info>> build_out_tables(
             {build_out_table});
         std::vector<std::shared_ptr<table_info>> probe_out_tables(
             {probe_out_table});
-        if (shuffle_required) {
+        if (shuffle_possible) {
             // shuffle data of other ranks
             std::shared_ptr<table_info> shuffle_table =
                 join_state->probe_shuffle_buffer.data_table;
@@ -1167,21 +1177,21 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             // above
             std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
                 shuffle_table, join_state->n_keys, SEED_HASH_PARTITION,
-                shuffle_required, true, dict_hashes);
+                shuffle_possible, true, dict_hashes);
             // make dictionaries global for shuffle
             for (size_t i = 0; i < shuffle_table->ncols(); i++) {
                 std::shared_ptr<array_info> arr = shuffle_table->columns[i];
                 if (arr->arr_type == bodo_array_type::DICT) {
-                    make_dictionary_global_and_unique(arr, shuffle_required);
+                    make_dictionary_global_and_unique(arr, shuffle_possible);
                 }
             }
             mpi_comm_info comm_info_table(shuffle_table->columns);
-            comm_info_table.set_counts(shuffle_hashes, shuffle_required);
+            comm_info_table.set_counts(shuffle_hashes, shuffle_possible);
             std::shared_ptr<table_info> new_data =
                 shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
-                                     comm_info_table, shuffle_required);
+                                     comm_info_table, shuffle_possible);
             shuffle_hashes.reset();
-            // TODO: clear probe_shuffle_buffer memory
+            join_state->probe_shuffle_buffer.Clear();
 
             // unify dictionaries to allow consistent hashing and fast key
             // comparison using indices NOTE: only key arrays need unified since
@@ -1201,14 +1211,14 @@ std::shared_ptr<table_info> join_probe_consume_batch(
             // dict_hashes are provided.
             std::shared_ptr<uint32_t[]> batch_hashes_partition =
                 hash_keys_table(new_data, join_state->n_keys,
-                                SEED_HASH_PARTITION, shuffle_required,
+                                SEED_HASH_PARTITION, shuffle_possible,
                                 /*global_dict_needed*/ false,
                                 new_data_dict_hashes);
 
             // probe hash table with new data
             std::shared_ptr<uint32_t[]> batch_hashes_join =
                 hash_keys_table(new_data, join_state->n_keys, SEED_HASH_JOIN,
-                                shuffle_required, false);
+                                shuffle_possible, false);
             active_partition->probe_table = new_data;
             active_partition->probe_table_hashes = batch_hashes_join.get();
 
@@ -1349,6 +1359,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
                     build_out_table->columns.end());
     out_arrs.insert(out_arrs.end(), probe_out_table->columns.begin(),
                     probe_out_table->columns.end());
+    join_state->probe_iter++;
     // Set the output size
     *total_rows = batch_rows;
     if (!join_state->probe_input_finalized && is_last) {
