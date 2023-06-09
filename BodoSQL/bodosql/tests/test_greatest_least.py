@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
+import bodo
 from bodo.tests.timezone_common import representative_tz  # noqa
 
 
@@ -356,3 +357,47 @@ def test_single_column_least_greatest(greatest_or_least, memory_leak_check):
     query = f"SELECT {greatest_or_least}(A) as output FROM table1"
     py_output = pd.DataFrame({"output": df.A})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
+
+def test_greatest_time_literals(greatest_or_least, memory_leak_check):
+    """
+    tests that Greatest works on time literals
+    """
+    query = f"""
+    SELECT
+        {greatest_or_least}(TO_TIME('17:24:57'), TO_TIME('04:19:46'), TO_TIME('10:35:32'))
+    """
+    if greatest_or_least == "GREATEST":
+        answer = pd.DataFrame({"A": pd.Series([bodo.Time(17, 24, 57)])})
+    else:
+        answer = pd.DataFrame({"A": pd.Series([bodo.Time(4, 19, 46)])})
+    check_query(
+        query,
+        {},
+        None,
+        check_names=False,
+        expected_output=answer
+    )
+
+
+def test_greatest_time_columns(
+    bodosql_time_types, greatest_or_least, memory_leak_check
+):
+    """
+    tests that Greatest works on time columns
+    """
+    query = f"""
+    SELECT
+        {greatest_or_least}(A,B,C) as out_col
+    FROM
+        table1
+    """
+    df = bodosql_time_types["table1"]
+    expected_output = pd.DataFrame(
+        {
+            "out_col": df.apply(
+                greatest_least_output_func, axis=1, args=(greatest_or_least,)
+            )
+        }
+    )
+    check_query(query, bodosql_time_types, None, expected_output=expected_output)

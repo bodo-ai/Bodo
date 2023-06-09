@@ -101,6 +101,57 @@ def test_coalesce_timestamp_date(memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "use_case",
+    [True, False]
+)
+def test_coalesce_time(use_case, memory_leak_check):
+    """Tests the coalesce function on time columns"""
+    if use_case:
+        query = "select CASE when A is NULL THEN B ELSE COALESCE(A, B) END from table1"
+    else:
+        query = "select COALESCE(A, B) from table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        bodo.Time(12, 0),
+                        bodo.Time(1, 1, 3),
+                        None,
+                        None,
+                        bodo.Time(12, 0, 31, 5, 92),
+                    ]
+                ),
+                "B": pd.Series(
+                    [
+                        None,
+                        bodo.Time(17, 12, 13, 92, 234, 193),
+                        bodo.Time(2, 18, 37),
+                        None,
+                        bodo.Time(15, 26, 3, 44),
+                    ]
+                )
+            }
+        )
+    }
+    answer = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [
+                    bodo.Time(12, 0),
+                    bodo.Time(1, 1, 3),
+                    bodo.Time(2, 18, 37),
+                    None,
+                    bodo.Time(12, 0, 31, 5, 92),
+                ]
+            )
+        }
+    )
+
+    check_query(query, ctx, None, expected_output=answer, check_names=False)
+
+
+@pytest.mark.parametrize(
     "query",
     [
         pytest.param(
@@ -458,6 +509,37 @@ def test_if_null_column(bodosql_nullable_numeric_types, spark_info, memory_leak_
     )
 
 
+@pytest.mark.parametrize(
+    "func_name",
+    [
+        "IF",
+        pytest.param("IFF", marks=pytest.mark.slow),
+    ]
+)
+def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
+    """Checks IF/IFF function with time columns"""
+    query = f"Select {func_name}(B < C, B, C) from table1"
+    expected_output = pd.DataFrame(
+        {
+            "output": pd.Series(
+                [
+                    None,
+                    bodo.Time(13, 37, 45),
+                    bodo.Time(1, 47, 59, 290, 574, 817),
+                ] * 4
+            )
+        }
+    )
+    check_query(
+        query,
+        bodosql_time_types,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
+
+
 @pytest.mark.slow
 def test_if_multitable(join_dataframes, spark_info, memory_leak_check):
     """Checks if function with columns from multiple tables"""
@@ -621,6 +703,64 @@ def test_nullif_mixed(bodosql_nullable_numeric_types, spark_info, memory_leak_ch
         check_names=False,
         check_dtype=False,
         convert_float_nan=True,
+    )
+
+
+def test_nullif_time(memory_leak_check):
+    """Checks nullif function with two time columns"""
+    query = "Select NULLIF(A, B) from table1"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        bodo.Time(12, 0),
+                        bodo.Time(8, 17, 43),
+                        bodo.Time(2, 18, 37),
+                        None,
+                        bodo.Time(12, 0, 31, 5, 92),
+                    ]
+                ),
+                "B": pd.Series(
+                    [
+                        None,
+                        bodo.Time(17, 12, 13, 92, 234, 193),
+                        bodo.Time(2, 18, 37),
+                        bodo.Time(22, 56, 41),
+                        bodo.Time(15, 26, 3, 44),
+                    ]
+                )
+            }
+        )
+    }
+    answer = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [
+                    bodo.Time(12, 0),
+                    bodo.Time(8, 17, 43),
+                    None,
+                    None,
+                    bodo.Time(12, 0, 31, 5, 92),
+                ]
+            )
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=answer,
+    )
+
+    query = "Select case when A is NULL then NULL else NULLIF(A, B) end from table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        expected_output=answer,
     )
 
 
@@ -836,6 +976,53 @@ def test_decode(args, spark_info, memory_leak_check):
         query,
         ctx,
         spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
+def test_decode_time(bodosql_time_types, memory_leak_check):
+    """Test DECODE with time columns"""
+    query = "SELECT DECODE(A, TO_TIME('14:28:57'), 1, NULL, 2, 0) from table1"
+    answer = pd.DataFrame({"output": pd.Series([0, 1, 0, 2] * 3)})
+    check_query(
+        query,
+        bodosql_time_types,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
+def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check):
+    """Test NVL and IFNULL with time columns and CASE statement"""
+    query = "SELECT CASE WHEN HOUR(A) < 12 THEN NVL(A, B) ELSE IFNULL(B, C) END FROM table1"
+    answer = pd.DataFrame(
+        {
+            "output": pd.Series(
+                [
+                    bodo.Time(5, 13, 29),
+                    bodo.Time(13, 37, 45),
+                    bodo.Time(8, 2, 5, 0, 1, 4),
+                    bodo.Time(5, 13, 29),
+                    bodo.Time(13, 37, 45),
+                    bodo.Time(22, 7, 16),
+                    bodo.Time(8, 2, 5, 0, 1, 4),
+                    bodo.Time(13, 37, 45),
+                    bodo.Time(22, 7, 16),
+                    bodo.Time(5, 13, 29),
+                    bodo.Time(8, 2, 5, 0, 1, 4),
+                    bodo.Time(22, 7, 16),
+                ]
+            )
+        }
+    )
+    check_query(
+        query,
+        bodosql_time_types,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=answer,
