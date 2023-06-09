@@ -664,16 +664,30 @@ class JoinState {
     // via broadcast decisions.
     bool build_parallel;
     const bool probe_parallel;
+    // Has all of the input already been processed. This should be
+    // updated after the last input to avoid repeating the outer
+    // join output.
+    bool build_input_finalized = false;
+    bool probe_input_finalized = false;
+    const int64_t output_batch_size;
 
     JoinState(uint64_t n_keys_, bool build_table_outer_,
-              bool probe_table_outer_, cond_expr_fn_t _cond_func,
-              bool build_parallel_, bool probe_parallel_)
+              bool probe_table_outer_, cond_expr_fn_t cond_func_,
+              bool build_parallel_, bool probe_parallel_,
+              int64_t output_batch_size_)
         : n_keys(n_keys_),
-          cond_func(_cond_func),
+          cond_func(cond_func_),
           build_table_outer(build_table_outer_),
           probe_table_outer(probe_table_outer_),
           build_parallel(build_parallel_),
-          probe_parallel(probe_parallel_) {}
+          probe_parallel(probe_parallel_),
+          output_batch_size(output_batch_size_) {}
+
+    virtual ~JoinState() {}
+
+    virtual void FinalizeBuild() { build_input_finalized = true; }
+
+    void FinalizeProbe() { probe_input_finalized = true; }
 };
 
 class HashJoinState : public JoinState {
@@ -729,8 +743,9 @@ class HashJoinState : public JoinState {
                   std::vector<int8_t> probe_arr_c_types,
                   std::vector<int8_t> probe_arr_array_types, uint64_t n_keys_,
                   bool build_table_outer_, bool probe_table_outer_,
-                  cond_expr_fn_t _cond_func, bool build_parallel_,
-                  bool probe_parallel_, size_t max_partition_depth_ = 5);
+                  cond_expr_fn_t cond_func_, bool build_parallel_,
+                  bool probe_parallel_, int64_t output_batch_size_,
+                  size_t max_partition_depth_ = 5);
 
     /**
      * @brief Create a global bloom filter for this Hash Join
@@ -811,7 +826,7 @@ class HashJoinState : public JoinState {
      * at one time), build hash tables, split partitions as necessary, etc.
      *
      */
-    void FinalizeBuild();
+    void FinalizeBuild() override;
 
     /**
      * @brief Reserve enough space to accommodate in_table
@@ -910,12 +925,12 @@ class NestedLoopJoinState : public JoinState {
     NestedLoopJoinState(const std::vector<int8_t>& build_arr_c_types,
                         const std::vector<int8_t>& build_arr_array_types,
                         bool build_table_outer_, bool probe_table_outer_,
-                        cond_expr_fn_t _cond_func, bool build_parallel_,
-                        bool probe_parallel_)
-        : JoinState(0, build_table_outer_, probe_table_outer_, _cond_func,
-                    build_parallel_,
-                    probe_parallel_),  // NestedLoopJoin is only used when
-                                       // n_keys is 0
+                        cond_expr_fn_t cond_func_, bool build_parallel_,
+                        bool probe_parallel_, int64_t output_batch_size_)
+        : JoinState(0, build_table_outer_, probe_table_outer_, cond_func_,
+                    build_parallel_, probe_parallel_,
+                    output_batch_size_),  // NestedLoopJoin is only used when
+                                          // n_keys is 0
           // For now, we pass nullptrs for dictionary builders, but this should
           // be modified once we support DICT columns in nested loop join
           // (https://bodo.atlassian.net/browse/BSE-478)
