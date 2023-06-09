@@ -236,10 +236,21 @@ inline bool GetBit(const uint8_t* bits, uint64_t i) {
     return (bits[i >> 3] >> (i & 0x07)) & 1;
 }
 
+template <typename Alloc>
+inline bool GetBit(const std::vector<uint8_t, Alloc>& V, uint64_t i) {
+    return GetBit(V.data(), i);
+}
+
 inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
     bits[i / 8] ^=
         static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
         kBitmask[i % 8];
+}
+
+template <typename Alloc>
+inline void SetBitTo(std::vector<uint8_t, Alloc>& V, int64_t i,
+                     bool bit_is_set) {
+    SetBitTo(V.data(), i, bit_is_set);
 }
 
 /**

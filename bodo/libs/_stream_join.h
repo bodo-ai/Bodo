@@ -486,8 +486,11 @@ class JoinPartition {
         build_table;  // join hash table (key row number -> matching row
                       // numbers)
 
-    // Probe state (for outer joins)
-    bodo::vector<bool> build_table_matched;  // state for building output table
+    // Probe state (for outer joins). Note we don't use
+    // vector<bool> because we may need to do an allreduce
+    // on the data directly and that can't be accessed for bool.
+    bodo::vector<uint8_t>
+        build_table_matched;  // state for building output table
 
     // Probe state (only used when this partition is inactive).
     // We don't need partitioning hashes since we should never
@@ -625,6 +628,7 @@ class JoinPartition {
      * build side.
      * @param probe_kept_cols Which columns to generate in the output on the
      * probe side.
+     * @param build_needs_reduction Do the build misses need a reduction?
      * @return std::tuple<std::shared_ptr<table_info>,
      * std::shared_ptr<table_info>> (Build side table, Probe side table) of
      * output.
@@ -634,7 +638,8 @@ class JoinPartition {
     std::tuple<std::shared_ptr<table_info>, std::shared_ptr<table_info>>
     FinalizeProbeForInactivePartition(
         cond_expr_fn_t cond_func, const std::vector<uint64_t>& build_kept_cols,
-        const std::vector<uint64_t>& probe_kept_cols);
+        const std::vector<uint64_t>& probe_kept_cols,
+        const bool build_needs_reduction);
 
    private:
     const size_t num_top_bits = 0;
@@ -655,13 +660,20 @@ class JoinState {
     cond_expr_fn_t cond_func;
     const bool build_table_outer;
     const bool probe_table_outer;
+    // Note: This isn't constant because we may change it
+    // via broadcast decisions.
+    bool build_parallel;
+    const bool probe_parallel;
 
     JoinState(uint64_t n_keys_, bool build_table_outer_,
-              bool probe_table_outer_, cond_expr_fn_t _cond_func)
+              bool probe_table_outer_, cond_expr_fn_t _cond_func,
+              bool build_parallel_, bool probe_parallel_)
         : n_keys(n_keys_),
           cond_func(_cond_func),
           build_table_outer(build_table_outer_),
-          probe_table_outer(probe_table_outer_) {}
+          probe_table_outer(probe_table_outer_),
+          build_parallel(build_parallel_),
+          probe_parallel(probe_parallel_) {}
 };
 
 class HashJoinState : public JoinState {
@@ -717,7 +729,8 @@ class HashJoinState : public JoinState {
                   std::vector<int8_t> probe_arr_c_types,
                   std::vector<int8_t> probe_arr_array_types, uint64_t n_keys_,
                   bool build_table_outer_, bool probe_table_outer_,
-                  cond_expr_fn_t _cond_func, size_t max_partition_depth_ = 5);
+                  cond_expr_fn_t _cond_func, bool build_parallel_,
+                  bool probe_parallel_, size_t max_partition_depth_ = 5);
 
     /**
      * @brief Create a global bloom filter for this Hash Join
@@ -897,10 +910,12 @@ class NestedLoopJoinState : public JoinState {
     NestedLoopJoinState(const std::vector<int8_t>& build_arr_c_types,
                         const std::vector<int8_t>& build_arr_array_types,
                         bool build_table_outer_, bool probe_table_outer_,
-                        cond_expr_fn_t _cond_func)
-        : JoinState(0, build_table_outer_, probe_table_outer_,
-                    _cond_func),  // NestedLoopJoin is only used when
-                                  // n_keys is 0
+                        cond_expr_fn_t _cond_func, bool build_parallel_,
+                        bool probe_parallel_)
+        : JoinState(0, build_table_outer_, probe_table_outer_, _cond_func,
+                    build_parallel_,
+                    probe_parallel_),  // NestedLoopJoin is only used when
+                                       // n_keys is 0
           // For now, we pass nullptrs for dictionary builders, but this should
           // be modified once we support DICT columns in nested loop join
           // (https://bodo.atlassian.net/browse/BSE-478)
@@ -917,8 +932,7 @@ class NestedLoopJoinState : public JoinState {
  * @param is_last is last batch
  */
 void nested_loop_join_build_consume_batch_py_entry(
-    NestedLoopJoinState* join_state, table_info* in_table, bool is_last,
-    bool parallel);
+    NestedLoopJoinState* join_state, table_info* in_table, bool is_last);
 
 /**
  * @brief consume probe table batch in streaming nested loop join and produce
@@ -934,11 +948,10 @@ void nested_loop_join_build_consume_batch_py_entry(
  * @param[out] total_rows Store the number of rows in the output batch in case
  *        all columns are dead.
  * @param is_last is last batch
- * @param is_parallel parallel flag
  * @return table_info* output table batch
  */
 table_info* nested_loop_join_probe_consume_batch_py_entry(
     NestedLoopJoinState* join_state, table_info* in_table,
     uint64_t* kept_build_col_nums, int64_t num_kept_build_cols,
     uint64_t* kept_probe_col_nums, int64_t num_kept_probe_cols,
-    int64_t* total_rows, bool is_last, bool* out_is_last, bool parallel);
+    int64_t* total_rows, bool is_last, bool* out_is_last);

@@ -765,6 +765,8 @@ def _init_join_state(
     n_probe_arrs,
     output_state_type,
     cfunc_cond_t,
+    build_parallel_t,
+    probe_parallel_t,
 ):
     """Initialize C++ JoinState pointer
 
@@ -781,6 +783,10 @@ def _init_join_state(
         n_probe_arrs (int32): number of probe columns
         output_state_type (TypeRef[JoinStateType]): The output type for the state that should be
                                                     generated.
+        cfunc_cond_t (void *): Non-equality condition function. Nullptr if the join only has equality
+                            conditions or is a true cross join.
+        build_parallel_t (bool): Is the build table parallel?
+        probe_parallel_t (bool): Is the probe table parallel?
     """
     output_type = unwrap_typeref(output_state_type)
 
@@ -794,6 +800,8 @@ def _init_join_state(
             n_probe_arrs,
             _,
             cfunc_cond,
+            build_parallel,
+            probe_parallel,
         ) = args
         n_keys = context.get_constant(types.uint64, output_type.n_keys)
         build_table_outer = context.get_constant(types.bool_, output_type.build_outer)
@@ -811,6 +819,8 @@ def _init_join_state(
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -827,6 +837,8 @@ def _init_join_state(
             build_table_outer,
             probe_table_outer,
             cfunc_cond,
+            build_parallel,
+            probe_parallel,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -841,6 +853,8 @@ def _init_join_state(
         types.int32,
         output_state_type,
         types.voidptr,
+        build_parallel_t,
+        probe_parallel_t,
     )
     return sig, codegen
 
@@ -858,6 +872,10 @@ def init_join_state(
     # the join is a pure hash join. Otherwise this is a string similar
     # to the query string accepted by merge.
     non_equi_condition=None,
+    # Note: build_parallel and probe_parallel are set automatically
+    # by the compiler and should not be set by the user.
+    build_parallel=False,
+    probe_parallel=False,
 ):
     expected_state_type = unwrap_typeref(expected_state_type)
     if is_overload_none(expected_state_type):
@@ -950,6 +968,8 @@ def init_join_state(
             probe_outer,
             expected_state_type=None,
             non_equi_condition=None,
+            build_parallel=False,
+            probe_parallel=False,
         ):  # pragma: no cover
             cfunc_cond = add_join_gen_cond_cfunc_sym(
                 general_cond_cfunc, cfunc_native_name
@@ -964,6 +984,8 @@ def init_join_state(
                 n_probe_arrs,
                 output_type,
                 cfunc_cond,
+                build_parallel,
+                probe_parallel,
             )
 
         return impl_nonequi
@@ -977,6 +999,8 @@ def init_join_state(
         probe_outer,
         expected_state_type=None,
         non_equi_condition=None,
+        build_parallel=False,
+        probe_parallel=False,
     ):  # pragma: no cover
         return _init_join_state(
             build_arr_dtypes.ctypes,
@@ -987,6 +1011,8 @@ def init_join_state(
             n_probe_arrs,
             output_type,
             0,
+            build_parallel,
+            probe_parallel,
         )
 
     return impl
@@ -998,7 +1024,6 @@ def _join_build_consume_batch(
     join_state,
     cpp_table,
     is_last,
-    parallel,
 ):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -1006,7 +1031,6 @@ def _join_build_consume_batch(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
-                lir.IntType(1),
                 lir.IntType(1),
             ],
         )
@@ -1016,12 +1040,12 @@ def _join_build_consume_batch(
         builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
-    sig = types.void(join_state, cpp_table, is_last, parallel)
+    sig = types.void(join_state, cpp_table, is_last)
     return sig, codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def join_build_consume_batch(join_state, table, is_last, parallel=False):
+def join_build_consume_batch(join_state, table, is_last):
     """Consume a build table batch in streaming join (insert into hash table)
 
     Args:
@@ -1035,12 +1059,12 @@ def join_build_consume_batch(join_state, table, is_last, parallel=False):
     if cast_table_type == types.unknown:
         cast_table_type = table
 
-    def impl(join_state, table, is_last, parallel=False):  # pragma: no cover
+    def impl(join_state, table, is_last):  # pragma: no cover
         cast_table = bodo.utils.table_utils.table_astype(
             table, cast_table_type, False, False
         )
         cpp_table = py_data_to_cpp_table(cast_table, (), in_col_inds, n_table_cols)
-        _join_build_consume_batch(join_state, cpp_table, is_last, parallel)
+        _join_build_consume_batch(join_state, cpp_table, is_last)
 
     return impl
 
@@ -1054,7 +1078,6 @@ def _join_probe_consume_batch(
     kept_probe_cols,
     total_rows,
     is_last,
-    parallel,
 ):
     def codegen(context, builder, sig, args):
         out_is_last = cgutils.alloca_once(builder, lir.IntType(1))
@@ -1070,7 +1093,6 @@ def _join_probe_consume_batch(
                 lir.IntType(8).as_pointer(),  # total_rows
                 lir.IntType(1),
                 lir.IntType(1).as_pointer(),
-                lir.IntType(1),
             ],
         )
         kept_build_cols_arr = cgutils.create_struct_proxy(sig.args[2])(
@@ -1092,7 +1114,6 @@ def _join_probe_consume_batch(
             args[4],
             args[5],
             out_is_last,
-            args[6],
         ]
         table_ret = builder.call(fn_tp, func_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -1107,15 +1128,12 @@ def _join_probe_consume_batch(
         kept_probe_cols,
         types.voidptr,
         is_last,
-        parallel,
     )
     return sig, codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def join_probe_consume_batch(
-    join_state, table, is_last, used_cols=None, parallel=False
-):
+def join_probe_consume_batch(join_state, table, is_last, used_cols=None):
     """Consume a probe table batch in streaming join (probe hash table and produce
     output rows)
 
@@ -1144,9 +1162,7 @@ def join_probe_consume_batch(
         out_cols_arr,
     ) = join_state.get_output_live_col_arrs(used_cols)
 
-    def impl(
-        join_state, table, is_last, used_cols=None, parallel=False
-    ):  # pragma: no cover
+    def impl(join_state, table, is_last, used_cols=None):  # pragma: no cover
         cast_table = bodo.utils.table_utils.table_astype(
             table, cast_table_type, False, False
         )
@@ -1160,7 +1176,6 @@ def join_probe_consume_batch(
             kept_probe_cols,
             total_rows_np.ctypes,
             is_last,
-            parallel,
         )
         out_table = cpp_table_to_py_table(
             out_cpp_table, out_cols_arr, out_table_type, total_rows_np[0]

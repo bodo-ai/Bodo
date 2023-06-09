@@ -945,7 +945,10 @@ class DistributedAnalysis:
             # This doesn't impact the distribution of any array.
             return
 
-        if fdef == ("array_to_repeated_array_item_array", "bodo.libs.array_item_arr_ext"):
+        if fdef == (
+            "array_to_repeated_array_item_array",
+            "bodo.libs.array_item_arr_ext",
+        ):
             # array_to_repeated_array_item_array is used to create an ArrayItemArray with an array.
             # This requires the input array to be replicated.
             self._set_REP(
@@ -1522,10 +1525,33 @@ class DistributedAnalysis:
             return
 
         if fdef == (
+            "init_join_state",
+            "bodo.libs.stream_join",
+        ):  # pragma: no cover
+            # Initialize join state to 1D
+            if lhs not in array_dists:
+                default_dist = (Distribution.OneD, Distribution.OneD)
+                self._set_var_dist(lhs, array_dists, default_dist, False)
+            return
+
+        if fdef == (
             "join_build_consume_batch",
             "bodo.libs.stream_join",
         ):  # pragma: no cover
-            self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
+            state_dist = array_dists[rhs.args[0].name]
+            build_state_dist = state_dist[0]
+            build_table_dist = array_dists[rhs.args[1].name]
+            build_dist = Distribution(
+                min(
+                    build_state_dist.value,
+                    build_table_dist.value,
+                )
+            )
+            # Update the build table
+            self._set_var_dist(rhs.args[1].name, array_dists, build_dist)
+            # Update the state
+            new_state_dist = (build_dist, state_dist[1])
+            self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
 
         if fdef == (
@@ -1534,18 +1560,44 @@ class DistributedAnalysis:
         ):  # pragma: no cover
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
-
-            in_dist = array_dists[rhs.args[1].name]
-
+            state_dist = array_dists[rhs.args[0].name]
+            # Get the build dist
+            build_dist = state_dist[0]
+            # Get the probe dist
+            probe_state_dist = state_dist[1]
+            probe_table_dist = array_dists[rhs.args[1].name]
+            probe_dist = Distribution(
+                min(
+                    probe_state_dist.value,
+                    probe_table_dist.value,
+                )
+            )
+            # Determine the output dist
+            state_output_dist = Distribution(
+                max(
+                    build_dist.value,
+                    probe_dist.value,
+                )
+            )
             # return is a tuple(table, bool)
             out_dist = Distribution(
                 min(
                     array_dists[lhs][0].value,
-                    in_dist.value,
+                    state_output_dist.value,
                 )
             )
+            # Update the output
             self._set_var_dist(lhs, array_dists, out_dist)
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist, False)
+            if out_dist == Distribution.REP:
+                # Output can convert inputs to REP.
+                build_dist = Distribution.REP
+                probe_dist = Distribution.REP
+
+            # Update the probe table
+            self._set_var_dist(rhs.args[1].name, array_dists, probe_dist)
+            # Update the state
+            new_state_dist = (build_dist, probe_dist)
+            self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
 
         if (
