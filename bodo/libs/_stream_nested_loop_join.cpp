@@ -12,7 +12,7 @@
  */
 void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
                                           std::shared_ptr<table_info> in_table,
-                                          bool is_last, bool parallel) {
+                                          bool is_last) {
     // just add batch to build table buffer
     std::vector<std::shared_ptr<table_info>> tables(
         {join_state->build_table_buffer.data_table, in_table});
@@ -98,10 +98,12 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
     NestedLoopJoinState* join_state, std::shared_ptr<table_info> in_table,
     const std::vector<uint64_t> build_kept_cols,
     const std::vector<uint64_t> probe_kept_cols, int64_t* total_rows,
-    bool is_last, bool parallel) {
+    bool is_last) {
     // Initialize the output to 0.
     *total_rows = 0;
     std::shared_ptr<table_info> out_table;
+    // We only need to take the parallel path if both tables are parallel.
+    bool parallel = join_state->build_parallel && join_state->probe_parallel;
     if (parallel) {
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -159,12 +161,10 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
 }
 
 void nested_loop_join_build_consume_batch_py_entry(
-    NestedLoopJoinState* join_state, table_info* in_table, bool is_last,
-    bool parallel) {
+    NestedLoopJoinState* join_state, table_info* in_table, bool is_last) {
     try {
         nested_loop_join_build_consume_batch(
-            join_state, std::shared_ptr<table_info>(in_table), is_last,
-            parallel);
+            join_state, std::shared_ptr<table_info>(in_table), is_last);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -174,7 +174,7 @@ table_info* nested_loop_join_probe_consume_batch_py_entry(
     NestedLoopJoinState* join_state, table_info* in_table,
     uint64_t* kept_build_col_nums, int64_t num_kept_build_cols,
     uint64_t* kept_probe_col_nums, int64_t num_kept_probe_cols,
-    int64_t* total_rows, bool is_last, bool* out_is_last, bool parallel) {
+    int64_t* total_rows, bool is_last, bool* out_is_last) {
     try {
         // TODO: Actually output out_is_last based on is_last + the state
         // of the output buffer.
@@ -186,7 +186,7 @@ table_info* nested_loop_join_probe_consume_batch_py_entry(
         std::shared_ptr<table_info> out = nested_loop_join_probe_consume_batch(
             join_state, std::unique_ptr<table_info>(in_table),
             std::move(build_kept_cols), std::move(probe_kept_cols), total_rows,
-            is_last, parallel);
+            is_last);
 
         return new table_info(*out);
     } catch (const std::exception& e) {
