@@ -14,6 +14,10 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
                                           std::shared_ptr<table_info> in_table,
                                           bool is_last) {
     // just add batch to build table buffer
+    if (join_state->build_input_finalized) {
+        // Nothing left to do for build
+        return;
+    }
     std::vector<std::shared_ptr<table_info>> tables(
         {join_state->build_table_buffer.data_table, in_table});
     join_state->build_table_buffer.data_table = concat_tables(tables);
@@ -23,6 +27,10 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
             arrow::bit_util::BytesForBits(
                 join_state->build_table_buffer.data_table->nrows()),
             0);
+    }
+    if (is_last) {
+        // Finalize the join state
+        join_state->FinalizeBuild();
     }
 }
 
@@ -127,7 +135,8 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
                                          probe_kept_cols, total_rows, parallel);
     }
 
-    if (join_state->build_table_outer && is_last) {
+    if (join_state->build_table_outer && !join_state->probe_input_finalized &&
+        is_last) {
         // Add unmatched rows from build table
         // for outer join
         bodo::vector<int64_t> build_idxs;
@@ -155,6 +164,10 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
         std::shared_ptr<table_info> outer_table =
             std::make_shared<table_info>(out_arrs);
         out_table = concat_tables({out_table, outer_table});
+    }
+    if (!join_state->probe_input_finalized && is_last) {
+        // Finalize the probe side
+        join_state->FinalizeProbe();
     }
 
     return out_table;

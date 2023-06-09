@@ -551,11 +551,12 @@ HashJoinState::HashJoinState(std::vector<int8_t> build_arr_c_types,
                              std::vector<int8_t> probe_arr_c_types,
                              std::vector<int8_t> probe_arr_array_types,
                              uint64_t n_keys_, bool build_table_outer_,
-                             bool probe_table_outer_, cond_expr_fn_t _cond_func,
+                             bool probe_table_outer_, cond_expr_fn_t cond_func_,
                              bool build_parallel_, bool probe_parallel_,
+                             int64_t output_batch_size_,
                              size_t max_partition_depth_)
-    : JoinState(n_keys_, build_table_outer_, probe_table_outer_, _cond_func,
-                build_parallel_, probe_parallel_),
+    : JoinState(n_keys_, build_table_outer_, probe_table_outer_, cond_func_,
+                build_parallel_, probe_parallel_, output_batch_size_),
       max_partition_depth(max_partition_depth_),
       dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)) {
     this->key_dict_builders.resize(this->n_keys);
@@ -723,6 +724,7 @@ void HashJoinState::FinalizeBuild() {
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
         this->partitions[i_part]->FinalizeBuild();
     }
+    JoinState::FinalizeBuild();
 }
 
 void HashJoinState::ReserveProbeTableForInactivePartitions(
@@ -869,6 +871,10 @@ HashJoinState::GetDictionaryHashesForKeys() {
 void join_build_consume_batch(HashJoinState* join_state,
                               std::shared_ptr<table_info> in_table,
                               bool use_bloom_filter, bool is_last) {
+    if (join_state->build_input_finalized) {
+        // Nothing left to do for build
+        return;
+    }
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -1147,7 +1153,8 @@ std::shared_ptr<table_info> join_probe_consume_batch(
     build_idxs.clear();
     probe_idxs.clear();
 
-    if (is_last && (build_table_outer || shuffle_required)) {
+    if (!join_state->probe_input_finalized && is_last &&
+        (build_table_outer || shuffle_required)) {
         std::vector<std::shared_ptr<table_info>> build_out_tables(
             {build_out_table});
         std::vector<std::shared_ptr<table_info>> probe_out_tables(
@@ -1316,7 +1323,7 @@ std::shared_ptr<table_info> join_probe_consume_batch(
         probe_out_tables.clear();
     }
 
-    if (is_last) {
+    if (!join_state->probe_input_finalized && is_last) {
         auto [build_out_table_inactive, probe_out_table_inactive] =
             join_state->FinalizeProbeForInactivePartitions<
                 build_table_outer, probe_table_outer, non_equi_condition>(
@@ -1344,6 +1351,10 @@ std::shared_ptr<table_info> join_probe_consume_batch(
                     probe_out_table->columns.end());
     // Set the output size
     *total_rows = batch_rows;
+    if (!join_state->probe_input_finalized && is_last) {
+        // Mark the input as finalized to avoid repeating outer join steps.
+        join_state->FinalizeProbe();
+    }
     return std::make_shared<table_info>(out_arrs);
 }
 
@@ -1386,13 +1397,15 @@ std::shared_ptr<table_info> alloc_table_like(
  *                  If there is no non-equality condition, this should be NULL.
  * @param build_parallel whether the build table is distributed
  * @param probe_parallel whether the probe table is distributed
+ * @param output_batch_size Batch size for reading output.
  * @return JoinState* join state to return to Python
  */
 JoinState* join_state_init_py_entry(
     int8_t* build_arr_c_types, int8_t* build_arr_array_types, int n_build_arrs,
     int8_t* probe_arr_c_types, int8_t* probe_arr_array_types, int n_probe_arrs,
     uint64_t n_keys, bool build_table_outer, bool probe_table_outer,
-    cond_expr_fn_t cond_func, bool build_parallel, bool probe_parallel) {
+    cond_expr_fn_t cond_func, bool build_parallel, bool probe_parallel,
+    int64_t output_batch_size) {
     // nested loop join is required if there are no equality keys
     if (n_keys == 0) {
         return new NestedLoopJoinState(
@@ -1401,7 +1414,7 @@ JoinState* join_state_init_py_entry(
             std::vector<int8_t>(build_arr_array_types,
                                 build_arr_array_types + n_build_arrs),
             build_table_outer, probe_table_outer, cond_func, build_parallel,
-            probe_parallel);
+            probe_parallel, output_batch_size);
     }
 
     return new HashJoinState(
@@ -1414,7 +1427,7 @@ JoinState* join_state_init_py_entry(
         std::vector<int8_t>(probe_arr_array_types,
                             probe_arr_array_types + n_probe_arrs),
         n_keys, build_table_outer, probe_table_outer, cond_func, build_parallel,
-        probe_parallel);
+        probe_parallel, output_batch_size);
 }
 
 /**
