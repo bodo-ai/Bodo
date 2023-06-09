@@ -302,6 +302,43 @@ struct ArrayBuildBuffer {
     }
 
     /**
+     * @brief Clear the buffers, i.e. set size to 0.
+     *  Capacity is not changed and memory is not released
+     */
+    void Clear() {
+        size = 0;
+        data_array->length = 0;
+        switch (data_array->arr_type) {
+            case bodo_array_type::NULLABLE_INT_BOOL: {
+                CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
+                                "Resize failed!");
+                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
+                                "Resize failed!");
+            } break;
+            case bodo_array_type::NUMPY: {
+                CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
+                                "Resize failed!");
+
+            } break;
+            case bodo_array_type::STRING: {
+                CHECK_ARROW_MEM(data_array->buffers[0]->Resize(0, false),
+                                "Resize failed!");
+                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(0, false),
+                                "Resize failed!");
+                CHECK_ARROW_MEM(data_array->buffers[2]->Resize(0, false),
+                                "Resize failed!");
+            } break;
+            case bodo_array_type::DICT: {
+                this->dict_indices->Clear();
+            } break;
+            default: {
+                throw std::runtime_error(
+                    "invalid array type in Clear " +
+                    GetArrType_as_string(data_array->arr_type));
+            }
+        }
+    }
+    /**
      * @brief Construct a new ArrayBuildBuffer for the provided data array.
      *
      * @param _data_array Data array that we will be appending to. This is
@@ -403,6 +440,16 @@ struct TableBuildBuffer {
         for (size_t i = 0; i < in_table->ncols(); i++) {
             std::shared_ptr<array_info>& in_arr = in_table->columns[i];
             array_buffers[i].ReserveArray(in_arr);
+        }
+    }
+
+    /**
+     * @brief Clear the buffers, i.e. set size to 0.
+     *  Capacity is not changed and memory is not released
+     */
+    void Clear() {
+        for (size_t i = 0; i < array_buffers.size(); i++) {
+            array_buffers[i].Clear();
         }
     }
 };
@@ -737,6 +784,10 @@ class HashJoinState : public JoinState {
     // Global bloom-filter. This is built during the build step
     // and used during the probe step.
     std::unique_ptr<BloomFilter> global_bloom_filter;
+
+    // Current iteration of the build and probe steps
+    uint64_t build_iter;
+    uint64_t probe_iter;
 
     HashJoinState(std::vector<int8_t> build_arr_c_types,
                   std::vector<int8_t> build_arr_array_types,
