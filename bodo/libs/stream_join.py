@@ -262,10 +262,14 @@ class JoinStateType(types.Type):
                 #
                 common_type = get_common_bodosql_integer_arr_type(input_types)
             else:
-                # TODO [BSE-439]: Support dict encoding + regular string
-                raise BodoError(
-                    "StreamingHashJoin: Build and probe keys must have the same types"
-                )
+                # If the inputs are all string or dict, return string.
+                valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
+                if all([t in valid_str_types for t in input_types]):
+                    common_type = bodo.string_array_type
+                else:
+                    raise BodoError(
+                        "StreamingHashJoin: Build and probe keys must have the same types"
+                    )
         return common_type
 
     @cached_property
