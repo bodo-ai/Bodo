@@ -810,6 +810,9 @@ def _init_join_state(
         n_keys = context.get_constant(types.uint64, output_type.n_keys)
         build_table_outer = context.get_constant(types.bool_, output_type.build_outer)
         probe_table_outer = context.get_constant(types.bool_, output_type.probe_outer)
+        output_batch_size = context.get_constant(
+            types.int64, bodo.bodosql_streaming_batch_size
+        )
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -825,6 +828,7 @@ def _init_join_state(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(1),
+                lir.IntType(64),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -843,6 +847,7 @@ def _init_join_state(
             cfunc_cond,
             build_parallel,
             probe_parallel,
+            output_batch_size,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
