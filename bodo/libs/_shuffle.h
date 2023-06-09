@@ -327,4 +327,18 @@ void reverse_shuffle_preallocated_data_array(
     std::shared_ptr<array_info> in_arr, std::shared_ptr<array_info> out_arr,
     std::shared_ptr<uint32_t[]>& hashes, mpi_comm_info const& comm_info);
 
+/**
+ * @brief Determine if we should shuffle this iteration.
+ * This is true if we are on the last iteration, every sync_iters
+ * the max size of every ranks shuffle buffer is checked and if it is
+ * greater than shuffle_at_nrows then we shuffle.
+ * @param parallel : is the table to be shuffled parallel
+ * @param is_last : is this the last iteration
+ * @param shuffle_table: the table to test for shuffling
+ * @param iter : the current iteration
+ */
+bool shuffle_this_iter(const bool parallel, const bool is_last,
+                       const std::shared_ptr<table_info>& shuffle_table,
+                       const uint64_t iter);
+
 #endif  // _SHUFFLE_H_INCLUDED

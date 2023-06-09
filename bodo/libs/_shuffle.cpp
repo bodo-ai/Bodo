@@ -9,6 +9,13 @@
 #include "_bodo_to_arrow.h"
 #include "_distributed.h"
 
+#ifndef SHUFFLE_THRESHOLD
+#define SHUFFLE_THRESHOLD 16000
+#endif
+#ifndef SHUFFLE_SYNC_ITER
+#define SHUFFLE_SYNC_ITER 1
+#endif
+
 mpi_comm_info::mpi_comm_info(std::vector<std::shared_ptr<array_info>>& _arrays)
     : arrays(_arrays) {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -3481,3 +3488,27 @@ table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,
         return NULL;
     }
 }
+
+bool shuffle_this_iter(const bool parallel, const bool is_last,
+                       const std::shared_ptr<table_info>& shuffle_table,
+                       const uint64_t iter) {
+    if (!parallel) {
+        return false;
+    }
+    if (is_last) {
+        return true;
+    }
+
+    if (iter % SHUFFLE_SYNC_ITER == 0) {
+        uint64_t local_shuffle_buffer_nrows = shuffle_table->nrows();
+        uint64_t reduced_shuffle_buffer_nrows;
+        MPI_Allreduce(&local_shuffle_buffer_nrows,
+                      &reduced_shuffle_buffer_nrows, 1, MPI_UINT64_T, MPI_MAX,
+                      MPI_COMM_WORLD);
+        return reduced_shuffle_buffer_nrows >= SHUFFLE_THRESHOLD;
+    }
+    return false;
+}
+
+#undef SHUFFLE_THRESHOLD
+#undef SHUFFLE_SYNC_ITER
