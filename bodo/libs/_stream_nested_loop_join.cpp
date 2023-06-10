@@ -1,6 +1,30 @@
 #include "_shuffle.h"
 #include "_stream_join.h"
 
+void NestedLoopJoinState::FinalizeBuild() {
+    // If the build table is small enough, broadcast it to all ranks
+    // so the probe table can be joined locally.
+    // NOTE: broadcasting build table is incorrect if the probe table is replicated.
+    if (this->build_parallel && this->probe_parallel) {
+        int64_t global_table_size =
+            table_global_memory_size(this->build_table_buffer.data_table);
+        if (global_table_size < get_bcast_join_threshold()) {
+            this->build_parallel = false;
+            bool all_gather = true;
+            this->build_table_buffer.data_table = gather_table(
+                this->build_table_buffer.data_table, -1, all_gather, true);
+        }
+    }
+
+    if (this->build_table_outer) {
+        this->build_table_matched.resize(
+            arrow::bit_util::BytesForBits(
+                this->build_table_buffer.data_table->nrows()),
+            0);
+    }
+    JoinState::FinalizeBuild();
+}
+
 /**
  * @brief consume build table batch in streaming nested loop join
  * Design doc:
@@ -22,27 +46,6 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
         {join_state->build_table_buffer.data_table, in_table});
     join_state->build_table_buffer.data_table = concat_tables(tables);
     tables.clear();
-    if (is_last) {
-        int64_t global_table_size =
-            table_global_memory_size(join_state->build_table_buffer.data_table);
-        // If the build table is small enough, broadcast it to all ranks
-        // so the probe table can be joined locally
-        if (join_state->build_parallel &&
-            global_table_size < get_bcast_join_threshold()) {
-            join_state->build_parallel = false;
-            bool all_gather = true;
-            join_state->build_table_buffer.data_table =
-                gather_table(join_state->build_table_buffer.data_table, -1,
-                             all_gather, join_state->build_parallel);
-        }
-
-        if (join_state->build_table_outer) {
-            join_state->build_table_matched.resize(
-                arrow::bit_util::BytesForBits(
-                    join_state->build_table_buffer.data_table->nrows()),
-                0);
-        }
-    }
     if (is_last) {
         // Finalize the join state
         join_state->FinalizeBuild();
