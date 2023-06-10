@@ -22,11 +22,26 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
         {join_state->build_table_buffer.data_table, in_table});
     join_state->build_table_buffer.data_table = concat_tables(tables);
     tables.clear();
-    if (is_last && join_state->build_table_outer) {
-        join_state->build_table_matched.resize(
-            arrow::bit_util::BytesForBits(
-                join_state->build_table_buffer.data_table->nrows()),
-            0);
+    if (is_last) {
+        int64_t global_table_size =
+            table_global_memory_size(join_state->build_table_buffer.data_table);
+        // If the build table is small enough, broadcast it to all ranks
+        // so the probe table can be joined locally
+        if (join_state->build_parallel &&
+            global_table_size < get_bcast_join_threshold()) {
+            join_state->build_parallel = false;
+            bool all_gather = true;
+            join_state->build_table_buffer.data_table =
+                gather_table(join_state->build_table_buffer.data_table, -1,
+                             all_gather, join_state->build_parallel);
+        }
+
+        if (join_state->build_table_outer) {
+            join_state->build_table_matched.resize(
+                arrow::bit_util::BytesForBits(
+                    join_state->build_table_buffer.data_table->nrows()),
+                0);
+        }
     }
     if (is_last) {
         // Finalize the join state
@@ -79,7 +94,9 @@ std::shared_ptr<table_info> nested_loop_join_local_chunk(
         probe_table_matched);
     if (join_state->probe_table_outer) {
         add_unmatched_rows(probe_table_matched, probe_table->nrows(),
-                           probe_idxs, build_idxs, parallel);
+                           probe_idxs, build_idxs,
+                           parallel && join_state->build_parallel &&
+                               !join_state->probe_parallel);
     }
 
     // Update the output size for this chunk.
@@ -110,7 +127,8 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
     // Initialize the output to 0.
     *total_rows = 0;
     std::shared_ptr<table_info> out_table;
-    // We only need to take the parallel path if both tables are parallel.
+    // We only need to take the parallel path if both tables are parallel and
+    // the build table wasn't broadcast.
     bool parallel = join_state->build_parallel && join_state->probe_parallel;
     if (parallel) {
         int n_pes, myrank;
@@ -141,10 +159,11 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
         // for outer join
         bodo::vector<int64_t> build_idxs;
         bodo::vector<int64_t> probe_idxs;
-        add_unmatched_rows(join_state->build_table_matched,
-                           join_state->build_table_buffer.data_table->nrows(),
-                           build_idxs, probe_idxs, false);
-        // Update the total_rows
+        add_unmatched_rows(
+            join_state->build_table_matched,
+            join_state->build_table_buffer.data_table->nrows(), build_idxs,
+            probe_idxs,
+            !join_state->build_parallel && join_state->probe_parallel);
         *total_rows += build_idxs.size();
 
         std::shared_ptr<table_info> build_out_outer =
