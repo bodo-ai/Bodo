@@ -831,6 +831,15 @@ class HashJoinState : public JoinState {
     void SplitPartition(size_t idx);
 
     /**
+     * @brief Clear the existing partition(s) and replace with a single
+     * partition with the correct type information. This creates equivalent
+     * partition state as when HashJoinState is initialized except there
+     * may be some additional dictionary builder information.
+     *
+     */
+    void ResetPartitions();
+
+    /**
      * @brief Reserve space in build_table_buffer, build_table_join_hashes, etc.
      * of all partitions to add all rows from 'in_table'.
      * XXX This will likely change to only allocate required memory (or do away
@@ -988,6 +997,14 @@ class NestedLoopJoinState : public JoinState {
           build_table_buffer(build_arr_c_types, build_arr_array_types,
                              std::vector<std::shared_ptr<DictionaryBuilder>>(
                                  build_arr_c_types.size(), nullptr)) {}
+
+    /**
+     * @brief Finalize build step for nested loop join.
+     * This may lead to a broadcast join if the build table is small
+     * enough.
+     *
+     */
+    void FinalizeBuild() override;
 };
 
 /**

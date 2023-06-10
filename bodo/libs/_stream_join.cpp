@@ -664,6 +664,31 @@ void HashJoinState::SplitPartition(size_t idx) {
     // join for this partition).
 }
 
+void HashJoinState::ResetPartitions() {
+    auto [build_arr_c_types, build_arr_array_types] =
+        get_dtypes_arr_types_from_table(
+            this->partitions[0]->build_table_buffer.data_table);
+    auto [probe_arr_c_types, probe_arr_array_types] =
+        get_dtypes_arr_types_from_table(
+            this->partitions[0]->probe_table_buffer.data_table);
+
+    std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders =
+        get_dict_builders_from_table_build_buffer(
+            this->partitions[0]->build_table_buffer);
+    std::vector<std::shared_ptr<DictionaryBuilder>> probe_table_dict_builders =
+        get_dict_builders_from_table_build_buffer(
+            this->partitions[0]->probe_table_buffer);
+
+    std::shared_ptr<JoinPartition> new_partition =
+        std::make_shared<JoinPartition>(
+            0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
+            probe_arr_array_types, this->n_keys, this->build_table_outer,
+            this->probe_table_outer, build_table_dict_builders,
+            probe_table_dict_builders);
+    this->partitions.clear();
+    this->partitions.emplace_back(new_partition);
+}
+
 void HashJoinState::ReserveBuildTable(
     const std::shared_ptr<table_info>& in_table) {
     // XXX This currently over allocates, so will need to be adjusted based
@@ -941,6 +966,112 @@ void join_build_consume_batch(HashJoinState* join_state,
         join_state->SplitPartition(0);
     }
 
+    // If the build table is small enough, broadcast it to all ranks
+    // so the probe table can be joined locally.
+    // NOTE: broadcasting build table is incorrect if the probe table is
+    // replicated.
+    // TODO: Simplify this logic into helper functions
+    // and/or move to FinalizeBuild?
+    if (is_last && join_state->build_parallel && join_state->probe_parallel) {
+        // Only consider a broadcast join if we have a single partition
+        bool single_partition = join_state->partitions.size() == 1;
+        MPI_Allreduce(MPI_IN_PLACE, &single_partition, 1, MPI_C_BOOL, MPI_LAND,
+                      MPI_COMM_WORLD);
+        if (single_partition) {
+            int64_t global_table_size = table_global_memory_size(
+                join_state->partitions[0]->build_table_buffer.data_table);
+            global_table_size += table_global_memory_size(
+                join_state->build_shuffle_buffer.data_table);
+            if (global_table_size < get_bcast_join_threshold()) {
+                join_state->build_parallel = false;
+
+                // We have decided to do a broadcast join. To do this we will
+                // execute the following steps:
+                //
+                // 1. Combine the shuffle buffer into the existing partition.
+                // This is necessary so we can shuffle a single table.
+                //
+                // 2. Broadcast the table across all ranks with allgatherv.
+                //
+                // 3. Clear the existing JoinPartition state. This is necessary
+                // because the allgatherv includes rows that we have already
+                // processed and we need to avoid processing them twice.
+                //
+                // 4. Insert the entire table into the new partition.
+
+                // Step 1: Combine the shuffle buffer into the existing
+                // partition
+
+                // Append all the shuffle data to the partition. This allows
+                // us to just shuffle 1 table.
+                // Dictionary hashes for the key columns which will be used
+                // for the partitioning hashes:
+                dict_hashes = join_state->GetDictionaryHashesForKeys();
+
+                batch_hashes_partition =
+                    hash_keys_table(join_state->build_shuffle_buffer.data_table,
+                                    join_state->n_keys, SEED_HASH_PARTITION,
+                                    false, false, dict_hashes);
+                batch_hashes_join =
+                    hash_keys_table(join_state->build_shuffle_buffer.data_table,
+                                    join_state->n_keys, SEED_HASH_JOIN, false,
+                                    /*global_dict_needed*/ false);
+
+                join_state->ReserveBuildTable(
+                    join_state->build_shuffle_buffer.data_table);
+                join_state->AppendBuildBatch(
+                    join_state->build_shuffle_buffer.data_table,
+                    batch_hashes_join, batch_hashes_partition);
+
+                // Empty the shuffle buffer
+                batch_hashes_partition.reset();
+                batch_hashes_join.reset();
+                join_state->build_shuffle_buffer.Clear();
+
+                // Step 2: Broadcast the table.
+
+                bool all_gather = true;
+                // Gather the partition data.
+                std::shared_ptr<table_info> gathered_table = gather_table(
+                    join_state->partitions[0]->build_table_buffer.data_table,
+                    -1, all_gather, true);
+
+                // Step 3: Clear the existing JoinPartition state
+                join_state->ResetPartitions();
+
+                // Step 4: Insert the broadcast table.
+
+                // Dictionary hashes for the key columns which will be used
+                // for the partitioning hashes:
+                dict_hashes = join_state->GetDictionaryHashesForKeys();
+
+                // Get hashes of the new batch (different hashes for
+                // partitioning and hash table to reduce conflict) NOTE:
+                // Partition hashes need to be consistent across ranks so
+                // need to use dictionary hashes. Since we are using
+                // dictionary hashes, we don't need dictionaries to be
+                // global. In fact, hash_keys_table will ignore the
+                // dictionaries entirely when dict_hashes are provided.
+                batch_hashes_partition = hash_keys_table(
+                    gathered_table, join_state->n_keys, SEED_HASH_PARTITION,
+                    false, false, dict_hashes);
+                batch_hashes_join = hash_keys_table(
+                    gathered_table, join_state->n_keys, SEED_HASH_JOIN, false,
+                    /*global_dict_needed*/ false);
+
+                join_state->ReserveBuildTable(gathered_table);
+                if (use_bloom_filter) {
+                    join_state->global_bloom_filter->AddAll(
+                        batch_hashes_partition, 0, gathered_table->nrows());
+                }
+                join_state->AppendBuildBatch(gathered_table, batch_hashes_join,
+                                             batch_hashes_partition);
+                batch_hashes_partition.reset();
+                batch_hashes_join.reset();
+                gathered_table.reset();
+            }
+        }
+    }
     if (shuffle_this_iter(join_state->build_parallel, is_last,
                           join_state->build_shuffle_buffer.data_table,
                           join_state->build_iter)) {
@@ -991,15 +1122,13 @@ void join_build_consume_batch(HashJoinState* join_state,
                                      batch_hashes_partition);
         batch_hashes_join.reset();
         batch_hashes_partition.reset();
-        // Finalize the bloom filter
-        if (use_bloom_filter) {
+    }
+    // Finalize build on all partitions if it's the last input batch.
+    if (is_last) {
+        if (use_bloom_filter && join_state->build_parallel) {
             // Make the bloom filter global.
             join_state->global_bloom_filter->union_reduction();
         }
-    }
-
-    // Finalize build on all partitions if it's the last input batch.
-    if (is_last) {
         // TODO: clear probe_shuffle_buffer memory
         join_state->FinalizeBuild();
     }
