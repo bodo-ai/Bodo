@@ -1036,6 +1036,9 @@ void join_build_consume_batch(HashJoinState* join_state,
                     join_state->partitions[0]->build_table_buffer.data_table,
                     -1, all_gather, true);
 
+                gathered_table =
+                    join_state->UnifyBuildTableDictionaryArrays(gathered_table);
+
                 // Step 3: Clear the existing JoinPartition state
                 join_state->ResetPartitions();
 
