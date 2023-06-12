@@ -276,6 +276,8 @@ supported_agg_funcs = [
     "booland_agg",
     "boolxor_agg",
     "bitor_agg",
+    "bitand_agg",
+    "bitxor_agg",
     "count_if",
     "udf",
     "gen_udf",
@@ -367,9 +369,11 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         "boolor_agg",
         "booland_agg",
         "bitor_agg",
+        "bitand_agg",
+        "bitxor_agg",
         "count_if",
     }:
-        # We don't have a function definition for first/last/boolor_agg/booland_agg/count_if,
+        # We don't have a function definition for first/last/boolor_agg/etc,
         # and it is not needed for the groupby C++ codepath, so we just use a dummy object.
         # Also NOTE: Series last and df.groupby.last() are different operations
         func = pytypes.SimpleNamespace()

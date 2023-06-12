@@ -293,7 +293,9 @@ void apply_to_column_string(std::shared_ptr<array_info> in_col,
             }
             break;
         }
-        case Bodo_FTypes::bitor_agg: {
+        case Bodo_FTypes::bitor_agg:
+        case Bodo_FTypes::bitand_agg:
+        case Bodo_FTypes::bitxor_agg: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if ((i_grp != -1) && in_col->get_null_bit(i)) {
@@ -486,7 +488,8 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
     size_t n_bytes = (num_groups + 7) >> 3;
     std::shared_ptr<array_info> indices_arr = nullptr;
     if (ftype != Bodo_FTypes::count && ftype != Bodo_FTypes::sum &&
-        ftype != Bodo_FTypes::bitor_agg) {
+        ftype != Bodo_FTypes::bitor_agg && ftype != Bodo_FTypes::bitand_agg &&
+        ftype != Bodo_FTypes::bitxor_agg) {
         // Allocate the indices. Count and sum don't use this array.
         indices_arr = alloc_nullable_array(num_groups, Bodo_CTypes::INT32, 0);
     }
@@ -506,7 +509,9 @@ void apply_to_column_dict(std::shared_ptr<array_info> in_col,
             }
             return;
         }
-        case Bodo_FTypes::bitor_agg: {
+        case Bodo_FTypes::bitor_agg:
+        case Bodo_FTypes::bitand_agg:
+        case Bodo_FTypes::bitxor_agg: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 // Get index of the string data
@@ -1104,7 +1109,9 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             }
             break;
         }
-        case Bodo_FTypes::bitor_agg: {
+        case Bodo_FTypes::bitor_agg:
+        case Bodo_FTypes::bitand_agg:
+        case Bodo_FTypes::bitxor_agg: {
             for (size_t i = 0; i < in_col->length; i++) {
                 int64_t i_grp = get_group_for_row(grp_info, i);
                 if (i_grp != -1) {
@@ -1430,7 +1437,9 @@ void apply_to_column_nullable(
             out_col->set_null_bit(i_grp, true);                                \
             aux_cols[0]->set_null_bit(i_grp, true);                            \
             break;                                                             \
-        case Bodo_FTypes::bitor_agg: {                                         \
+        case Bodo_FTypes::bitor_agg:                                           \
+        case Bodo_FTypes::bitand_agg:                                          \
+        case Bodo_FTypes::bitxor_agg: {                                        \
             T val2 = getv<T>(in_col, i);                                       \
             if (!isnan_alltype<T, dtype>(val2)) {                              \
                 if (std::is_integral<T>::value) {                              \
@@ -1609,6 +1618,16 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
 
             case Bodo_FTypes::bitor_agg:
                 return apply_to_column<int, Bodo_FTypes::bitor_agg,
+                                       Bodo_CTypes::STRING>(in_col, out_col,
+                                                            aux_cols, grp_info);
+
+            case Bodo_FTypes::bitand_agg:
+                return apply_to_column<int, Bodo_FTypes::bitand_agg,
+                                       Bodo_CTypes::STRING>(in_col, out_col,
+                                                            aux_cols, grp_info);
+
+            case Bodo_FTypes::bitxor_agg:
+                return apply_to_column<int, Bodo_FTypes::bitxor_agg,
                                        Bodo_CTypes::STRING>(in_col, out_col,
                                                             aux_cols, grp_info);
         }
@@ -2037,6 +2056,34 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::UINT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::FLOAT64)
+            // TODO: add decimal????
+            break;
+        case Bodo_FTypes::bitand_agg:
+            // BITAND_AGG
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::INT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::UINT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::INT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::UINT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::INT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::UINT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::INT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::UINT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::FLOAT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::FLOAT64)
+            // TODO: add decimal????
+            break;
+        case Bodo_FTypes::bitxor_agg:
+            // BITXOR_AGG
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::INT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::UINT8)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::INT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::UINT16)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::INT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::UINT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::INT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::UINT64)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::FLOAT32)
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::FLOAT64)
             // TODO: add decimal????
             break;
         case Bodo_FTypes::count_if:
