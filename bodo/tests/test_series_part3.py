@@ -1262,14 +1262,57 @@ def test_bool_aggfuncs(memory_leak_check):
     "S, expected",
     [
         pytest.param(
-            pd.Series([None] * 20, dtype=pd.Int32Dtype()), (None,), id="all_null"
+            pd.Series([None] * 20, dtype=pd.Int32Dtype()),
+            (None, None, None),
+            id="all_null",
         ),
         pytest.param(
-            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.Int32Dtype()), (23,), id="1234_16"
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.Int8Dtype()),
+            (np.int8(23), np.int8(0), np.int8(20)),
+            id="1234-16_int8",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.Int16Dtype()),
+            (np.int16(23), np.int16(0), np.int16(20)),
+            id="1234-16_int16",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.Int32Dtype()),
+            (np.int32(23), np.int32(0), np.int32(20)),
+            id="1234-16_int32",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.Int64Dtype()),
+            (np.int64(23), np.int64(0), np.int64(20)),
+            id="1234-16_int64",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.UInt8Dtype()),
+            (np.uint8(23), np.uint8(0), np.uint8(20)),
+            id="1234-16_uint8",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.UInt16Dtype()),
+            (np.uint16(23), np.uint16(0), np.uint16(20)),
+            id="1234-16_uint16",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.UInt32Dtype()),
+            (np.uint32(23), np.uint32(0), np.uint32(20)),
+            id="1234-16_uint32",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4, 16] * 5, dtype=pd.UInt64Dtype()),
+            (np.uint64(23), np.uint64(0), np.uint64(20)),
+            id="1234-16_uint64",
         ),
         pytest.param(
             pd.Series([1, 2, 3, 4, None] * 5, dtype=pd.Int32Dtype()),
-            (7,),
+            (np.int32(7), np.int32(0), np.int32(4)),
             id="1234_null",
         ),
         pytest.param(
@@ -1284,12 +1327,12 @@ def test_bool_aggfuncs(memory_leak_check):
                 ],
                 dtype=pd.Int64Dtype(),
             ),
-            (-67108887,),
+            (np.int64(-67108887), np.int64(589824), np.int64(9981824254375817)),
             id="bignums",
         ),
         pytest.param(
             pd.Series([0.5, 0.5, 0.5, 0.5, 0.5], dtype=pd.Float64Dtype()),
-            (1,),
+            (np.int64(1), np.int64(1), np.int64(1)),
             id="rounding",
         ),
         pytest.param(
@@ -1303,12 +1346,12 @@ def test_bool_aggfuncs(memory_leak_check):
                 ],
                 dtype=pd.Float64Dtype(),
             ),
-            (16383,),
+            (np.int64(16383), np.int64(1024), np.int64(15710)),
             id="float",
         ),
         pytest.param(
             pd.Series(["1", "2", "3", "4", "5"], dtype=pd.StringDtype()),
-            (7,),
+            (np.int64(7), np.int64(0), np.int64(1)),
             id="strings",
         ),
     ],
@@ -1325,6 +1368,10 @@ def test_bit_aggfuncs(S, expected, memory_leak_check):
     """
 
     def impl(S):
-        return (bodo.libs.array_kernels.bitor_agg(S),)
+        return (
+            bodo.libs.array_kernels.bitor_agg(S),
+            bodo.libs.array_kernels.bitand_agg(S),
+            bodo.libs.array_kernels.bitxor_agg(S),
+        )
 
     check_func(impl, (S,), py_output=expected, is_out_distributed=False)

@@ -960,16 +960,30 @@ def test_boolor_booland_boolxor_agg(func, results, memory_leak_check):
     [
         pytest.param(
             pd.Series([None] * 20, dtype=pd.Int32Dtype()),
-            None,
+            (None, None, None),
             id="all_null",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Series([1, 2, 4, 63, 4, None, 20], dtype=pd.Int32Dtype()), 63, id="ints"
+            pd.Series([1, 2, 4, 63, 4, None, 20], dtype=pd.Int32Dtype()),
+            (63, 0, 40),
+            id="ints",
+        ),
+        pytest.param(
+            pd.Series([10, 253, 253, None, 42], dtype=pd.UInt8Dtype()),
+            (255, 8, 32),
+            id="unsigned",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([0, 2, 62, 60, 20, 16, 4], dtype=pd.Int32Dtype()),
+            (62, 0, 0),
+            id="ints-xor",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([-64, 1, 4, 8, 1, 4], dtype=pd.Int32Dtype()),
-            -51,
+            (-51, 0, -56),
             id="neg_ints",
             marks=pytest.mark.slow,
         ),
@@ -977,30 +991,34 @@ def test_boolor_booland_boolxor_agg(func, results, memory_leak_check):
             pd.Series(
                 [3625133335, 7285961799, 4755749177, 7850278502], dtype=pd.Int64Dtype()
             ),
-            8522825599,
+            (8522825599, 268443648, 7026152975),
             id="big_ints",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Series([2.0, 50.5, None, 602.4, 59.6, 0.1], dtype=pd.Float32Dtype()),
-            639,
+            pd.Series([2.0, 50.5, None, 602.4, 61.6], dtype=pd.Float32Dtype()),
+            (639, 2, 597),
             id="floats",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Series(["2", "50.5", "601.5", None, "0", "2"]), 635, id="strings"
+            pd.Series(["2", "50.5", "601.5", None, "2"]),
+            (635, 2, 617),
+            id="strings",
         ),
     ],
 )
-def test_bitor_agg(col, expected, memory_leak_check):
-    """Tests the BITOR_AGG aggregation function without groupby on string data.
-    This will in the future also test BITAND_AGG and BITXOR_AGG.
+def test_bit_agg(col, expected, memory_leak_check):
+    """Tests the BITOR_AGG, BITAND_AGG, and BITXOR_AGG aggregation functions
+    without groupby on string data.
 
     Args:
         col (pd.Series): Input column
-        expected (int): Bitwise-or'd expected output
+        expected (int): Expected output
         memory_leak_check (): Fixture, see `conftest.py`.
     """
+    bit_agg_funcs = ["BITOR_AGG", "BITAND_AGG", "BITXOR_AGG"]
+
     ctx = {
         "table1": pd.DataFrame(
             {
@@ -1009,11 +1027,13 @@ def test_bitor_agg(col, expected, memory_leak_check):
         )
     }
 
-    query = "SELECT bitor_agg(A) from table1"
+    query = "SELECT bitor_agg(A), bitand_agg(A), bitxor_agg(A) from table1"
 
     expected_df = pd.DataFrame(
         {
-            0: expected,
+            0: expected[0],
+            1: expected[1],
+            2: expected[2],
         },
         index=np.arange(1),
     )
