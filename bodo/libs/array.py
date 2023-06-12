@@ -125,6 +125,7 @@ ll.add_symbol("get_replace_regex_py_entry", array_ext.get_replace_regex_py_entry
 ll.add_symbol("array_info_getitem", array_ext.array_info_getitem)
 ll.add_symbol("array_info_getdata1", array_ext.array_info_getdata1)
 ll.add_symbol("union_tables", array_ext.union_tables)
+ll.add_symbol("concat_tables_py_entry", array_ext.concat_tables_py_entry)
 ll.add_symbol("alloc_like_kernel_cache", array_ext.alloc_like_kernel_cache)
 ll.add_symbol("add_to_like_kernel_cache", array_ext.add_to_like_kernel_cache)
 ll.add_symbol("check_like_kernel_cache", array_ext.check_like_kernel_cache)
@@ -1921,6 +1922,36 @@ delete_table = types.ExternalFunction(
     "delete_table",
     types.void(table_type),
 )
+
+
+# TODO add a test for this
+@intrinsic
+def concat_tables_cpp(typing_ctx, table_info_list_t):  # pragma: no cover
+    assert table_info_list_t == types.List(
+        table_type
+    ), "table_info_list_t must be a list of table_type"
+
+    def codegen(context, builder, sig, args):
+        (info_list,) = args
+        list_inst = numba.cpython.listobj.ListInstance(
+            context, builder, sig.args[0], info_list
+        )
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer().as_pointer(),
+                lir.IntType(64),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="concat_tables_py_entry"
+        )
+        args = [list_inst.data, list_inst.size]
+        res = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return res
+
+    return table_type(table_info_list_t), codegen
 
 
 @intrinsic

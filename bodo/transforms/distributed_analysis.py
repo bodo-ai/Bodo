@@ -1599,6 +1599,13 @@ class DistributedAnalysis:
             new_state_dist = (build_dist, probe_dist)
             self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
+            
+        if fdef == (
+            "snowflake_writer_append_df",
+            "bodo.io.snowflake_write",
+        ):  # pragma: no cover
+            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            return
 
         if (
             isinstance(func_mod, str) and func_mod == "bodo"

@@ -348,16 +348,12 @@ int64_t pq_write(
         std::shared_ptr<arrow::Array> arr;
         std::shared_ptr<arrow::Field> index_field;
 
+        auto arrow_type =
+            bodo_array_to_arrow(pool, index, &arr, convert_timedelta_to_int64,
+                                tz, time_unit, downcast_time_ns_to_us);
         if (strcmp(idx_name, "null") != 0) {
-            auto arrow_type = bodo_array_to_arrow(
-                pool, index, &arr, convert_timedelta_to_int64, tz, time_unit,
-                downcast_time_ns_to_us);
             index_field = arrow::field(idx_name, arrow_type);
-
         } else {
-            auto arrow_type = bodo_array_to_arrow(
-                pool, index, &arr, convert_timedelta_to_int64, tz, time_unit,
-                downcast_time_ns_to_us);
             index_field = arrow::field("__index_level_0__", arrow_type);
         }
 

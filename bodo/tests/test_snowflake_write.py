@@ -17,6 +17,12 @@ import pytest
 from mpi4py import MPI
 
 import bodo
+import bodo.io.snowflake
+from bodo.io.arrow_reader import read_arrow_next
+from bodo.io.snowflake_write import (
+    snowflake_writer_append_df,
+    snowflake_writer_init,
+)
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
@@ -69,7 +75,7 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
         if bodo.get_rank() == 0:
             show_stages_sql = (
                 f"SHOW STAGES "
-                f"/* Python:bodo.tests.test_sql:test_snowflake_create_internal_stage() */"
+                f"/* tests.test_sql:test_snowflake_create_internal_stage() */"
             )
             all_stages = cursor.execute(show_stages_sql, _is_internal=True).fetchall()
             all_stage_names = [x[1] for x in all_stages]
@@ -82,7 +88,7 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     if bodo.get_rank() == 0:
         cleanup_stage_sql = (
             f'DROP STAGE IF EXISTS "{stage_name}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_create_internal_stage() */"
+            f"/* tests.test_sql:test_snowflake_write_create_internal_stage() */"
         )
         cursor.execute(cleanup_stage_sql, _is_internal=True).fetchall()
     cursor.close()
@@ -119,7 +125,7 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
         stage_name = f"bodo_test_sql_{uuid.uuid4()}"
         create_stage_sql = (
             f'CREATE {"TEMPORARY " if is_temporary else ""}STAGE "{stage_name}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_drop_internal_stage() */"
+            f"/* tests.test_sql:test_snowflake_write_drop_internal_stage() */"
         )
         cursor.execute(create_stage_sql, _is_internal=True).fetchall()
     stage_name = comm.bcast(stage_name)
@@ -134,7 +140,7 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
         if bodo.get_rank() == 0:
             show_stages_sql = (
                 f"SHOW STAGES "
-                f"/* Python:bodo.tests.test_sql:test_snowflake_drop_internal_stage() */"
+                f"/* tests.test_sql:test_snowflake_drop_internal_stage() */"
             )
             all_stages = cursor.execute(show_stages_sql, _is_internal=True).fetchall()
             all_stage_names = [x[1] for x in all_stages]
@@ -147,7 +153,7 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     if bodo.get_rank() == 0:
         cleanup_stage_sql = (
             f'DROP STAGE IF EXISTS "{stage_name}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_drop_internal_stage() */"
+            f"/* tests.test_sql:test_snowflake_drop_internal_stage() */"
         )
         cursor.execute(cleanup_stage_sql, _is_internal=True).fetchall()
         cursor.close()
@@ -182,7 +188,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     if bodo.get_rank() == 0:
         create_schema_sql = (
             f'CREATE OR REPLACE SCHEMA "{schema}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
+            f"/* tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
         )
         cursor.execute(create_schema_sql, _is_internal=True).fetchall()
 
@@ -193,7 +199,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
         stage_name = f"bodo_test_sql_{uuid.uuid4()}"
         create_stage_sql = (
             f'CREATE STAGE "{stage_name}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_do_upload_and_cleanup() */"
+            f"/* tests.test_sql:test_snowflake_write_do_upload_and_cleanup() */"
         )
         cursor.execute(create_stage_sql, _is_internal=True).fetchall()
     stage_name = comm.bcast(stage_name)
@@ -242,7 +248,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
         # List files uploaded to stage
         list_stage_sql = (
             f'LIST @"{stage_name}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
+            f"/* tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
         )
         listing = cursor.execute(list_stage_sql, _is_internal=True).fetchall()
         assert len(listing) == npes
@@ -251,7 +257,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
         with TemporaryDirectory() as tmp_folder:
             get_stage_sql = (
                 f"GET @\"{stage_name}\" 'file://{tmp_folder}' "
-                f"/* Python:bodo.tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
+                f"/* tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
             )
             cursor.execute(get_stage_sql, _is_internal=True)
             df_load = pd.read_parquet(tmp_folder)
@@ -273,7 +279,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     if bodo.get_rank() == 0:
         cleanup_stage_sql = (
             f'DROP STAGE IF EXISTS "{stage_name}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
+            f"/* tests.test_sql:test_snowflake_do_upload_and_cleanup() */"
         )
         cursor.execute(cleanup_stage_sql, _is_internal=True).fetchall()
 
@@ -299,11 +305,11 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
     comm = MPI.COMM_WORLD
 
     def test_impl_create_table_handle_exists(
-        cursor, stage_name, location, sf_schema, if_exists, table_type=""
+        cursor, location, sf_schema, if_exists, table_type=""
     ):
         with bodo.objmode():
             create_table_handle_exists(
-                cursor, stage_name, location, sf_schema, if_exists, table_type
+                cursor, location, sf_schema, if_exists, table_type
             )
 
     bodo_impl = bodo.jit(distributed=False)(test_impl_create_table_handle_exists)
@@ -312,7 +318,7 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
     if bodo.get_rank() == 0:
         create_schema_sql = (
             f'CREATE OR REPLACE SCHEMA "{schema}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
+            f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
         )
         cursor.execute(create_schema_sql, _is_internal=True).fetchall()
 
@@ -323,7 +329,7 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
         stage_name = f"bodo_test_sql_{uuid.uuid4()}"
         create_stage_sql = (
             f'CREATE STAGE "{stage_name}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
+            f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
         )
         cursor.execute(create_stage_sql, _is_internal=True).fetchall()
     stage_name = comm.bcast(stage_name)
@@ -370,7 +376,7 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
 
         upload_put_sql = (
             f"PUT 'file://{df_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
+            f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
         )
         cursor.execute(upload_put_sql, _is_internal=True)
 
@@ -380,7 +386,7 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
         sf_schema = bodo.io.snowflake.gen_snowflake_schema(
             df_in.columns, bodo.typeof(df_in).data
         )
-        bodo_impl(cursor, stage_name, table_name, sf_schema, "fail")
+        bodo_impl(cursor, table_name, sf_schema, "fail")
     bodo.barrier()
     passed = 1
 
@@ -389,7 +395,7 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
         try:
             show_tables_sql = (
                 f"""SHOW TABLES STARTS WITH '{table_name.strip('"')}' """
-                f"/* Python:bodo.tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
+                f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
             )
             tables_desc = cursor.execute(show_tables_sql, _is_internal=True).fetchall()
             first_table_creation_time = tables_desc[0]
@@ -408,7 +414,7 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
 
             describe_table_columns_sql = (
                 f"DESCRIBE TABLE {table_name} TYPE=COLUMNS "
-                f"/* Python:bodo.tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
+                f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
             )
             columns_desc = cursor.execute(
                 describe_table_columns_sql, _is_internal=True
@@ -429,20 +435,20 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
 
         err_msg = f"Object '{table_name}' already exists."
         with pytest.raises(snowflake.connector.ProgrammingError, match=err_msg):
-            bodo_impl(cursor, stage_name, table_name, sf_schema, "fail")
+            bodo_impl(cursor, table_name, sf_schema, "fail")
     bodo.barrier()
 
     # Step 3: Call create_table_handle_exists again with if_exists="append".
     # This should succeed and keep the same table from Step 1.
     if bodo.get_rank() == 0:
-        bodo_impl(cursor, stage_name, table_name, sf_schema, "append")
+        bodo_impl(cursor, table_name, sf_schema, "append")
     bodo.barrier()
 
     if bodo.get_rank() == 0:
         try:
             show_tables_sql = (
                 f"""SHOW TABLES STARTS WITH '{table_name.strip('"')}' """
-                f"/* Python:bodo.tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
+                f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
             )
             tables_desc = cursor.execute(show_tables_sql, _is_internal=True).fetchall()
             assert tables_desc[0] == first_table_creation_time
@@ -457,14 +463,14 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
     # And a different table type ("TEMPORARY").
     # This should succeed after dropping the table from Step 1.
     if bodo.get_rank() == 0:
-        bodo_impl(cursor, stage_name, table_name, sf_schema, "replace", "TEMPORARY")
+        bodo_impl(cursor, table_name, sf_schema, "replace", "TEMPORARY")
     bodo.barrier()
 
     if bodo.get_rank() == 0:
         try:
             show_tables_sql = (
                 f"""SHOW TABLES STARTS WITH '{table_name.strip('"')}' """
-                f"/* Python:bodo.tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
+                f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
             )
             tables_desc = cursor.execute(show_tables_sql, _is_internal=True).fetchall()
             assert tables_desc[0] != first_table_creation_time
@@ -486,13 +492,13 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
     if bodo.get_rank() == 0:
         cleanup_stage_sql = (
             f'DROP STAGE IF EXISTS "{stage_name}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
+            f"/* tests.test_sql:test_snowflake_write_create_table_handle_exists() */"
         )
         cursor.execute(cleanup_stage_sql, _is_internal=True).fetchall()
 
         cleanup_table_sql = (
             f"DROP TABLE IF EXISTS {table_name} "
-            f"/* Python:bodo.tests.test_sql:test_snowflake_create_table_handle_exists() */"
+            f"/* tests.test_sql:test_snowflake_create_table_handle_exists() */"
         )
         cursor.execute(cleanup_table_sql, _is_internal=True).fetchall()
 
@@ -533,7 +539,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
     if bodo.get_rank() == 0:
         create_schema_sql = (
             f'CREATE OR REPLACE SCHEMA "{schema}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_execute_copy_into() */ "
+            f"/* tests.test_sql:test_snowflake_write_execute_copy_into() */ "
         )
         cursor.execute(create_schema_sql, _is_internal=True).fetchall()
 
@@ -544,7 +550,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
         stage_name = f"bodo_test_sql_{uuid.uuid4()}"
         create_stage_sql = (
             f'CREATE STAGE "{stage_name}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_execute_copy_into() */ "
+            f"/* tests.test_sql:test_snowflake_write_execute_copy_into() */ "
         )
         cursor.execute(create_stage_sql, _is_internal=True).fetchall()
     stage_name = comm.bcast(stage_name)
@@ -598,7 +604,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
 
         upload_put_sql = (
             f"PUT 'file://{df_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
-            f"/* Python:bodo.tests.test_sql.test_snowflake_write_execute_copy_into() */ "
+            f"/* tests.test_sql.test_snowflake_write_execute_copy_into() */ "
         )
         cursor.execute(upload_put_sql, _is_internal=True)
 
@@ -638,7 +644,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
             # Verify that data was copied correctly
             select_sql = (
                 f"SELECT * FROM {table_name} "
-                f"/* Python:bodo.tests.test_sql:test_snowflake_write_execute_copy_into() */ "
+                f"/* tests.test_sql:test_snowflake_write_execute_copy_into() */ "
             )
             df = cursor.execute(select_sql, _is_internal=True).fetchall()
             df_load = pd.DataFrame(df, columns=df_in.columns)
@@ -662,13 +668,13 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
     if bodo.get_rank() == 0:
         cleanup_stage_sql = (
             f'DROP STAGE IF EXISTS "{stage_name}" '
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_execute_copy_into() */ "
+            f"/* tests.test_sql:test_snowflake_write_execute_copy_into() */ "
         )
         cursor.execute(cleanup_stage_sql, _is_internal=True).fetchall()
 
         cleanup_table_sql = (
             f"DROP TABLE IF EXISTS {table_name} "
-            f"/* Python:bodo.tests.test_sql:test_snowflake_write_execute_copy_into() */ "
+            f"/* tests.test_sql:test_snowflake_write_execute_copy_into() */ "
         )
         cursor.execute(cleanup_table_sql, _is_internal=True).fetchall()
 
@@ -706,7 +712,7 @@ def test_snowflake_write_join_all_threads(memory_leak_check):
             thread_list.append(th)
 
         with bodo.objmode():
-            join_all_threads(thread_list)
+            join_all_threads(thread_list, _is_parallel=bodo.get_size() != 1)
 
     test_join_all_threads_impl_1()
 
@@ -728,7 +734,7 @@ def test_snowflake_write_join_all_threads(memory_leak_check):
             thread_list.append(th)
 
         with bodo.objmode():
-            join_all_threads(thread_list)
+            join_all_threads(thread_list, _is_parallel=bodo.get_size() != 1)
 
     err_msg = f"rank{bodo.get_rank()}_thread1"
     with pytest.raises(ValueError, match=err_msg):
@@ -752,7 +758,7 @@ def test_snowflake_write_join_all_threads(memory_leak_check):
             thread_list.append(th)
 
         with bodo.objmode():
-            join_all_threads(thread_list)
+            join_all_threads(thread_list, _is_parallel=bodo.get_size() != 1)
 
     err_msg = f"rank0_thread0"
     with pytest.raises(ValueError, match=err_msg):
@@ -826,9 +832,18 @@ def test_to_sql_table_name(table_names):
 
 
 @pytest.mark.parametrize("df_size", [17000 * 3, 2, 0])
-@pytest.mark.parametrize("sf_write_overlap", [True, False])
-@pytest.mark.parametrize("sf_write_use_put", [True, False])
-@pytest.mark.parametrize("snowflake_user", [1, pytest.param(3, marks=pytest.mark.slow)])
+@pytest.mark.parametrize(
+    "sf_write_overlap",
+    [pytest.param(True, id="with-overlap"), pytest.param(False, id="no-overlap")],
+)
+@pytest.mark.parametrize(
+    "sf_write_use_put",
+    [pytest.param(True, id="with-put"), pytest.param(False, id="no-put")],
+)
+@pytest.mark.parametrize(
+    "snowflake_user",
+    [pytest.param(1, id="s3"), pytest.param(3, id="adls", marks=pytest.mark.slow)],
+)
 def test_to_sql_snowflake(
     df_size, sf_write_overlap, sf_write_use_put, snowflake_user, memory_leak_check
 ):
@@ -861,12 +876,6 @@ def test_to_sql_snowflake(
     import bodo
     import bodo.io.snowflake
 
-    # Specify Snowflake write hyperparameters
-    old_sf_write_overlap = bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
-    bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = sf_write_overlap
-    old_sf_write_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
-    bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
-
     rng = np.random.default_rng(5)
     letters = np.array(list(string.ascii_letters))
     py_output = pd.DataFrame(
@@ -889,10 +898,17 @@ def test_to_sql_snowflake(
         df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
         bodo.barrier()
 
+    # Specify Snowflake write hyperparameters
+    old_sf_write_overlap = bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
+    old_sf_write_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
+
     try:
+        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = sf_write_overlap
+        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
+
         with ensure_clean_snowflake_table(conn) as name:
             # If using a Azure Snowflake account, the stage will be ADLS backed, so
-            # when writing to it directly, we need a proper ADLS/Haddop setup
+            # when writing to it directly, we need a proper ADLS/Hadoop setup
             # and the bodo_azurefs_sas_token_provider library, both of which are only
             # done for Linux. So we verify that it shows user the appropriate warning
             # about falling back to the PUT method.
@@ -1537,3 +1553,180 @@ def test_snowflake_write_column_name_special_chars(memory_leak_check):
         # before dropping the table
         bodo.barrier()
         drop_snowflake_table(table_name, db, schema)
+
+
+@pytest.mark.parametrize(
+    "sf_write_overlap",
+    [pytest.param(True, id="with-overlap"), pytest.param(False, id="no-overlap")],
+)
+@pytest.mark.parametrize(
+    "sf_write_use_put",
+    [pytest.param(True, id="with-put"), pytest.param(False, id="no-put")],
+)
+@pytest.mark.parametrize(
+    "sf_write_streaming_num_files",
+    [
+        pytest.param(0, id="num-files-0"),
+        pytest.param(1, id="num-files-1"),
+        pytest.param(64, id="num-files-64"),
+    ],
+)
+@pytest.mark.parametrize(
+    "is_distributed",
+    [
+        pytest.param(True, id="distributed"),
+        pytest.param(False, id="replicated"),
+    ],
+)
+@pytest.mark.parametrize(
+    "snowflake_user",
+    [pytest.param(1, id="s3"), pytest.param(3, id="adls", marks=pytest.mark.slow)],
+)
+# TODO fix memory leak for ADLS test with `sf_write_use_put`
+def test_batched_write_agg(
+    sf_write_overlap,
+    sf_write_use_put,
+    sf_write_streaming_num_files,
+    is_distributed,
+    snowflake_user,
+):
+    """
+    Test a simple use of batched Snowflake writes by reading a table, writing
+    the results, then reading again
+    """
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "l_orderkey",
+            "l_partkey",
+            "l_suppkey",
+            "l_linenumber",
+            "l_quantity",
+            "l_extendedprice",
+            "l_discount",
+            "l_tax",
+            "l_returnflag",
+            "l_linestatus",
+            "l_shipdate",
+            "l_commitdate",
+            "l_receiptdate",
+            "l_shipinstruct",
+            "l_shipmode",
+            "l_comment",
+        )
+    )
+
+    conn_r = bodo.tests.utils.get_snowflake_connection_string(
+        "SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1", user=snowflake_user
+    )
+    conn_w = bodo.tests.utils.get_snowflake_connection_string(
+        "TEST_DB", "PUBLIC", user=snowflake_user
+    )
+    if bodo.get_rank() == 0:
+        cursor_w = bodo.io.snowflake.snowflake_connect(conn_w).cursor()
+
+    table_r = "LINEITEM"
+    table_w = None  # Forward declaration
+    if bodo.get_rank() == 0:
+        table_w = f'"LINEITEM_TEST_{uuid.uuid4()}"'
+    table_w = MPI.COMM_WORLD.bcast(table_w)
+
+    # To test multiple COPY INTO, temporarily reduce Parquet write chunk size
+    # and the number of files included in each streaming COPY INTO
+    old_overlap = bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
+    old_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
+    old_chunk_size = bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE
+    old_streaming_num_files = bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES
+    try:
+        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = sf_write_overlap
+        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
+        bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE = int(256e3)
+        bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES = sf_write_streaming_num_files
+
+        def impl_write(conn_r, conn_w):
+            reader0 = pd.read_sql(
+                f"SELECT * FROM {table_r} LIMIT 10000", conn_r, _bodo_chunksize=1000
+            )  # type: ignore
+            writer = snowflake_writer_init(
+                conn_w,
+                table_name=table_w,
+                schema="PUBLIC",
+                if_exists="replace",
+                table_type="",
+            )
+            total0 = 0
+
+            # Streaming read might output a different number of chunks on each
+            # rank, but streaming write assumes the number of chunks is equal,
+            # so we need to manually synchronize `is_last`. We assume that
+            # arrow_reader handles repeated empty calls.
+            all_is_last = False
+            and_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
+            while not all_is_last:
+                table, is_last = read_arrow_next(reader0)
+                all_is_last = bodo.libs.distributed_api.dist_reduce(is_last, and_op)
+
+                index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                    0, len(table), 1, None
+                )
+                df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                    (table,), index_var, col_meta
+                )
+                total0 += df["l_partkey"].sum()
+                snowflake_writer_append_df(writer, df, all_is_last)
+
+            return total0
+
+        def impl_check(conn_w):
+            reader1 = pd.read_sql(
+                f"SELECT * FROM {table_w}", conn_w, _bodo_chunksize=1000
+            )  # type: ignore
+            total1 = 0
+
+            all_is_last = False
+            and_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
+            while not all_is_last:
+                table, is_last = read_arrow_next(reader1)
+                all_is_last = bodo.libs.distributed_api.dist_reduce(is_last, and_op)
+
+                index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                    0, len(table), 1, None
+                )
+                df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                    (table,), index_var, col_meta
+                )
+                total1 += df["l_partkey"].sum()
+
+            return total1
+
+        if is_distributed:
+            impl_write_dist = bodo.jit(cache=False, distributed=["df"])(impl_write)
+            impl_check_dist = bodo.jit(cache=False, distributed=["df"])(impl_check)
+            total0 = impl_write_dist(conn_r, conn_w)
+            total1 = impl_check_dist(conn_w)
+            assert total0 == total1, (
+                f"Distributed streaming write failed: "
+                f"wrote {total0} but read back {total1}"
+            )
+        else:
+            impl_write_repl = bodo.jit(cache=False, replicated=["df"])(impl_write)
+            impl_check_repl = bodo.jit(cache=False, replicated=["df"])(impl_check)
+            total0 = impl_write_repl(conn_r, conn_w)
+            total1 = impl_check_repl(conn_w)
+            assert total0 == total1, (
+                f"Replicated streaming write failed: "
+                f"wrote {total0} but read back {total1}"
+            )
+
+    finally:
+        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = old_overlap
+        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_use_put
+        bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE = old_chunk_size
+        bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES = old_streaming_num_files
+
+        if bodo.get_rank() == 0:
+            cleanup_table_sql = (
+                f"DROP TABLE IF EXISTS {table_w} "
+                f"/* tests.test_sql:test_batched_write_agg() */"
+            )
+            cursor_w.execute(cleanup_table_sql, _is_internal=True).fetchall()
+            cursor_w.close()
