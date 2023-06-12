@@ -8,12 +8,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
-import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;
-import org.apache.calcite.sql.type.SameOperandTypeChecker;
-import org.apache.calcite.sql.type.SqlOperandTypeInference;
-import org.apache.calcite.sql.type.SqlTypeFamily;
-import org.apache.calcite.sql.type.SqlTypeTransforms;
+import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.sql.validate.implicit.TypeCoercion;
 import org.apache.calcite.util.Optionality;
@@ -352,9 +347,47 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           ReturnTypes.DOUBLE_NULLABLE,
           OperandTypes.NUMERIC);
 
+  /**
+   * Determine the return type for BITOR_AGG, BITAND_AGG, and BITXOR_AGG. The return type is the
+   * same as the input if it is an integer, otherwise the return type is always int64 (BIGINT).
+   *
+   * @param binding The operand bindings for the function signature.
+   * @return The return type of the function
+   */
+  public static RelDataType bitX_ret_type(SqlOperatorBinding binding) {
+    RelDataType arg0Type = binding.getOperandType(0);
+    SqlTypeFamily arg0TypeFamily = arg0Type.getSqlTypeName().getFamily();
+    if (arg0TypeFamily.equals(SqlTypeFamily.INTEGER)) {
+      return ReturnTypes.ARG0_NULLABLE.inferReturnType(binding);
+    } else {
+      return ReturnTypes.BIGINT_NULLABLE.inferReturnType(binding);
+    }
+  }
+
   public static final SqlAggFunction BITOR_AGG =
       SqlBasicAggFunction.create(
-              "BITOR_AGG", SqlKind.BIT_OR, ReturnTypes.ARG0_NULLABLE, OperandTypes.NUMERIC)
+              "BITOR_AGG",
+              SqlKind.BIT_OR,
+              sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
+              OperandTypes.or(OperandTypes.NUMERIC, OperandTypes.STRING))
+          .withGroupOrder(Optionality.FORBIDDEN)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
+  public static final SqlAggFunction BITAND_AGG =
+      SqlBasicAggFunction.create(
+              "BITAND_AGG",
+              SqlKind.BIT_AND,
+              sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
+              OperandTypes.or(OperandTypes.NUMERIC, OperandTypes.STRING))
+          .withGroupOrder(Optionality.FORBIDDEN)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
+  public static final SqlAggFunction BITXOR_AGG =
+      SqlBasicAggFunction.create(
+              "BITXOR_AGG",
+              SqlKind.BIT_XOR,
+              sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
+              OperandTypes.or(OperandTypes.NUMERIC, OperandTypes.STRING))
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
@@ -439,6 +472,8 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           BITSHIFTRIGHT,
           GETBIT,
           BITOR_AGG,
+          BITAND_AGG,
+          BITXOR_AGG,
           CEILING,
           DIV0,
           HAVERSINE,

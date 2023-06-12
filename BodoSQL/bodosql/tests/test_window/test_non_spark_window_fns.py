@@ -832,24 +832,44 @@ def test_bool_agg(memory_leak_check):
     count_window_applies(pandas_code, 1, ["BOOLOR_AGG", "BOOLAND_AGG", "BOOLXOR_AGG"])
 
 
-def test_bit_agg(memory_leak_check):
-    """Tests the BITOR_AGG window function. This will in the future also test BITAND_AGG and BITXOR_AGG.
+@pytest.mark.parametrize(
+    "data, dtype",
+    [
+        pytest.param(
+            [42, 100, 60, 5, 15, 70, 3, 213, 6, None],
+            pd.Int32Dtype(),
+            id="int32",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            [41.5, 100.4, 60.0, 5.0, 15.21, 69.53, 3.2, 213.1, 5.8, None],
+            pd.Float32Dtype(),
+            id="floats",
+        ),
+        pytest.param(
+            ["41.5", "100", "60", "5", "15", "69.53", "3.2", "213.1", "5.8", None],
+            pd.StringDtype(),
+            id="strings",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_bit_agg(data, dtype, memory_leak_check):
+    """Tests the BITOR_AGG, BITAND_AGG, and BITXOR_AGG window functions.
+        These operations perform bitwise or, and, and xor operations respectively,
+        aggregating the result per window.
 
     Args:
+        data (pd.Series): Input column
         memory_leak_check (): Fixture, see `conftest.py`.
     """
-    bit_agg_funcs = [
-        "BITOR_AGG",
-    ]
+    bit_agg_funcs = ["BITOR_AGG", "BITAND_AGG", "BITXOR_AGG"]
 
     ctx = {
         "table1": pd.DataFrame(
             {
-                "A": pd.Series([1, 1, 1, 1, 1, 2, 3, 3, 4, 4], dtype=pd.Int32Dtype()),
-                "B": pd.Series(
-                    [1.0, 2.0, 3.0, 4.0, 5.0, 0.5, 0.6, 2.0, None, None],
-                    dtype=pd.Float32Dtype(),
-                ),
+                "A": pd.Series([1, 1, 1, 2, 2, 2, 3, 3, 3, 4], dtype=pd.Int32Dtype()),
+                "B": pd.Series(data, dtype=dtype),
             }
         )
     }
@@ -863,9 +883,17 @@ def test_bit_agg(memory_leak_check):
     expected = pd.DataFrame(
         {
             0: pd.Series(
-                [7, 7, 7, 7, 7, 1, 3, 3, None, None],
+                [126, 126, 126, 79, 79, 79, 215, 215, 215, None],
                 dtype=pd.Int32Dtype(),
-            )
+            ),
+            1: pd.Series(
+                [32, 32, 32, 4, 4, 4, 0, 0, 0, None],
+                dtype=pd.Int32Dtype(),
+            ),
+            2: pd.Series(
+                [114, 114, 114, 76, 76, 76, 208, 208, 208, None],
+                dtype=pd.Int32Dtype(),
+            ),
         }
     )
 

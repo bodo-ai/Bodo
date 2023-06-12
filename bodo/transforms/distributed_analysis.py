@@ -1686,6 +1686,14 @@ class DistributedAnalysis:
             # bitor_agg doesn't affect input's distribution
             return
 
+        if fdef == ("bitand_agg", "bodo.libs.array_kernels"):
+            # bitand_agg doesn't affect input's distribution
+            return
+
+        if fdef == ("bitxor_agg", "bodo.libs.array_kernels"):
+            # bitxor_agg doesn't affect input's distribution
+            return
+
         if fdef == ("series_str_dt64_astype", "bodo.hiframes.pd_timestamp_ext"):
             # LHS should match RHS
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)

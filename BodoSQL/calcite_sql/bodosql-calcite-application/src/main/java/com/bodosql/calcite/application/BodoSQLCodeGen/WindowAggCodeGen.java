@@ -136,6 +136,8 @@ public class WindowAggCodeGen {
     windowFunctions.put("KURTOSIS", "%s.kurtosis()");
     windowFunctions.put("SKEW", "%s.skew()");
     windowFunctions.put("BITOR_AGG", "bodo.libs.array_kernels.bitor_agg(%s)");
+    windowFunctions.put("BITAND_AGG", "bodo.libs.array_kernels.bitand_agg(%s)");
+    windowFunctions.put("BITXOR_AGG", "bodo.libs.array_kernels.bitxor_agg(%s)");
   }
 
   /**
@@ -457,6 +459,8 @@ public class WindowAggCodeGen {
         case "KURTOSIS":
         case "SKEW":
         case "BITOR_AGG":
+        case "BITAND_AGG":
+        case "BITXOR_AGG":
           needsToRevertSort |= hasOrder;
           loopAggNames.add(aggName);
           loopAggArgs.add(argsList);
@@ -844,6 +848,8 @@ public class WindowAggCodeGen {
 
           // The functions that always have output int64
         case "BITOR_AGG":
+        case "BITAND_AGG":
+        case "BITXOR_AGG":
           funcText.append(
               "bodo.libs.int_arr_ext.alloc_int_array(" + partitionLength + ", bodo.int64)\n");
           break;
