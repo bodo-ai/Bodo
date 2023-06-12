@@ -207,6 +207,45 @@ def construct_time_column_type(
     )
 
 
+def construct_array_column_type(arr_type, col_name):
+    """Construct a BodoSQL column type for an array
+        value.
+
+        Args:
+            typ (bodo.ArrayItemArrayType): A ArrayItemArray type
+            col_name (str): Column name
+
+        Returns:
+            JavaObject: The Java Object for the BodoSQL column type.
+        """
+    col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Array.value)
+    dtype = arr_type.dtype
+    warning_msg = f"ARRAY column '{col_name}' with type {dtype} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
+    nullable = bodo.utils.typing.is_nullable_type(dtype)
+    tz_info = None
+    precision = -1
+    if isinstance(dtype, bodo.DatetimeArrayType):
+        tz_info = BodoTZInfoClass(str(dtype.tz), "int" if isinstance(dtype.tz, int) else "str")
+        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value)
+    elif isinstance(arr_type, bodo.TimeArrayType):
+        precision = dtype.precision
+        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Time.value)
+    elif isinstance(arr_type, bodo.ArrayItemArrayType):
+        # TODO: Support nested array element type
+        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Array.value)
+    elif dtype.dtype in _numba_to_sql_column_type_map:
+        elem_dtype = ColumnTypeClass.fromTypeId(
+            _numba_to_sql_column_type_map[dtype.dtype]
+        )
+    else:
+        # The type is unsupported we raise a warning indicating this is a possible
+        # error but we generate a dummy type because we may be able to support it
+        # if its optimized out.
+        warnings.warn(warning_msg)
+        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
+    return ColumnClass(col_name, col_dtype, elem_dtype, nullable, tz_info, precision)
+
+
 def get_sql_column_type(arr_type, col_name):
     """get SQL type for a given array type."""
     warning_msg = f"DataFrame column '{col_name}' with type {arr_type} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
@@ -217,6 +256,9 @@ def get_sql_column_type(arr_type, col_name):
     elif isinstance(arr_type, bodo.TimeArrayType):
         # Time array types have their own special handling for precision
         return construct_time_column_type(arr_type, col_name, nullable)
+    elif isinstance(arr_type, bodo.ArrayItemArrayType):
+        # TODO: [BSE-560] Make get_sql_column_type recursive for semi-structured data
+        return construct_array_column_type(arr_type, col_name)
     elif arr_type.dtype in _numba_to_sql_column_type_map:
         col_dtype = ColumnTypeClass.fromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]

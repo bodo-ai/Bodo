@@ -1668,6 +1668,7 @@ def _infer_ndarray_obj_dtype(val):
         (
             list,
             np.ndarray,
+            pd.core.arrays.numpy_.PandasArray,
             pd.arrays.BooleanArray,
             pd.arrays.IntegerArray,
             pd.arrays.FloatingArray,
@@ -1675,12 +1676,11 @@ def _infer_ndarray_obj_dtype(val):
             pd.arrays.ArrowStringArray,
         ),
     ):
-        # normalize list to array, 'np.object_' dtype to consider potential nulls
-        if isinstance(first_val, list):
-            first_val = _value_to_array(first_val)
-        val_typ = numba.typeof(first_val)
-        val_typ = to_str_arr_if_dict_array(val_typ)
-        return ArrayItemArrayType(val_typ)
+        dtype, nesting_depth = _infer_array_item_array_type_and_depth(val, 0)
+        arr_type = dtype_to_array_type(dtype, True)
+        for i in range(nesting_depth):
+            arr_type = ArrayItemArrayType(arr_type)
+        return arr_type
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type
     if isinstance(first_val, datetime.timedelta):
@@ -1709,7 +1709,6 @@ def _value_to_array(val):
     val_infer = val.copy()
     val_infer.append(None)
     arr = np.array(val_infer, np.object_)
-
     # assume float lists can be regular np.float64 arrays
     # TODO handle corener cases where None could be used as NA instead of np.nan
     if len(val) and isinstance(val[0], float):
@@ -1742,3 +1741,38 @@ def _get_struct_value_arr_type(v):
         arr_typ = to_nullable_type(arr_typ)
 
     return arr_typ
+
+
+def _infer_array_item_array_type_and_depth(val, nesting_depth):
+    """
+    Get the data type and the nesting depth of an ArrayItemArray
+    Our current type system requires that every element in an array
+    be of the same type. So for all non-null scalars in this ArrayItemArray,
+    they should have the same nesting depth. But for the null objects they may
+    have different depths, e.g:
+    [
+        [[1, 2, 3], None, [4, 5, 6]],
+        None,
+        [[7, 8, 9], [10, None]],
+    ]
+    In this case the data type is integer and the nesting depth is 3
+    """
+    max_depth = nesting_depth
+    if len(val) == 0:
+        return None, nesting_depth
+
+    for i in range(len(val)):
+        if pd.api.types.is_scalar(val[i]):
+            if not pd.isna(val[i]):
+                return numba.typeof(val[i]), nesting_depth
+        elif isinstance(val[i], (dict, Dict)):
+            # convert array of dicts to StructArrayType
+            struct_arr_typ = numba.typeof(np.array(val, np.object_))
+            # returning nesting_depth-1 because struct_arr_typ is based on val not val[i]
+            return struct_arr_typ, nesting_depth - 1
+        else:
+            typ, depth = _infer_array_item_array_type_and_depth(val[i], nesting_depth + 1)
+            max_depth = max(max_depth, depth)
+            if typ != None:
+                return typ, max_depth
+    return None, max_depth
