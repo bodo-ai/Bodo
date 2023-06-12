@@ -1,6 +1,6 @@
 // Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-// Implementation of SnowflakeReader (subclass of ArrowDataFrameReader) with
+// Implementation of SnowflakeReader (subclass of ArrowReader) with
 // functionality that is specific to reading from Snowflake
 
 #include <chrono>

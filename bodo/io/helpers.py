@@ -463,7 +463,7 @@ def map_cpp_to_py_table_column_idxs(
 # ----------------------------- Snowflake Write Helpers ----------------------------- #
 
 
-def update_env_vars(env_vars):
+def update_env_vars(env_vars):  # pragma: no cover
     """Update the current environment variables with key-value pairs provided
     in a dictionary. Used in bodo.io.snowflake. "__none__" is used as a dummy
     value since Numba hates dictionaries with strings and NoneType's as values.
@@ -492,7 +492,9 @@ def update_env_vars(env_vars):
     return old_env_vars
 
 
-def update_file_contents(fname: str, contents: str, is_parallel=True) -> str:
+def update_file_contents(
+    fname: str, contents: str, is_parallel=True
+) -> str:  # pragma: no cover
     """
     Similar to update_env_vars, except here we will update the contents
     of a file and return the original contents if there are any.
@@ -558,7 +560,7 @@ def update_file_contents(fname: str, contents: str, is_parallel=True) -> str:
 
 
 @numba.njit
-def uuid4_helper():
+def uuid4_helper():  # pragma: no cover
     """Helper function that enters objmode and calls uuid4 from JIT
 
     Returns
@@ -567,6 +569,22 @@ def uuid4_helper():
     with numba.objmode(out="unicode_type"):
         out = str(uuid.uuid4())
     return out
+
+
+@numba.njit
+def makedirs_helper(path, exist_ok=False):  # pragma: no cover
+    """Helper function that enters objmode and calls os.makedirs from JIT
+    This is intended to be called from all ranks at once within streaming
+    Snowflake write, with a distinct `path` per rank.
+
+    Args:
+        path (str): Path of directory to create
+        exist_ok (bool): If True, nothing happens if the directory already
+            exists. If False, raise an exception if the directory exists.
+
+    """
+    with numba.objmode():
+        os.makedirs(path, exist_ok=exist_ok)
 
 
 class ExceptionPropagatingThread(threading.Thread):
@@ -664,15 +682,14 @@ def get_table_iterator(rhs: "ir.Inst", func_ir: "ir.FunctionIR") -> str:
     return tup_def.args[0].name
 
 
-def join_all_threads(thread_list):
+def join_all_threads(thread_list, _is_parallel=False):  # pragma: no cover
     """Given a list of threads, call `th.join()` on all threads in the list.
 
     Args
         thread_list (List(threading.Thread)): A list of threads to join
+        _is_parallel (bool): Whether join is occurring in parallel
     """
-    ev = tracing.Event("join_all_threads", is_parallel=True)
-
-    comm = MPI.COMM_WORLD
+    ev = tracing.Event("join_all_threads", is_parallel=_is_parallel)
 
     err = None
     try:
@@ -682,26 +699,44 @@ def join_all_threads(thread_list):
     except Exception as e:
         err = e
 
-    # If any rank raises an exception, re-raise that error on all non-failing
-    # ranks to prevent deadlock on future MPI collective ops.
-    # We use allreduce with MPI.MAXLOC to communicate the rank of the lowest
-    # failing process, then broadcast the error backtrace across all ranks.
-    err_on_this_rank = int(err is not None)
-    err_on_any_rank, failing_rank = comm.allreduce(
-        (err_on_this_rank, comm.Get_rank()), op=MPI.MAXLOC
-    )
-    if err_on_any_rank:
-        if comm.Get_rank() == failing_rank:
-            lowest_err = err
-        else:
-            lowest_err = None
-        lowest_err = comm.bcast(lowest_err, root=failing_rank)
+    try:
+        sync_and_reraise_error(err, _is_parallel)
+    finally:
+        ev.finalize()
 
-        # Each rank that already has an error will re-raise their own error, and
-        # any rank that doesn't have an error will re-raise the lowest rank's error.
-        if err_on_this_rank:
+
+def sync_and_reraise_error(err, _is_parallel=False):  # pragma: no cover
+    """If `err` is an Exception on any rank, broadcast and re-raise it on all ranks.
+    This is a no-op if all ranks are exception-free.
+
+    Args:
+        err (Exception or None): Could be None or an exception
+        _is_parallel (bool): Whether this is being called from many ranks
+    """
+    comm = MPI.COMM_WORLD
+
+    if _is_parallel:
+        # If any rank raises an exception, re-raise that error on all non-failing
+        # ranks to prevent deadlock on future MPI collective ops.
+        # We use allreduce with MPI.MAXLOC to communicate the rank of the lowest
+        # failing process, then broadcast the error backtrace across all ranks.
+        err_on_this_rank = int(err is not None)
+        err_on_any_rank, failing_rank = comm.allreduce(
+            (err_on_this_rank, comm.Get_rank()), op=MPI.MAXLOC
+        )
+        if err_on_any_rank:
+            if comm.Get_rank() == failing_rank:
+                lowest_err = err
+            else:
+                lowest_err = None
+            lowest_err = comm.bcast(lowest_err, root=failing_rank)
+
+            # Each rank that already has an error will re-raise their own error, and
+            # any rank that doesn't have an error will re-raise the lowest rank's error.
+            if err_on_this_rank:
+                raise err
+            else:
+                raise lowest_err
+    else:
+        if err is not None:
             raise err
-        else:
-            raise lowest_err
-
-    ev.finalize()
