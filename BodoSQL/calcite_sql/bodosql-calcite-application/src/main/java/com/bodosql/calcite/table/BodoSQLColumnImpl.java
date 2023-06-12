@@ -190,6 +190,34 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   }
 
   /**
+   * Create a new column from a name, type, elemType, nullability and tzInfo. This is used for
+   * categorical data.
+   *
+   * @param name the name that we will give the column
+   * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param elemType the {@link BodoSQLColumnDataType} for the element in categorical types
+   * @param nullable Is the column type nullable?
+   * @param tzInfo The timezone to use for this column if its timezone aware. This may be null.
+   * @param precision The precision to use when creating the type. Currently only used for Time
+   *     types.
+   */
+  public BodoSQLColumnImpl(
+      String name,
+      BodoSQLColumnDataType type,
+      BodoSQLColumnDataType elemType,
+      boolean nullable,
+      BodoTZInfo tzInfo,
+      int precision) {
+    this.dataType = type;
+    this.readName = name;
+    this.writeName = name;
+    this.elemType = elemType;
+    this.nullable = nullable;
+    this.tzInfo = tzInfo;
+    this.precision = precision;
+  }
+
+  /**
    * Create a new column from a readName, writeName type, elemType, and nullability. This is used
    * for categorical data.
    *
@@ -263,6 +291,10 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     if (this.dataType == BodoSQLColumnDataType.CATEGORICAL) {
       // Categorical code should be treated as its underlying elemType
       dtype = this.elemType;
+    }
+    if (this.dataType == BodoSQLColumnDataType.ARRAY) {
+      RelDataType elemRelType = this.elemType.convertToSqlType(typeFactory, nullable, tzInfo, precision);
+      return typeFactory.createArrayType(elemRelType, -1);
     }
     return dtype.convertToSqlType(typeFactory, nullable, tzInfo, precision);
   }
