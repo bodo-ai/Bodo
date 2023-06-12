@@ -32,6 +32,8 @@ static UNORD_MAP_CONTAINER<int, int> combine_funcs = {
     {Bodo_FTypes::boolor_agg, Bodo_FTypes::boolor_agg},
     {Bodo_FTypes::booland_agg, Bodo_FTypes::booland_agg},
     {Bodo_FTypes::bitor_agg, Bodo_FTypes::bitor_agg},
+    {Bodo_FTypes::bitand_agg, Bodo_FTypes::bitand_agg},
+    {Bodo_FTypes::bitxor_agg, Bodo_FTypes::bitxor_agg},
     {Bodo_FTypes::count_if, Bodo_FTypes::sum}};
 
 int get_combine_func(int update_ftype) { return combine_funcs[update_ftype]; }

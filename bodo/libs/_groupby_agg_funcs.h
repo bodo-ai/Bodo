@@ -826,6 +826,60 @@ struct casted_aggfunc<int64_t, T_in, dtype, Bodo_FTypes::bitor_agg> {
     static void apply(int64_t& v1, T_in& v2) { v1 |= std::lround(v2); }
 };
 
+// bitand_agg
+
+template <typename T_out, typename T_in, int dtype>
+    requires std::integral<T_in> && std::same_as<T_in, T_out>
+struct casted_aggfunc<T_out, T_in, dtype, Bodo_FTypes::bitand_agg> {
+    /**
+     * Applies BITAND_AGG for *integer* inputs.
+     * For integers, T_out and T_in should be the same dtype.
+     *
+     * @param[in,out] v1: current aggregate value, holds the result
+     * @param[in] v2: other input value.
+     */
+    static void apply(T_out& v1, T_in& v2) { v1 &= v2; }
+};
+
+template <typename T_in, int dtype>
+    requires std::floating_point<T_in>
+struct casted_aggfunc<int64_t, T_in, dtype, Bodo_FTypes::bitand_agg> {
+    /**
+     * Applies BITAND_AGG for *floating point* inputs.
+     *
+     * @param[in,out] v1: current aggregate value, holds the result
+     * @param[in] v2: other input value.
+     */
+    static void apply(int64_t& v1, T_in& v2) { v1 &= std::lround(v2); }
+};
+
+// bitand_agg
+
+template <typename T_out, typename T_in, int dtype>
+    requires std::integral<T_in> && std::same_as<T_in, T_out>
+struct casted_aggfunc<T_out, T_in, dtype, Bodo_FTypes::bitxor_agg> {
+    /**
+     * Applies BITXOR_AGG for *integer* inputs.
+     * For integers, T_out and T_in should be the same dtype.
+     *
+     * @param[in,out] v1: current aggregate value, holds the result
+     * @param[in] v2: other input value.
+     */
+    static void apply(T_out& v1, T_in& v2) { v1 ^= v2; }
+};
+
+template <typename T_in, int dtype>
+    requires std::floating_point<T_in>
+struct casted_aggfunc<int64_t, T_in, dtype, Bodo_FTypes::bitxor_agg> {
+    /**
+     * Applies BITXOR_AGG for *floating point* inputs.
+     *
+     * @param[in,out] v1: current aggregate value, holds the result
+     * @param[in] v2: other input value.
+     */
+    static void apply(int64_t& v1, T_in& v2) { v1 ^= std::lround(v2); }
+};
+
 // Non inlined operations over multiple columns
 
 /**
