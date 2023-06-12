@@ -97,6 +97,8 @@ min_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Min.value)
 or_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_Or.value)
 and_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value)
 bitor_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Bit_Or.value)
+bitand_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Bit_And.value)
+bitxor_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Bit_Xor.value)
 
 
 def isna(arr, i):  # pragma: no cover
@@ -3226,76 +3228,146 @@ def boolxor_agg(A, parallel=False):  # pragma: no cover
     return impl
 
 
-@numba.generated_jit
+def make_bitX_agg_fn(func_type):
+    """Overloaded function, generates implementation for bitor_agg, bitand_agg, and bitxor_agg.
+
+    Args:
+        func_type (string): which bitX_agg function code to generate. Should be "or" | "and" | "xor"
+
+    Returns:
+        fn: Function that generates the implementation of bitX_agg.
+    """
+
+    if func_type == "or":
+        op_sym = "|"
+        start_val = 0
+    elif func_type == "and":
+        op_sym = "&"
+        # Numpy will cast this -1 to the appropriate dtype.
+        # For signed values (two's complement), -1 is all 1 bits.
+        # If it's unsigned, it underflows to INT_MAX, which is also all 1 bits.
+        start_val = -1
+    elif func_type == "xor":
+        op_sym = "^"
+        start_val = 0
+    else:
+        raise_bodo_error(f'Failed to make a bit agg func of type "{func_type}"')
+
+    def overload_fn(A, parallel=False):
+        func_text = "def impl(A, parallel=False):\n"
+
+        if bodo.utils.utils.is_array_typ(A):  # pragma: no cover
+            if isinstance(A, SeriesType):  # pragma: no cover
+                arr_data = A.data
+                func_text += "    A = bodo.utils.conversion.coerce_to_array(A)\n"
+            else:
+                arr_data = A
+        else:
+            raise_bodo_error("Input must be an array type")
+
+        # the behavior of xor changes if duplicate values are removed (reading from the data of the
+        # dictionary encoding does not respect duplicates).
+        if arr_data == bodo.dict_str_arr_type and func_type != "xor":
+            func_text += "    A = A._data\n"
+
+        if isinstance(arr_data.dtype, types.Float) or arr_data.dtype == string_type:
+            func_text += f"    result = np.int64({start_val})\n"
+        else:
+            func_text += f"    result = np.{arr_data.dtype}({start_val})\n"
+        func_text += "    non_null = False\n"
+        func_text += "    for i in range(len(A)):\n"
+        func_text += "        if not bodo.libs.array_kernels.isna(A, i):\n"
+        func_text += "            non_null = True\n"
+        if isinstance(arr_data.dtype, types.Integer):
+            func_text += f"            result {op_sym}= A[i]\n"
+        elif isinstance(arr_data.dtype, types.Float):
+            func_text += f"            result {op_sym}= np.int64(round_half_always_up(A[i], 0))\n"
+        elif arr_data.dtype == string_type:
+            func_text += f"            result {op_sym}= np.int64(round_half_always_up(float(A[i]), 0))\n"
+        else:
+            raise_bodo_error(
+                "Invalid type for bitor_agg--expected integer, float, or string that evaluates to a number."
+            )
+
+        func_text += "    if parallel:\n"
+        func_text += f"        non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)\n"
+        func_text += f"        result = bodo.libs.distributed_api.dist_reduce(result, bit{func_type}_op)\n"
+        func_text += "    if non_null:\n"
+        func_text += "        return result\n"
+        func_text += "    return None\n"
+
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "np": np,
+                "pd": pd,
+                "bodo": bodo,
+                "or_op": or_op,
+                "bitor_op": bitor_op,
+                "bitand_op": bitand_op,
+                "bitxor_op": bitxor_op,
+                "round_half_always_up": bodo.libs.bodosql_array_kernels.round_half_always_up,
+            },
+            loc_vars,
+        )
+        return loc_vars["impl"]
+
+    return overload_fn
+
+
 def bitor_agg(A, parallel=False):  # pragma: no cover
     """Performs the BITOR_AGG operation on an array. This function
     performs a bitwise or on every element of the array, reducing it to one value.
 
     Args:
         A (np.ndarray): the array of integers/floats/booleans/decimals
-
+        parallel (bool, optional): flag that indicates if the code is being
+                executed in parallel.
     Returns:
         boolean: None if the array is all-null, otherwise True if there is
-                 at least one non-null entry.
+                at least one non-null entry.
     """
+    # Dummy function used for overload
 
-    func_text = "def impl(A, parallel=False):\n"
 
-    if bodo.utils.utils.is_array_typ(A):  # pragma: no cover
-        if isinstance(A, SeriesType):  # pragma: no cover
-            arr_data = A.data
-            func_text += "    A = bodo.utils.conversion.coerce_to_array(A)\n"
-        else:
-            arr_data = A
-    else:
-        raise_bodo_error("Input must be an array type")
+def bitand_agg(A, parallel=False):  # pragma: no cover
+    """Performs the BITAND_AGG operation on an array. This function
+    performs a bitwise and on every element of the array, reducing it to one value.
 
-    if arr_data == bodo.dict_str_arr_type:
-        func_text += "    A = A._data\n"
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+        parallel (bool, optional): flag that indicates if the code is being
+                executed in parallel.
+    Returns:
+        boolean: None if the array is all-null, otherwise True if there is
+                at least one non-null entry.
+    """
+    # Dummy function used for overload
 
-    func_text += "    result = 0\n"
-    func_text += "    non_null = False\n"
-    func_text += "    for i in range(len(A)):\n"
-    func_text += "        if not bodo.libs.array_kernels.isna(A, i):\n"
-    func_text += "            non_null = True\n"
-    if isinstance(arr_data.dtype, types.Integer):
-        func_text += "            result |= A[i]\n"
-    elif isinstance(arr_data.dtype, types.Float):
-        func_text += "            result |= np.int64(round_half_always_up(A[i], 0))\n"
-    elif arr_data.dtype == string_type:
-        func_text += (
-            "            result |= np.int64(round_half_always_up(float(A[i]), 0))\n"
-        )
-    else:
-        raise_bodo_error(
-            "Invalid type for bitor_agg--expected integer, float, or string that evaluates to a number."
-        )
 
-    func_text += "    if parallel:\n"
-    func_text += (
-        "        non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)\n"
-    )
-    func_text += (
-        "        result = bodo.libs.distributed_api.dist_reduce(result, bitor_op)\n"
-    )
-    func_text += "    if non_null:\n"
-    func_text += "        return result\n"
-    func_text += "    return None\n"
+def bitxor_agg(A, parallel=False):  # pragma: no cover
+    """Performs the BITXOR_AGG operation on an array. This function
+    performs a bitwise xor on every element of the array, reducing it to one value.
 
-    loc_vars = {}
-    exec(
-        func_text,
-        {
-            "np": np,
-            "pd": pd,
-            "bodo": bodo,
-            "or_op": or_op,
-            "bitor_op": bitor_op,
-            "round_half_always_up": bodo.libs.bodosql_array_kernels.round_half_always_up,
-        },
-        loc_vars,
-    )
-    return loc_vars["impl"]
+    Args:
+        A (np.ndarray): the array of integers/floats/booleans/decimals
+        parallel (bool, optional): flag that indicates if the code is being
+                executed in parallel.
+    Returns:
+        boolean: None if the array is all-null, otherwise True if there is
+                at least one non-null entry.
+    """
+    # Dummy function used for overload
+
+
+def _install_bitX_agg_fns():
+    overload(bitor_agg)(make_bitX_agg_fn("or"))
+    overload(bitand_agg)(make_bitX_agg_fn("and"))
+    overload(bitxor_agg)(make_bitX_agg_fn("xor"))
+
+
+_install_bitX_agg_fns()
 
 
 @overload(np.unique, inline="always", no_unliteral=True)
@@ -3845,7 +3917,7 @@ def np_random_multivariate_normal(mean, cov, size=None, check_valid="warn", tol=
 
 
 def _validate_multivar_norm(cov):  # pragma: no cover
-    # Dummy function for overload
+    # Dummy function used for overload
     return
 
 
