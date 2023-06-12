@@ -213,6 +213,14 @@ table_info* drop_duplicates_table_py_entry(table_info* in_table,
 table_info* union_tables(table_info** in_table, int64_t num_tables,
                          bool drop_duplicates, bool is_parallel);
 
+/**
+ * @brief Python entry point for concat_tables
+ * @param in_table Array of input tables each with the same schema.
+ * @param num_tables The number of tables in the input array.
+ * @return table_info* The output table.
+ */
+table_info* concat_tables_py_entry(table_info** in_table, int64_t num_tables);
+
 /** This function is the function for the dropping of duplicated keys:
  * ---only the keys are returned
  * ---non-null entries are removed from the output.

@@ -1737,6 +1737,20 @@ table_info* union_tables(table_info** in_tables, int64_t num_tables,
     }
 }
 
+table_info* concat_tables_py_entry(table_info** in_tables, int64_t num_tables) {
+    try {
+        std::vector<std::shared_ptr<table_info>> in_tables_vec;
+        for (int64_t i = 0; i < num_tables; i++) {
+            in_tables_vec.push_back(std::shared_ptr<table_info>(in_tables[i]));
+        }
+        std::shared_ptr<table_info> out_table = concat_tables(in_tables_vec);
+        return new table_info(*out_table);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
+}
+
 //
 //   SAMPLE
 //
