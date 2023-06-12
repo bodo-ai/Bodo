@@ -229,7 +229,7 @@ def to_arr_obj_if_list_obj(c, context, builder, val, typ):
         return val
 
     # convert val to array if it is a list (list_check is needed since converting
-    # pd arrays like IntergerArray can cause errors)
+    # pd arrays like IntegerArray can cause errors)
     # if isinstance(val, list):
     #   val = np.array(val)
     val_ptr = cgutils.alloca_once_value(builder, val)
@@ -244,7 +244,10 @@ def to_arr_obj_if_list_obj(c, context, builder, val, typ):
         # (see _value_to_array in boxing.py)
         if isinstance(typ, types.Array) or isinstance(typ.dtype, types.Float):
             dtype_str = str(typ.dtype)
-        dtype_obj = c.pyapi.object_getattr_string(np_mod_obj, dtype_str)
+        if dtype_str == "datetime64[ns]":
+            dtype_obj = c.pyapi.string_from_constant_string("datetime64[ns]")
+        else:
+            dtype_obj = c.pyapi.object_getattr_string(np_mod_obj, dtype_str)
 
         old_obj = builder.load(val_ptr)
         new_obj = c.pyapi.call_method(np_mod_obj, "asarray", (old_obj, dtype_obj))
