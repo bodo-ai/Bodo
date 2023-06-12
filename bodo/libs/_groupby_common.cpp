@@ -47,8 +47,11 @@ void aggfunc_output_initialize_kernel(
                 ftype == Bodo_FTypes::boolor_agg ||
                 ftype == Bodo_FTypes::booland_agg ||
                 ftype == Bodo_FTypes::boolxor_agg ||
-                ftype == Bodo_FTypes::bitor_agg || ftype == Bodo_FTypes::mean ||
-                ftype == Bodo_FTypes::var || ftype == Bodo_FTypes::var_pop ||
+                ftype == Bodo_FTypes::bitor_agg ||
+                ftype == Bodo_FTypes::bitand_agg ||
+                ftype == Bodo_FTypes::bitxor_agg ||
+                ftype == Bodo_FTypes::mean || ftype == Bodo_FTypes::var ||
+                ftype == Bodo_FTypes::var_pop ||
                 ftype == Bodo_FTypes::std_pop ||
                 ftype == Bodo_FTypes::kurtosis || ftype == Bodo_FTypes::skew ||
                 ftype == Bodo_FTypes::std || ftype == Bodo_FTypes::median) {
@@ -170,6 +173,49 @@ void aggfunc_output_initialize_kernel(
                 case Bodo_CTypes::BINARY:
                 default:
                     Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
+                    return;
+            }
+        case Bodo_FTypes::bitand_agg:
+            switch (out_col->dtype) {
+                case Bodo_CTypes::INT8:
+                    std::fill((int8_t*)out_col->data1(),
+                              (int8_t*)out_col->data1() + out_col->length, -1);
+                    return;
+                case Bodo_CTypes::UINT8:
+                    std::fill((uint8_t*)out_col->data1(),
+                              (uint8_t*)out_col->data1() + out_col->length,
+                              ~0u);
+                    return;
+                case Bodo_CTypes::INT16:
+                    std::fill((int16_t*)out_col->data1(),
+                              (int16_t*)out_col->data1() + out_col->length, -1);
+                    return;
+                case Bodo_CTypes::UINT16:
+                    std::fill((uint16_t*)out_col->data1(),
+                              (uint16_t*)out_col->data1() + out_col->length,
+                              ~0u);
+                    return;
+                case Bodo_CTypes::INT32:
+                    std::fill((int32_t*)out_col->data1(),
+                              (int32_t*)out_col->data1() + out_col->length, -1);
+                    return;
+                case Bodo_CTypes::UINT32:
+                    std::fill((uint32_t*)out_col->data1(),
+                              (uint32_t*)out_col->data1() + out_col->length,
+                              ~0u);
+                    return;
+                case Bodo_CTypes::INT64:
+                    std::fill((int64_t*)out_col->data1(),
+                              (int64_t*)out_col->data1() + out_col->length, -1);
+                    return;
+                case Bodo_CTypes::UINT64:
+                    std::fill((uint64_t*)out_col->data1(),
+                              (uint64_t*)out_col->data1() + out_col->length,
+                              ~0u);
+                    return;
+                default:
+                    std::fill((int64_t*)out_col->data1(),
+                              (int64_t*)out_col->data1() + out_col->length, -1);
                     return;
             }
         case Bodo_FTypes::min:
@@ -464,8 +510,10 @@ void get_groupby_output_dtype(int ftype,
             dtype = Bodo_CTypes::_BOOL;
             return;
         case Bodo_FTypes::bitor_agg:
+        case Bodo_FTypes::bitand_agg:
+        case Bodo_FTypes::bitxor_agg:
             array_type = bodo_array_type::NULLABLE_INT_BOOL;
-            // If we have a float or string, then bitor_agg will round/convert,
+            // If we have a float or string, then bitX_agg will round/convert,
             // so we output int64 always.
             if (dtype == Bodo_CTypes::FLOAT32 ||
                 dtype == Bodo_CTypes::FLOAT64 || dtype == Bodo_CTypes::STRING) {

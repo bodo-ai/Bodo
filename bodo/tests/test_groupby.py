@@ -6806,13 +6806,13 @@ def test_boolor_booland_boolxor_agg(t_val, f_val, dtype, memory_leak_check):
         ),
     ],
 )
-def test_bitor_agg(data, dtype, memory_leak_check):
-    """Tests the BITOR_AGG aggregation function with groupby on string data.
-    This will in the future also test BITAND_AGG and BITXOR_AGG.
+def test_bit_agg(data, dtype, memory_leak_check):
+    """Tests the BITOR_AGG, BITAND_AGG, and BITXOR_AGG aggregation functions
+        with groupby.
 
     Args:
-        col (pd.Series): Input column
-        expected (int): Bitwise-or'd expected output
+        data (pd.Series): Input column
+        dtype (int): Dtype of the input column (data)
         memory_leak_check (): Fixture, see `conftest.py`.
     """
 
@@ -6821,6 +6821,8 @@ def test_bitor_agg(data, dtype, memory_leak_check):
         # these are the generated SQL flags
         return df.groupby(["key"], as_index=False, dropna=False).agg(
             or_out=pd.NamedAgg(column="data", aggfunc="bitor_agg"),
+            and_out=pd.NamedAgg(column="data", aggfunc="bitand_agg"),
+            xor_out=pd.NamedAgg(column="data", aggfunc="bitxor_agg"),
         )
 
     df = pd.DataFrame(
@@ -6834,6 +6836,8 @@ def test_bitor_agg(data, dtype, memory_leak_check):
         {
             "key": pd.Series([1, 2, 3, 4]),
             "or_out": pd.Series([126, 79, 215, None], dtype=pd.Int32Dtype()),
+            "and_out": pd.Series([32, 4, 0, None], dtype=pd.Int32Dtype()),
+            "xor_out": pd.Series([114, 76, 208, None], dtype=pd.Int32Dtype()),
         }
     )
 
