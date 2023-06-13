@@ -3265,11 +3265,6 @@ def make_bitX_agg_fn(func_type):
         else:
             raise_bodo_error("Input must be an array type")
 
-        # the behavior of xor changes if duplicate values are removed (reading from the data of the
-        # dictionary encoding does not respect duplicates).
-        if arr_data == bodo.dict_str_arr_type and func_type != "xor":
-            func_text += "    A = A._data\n"
-
         if isinstance(arr_data.dtype, types.Float) or arr_data.dtype == string_type:
             func_text += f"    result = np.int64({start_val})\n"
         else:
