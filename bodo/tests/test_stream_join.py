@@ -19,205 +19,208 @@ from bodo.tests.utils import (
     temp_env_override,
 )
 
+# Listing them separately since otherwise the traceback during errors is huge.
+hash_join_basic_test_params = [
+    # Equivalent query:
+    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # from lineitem inner join part on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
+    # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
+    # and p_size > {p_size_limit}
+    (
+        False,
+        False,
+        pd.DataFrame(
+            {
+                "p_partkey": [183728],
+                "p_comment": ["bold deposi"],
+                "p_name": ["yellow turquoise cornflower coral saddle"],
+                "p_size": [37],
+                "l_partkey": [183728],
+                "l_comment": ["bold deposi"],
+                "l_orderkey": [685476],
+            }
+        ),
+    ),
+    # Equivalent query:
+    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # from (
+    #     select  L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
+    # ) lineitem_filtered
+    # right outer join (
+    #     select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size = {p_size_limit} and p_partkey > {p_orderkey_start} and p_partkey < {p_orderkey_end}
+    # ) part_filtered
+    # on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
+    (
+        True,
+        False,
+        pd.DataFrame(
+            {
+                "p_partkey": [183728, 183820, 183846],
+                "p_comment": [
+                    "bold deposi",
+                    "s. quickly unusua",
+                    " foxes are",
+                ],
+                "p_name": [
+                    "yellow turquoise cornflower coral saddle",
+                    "tomato goldenrod black turquoise maroon",
+                    "cream dim blush moccasin drab",
+                ],
+                "p_size": [37] * 3,
+                "l_partkey": [183728, pd.NA, pd.NA],
+                "l_comment": [
+                    "bold deposi",
+                    pd.NA,
+                    pd.NA,
+                ],
+                "l_orderkey": [685476, pd.NA, pd.NA],
+            }
+        ),
+    ),
+    # Equivalent query:
+    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # from lineitem left outer join (
+    #     select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > {p_size_limit}
+    # ) on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
+    # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
+    (
+        False,
+        True,
+        pd.DataFrame(
+            {
+                "p_partkey": [pd.NA, pd.NA, pd.NA, 183728, pd.NA, pd.NA, pd.NA],
+                "p_comment": [
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                    "bold deposi",
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                ],
+                "p_name": [
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                    "yellow turquoise cornflower coral saddle",
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                ],
+                "p_size": [pd.NA, pd.NA, pd.NA, 37, pd.NA, pd.NA, pd.NA],
+                "l_partkey": [45677, 85880, 174117, 183728, 106836, 191705, 171506],
+                "l_comment": [
+                    "requests wake permanently among the e",
+                    "te above the silent platelets. furiously",
+                    "lyly express accounts are blithely f",
+                    "bold deposi",
+                    "t, regular requests cajole ",
+                    "ve the blithely even requests haggle",
+                    "ding packages; ironic accounts ",
+                ],
+                "l_orderkey": [
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                ],
+            }
+        ),
+    ),
+    # Equivalent query:
+    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # from (
+    #     select  L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
+    # ) lineitem_filtered
+    # full outer join (
+    #     select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size = {p_size_limit} and p_partkey > {p_orderkey_start} and p_partkey < {p_orderkey_end}
+    # ) part_filtered
+    # on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
+    (
+        True,
+        True,
+        pd.DataFrame(
+            {
+                "p_partkey": [
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                    183728,
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                    183820,
+                    183846,
+                ],
+                "p_comment": [
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                    "bold deposi",
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                    "s. quickly unusua",
+                    " foxes are",
+                ],
+                "p_name": [
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                    "yellow turquoise cornflower coral saddle",
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                    "tomato goldenrod black turquoise maroon",
+                    "cream dim blush moccasin drab",
+                ],
+                "p_size": [pd.NA, pd.NA, pd.NA, 37, pd.NA, pd.NA, pd.NA, 37, 37],
+                "l_partkey": [
+                    45677,
+                    85880,
+                    174117,
+                    183728,
+                    106836,
+                    191705,
+                    171506,
+                    pd.NA,
+                    pd.NA,
+                ],
+                "l_comment": [
+                    "requests wake permanently among the e",
+                    "te above the silent platelets. furiously",
+                    "lyly express accounts are blithely f",
+                    "bold deposi",
+                    "t, regular requests cajole ",
+                    "ve the blithely even requests haggle",
+                    "ding packages; ironic accounts ",
+                    pd.NA,
+                    pd.NA,
+                ],
+                "l_orderkey": [
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    685476,
+                    pd.NA,
+                    pd.NA,
+                ],
+            }
+        ),
+    ),
+]
+
 
 @pytest_mark_snowflake
 @pytest.mark.parametrize(
     "build_outer,probe_outer,expected_df",
-    [
-        # Equivalent query:
-        # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
-        # from lineitem inner join part on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
-        # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
-        # and p_size > {p_size_limit}
-        (
-            False,
-            False,
-            pd.DataFrame(
-                {
-                    "p_partkey": [183728],
-                    "p_comment": ["bold deposi"],
-                    "p_name": ["yellow turquoise cornflower coral saddle"],
-                    "p_size": [37],
-                    "l_partkey": [183728],
-                    "l_comment": ["bold deposi"],
-                    "l_orderkey": [685476],
-                }
-            ),
-        ),
-        # Equivalent query:
-        # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
-        # from (
-        #     select  L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
-        # ) lineitem_filtered
-        # right outer join (
-        #     select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size = {p_size_limit} and p_partkey > {p_orderkey_start} and p_partkey < {p_orderkey_end}
-        # ) part_filtered
-        # on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
-        (
-            True,
-            False,
-            pd.DataFrame(
-                {
-                    "p_partkey": [183728, 183820, 183846],
-                    "p_comment": [
-                        "bold deposi",
-                        "s. quickly unusua",
-                        " foxes are",
-                    ],
-                    "p_name": [
-                        "yellow turquoise cornflower coral saddle",
-                        "tomato goldenrod black turquoise maroon",
-                        "cream dim blush moccasin drab",
-                    ],
-                    "p_size": [37] * 3,
-                    "l_partkey": [183728, pd.NA, pd.NA],
-                    "l_comment": [
-                        "bold deposi",
-                        pd.NA,
-                        pd.NA,
-                    ],
-                    "l_orderkey": [685476, pd.NA, pd.NA],
-                }
-            ),
-        ),
-        # Equivalent query:
-        # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
-        # from lineitem left outer join (
-        #     select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > {p_size_limit}
-        # ) on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
-        # where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
-        (
-            False,
-            True,
-            pd.DataFrame(
-                {
-                    "p_partkey": [pd.NA, pd.NA, pd.NA, 183728, pd.NA, pd.NA, pd.NA],
-                    "p_comment": [
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                        "bold deposi",
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                    ],
-                    "p_name": [
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                        "yellow turquoise cornflower coral saddle",
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                    ],
-                    "p_size": [pd.NA, pd.NA, pd.NA, 37, pd.NA, pd.NA, pd.NA],
-                    "l_partkey": [45677, 85880, 174117, 183728, 106836, 191705, 171506],
-                    "l_comment": [
-                        "requests wake permanently among the e",
-                        "te above the silent platelets. furiously",
-                        "lyly express accounts are blithely f",
-                        "bold deposi",
-                        "t, regular requests cajole ",
-                        "ve the blithely even requests haggle",
-                        "ding packages; ironic accounts ",
-                    ],
-                    "l_orderkey": [
-                        685476,
-                        685476,
-                        685476,
-                        685476,
-                        685476,
-                        685476,
-                        685476,
-                    ],
-                }
-            ),
-        ),
-        # Equivalent query:
-        # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
-        # from (
-        #     select  L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey > {l_orderkey_start} and l_orderkey < {l_orderkey_end}
-        # ) lineitem_filtered
-        # full outer join (
-        #     select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size = {p_size_limit} and p_partkey > {p_orderkey_start} and p_partkey < {p_orderkey_end}
-        # ) part_filtered
-        # on P_PARTKEY = L_PARTKEY and P_COMMENT = L_COMMENT
-        (
-            True,
-            True,
-            pd.DataFrame(
-                {
-                    "p_partkey": [
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                        183728,
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                        183820,
-                        183846,
-                    ],
-                    "p_comment": [
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                        "bold deposi",
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                        "s. quickly unusua",
-                        " foxes are",
-                    ],
-                    "p_name": [
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                        "yellow turquoise cornflower coral saddle",
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                        "tomato goldenrod black turquoise maroon",
-                        "cream dim blush moccasin drab",
-                    ],
-                    "p_size": [pd.NA, pd.NA, pd.NA, 37, pd.NA, pd.NA, pd.NA, 37, 37],
-                    "l_partkey": [
-                        45677,
-                        85880,
-                        174117,
-                        183728,
-                        106836,
-                        191705,
-                        171506,
-                        pd.NA,
-                        pd.NA,
-                    ],
-                    "l_comment": [
-                        "requests wake permanently among the e",
-                        "te above the silent platelets. furiously",
-                        "lyly express accounts are blithely f",
-                        "bold deposi",
-                        "t, regular requests cajole ",
-                        "ve the blithely even requests haggle",
-                        "ding packages; ironic accounts ",
-                        pd.NA,
-                        pd.NA,
-                    ],
-                    "l_orderkey": [
-                        685476,
-                        685476,
-                        685476,
-                        685476,
-                        685476,
-                        685476,
-                        685476,
-                        pd.NA,
-                        pd.NA,
-                    ],
-                }
-            ),
-        ),
-    ],
+    hash_join_basic_test_params,
 )
 def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_check):
     """
@@ -325,141 +328,145 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
     )
 
 
+# Listing them separately since otherwise the traceback during errors is huge.
+nested_loop_join_test_params = [
+    # Equivalent query:
+    # select *
+    # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
+    # inner join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
+    # on P_PARTKEY > L_PARTKEY + 197800
+    (
+        False,
+        False,
+        pd.DataFrame(
+            {
+                "p_partkey": [199978, 199995],
+                "p_comment": ["ess, i", "packa"],
+                "p_name": [
+                    "linen magenta saddle slate turquoise",
+                    "blanched floral red maroon papaya",
+                ],
+                "p_size": [50, 50],
+                "l_partkey": [2132, 2132],
+                "l_comment": ["lites. fluffily even de", "lites. fluffily even de"],
+                "l_orderkey": [1, 1],
+            }
+        ),
+    ),
+    # Equivalent query:
+    # select *
+    # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
+    # right join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
+    # on P_PARTKEY > L_PARTKEY + 197800
+    (
+        True,
+        False,
+        pd.DataFrame(
+            {
+                "p_partkey": [199978, 199995, 199843, 199847, 199898],
+                "p_comment": [
+                    "ess, i",
+                    "packa",
+                    "refully f",
+                    " reques",
+                    "around the",
+                ],
+                "p_name": [
+                    "linen magenta saddle slate turquoise",
+                    "blanched floral red maroon papaya",
+                    "pale orchid deep linen chocolate",
+                    "hot black red powder smoke",
+                    "firebrick brown gainsboro orchid medium",
+                ],
+                "p_size": [50, 50, 50, 50, 50],
+                "l_partkey": [2132, 2132, pd.NA, pd.NA, pd.NA],
+                "l_comment": [
+                    "lites. fluffily even de",
+                    "lites. fluffily even de",
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                ],
+                "l_orderkey": [1, 1, pd.NA, pd.NA, pd.NA],
+            }
+        ),
+    ),
+    # Equivalent query:
+    # select *
+    # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
+    # left join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
+    # on P_PARTKEY > L_PARTKEY + 197800
+    (
+        False,
+        True,
+        pd.DataFrame(
+            {
+                "p_partkey": [199978, 199995, pd.NA],
+                "p_comment": ["ess, i", "packa", pd.NA],
+                "p_name": [
+                    "linen magenta saddle slate turquoise",
+                    "blanched floral red maroon papaya",
+                    pd.NA,
+                ],
+                "p_size": [50, 50, pd.NA],
+                "l_partkey": [2132, 2132, 15635],
+                "l_comment": [
+                    "lites. fluffily even de",
+                    "lites. fluffily even de",
+                    "arefully slyly ex",
+                ],
+                "l_orderkey": [1, 1, 1],
+            }
+        ),
+    ),
+    # Equivalent query:
+    # select *
+    # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
+    # full outer join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
+    # on P_PARTKEY > L_PARTKEY + 197800
+    (
+        True,
+        True,
+        pd.DataFrame(
+            {
+                "p_partkey": [199978, 199995, 199843, 199847, 199898, pd.NA],
+                "p_comment": [
+                    "ess, i",
+                    "packa",
+                    "refully f",
+                    " reques",
+                    "around the",
+                    pd.NA,
+                ],
+                "p_name": [
+                    "linen magenta saddle slate turquoise",
+                    "blanched floral red maroon papaya",
+                    "pale orchid deep linen chocolate",
+                    "hot black red powder smoke",
+                    "firebrick brown gainsboro orchid medium",
+                    pd.NA,
+                ],
+                "p_size": [50, 50, 50, 50, 50, pd.NA],
+                "l_partkey": [2132, 2132, pd.NA, pd.NA, pd.NA, 15635],
+                "l_comment": [
+                    "lites. fluffily even de",
+                    "lites. fluffily even de",
+                    pd.NA,
+                    pd.NA,
+                    pd.NA,
+                    "arefully slyly ex",
+                ],
+                "l_orderkey": [1, 1, pd.NA, pd.NA, pd.NA, 1],
+            }
+        ),
+    ),
+]
+
+
 @pytest_mark_snowflake
 @pytest.mark.parametrize(
     "build_outer,probe_outer,expected_df",
-    [
-        # Equivalent query:
-        # select *
-        # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
-        # inner join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
-        # on P_PARTKEY > L_PARTKEY + 197800
-        (
-            False,
-            False,
-            pd.DataFrame(
-                {
-                    "p_partkey": [199978, 199995],
-                    "p_comment": ["ess, i", "packa"],
-                    "p_name": [
-                        "linen magenta saddle slate turquoise",
-                        "blanched floral red maroon papaya",
-                    ],
-                    "p_size": [50, 50],
-                    "l_partkey": [2132, 2132],
-                    "l_comment": ["lites. fluffily even de", "lites. fluffily even de"],
-                    "l_orderkey": [1, 1],
-                }
-            ),
-        ),
-        # Equivalent query:
-        # select *
-        # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
-        # right join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
-        # on P_PARTKEY > L_PARTKEY + 197800
-        (
-            True,
-            False,
-            pd.DataFrame(
-                {
-                    "p_partkey": [199978, 199995, 199843, 199847, 199898],
-                    "p_comment": [
-                        "ess, i",
-                        "packa",
-                        "refully f",
-                        " reques",
-                        "around the",
-                    ],
-                    "p_name": [
-                        "linen magenta saddle slate turquoise",
-                        "blanched floral red maroon papaya",
-                        "pale orchid deep linen chocolate",
-                        "hot black red powder smoke",
-                        "firebrick brown gainsboro orchid medium",
-                    ],
-                    "p_size": [50, 50, 50, 50, 50],
-                    "l_partkey": [2132, 2132, pd.NA, pd.NA, pd.NA],
-                    "l_comment": [
-                        "lites. fluffily even de",
-                        "lites. fluffily even de",
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                    ],
-                    "l_orderkey": [1, 1, pd.NA, pd.NA, pd.NA],
-                }
-            ),
-        ),
-        # Equivalent query:
-        # select *
-        # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
-        # left join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
-        # on P_PARTKEY > L_PARTKEY + 197800
-        (
-            False,
-            True,
-            pd.DataFrame(
-                {
-                    "p_partkey": [199978, 199995, pd.NA],
-                    "p_comment": ["ess, i", "packa", pd.NA],
-                    "p_name": [
-                        "linen magenta saddle slate turquoise",
-                        "blanched floral red maroon papaya",
-                        pd.NA,
-                    ],
-                    "p_size": [50, 50, pd.NA],
-                    "l_partkey": [2132, 2132, 15635],
-                    "l_comment": [
-                        "lites. fluffily even de",
-                        "lites. fluffily even de",
-                        "arefully slyly ex",
-                    ],
-                    "l_orderkey": [1, 1, 1],
-                }
-            ),
-        ),
-        # Equivalent query:
-        # select *
-        # from (SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY from lineitem where l_orderkey < 2 and l_partkey < 20000)
-        # full outer join (SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE from part where p_size > 49 and p_partkey > 199840) as part_filtered
-        # on P_PARTKEY > L_PARTKEY + 197800
-        (
-            True,
-            True,
-            pd.DataFrame(
-                {
-                    "p_partkey": [199978, 199995, 199843, 199847, 199898, pd.NA],
-                    "p_comment": [
-                        "ess, i",
-                        "packa",
-                        "refully f",
-                        " reques",
-                        "around the",
-                        pd.NA,
-                    ],
-                    "p_name": [
-                        "linen magenta saddle slate turquoise",
-                        "blanched floral red maroon papaya",
-                        "pale orchid deep linen chocolate",
-                        "hot black red powder smoke",
-                        "firebrick brown gainsboro orchid medium",
-                        pd.NA,
-                    ],
-                    "p_size": [50, 50, 50, 50, 50, pd.NA],
-                    "l_partkey": [2132, 2132, pd.NA, pd.NA, pd.NA, 15635],
-                    "l_comment": [
-                        "lites. fluffily even de",
-                        "lites. fluffily even de",
-                        pd.NA,
-                        pd.NA,
-                        pd.NA,
-                        "arefully slyly ex",
-                    ],
-                    "l_orderkey": [1, 1, pd.NA, pd.NA, pd.NA, 1],
-                }
-            ),
-        ),
-    ],
+    nested_loop_join_test_params,
 )
 def test_nested_loop_join(build_outer, probe_outer, expected_df, memory_leak_check):
     """
