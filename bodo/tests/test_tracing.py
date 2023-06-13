@@ -1,6 +1,8 @@
 # Copyright (C) 2019 Bodo Inc.
 # Turn on tracing for all tests in this file.
+import json
 import os
+import time
 from tempfile import TemporaryDirectory
 
 import pytest
@@ -106,3 +108,54 @@ def test_tracing_warning(recwarn):
 
     rank_no_warns = comm.allreduce(rank_no_warns, MPI.BAND)
     assert rank_no_warns, "Memory warning was raised on ranks != 0"
+
+
+def test_resumable_event():
+    """Test that a resumable event and non-resumable event come up with similar numbers"""
+
+    # Test normal operation of tracing with synced and non-synced events
+    def impl1():
+        with TemporaryDirectory() as tempdir:
+            tracing.start()
+            resumable_event = tracing.ResumableEvent("resumable")
+            event1 = tracing.Event("simple")
+
+            with resumable_event.iteration():
+                time.sleep(0.1)
+
+            event1.finalize()
+
+            time.sleep(0.1)
+
+            event2 = tracing.Event("simple2")
+
+            with resumable_event.iteration():
+                time.sleep(0.1)
+
+            event2.finalize()
+            resumable_event.finalize()
+
+            output = f"{tempdir}/bodo_trace.json"
+            tracing.dump(output)
+            with open(output, "rt") as f:
+                d = json.load(f)["traceEvents"]
+
+        _start_event, simple1, simple2, resumable, _end_event = d
+        assert resumable["resumable"], "No resumable attribute on resumable event"
+        assert (
+            resumable["iteration_count"] == 2
+        ), "Resumable event iteration count is wrong"
+
+        # the first and second simple event occur around the two iterations of resumable, thus they should take longer
+        assert (
+            simple1["dur"] + simple2["dur"] >= resumable["dur"]
+        ), "Resumable event duration is incorrect"
+        # However, the simple events occur in between the construction and finalization of resumable, so the total duration should be longer
+        assert (
+            simple1["dur"] + simple2["dur"] <= resumable["total_dur"]
+        ), "Resumable event duration is incorrect"
+
+    impl1()
+
+    tracing.reset()
+    tracing.stop()
