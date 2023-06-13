@@ -559,6 +559,8 @@ class HashJoinState : public JoinState {
      */
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
     GetDictionaryHashesForKeys();
+
+    tracing::ResumableEvent join_event;
 };
 
 class NestedLoopJoinState : public JoinState {
@@ -585,9 +587,12 @@ class NestedLoopJoinState : public JoinState {
           // (https://bodo.atlassian.net/browse/BSE-478)
           build_table_buffer(build_arr_c_types, build_arr_array_types,
                              std::vector<std::shared_ptr<DictionaryBuilder>>(
-                                 build_arr_c_types.size(), nullptr)) {
+                                 build_arr_c_types.size(), nullptr)),
+          join_event("NestedLoopJoin") {
         // TODO: Integrate dict_builders for nested loop join.
     }
+
+    tracing::ResumableEvent join_event;
 
     /**
      * @brief Initialize the output buffer.

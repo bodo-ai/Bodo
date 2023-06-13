@@ -454,7 +454,8 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
                 build_parallel_, probe_parallel_, output_batch_size_),
       max_partition_depth(max_partition_depth_),
       build_iter(0),
-      probe_iter(0) {
+      probe_iter(0),
+      join_event("HashJoin") {
     this->key_dict_builders.resize(this->n_keys);
 
     // Create dictionary builders for key columns:
@@ -849,6 +850,7 @@ void join_build_consume_batch(HashJoinState* join_state,
         return;
     }
     int n_pes, myrank;
+    auto iterationEvent(join_state->join_event.iteration());
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 

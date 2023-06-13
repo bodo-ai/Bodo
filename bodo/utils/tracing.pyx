@@ -1,10 +1,17 @@
 import atexit
+import contextlib
 import os
 import time
 import warnings
 
 import numpy as np
-from mpi4py.libmpi cimport MPI_COMM_WORLD, MPI_Comm_rank, MPI_Comm_size, MPI_Barrier
+
+from mpi4py.libmpi cimport (
+    MPI_COMM_WORLD,
+    MPI_Barrier,
+    MPI_Comm_rank,
+    MPI_Comm_size,
+)
 
 from bodo.utils.typing import BodoWarning
 
@@ -123,8 +130,9 @@ def dump(fname=None, clear_traces=True):
             )
             trace_obj = {"num_ranks": num_ranks}
             trace_obj["num_nodes"] = num_nodes
-            import bodo
             import json
+
+            import bodo
             trace_obj["bodo_version"] = bodo.__version__
             for var in os.environ:
                 if "MPI" in var or var.startswith("FI_") or var.startswith("BODO"):
@@ -140,6 +148,7 @@ def dump(fname=None, clear_traces=True):
                 # To decompress, use obfuscation/decompress_traces.py
                 with open(fname, "wb") as f:
                     import zlib
+
                     # wbits=-15 won't add a header, so output will just be a
                     # raw binary stream
                     c = zlib.compressobj(9, wbits=-15)
@@ -206,7 +215,7 @@ cdef aggregate_events():
     # The event aggregation code below hangs if there are a different number
     # of events with `_bodo_aggr == 1` on each rank.
     # Detect that error condition beforehand and raise a programming error.
-    from bodo.libs.distributed_api import dist_reduce, Reduce_Type
+    from bodo.libs.distributed_api import Reduce_Type, dist_reduce
 
     err = None  # Forward declaration
     aggr_events = [e["name"] for e in traceEvents if "_bodo_aggr" in e]
@@ -322,16 +331,83 @@ cdef class Event:
         # add attributes always to avoid overhead of checking
         self.trace["args"][name] = value
 
+    def _get_duration(self):
+        '''Get duration for this event.
+        
+        Overriden in subclasses, like ResumableEvent, in order to provide a
+        custom definition of duration for an event.'''
+        return get_timestamp() - self.trace["ts"]
+
     def finalize(self, bint aggregate=True):
         """ Finalize event
             If aggregate=True, aggregate the info of the event across all ranks
         """
         if TRACING == 0:
             return  # nop
-        self.trace["dur"] = get_timestamp() - self.trace["ts"]
+        self.trace["dur"] = self._get_duration()
         if self.sync and self.is_parallel:
             # wait for all processes to finish event
             MPI_Barrier(MPI_COMM_WORLD)
         if aggregate and self.is_parallel:
             self.trace["_bodo_aggr"] = 1
         traceEvents.append(self.trace)
+
+cdef class ResumableEvent(Event):
+
+    cdef long long current_iter_start
+    cdef int resumable_dur
+    cdef int iteration_count
+
+    def __cinit__(self, name not None, bint is_parallel=1, bint sync=1):
+        """Create a resumable event named 'name'.
+        Other arguments are the same as for Event.
+        """
+        super().__init__(name, is_parallel, sync)
+        self.current_iter_start = -1
+        self.resumable_dur = 0
+        self.iteration_count = 0
+
+    def finalize(self, bint aggregate=True):
+        """Finalize an event, taking care to end any current iteration
+        """
+        if TRACING == 0:
+            return  # nop
+        if self.current_iter_start != -1:
+            self.end_iteration()
+
+        self.trace["iteration_count"] = self.iteration_count
+        self.trace["resumable"] = True
+        # Get the total duration from the superclass, which counts the total
+        # amount of time the event was alive.
+        self.trace["total_dur"] = super()._get_duration()
+        super().finalize(aggregate)
+
+    @contextlib.contextmanager
+    def iteration(self):
+        """Context manager to handle calling start_iteration and end_iteration
+        
+        Use as such:
+        
+            with event.iteration():
+                ITERATION CODE        
+        """
+        self.start_iteration()
+        try:
+            yield
+        finally:
+            self.end_iteration()
+
+    def start_iteration(self):
+        """Start a new iteration on the resumable event."""
+        if self.current_iter_start < 0:
+            self.current_iter_start = get_timestamp()
+            self.iteration_count += 1
+
+    def end_iteration(self):
+        """End the current iteration if any and aggregate runtime statistics"""
+        if self.current_iter_start >= 0:
+            self.resumable_dur += (get_timestamp() - self.current_iter_start)
+            self.current_iter_start = -1
+
+    def _get_duration(self):
+        return self.resumable_dur
