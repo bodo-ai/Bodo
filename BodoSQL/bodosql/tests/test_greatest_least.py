@@ -376,7 +376,8 @@ def test_greatest_time_literals(greatest_or_least, memory_leak_check):
         {},
         None,
         check_names=False,
-        expected_output=answer
+        expected_output=answer,
+        is_out_distributed=False,
     )
 
 

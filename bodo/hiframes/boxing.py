@@ -1676,8 +1676,8 @@ def _infer_ndarray_obj_dtype(val):
             pd.arrays.ArrowStringArray,
         ),
     ):
-        dtype, nesting_depth = _infer_array_item_array_type_and_depth(val, 0)
-        arr_type = dtype_to_array_type(dtype, True)
+        dtype, nesting_depth, nullable = _infer_array_item_array_type_and_depth(val, 0)
+        arr_type = dtype_to_array_type(dtype, nullable)
         for i in range(nesting_depth):
             arr_type = ArrayItemArrayType(arr_type)
         return arr_type
@@ -1759,20 +1759,24 @@ def _infer_array_item_array_type_and_depth(val, nesting_depth):
     """
     max_depth = nesting_depth
     if len(val) == 0:
-        return None, nesting_depth
+        return None, nesting_depth, True
 
     for i in range(len(val)):
         if pd.api.types.is_scalar(val[i]):
             if not pd.isna(val[i]):
-                return numba.typeof(val[i]), nesting_depth
+                if isinstance(val, np.ndarray):
+                    nullable = False
+                else:
+                    nullable = True
+                return numba.typeof(val[i]), nesting_depth, nullable
         elif isinstance(val[i], (dict, Dict)):
             # convert array of dicts to StructArrayType
             struct_arr_typ = numba.typeof(np.array(val, np.object_))
             # returning nesting_depth-1 because struct_arr_typ is based on val not val[i]
-            return struct_arr_typ, nesting_depth - 1
+            return struct_arr_typ, nesting_depth - 1, True
         else:
-            typ, depth = _infer_array_item_array_type_and_depth(val[i], nesting_depth + 1)
+            typ, depth, nullable = _infer_array_item_array_type_and_depth(val[i], nesting_depth + 1)
             max_depth = max(max_depth, depth)
             if typ != None:
-                return typ, max_depth
-    return None, max_depth
+                return typ, max_depth, nullable
+    return None, max_depth, True
