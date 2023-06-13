@@ -365,4 +365,4 @@ bodosql_use_streaming_plan = False
 # Number of rows to process at once for BodoSQL. This is used to test
 # the streaming plan in BodoSQL on the existing unit tests that may only
 # have one batch worth of data.
-bodosql_streaming_batch_size = 4000
+bodosql_streaming_batch_size = 4096

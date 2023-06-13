@@ -1308,6 +1308,13 @@ SizeClass* BufferPool::GetSizeClass_Unsafe(uint64_t idx) const {
     return this->size_classes_[idx].get();
 }
 
+uint64_t BufferPool::GetSmallestSizeClassSize() const {
+    if (this->size_class_bytes_.size() > 0) {
+        return this->size_class_bytes_[0];
+    }
+    return 0;
+}
+
 /// Helper Functions for using BufferPool in Arrow
 
 ::arrow::compute::ExecContext* buffer_exec_context() {

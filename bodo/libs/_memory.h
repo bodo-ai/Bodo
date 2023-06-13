@@ -665,6 +665,14 @@ class BufferPool final : public ::arrow::MemoryPool {
      */
     virtual SizeClass* GetSizeClass_Unsafe(uint64_t idx) const;
 
+    /**
+     * @brief Get the size of the smallest SizeClass in bytes.
+     * Will return 0 when there are no SizeClass-es.
+     *
+     * @return uint64_t
+     */
+    uint64_t GetSmallestSizeClassSize() const;
+
    protected:
     /// @brief Options that were used for building the BufferPool.
     BufferPoolOptions options_;
