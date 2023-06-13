@@ -1,10 +1,71 @@
 #include "_shuffle.h"
 #include "_stream_join.h"
 
+void NestedLoopJoinState::InitOutputBuffer(
+    const std::vector<uint64_t>& build_kept_cols,
+    const std::vector<uint64_t>& probe_kept_cols) {
+    // TODO: Move to JoinState after dict encoding support for
+    // NestedLoopJoinState.
+    if (this->output_buffer != nullptr) {
+        // Already initialized. We only initialize on the first
+        // iteration.
+        return;
+    }
+    auto [build_arr_c_types, build_arr_array_types] =
+        get_dtypes_arr_types_from_table(this->build_table_buffer.data_table);
+    auto [probe_arr_c_types, probe_arr_array_types] =
+        get_dtypes_arr_types_from_table(this->dummy_probe_table);
+    std::vector<int8_t> arr_c_types, arr_array_types;
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    arr_c_types.reserve(build_kept_cols.size() + probe_kept_cols.size());
+    arr_array_types.reserve(build_kept_cols.size() + probe_kept_cols.size());
+    dict_builders.reserve(build_kept_cols.size() + probe_kept_cols.size());
+    for (uint64_t i_col : build_kept_cols) {
+        bodo_array_type::arr_type_enum arr_type =
+            (bodo_array_type::arr_type_enum)build_arr_array_types[i_col];
+        Bodo_CTypes::CTypeEnum dtype =
+            (Bodo_CTypes::CTypeEnum)build_arr_c_types[i_col];
+        // In the probe outer case, we need to make NUMPY arrays
+        // into NULLABLE arrays. Matches the `use_nullable_arrs`
+        // behavior of RetrieveTable.
+        // TODO: Move to a helper function.
+        if (this->probe_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
+                                        (is_integer(dtype) || is_float(dtype) ||
+                                         dtype == Bodo_CTypes::_BOOL))) {
+            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+        }
+        arr_c_types.push_back(dtype);
+        arr_array_types.push_back(arr_type);
+        // TODO: Integrate dict_builders for nested loop join.
+        dict_builders.push_back(nullptr);
+    }
+    for (uint64_t i_col : probe_kept_cols) {
+        bodo_array_type::arr_type_enum arr_type =
+            (bodo_array_type::arr_type_enum)probe_arr_array_types[i_col];
+        Bodo_CTypes::CTypeEnum dtype =
+            (Bodo_CTypes::CTypeEnum)probe_arr_c_types[i_col];
+        // In the build outer case, we need to make NUMPY arrays
+        // into NULLABLE arrays. Matches the `use_nullable_arrs`
+        // behavior of RetrieveTable.
+        if (this->build_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
+                                        (is_integer(dtype) || is_float(dtype) ||
+                                         dtype == Bodo_CTypes::_BOOL))) {
+            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+        }
+        arr_c_types.push_back(dtype);
+        arr_array_types.push_back(arr_type);
+        // TODO: Integrate dict_builders for nested loop join.
+        dict_builders.push_back(nullptr);
+    }
+    this->output_buffer = std::make_shared<ChunkedTableBuilder>(
+        arr_c_types, arr_array_types, dict_builders, this->output_batch_size,
+        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+}
 void NestedLoopJoinState::FinalizeBuild() {
     // If the build table is small enough, broadcast it to all ranks
     // so the probe table can be joined locally.
-    // NOTE: broadcasting build table is incorrect if the probe table is replicated.
+    // NOTE: broadcasting build table is incorrect if the probe table is
+    // replicated.
     if (this->build_parallel && this->probe_parallel) {
         int64_t global_table_size =
             table_global_memory_size(this->build_table_buffer.data_table);
@@ -62,17 +123,13 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
  * side.
  * @param probe_kept_cols Which columns to generate in the output on the probe
  * side.
- * @param[out] total_rows Store the number of rows in the output batch in case
- *        all columns are dead. This function should increment this with the
- * size of this chunk.
  * @param is_parallel parallel flag for tracing purposes
- * @return std::shared_ptr<table_info> output table batch
  */
-std::shared_ptr<table_info> nested_loop_join_local_chunk(
-    NestedLoopJoinState* join_state, std::shared_ptr<table_info> probe_table,
-    const std::vector<uint64_t>& build_kept_cols,
-    const std::vector<uint64_t>& probe_kept_cols, int64_t* total_rows,
-    bool parallel) {
+void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
+                                  std::shared_ptr<table_info> probe_table,
+                                  const std::vector<uint64_t>& build_kept_cols,
+                                  const std::vector<uint64_t>& probe_kept_cols,
+                                  bool parallel) {
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
 
@@ -101,35 +158,26 @@ std::shared_ptr<table_info> nested_loop_join_local_chunk(
                            parallel && join_state->build_parallel &&
                                !join_state->probe_parallel);
     }
-
-    // Update the output size for this chunk.
-    *total_rows += build_idxs.size();
-
-    std::shared_ptr<table_info> build_out_table =
-        RetrieveTable(join_state->build_table_buffer.data_table, build_idxs,
-                      build_kept_cols, join_state->probe_table_outer);
-    std::shared_ptr<table_info> probe_out_table =
-        RetrieveTable(probe_table, probe_idxs, probe_kept_cols,
-                      join_state->build_table_outer);
-    build_idxs.clear();
-    probe_idxs.clear();
-
-    std::vector<std::shared_ptr<array_info>> out_arrs;
-    out_arrs.insert(out_arrs.end(), build_out_table->columns.begin(),
-                    build_out_table->columns.end());
-    out_arrs.insert(out_arrs.end(), probe_out_table->columns.begin(),
-                    probe_out_table->columns.end());
-    return std::make_shared<table_info>(out_arrs);
+    join_state->output_buffer->AppendJoinOutput(
+        join_state->build_table_buffer.data_table, probe_table, build_idxs,
+        probe_idxs, build_kept_cols, probe_kept_cols);
 }
 
-std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
+void nested_loop_join_probe_consume_batch(
     NestedLoopJoinState* join_state, std::shared_ptr<table_info> in_table,
     const std::vector<uint64_t> build_kept_cols,
-    const std::vector<uint64_t> probe_kept_cols, int64_t* total_rows,
-    bool is_last) {
-    // Initialize the output to 0.
-    *total_rows = 0;
-    std::shared_ptr<table_info> out_table;
+    const std::vector<uint64_t> probe_kept_cols, bool is_last) {
+    if (join_state->probe_input_finalized) {
+        if (in_table->nrows() != 0) {
+            throw std::runtime_error(
+                "nested_loop_join_probe_consume_batch: Received non-empty "
+                "in_table after "
+                "the probe was already finalized!");
+        }
+        // No processing left.
+        return;
+    }
+
     // We only need to take the parallel path if both tables are parallel and
     // the build table wasn't broadcast.
     bool parallel = join_state->build_parallel && join_state->probe_parallel;
@@ -137,62 +185,41 @@ std::shared_ptr<table_info> nested_loop_join_probe_consume_batch(
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        std::vector<std::shared_ptr<table_info>> out_table_chunks;
-        out_table_chunks.reserve(n_pes);
 
         for (int p = 0; p < n_pes; p++) {
             std::shared_ptr<table_info> bcast_probe_chunk = broadcast_table(
                 in_table, in_table, in_table->ncols(), parallel, p);
-            std::shared_ptr<table_info> out_table_chunk =
-                nested_loop_join_local_chunk(join_state, bcast_probe_chunk,
-                                             build_kept_cols, probe_kept_cols,
-                                             total_rows, parallel);
-            out_table_chunks.emplace_back(out_table_chunk);
+            nested_loop_join_local_chunk(join_state, bcast_probe_chunk,
+                                         build_kept_cols, probe_kept_cols,
+                                         parallel);
         }
-        out_table = concat_tables(out_table_chunks);
     } else {
-        out_table =
-            nested_loop_join_local_chunk(join_state, in_table, build_kept_cols,
-                                         probe_kept_cols, total_rows, parallel);
+        nested_loop_join_local_chunk(join_state, in_table, build_kept_cols,
+                                     probe_kept_cols, parallel);
     }
 
-    if (join_state->build_table_outer && !join_state->probe_input_finalized &&
-        is_last) {
+    if (join_state->build_table_outer && is_last) {
         // Add unmatched rows from build table
         // for outer join
         bodo::vector<int64_t> build_idxs;
         bodo::vector<int64_t> probe_idxs;
+
         add_unmatched_rows(
             join_state->build_table_matched,
             join_state->build_table_buffer.data_table->nrows(), build_idxs,
             probe_idxs,
             !join_state->build_parallel && join_state->probe_parallel);
-        *total_rows += build_idxs.size();
 
-        std::shared_ptr<table_info> build_out_outer =
-            RetrieveTable(join_state->build_table_buffer.data_table, build_idxs,
-                          build_kept_cols, join_state->probe_table_outer);
-        std::shared_ptr<table_info> probe_out_outer =
-            RetrieveTable(in_table, probe_idxs, probe_kept_cols,
-                          join_state->build_table_outer);
+        join_state->output_buffer->AppendJoinOutput(
+            join_state->build_table_buffer.data_table, in_table, build_idxs,
+            probe_idxs, build_kept_cols, probe_kept_cols);
         build_idxs.clear();
         probe_idxs.clear();
-
-        std::vector<std::shared_ptr<array_info>> out_arrs;
-        out_arrs.insert(out_arrs.end(), build_out_outer->columns.begin(),
-                        build_out_outer->columns.end());
-        out_arrs.insert(out_arrs.end(), probe_out_outer->columns.begin(),
-                        probe_out_outer->columns.end());
-        std::shared_ptr<table_info> outer_table =
-            std::make_shared<table_info>(out_arrs);
-        out_table = concat_tables({out_table, outer_table});
     }
-    if (!join_state->probe_input_finalized && is_last) {
+    if (is_last) {
         // Finalize the probe side
         join_state->FinalizeProbe();
     }
-
-    return out_table;
 }
 
 void nested_loop_join_build_consume_batch_py_entry(
@@ -202,30 +229,5 @@ void nested_loop_join_build_consume_batch_py_entry(
             join_state, std::shared_ptr<table_info>(in_table), is_last);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-    }
-}
-
-table_info* nested_loop_join_probe_consume_batch_py_entry(
-    NestedLoopJoinState* join_state, table_info* in_table,
-    uint64_t* kept_build_col_nums, int64_t num_kept_build_cols,
-    uint64_t* kept_probe_col_nums, int64_t num_kept_probe_cols,
-    int64_t* total_rows, bool is_last, bool* out_is_last) {
-    try {
-        // TODO: Actually output out_is_last based on is_last + the state
-        // of the output buffer.
-        *out_is_last = is_last;
-        std::vector<uint64_t> build_kept_cols(
-            kept_build_col_nums, kept_build_col_nums + num_kept_build_cols);
-        std::vector<uint64_t> probe_kept_cols(
-            kept_probe_col_nums, kept_probe_col_nums + num_kept_probe_cols);
-        std::shared_ptr<table_info> out = nested_loop_join_probe_consume_batch(
-            join_state, std::unique_ptr<table_info>(in_table),
-            std::move(build_kept_cols), std::move(probe_kept_cols), total_rows,
-            is_last);
-
-        return new table_info(*out);
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
     }
 }

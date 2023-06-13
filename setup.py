@@ -257,6 +257,9 @@ ext_metadata["sources"] += [
     "bodo/libs/iceberg_transforms.cpp",
     "bodo/libs/_stream_join.cpp",
     "bodo/libs/_stream_nested_loop_join.cpp",
+    "bodo/libs/_dict_builder.cpp",
+    "bodo/libs/_table_builder.cpp",
+    "bodo/libs/_chunked_table_builder.cpp",
 ]
 ext_metadata["depends"] += [
     "bodo/io/_bodo_file_reader.h",
@@ -298,6 +301,9 @@ ext_metadata["depends"] += [
     "bodo/libs/iceberg_transforms.h",
     "bodo/libs/_stream_join.h",
     "bodo/libs/simd-block-fixed-fpp.h",
+    "bodo/libs/_dict_builder.h",
+    "bodo/libs/_table_builder.h",
+    "bodo/libs/_chunked_table_builder.h",
 ]
 
 # We cannot compile with -Werror yet because _fsspec_reader.cpp
