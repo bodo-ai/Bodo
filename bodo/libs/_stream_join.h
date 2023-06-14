@@ -269,6 +269,11 @@ class JoinPartition {
 
 class JoinState {
    public:
+    // The types of the columns in the build table and probe tables.
+    const std::vector<int8_t> build_arr_c_types;
+    const std::vector<int8_t> build_arr_array_types;
+    const std::vector<int8_t> probe_arr_c_types;
+    const std::vector<int8_t> probe_arr_array_types;
     // Join properties
     const uint64_t n_keys;
     cond_expr_fn_t cond_func;
@@ -285,6 +290,21 @@ class JoinState {
     bool probe_input_finalized = false;
     const int64_t output_batch_size;
 
+    // Dictionary builders for the key columns. This is
+    // always of length n_keys and is nullptr for non DICT keys.
+    // These will be shared between the build_table_buffers and
+    // probe_table_buffers of all partitions and the build_shuffle_buffer
+    // and probe_shuffle_buffer.
+    std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
+
+    // Simple concatenation of key_dict_builders and
+    // non key dict builders
+    std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
+
+    // Simple concatenation of key_dict_builders and
+    // non key dict builders
+    std::vector<std::shared_ptr<DictionaryBuilder>> probe_table_dict_builders;
+
     // Output buffer
     // This will be lazily initialized during the probe step
     // since we don't know the required columns (after column
@@ -294,21 +314,14 @@ class JoinState {
     // Dummy probe table. Useful for the build_table_outer case.
     std::shared_ptr<table_info> dummy_probe_table;
 
-    JoinState(const std::vector<int8_t>& probe_arr_c_types,
-              const std::vector<int8_t>& probe_arr_array_types,
+    JoinState(const std::vector<int8_t>& build_arr_c_types_,
+              const std::vector<int8_t>& build_arr_array_types_,
+              const std::vector<int8_t>& probe_arr_c_types_,
+              const std::vector<int8_t>& probe_arr_array_types_,
               uint64_t n_keys_, bool build_table_outer_,
               bool probe_table_outer_, cond_expr_fn_t cond_func_,
               bool build_parallel_, bool probe_parallel_,
-              int64_t output_batch_size_)
-        : n_keys(n_keys_),
-          cond_func(cond_func_),
-          build_table_outer(build_table_outer_),
-          probe_table_outer(probe_table_outer_),
-          build_parallel(build_parallel_),
-          probe_parallel(probe_parallel_),
-          output_batch_size(output_batch_size_),
-          dummy_probe_table(
-              alloc_table(probe_arr_c_types, probe_arr_array_types)) {}
+              int64_t output_batch_size_);
 
     virtual ~JoinState() {}
 
@@ -319,9 +332,36 @@ class JoinState {
         this->probe_input_finalized = true;
     }
 
-    virtual void InitOutputBuffer(
-        const std::vector<uint64_t>& build_kept_cols,
-        const std::vector<uint64_t>& probe_kept_cols) {}
+    void InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
+                          const std::vector<uint64_t>& probe_kept_cols);
+
+    /**
+     * @brief Unify dictionaries of input table with build table
+     * (build_table_buffer of all partitions and build_shuffle_buffer which all
+     * share the same dictionaries) by appending its new dictionary values to
+     * buffer's dictionaries and transposing input's indices.
+     *
+     * @param in_table input table
+     * @param only_keys only unify key columns
+     * @return std::shared_ptr<table_info> input table with dictionaries unified
+     * with build table dictionaries.
+     */
+    std::shared_ptr<table_info> UnifyBuildTableDictionaryArrays(
+        const std::shared_ptr<table_info>& in_table, bool only_keys = false);
+
+    /**
+     * @brief Unify dictionaries of input table with probe table
+     * (probe_table_buffer of all partitions and probe_shuffle_buffer which all
+     * share the same dictionaries) by appending its new dictionary values to
+     * buffer's dictionaries and transposing input's indices.
+     *
+     * @param in_table input table
+     * @param only_keys only unify key columns
+     * @return std::shared_ptr<table_info> input table with dictionaries unified
+     * with probe table dictionaries.
+     */
+    std::shared_ptr<table_info> UnifyProbeTableDictionaryArrays(
+        const std::shared_ptr<table_info>& in_table, bool only_keys = false);
 };
 
 class HashJoinState : public JoinState {
@@ -330,36 +370,6 @@ class HashJoinState : public JoinState {
     std::vector<std::shared_ptr<JoinPartition>> partitions;
 
     const size_t max_partition_depth = 5;
-
-    // Dictionary builders for the key columns. This is
-    // always of length n_keys and is nullptr for non DICT keys.
-    // These will be shared between the build_table_buffers and
-    // probe_table_buffers of all partitions and the build_shuffle_buffer
-    // and probe_shuffle_buffer.
-    std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
-
-    // Dictionary builders for the non key DICT columns in the
-    // build table. This is always of length
-    // (#build_table_columns - n_keys) and has nullptr for non DICT
-    // keys.
-    std::vector<std::shared_ptr<DictionaryBuilder>>
-        build_table_non_key_dict_builders;
-    // Dictionary builders for the non key DICT columns in the
-    // probe table. This is always of length
-    // (#probe_table_columns - n_keys) and has nullptr for non DICT
-    // keys.
-    std::vector<std::shared_ptr<DictionaryBuilder>>
-        probe_table_non_key_dict_builders;
-
-    // Simple concatenation of key_dict_builders and
-    // build_table_non_key_dict_builders. We maintain it
-    // for convenience.
-    std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
-
-    // Simple concatenation of key_dict_builders and
-    // probe_table_non_key_dict_builders. We maintain it
-    // for convenience.
-    std::vector<std::shared_ptr<DictionaryBuilder>> probe_table_dict_builders;
 
     // Shuffle state
     TableBuildBuffer build_shuffle_buffer;
@@ -473,21 +483,6 @@ class HashJoinState : public JoinState {
     void FinalizeBuild() override;
 
     /**
-     * @brief Initialize the output buffer.
-     * This needs to be right before the first
-     * probe step since we won't know the required
-     * columns until then.
-     *
-     * @param build_kept_cols Indices of columns in the
-     * build table to keep.
-     * @param probe_kept_cols Indices of columns in the
-     * probe table to keep.
-     */
-    void InitOutputBuffer(
-        const std::vector<uint64_t>& build_kept_cols,
-        const std::vector<uint64_t>& probe_kept_cols) override;
-
-    /**
      * @brief Reserve enough space to accommodate in_table
      * in probe buffers of each of the inactive partitions.
      *
@@ -529,34 +524,6 @@ class HashJoinState : public JoinState {
         const std::vector<uint64_t>& probe_kept_cols);
 
     /**
-     * @brief Unify dictionaries of input table with build table
-     * (build_table_buffer of all partitions and build_shuffle_buffer which all
-     * share the same dictionaries) by appending its new dictionary values to
-     * buffer's dictionaries and transposing input's indices.
-     *
-     * @param in_table input table
-     * @param only_keys only unify key columns
-     * @return std::shared_ptr<table_info> input table with dictionaries unified
-     * with build table dictionaries.
-     */
-    std::shared_ptr<table_info> UnifyBuildTableDictionaryArrays(
-        const std::shared_ptr<table_info>& in_table, bool only_keys = false);
-
-    /**
-     * @brief Unify dictionaries of input table with probe table
-     * (probe_table_buffer of all partitions and probe_shuffle_buffer which all
-     * share the same dictionaries) by appending its new dictionary values to
-     * buffer's dictionaries and transposing input's indices.
-     *
-     * @param in_table input table
-     * @param only_keys only unify key columns
-     * @return std::shared_ptr<table_info> input table with dictionaries unified
-     * with probe table dictionaries.
-     */
-    std::shared_ptr<table_info> UnifyProbeTableDictionaryArrays(
-        const std::shared_ptr<table_info>& in_table, bool only_keys = false);
-
-    /**
      * @brief Get dictionary hashes of dict-encoded string key columns (nullptr
      * for other key columns).
      * NOTE: output vector does not have values for data columns (length is
@@ -585,37 +552,19 @@ class NestedLoopJoinState : public JoinState {
                         bool build_table_outer_, bool probe_table_outer_,
                         cond_expr_fn_t cond_func_, bool build_parallel_,
                         bool probe_parallel_, int64_t output_batch_size_)
-        : JoinState(probe_arr_c_types, probe_arr_array_types, 0,
-                    build_table_outer_, probe_table_outer_, cond_func_,
-                    build_parallel_, probe_parallel_,
+        : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
+                    probe_arr_array_types, 0, build_table_outer_,
+                    probe_table_outer_, cond_func_, build_parallel_,
+                    probe_parallel_,
                     output_batch_size_),  // NestedLoopJoin is only used when
                                           // n_keys is 0
-          // For now, we pass nullptrs for dictionary builders, but this should
-          // be modified once we support DICT columns in nested loop join
-          // (https://bodo.atlassian.net/browse/BSE-478)
           build_table_buffer(build_arr_c_types, build_arr_array_types,
-                             std::vector<std::shared_ptr<DictionaryBuilder>>(
-                                 build_arr_c_types.size(), nullptr)),
+                             build_table_dict_builders),
           join_event("NestedLoopJoin") {
         // TODO: Integrate dict_builders for nested loop join.
     }
 
     tracing::ResumableEvent join_event;
-
-    /**
-     * @brief Initialize the output buffer.
-     * This needs to be right before the first
-     * probe step since we won't know the required
-     * columns until then.
-     *
-     * @param build_kept_cols Indices of columns in the
-     * build table to keep.
-     * @param probe_kept_cols Indices of columns in the
-     * probe table to keep.
-     */
-    void InitOutputBuffer(
-        const std::vector<uint64_t>& build_kept_cols,
-        const std::vector<uint64_t>& probe_kept_cols) override;
 
     /**
      * @brief Finalize build step for nested loop join.
