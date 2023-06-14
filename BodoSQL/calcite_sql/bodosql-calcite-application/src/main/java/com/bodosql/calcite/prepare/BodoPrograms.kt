@@ -153,8 +153,6 @@ object BodoPrograms {
             PandasRelMetadataProvider(),
         ),
         DecorrelateProgram(),
-
-
     )
 
     /**

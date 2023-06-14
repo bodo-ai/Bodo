@@ -34,7 +34,7 @@
 		<org.apache.calcite-version>1.30.0</org.apache.calcite-version>
 		<org.apache.calcite.avatica-version>1.18.0</org.apache.calcite.avatica-version>
 		<com.google.protobuf-version>3.17.0</com.google.protobuf-version>
-		<snowflake-jdbc-version>3.13.21</snowflake-jdbc-version>
+		<snowflake-jdbc-version>3.13.32</snowflake-jdbc-version>
 		<mockk.version>1.13.4</mockk.version>
 	</properties>
 
