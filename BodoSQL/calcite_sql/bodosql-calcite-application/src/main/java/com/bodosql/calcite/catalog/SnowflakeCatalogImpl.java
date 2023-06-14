@@ -2,6 +2,7 @@ package com.bodosql.calcite.catalog;
 
 import static java.lang.Math.min;
 
+import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
@@ -560,7 +561,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @param tableName Name of the table to use when reading.
    * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
-   * @param streamingBatchSize The batch size to use if streaming is enabled.
+   * @param streamingOptions The options to use if streaming is enabled.
    * @return The generated code to produce a read.
    */
   @Override
@@ -568,11 +569,11 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       String schemaName,
       String tableName,
       boolean useStreaming,
-      Expr.IntegerLiteral streamingBatchSize) {
+      StreamingOptions streamingOptions) {
     // TODO: Convert to use Expr.Call
     String streamingArg = "";
     if (useStreaming) {
-      streamingArg = "_bodo_chunksize=" + streamingBatchSize.emit();
+      streamingArg = "_bodo_chunksize=" + streamingOptions.getChunkSize();
     }
     return new Expr.Raw(
         String.format(

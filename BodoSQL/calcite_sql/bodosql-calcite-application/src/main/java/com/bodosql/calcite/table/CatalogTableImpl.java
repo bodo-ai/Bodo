@@ -1,5 +1,6 @@
 package com.bodosql.calcite.table;
 
+import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
@@ -141,9 +142,9 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    * @return The generated code to read the table.
    */
   @Override
-  public Expr generateReadCode(boolean useStreaming, Expr.IntegerLiteral streamingBatchSize) {
+  public Expr generateReadCode(boolean useStreaming, StreamingOptions streamingOptions) {
     return this.getCatalogSchema()
-        .generateReadCode(this.getName(), useStreaming, streamingBatchSize);
+        .generateReadCode(this.getName(), useStreaming, streamingOptions);
   }
 
   /**

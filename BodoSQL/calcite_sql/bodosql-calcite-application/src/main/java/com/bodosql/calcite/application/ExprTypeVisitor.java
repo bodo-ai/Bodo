@@ -536,4 +536,33 @@ public class ExprTypeVisitor {
           "Internal Error: Calcite Plan Produced an Unsupported RexCall: " + node.getOperator());
     }
   }
+
+  /**
+   * Determines if a node is a scalar.
+   *
+   * @param node input node to determine if it is a scalar or not.
+   * @param builder a RexBuilder. Unused for the result, but because this function
+   *                is a hack it's needed to prevent a null pointer exception in some
+   *                circumstances.
+   */
+  public static boolean isScalar(RexNode node, RexBuilder builder) {
+    // TODO(jsternberg): Refactor this so it just returns the type based on the RexNode
+    // rather than going through the ExprTypeVisitor.
+    //
+    // I don't really think the ExprTypeVisitor needs to exist. We can either
+    // keep track of columns/scalars at the point where they're used (such as in the
+    // RexToPandasTranslator) or, if that's a bit difficult, we can turn the logic
+    // in the ExprTypeVisitor to just return the information based on local information.
+    //
+    // We don't really need anything that goes and determines all expression types
+    // before anything begins. It's far too complicated and makes it more difficult
+    // to understand the sections of code where it matters.
+    HashMap<String, BodoSQLExprType.ExprType> exprTypes = new HashMap<>();
+    ExprTypeVisitor.determineRexNodeExprType(node, exprTypes, 0, new HashMap<>(), builder);
+
+    // Access the expression type using the generated rex node key.
+    // If we don't find it, just assume it's not a scalar. It's unlikely to matter anyway.
+    String key = ExprTypeVisitor.generateRexNodeKey(node, 0);
+    return exprTypes.get(key) == BodoSQLExprType.ExprType.SCALAR;
+  }
 }

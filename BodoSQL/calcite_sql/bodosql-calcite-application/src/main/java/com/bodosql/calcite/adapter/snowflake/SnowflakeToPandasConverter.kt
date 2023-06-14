@@ -1,8 +1,10 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.ir.*
+import com.bodosql.calcite.ir.Dataframe
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.*
@@ -16,7 +18,6 @@ import org.apache.calcite.rel.type.RelRecordType
 
 class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
     ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits, input), PandasRel {
-
 
     override fun copy(traitSet: RelTraitSet, inputs: List<RelNode>): RelNode {
         return SnowflakeToPandasConverter(cluster, traitSet, sole(inputs))
@@ -63,27 +64,24 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         })
     }
 
-    override fun emit(
-        visitor: PandasCodeGenVisitor,
-        builder: Module.Builder,
-        inputs: () -> List<Dataframe>
-    ): Dataframe {
-        if (isStreaming()) {
-            return generateStreamingDataFrame(visitor)
-        } else {
-            return generateNonStreamingDataFrame(visitor, builder)
+    override fun emit(implementor: PandasRel.Implementor): Dataframe =
+        implementor.build(withTimers = false) { ctx ->
+            if (isStreaming()) {
+                generateStreamingDataFrame(ctx)
+            } else {
+                generateNonStreamingDataFrame(ctx)
+            }
         }
-    }
 
     /**
      * Generate the required read expression for processing the P
      */
-    private fun generateReadExpr(visitor: PandasCodeGenVisitor): Expr.Call {
+    private fun generateReadExpr(ctx: PandasRel.BuildContext): Expr.Call {
         if (input is SnowflakeTableScan) {
             // The input is a table.
-            return sqlReadTable(input as SnowflakeTableScan, visitor)
+            return sqlReadTable(input as SnowflakeTableScan, ctx)
         } else {
-            return readSql(visitor)
+            return readSql(ctx)
         }
     }
 
@@ -91,7 +89,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      * Generate the code required to read a table. This path is necessary because the Snowflake
      * API allows for more accurate sampling when operating directly on a table.
      */
-    private fun sqlReadTable(tableScan: SnowflakeTableScan, visitor: PandasCodeGenVisitor): Expr.Call {
+    private fun sqlReadTable(tableScan: SnowflakeTableScan, ctx: PandasRel.BuildContext): Expr.Call {
         val relInput = input as SnowflakeRel
         val catalogTable = tableScan.catalogTable
         val tableName = catalogTable.name
@@ -100,14 +98,14 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
             Expr.StringLiteral(tableName),
             Expr.StringLiteral(relInput.generatePythonConnStr(schemaName))
         )
-        return Expr.Call("pd.read_sql", args, getNamedArgs(visitor, true))
+        return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, true))
     }
 
     /**
      * Generate a read expression for SQL operations that will be pushed into Snowflake. The currently
      * supported operations consist of Aggregates and filters.
      */
-    private fun readSql(visitor: PandasCodeGenVisitor): Expr.Call {
+    private fun readSql(ctx: PandasRel.BuildContext): Expr.Call {
         val relInput = input as SnowflakeRel
         // Use the snowflake dialect for generating the sql string.
         val rel2sql = RelToSqlConverter(SnowflakeSqlDialect.DEFAULT)
@@ -118,6 +116,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
                     .withDialect(SnowflakeSqlDialect.DEFAULT)
             }
             .toString()
+
         val args = listOf(
             Expr.StringLiteral(sql),
             // We don't use a schema name because we've already fully qualified
@@ -125,13 +124,13 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
             // potentially unexpected behavior.
             Expr.StringLiteral(relInput.generatePythonConnStr(""))
         )
-        return Expr.Call("pd.read_sql", args, getNamedArgs(visitor, false))
+        return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, false))
     }
 
-    private fun getNamedArgs(visitor: PandasCodeGenVisitor, isTable: Boolean): List<Pair<String, Expr>> {
+    private fun getNamedArgs(ctx: PandasRel.BuildContext, isTable: Boolean): List<Pair<String, Expr>> {
         return listOf(
             "_bodo_is_table_input" to Expr.BooleanLiteral(isTable),
-            "_bodo_chunksize" to getStreamingBatchArg(visitor),
+            "_bodo_chunksize" to getStreamingBatchArg(ctx),
         )
     }
 
@@ -139,34 +138,30 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      * Generate the argument that will be passed for '_bodo_chunksize' in a read_sql call. If
      * we are not streaming Python expects None.
      */
-    private fun getStreamingBatchArg(visitor: PandasCodeGenVisitor) : Expr {
+    private fun getStreamingBatchArg(ctx: PandasRel.BuildContext): Expr =
         if (isStreaming()) {
-            return visitor.BATCH_SIZE
+            Expr.IntegerLiteral(ctx.streamingOptions().chunkSize)
         } else {
-            return Expr.None
+            Expr.None
         }
-    }
 
     /**
      * Generate the DataFrame for streaming code. The code leverages the code generation process
      * from initStreamingIoLoop and does not yet support RelNode caching.
      */
-    private fun generateStreamingDataFrame(visitor: PandasCodeGenVisitor): Dataframe {
-        val readExpr = generateReadExpr(visitor)
-        val columnNames = this.getRowType().fieldNames
+    private fun generateStreamingDataFrame(ctx: PandasRel.BuildContext): Dataframe {
+        val readExpr = generateReadExpr(ctx)
         val initOutput: Variable =
-            visitor.initStreamingIoLoop(readExpr, columnNames)
+            ctx.initStreamingIoLoop(readExpr, rowType)
         return Dataframe(initOutput.name, this)
     }
 
     /**
      * Generate the DataFrame for the non-streaming code.
      */
-    private fun generateNonStreamingDataFrame(visitor: PandasCodeGenVisitor, builder: Module.Builder): Dataframe {
-        val readExpr = generateReadExpr(visitor)
-        val df = builder.genDataframe(this)
-        builder.add(Op.Assign(df.variable, readExpr))
-        return df
+    private fun generateNonStreamingDataFrame(ctx: PandasRel.BuildContext): Dataframe {
+        val readExpr = generateReadExpr(ctx)
+        return ctx.returns(readExpr)
     }
 
     /**

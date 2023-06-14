@@ -179,7 +179,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   public Expr visitInputRef(RexInputRef inputRef) {
     return new Expr.Call(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data",
-        List.of(input.getVariable(), new Expr.IntegerLiteral(inputRef.getIndex())));
+        List.of(input, new Expr.IntegerLiteral(inputRef.getIndex())));
   }
 
   @Override
@@ -613,12 +613,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   private Variable getCaseInputVar(BodoCtx translatorContext) {
     if (translatorContext.getColsToAddList().size() > 0) {
       // Generate the new variable in the code
-      List<String> colNames = input.getRel().getRowType().getFieldNames();
-      Variable prevInputVar = input.getVariable();
+      List<String> colNames = input.getRowType().getFieldNames();
       return generateCombinedDf(
-          prevInputVar, colNames, translatorContext.getColsToAddList(), visitor, builder);
+          input, colNames, translatorContext.getColsToAddList(), visitor, builder);
     } else {
-      return input.getVariable();
+      return input;
     }
   }
 
@@ -692,7 +691,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     // Generate the triple quoted string
     // Note: We use indent level 2 because this is found inside a for loop
     Expr loopBody = new FrameTripleQuotedString(loopBodyFrame, 2);
-    Variable prevInputVar = input.getVariable();
+    Variable prevInputVar = input;
     if (!prevInputVar.equals(inputVar)) {
       // Update the loop body to replace any uses of the prevInputVar with the new inputVar.
       // TODO: Remove
@@ -902,7 +901,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       case POSITION:
         return generatePosition(operands);
       case RANDOM:
-        return generateRandomFnInfo(input.getVariable().getName(), isSingleRow);
+        return generateRandomFnInfo(input.getName(), isSingleRow);
       case OTHER:
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
@@ -1514,7 +1513,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     // Windowed aggregation is special, since it needs to add generated
     // code in order to define functions to be used with groupby apply.
     List<RexOver> tmp = Collections.singletonList(over);
-    List<String> colNames = input.getRel().getRowType().getFieldNames();
+    List<String> colNames = input.getRowType().getFieldNames();
     List<Expr> results = visitor.visitAggOverOp(tmp, colNames, nodeId, input, isSingleRow, ctx);
     return results.get(0);
   }
@@ -1582,7 +1581,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       ctx.getUsedColumns().add(inputRef.getIndex());
       // NOTE: Codegen for bodosql_case_placeholder() expects column value accesses
       // (e.g. bodo.utils.indexing.scalar_optional_getitem(T1_1, i))
-      Variable inputVar = new Variable(input.getVariable().getName() + "_" + inputRef.getIndex());
+      Variable inputVar = new Variable(input.getName() + "_" + inputRef.getIndex());
       Variable index = new Variable("i");
       return new Expr.Call("bodo.utils.indexing.scalar_optional_getitem", List.of(inputVar, index));
     }

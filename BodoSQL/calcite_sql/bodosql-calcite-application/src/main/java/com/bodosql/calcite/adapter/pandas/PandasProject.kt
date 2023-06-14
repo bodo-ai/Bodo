@@ -1,8 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
@@ -36,11 +34,7 @@ class PandasProject(
         return PandasProject(cluster, traitSet, input, projects, rowType)
     }
 
-    override fun emit(
-        visitor: PandasCodeGenVisitor,
-        builder: Module.Builder,
-        inputs: () -> List<Dataframe>
-    ): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): Dataframe {
         TODO("Not yet implemented")
     }
 
