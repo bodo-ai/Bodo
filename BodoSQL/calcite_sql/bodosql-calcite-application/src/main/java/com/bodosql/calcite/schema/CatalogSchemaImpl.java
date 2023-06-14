@@ -1,5 +1,6 @@
 package com.bodosql.calcite.schema;
 
+import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
@@ -150,9 +151,9 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    * @return The generated code to compute the read in Python.
    */
   public Expr generateReadCode(
-      String tableName, boolean useStreaming, Expr.IntegerLiteral streamingBatchSize) {
+      String tableName, boolean useStreaming, StreamingOptions streamingOptions) {
     return this.catalog.generateReadCode(
-        this.getName(), tableName, useStreaming, streamingBatchSize);
+        this.getName(), tableName, useStreaming, streamingOptions);
   }
 
   /** @return The catalog for the schema. */

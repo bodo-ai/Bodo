@@ -1,8 +1,8 @@
 package com.bodosql.calcite.ir
 
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.type.RelDataType
 
-class Dataframe(name: String, val rel: RelNode) : Expr() {
-    val variable = Variable(name)
-    override fun emit(): String = variable.emit()
+class Dataframe(name: String, val rowType: RelDataType) : Variable(name) {
+    constructor(name: String, rel: RelNode) : this(name, rel.rowType)
 }
