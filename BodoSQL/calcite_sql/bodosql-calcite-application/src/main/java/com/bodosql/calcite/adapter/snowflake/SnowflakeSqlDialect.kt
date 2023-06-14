@@ -18,10 +18,12 @@ class SnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     }
 
     companion object {
+        @JvmField
         val DEFAULT_CONTEXT: Context = org.apache.calcite.sql.dialect.SnowflakeSqlDialect.DEFAULT_CONTEXT
             .withLiteralQuoteString("$$")
             .withLiteralEscapedQuoteString("\\$\\$")
 
+        @JvmField
         val DEFAULT = SnowflakeSqlDialect(DEFAULT_CONTEXT)
     }
 }
