@@ -3,6 +3,7 @@ package com.bodosql.calcite.catalog;
 import static java.lang.Math.min;
 
 import com.bodosql.calcite.adapter.pandas.StreamingOptions;
+import com.bodosql.calcite.adapter.snowflake.SnowflakeSqlDialect;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
@@ -16,6 +17,7 @@ import java.net.URLEncoder;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -30,10 +32,18 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import kotlin.Pair;
+
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoTZInfo;
+import org.apache.calcite.sql.util.SqlString;
+
 import org.json.simple.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -689,6 +699,61 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   @Override
   public String getCatalogName() {
     return catalogName;
+  }
+
+  /**
+   * Estimate the row count for a given fully qualified table.
+   *
+   * @param tableName qualified table name.
+   * @return estimated row count.
+   */
+  public @Nullable Double estimateRowCount(List<String> tableName) {
+    // While this function is named estimateRowCount, it presently returns
+    // the exact row count because that information is readily available to us.
+    // This method is still named estimateRowCount in case there ends up being
+    // a more efficient query that only gives us an estimation so we don't have
+    // to rename this function.
+    //
+    // So while this function returns an exact row count, the result should just
+    // be used as an estimation rather than an exact number of rows.
+    SqlSelect select = rowCountQuery(tableName);
+    SqlString sql = select.toSqlString((c) -> c.withClauseStartsLine(false)
+        .withDialect(SnowflakeSqlDialect.DEFAULT));
+
+    // TODO(jsternberg): This class mostly doesn't handle connections correctly.
+    // This should be inside of a try/resource block, but it will likely cause
+    // this to fail because we're not utilizing connection pooling or reuse and
+    // closing this is likely to result in more confusion.
+    try {
+      Connection conn = getConnection();
+      try (PreparedStatement stmt = conn.prepareStatement(sql.getSql())) {
+        try (ResultSet rs = stmt.executeQuery()) {
+          // Only one row matters.
+          if (rs.next()) {
+            int rows = rs.getInt(1);
+            return (double) rows;
+          }
+        }
+      }
+    } catch (SQLException ex) {
+      // Error executing the query.
+      // There's really nothing we can do other than just accept
+      // this failure and maybe log this when we have a logging mechanism
+      // in the future.
+    }
+    return null;
+  }
+
+  private SqlSelect rowCountQuery(List<String> tableName) {
+    SqlNodeList selectList = SqlNodeList.of(
+        SqlStdOperatorTable.COUNT.createCall(
+            SqlParserPos.ZERO,
+            SqlIdentifier.STAR));
+    SqlNodeList from = SqlNodeList.of(
+        new SqlIdentifier(tableName, SqlParserPos.ZERO));
+    return new SqlSelect(SqlParserPos.ZERO, SqlNodeList.EMPTY,
+        selectList, from, null, null, null,
+        null, null, null, null, null, null);
   }
 
   /**
