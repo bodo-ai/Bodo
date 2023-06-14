@@ -2426,8 +2426,13 @@ pytest_snowflake_is_rerunning = False
 # Determine wether we want to re-run a test due to a flaky failure,
 # and set the pytest_snowflake_is_rerunning flag.
 def _pytest_snowflake_rerun_filter(err, *args):
-    should_rerun = "HTTP 503: Service Unavailable" in str(err)
+    str_err = str(err)
+    should_rerun = (
+        "HTTP 503: Service Unavailable" in str_err
+        or "HTTP 504: Gateway Timeout" in str_err
+    )
     if should_rerun:
+        global pytest_snowflake_is_rerunning
         pytest_snowflake_is_rerunning = True
     return should_rerun
 
