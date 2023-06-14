@@ -222,6 +222,7 @@ void JoinPartition::AppendBuildRow(const std::shared_ptr<table_info>& in_table,
     }
 }
 
+// TODO BSE-580: Add whole table at once
 void JoinPartition::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes,
@@ -438,24 +439,28 @@ void JoinPartition::FinalizeProbeForInactivePartition(
 
 /* ------------------------------------------------------------------------ */
 
-/* ---------------------------- HashJoinState ----------------------------- */
+/* --------------------------- JoinState ---------------------------------- */
 
-HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
-                             const std::vector<int8_t>& build_arr_array_types,
-                             const std::vector<int8_t>& probe_arr_c_types,
-                             const std::vector<int8_t>& probe_arr_array_types,
-                             uint64_t n_keys_, bool build_table_outer_,
-                             bool probe_table_outer_, cond_expr_fn_t cond_func_,
-                             bool build_parallel_, bool probe_parallel_,
-                             int64_t output_batch_size_,
-                             size_t max_partition_depth_)
-    : JoinState(probe_arr_c_types, probe_arr_array_types, n_keys_,
-                build_table_outer_, probe_table_outer_, cond_func_,
-                build_parallel_, probe_parallel_, output_batch_size_),
-      max_partition_depth(max_partition_depth_),
-      build_iter(0),
-      probe_iter(0),
-      join_event("HashJoin") {
+JoinState::JoinState(const std::vector<int8_t>& build_arr_c_types_,
+                     const std::vector<int8_t>& build_arr_array_types_,
+                     const std::vector<int8_t>& probe_arr_c_types_,
+                     const std::vector<int8_t>& probe_arr_array_types_,
+                     uint64_t n_keys_, bool build_table_outer_,
+                     bool probe_table_outer_, cond_expr_fn_t cond_func_,
+                     bool build_parallel_, bool probe_parallel_,
+                     int64_t output_batch_size_)
+    : build_arr_c_types(build_arr_c_types_),
+      build_arr_array_types(build_arr_array_types_),
+      probe_arr_c_types(probe_arr_c_types_),
+      probe_arr_array_types(probe_arr_array_types_),
+      n_keys(n_keys_),
+      cond_func(cond_func_),
+      build_table_outer(build_table_outer_),
+      probe_table_outer(probe_table_outer_),
+      build_parallel(build_parallel_),
+      probe_parallel(probe_parallel_),
+      output_batch_size(output_batch_size_),
+      dummy_probe_table(alloc_table(probe_arr_c_types, probe_arr_array_types)) {
     this->key_dict_builders.resize(this->n_keys);
 
     // Create dictionary builders for key columns:
@@ -479,31 +484,35 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
         }
     }
 
+    std::vector<std::shared_ptr<DictionaryBuilder>>
+        build_table_non_key_dict_builders;
     // Create dictionary builders for non-key columns in build table:
-    for (size_t i = this->n_keys; i < build_arr_array_types.size(); i++) {
-        if (build_arr_array_types[i] == bodo_array_type::DICT) {
+    for (size_t i = this->n_keys; i < this->build_arr_array_types.size(); i++) {
+        if (this->build_arr_array_types[i] == bodo_array_type::DICT) {
             std::shared_ptr<array_info> dict = alloc_array(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING, 0, 0);
-            this->build_table_non_key_dict_builders.emplace_back(
+            build_table_non_key_dict_builders.emplace_back(
                 std::make_shared<DictionaryBuilder>(dict, false));
         } else {
-            this->build_table_non_key_dict_builders.emplace_back(nullptr);
+            build_table_non_key_dict_builders.emplace_back(nullptr);
         }
     }
 
+    std::vector<std::shared_ptr<DictionaryBuilder>>
+        probe_table_non_key_dict_builders;
     // Create dictionary builders for non-key columns in probe table:
-    for (size_t i = this->n_keys; i < probe_arr_array_types.size(); i++) {
-        if (probe_arr_array_types[i] == bodo_array_type::DICT) {
+    for (size_t i = this->n_keys; i < this->probe_arr_array_types.size(); i++) {
+        if (this->probe_arr_array_types[i] == bodo_array_type::DICT) {
             std::shared_ptr<array_info> dict = alloc_array(
                 0, 0, 0, bodo_array_type::STRING, Bodo_CTypes::STRING, 0, 0);
-            this->probe_table_non_key_dict_builders.emplace_back(
+            probe_table_non_key_dict_builders.emplace_back(
                 std::make_shared<DictionaryBuilder>(dict, false));
             // Also set this as the dictionary of the dummy probe table
             // for consistency, else there will be issues during output
             // generation.
             this->dummy_probe_table->columns[i]->child_arrays[0] = dict;
         } else {
-            this->probe_table_non_key_dict_builders.emplace_back(nullptr);
+            probe_table_non_key_dict_builders.emplace_back(nullptr);
         }
     }
 
@@ -512,17 +521,138 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
         this->key_dict_builders.end());
     this->build_table_dict_builders.insert(
         this->build_table_dict_builders.end(),
-        this->build_table_non_key_dict_builders.begin(),
-        this->build_table_non_key_dict_builders.end());
+        build_table_non_key_dict_builders.begin(),
+        build_table_non_key_dict_builders.end());
 
     this->probe_table_dict_builders.insert(
         this->probe_table_dict_builders.end(), this->key_dict_builders.begin(),
         this->key_dict_builders.end());
     this->probe_table_dict_builders.insert(
         this->probe_table_dict_builders.end(),
-        this->probe_table_non_key_dict_builders.begin(),
-        this->probe_table_non_key_dict_builders.end());
+        probe_table_non_key_dict_builders.begin(),
+        probe_table_non_key_dict_builders.end());
+}
 
+void JoinState::InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
+                                 const std::vector<uint64_t>& probe_kept_cols) {
+    if (this->output_buffer != nullptr) {
+        // Already initialized. We only initialize on the first
+        // iteration.
+        return;
+    }
+    std::vector<int8_t> arr_c_types, arr_array_types;
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    arr_c_types.reserve(build_kept_cols.size() + probe_kept_cols.size());
+    arr_array_types.reserve(build_kept_cols.size() + probe_kept_cols.size());
+    dict_builders.reserve(build_kept_cols.size() + probe_kept_cols.size());
+    for (uint64_t i_col : build_kept_cols) {
+        bodo_array_type::arr_type_enum arr_type =
+            (bodo_array_type::arr_type_enum)this->build_arr_array_types[i_col];
+        Bodo_CTypes::CTypeEnum dtype =
+            (Bodo_CTypes::CTypeEnum)this->build_arr_c_types[i_col];
+        // In the probe outer case, we need to make NUMPY arrays
+        // into NULLABLE arrays. Matches the `use_nullable_arrs`
+        // behavior of RetrieveTable.
+        // TODO: Move to a helper function.
+        if (this->probe_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
+                                        (is_integer(dtype) || is_float(dtype) ||
+                                         dtype == Bodo_CTypes::_BOOL))) {
+            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+        }
+        arr_c_types.push_back(dtype);
+        arr_array_types.push_back(arr_type);
+        dict_builders.push_back(this->build_table_dict_builders[i_col]);
+    }
+    for (uint64_t i_col : probe_kept_cols) {
+        bodo_array_type::arr_type_enum arr_type =
+            (bodo_array_type::arr_type_enum)this->probe_arr_array_types[i_col];
+        Bodo_CTypes::CTypeEnum dtype =
+            (Bodo_CTypes::CTypeEnum)this->probe_arr_c_types[i_col];
+        // In the build outer case, we need to make NUMPY arrays
+        // into NULLABLE arrays. Matches the `use_nullable_arrs`
+        // behavior of RetrieveTable.
+        if (this->build_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
+                                        (is_integer(dtype) || is_float(dtype) ||
+                                         dtype == Bodo_CTypes::_BOOL))) {
+            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+        }
+        arr_c_types.push_back(dtype);
+        arr_array_types.push_back(arr_type);
+        dict_builders.push_back(this->probe_table_dict_builders[i_col]);
+    }
+    this->output_buffer = std::make_shared<ChunkedTableBuilder>(
+        arr_c_types, arr_array_types, dict_builders,
+        /*chunk_size*/ this->output_batch_size,
+        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+}
+
+/**
+ * @brief Helper for UnifyBuildTableDictionaryArrays and
+ * UnifyProbeTableDictionaryArrays. Unifies dictionaries of input table with
+ * dictionaries in dict_builders by appending its new dictionary values to
+ * buffer's dictionaries and transposing input's indices.
+ *
+ * @param in_table input table
+ * @param dict_builders Dictionary builders to unify with. The dict builders
+ * will be appended with the new values from dictionaries in input_table.
+ * @param n_keys number of key columns
+ * @param only_keys only unify key columns
+ * @return std::shared_ptr<table_info> input table with dictionaries unified
+ * with build table dictionaries.
+ */
+std::shared_ptr<table_info> unify_dictionary_arrays_helper(
+    const std::shared_ptr<table_info>& in_table,
+    std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    uint64_t n_keys, bool only_keys) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(in_table->ncols());
+    for (size_t i = 0; i < in_table->ncols(); i++) {
+        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        std::shared_ptr<array_info> out_arr;
+        if (in_arr->arr_type != bodo_array_type::DICT ||
+            (only_keys && (i >= n_keys))) {
+            out_arr = in_arr;
+        } else {
+            out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr);
+        }
+        out_arrs.emplace_back(out_arr);
+    }
+    return std::make_shared<table_info>(out_arrs);
+}
+
+std::shared_ptr<table_info> JoinState::UnifyBuildTableDictionaryArrays(
+    const std::shared_ptr<table_info>& in_table, bool only_keys) {
+    return unify_dictionary_arrays_helper(
+        in_table, this->build_table_dict_builders, this->n_keys, only_keys);
+}
+
+std::shared_ptr<table_info> JoinState::UnifyProbeTableDictionaryArrays(
+    const std::shared_ptr<table_info>& in_table, bool only_keys) {
+    return unify_dictionary_arrays_helper(
+        in_table, this->probe_table_dict_builders, this->n_keys, only_keys);
+}
+
+/* ------------------------------------------------------------------------ */
+
+/* ---------------------------- HashJoinState ----------------------------- */
+
+HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
+                             const std::vector<int8_t>& build_arr_array_types,
+                             const std::vector<int8_t>& probe_arr_c_types,
+                             const std::vector<int8_t>& probe_arr_array_types,
+                             uint64_t n_keys_, bool build_table_outer_,
+                             bool probe_table_outer_, cond_expr_fn_t cond_func_,
+                             bool build_parallel_, bool probe_parallel_,
+                             int64_t output_batch_size_,
+                             size_t max_partition_depth_)
+    : JoinState(build_arr_c_types, build_arr_array_types, probe_arr_c_types,
+                probe_arr_array_types, n_keys_, build_table_outer_,
+                probe_table_outer_, cond_func_, build_parallel_,
+                probe_parallel_, output_batch_size_),
+      max_partition_depth(max_partition_depth_),
+      build_iter(0),
+      probe_iter(0),
+      join_event("HashJoin") {
     this->build_shuffle_buffer =
         TableBuildBuffer(build_arr_c_types, build_arr_array_types,
                          this->build_table_dict_builders);
@@ -568,13 +698,6 @@ void HashJoinState::SplitPartition(size_t idx) {
 }
 
 void HashJoinState::ResetPartitions() {
-    auto [build_arr_c_types, build_arr_array_types] =
-        get_dtypes_arr_types_from_table(
-            this->partitions[0]->build_table_buffer.data_table);
-    auto [probe_arr_c_types, probe_arr_array_types] =
-        get_dtypes_arr_types_from_table(
-            this->partitions[0]->probe_table_buffer.data_table);
-
     std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders =
         get_dict_builders_from_table_build_buffer(
             this->partitions[0]->build_table_buffer);
@@ -584,10 +707,10 @@ void HashJoinState::ResetPartitions() {
 
     std::shared_ptr<JoinPartition> new_partition =
         std::make_shared<JoinPartition>(
-            0, 0, build_arr_c_types, build_arr_array_types, probe_arr_c_types,
-            probe_arr_array_types, this->n_keys, this->build_table_outer,
-            this->probe_table_outer, build_table_dict_builders,
-            probe_table_dict_builders);
+            0, 0, this->build_arr_c_types, this->build_arr_array_types,
+            this->probe_arr_c_types, this->probe_arr_array_types, this->n_keys,
+            this->build_table_outer, this->probe_table_outer,
+            build_table_dict_builders, probe_table_dict_builders);
     this->partitions.clear();
     this->partitions.emplace_back(new_partition);
 }
@@ -658,66 +781,6 @@ void HashJoinState::FinalizeBuild() {
     JoinState::FinalizeBuild();
 }
 
-void HashJoinState::InitOutputBuffer(
-    const std::vector<uint64_t>& build_kept_cols,
-    const std::vector<uint64_t>& probe_kept_cols) {
-    // TODO: Move to JoinState after dict encoding support for
-    // NestedLoopJoinState.
-    if (this->output_buffer != nullptr) {
-        // Already initialized. We only initialize on the first
-        // iteration.
-        return;
-    }
-    auto [build_arr_c_types, build_arr_array_types] =
-        get_dtypes_arr_types_from_table(this->build_shuffle_buffer.data_table);
-    auto [probe_arr_c_types, probe_arr_array_types] =
-        get_dtypes_arr_types_from_table(this->probe_shuffle_buffer.data_table);
-    std::vector<int8_t> arr_c_types, arr_array_types;
-    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-    arr_c_types.reserve(build_kept_cols.size() + probe_kept_cols.size());
-    arr_array_types.reserve(build_kept_cols.size() + probe_kept_cols.size());
-    dict_builders.reserve(build_kept_cols.size() + probe_kept_cols.size());
-    for (uint64_t i_col : build_kept_cols) {
-        bodo_array_type::arr_type_enum arr_type =
-            (bodo_array_type::arr_type_enum)build_arr_array_types[i_col];
-        Bodo_CTypes::CTypeEnum dtype =
-            (Bodo_CTypes::CTypeEnum)build_arr_c_types[i_col];
-        // In the probe outer case, we need to make NUMPY arrays
-        // into NULLABLE arrays. Matches the `use_nullable_arrs`
-        // behavior of RetrieveTable.
-        // TODO: Move to a helper function.
-        if (this->probe_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
-                                        (is_integer(dtype) || is_float(dtype) ||
-                                         dtype == Bodo_CTypes::_BOOL))) {
-            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-        }
-        arr_c_types.push_back(dtype);
-        arr_array_types.push_back(arr_type);
-        dict_builders.push_back(this->build_table_dict_builders[i_col]);
-    }
-    for (uint64_t i_col : probe_kept_cols) {
-        bodo_array_type::arr_type_enum arr_type =
-            (bodo_array_type::arr_type_enum)probe_arr_array_types[i_col];
-        Bodo_CTypes::CTypeEnum dtype =
-            (Bodo_CTypes::CTypeEnum)probe_arr_c_types[i_col];
-        // In the build outer case, we need to make NUMPY arrays
-        // into NULLABLE arrays. Matches the `use_nullable_arrs`
-        // behavior of RetrieveTable.
-        if (this->build_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
-                                        (is_integer(dtype) || is_float(dtype) ||
-                                         dtype == Bodo_CTypes::_BOOL))) {
-            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-        }
-        arr_c_types.push_back(dtype);
-        arr_array_types.push_back(arr_type);
-        dict_builders.push_back(this->probe_table_dict_builders[i_col]);
-    }
-    this->output_buffer = std::make_shared<ChunkedTableBuilder>(
-        arr_c_types, arr_array_types, dict_builders,
-        /*chunk_size*/ this->output_batch_size,
-        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
-}
-
 void HashJoinState::ReserveProbeTableForInactivePartitions(
     const std::shared_ptr<table_info>& in_table) {
     for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
@@ -762,52 +825,6 @@ void HashJoinState::FinalizeProbeForInactivePartitions(
                 this->cond_func, build_kept_cols, probe_kept_cols,
                 build_needs_reduction, this->output_buffer);
     }
-}
-
-/**
- * @brief Helper for UnifyBuildTableDictionaryArrays and
- * UnifyProbeTableDictionaryArrays. Unifies dictionaries of input table with
- * dictionaries in dict_builders by appending its new dictionary values to
- * buffer's dictionaries and transposing input's indices.
- *
- * @param in_table input table
- * @param dict_builders Dictionary builders to unify with. The dict builders
- * will be appended with the new values from dictionaries in input_table.
- * @param n_keys number of key columns
- * @param only_keys only unify key columns
- * @return std::shared_ptr<table_info> input table with dictionaries unified
- * with build table dictionaries.
- */
-std::shared_ptr<table_info> unify_dictionary_arrays_helper(
-    const std::shared_ptr<table_info>& in_table,
-    std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    uint64_t n_keys, bool only_keys) {
-    std::vector<std::shared_ptr<array_info>> out_arrs;
-    out_arrs.reserve(in_table->ncols());
-    for (size_t i = 0; i < in_table->ncols(); i++) {
-        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
-        std::shared_ptr<array_info> out_arr;
-        if (in_arr->arr_type != bodo_array_type::DICT ||
-            (only_keys && (i >= n_keys))) {
-            out_arr = in_arr;
-        } else {
-            out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr);
-        }
-        out_arrs.emplace_back(out_arr);
-    }
-    return std::make_shared<table_info>(out_arrs);
-}
-
-std::shared_ptr<table_info> HashJoinState::UnifyBuildTableDictionaryArrays(
-    const std::shared_ptr<table_info>& in_table, bool only_keys) {
-    return unify_dictionary_arrays_helper(
-        in_table, this->build_table_dict_builders, this->n_keys, only_keys);
-}
-
-std::shared_ptr<table_info> HashJoinState::UnifyProbeTableDictionaryArrays(
-    const std::shared_ptr<table_info>& in_table, bool only_keys) {
-    return unify_dictionary_arrays_helper(
-        in_table, this->probe_table_dict_builders, this->n_keys, only_keys);
 }
 
 std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>

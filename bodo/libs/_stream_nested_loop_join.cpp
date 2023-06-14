@@ -1,66 +1,6 @@
 #include "_shuffle.h"
 #include "_stream_join.h"
 
-void NestedLoopJoinState::InitOutputBuffer(
-    const std::vector<uint64_t>& build_kept_cols,
-    const std::vector<uint64_t>& probe_kept_cols) {
-    // TODO: Move to JoinState after dict encoding support for
-    // NestedLoopJoinState.
-    if (this->output_buffer != nullptr) {
-        // Already initialized. We only initialize on the first
-        // iteration.
-        return;
-    }
-    auto [build_arr_c_types, build_arr_array_types] =
-        get_dtypes_arr_types_from_table(this->build_table_buffer.data_table);
-    auto [probe_arr_c_types, probe_arr_array_types] =
-        get_dtypes_arr_types_from_table(this->dummy_probe_table);
-    std::vector<int8_t> arr_c_types, arr_array_types;
-    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-    arr_c_types.reserve(build_kept_cols.size() + probe_kept_cols.size());
-    arr_array_types.reserve(build_kept_cols.size() + probe_kept_cols.size());
-    dict_builders.reserve(build_kept_cols.size() + probe_kept_cols.size());
-    for (uint64_t i_col : build_kept_cols) {
-        bodo_array_type::arr_type_enum arr_type =
-            (bodo_array_type::arr_type_enum)build_arr_array_types[i_col];
-        Bodo_CTypes::CTypeEnum dtype =
-            (Bodo_CTypes::CTypeEnum)build_arr_c_types[i_col];
-        // In the probe outer case, we need to make NUMPY arrays
-        // into NULLABLE arrays. Matches the `use_nullable_arrs`
-        // behavior of RetrieveTable.
-        // TODO: Move to a helper function.
-        if (this->probe_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
-                                        (is_integer(dtype) || is_float(dtype) ||
-                                         dtype == Bodo_CTypes::_BOOL))) {
-            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-        }
-        arr_c_types.push_back(dtype);
-        arr_array_types.push_back(arr_type);
-        // TODO: Integrate dict_builders for nested loop join.
-        dict_builders.push_back(nullptr);
-    }
-    for (uint64_t i_col : probe_kept_cols) {
-        bodo_array_type::arr_type_enum arr_type =
-            (bodo_array_type::arr_type_enum)probe_arr_array_types[i_col];
-        Bodo_CTypes::CTypeEnum dtype =
-            (Bodo_CTypes::CTypeEnum)probe_arr_c_types[i_col];
-        // In the build outer case, we need to make NUMPY arrays
-        // into NULLABLE arrays. Matches the `use_nullable_arrs`
-        // behavior of RetrieveTable.
-        if (this->build_table_outer && ((arr_type == bodo_array_type::NUMPY) &&
-                                        (is_integer(dtype) || is_float(dtype) ||
-                                         dtype == Bodo_CTypes::_BOOL))) {
-            arr_type = bodo_array_type::NULLABLE_INT_BOOL;
-        }
-        arr_c_types.push_back(dtype);
-        arr_array_types.push_back(arr_type);
-        // TODO: Integrate dict_builders for nested loop join.
-        dict_builders.push_back(nullptr);
-    }
-    this->output_buffer = std::make_shared<ChunkedTableBuilder>(
-        arr_c_types, arr_array_types, dict_builders, this->output_batch_size,
-        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
-}
 void NestedLoopJoinState::FinalizeBuild() {
     // If the build table is small enough, broadcast it to all ranks
     // so the probe table can be joined locally.
@@ -72,8 +12,17 @@ void NestedLoopJoinState::FinalizeBuild() {
         if (global_table_size < get_bcast_join_threshold()) {
             this->build_parallel = false;
             bool all_gather = true;
-            this->build_table_buffer.data_table = gather_table(
+            std::shared_ptr<table_info> gathered_table = gather_table(
                 this->build_table_buffer.data_table, -1, all_gather, true);
+
+            gathered_table =
+                this->UnifyBuildTableDictionaryArrays(gathered_table);
+            this->build_table_buffer.Reset();
+            this->build_table_buffer.ReserveTable(gathered_table);
+            // TODO BSE-580: Add whole table at once
+            for (uint64_t i = 0; i < gathered_table->nrows(); i++) {
+                this->build_table_buffer.AppendRow(gathered_table, i);
+            }
         }
     }
 
@@ -83,6 +32,7 @@ void NestedLoopJoinState::FinalizeBuild() {
                 this->build_table_buffer.data_table->nrows()),
             0);
     }
+
     JoinState::FinalizeBuild();
 }
 
@@ -103,10 +53,22 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
         // Nothing left to do for build
         return;
     }
-    std::vector<std::shared_ptr<table_info>> tables(
-        {join_state->build_table_buffer.data_table, in_table});
-    join_state->build_table_buffer.data_table = concat_tables(tables);
-    tables.clear();
+
+    // Unify dictionaries to allow consistent hashing and fast key
+    // comparison using indices NOTE: key columns in build_table_buffer (of
+    // all partitions), probe_table_buffers (of all partitions),
+    // build_shuffle_buffer and probe_shuffle_buffer use the same dictionary
+    // object for consistency. Non-key DICT columns of build_table_buffer
+    // and build_shuffle_buffer also share their dictionaries and will also
+    // be unified.
+    in_table = join_state->UnifyBuildTableDictionaryArrays(in_table);
+
+    join_state->build_table_buffer.ReserveTable(in_table);
+    // TODO BSE-580: Add whole table at once
+    for (uint64_t i = 0; i < in_table->nrows(); i++) {
+        join_state->build_table_buffer.AppendRow(in_table, i);
+    }
+
     if (is_last) {
         // Finalize the join state
         join_state->FinalizeBuild();
@@ -119,10 +81,10 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
  *
  * @param join_state join state pointer
  * @param probe_table probe table batch
- * @param build_kept_cols Which columns to generate in the output on the build
- * side.
- * @param probe_kept_cols Which columns to generate in the output on the probe
- * side.
+ * @param build_kept_cols Which columns to generate in the output on the
+ * build side.
+ * @param probe_kept_cols Which columns to generate in the output on the
+ * probe side.
  * @param is_parallel parallel flag for tracing purposes
  */
 void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
@@ -178,22 +140,40 @@ void nested_loop_join_probe_consume_batch(
         return;
     }
 
-    // We only need to take the parallel path if both tables are parallel and
-    // the build table wasn't broadcast.
+    // We only need to take the parallel path if both tables are parallel
+    // and the build table wasn't broadcast.
     bool parallel = join_state->build_parallel && join_state->probe_parallel;
     if (parallel) {
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
+        // make dictionaries global for broadcast
+        for (size_t i = 0; i < in_table->ncols(); i++) {
+            std::shared_ptr<array_info> arr = in_table->columns[i];
+            if (arr->arr_type == bodo_array_type::DICT) {
+                make_dictionary_global_and_unique(arr, parallel);
+            }
+        }
+
         for (int p = 0; p < n_pes; p++) {
             std::shared_ptr<table_info> bcast_probe_chunk = broadcast_table(
                 in_table, in_table, in_table->ncols(), parallel, p);
+            bcast_probe_chunk =
+                join_state->UnifyProbeTableDictionaryArrays(bcast_probe_chunk);
             nested_loop_join_local_chunk(join_state, bcast_probe_chunk,
                                          build_kept_cols, probe_kept_cols,
                                          parallel);
         }
     } else {
+        // Unify dictionaries to allow consistent hashing and fast key
+        // comparison using indices NOTE: key columns in build_table_buffer (of
+        // all partitions), probe_table_buffers (of all partitions),
+        // build_shuffle_buffer and probe_shuffle_buffer use the same dictionary
+        // object for consistency. Non-key DICT columns of probe_table_buffer
+        // and probe_shuffle_buffer also share their dictionaries and will also
+        // be unified.
+        in_table = join_state->UnifyProbeTableDictionaryArrays(in_table);
         nested_loop_join_local_chunk(join_state, in_table, build_kept_cols,
                                      probe_kept_cols, parallel);
     }
@@ -211,8 +191,9 @@ void nested_loop_join_probe_consume_batch(
             !join_state->build_parallel && join_state->probe_parallel);
 
         join_state->output_buffer->AppendJoinOutput(
-            join_state->build_table_buffer.data_table, in_table, build_idxs,
-            probe_idxs, build_kept_cols, probe_kept_cols);
+            join_state->build_table_buffer.data_table,
+            join_state->dummy_probe_table, build_idxs, probe_idxs,
+            build_kept_cols, probe_kept_cols);
         build_idxs.clear();
         probe_idxs.clear();
     }

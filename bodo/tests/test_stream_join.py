@@ -473,7 +473,10 @@ nested_loop_join_test_params = [
     "build_outer,probe_outer,expected_df",
     nested_loop_join_test_params,
 )
-def test_nested_loop_join(build_outer, probe_outer, expected_df, memory_leak_check):
+@pytest.mark.parametrize("use_dict_encoding", [True, False])
+def test_nested_loop_join(
+    build_outer, probe_outer, expected_df, use_dict_encoding, memory_leak_check
+):
     """
     Test streaming nested loop join
     """
@@ -577,7 +580,7 @@ def test_nested_loop_join(build_outer, probe_outer, expected_df, memory_leak_che
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
     )
     try:
-        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = False
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = use_dict_encoding
         out_df = test_nested_loop_join(conn_str)
     finally:
         bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
@@ -595,7 +598,8 @@ def test_nested_loop_join(build_outer, probe_outer, expected_df, memory_leak_che
 
 @pytest_mark_snowflake
 @pytest.mark.parametrize("broadcast", [False, True])
-def test_broadcast_nested_loop_join(broadcast, memory_leak_check):
+@pytest.mark.parametrize("use_dict_encoding", [True, False])
+def test_broadcast_nested_loop_join(broadcast, use_dict_encoding, memory_leak_check):
     """
     Test streaming broadcast nested loop join
     """
@@ -719,7 +723,7 @@ def test_broadcast_nested_loop_join(broadcast, memory_leak_check):
             bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
         )
         try:
-            bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = False
+            bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = use_dict_encoding
             out_df = test_nested_loop_join(conn_str)
         finally:
             bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
