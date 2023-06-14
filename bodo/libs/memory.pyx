@@ -609,6 +609,16 @@ cdef class BufferPool(MemoryPool):
         """
         self.c_unpin(allocation)
 
+    cdef uint64_t c_get_smallest_size_class_size(self):
+        return deref(self.c_pool).GetSmallestSizeClassSize()
+    
+    def get_smallest_size_class_size(self) -> int:
+        """
+        Get the size of the smallest SizeClass.
+        Returns 0 when there are no SizeClass-es.
+        """
+        return self.c_get_smallest_size_class_size()
+
 
 def default_buffer_pool():
     """

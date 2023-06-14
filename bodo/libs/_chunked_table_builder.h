@@ -6,6 +6,8 @@
 #include "_table_builder.h"
 
 // Pre-allocate 32 bytes per string for now.
+// Keep in sync with value in
+// test_stream_join.py::test_long_strings_chunked_table_builder
 #define CHUNKED_TABLE_DEFAULT_STRING_PREALLOCATION 32LL
 
 /**
