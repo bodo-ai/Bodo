@@ -1,8 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Module
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.plan.RelTraitSet
@@ -33,11 +31,7 @@ class PandasTableModify(
             sole(inputs), operation, updateColumnList, sourceExpressionList, isFlattened)
     }
 
-    override fun emit(
-        visitor: PandasCodeGenVisitor,
-        builder: Module.Builder,
-        inputs: () -> List<Dataframe>
-    ): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): Dataframe {
         TODO("Not yet implemented")
     }
 }

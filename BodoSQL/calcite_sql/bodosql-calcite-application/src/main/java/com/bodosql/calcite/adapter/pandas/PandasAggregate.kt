@@ -28,11 +28,7 @@ class PandasAggregate(
         return PandasAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls)
     }
 
-    override fun emit(
-        visitor: PandasCodeGenVisitor,
-        builder: Module.Builder,
-        inputs: () -> List<Dataframe>
-    ): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): Dataframe {
         TODO("Not yet implemented")
     }
 }

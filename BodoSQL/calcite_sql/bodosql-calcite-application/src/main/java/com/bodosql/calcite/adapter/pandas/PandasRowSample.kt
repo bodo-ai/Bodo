@@ -2,7 +2,6 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptRowSamplingParameters
@@ -35,11 +34,7 @@ class PandasRowSample(
         return PandasRowSample(cluster, traitSet, sole(inputs), params)
     }
 
-    override fun emit(
-        visitor: PandasCodeGenVisitor,
-        builder: Module.Builder,
-        inputs: () -> List<Dataframe>
-    ): Dataframe {
+    override fun emit(implementor: PandasRel.Implementor): Dataframe {
         TODO("Not yet implemented")
     }
 

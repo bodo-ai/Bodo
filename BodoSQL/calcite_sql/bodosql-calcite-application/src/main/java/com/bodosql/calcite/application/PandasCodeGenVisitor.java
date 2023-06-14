@@ -5,7 +5,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generate
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeNoGroupBy;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeWithGroupBy;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateApplyCodeWithGroupBy;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.FilterCodeGen.generateFilterCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.generateJoinCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.generateLiteralCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.generateLogicalValuesCode;
@@ -37,7 +36,6 @@ import static com.bodosql.calcite.application.Utils.Utils.sqlTypenameToPandasTyp
 import static com.bodosql.calcite.application.Utils.Utils.stringsToStringLiterals;
 
 import com.bodosql.calcite.adapter.pandas.PandasAggregate;
-import com.bodosql.calcite.adapter.pandas.PandasFilter;
 import com.bodosql.calcite.adapter.pandas.PandasIntersect;
 import com.bodosql.calcite.adapter.pandas.PandasJoin;
 import com.bodosql.calcite.adapter.pandas.PandasMinus;
@@ -53,6 +51,7 @@ import com.bodosql.calcite.adapter.pandas.PandasTargetTableScan;
 import com.bodosql.calcite.adapter.pandas.PandasUnion;
 import com.bodosql.calcite.adapter.pandas.PandasValues;
 import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
+import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToPandasConverter;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
@@ -64,6 +63,7 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.Call;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
 import com.bodosql.calcite.ir.Expr.StringLiteral;
+import com.bodosql.calcite.ir.Frame;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
@@ -84,7 +84,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Stack;
 import java.util.TreeMap;
-import kotlin.jvm.functions.Function0;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -118,7 +117,10 @@ import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
+
+import kotlin.jvm.functions.Function1;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.jetbrains.annotations.NotNull;
 
 /** Visitor class for parsed SQL nodes to generate Pandas code from SQL code. */
 public class PandasCodeGenVisitor extends RelVisitor {
@@ -137,7 +139,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private static final String icebergFileListVarName = "__bodo_Iceberg_file_list";
   private static final String icebergSnapshotIDName = "__bodo_Iceberg_snapshot_id";
 
-  public final Expr.IntegerLiteral BATCH_SIZE;
+  private final StreamingOptions streamingOptions;
 
   private static final String ROW_ID_COL_NAME = "_bodo_row_id";
   private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
@@ -227,7 +229,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
     this.generatedCode = new Module.Builder();
-    this.BATCH_SIZE = new Expr.IntegerLiteral(batchSize);
+    this.streamingOptions = new StreamingOptions(batchSize);
   }
 
   /**
@@ -415,8 +417,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.visitLogicalIntersect((Intersect) node);
     } else if (node instanceof PandasMinus) {
       this.visitLogicalMinus((Minus) node);
-    } else if (node instanceof PandasFilter) {
-      this.visitLogicalFilter((Filter) node);
     } else if (node instanceof PandasValues) {
       this.visitLogicalValues((Values) node);
     } else if (node instanceof PandasTableModify) {
@@ -498,10 +498,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     streamingInfo.addInitialization(assn);
 
     Variable outputDfVar = genDfVar();
-    Expr sliceStart = new Expr.Binary("*", iteratorNumber, BATCH_SIZE);
+    Expr sliceStart = new Expr.Binary("*", iteratorNumber, new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
     Expr sliceEnd =
         new Expr.Binary(
-            "*", new Expr.Binary("+", iteratorNumber, new Expr.IntegerLiteral(1)), BATCH_SIZE);
+            "*", new Expr.Binary("+", iteratorNumber, new Expr.IntegerLiteral(1)), new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
 
     Expr slicedDfExpr = new Expr.DataFrameSlice(nonStreamingInput, sliceStart, sliceEnd);
 
@@ -535,56 +535,17 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void visitPandasRel(PandasRel node) {
     // Determine if this node has already been cached.
     // If it has, just return that immediately.
-
-    // SnowflakeToPandas is a pandasRel,
-    // which does not support caching. For now, we've disabled
-    // caching for all PandasRels for this reason
-    if (isNodeCached(node) && !node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+    if (node.canUseNodeCache() && isNodeCached(node)) {
       varGenStack.push(varCache.get(node.getId()));
       return;
     }
 
-    // Currently wrapping this functionality in a closure.
-    // We pass this to the emit function so it can decide whether
-    // to run this code.
-    //
-    // The reason for this is because we haven't correctly set a convention
-    // and implemented a convention converter. In the calcite code, see the cassandra
-    // module, CassandraRel, and CassandraToEnumerableConverter. The last one
-    // implements EnumerableRel which allows the enumerable engine built into calcite
-    // to invoke the Cassandra relation. The converter then constructs the underlying
-    // Cassandra query and executes it. We need a common top-level converter that implements
-    // PandaRel. Once that's properly in place, this could be converted to just emitting
-    // the inputs eagerly.
-    Function0<? extends List<Dataframe>> getInputs =
-        () -> {
-          // Visit the inputs for this node.
-          node.childrenAccept(this);
+    // Emit code using the implementor.
+    Dataframe out = node.emit(new Implementor(node));
 
-          // Construct the input variables by popping off the stack.
-          // We use reverse on this afterwards since building the list is in reverse order.
-          int capacity = node.getInputs().size();
-          ImmutableList.Builder<Dataframe> inputs = ImmutableList.builder();
-          for (int i = capacity - 1; i >= 0; i--) {
-            // TODO(jsternberg): When varGenStack is refactored to natively hold dataframes,
-            // the creation of a dataframe here should be removed.
-            Dataframe df = new Dataframe(varGenStack.pop().emit(), node.getInput(i));
-            inputs.add(df);
-          }
-          return inputs.build().reverse();
-        };
-
-    // Construct the inputs and then invoke the emit function.
-
-    // Can't properly handle timers since some pandas Rels are streaming
-    Dataframe out = node.emit(this, generatedCode, getInputs);
-
-    Variable outVal = out.getVariable();
-    // Can't handle caching in streaming case (see above)
-    if (!node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-      varCache.put(node.getId(), outVal);
-    }
-    varGenStack.push(outVal);
+    // Place the output variable in the varCache and varGenStack.
+    varCache.put(node.getId(), out);
+    varGenStack.push(out);
   }
 
   /**
@@ -611,80 +572,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.generatedCode.add(new Op.Assign(outVar, logicalValuesExpr));
     this.varGenStack.push(outVar);
     this.genRelnodeTimerStop(node);
-  }
-
-  /**
-   * Visitor method for logicalFilter nodes to support HAVING clause
-   *
-   * @param node RelNode to be visited
-   */
-  private void visitLogicalFilter(Filter node) {
-
-    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-      this.visitStreamingLogicalFilter(node);
-    } else {
-      this.visitSingleBatchLogicalFilter(node);
-    }
-  }
-
-  /**
-   * Visitor method for logicalFilter nodes that are NOT streaming.
-   *
-   * @param node RelNode to be visited
-   */
-  private void visitSingleBatchLogicalFilter(Filter node) {
-    if (this.isNodeCached(node)) {
-      Variable outVar = genDfVar();
-      int nodeId = node.getId();
-      // If the node is in the cache load
-      Variable cacheKey = this.varCache.get(nodeId);
-      this.generatedCode.add(new Assign(outVar, cacheKey));
-      varGenStack.push(outVar);
-    } else {
-      visitLogicalFilterCommon(node);
-    }
-  }
-
-  /**
-   * Visitor method for logicalFilter nodes that are streaming.
-   *
-   * @param node RelNode to be visited
-   */
-  private void visitStreamingLogicalFilter(Filter node) {
-    assert node.getTraitSet().contains(BatchingProperty.STREAMING)
-        : "Internal error in visitStreamingLogicalFilter: input node not streaming";
-    // TODO: determine how to handle caching for a streaming system
-    visitLogicalFilterCommon(node);
-  }
-
-  /**
-   * Code common to both the streaming and non-streaming logicalFilter nodes that are streaming.
-   * Handles visiting the input, appending the generated code, and pushing the output dataframe (and
-   * flag, if applicable) to the varGenStack.
-   *
-   * @param node RelNode to be visited
-   */
-  private void visitLogicalFilterCommon(Filter node) {
-
-    Variable outVar = genDfVar();
-    RelNode input = node.getInput();
-    this.visit(input, 0, node);
-    this.genRelnodeTimerStart(node);
-    Variable inVar = varGenStack.pop();
-    // The hashset is unused because the result should always be empty.
-    // We assume filter is never within an apply.
-    RexToPandasTranslator translator = getRexTranslator(node, inVar.emit(), input);
-    Expr expr = node.getCondition().accept(translator);
-    Expr filterExpr =
-        generateFilterCode(
-            inVar,
-            expr,
-            exprTypesMap.get(
-                ExprTypeVisitor.generateRexNodeKey(node.getCondition(), node.getId())));
-    this.generatedCode.add(new Op.Assign(outVar, filterExpr));
-    this.genRelnodeTimerStop(node);
-
-    varGenStack.push(outVar);
   }
 
   /**
@@ -1595,7 +1482,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       Variable outputVar = this.genWindowedAggDf();
       Expr outputCode =
           generateOptimizedEngineKernelCode(
-              inputVar.getVariable().getName(),
+              inputVar.getName(),
               outputVar,
               aggOperations,
               childExprs,
@@ -1685,7 +1572,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               fnNameList,
               respectNullsList,
               id,
-              inputVar.getVariable().getName(),
+              inputVar.getName(),
               translator);
 
       // Extract the dataframe whose columns contain the output(s) of the
@@ -2293,7 +2180,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                   readVar.emit(), icebergFileListVarName, icebergSnapshotIDName, readCode.emit()));
       targetTableDf = readVar;
     } else {
-      readCode = table.generateReadCode(false, BATCH_SIZE);
+      readCode = table.generateReadCode(false, streamingOptions);
       readAssign = new Op.Assign(readVar, readCode);
     }
 
@@ -2343,7 +2230,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable outVar = this.genDfVar();
 
     BodoSqlTable table = node.getCatalogTable();
-    Expr readCode = table.generateReadCode(true, BATCH_SIZE);
+    Expr readCode = table.generateReadCode(true, streamingOptions);
 
     List<String> columnNames = node.getRowType().getFieldNames();
 
@@ -2759,5 +2646,76 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   private RexToPandasTranslator getRexTranslator(int nodeId, Dataframe input) {
     return new RexToPandasTranslator(this, this.generatedCode, this.typeSystem, nodeId, input);
+  }
+
+  private class Implementor implements PandasRel.Implementor {
+    private final @NotNull PandasRel node;
+
+    public Implementor(@NotNull PandasRel node) {
+      this.node = node;
+    }
+
+    @NotNull @Override public Dataframe visitChild(@NotNull final RelNode input, final int ordinal) {
+      visit(input, ordinal, node);
+      Variable dfVar = varGenStack.pop();
+      if (dfVar instanceof Dataframe) {
+        return (Dataframe) dfVar;
+      } else {
+        // Ideally, all parts of code generation return dataframes
+        // and this isn't needed. That is not true so fabricate the proper
+        // dataframe value.
+        return new Dataframe(dfVar.getName(), input.getRowType());
+      }
+    }
+
+    @NotNull @Override public List<Dataframe> visitChildren(@NotNull final List<? extends RelNode> inputs) {
+      return DefaultImpls.visitChildren(this, inputs);
+    }
+
+    @NotNull @Override public Dataframe build(boolean withTimers, @NotNull final Function1<? super PandasRel.BuildContext, Dataframe> fn) {
+      if (withTimers) {
+        // Generate the code and include it in the main generated code.
+        genRelnodeTimerStart(node);
+      }
+      // Generate the code by calling the closure.
+      Dataframe out = fn.invoke(new BuildContext(node));
+      if (withTimers) {
+        // End timer for the rel node timer.
+        genRelnodeTimerStop(node);
+      }
+      return out;
+    }
+  }
+
+  private class BuildContext implements PandasRel.BuildContext {
+    private final @NotNull PandasRel node;
+
+    public BuildContext(@NotNull PandasRel node) {
+      this.node = node;
+    }
+
+    @NotNull @Override public Module.Builder builder() {
+      return generatedCode;
+    }
+
+    @NotNull @Override public RexToPandasTranslator rexTranslator(@NotNull final Dataframe input) {
+      return getRexTranslator(node.getId(), input);
+    }
+
+    @NotNull @Override public Dataframe returns(@NotNull final Expr result) {
+      Dataframe destination = generatedCode.genDataframe(node);
+      generatedCode.add(new Op.Assign(destination, result));
+      return destination;
+    }
+
+    @NotNull @Override public StreamingOptions streamingOptions() {
+      return streamingOptions;
+    }
+
+    @NotNull @Override public Dataframe initStreamingIoLoop(@NotNull final Expr expr, @NotNull final RelDataType rowType) {
+      List<String> columnNames = rowType.getFieldNames();
+      Variable out = PandasCodeGenVisitor.this.initStreamingIoLoop(expr, columnNames);
+      return new Dataframe(out.getName(), node);
+    }
   }
 }

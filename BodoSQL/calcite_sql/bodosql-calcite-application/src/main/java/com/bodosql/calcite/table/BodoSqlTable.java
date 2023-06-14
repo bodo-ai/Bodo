@@ -4,6 +4,7 @@
 
 package com.bodosql.calcite.table;
 
+import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
@@ -254,11 +255,11 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    *
    * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
-   * @param streamingBatchSize The batch size to use if streaming is enabled.
+   * @param streamingOptions The options to be used if streaming is selected.
    * @return The generated code to read the table.
    */
   public abstract Expr generateReadCode(
-      boolean useStreaming, Expr.IntegerLiteral streamingBatchSize);
+      boolean useStreaming, StreamingOptions streamingOptions);
 
   /**
    * Generate the code needed to read the table. This function is called by specialized IO

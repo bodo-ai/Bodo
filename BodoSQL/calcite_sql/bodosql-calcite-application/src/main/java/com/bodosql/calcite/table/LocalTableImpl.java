@@ -1,5 +1,6 @@
 package com.bodosql.calcite.table;
 
+import com.bodosql.calcite.adapter.pandas.StreamingOptions;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
@@ -131,11 +132,11 @@ public class LocalTableImpl extends BodoSqlTable {
    *
    * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
-   * @param streamingBatchSize The batch size to use if streaming is enabled.
+   * @param streamingOptions The streaming options to use if streaming is enabled.
    * @return The generated code to read the table.
    */
   @Override
-  public Expr generateReadCode(boolean useStreaming, Expr.IntegerLiteral streamingBatchSize) {
+  public Expr generateReadCode(boolean useStreaming, StreamingOptions streamingOptions) {
     if (useStreaming) {
       throw new RuntimeException(
           "Internal error: Streaming not supported for non-snowflake tables");
