@@ -28,6 +28,9 @@ struct HashHashJoinTable {
      */
     uint32_t operator()(const int64_t iRow) const;
     JoinPartition* join_partition;
+
+    HashHashJoinTable(JoinPartition* join_partition)
+        : join_partition(join_partition) {}
 };
 
 struct KeyEqualHashJoinTable {
@@ -46,6 +49,9 @@ struct KeyEqualHashJoinTable {
     bool operator()(const int64_t iRowA, const int64_t iRowB) const;
     JoinPartition* join_partition;
     const uint64_t n_keys;
+
+    KeyEqualHashJoinTable(JoinPartition* join_partition, const uint64_t n_keys)
+        : join_partition(join_partition), n_keys(n_keys) {}
 };
 
 /**

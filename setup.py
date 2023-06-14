@@ -8,6 +8,7 @@ from setuptools import Extension, find_packages, setup
 from Cython.Build import cythonize
 
 import numpy.distutils.misc_util as np_misc
+import pyarrow
 
 import versioneer
 
@@ -81,8 +82,6 @@ else:
     if is_win:
         PREFIX_DIR += "\Library"
 
-
-import pyarrow
 
 try:
     import h5py  # noqa
