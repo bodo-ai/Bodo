@@ -74,6 +74,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         c_string get_backend_name" backend_name"()
         size_t num_size_classes()
         CSizeClass* GetSizeClass_Unsafe(uint64_t idx)
+        uint64_t GetSmallestSizeClassSize()
 
         @staticmethod
         shared_ptr[CBufferPool] Default()

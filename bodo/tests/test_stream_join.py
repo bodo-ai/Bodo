@@ -1,3 +1,7 @@
+import math
+import random
+import string
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -6,6 +10,7 @@ import bodo
 import bodo.io.snowflake
 import bodo.tests.utils
 from bodo.io.arrow_reader import read_arrow_next
+from bodo.libs.memory import BufferPool
 from bodo.libs.stream_join import (
     delete_join_state,
     init_join_state,
@@ -1716,3 +1721,321 @@ def test_only_one_distributed(build_outer, probe_outer, build_dist, memory_leak_
         sort_output=True,
         reset_index=True,
     )
+
+
+@pytest.mark.skipif(
+    bodo.get_size() > 1,
+    reason="Only test with a single rank to simplify the checks",
+)
+def test_long_strings_chunked_table_builder(memory_leak_check):
+    """
+    Tests for the edge cases related to handling of long strings
+    in ChunkedTableBuilder. The output buffers of streaming
+    hash join use the ChunkedTableBuilder, so we use that to
+    test the behavior of ChunkedTableBuilder indirectly.
+    """
+
+    def generate_random_string(length):
+        # Get all the ASCII letters in lowercase
+        letters = string.ascii_lowercase
+        random_string = "".join(f"{random.choice(letters)}" for _ in range(length))
+        return random_string
+
+    # This is the minimum size of any of the allocated buffers in ChunkedTableBuilder
+    smallest_alloc_size = BufferPool.default().get_smallest_size_class_size()
+    # Should match CHUNKED_TABLE_DEFAULT_STRING_PREALLOCATION defined in
+    # _chunked_table_builder.h
+    string_prealloc = 32
+    num_prealloc_strings_in_smallest_frame = smallest_alloc_size // string_prealloc
+    # Should match DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES defined in
+    # _stream_join.h
+    max_resize_count = 2
+
+    # Use a single int column as key. Keep all columns around.
+    build_keys_inds = bodo.utils.typing.MetaType((0,))
+    probe_keys_inds = bodo.utils.typing.MetaType((0,))
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    @bodo.jit(distributed=["df1", "df2"])
+    def test_hash_join_impl(df1, df2, batch_size):
+        join_state = init_join_state(
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+        )
+        _temp1 = 0
+        is_last1 = False
+        while not is_last1:
+            batch1 = df1.iloc[(_temp1 * batch_size) : ((_temp1 + 1) * batch_size)]
+            is_last1 = (_temp1 * batch_size) >= len(df1)
+            # We don't need the Allreduce call for is_last1 since the test only runs on 1 rank.
+            _temp1 = _temp1 + 1
+            table1 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
+                (),
+                kept_cols,
+                2,
+            )
+            join_build_consume_batch(join_state, table1, is_last1)
+
+        _temp2 = 0
+        out_dfs = []
+        is_last2 = False
+        is_last3 = False
+        while not is_last3:
+            batch2 = df2.iloc[(_temp2 * batch_size) : ((_temp2 + 1) * batch_size)]
+            is_last2 = ((_temp2 + 1) * batch_size) >= len(df2)
+            # We don't need the Allreduce call for is_last2 since the test only runs on 1 rank.
+            _temp2 = _temp2 + 1
+            table2 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
+                (),
+                kept_cols,
+                2,
+            )
+            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            # We don't need the Allreduce call for is_last3 since the test only runs on 1 rank.
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df_final)
+        delete_join_state(join_state)
+        return out_dfs
+
+    def test_helper(df1, df2, batch_size):
+        """
+        Helper function for the tests. Does the required setup
+        and reset for the tests.
+
+        Args:
+            df1 (pd.DataFrame): Build Table
+            df2 (pd.DataFrame): Probe Table
+            batch_size (int): Batch size to use
+
+        Returns:
+            List[pd.DataFrame]: Output chunks
+        """
+        # Force string dtype
+        saved_SF_READ_AUTO_DICT_ENCODE_ENABLED = (
+            bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
+        )
+        # Set batch size
+        saved_bodosql_streaming_batch_size = bodo.bodosql_streaming_batch_size
+
+        try:
+            bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = False
+            bodo.bodosql_streaming_batch_size = batch_size
+            # Use non-broadcast to simplify testing
+            with temp_env_override({"BODO_BCAST_JOIN_THRESHOLD": "0"}):
+                # Test is only run with one rank, so we don't need
+                # to use _get_dist_arg.
+                out_dfs = test_hash_join_impl(
+                    df1, df2, bodo.bodosql_streaming_batch_size
+                )
+                return out_dfs
+        finally:
+            bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
+                saved_SF_READ_AUTO_DICT_ENCODE_ENABLED
+            )
+            bodo.bodosql_streaming_batch_size = saved_bodosql_streaming_batch_size
+
+    # Test 1: Check that resizing works as expected. We will make it
+    # so that each string is (string_prealloc) * 2**(max_resize_count)
+    # bytes and verify that a single batch fits the entire output.
+    def test1():
+        str_len = string_prealloc * (2**max_resize_count)
+        batch_size = num_prealloc_strings_in_smallest_frame
+        build_df = pd.DataFrame(
+            {
+                "A": pd.array(np.arange(batch_size), dtype="Int64"),
+                "B": pd.array(np.arange(batch_size), dtype="Int64"),
+            }
+        )
+        probe_df = pd.DataFrame(
+            {
+                "C": pd.array(np.arange(batch_size), dtype="Int64"),
+                "D": [generate_random_string(str_len)] * batch_size,
+            }
+        )
+        out_dfs = test_helper(build_df, probe_df, batch_size)
+        assert len(out_dfs) == 1
+        assert len(out_dfs[0]) == batch_size
+        assert (out_dfs[0]["D"].str.len() == pd.Series([str_len] * batch_size)).all()
+
+    # Test 2: Check that if each string is > ((string_prealloc) * 2**(max_resize_count))
+    # bytes, we get expected number of batches and the size of the batches is as expected.
+    def test2():
+        str_len = (string_prealloc * (2**max_resize_count)) + 10
+        batch_size = num_prealloc_strings_in_smallest_frame
+        max_buffer_size = max(
+            smallest_alloc_size,
+            (batch_size * string_prealloc * (2**max_resize_count)),
+        )
+        exp_out_chunks = math.ceil(str_len * batch_size / max_buffer_size)
+        build_df = pd.DataFrame(
+            {
+                "A": pd.array(np.arange(batch_size), dtype="Int64"),
+                "B": pd.array(np.arange(batch_size), dtype="Int64"),
+            }
+        )
+        probe_df = pd.DataFrame(
+            {
+                "C": pd.array(np.arange(batch_size), dtype="Int64"),
+                "D": [generate_random_string(str_len)] * batch_size,
+            }
+        )
+        out_dfs = test_helper(build_df, probe_df, batch_size)
+        assert len(out_dfs) == exp_out_chunks
+        assert len(out_dfs[0]) == (max_buffer_size // str_len)
+        assert (
+            out_dfs[0]["D"].str.len()
+            == pd.Series([str_len] * (max_buffer_size // str_len))
+        ).all()
+        assert sum([len(df) for df in out_dfs]) == batch_size
+
+    # Test 3: Check that if we create a string that's larger than
+    # max buffer size, the batch size is 1 if it's the first one.
+    def test3():
+        batch_size = num_prealloc_strings_in_smallest_frame
+        max_buffer_size = max(
+            smallest_alloc_size,
+            (batch_size * string_prealloc * (2**max_resize_count)),
+        )
+        build_df = pd.DataFrame(
+            {
+                "A": pd.array(np.arange(batch_size), dtype="Int64"),
+                "B": pd.array(np.arange(batch_size), dtype="Int64"),
+            }
+        )
+        probe_df = pd.DataFrame(
+            {
+                "C": pd.array(np.arange(batch_size), dtype="Int64"),
+                "D": [generate_random_string(max_buffer_size + 10)]
+                + ([generate_random_string(string_prealloc)] * (batch_size - 1)),
+            }
+        )
+        out_dfs = test_helper(build_df, probe_df, batch_size)
+        assert len(out_dfs) == 2
+        assert len(out_dfs[0]) == 1
+        assert len(out_dfs[1]) == (batch_size - 1)
+        assert len(out_dfs[0]["D"][0]) == max_buffer_size + 10
+
+    # Test 4: Fill up buffer so that it has resized one fewer than max allowed times.
+    # Then add a string that's larger than max buffer size, and it should still
+    # be returned in the first batch.
+    def test4():
+        batch_size = num_prealloc_strings_in_smallest_frame
+        max_buffer_size = max(
+            smallest_alloc_size,
+            (batch_size * string_prealloc * (2**max_resize_count)),
+        )
+
+        # We need to allocate total of str_len_p1_sum to get the buffer to resize
+        # required number of times.
+        str_len_p1_sum = string_prealloc * (2 ** (max_resize_count - 1)) * batch_size
+        # Let's have (batch_size - 2) strings of length str_len_p11
+        str_len_p11 = (
+            string_prealloc * (2 ** (max_resize_count - 1)) * batch_size
+        ) // (batch_size - 2)
+        # Let's have 1 string of length required to get to str_len_p1_sum
+        str_len_p12 = str_len_p1_sum - (str_len_p11 * (batch_size - 2))
+        # Last string will be of size:
+        str_len_p2 = max_buffer_size * 2
+
+        build_df = pd.DataFrame(
+            {
+                "A": pd.array(np.arange(batch_size), dtype="Int64"),
+                "B": pd.array(np.arange(batch_size), dtype="Int64"),
+            }
+        )
+        probe_df = pd.DataFrame(
+            {
+                "C": pd.array(np.arange(batch_size), dtype="Int64"),
+                "D": ([generate_random_string(str_len_p11)] * (batch_size - 2))
+                + [
+                    generate_random_string(str_len_p12),
+                    generate_random_string(str_len_p2),
+                ],
+            }
+        )
+        out_dfs = test_helper(build_df, probe_df, batch_size)
+        assert len(out_dfs) == 1
+        assert len(out_dfs[0]) == batch_size
+        assert len(out_dfs[0]["D"][batch_size - 1]) == str_len_p2
+
+    # Test 5: Fill up the buffer so that it has resized max number of times.
+    # Then, try adding a string that's larger than max allowed size and verify
+    # that it's added to the second output chunk and not the first one.
+    def test5():
+        batch_size = num_prealloc_strings_in_smallest_frame
+        max_buffer_size = max(
+            smallest_alloc_size,
+            (batch_size * string_prealloc * (2**max_resize_count)),
+        )
+
+        # We need to allocate total of str_len_p1_sum to get the buffer to resize
+        # required number of times.
+        str_len_p1_sum = string_prealloc * (2**max_resize_count) * batch_size
+        # Let's have (batch_size - 2) strings of length str_len_p11
+        str_len_p11 = (
+            string_prealloc * (2 ** (max_resize_count - 1)) * batch_size
+        ) // (batch_size - 2)
+        # Let's have 1 string of length required to get to slightly less than str_len_p1_sum
+        str_len_p12 = max(str_len_p1_sum - (str_len_p11 * (batch_size - 2)) - 1, 0)
+        # Last string will be of size:
+        str_len_p2 = max_buffer_size * 2
+
+        build_df = pd.DataFrame(
+            {
+                "A": pd.array(np.arange(batch_size), dtype="Int64"),
+                "B": pd.array(np.arange(batch_size), dtype="Int64"),
+            }
+        )
+        probe_df = pd.DataFrame(
+            {
+                "C": pd.array(np.arange(batch_size), dtype="Int64"),
+                "D": ([generate_random_string(str_len_p11)] * (batch_size - 2))
+                + [
+                    generate_random_string(str_len_p12),
+                    generate_random_string(str_len_p2),
+                ],
+            }
+        )
+        out_dfs = test_helper(build_df, probe_df, batch_size)
+        assert len(out_dfs) == 2
+        assert len(out_dfs[0]) == (batch_size - 1)
+        assert len(out_dfs[1]) == 1
+        assert len(out_dfs[1]["D"][0]) == str_len_p2
+
+    # Run all tests:
+    test1()
+    test2()
+    test3()
+    test4()
+    test5()
