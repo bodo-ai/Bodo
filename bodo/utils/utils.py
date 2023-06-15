@@ -210,6 +210,7 @@ def numba_to_c_array_type(arr_type: types.ArrayCompatible) -> int:
             bodo.FloatingArrayType,
             bodo.TimeArrayType,
             bodo.DecimalArrayType,
+            bodo.DatetimeArrayType,
         ),
     ):
         return CArrayTypeEnum.NULLABLE_INT_BOOL.value

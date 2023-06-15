@@ -784,7 +784,6 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
 
         # Code path generated for timezone-aware data
         elif time_zone is not None:
-
             # Find the transition times / deltas for the timezone in question.
             # These arrays will be lowered via global variables in the exec env
             if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
@@ -858,7 +857,6 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
         # Code path generated for timezone-native data by directly adding to
         # a DateOffset or TimeDelta with the corresponding units
         else:
-
             # Scalars will return Timestamp values while vectors will remain
             # in datetime64 format
             unbox_str = (

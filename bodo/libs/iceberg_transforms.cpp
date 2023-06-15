@@ -67,11 +67,12 @@ std::shared_ptr<array_info> convert_datetime_ns_to_us(
             "Bodo_CTypes::DATETIME array.");
     }
 
-    if (in_arr->arr_type != bodo_array_type::NUMPY) {
+    if (in_arr->arr_type != bodo_array_type::NUMPY &&
+        in_arr->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
         throw std::runtime_error(
             "Unsupported arr_type '" + GetArrType_as_string(in_arr->arr_type) +
             "' provided to convert_datetime_ns_to_us. Expected "
-            "bodo_array_type::NUMPY.");
+            "bodo_array_type::NUMPY or bodo_array_type::NULLABLE_INT_BOOL.");
     }
 
     std::shared_ptr<array_info> out_arr =
@@ -461,7 +462,8 @@ std::shared_ptr<array_info> array_transform_year(
         memcpy(out_arr->null_bitmask(), in_arr->null_bitmask(), n_bytes);
         return out_arr;
     }
-    if ((in_arr->arr_type == bodo_array_type::NUMPY) &&
+    if ((in_arr->arr_type == bodo_array_type::NUMPY ||
+         in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) &&
         (in_arr->dtype == Bodo_CTypes::DATETIME)) {
         for (uint64_t i = 0; i < nRow; i++) {
             if (in_arr->at<int64_t>(i) == std::numeric_limits<int64_t>::min()) {
@@ -507,7 +509,8 @@ std::shared_ptr<array_info> array_transform_month(
         return out_arr;
     }
 
-    if ((in_arr->arr_type == bodo_array_type::NUMPY) &&
+    if ((in_arr->arr_type == bodo_array_type::NUMPY ||
+         in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) &&
         (in_arr->dtype == Bodo_CTypes::DATETIME)) {
         for (uint64_t i = 0; i < nRow; i++) {
             if (in_arr->at<int64_t>(i) == std::numeric_limits<int64_t>::min()) {
@@ -553,7 +556,8 @@ std::shared_ptr<array_info> array_transform_day(
         return out_arr;
     }
 
-    if ((in_arr->arr_type == bodo_array_type::NUMPY) &&
+    if ((in_arr->arr_type == bodo_array_type::NUMPY ||
+         in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) &&
         (in_arr->dtype == Bodo_CTypes::DATETIME)) {
         for (uint64_t i = 0; i < nRow; i++) {
             if (in_arr->at<int64_t>(i) == std::numeric_limits<int64_t>::min()) {
@@ -587,7 +591,8 @@ std::shared_ptr<array_info> array_transform_hour(
     std::shared_ptr<array_info> out_arr =
         alloc_nullable_array(nRow, Bodo_CTypes::INT32, 0);
 
-    if ((in_arr->arr_type == bodo_array_type::NUMPY) &&
+    if ((in_arr->arr_type == bodo_array_type::NUMPY ||
+         in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) &&
         (in_arr->dtype == Bodo_CTypes::DATETIME)) {
         for (uint64_t i = 0; i < nRow; i++) {
             if (in_arr->at<int64_t>(i) == std::numeric_limits<int64_t>::min()) {
