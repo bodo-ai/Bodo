@@ -758,6 +758,28 @@ client = get_bodo_client(keys)
 client.job.cancel_batch_job_run('04412S5b-300e-42db-84d4-5f22f7506594')
 ```
 
+<br/>
+#####  Cancel all job runs on a cluster UUIDs
+
+
+`BodoClient.job.cancel_all_job_runs(cluster_uuids: Union[List[str], List[UUID]])`
+
+
+Cancels all the job runs for a set of cluster UUIDs provided as a function parameter
+
+
+**Example:**
+
+```python
+from bodosdk.models import WorkspaceKeys
+from bodosdk.client import get_bodo_client
+keys = WorkspaceKeys(
+    client_id="XYZ",
+    secret_key="XYZ"
+)
+client = get_bodo_client(keys)
+client.job.cancel_all_job_runs(['04412S5b-300e-42db-84d4-5f22f7506594'])
+```
 
 
 <br/>
