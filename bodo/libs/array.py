@@ -37,6 +37,7 @@ from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import MapArrayType, _get_map_arr_data_type
+from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import (
     _get_str_binary_arr_payload,
     char_arr_type,
@@ -393,17 +394,6 @@ def array_to_info_codegen(context, builder, sig, args):
         arr_type = types.Array(int_dtype, 1, "C")
         is_categorical = True
 
-    # PandasDatetimeArray
-    if isinstance(arr_type, bodo.DatetimeArrayType):
-        if is_categorical:
-            raise BodoError(
-                "array_to_info(): Categorical PandasDatetimeArrayType not supported"
-            )
-        # For PandasDatetimeArray, extract the internal
-        # dt64 array
-        in_arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr).data
-        arr_type = arr_type.data_array_type
-
     # Numpy
     if isinstance(arr_type, types.Array):
         arr = context.make_array(arr_type)(context, builder, in_arr)
@@ -488,7 +478,14 @@ def array_to_info_codegen(context, builder, sig, args):
 
     # nullable integer/bool array
     if isinstance(
-        arr_type, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
+        arr_type,
+        (
+            IntegerArrayType,
+            FloatingArrayType,
+            DecimalArrayType,
+            TimeArrayType,
+            DatetimeArrayType,
+        ),
     ) or arr_type in (
         boolean_array_type,
         datetime_date_array_type,
@@ -498,6 +495,8 @@ def array_to_info_codegen(context, builder, sig, args):
         np_dtype = dtype
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
+        elif isinstance(arr_type, DatetimeArrayType):
+            np_dtype = bodo.datetime64ns
         elif arr_type == datetime_date_array_type:
             np_dtype = types.int32
         elif arr_type == boolean_array_type:
@@ -1013,16 +1012,6 @@ def info_to_array_codegen(context, builder, sig, args):
         out_arr.dtype = dtype
         return out_arr._getvalue()
 
-    # Pandas Datetime Array
-    if isinstance(arr_type, bodo.DatetimeArrayType):
-        arr = cgutils.create_struct_proxy(arr_type)(context, builder)
-        # Timezone information doesn't get sent to C++, just a dt64 array.
-        data = _lower_info_to_array_numpy(
-            arr_type.data_array_type, context, builder, in_info
-        )
-        arr.data = data
-        return arr._getvalue()
-
     # Numpy
     if isinstance(arr_type, types.Array):
         return _lower_info_to_array_numpy(arr_type, context, builder, in_info)
@@ -1058,7 +1047,14 @@ def info_to_array_codegen(context, builder, sig, args):
 
     # nullable integer/bool array
     if isinstance(
-        arr_type, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
+        arr_type,
+        (
+            IntegerArrayType,
+            FloatingArrayType,
+            DecimalArrayType,
+            TimeArrayType,
+            DatetimeArrayType,
+        ),
     ) or arr_type in (
         boolean_array_type,
         datetime_date_array_type,
@@ -1067,6 +1063,8 @@ def info_to_array_codegen(context, builder, sig, args):
         np_dtype = arr_type.dtype
         if isinstance(arr_type, DecimalArrayType):
             np_dtype = int128_type
+        elif isinstance(arr_type, DatetimeArrayType):
+            np_dtype = bodo.datetime64ns
         elif arr_type == datetime_date_array_type:
             np_dtype = types.int32
         elif arr_type == boolean_array_type:

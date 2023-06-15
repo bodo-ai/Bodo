@@ -1019,6 +1019,10 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_numeric_array_to_bodo<arrow::Date32Array>(
                 std::static_pointer_cast<arrow::Date32Array>(arrow_arr),
                 Bodo_CTypes::DATE);
+        case arrow::Type::TIMESTAMP:
+            return arrow_numeric_array_to_bodo<arrow::TimestampArray>(
+                std::static_pointer_cast<arrow::TimestampArray>(arrow_arr),
+                Bodo_CTypes::DATETIME);
         case arrow::Type::INT32:
             return arrow_numeric_array_to_bodo<arrow::Int32Array>(
                 std::static_pointer_cast<arrow::Int32Array>(arrow_arr),
