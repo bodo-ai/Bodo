@@ -315,7 +315,9 @@ def format_input_string_df():
         pytest.param("A", "YYYY-MM-DD", id="YYYY-MM-DD"),
         pytest.param("B", "DD-MON-YYYY", id="DD-MON-YYYY"),
         pytest.param("C", "MM/DD/YYYY", id="MM/DD/YYYY", marks=pytest.mark.slow),
-        pytest.param("D", "___MMMM__DD____YY__", id="___MMMM__DD____YY__", marks=pytest.mark.slow),
+        pytest.param(
+            "D", "___MMMM__DD____YY__", id="___MMMM__DD____YY__", marks=pytest.mark.slow
+        ),
         pytest.param("E", "DY@#$DD@#$YYYY@#$MON", id="DY@#$DD@#$YYYY@#$MON"),
     ],
 )
@@ -360,7 +362,9 @@ def test_date_casting_functions_with_valid_format(
         pytest.param("B", "YYYY-MM-DD", id="YYYY-MM-DD", marks=pytest.mark.slow),
         pytest.param("C", "DD-MON-YYYY", id="DD-MON-YYYY"),
         pytest.param("D", "DY@#$DD@#$YYYY@#$MON", id="DY@#$DD@#$YYYY@#$MON"),
-        pytest.param("E", "___MMMM__DD____YY__", id="___MMMM__DD____YY__", marks=pytest.mark.slow),
+        pytest.param(
+            "E", "___MMMM__DD____YY__", id="___MMMM__DD____YY__", marks=pytest.mark.slow
+        ),
     ],
 )
 def test_date_casting_functions_with_invalid_format(
@@ -797,4 +801,49 @@ def test_to_timestamp_numeric(
         expected_output=expected_output,
         check_names=False,
         only_jit_1DVar=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "tz_naive_df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {"A": pd.date_range(start="1/1/2018", periods=5, freq="3M").to_series()}
+            )
+        )
+    ],
+)
+def test_convert_timezone(tz_aware_df, tz_naive_df, memory_leak_check):
+    query1 = "SELECT CONVERT_TIMEZONE('Poland', A) from table1"
+    expected_output1 = tz_aware_df["table1"]["A"].dt.tz_convert("Poland").to_frame()
+
+    check_query(
+        query1,
+        tz_aware_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output1,
+    )
+
+    query2 = "SELECT CONVERT_TIMEZONE('America/New_York', 'Poland', A) from table1"
+
+    converted_series = (
+        tz_naive_df["A"]
+        .index.tz_localize(None)
+        .tz_localize("America/New_York")
+        .tz_convert("Poland")
+        .tz_localize(None)
+        .to_series()
+    )
+    expected_output2 = converted_series.to_frame()
+
+    check_query(
+        query2,
+        {"table1": tz_naive_df},
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output2,
     )

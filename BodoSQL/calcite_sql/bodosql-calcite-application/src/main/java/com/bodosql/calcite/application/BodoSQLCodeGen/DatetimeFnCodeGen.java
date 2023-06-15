@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+
+import com.bodosql.calcite.ir.ExprKt;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -179,6 +181,26 @@ public class DatetimeFnCodeGen {
             + ")";
 
     return new Expr.Raw(outputExpression);
+  }
+
+
+  /**
+   * Helper function that handles codegen for CONVERT_TIMEZONE
+   *
+   * @return The Expr corresponding to the function call
+   */
+  public static Expr generateConvertTimezoneCode(List<Expr> operands, BodoTZInfo tzTimeInfo) {
+    String defaultTimezoneStr = tzTimeInfo.getPyZone();
+    List<Expr> args = new ArrayList<>();
+    if (operands.size() == 2) {
+      args.add(new Expr.Raw(defaultTimezoneStr));
+      args.addAll(operands);
+      args.add(new Expr.BooleanLiteral(true));
+    } else if (operands.size() == 3) {
+      args.addAll(operands);
+      args.add(new Expr.BooleanLiteral(false));
+    }
+    return ExprKt.BodoSQLKernel("convert_timezone", args, List.of());
   }
 
   /**

@@ -3,6 +3,7 @@
 Implements datetime array kernels that are specific to BodoSQL
 """
 
+from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 import numba
 import numpy as np
 import pandas as pd

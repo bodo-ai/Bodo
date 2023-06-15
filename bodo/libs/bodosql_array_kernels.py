@@ -78,6 +78,7 @@ broadcasted_fixed_arg_functions = {
     "construct_timestamp",
     "contains",
     "conv",
+    "convert_timezone",
     "cos",
     "cosh",
     "cot",

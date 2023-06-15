@@ -331,7 +331,6 @@ def scalar_to_date_equiv_fn_inner(val, formatstr=None, scale=0):
 def test_to_date_valid_strings(
     valid_to_date_strings, test_fn, use_dict_enc, memory_leak_check
 ):
-
     if not use_dict_enc:
         return
 
@@ -378,7 +377,6 @@ def test_to_date_valid_strings(
 def test_to_date_valid_digit_strings(
     valid_to_date_integers_for_strings, test_fn, memory_leak_check
 ):
-
     if isinstance(valid_to_date_integers_for_strings[0], int):
         valid_digit_strs = (str(valid_to_date_integers_for_strings[0]),)
     else:
@@ -615,3 +613,122 @@ def test_to_dates_option(memory_leak_check):
 
         answer = (fn_output, fn_output)
         check_func(impl, ("2022-02-18", flag), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "source_tz, target_tz, dt, return_tz, answer",
+    [
+        pytest.param(
+            "America/New_York",
+            "America/Los_Angeles",
+            pd.Timestamp("2022-08-17T12"),
+            False,
+            pd.Timestamp("2022-08-17T09"),
+            id="three-arg",
+        ),
+        pytest.param(
+            "Poland",
+            "America/Chicago",
+            pd.Timestamp("2022-08-17T12", tz="America/New_York"),
+            True,
+            pd.Timestamp("2022-08-17T11", tz="America/Chicago"),
+            id="two-arg-data-tz",
+        ),
+        pytest.param(
+            "Poland",
+            "America/Chicago",
+            pd.Timestamp("2022-08-17T12"),
+            True,
+            pd.Timestamp("2022-08-17T05", tz="America/Chicago"),
+            id="two-arg-source-tz",
+        ),
+    ],
+)
+def test_convert_timezone_scalars(source_tz, target_tz, dt, return_tz, answer):
+    def impl(data):
+        return bodo.libs.bodosql_array_kernels.convert_timezone(
+            source_tz,
+            target_tz,
+            data,
+            return_tz,
+        )
+
+    check_func(
+        impl,
+        (dt,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "source_tz, target_tz, data, return_tz, answer",
+    [
+        pytest.param(
+            "America/New_York",
+            "America/Los_Angeles",
+            pd.Series(
+                [
+                    pd.Timestamp("2023-01-01T12"),
+                    pd.Timestamp("2022-09-01T23"),
+                    pd.Timestamp("2021-08-01T14"),
+                    pd.Timestamp("2020-03-01T10"),
+                ]
+                * 3
+            ),
+            True,
+            pd.Series(
+                [
+                    pd.Timestamp("2023-01-01T09", tz="America/Los_Angeles"),
+                    pd.Timestamp("2022-09-01T20", tz="America/Los_Angeles"),
+                    pd.Timestamp("2021-08-01T11", tz="America/Los_Angeles"),
+                    pd.Timestamp("2020-03-01T07", tz="America/Los_Angeles"),
+                ]
+                * 3
+            ),
+            id="two-arg",
+        ),
+        pytest.param(
+            "America/New_York",
+            "America/Chicago",
+            pd.Series(
+                [
+                    pd.Timestamp("2023-01-01T12", tz="Europe/Berlin"),
+                    pd.Timestamp("2022-09-01T23", tz="Europe/Berlin"),
+                    pd.Timestamp("2021-08-01T14", tz="Europe/Berlin"),
+                    pd.Timestamp("2020-03-01T10", tz="Europe/Berlin"),
+                ]
+                * 3
+            ),
+            True,
+            pd.Series(
+                [
+                    pd.Timestamp("2023-01-01T05", tz="America/Chicago"),
+                    pd.Timestamp("2022-09-01T16", tz="America/Chicago"),
+                    pd.Timestamp("2021-08-01T07", tz="America/Chicago"),
+                    pd.Timestamp("2020-03-01T03", tz="America/Chicago"),
+                ]
+                * 3
+            ),
+            id="three-arg-data-tz",
+        ),
+    ],
+)
+def test_convert_timezone(source_tz, target_tz, data, return_tz, answer):
+    def impl(data):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.convert_timezone(
+                source_tz, target_tz, data, return_tz
+            )
+        )
+
+    check_func(
+        impl,
+        (data,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        check_names=False,
+    )

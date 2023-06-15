@@ -17,6 +17,8 @@ from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_bool,
+    get_overload_const_int,
+    get_overload_const_str,
     is_literal_type,
     is_overload_constant_bool,
     is_overload_constant_str,
@@ -191,7 +193,8 @@ def create_date_cast_util(func, error_on_fail):
             https://docs.snowflake.com/en/user-guide/date-time-input-output.html#date-formats. All of the examples listed are
             handled by pd.to_datetime() in Bodo jit code.
 
-            It will also check if the string is convertible to int, IE '12345' or '-4321'"""
+            It will also check if the string is convertible to int, IE '12345' or '-4321'
+            """
 
             # Conversion needs to be done incase arg0 is unichr array
             scalar_text = "arg0 = str(arg0)\n"
@@ -426,7 +429,8 @@ def create_timestamp_cast_util(func, error_on_fail):
             https://docs.snowflake.com/en/user-guide/date-time-input-output.html#date-formats. All of the examples listed are
             handled by pd.to_datetime() in Bodo jit code.
 
-            It will also check if the string is convertable to int, IE '12345' or '-4321'"""
+            It will also check if the string is convertable to int, IE '12345' or '-4321'
+            """
 
             # Conversion needs to be done incase arg0 is unichr array
             scalar_text = "arg0 = str(arg0)\n"
@@ -1547,3 +1551,87 @@ def to_number_util(expr, _try=False):  # pragma: no cover
         scalar_text = "res[i] = np.int64(arg0)"
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def convert_timezone(source_tz, target_tz, data, return_tz):
+    """Handles cases where adding intervals receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [source_tz, target_tz, data, return_tz]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.convert_timezone",
+                ["source_tz", "target_tz", "data", "return_tz"],
+                i,
+            )
+
+    def impl(source_tz, target_tz, data, return_tz):  # pragma: no cover
+        return convert_timezone_util(source_tz, target_tz, data, return_tz)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def convert_timezone_util(source_tz, target_tz, data, return_tz):
+    """
+    Converts <data> to <target_tz> timezone.
+
+    <data>'s tz info takes precedence over <source_tz>,
+    meaning that if <data> is tz-aware, the kernel will convert
+    from <data>.tz -> <target_tz> instead of <source_tz> -> <target_tz>.
+
+    Args:
+        source_tz (Literal[str]): string of timezone to convert from
+        target_tz (Literal[str]): string of timezone to convert to
+        data (datetime/timestamp scalar/array): input data
+        return_tz (bool): whether output data should be tz-aware
+
+    Returns:
+        bodo.DatetimeArrayType if output is tz-aware
+        types.Array(bodo.datetime64ns, 1, "C") otherwise
+    """
+
+    verify_scalar_string_arg(source_tz, "convert_timezone", "source_tz")
+    verify_scalar_string_arg(target_tz, "convert_timezone", "target_tz")
+    verify_time_or_datetime_arg_allow_tz(data, "convert_timezone", "data")
+    verify_boolean_arg(return_tz, "convert_timezone", "return_tz")
+
+    arg_names = ["source_tz", "target_tz", "data", "return_tz"]
+    arg_types = [source_tz, target_tz, data, return_tz]
+    propagate_null = [False, True, True, True]
+
+    box_str = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(data, True)
+        else ""
+    )
+
+    unbox_str = (
+        "unbox_if_tz_naive_timestamp"
+        if bodo.utils.utils.is_array_typ(data, True)
+        else ""
+    )
+
+    scalar_text = f"arg2 = {box_str}(arg2)\n"
+
+    if get_overload_const_bool(return_tz):
+        out_dtype = bodo.DatetimeArrayType(get_overload_const_str(target_tz))
+        if is_valid_tz_aware_datetime_arg(data):
+            scalar_text += "res[i] = arg2.tz_convert(arg1)\n"
+        else:
+            scalar_text += "res[i] = arg2.tz_localize(arg0).tz_convert(arg1)\n"
+    else:
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+        scalar_text += f"res[i] = {unbox_str}(arg2.tz_localize(None).tz_localize(arg0).tz_convert(arg1).tz_localize(None))\n"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals={
+            "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
+        },
+    )

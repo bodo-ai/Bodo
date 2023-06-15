@@ -1104,6 +1104,28 @@ def verify_time_or_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cov
         )
 
 
+def verify_time_or_datetime_arg_forbid_tz(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a time/datetime
+       (scalar or vector) that does not allow timezones.
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being checked
+
+    raises: BodoError if the argument is not a datetime, datetime column, or NULL
+    """
+    if not (
+        is_overload_none(arg)
+        or is_valid_date_arg(arg)
+        or is_valid_time_arg(arg)
+        or is_valid_tz_naive_datetime_arg(arg)
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a time/datetime, time/datetime column, or null without a tz"
+        )
+
+
 def get_common_broadcasted_type(arg_types, func_name):
     """Takes in a list of types from arrays/Series/scalars, verifies that they
     have a common underlying scalar type, and if so returns the corresponding
