@@ -16,24 +16,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.g
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateSnowflakeDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.generateDateDiffFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.DateTimeType;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.TIME_PART_UNITS;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurdateCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurrTimeCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateCurrTimestampCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateFormatCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTimeTypeFromPartsCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTruncCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateLastDayCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateMakeDateInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateToTimeCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateUTCDateCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateUTCTimestampCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getDateTimeDataType;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getDoubleArgDatetimeFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getSingleArgDatetimeFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.getYearWeekFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateDatePart;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.generateJsonTwoArgsInfo;
@@ -88,16 +71,12 @@ import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.ExprTypeVisitor;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.Utils.BodoCtx;
-import com.bodosql.calcite.ir.Dataframe;
-import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.*;
 import com.bodosql.calcite.ir.Expr.FrameTripleQuotedString;
-import com.bodosql.calcite.ir.Frame;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Module.Builder;
-import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
 import com.bodosql.calcite.ir.Op.If;
-import com.bodosql.calcite.ir.Variable;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import java.util.ArrayList;
@@ -106,6 +85,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+
+import kotlin.Pair;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rex.RexCall;
@@ -1233,6 +1214,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                   "Error DATE_FORMAT(): 'Format' must be a string literal");
             }
             return generateDateFormatCode(operands.get(0), operands.get(1));
+          case "CONVERT_TIMEZONE":
+            assert operands.size() == 2 || operands.size() == 3;
+            return generateConvertTimezoneCode(operands, this.typeSystem.getDefaultTZInfo());
           case "CURRENT_DATE":
           case "CURDATE":
             assert operands.size() == 0;
