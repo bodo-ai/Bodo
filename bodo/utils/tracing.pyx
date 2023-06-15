@@ -333,7 +333,7 @@ cdef class Event:
 
     def _get_duration(self):
         '''Get duration for this event.
-        
+
         Overriden in subclasses, like ResumableEvent, in order to provide a
         custom definition of duration for an event.'''
         return get_timestamp() - self.trace["ts"]
@@ -385,11 +385,11 @@ cdef class ResumableEvent(Event):
     @contextlib.contextmanager
     def iteration(self):
         """Context manager to handle calling start_iteration and end_iteration
-        
+
         Use as such:
-        
+
             with event.iteration():
-                ITERATION CODE        
+                ITERATION CODE
         """
         self.start_iteration()
         try:
