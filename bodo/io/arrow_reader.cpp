@@ -16,6 +16,17 @@ using arrow::Type;
 
 #define kNanosecondsInDay 86400000000000LL  // TODO: reuse from type_traits.h
 
+// If the arrow type is a time type, get the time unit associated with it
+inline arrow::TimeUnit::type getTimeUnit(
+    const std::shared_ptr<arrow::DataType>& type) {
+    if (type->id() == arrow::Type::TIMESTAMP) {
+        const auto& ts_type = static_cast<const arrow::TimestampType&>(*type);
+        return ts_type.unit();
+    } else {
+        return arrow::TimeUnit::NANO;
+    }
+}
+
 // similar to arrow/python/arrow_to_pandas.cc ConvertDatetimeNanos except with
 // just buffer
 // TODO: reuse from arrow
@@ -75,12 +86,14 @@ bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
             return pq_type == Bodo_CTypes::BINARY;
         case Type::DATE32:
             return pq_type == Bodo_CTypes::DATE;
+        case Type::TIMESTAMP:
+            return pq_type == Bodo_CTypes::DATETIME &&
+                   getTimeUnit(arrow_type) == arrow::TimeUnit::NANO;
         case Type::DICTIONARY:
             // Dictionary array's codes are always read into proper integer
             // array type, so buffer data types are the same
             return true;
         default:
-            // TODO: add timestamp[ns]
             return false;
     }
     return false;
@@ -308,12 +321,14 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
    public:
     /**
      * @param dtype : Bodo type of input array
+     * @param timeUnit: Time unit if dtype is Bodo_CTypes::DATETIME
      * @param length : final output length on this process
      * @param is_nullable : true if array is nullable
      * @param is_categorical : true if column is categorical
      */
     PrimitiveBuilder(Bodo_CTypes::CTypeEnum dtype, int64_t length,
-                     bool is_nullable, bool is_categorical)
+                     bool is_nullable, bool is_categorical,
+                     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO)
         : is_nullable(is_nullable),
           is_categorical(is_categorical),
           dtype(dtype) {
@@ -332,9 +347,15 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
                 case Bodo_CTypes::INT8:
                 case Bodo_CTypes::DATE:
                     return;
+
+                case Bodo_CTypes::DATETIME:
+                    if (time_unit == arrow::TimeUnit::NANO) {
+                        return;
+                    }
+
                 default:
                     // Fallthrough for unsupported zero-copy cases
-                    // TODO support date, datetime, timestamp types
+                    // TODO support timestamp types
                     ;
             }
         }
@@ -349,7 +370,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
     PrimitiveBuilder(std::shared_ptr<arrow::DataType> type, int64_t length,
                      bool is_nullable, bool is_categorical)
         : PrimitiveBuilder(arrow_to_bodo_type(type->id()), length, is_nullable,
-                           is_categorical) {}
+                           is_categorical, getTimeUnit(type)) {}
 
     virtual void append(std::shared_ptr<arrow::ChunkedArray> chunked_arr) {
         if (!temp_zero_copy_fallback) {

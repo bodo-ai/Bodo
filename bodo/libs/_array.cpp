@@ -373,6 +373,17 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
                         "info_to_nullable_array requires nullable input");
         return;
     }
+    if (info->dtype == Bodo_CTypes::DATETIME) {
+        // Temporary fix to set invalid entries to NaT
+        std::uint8_t* bitmap =
+            reinterpret_cast<std::uint8_t*>(info->null_bitmask());
+        std::int64_t* data = reinterpret_cast<std::int64_t*>(info->data1());
+        for (std::uint64_t i = 0; i < info->length; ++i) {
+            if (!GetBit(bitmap, i)) {
+                data[i] = std::numeric_limits<std::int64_t>::min();
+            }
+        }
+    }
     *n_items = info->length;
     *n_bytes = (info->length + 7) >> 3;
     *data = info->data1();

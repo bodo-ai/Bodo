@@ -153,10 +153,13 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
                 ),
                 "B": pd.date_range("2018-04-09", periods=50, freq="2D1H"),
                 "C": pd.date_range("2018-04-09", periods=50, freq="2D1H", tz="Poland"),
+                "D": pd.date_range(
+                    "2018-04-09", periods=50, freq="5001ns"
+                ),  # Force timestamp64 as NS
             }
         )
         # Create a pq ex
-        df.to_parquet("test_tz.pq", index=False)
+        df.to_parquet("test_tz.pq", index=False, version="2.6")
 
     def test_impl1():
         """

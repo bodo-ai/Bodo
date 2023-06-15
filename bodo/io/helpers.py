@@ -100,7 +100,6 @@ def lower_pyarrow_table_schema(context, builder, ty, pyval):
 def is_nullable(typ):
     return bodo.utils.utils.is_array_typ(typ, False) and (
         not isinstance(typ, types.Array)  # or is_dtype_nullable(typ.dtype)
-        and not isinstance(typ, bodo.DatetimeArrayType)
     )
 
 
