@@ -926,6 +926,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+
   public static final SqlFunction DATE_TRUNC =
       new SqlFunction(
           "DATE_TRUNC",
@@ -1026,8 +1027,20 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction DAY = new SqlDatePartFunction("DAY", TimeUnit.DAY);
 
+  public static final SqlFunction CONVERT_TIMEZONE =
+          new SqlFunction("CONVERT_TIMEZONE",
+                  SqlKind.OTHER_FUNCTION,
+                  ReturnTypes.TIMESTAMP,
+                  null,
+                  OperandTypes.or(
+                    OperandTypes.CHARACTER_CHARACTER_DATETIME,
+                    OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME)
+                  ),
+                  SqlFunctionCategory.TIMEDATE);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
+          CONVERT_TIMEZONE,
           DATE_PART,
           DATEADD,
           DATE_ADD,
