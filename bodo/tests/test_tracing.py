@@ -1,6 +1,5 @@
 # Copyright (C) 2019 Bodo Inc.
 # Turn on tracing for all tests in this file.
-import json
 import os
 import time
 from tempfile import TemporaryDirectory
@@ -9,6 +8,7 @@ import pytest
 from mpi4py import MPI
 
 import bodo
+from bodo.tests.tracing_utils import TracingContextManager
 from bodo.utils import tracing
 from bodo.utils.tracing import TRACING_MEM_WARN
 from bodo.utils.typing import BodoWarning
@@ -115,8 +115,8 @@ def test_resumable_event():
 
     # Test normal operation of tracing with synced and non-synced events
     def impl1():
-        with TemporaryDirectory() as tempdir:
-            tracing.start()
+        tracing_info = TracingContextManager()
+        with tracing_info:
             resumable_event = tracing.ResumableEvent("resumable")
             event1 = tracing.Event("simple")
 
@@ -135,12 +135,10 @@ def test_resumable_event():
             event2.finalize()
             resumable_event.finalize()
 
-            output = f"{tempdir}/bodo_trace.json"
-            tracing.dump(output)
-            with open(output, "rt") as f:
-                d = json.load(f)["traceEvents"]
+        simple1 = tracing_info.get_event("simple", 0)
+        simple2 = tracing_info.get_event("simple2", 0)
+        resumable = tracing_info.get_event("resumable", 0)
 
-        _start_event, simple1, simple2, resumable, _end_event = d
         assert resumable["resumable"], "No resumable attribute on resumable event"
         assert (
             resumable["iteration_count"] == 2
@@ -156,6 +154,5 @@ def test_resumable_event():
         ), "Resumable event duration is incorrect"
 
     impl1()
-
     tracing.reset()
     tracing.stop()
