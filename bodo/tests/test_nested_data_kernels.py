@@ -7,6 +7,8 @@ import bodo
 import numba
 import numpy as np
 import pandas as pd
+
+from bodo.libs.bodosql_array_kernel_utils import vectorized_sol
 from bodo.tests.utils import check_func
 
 
@@ -98,4 +100,95 @@ def test_to_array(to_array_input, dtype, answer, memory_leak_check):
         py_output=answer,
         check_dtype=False,
         is_out_distributed=not is_scalar,
+    )
+
+
+
+
+@pytest.mark.parametrize(
+    "array, separator, answer",
+    [
+        pytest.param(
+            np.array([4234, 401, -820]),
+            "+",
+            "4234+401+-820",
+            id="int_scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    [-253.123, None, 534.958, -4.37, 0.9305],
+                    [19.9, -235.104, 437.0, -0.2952],
+                    [1312.2423, None],
+                    None,
+                ] * 4
+            ),
+            "-",
+            pd.Series(
+                [
+                    "-253.123000--534.958000--4.370000-0.930500",
+                    "19.900000--235.104000-437.000000--0.295200",
+                    "1312.242300-",
+                    None,
+                ] * 4
+            ),
+            id="float_vector"
+        ),
+        pytest.param(
+            np.array([False, True, None, True]),
+            "&",
+            "False&True&&True",
+            id="bool_scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    ["-253.123", "534.958", None, "-4.37", "0.9305"],
+                    None,
+                    ["oneword"],
+                    ["g0q0ejdif", "ewkf", "%%@", ",..;", "BLSDF"],
+                ] * 4
+            ),
+            "",
+            pd.Series(
+                [
+                    "-253.123534.958-4.370.9305",
+                    None,
+                    "oneword",
+                    "g0q0ejdifewkf%%@,..;BLSDF",
+                ] * 4
+            ),
+            id="string_vector"
+        ),
+        pytest.param(
+            np.array(
+                [
+                    datetime.date(1932, 10, 5),
+                    datetime.date(2012, 7, 23),
+                    datetime.date(1999, 3, 15),
+                    datetime.date(2022, 12, 29),
+                ],
+            ),
+            "_",
+            "1932-10-05_2012-07-23_1999-03-15_2022-12-29",
+            id="date_scalar",
+        ),
+    ]
+)
+def test_array_to_string(array, separator, answer, memory_leak_check):
+    is_out_distributed = True
+    def impl(array, separator):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.array_to_string(array, separator)
+        )
+
+    if not isinstance(array, pd.Series):
+        is_out_distributed = False
+        impl = lambda array, separator: bodo.libs.bodosql_array_kernels.array_to_string(array, separator)
+
+    check_func(
+        impl,
+        (array, separator,),
+        py_output=answer,
+        is_out_distributed=is_out_distributed,
     )

@@ -1098,6 +1098,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateToDoubleFnCode(operands, fnName);
           case "TO_ARRAY":
             return generateToArrayFnCode(this.visitor, fnOperation, operands);
+          case "ARRAY_TO_STRING":
+            assert operands.size() == 2;
+            return ExprKt.BodoSQLKernel("array_to_string", operands, List.of());
           case "ASINH":
           case "ACOSH":
           case "ATANH":

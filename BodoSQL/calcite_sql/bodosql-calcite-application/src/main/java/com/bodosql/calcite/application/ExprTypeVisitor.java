@@ -105,6 +105,7 @@ public class ExprTypeVisitor {
   private static Set<String> meetFunctions =
       Set.of(
           "ADDDATE",
+          "ARRAY_TO_STRING",
           "ATAN2",
           "BITAND",
           "BITNOT",
