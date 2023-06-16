@@ -2882,3 +2882,168 @@ def add_date_interval_to_date_util(start_dt, interval):
         scalar_text,
         out_dtype,
     )
+
+
+@numba.generated_jit(nopython=True)
+def months_between(dt0, dt1):  # pragma: no cover
+    args = [dt0, dt1]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.months_between",
+                ["dt0", "dt1"],
+                i,
+            )
+
+    def impl(dt0, dt1):  # pragma: no cover
+        return months_between_util(dt0, dt1)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def months_between_util(dt0, dt1):
+    """
+    Python kernel for MONTHS_BETWEEN function.
+    Returns the number of months between two DATE or TIMESTAMP values.
+
+    Args:
+        dt0: A column/scalar of date/timestamp object
+        dt1: A column/scalar of date/timestamp object
+
+    Returns:
+        A scalar or array of floats that denotes the months
+        between dt0 and dt1.
+    """
+    verify_time_or_datetime_arg_allow_tz(dt0, "months_between", "arg0")
+    verify_time_or_datetime_arg_allow_tz(dt1, "months_between", "arg1")
+
+    arg_names = ["dt0", "dt1"]
+    arg_types = [dt0, dt1]
+    propagate_null = [True] * 2
+
+    box_str0 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(dt0, True)
+        else ""
+    )
+    box_str1 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(dt1, True)
+        else ""
+    )
+
+    scalar_text = f"arg0 = {box_str0}(arg0)\n"
+    scalar_text += f"arg1 = {box_str1}(arg1)\n"
+    scalar_text += "arg0_next = arg0 + datetime.timedelta(days=1)\n"
+    scalar_text += "arg1_next = arg1 + datetime.timedelta(days=1)\n"
+    scalar_text += (
+        "months_int_count = (arg0.year - arg1.year) * 12 + (arg0.month - arg1.month)\n"
+    )
+
+    # Per Snowflake docs, if the two date's have the same day number or they are
+    # both the last day of the month, the months between value is an integer value.
+    scalar_text += (
+        "if (arg0.day == arg1.day) or (arg0_next.day == 1 and arg1_next.day == 1):\n"
+    )
+    scalar_text += "  months_frac_count = 0\n"
+    scalar_text += "else:\n"
+
+    # Otherwise, there is a fractioanl component, which is the difference in the
+    # day numbers / 31 (per Snowflake docs), rounded to 6 decimal places.
+    scalar_text += "  months_frac_count = round((arg0.day - arg1.day)/31.0, 6)\n"
+    scalar_text += "res[i] = months_int_count + months_frac_count\n"
+
+    out_dtype = bodo.FloatingArrayType(bodo.float64)
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def add_months(dt0, num_months):  # pragma: no cover
+    args = [dt0, num_months]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.months_between",
+                ["dt0", "num_months"],
+                i,
+            )
+
+    def impl(dt0, num_months):  # pragma: no cover
+        return add_months_util(dt0, num_months)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def add_months_util(dt0, num_months):
+    """
+    Python kernel for ADD_MONTHS function.
+    Adds <num_months> months to dt0.
+
+    Args:
+        dt0: A column/scalar of date/timestamp object
+        num_months: A column/scalar of numeric values.
+
+    Returns:
+        A column/scalar of date/timestamp object.
+    """
+
+    verify_time_or_datetime_arg_allow_tz(dt0, "add_months", "arg0")
+    verify_int_float_arg(num_months, "add_months", "num_months")
+
+    time_zone = get_tz_if_exists(dt0)
+
+    arg_names = ["dt0", "num_months"]
+    arg_types = [dt0, num_months]
+    propagate_null = [True] * 2
+
+    dt0_is_array = bodo.utils.utils.is_array_typ(dt0, True)
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp" if dt0_is_array else ""
+    )
+
+    box_str = "bodo.utils.conversion.box_if_dt64" if dt0_is_array else ""
+
+    # Box dt64/date to Timestamp
+    date_to_int_str = "bodo.hiframes.datetime_date_ext.cast_datetime_date_to_int_ns"
+    if is_valid_date_arg(dt0):
+        scalar_text = f"arg0 = pd.Timestamp({date_to_int_str}(arg0))\n"
+    else:
+        scalar_text = f"arg0 = {box_str}(arg0)\n"
+
+    # Per Snowflake docs, the num_months argument can be any numeric value,
+    # so we have to round the value in the beginning to get an integer.
+    scalar_text += "arg1 = round(arg1)\n"
+
+    # # If the input date is the last day of the month,
+    # # the output date also must be the last day of the month
+    scalar_text += f"if (arg0.is_month_end and not (arg0 + pd.DateOffset(months=arg1)).is_month_end):\n"
+    scalar_text += "  new_arg = arg0 + pd.DateOffset(months=arg1) + pd.tseries.offsets.MonthEnd()\n"
+    scalar_text += "else:\n"
+    scalar_text += "  new_arg = arg0 + pd.DateOffset(months=arg1)\n"
+
+    if time_zone is not None:
+        out_dtype = bodo.DatetimeArrayType(time_zone)
+        scalar_text += f"res[i] = new_arg\n"
+    else:
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+        if is_valid_date_arg(dt0):
+            scalar_text += f"res[i] = {unbox_str}(pd.Timestamp(new_arg))\n"
+        else:
+            scalar_text += f"res[i] = {unbox_str}(new_arg)\n"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
