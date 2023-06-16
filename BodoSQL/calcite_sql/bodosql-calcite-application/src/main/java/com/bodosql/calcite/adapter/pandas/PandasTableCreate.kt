@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.Dataframe
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -31,4 +32,10 @@ class PandasTableCreate(
     override fun emit(implementor: PandasRel.Implementor): Dataframe {
         TODO("Not yet implemented")
     }
+
+    override fun getSingleBatchTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
+
+    override fun operationDescriptor() = "writing table"
+    override fun loggingTitle() = "IO TIMING"
+    override fun nodeDetails() = tableName
 }
