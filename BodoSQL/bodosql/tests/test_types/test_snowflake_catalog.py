@@ -523,7 +523,86 @@ def test_read_timing_debug_message(
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
         impl(bc)
-        check_logger_msg(stream, "Finished reading table REGION")
+        check_logger_msg(stream, "Execution time for reading table REGION")
+
+
+def test_insert_into_timing_debug_message(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that using insert into with a SnowflakeCatalog and bodo.set_verbose_level(1)
+    automatically adds a debug message about IO.
+    """
+    if bodo.get_size() > 1:
+        # Only test on 1 rank to simplify testing.
+        return
+
+    @bodo.jit
+    def impl(bc, query):
+        # Load with snowflake or local default
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    typed_df = pd.DataFrame({"name_column": ["sample_name"]})
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    with create_snowflake_table(
+        typed_df, "insert_into_timer_table", db, schema
+    ) as table_name:
+        query = f"INSERT INTO {table_name} (name_column) SELECT 'this is a name'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            impl(bc, query)
+            check_logger_msg(
+                stream, f"Execution time for writing table {table_name.upper()}"
+            )
+
+
+def test_create_table_timing_debug_message(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that using insert into with a SnowflakeCatalog and bodo.set_verbose_level(1)
+    automatically adds a debug message about IO.
+    """
+    if bodo.get_size() > 1:
+        # Only test on 1 rank to simplify testing.
+        return
+
+    @bodo.jit
+    def impl(bc, query):
+        # Load with snowflake or local default
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    table_name = gen_unique_table_id("create_table_timer_table")
+    exception_occurred_in_test_body = False
+    try:
+        query = f"create table {table_name} as SELECT 'this is a name' as A"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            impl(bc, query)
+            check_logger_msg(stream, f"Execution time for writing table {table_name}")
+    except Exception as e:
+        # In the case that another exception ocurred within the body of the try,
+        # We may not have created a table to drop.
+        # because of this, we call drop_snowflake_table in a try/except, to avoid
+        # masking the original exception
+        exception_occurred_in_test_body = True
+        raise e
+    finally:
+        db = test_db_snowflake_catalog.database
+        schema = test_db_snowflake_catalog.connection_params["schema"]
+        if exception_occurred_in_test_body:
+            try:
+                drop_snowflake_table(table_name, db, schema)
+            except:
+                pass
+        else:
+            drop_snowflake_table(table_name, db, schema)
 
 
 def test_delete_simple(test_db_snowflake_catalog, memory_leak_check):
@@ -767,7 +846,7 @@ def test_default_table_type(
     # Write to Snowflake
     succsess_query = f"CREATE OR REPLACE TABLE {schema}.{table_name} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
 
-    exception_occured_in_test_body = False
+    exception_occurred_in_test_body = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
         check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
@@ -811,10 +890,10 @@ def test_default_table_type(
         # We may not have created a table to drop.
         # because of this, we call drop_snowflake_table in a try/except, to avoid
         # masking the original exception
-        exception_occured_in_test_body = True
+        exception_occurred_in_test_body = True
         raise e
     finally:
-        if exception_occured_in_test_body:
+        if exception_occurred_in_test_body:
             try:
                 drop_snowflake_table(table_name, db, schema)
             except:
@@ -890,7 +969,7 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
     table_name = comm.bcast(table_name)
 
     succsess_query = f"CREATE OR REPLACE TRANSIENT TABLE {schema}.{table_name} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
-    exception_occured_in_test_body = False
+    exception_occurred_in_test_body = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
         check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
@@ -934,10 +1013,10 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
         # We may not have created a table to drop.
         # because of this, we call drop_snowflake_table in a try/except, to avoid
         # masking the original exception
-        exception_occured_in_test_body = True
+        exception_occurred_in_test_body = True
         raise e
     finally:
-        if exception_occured_in_test_body:
+        if exception_occurred_in_test_body:
             try:
                 drop_snowflake_table(table_name, db, schema)
             except:
@@ -980,7 +1059,7 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
     succsess_query = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
     # This should succseed, since the table does not exist
 
-    exception_occured_in_test_body = False
+    exception_occurred_in_test_body = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
         check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
@@ -1010,10 +1089,10 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
         # We may not have created a table to drop.
         # because of this, we call drop_snowflake_table in a try/except, to avoid
         # masking the original exception
-        exception_occured_in_test_body = True
+        exception_occurred_in_test_body = True
         raise e
     finally:
-        if exception_occured_in_test_body:
+        if exception_occurred_in_test_body:
             try:
                 drop_snowflake_table(table_name, db, schema)
             except:
@@ -1151,7 +1230,7 @@ def test_snowflake_catalog_simple_rewrite(
     # but the clause does require a re-write
     query = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select * from __bodolocal__.table1 limit 100"
 
-    exception_occured_in_test_body = False
+    exception_occurred_in_test_body = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
         check_func(impl, (bc, query), only_1D=True, py_output=5)
@@ -1174,10 +1253,10 @@ def test_snowflake_catalog_simple_rewrite(
         # We may not have created a table to drop.
         # because of this, we call drop_snowflake_table in a try/except, to avoid
         # masking the original exception
-        exception_occured_in_test_body = True
+        exception_occurred_in_test_body = True
         raise e
     finally:
-        if exception_occured_in_test_body:
+        if exception_occurred_in_test_body:
             try:
                 drop_snowflake_table(table_name, db, schema)
             except:

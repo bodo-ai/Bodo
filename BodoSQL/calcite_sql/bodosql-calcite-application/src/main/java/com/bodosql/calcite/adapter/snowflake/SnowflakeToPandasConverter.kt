@@ -1,10 +1,10 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
-import com.bodosql.calcite.ir.*
+import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Expr
-import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.*
@@ -29,6 +29,17 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      * benefit from parallelism.
      */
     override fun splitCount(numRanks: Int): Int = 1
+
+    override fun getSingleBatchTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
+
+    override fun operationDescriptor() = "reading table"
+    override fun loggingTitle() = "IO TIMING"
+
+    override fun nodeDetails() = (if (input is SnowflakeTableScan) {
+        getTableName()
+    } else {
+        getSnowflakeSQL()
+    })!!
 
     override fun computeSelfCost(planner: RelOptPlanner, mq: RelMetadataQuery): RelOptCost? {
         // Determine the average row size which determines how much data is returned.
@@ -65,7 +76,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     }
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe =
-        implementor.build(withTimers = false) { ctx ->
+        implementor.build { ctx ->
             if (isStreaming()) {
                 generateStreamingDataFrame(ctx)
             } else {
@@ -85,15 +96,17 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         }
     }
 
+    private fun getTableName()  = (input as SnowflakeTableScan).catalogTable.name
+    private fun getSchemaName()  = (input as SnowflakeTableScan).catalogTable.schema.name
+
     /**
      * Generate the code required to read a table. This path is necessary because the Snowflake
      * API allows for more accurate sampling when operating directly on a table.
      */
     private fun sqlReadTable(tableScan: SnowflakeTableScan, ctx: PandasRel.BuildContext): Expr.Call {
+        val tableName = getTableName()
+        val schemaName = getSchemaName()
         val relInput = input as SnowflakeRel
-        val catalogTable = tableScan.catalogTable
-        val tableName = catalogTable.name
-        val schemaName = catalogTable.schema.name
         val args = listOf(
             Expr.StringLiteral(tableName),
             Expr.StringLiteral(relInput.generatePythonConnStr(schemaName))
@@ -101,22 +114,25 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, true))
     }
 
-    /**
-     * Generate a read expression for SQL operations that will be pushed into Snowflake. The currently
-     * supported operations consist of Aggregates and filters.
-     */
-    private fun readSql(ctx: PandasRel.BuildContext): Expr.Call {
-        val relInput = input as SnowflakeRel
+    private fun getSnowflakeSQL(): String {
         // Use the snowflake dialect for generating the sql string.
         val rel2sql = RelToSqlConverter(SnowflakeSqlDialect.DEFAULT)
-        val sql = rel2sql.visitRoot(input)
+        return rel2sql.visitRoot(input)
             .asSelect()
             .toSqlString { c ->
                 c.withClauseStartsLine(false)
                     .withDialect(SnowflakeSqlDialect.DEFAULT)
             }
             .toString()
+    }
 
+    /**
+     * Generate a read expression for SQL operations that will be pushed into Snowflake. The currently
+     * supported operations consist of Aggregates and filters.
+     */
+    private fun readSql(ctx: PandasRel.BuildContext): Expr.Call {
+        val sql = getSnowflakeSQL()
+        val relInput = input as SnowflakeRel
         val args = listOf(
             Expr.StringLiteral(sql),
             // We don't use a schema name because we've already fully qualified
