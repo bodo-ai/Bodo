@@ -1,11 +1,9 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.application.ExprTypeVisitor.isScalar
 import com.bodosql.calcite.ir.BodoSQLKernel
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Expr
-import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty

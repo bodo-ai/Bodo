@@ -1,13 +1,15 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor
+import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
+import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.type.RelDataType
+import java.util.*
 
 interface PandasRel : RelNode {
     companion object {
@@ -36,13 +38,26 @@ interface PandasRel : RelNode {
      */
     fun splitCount(numRanks: Int): Int? = numRanks
 
+    /**
+     * Generates the SingleBatchRelNodeTimer for the appropriate operator.
+     */
+    fun getSingleBatchTimerType(): SingleBatchRelNodeTimer.OperationType = SingleBatchRelNodeTimer.OperationType.BATCH
+
+    fun operationDescriptor() = "RelNode"
+    fun loggingTitle() = "RELNODE_TIMING"
+
+    fun nodeDetails() = Arrays.stream(
+        RelOptUtil.toString(this)
+            .split("\n".toRegex()).dropLastWhile { it.isEmpty() }
+            .toTypedArray()).findFirst().get()
+
     interface Implementor {
         fun visitChild(input: RelNode, ordinal: Int): Dataframe
 
         fun visitChildren(inputs: List<RelNode>): List<Dataframe> =
             inputs.mapIndexed { index, input -> visitChild(input, index) }
 
-        fun build(withTimers: Boolean = true, fn: (BuildContext) -> Dataframe): Dataframe
+        fun build(fn: (BuildContext) -> Dataframe): Dataframe
     }
 
     interface BuildContext {
