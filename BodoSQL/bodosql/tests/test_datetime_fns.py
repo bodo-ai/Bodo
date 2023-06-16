@@ -4389,3 +4389,27 @@ def test_current_date(fn_name, memory_leak_check):
         check_names=False,
         expected_output=pd.DataFrame({"output": [datetime.date.today()]}),
     )
+
+def test_months_between(spark_info, date_df, memory_leak_check):
+    query = "SELECT MONTHS_BETWEEN(B, A) from table1"
+
+    check_query(
+        query,
+        date_df,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        equivalent_spark_query=query,
+    )
+
+def test_add_months(spark_info, date_df, memory_leak_check):
+    query = "SELECT ADD_MONTHS(A, -18) from table1"
+
+    check_query(
+        query,
+        date_df,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        equivalent_spark_query=query,
+    )

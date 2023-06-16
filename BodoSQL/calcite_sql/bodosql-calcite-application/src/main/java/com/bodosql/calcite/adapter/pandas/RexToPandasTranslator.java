@@ -1224,6 +1224,12 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "YEARWEEK":
             assert operands.size() == 1;
             return getYearWeekFnInfo(operands.get(0));
+          case "MONTHS_BETWEEN":
+            assert operands.size() == 2;
+            return ExprKt.BodoSQLKernel("months_between", operands, List.of());
+          case "ADD_MONTHS":
+            assert operands.size() == 2;
+            return ExprKt.BodoSQLKernel("add_months", operands, List.of());
           case "MONTHNAME":
           case "MONTH_NAME":
           case "DAYNAME":
