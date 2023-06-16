@@ -54,6 +54,25 @@ public class ArrayOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction ARRAY_TO_STRING =
+      new SqlFunction(
+          "ARRAY_TO_STRING",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // The input can be any data type.
+          OperandTypes.sequence(
+              "ARRAY_TO_STRING(ARRAY, STRING)",
+              OperandTypes.ARRAY,
+              OperandTypes.STRING),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   /**
    * Determine the return type of the TO_ARRAY function
    *
@@ -74,7 +93,8 @@ public class ArrayOperatorTable implements SqlOperatorTable {
 
   private List<SqlOperator> functionList =
       Arrays.asList(
-          TO_ARRAY);
+          TO_ARRAY,
+          ARRAY_TO_STRING);
 
   @Override
   public void lookupOperatorOverloads(
