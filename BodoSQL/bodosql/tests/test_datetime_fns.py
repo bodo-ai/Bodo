@@ -2927,8 +2927,12 @@ def test_yearweek_scalars(spark_info, dt_fn_dataframe, memory_leak_check):
     )
 
 
-def test_date_trunc_time_part(time_df, time_part_strings, memory_leak_check):
-    query = f"SELECT DATE_TRUNC('{time_part_strings}', A) as output from table1"
+# NOTE (allai5): since DATE_TRUNC and TRUNC (datetime version)
+# map to the same codegen, it is believed that testing TRUNC
+# with the below two DATE_TRUNC unit tests is sufficient.
+@pytest.mark.parametrize("sql_func", ["DATE_TRUNC", "TRUNC"])
+def test_date_trunc_time_part(sql_func, time_df, time_part_strings, memory_leak_check):
+    query = f"SELECT {sql_func}('{time_part_strings}', A) as output from table1"
     scalar_func = generate_date_trunc_time_func(time_part_strings)
     output = pd.DataFrame({"output": time_df["table1"]["A"].map(scalar_func)})
     check_query(
@@ -2941,8 +2945,11 @@ def test_date_trunc_time_part(time_df, time_part_strings, memory_leak_check):
     )
 
 
-def test_date_trunc_day_part_handling(time_df, day_part_strings, memory_leak_check):
-    query = f"SELECT DATE_TRUNC('{day_part_strings}', A) as output from table1"
+@pytest.mark.parametrize("sql_func", ["DATE_TRUNC", "TRUNC"])
+def test_date_trunc_day_part_handling(
+    sql_func, time_df, day_part_strings, memory_leak_check
+):
+    query = f"SELECT {sql_func}('{day_part_strings}', A) as output from table1"
     output = pd.DataFrame({"output": []})
     with pytest.raises(
         Exception,
