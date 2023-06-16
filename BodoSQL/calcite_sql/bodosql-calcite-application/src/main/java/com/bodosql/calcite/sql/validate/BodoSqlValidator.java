@@ -16,11 +16,12 @@
  */
 package com.bodosql.calcite.sql.validate;
 
+import com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.sql.SqlInsert;
-import org.apache.calcite.sql.SqlOperatorTable;
+import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorImpl;
 
@@ -44,5 +45,32 @@ public class BodoSqlValidator extends SqlValidatorImpl {
   protected RelDataType getLogicalTargetRowType(RelDataType targetRowType, SqlInsert insert) {
     final RelDataType superType = super.getLogicalTargetRowType(targetRowType, insert);
     return ((JavaTypeFactory) typeFactory).toSql(superType);
+  }
+
+  /**
+   * Creates the SELECT statement that putatively feeds rows into an UPDATE statement to be updated.
+   *
+   * @param call Call to the UPDATE operator
+   * @return select statement
+   */
+  protected SqlSelect createSourceSelectForUpdate(SqlUpdate call) {
+    SqlSelect select = super.createSourceSelectForUpdate(call);
+    // Cast to the BodoSQL subclass of Update to extract the FROM field.
+    // If it exists, this table is cross joined with the source table.
+    if (call instanceof SqlSnowflakeUpdate) {
+      SqlNode from = ((SqlSnowflakeUpdate) call).getFrom();
+      if (from != null) {
+        select.setFrom(
+            new SqlJoin(
+                SqlParserPos.ZERO,
+                select.getFrom(),
+                SqlLiteral.createBoolean(false, SqlParserPos.ZERO),
+                JoinType.CROSS.symbol(SqlParserPos.ZERO),
+                from,
+                JoinConditionType.NONE.symbol(SqlParserPos.ZERO),
+                null));
+      }
+    }
+    return select;
   }
 }
