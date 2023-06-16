@@ -1746,6 +1746,7 @@ SqlNode SqlUpdate() :
     SqlNode condition;
     SqlNodeList sourceExpressionList;
     SqlNodeList targetColumnList;
+    SqlNode from = null;
     SqlIdentifier id;
     SqlNode exp;
     final Span s;
@@ -1781,11 +1782,12 @@ SqlNode SqlUpdate() :
             sourceExpressionList.add(exp);
         }
     )*
+    [ <FROM> from = FromClause() ]
     condition = WhereOpt()
     {
-        return new SqlUpdate(s.addAll(targetColumnList)
+        return new SqlSnowflakeUpdate(s.addAll(targetColumnList)
             .addAll(sourceExpressionList).addIf(condition).pos(), table,
-            targetColumnList, sourceExpressionList, condition, null, alias);
+            targetColumnList, sourceExpressionList, condition, null, alias, from);
     }
 }
 
