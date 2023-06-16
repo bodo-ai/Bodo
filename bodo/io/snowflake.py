@@ -1451,14 +1451,22 @@ def retrieve_async_copy_into(
         err = e
 
     if err is None and nchunks != file_count:
-        err = RuntimeError(
+        rollback_transaction_sql = (
+            "ROLLBACK /* io.snowflake.retrieve_async_copy_into() */"
+        )
+        cursor.execute(rollback_transaction_sql)
+        err = BodoError(
             f"Streaming snowflake write failed. Expected COPY INTO to process "
             f"{file_count} files, but only {nchunks} files were found. "
             f"Full COPY INTO result:\n{output}"
         )
 
     if err is None and nsuccess != nchunks:
-        err = RuntimeError(
+        rollback_transaction_sql = (
+            "ROLLBACK /* io.snowflake.retrieve_async_copy_into() */"
+        )
+        cursor.execute(rollback_transaction_sql)
+        err = BodoError(
             f"Streaming snowflake write failed. {nchunks} files were loaded, "
             f"but only {nsuccess} were successful. "
             f"Full COPY INTO result:\n{output}"
@@ -1876,6 +1884,10 @@ def create_table_copy_into(
 
                 # Validate copy into results
                 if nchunks != num_files_uploaded:
+                    rollback_transaction_sql = (
+                        "ROLLBACK /* io.snowflake.create_table_copy_into() */"
+                    )
+                    cursor.execute(rollback_transaction_sql)
                     raise BodoError(
                         f"Snowflake write failed. Expected COPY INTO to have processed "
                         f"{num_files_uploaded} files, but only {nchunks} files were found. "
@@ -1883,6 +1895,10 @@ def create_table_copy_into(
                     )
 
                 if nsuccess != nchunks:
+                    rollback_transaction_sql = (
+                        "ROLLBACK /* io.snowflake.create_table_copy_into() */"
+                    )
+                    cursor.execute(rollback_transaction_sql)
                     raise BodoError(
                         f"Snowflake write failed. {nchunks} files were loaded, but only "
                         f"{nsuccess} were successful. "
