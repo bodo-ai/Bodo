@@ -114,14 +114,12 @@ def test_snowflake_catalog_just_limit_pushdown(memory_leak_check):
     # is undefined.
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
-        bodo_func(bc, query)
-        fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-        assert hasattr(fir, "meta_head_only_info")
-        assert fir.meta_head_only_info[0] is not None
+    with set_logging_stream(logger, 2):
+        bodo.jit(pipeline_class=DistTestPipeline)(impl)(bc, query)
         check_logger_msg(stream, "Columns loaded ['mycol', 'mycol2']")
-        check_logger_msg(stream, "Constant limit detected, reading at most 5 rows")
+        # This should be included in the pushed down SQL query if it
+        # succeeds.
+        check_logger_msg(stream, "FETCH NEXT 5 ROWS ONLY")
 
 
 def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
@@ -400,15 +398,13 @@ def test_snowflake_catalog_limit_pushdown(memory_leak_check):
     # make sure filter + limit pushdown worked
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
-        bodo_func(bc, query)
-        fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-        assert hasattr(fir, "meta_head_only_info")
-        assert fir.meta_head_only_info[0] is not None
+    with set_logging_stream(logger, 2):
+        check_func(impl, (bc, query), py_output=py_output)
         # Note the only column need is pruned by the planner due to the filter.
         check_logger_msg(stream, "Columns loaded []")
-        check_logger_msg(stream, "Filter pushdown successfully performed")
+        # This should be included in the pushed down SQL query if it
+        # succeeds.
+        check_logger_msg(stream, "FETCH NEXT 5 ROWS ONLY")
 
 
 def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
