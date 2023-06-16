@@ -33,6 +33,13 @@ from bodo.utils.typing import (
 )
 
 
+def is_array_item_array(typ):
+    is_series = isinstance(typ, bodo.hiframes.pd_series_ext.SeriesType)
+    if is_series:
+        return isinstance(typ.data, bodo.libs.array_item_arr_ext.ArrayItemArrayType)
+    return isinstance(typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType)
+
+
 def indent_block(text, indentation):
     """Adjusts the indentation of a multiline string so that it can be injected
        another multiline string at a specified indentation level.
@@ -78,6 +85,7 @@ def gen_vectorized(
     synthesize_dict_scalar_text=None,
     synthesize_dict_global=False,
     synthesize_dict_unique=False,
+    array_is_scalar=False,
 ):
     """Creates an impl for a column compute function that has several inputs
        that could all be scalars, nulls, or arrays by broadcasting appropriately.
@@ -194,7 +202,10 @@ def gen_vectorized(
         res_list and support_dict_encoding
     ), "Cannot use res_list with support_dict_encoding"
 
-    are_arrays = [bodo.utils.utils.is_array_typ(typ, True) for typ in arg_types]
+    if array_is_scalar:
+        are_arrays = [is_array_item_array(typ) for typ in arg_types]
+    else:
+        are_arrays = [bodo.utils.utils.is_array_typ(typ, True) for typ in arg_types]
     all_scalar = not any(are_arrays)
     out_null = any(
         [propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none]

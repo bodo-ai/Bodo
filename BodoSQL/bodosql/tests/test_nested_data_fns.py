@@ -390,3 +390,176 @@ def test_array_column_type(array_df, col_name, memory_leak_check):
         sort_output=False,
         expected_output=py_output,
     )
+
+
+@pytest.mark.parametrize(
+    "query, answer",
+    [
+        pytest.param(
+            "SELECT ARRAY_TO_STRING(int_col, ',') from table1",
+            pd.Series(
+                [
+                    "4234,-123,0",
+                    "",
+                    None,
+                    "86956,-958,-345,49,2",
+                    "-4,50,-15,941,252,-404,1399"
+                ] * 4
+            ),
+            id="int",
+        ),
+        pytest.param(
+            "SELECT ARRAY_TO_STRING(float_col, ', ') from table1",
+            pd.Series(
+                [
+                    "",
+                    "42.340000, -1.230000, 0.0",
+                    None,
+                    "8.695600, -0.958000, -34.500000, 4.900000, 20.000000",
+                    "-1.400000, 5.000000, -15.150000, 9.410000, 25.200000, -40.400000, 0.139900",
+                ] * 4
+            ),
+            id="float",
+        ),
+        pytest.param(
+            "SELECT ARRAY_TO_STRING(bool_col, '.') from table1",
+            pd.Series(
+                [
+                    "True.False.False.True.True.True",
+                    "",
+                    "False.False.True",
+                    None,
+                    "False.True.False.True.False",
+                ] * 4
+            ),
+            id="bool",
+        ),
+        pytest.param(
+            "SELECT ARRAY_TO_STRING(string_col, '| ') from table1",
+            pd.Series(
+                [
+                    "True| False| and| or| not| xor",
+                    "kgspoas| 0q3e0j| ;.2qe",
+                    None,
+                    "",
+                    " | ^#%&| VCX:>?| 3ews| zxcv",
+                ] * 4
+            ),
+            id="string",
+        ),
+        pytest.param(
+            "SELECT ARRAY_TO_STRING(date_col, '-') from table1",
+            pd.Series(
+                [
+                    "2018-01-24-1983-01-03-1966-04-27-1999-12-07-2020-11-17-2008-01-19",
+                    "1966-04-27-2004-07-08",
+                    None,
+                    "",
+                    "2012-01-01-2011-03-03-1999-05-02-1981-08-31-2019-11-12",
+                ] * 4
+            ),
+            id="date",
+        ),
+        pytest.param(
+            "SELECT ARRAY_TO_STRING(time_col, '| ') from table1",
+            pd.Series(
+                [
+                    "True| False| and| or| not| xor",
+                    "kgspoas| 0q3e0j| ;.2qe",
+                    None,
+                    "",
+                    " | ^#%&| VCX:>?| 3ews| zxcv",
+                ] * 4
+            ),
+            id="time",
+            marks=pytest.mark.skip(reason="TODO: Support str() for time type."),
+        ),
+        pytest.param(
+            "SELECT ARRAY_TO_STRING(timestamp_col, '-*-') from table1",
+            pd.Series(
+                [
+                    "",
+                    "2021-12-08T00:00:00-*-2020-03-14T15:32:52.192548-*-2016-02-28T12:23:33"
+                    "-*-2005-01-01T00:00:00-*-1999-10-31T12:23:33-*-2020-01-01T00:00:00",
+                    "2021-10-14T00:00:00-*-2017-01-05T00:00:00",
+                    "2017-01-11T00:00:00-*-2022-11-06T11:30:15-*-2030-01-01T15:23:42.728347"
+                    "-*-1981-08-31T00:00:00-*-2019-11-12T00:00:00",
+                    None,
+                ] * 4
+            ),
+            id="timestamp",
+        ),
+    ]
+)
+def test_array_to_string_column(array_df, query, answer, memory_leak_check):
+    """
+    Test ARRAY_TO_STRING works correctly with different data type columns
+    """
+    py_output = pd.DataFrame({"A": answer})
+    check_query(
+        query,
+        array_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.parametrize(
+    "input, answer",
+    [
+        pytest.param(
+            "2395",
+            "2395",
+            id="int",
+        ),
+        pytest.param(
+            "12.482",
+            "12.482000",
+            id="float",
+        ),
+        pytest.param(
+            "True",
+            "True",
+            id="bool",
+        ),
+        pytest.param(
+            "'koagri'",
+            "koagri",
+            id="string",
+        ),
+        pytest.param(
+            "TO_DATE('2019-06-12')",
+            "2019-06-12",
+            id="date",
+        ),
+        pytest.param(
+            "TO_TIME('16:47:23')",
+            "16:47:23",
+            id="time",
+            marks=pytest.mark.skip(reason="TODO: Support str() for time type."),
+        ),
+        pytest.param(
+            "TO_TIMESTAMP('2023-06-13 16:49:50')",
+            "2023-06-13T16:49:50",
+            id="timestamp",
+        ),
+    ]
+)
+def test_array_to_string_scalar(basic_df, input, answer, memory_leak_check):
+    """
+    Test ARRAY_TO_STRING works correctly with different data type scalars
+    """
+    query = f"SELECT ARRAY_TO_STRING(TO_ARRAY({input}), ', ')"
+    py_output = pd.DataFrame({"A": pd.Series([answer])})
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=py_output,
+    )

@@ -941,7 +941,17 @@ class DistributedAnalysis:
             return
 
         if fdef == ("scalar_optional_getitem", "bodo.utils.indexing"):
-            # scalar_optional_getitem is used by BodoSQL to load scalars.
+            # scalar_optional_getitem isused by BodoSQL to load scalars.
+            # This doesn't impact the distribution of any array.
+            return
+
+        if fdef == ("add_nested_counts", "bodo.utils.indexing"):
+            # add_nested_counts is used by ArrayItemArray to add nested counts.
+            # This doesn't impact the distribution of any array.
+            return
+
+        if fdef == ("scalar_to_array_item_array", "bodo.libs.array_item_arr_ext"):
+            # scalar_to_array_item_array is used to convert a scalar to ArrayItemArray.
             # This doesn't impact the distribution of any array.
             return
 
@@ -2782,6 +2792,9 @@ class DistributedAnalysis:
 
         # np.fromfile()
         if fdef == ("file_read", "bodo.io.np_io"):
+            return
+
+        if fdef == ('array_to_string', 'bodo.libs.bodosql_array_kernels'):
             return
 
         # str_arr_from_sequence() applies to lists/tuples so output is REP
