@@ -1632,6 +1632,7 @@ def test_monthname_date(datetime_dates_scalar_vector, memory_leak_check):
         "November",
         "December",
     ]
+
     # Simulates MONTHNAME on a single row
     def monthname_scalar_fn(elem):
         if pd.isna(elem):
@@ -1798,6 +1799,7 @@ def test_next_previous_day(dt, dow_str, memory_leak_check):
         return pd.Series(bodo.libs.bodosql_array_kernels.previous_day(arr0, arr1))
 
     dow_map = {"mo": 0, "tu": 1, "we": 2, "th": 3, "fr": 4, "sa": 5, "su": 6}
+
     # Simulates next/previous_day on a single row
     def next_prev_day_scalar_fn(is_prev=False):
         mlt = -1 if is_prev else 1
@@ -3085,5 +3087,226 @@ def test_date_format(expr, format_str, answer, memory_leak_check):
     check_func(
         impl,
         (expr, format_str),
+        py_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg0, arg1, answer",
+    [
+        pytest.param(
+            datetime.date(2017, 6, 15),
+            datetime.date(2018, 9, 10),
+            -14.838710,
+            id="date-scalar",
+        ),
+        pytest.param(
+            pd.Timestamp("2023-08-17"),
+            pd.Timestamp("2023-07-17"),
+            1.0,
+            id="timestamp-date-tz-naive-scalar",
+        ),
+        pytest.param(
+            pd.Timestamp("2020-06-27", tz="Poland"),
+            pd.Timestamp("2025-12-31", tz="Poland"),
+            -66.129032,
+            id="timestamp-date-tz-aware-scalar",
+        ),
+        pytest.param(
+            pd.Timestamp("2020-01-20T12"),
+            pd.Timestamp("2013-3-15T09"),
+            82.161290,
+            id="timestamp-tz-naive-scalar",
+        ),
+        pytest.param(pd.Timestamp.now(), pd.Timestamp.now(), 0, id="current-ts"),
+    ],
+)
+def test_months_between_scalars(arg0, arg1, answer, memory_leak_check):
+    """
+    Tests months-between kernel over scalars.
+    """
+    impl = lambda arg0, arg1: bodo.libs.bodosql_array_kernels.months_between(arg0, arg1)
+
+    check_func(
+        impl,
+        (arg0, arg1),
+        py_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg0, arg1, answer",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp("2023-08-19"),
+                    pd.Timestamp("2013-08-20"),
+                    pd.Timestamp("2003-08-31"),
+                    pd.Timestamp("2013-08-19"),
+                ]
+                * 4
+            ),
+            pd.Series(
+                [
+                    pd.Timestamp("2023-01-18"),
+                    pd.Timestamp("2023-08-20"),
+                    pd.Timestamp("2023-02-28"),
+                    pd.Timestamp("2023-08-10"),
+                ]
+                * 4
+            ),
+            pd.Series([7.032258, -120.0, -234.0, -119.709677] * 4),
+            id="timestamp-series",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp("2023-08-19"),
+                    pd.Timestamp("2013-08-20"),
+                    pd.Timestamp("2003-08-31"),
+                    pd.Timestamp("2013-08-19"),
+                ]
+                * 4
+            ),
+            pd.Timestamp("2023-01-18"),
+            pd.Series(
+                [
+                    7.032258,
+                    -112.935484,
+                    -232.580645,
+                    -112.967742,
+                ]
+                * 4
+            ),
+            id="timestamp-mix",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.date(2023, 8, 19),
+                    datetime.date(2020, 8, 19),
+                ]
+                * 3
+            ),
+            pd.Series(
+                [
+                    datetime.date(2023, 6, 19),
+                    datetime.date(2020, 8, 17),
+                ]
+                * 3
+            ),
+            pd.Series(
+                [
+                    2.0,
+                    0.064516,
+                ]
+                * 3
+            ),
+            id="datetime-date-series",
+        ),
+    ],
+)
+def test_months_between_series(arg0, arg1, answer, memory_leak_check):
+    """
+    Tests months-between kernel over series.
+    """
+
+    def impl(arg0, arg1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.months_between(arg0, arg1))
+
+    check_func(
+        impl,
+        (arg0, arg1),
+        py_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg0, num_months, answer",
+    [
+        pytest.param(
+            pd.Timestamp("2018-06-15"), 3, pd.Timestamp("2018-09-15"), id="basic"
+        ),
+        pytest.param(
+            pd.Timestamp("2020-4-28", tz="Poland"),
+            20,
+            pd.Timestamp("2021-12-28", tz="Poland"),
+            id="tz-aware",
+        ),
+        pytest.param(
+            pd.Timestamp("2018-02-28"), 3, pd.Timestamp("2018-05-31"), id="positive-eom"
+        ),
+        pytest.param(
+            pd.Timestamp("2018-02-28"),
+            15,
+            pd.Timestamp("2019-05-31"),
+            id="positive-eom-1",
+        ),
+        pytest.param(
+            pd.Timestamp("2018-02-28"),
+            22,
+            pd.Timestamp("2019-12-31"),
+            id="positive-eom-2",
+        ),
+        pytest.param(
+            datetime.date(2023, 1, 1), -1, datetime.date(2022, 12, 1), id="negative-eom"
+        ),
+        pytest.param(
+            datetime.date(2023, 1, 31),
+            -13,
+            datetime.date(2021, 12, 31),
+            id="negative-eom-1",
+        ),
+        pytest.param(
+            datetime.date(2023, 2, 28),
+            -25,
+            datetime.date(2021, 1, 31),
+            id="negative-eom-2",
+        ),
+    ],
+)
+def test_add_months_scalars(arg0, num_months, answer, memory_leak_check):
+    """
+    Tests add-months kernel over scalars.
+    """
+    impl = lambda arg0, num_months: bodo.libs.bodosql_array_kernels.add_months(
+        arg0, num_months
+    )
+
+    check_func(
+        impl,
+        (arg0, num_months),
+        py_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg0, num_months, answer",
+    [
+        pytest.param(
+            pd.Series([pd.Timestamp("2018-06-15")] * 4),
+            3,
+            pd.Series([pd.Timestamp("2018-09-15")] * 4),
+            id="basic",
+        ),
+        pytest.param(
+            pd.Series([pd.Timestamp("2018-06-15")] * 4),
+            pd.Series([3] * 4),
+            pd.Series([pd.Timestamp("2018-09-15")] * 4),
+            id="basic-2",
+        ),
+    ],
+)
+def test_add_months_series(arg0, num_months, answer, memory_leak_check):
+    """
+    Tests add-months kernel over series.
+    """
+    def impl(arg0, num_months):
+        return pd.Series(bodo.libs.bodosql_array_kernels.add_months(arg0, num_months))
+
+    check_func(
+        impl,
+        (arg0, num_months),
         py_output=answer,
     )

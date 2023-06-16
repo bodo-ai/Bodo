@@ -841,6 +841,46 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+
+  public static final SqlFunction MONTHS_BETWEEN =
+      new SqlFunction(
+          "MONTHS_BETWEEN",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.DOUBLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          /// What Input Types does the function accept.
+          OperandTypes.sequence(
+                  "MONTHS_BETWEEN(DATETIME, DATETIME)",
+                  OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
+                  OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP)),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction ADD_MONTHS =
+      new SqlFunction(
+          "ADD_MONTHS",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.ARG0,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          /// What Input Types does the function accept. This function accepts the following
+          // arguments (Datetime, Interval), (String, Interval)
+          OperandTypes.sequence(
+                  "ADD_MONTHS(DATETIME, NUMERIC)",
+                  OperandTypes.or(OperandTypes.DATE, OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
+                  OperandTypes.NUMERIC),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
   public static final SqlFunction CURDATE =
       new SqlFunction(
           "CURDATE",
@@ -1068,6 +1108,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           DAYOFWEEKISO,
           MONTHNAME,
           MONTH_NAME,
+          MONTHS_BETWEEN,
+          ADD_MONTHS,
           MICROSECOND,
           WEEKOFYEAR,
           WEEKISO,
