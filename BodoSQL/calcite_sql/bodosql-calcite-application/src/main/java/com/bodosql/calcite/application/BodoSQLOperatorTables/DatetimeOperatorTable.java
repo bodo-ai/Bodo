@@ -986,7 +986,37 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction YEAROFWEEK =
+
+  private static RelDataType truncReturnType(SqlOperatorBinding binding) {
+    RelDataTypeFactory typeFactory = binding.getTypeFactory();
+    RelDataType inputType = binding.getOperandType(0);
+
+    if (inputType.getSqlTypeName().getFamily().equals(SqlTypeFamily.NUMERIC)) {
+      return typeFactory.createTypeWithNullability(
+              inputType,
+              inputType.isNullable());
+    } else {
+      return datetruncReturnType(binding);
+    }
+  }
+
+  public static final SqlFunction TRUNC =
+      new SqlFunction(
+          "TRUNC",
+          SqlKind.OTHER_FUNCTION,
+          opBinding -> truncReturnType(opBinding),
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.or(
+                  OperandTypes.sequence("TRUNC(UNIT, DATETIME)",
+                          OperandTypes.ANY,
+                          OperandTypes.DATETIME),
+                  OperandTypes.NUMERIC_INTEGER
+          ),
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+
+    public static final SqlFunction YEAROFWEEK =
       new SqlFunction(
           "YEAROFWEEK",
           // What SqlKind should match?
@@ -1126,6 +1156,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           TIME_FROM_PARTS,
           TIME,
           TIMEADD,
+          TRUNC,
           DATE_TRUNC,
           YEAROFWEEK,
           YEAROFWEEKISO,
