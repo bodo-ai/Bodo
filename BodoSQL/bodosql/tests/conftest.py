@@ -26,6 +26,10 @@ os.environ["PYSPARK_PYTHON"] = sys.executable
 os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 from pyspark.sql import SparkSession
 
+# Disable broadcast join as the default.
+# To test braodcast join either remove or increase this.
+os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "0"
+
 
 def pytest_addoption(parser):
     """Used with caching tests, stores the --is_cached flag into the pytestconfig"""
