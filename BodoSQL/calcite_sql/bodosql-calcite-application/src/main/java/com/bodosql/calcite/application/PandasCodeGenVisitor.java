@@ -63,7 +63,6 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.Call;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
 import com.bodosql.calcite.ir.Expr.StringLiteral;
-import com.bodosql.calcite.ir.Frame;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Op.Assign;
@@ -75,7 +74,6 @@ import com.bodosql.calcite.table.LocalTableImpl;
 import com.bodosql.calcite.traits.BatchingProperty;
 import com.bodosql.calcite.traits.CombineStreamsExchange;
 import com.bodosql.calcite.traits.SeparateStreamExchange;
-import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -84,6 +82,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Stack;
 import java.util.TreeMap;
+import kotlin.jvm.functions.Function1;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -97,7 +96,6 @@ import org.apache.calcite.rel.core.Intersect;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.Minus;
 import org.apache.calcite.rel.core.Project;
-import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.core.Union;
@@ -117,8 +115,6 @@ import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
-
-import kotlin.jvm.functions.Function1;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.NotNull;
 
@@ -406,7 +402,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else if (node instanceof PandasJoin) {
       this.visitPandasJoin((PandasJoin) node);
     } else if (node instanceof PandasSort) {
-      this.visitLogicalSort((Sort) node);
+      this.visitPandasSort((PandasSort) node);
     } else if (node instanceof PandasProject) {
       this.visitLogicalProject((Project) node);
     } else if (node instanceof PandasAggregate) {
@@ -498,10 +494,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
     streamingInfo.addInitialization(assn);
 
     Variable outputDfVar = genDfVar();
-    Expr sliceStart = new Expr.Binary("*", iteratorNumber, new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
+    Expr sliceStart =
+        new Expr.Binary(
+            "*", iteratorNumber, new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
     Expr sliceEnd =
         new Expr.Binary(
-            "*", new Expr.Binary("+", iteratorNumber, new Expr.IntegerLiteral(1)), new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
+            "*",
+            new Expr.Binary("+", iteratorNumber, new Expr.IntegerLiteral(1)),
+            new Expr.IntegerLiteral(streamingOptions.getChunkSize()));
 
     Expr slicedDfExpr = new Expr.DataFrameSlice(nonStreamingInput, sliceStart, sliceEnd);
 
@@ -674,9 +674,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
   /**
    * Visitor for Logical Sort node. Code generation for ORDER BY clauses in SQL
    *
-   * @param node Logical Sort node to be visited
+   * @param node PandasSort node to be visited
    */
-  public void visitLogicalSort(Sort node) {
+  public void visitPandasSort(PandasSort node) {
     RelNode input = node.getInput();
     this.visit(input, 0, node);
     this.genRelnodeTimerStart(node);
@@ -2655,7 +2655,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.node = node;
     }
 
-    @NotNull @Override public Dataframe visitChild(@NotNull final RelNode input, final int ordinal) {
+    @NotNull
+    @Override
+    public Dataframe visitChild(@NotNull final RelNode input, final int ordinal) {
       visit(input, ordinal, node);
       Variable dfVar = varGenStack.pop();
       if (dfVar instanceof Dataframe) {
@@ -2668,11 +2670,17 @@ public class PandasCodeGenVisitor extends RelVisitor {
       }
     }
 
-    @NotNull @Override public List<Dataframe> visitChildren(@NotNull final List<? extends RelNode> inputs) {
+    @NotNull
+    @Override
+    public List<Dataframe> visitChildren(@NotNull final List<? extends RelNode> inputs) {
       return DefaultImpls.visitChildren(this, inputs);
     }
 
-    @NotNull @Override public Dataframe build(boolean withTimers, @NotNull final Function1<? super PandasRel.BuildContext, Dataframe> fn) {
+    @NotNull
+    @Override
+    public Dataframe build(
+        boolean withTimers,
+        @NotNull final Function1<? super PandasRel.BuildContext, Dataframe> fn) {
       if (withTimers) {
         // Generate the code and include it in the main generated code.
         genRelnodeTimerStart(node);
@@ -2694,25 +2702,36 @@ public class PandasCodeGenVisitor extends RelVisitor {
       this.node = node;
     }
 
-    @NotNull @Override public Module.Builder builder() {
+    @NotNull
+    @Override
+    public Module.Builder builder() {
       return generatedCode;
     }
 
-    @NotNull @Override public RexToPandasTranslator rexTranslator(@NotNull final Dataframe input) {
+    @NotNull
+    @Override
+    public RexToPandasTranslator rexTranslator(@NotNull final Dataframe input) {
       return getRexTranslator(node.getId(), input);
     }
 
-    @NotNull @Override public Dataframe returns(@NotNull final Expr result) {
+    @NotNull
+    @Override
+    public Dataframe returns(@NotNull final Expr result) {
       Dataframe destination = generatedCode.genDataframe(node);
       generatedCode.add(new Op.Assign(destination, result));
       return destination;
     }
 
-    @NotNull @Override public StreamingOptions streamingOptions() {
+    @NotNull
+    @Override
+    public StreamingOptions streamingOptions() {
       return streamingOptions;
     }
 
-    @NotNull @Override public Dataframe initStreamingIoLoop(@NotNull final Expr expr, @NotNull final RelDataType rowType) {
+    @NotNull
+    @Override
+    public Dataframe initStreamingIoLoop(
+        @NotNull final Expr expr, @NotNull final RelDataType rowType) {
       List<String> columnNames = rowType.getFieldNames();
       Variable out = PandasCodeGenVisitor.this.initStreamingIoLoop(expr, columnNames);
       return new Dataframe(out.getName(), node);
