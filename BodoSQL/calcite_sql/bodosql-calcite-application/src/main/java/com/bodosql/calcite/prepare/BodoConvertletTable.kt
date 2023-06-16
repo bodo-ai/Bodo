@@ -1,14 +1,17 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.sql.`fun`.SqlLikeQuantifyOperator
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.sql.SqlCall
+import org.apache.calcite.sql.SqlFunction
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
+import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql2rel.SqlRexContext
 import org.apache.calcite.sql2rel.SqlRexConvertlet
 import org.apache.calcite.sql2rel.SqlRexConvertletTable
@@ -29,10 +32,26 @@ class BodoConvertletTable(private val inner: SqlRexConvertletTable) : SqlRexConv
             SqlKind.LIKE -> if (call.operator is SqlLikeQuantifyOperator)
                 LikeQuantifyConverter else inner.get(call)
 
+            SqlKind.OTHER_FUNCTION -> {
+                when (call.operator.name) {
+                    "TRUNC" -> DateTruncConverter
+                    else -> inner.get(call)
+                }
+            }
             else -> inner.get(call)
         }
     }
 
+    private object DateTruncConverter : SqlRexConvertlet {
+        override fun convertCall(cx: SqlRexContext, call: SqlCall): RexNode {
+            val operands = call.operandList.map { op -> cx.convertExpression(op) }
+
+            return when (cx.validator.getValidatedNodeType(call).family) {
+                SqlTypeFamily.NUMERIC -> cx.rexBuilder.makeCall(SqlStdOperatorTable.TRUNCATE, operands)
+                else -> cx.rexBuilder.makeCall(DatetimeOperatorTable.DATE_TRUNC, operands)
+            }
+        }
+    }
     private object AliasConverter : SqlRexConvertlet {
         override fun convertCall(cx: SqlRexContext, call: SqlCall): RexNode {
             val operands = call.operandList.map { op -> cx.convertExpression(op) }
