@@ -21,8 +21,15 @@ from bodo.tests.utils import (
     _test_equal,
     check_func,
     pytest_mark_snowflake,
+    set_broadcast_join,
     temp_env_override,
 )
+
+
+@pytest.fixture(params=[True, False])
+def broadcast(request):
+    return request.param
+
 
 # Listing them separately since otherwise the traceback during errors is huge.
 hash_join_basic_test_params = [
@@ -597,146 +604,141 @@ def test_nested_loop_join(
 
 
 @pytest_mark_snowflake
-@pytest.mark.parametrize("broadcast", [False, True])
 @pytest.mark.parametrize("use_dict_encoding", [True, False])
-def test_broadcast_nested_loop_join(broadcast, use_dict_encoding, memory_leak_check):
+def test_broadcast_nested_loop_join(use_dict_encoding, broadcast, memory_leak_check):
     """
     Test streaming broadcast nested loop join
     """
-    with temp_env_override(
-        {"BODO_BCAST_JOIN_THRESHOLD": "0" if not broadcast else str(1024 * 1024 * 1024)}
-    ):
-        conn_str = bodo.tests.utils.get_snowflake_connection_string(
-            "SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"
+    conn_str = bodo.tests.utils.get_snowflake_connection_string(
+        "SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"
+    )
+
+    l_orderkey_end = 2
+    l_partkey_end = 20_000
+    p_size_limit = 49
+    p_partkey_limit = 199_840
+
+    build_keys_inds = bodo.utils.typing.MetaType(())
+    probe_keys_inds = bodo.utils.typing.MetaType(())
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        ("p_partkey", "p_comment", "p_name", "p_size")
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "l_partkey",
+            "l_comment",
+            "l_orderkey",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "p_partkey",
+            "p_comment",
+            "p_name",
+            "p_size",
+            "l_partkey",
+            "l_comment",
+            "l_orderkey",
+        )
+    )
+    non_equi_condition = "(left.p_partkey) > ((right.l_partkey) + 197800)"
+
+    # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
+    # from lineitem inner join part on P_PARTKEY > L_PARTKEY + 197800 where l_orderkey < 2 and p_size > 49
+
+    expected_df = pd.DataFrame(
+        {
+            "p_partkey": [199978, 199995],
+            "p_comment": ["ess, i", "packa"],
+            "p_name": [
+                "linen magenta saddle slate turquoise",
+                "blanched floral red maroon papaya",
+            ],
+            "p_size": [50, 50],
+            "l_partkey": [2132, 2132],
+            "l_comment": ["lites. fluffily even de", "lites. fluffily even de"],
+            "l_orderkey": [1, 1],
+        }
+    )
+
+    @bodo.jit
+    def test_nested_loop_join(conn):
+        join_state = init_join_state(
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+            non_equi_condition=non_equi_condition,
         )
 
-        l_orderkey_end = 2
-        l_partkey_end = 20_000
-        p_size_limit = 49
-        p_partkey_limit = 199_840
-
-        build_keys_inds = bodo.utils.typing.MetaType(())
-        probe_keys_inds = bodo.utils.typing.MetaType(())
-        build_col_meta = bodo.utils.typing.ColNamesMetaType(
-            ("p_partkey", "p_comment", "p_name", "p_size")
+        # read PART table
+        reader1 = pd.read_sql(
+            f"SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE FROM PART where P_SIZE > {p_size_limit} and P_PARTKEY > {p_partkey_limit}",
+            conn,
+            _bodo_chunksize=4000,
         )
-        probe_col_meta = bodo.utils.typing.ColNamesMetaType(
-            (
-                "l_partkey",
-                "l_comment",
-                "l_orderkey",
+        while True:
+            table1, is_last1 = read_arrow_next(reader1)
+            is_last1 = bodo.libs.distributed_api.dist_reduce(
+                is_last1,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
             )
+            join_build_consume_batch(join_state, table1, is_last1)
+            if is_last1:
+                break
+
+        # read LINEITEM table and probe
+        reader2 = pd.read_sql(
+            f"SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY FROM LINEITEM where l_orderkey < {l_orderkey_end} and l_partkey < {l_partkey_end}",
+            conn,
+            _bodo_chunksize=4000,
         )
-        col_meta = bodo.utils.typing.ColNamesMetaType(
-            (
-                "p_partkey",
-                "p_comment",
-                "p_name",
-                "p_size",
-                "l_partkey",
-                "l_comment",
-                "l_orderkey",
+        out_dfs = []
+        while True:
+            table2, is_last2 = read_arrow_next(reader2)
+            is_last2 = bodo.libs.distributed_api.dist_reduce(
+                is_last2,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
             )
-        )
-        non_equi_condition = "(left.p_partkey) > ((right.l_partkey) + 197800)"
-
-        # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
-        # from lineitem inner join part on P_PARTKEY > L_PARTKEY + 197800 where l_orderkey < 2 and p_size > 49
-
-        expected_df = pd.DataFrame(
-            {
-                "p_partkey": [199978, 199995],
-                "p_comment": ["ess, i", "packa"],
-                "p_name": [
-                    "linen magenta saddle slate turquoise",
-                    "blanched floral red maroon papaya",
-                ],
-                "p_size": [50, 50],
-                "l_partkey": [2132, 2132],
-                "l_comment": ["lites. fluffily even de", "lites. fluffily even de"],
-                "l_orderkey": [1, 1],
-            }
-        )
-
-        @bodo.jit
-        def test_nested_loop_join(conn):
-            join_state = init_join_state(
-                build_keys_inds,
-                probe_keys_inds,
-                build_col_meta,
-                probe_col_meta,
-                False,
-                False,
-                non_equi_condition=non_equi_condition,
+            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
             )
-
-            # read PART table
-            reader1 = pd.read_sql(
-                f"SELECT P_PARTKEY, P_COMMENT, P_NAME, P_SIZE FROM PART where P_SIZE > {p_size_limit} and P_PARTKEY > {p_partkey_limit}",
-                conn,
-                _bodo_chunksize=4000,
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
             )
-            while True:
-                table1, is_last1 = read_arrow_next(reader1)
-                is_last1 = bodo.libs.distributed_api.dist_reduce(
-                    is_last1,
-                    np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-                )
-                join_build_consume_batch(join_state, table1, is_last1)
-                if is_last1:
-                    break
-
-            # read LINEITEM table and probe
-            reader2 = pd.read_sql(
-                f"SELECT L_PARTKEY, L_COMMENT, L_ORDERKEY FROM LINEITEM where l_orderkey < {l_orderkey_end} and l_partkey < {l_partkey_end}",
-                conn,
-                _bodo_chunksize=4000,
+            out_dfs.append(df)
+            is_last3 = bodo.libs.distributed_api.dist_reduce(
+                is_last3,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
             )
-            out_dfs = []
-            while True:
-                table2, is_last2 = read_arrow_next(reader2)
-                is_last2 = bodo.libs.distributed_api.dist_reduce(
-                    is_last2,
-                    np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-                )
-                out_table, is_last3 = join_probe_consume_batch(
-                    join_state, table2, is_last2
-                )
-                index_var = bodo.hiframes.pd_index_ext.init_range_index(
-                    0, len(out_table), 1, None
-                )
-                df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                    (out_table,), index_var, col_meta
-                )
-                out_dfs.append(df)
-                is_last3 = bodo.libs.distributed_api.dist_reduce(
-                    is_last3,
-                    np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
-                )
-                if is_last3:
-                    break
-            delete_join_state(join_state)
-            return pd.concat(out_dfs)
+            if is_last3:
+                break
+        delete_join_state(join_state)
+        return pd.concat(out_dfs)
 
-        # TODO[BSE-439]: Support dict-encoded strings
-        saved_SF_READ_AUTO_DICT_ENCODE_ENABLED = (
-            bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
-        )
-        try:
-            bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = use_dict_encoding
+    # TODO[BSE-439]: Support dict-encoded strings
+    saved_SF_READ_AUTO_DICT_ENCODE_ENABLED = (
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
+    )
+    try:
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = use_dict_encoding
+        with set_broadcast_join(broadcast):
             out_df = test_nested_loop_join(conn_str)
-        finally:
-            bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
-                saved_SF_READ_AUTO_DICT_ENCODE_ENABLED
-            )
-        out_df = bodo.allgatherv(out_df)
-        _test_equal(
-            out_df,
-            expected_df,
-            check_dtype=False,
-            reset_index=True,
-            sort_output=True,
+    finally:
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
+            saved_SF_READ_AUTO_DICT_ENCODE_ENABLED
         )
+    out_df = bodo.allgatherv(out_df)
+    _test_equal(
+        out_df,
+        expected_df,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=True,
+    )
 
 
 @pytest_mark_snowflake
@@ -1174,7 +1176,7 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
         pytest.param(False, True, id="right", marks=pytest.mark.slow),
     ],
 )
-def test_non_equi_join_cond(build_outer, probe_outer, memory_leak_check):
+def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_check):
     """Test streaming hash join with a non-equality condition."""
     df1 = pd.DataFrame(
         {
@@ -1314,13 +1316,14 @@ def test_non_equi_join_cond(build_outer, probe_outer, memory_leak_check):
         expected_df = pd.concat([probe_outer_df, inner])
     else:
         expected_df = inner
-    check_func(
-        test_hash_join,
-        (df1, df2),
-        py_output=expected_df,
-        reset_index=True,
-        sort_output=True,
-    )
+    with set_broadcast_join(broadcast):
+        check_func(
+            test_hash_join,
+            (df1, df2),
+            py_output=expected_df,
+            reset_index=True,
+            sort_output=True,
+        )
 
 
 def test_join_key_prune(memory_leak_check):
@@ -1565,7 +1568,9 @@ def test_key_multicast(memory_leak_check):
         pytest.param(False, True, True, id="right-build_dist", marks=pytest.mark.slow),
     ],
 )
-def test_only_one_distributed(build_outer, probe_outer, build_dist, memory_leak_check):
+def test_only_one_distributed(
+    build_outer, probe_outer, build_dist, broadcast, memory_leak_check
+):
     """Test streaming hash join where only build or probe table is
     distributed but not both."""
     df1 = pd.DataFrame(
@@ -1717,7 +1722,10 @@ def test_only_one_distributed(build_outer, probe_outer, build_dist, memory_leak_
         expected_df = pd.concat([probe_outer_df, inner])
     else:
         expected_df = inner
-    bodo_output = test_hash_join(df1, df2)
+
+    with set_broadcast_join(broadcast):
+        bodo_output = test_hash_join(df1, df2)
+
     out_df = bodo.allgatherv(bodo_output)
     _test_equal(
         out_df,

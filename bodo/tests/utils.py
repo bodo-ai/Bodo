@@ -2489,3 +2489,28 @@ def temp_env_override(env_vars):
         yield
     finally:
         update_env_vars(old_env)
+
+
+@contextmanager
+def set_broadcast_join(broadcast: bool):
+    """
+    Context manager for enabling/disabling broadcast join in a test.
+    If broadcasting it set the threshold to 1 TB so it will always
+    broadcast.
+
+    Args:
+        broadcast (bool): Should broadcast be allowed?
+    """
+    old_threshold = os.environ.get("BODO_BCAST_JOIN_THRESHOLD", None)
+    try:
+        if broadcast:
+            # Set to a very high value of 1 GB
+            os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "1000000000"
+        else:
+            os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "0"
+        yield
+    finally:
+        if old_threshold is None:
+            del os.environ["BODO_BCAST_JOIN_THRESHOLD"]
+        else:
+            os.environ["BODO_BCAST_JOIN_THRESHOLD"] = old_threshold

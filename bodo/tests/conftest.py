@@ -18,6 +18,9 @@ from numba.core.runtime import rtsys
 import bodo
 import bodo.utils.allocation_tracking
 
+# Disable broadcast join as the default
+os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "0"
+
 
 # Similar to Pandas
 class DataPath(Protocol):
