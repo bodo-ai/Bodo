@@ -9,6 +9,48 @@
 
 #include "../libs/_distributed.h"
 
+/**
+ * @brief Class that contains the information to convert
+ * Arrow string columns loaded from Snowflake into
+ * Arrow Dictionary columns. This shouldn't incur additional
+ * overhead because we have a zero-copy approach to convert
+ * to Bodo arrays.
+ *
+ */
+class SnowflakeDictionaryBuilder {
+   public:
+    SnowflakeDictionaryBuilder(std::shared_ptr<arrow::Schema> _schema,
+                               const std::set<int>& _selected_fields,
+                               const std::set<std::string>& _str_as_dict_cols)
+        : schema(_schema),
+          selected_fields(_selected_fields),
+          str_as_dict_cols(_str_as_dict_cols) {}
+
+    std::shared_ptr<arrow::Table> convert(
+        std::shared_ptr<arrow::Table> in_table) {
+        arrow::ChunkedArrayVector new_cols;
+        for (int i = 0; i < in_table->num_columns(); i++) {
+            auto col = in_table->column(i);
+            if (selected_fields.contains(i) &&
+                str_as_dict_cols.contains(schema->field(i)->name())) {
+                // We have a dictionary column to convert.
+                auto new_col = arrow::compute::DictionaryEncode(col);
+                new_cols.push_back(new_col->chunked_array());
+            } else {
+                // For all other columns just copy the column to the table.
+                new_cols.push_back(col);
+            }
+        }
+
+        return arrow::Table::Make(this->schema, new_cols, in_table->num_rows());
+    }
+
+   private:
+    std::shared_ptr<arrow::Schema> schema;
+    const std::set<int>& selected_fields;
+    const std::set<std::string>& str_as_dict_cols;
+};
+
 // -------- SnowflakeReader --------
 
 class SnowflakeReader : public ArrowReader {
@@ -245,6 +287,11 @@ class SnowflakeReader : public ArrowReader {
                 process_result_batch(next_piece, offset);
 
             auto start = steady_clock::now();
+
+            // Build the dictionary
+            SnowflakeDictionaryBuilder dict_builder(schema, selected_fields,
+                                                    str_as_dict_colnames);
+            table = dict_builder.convert(table);
             // Arrow utility to iterate over row-chunks of an input table
             // Useful for us to construct batches of Bodo tables from the piece
             auto reader = arrow::TableBatchReader(table);
@@ -257,8 +304,7 @@ class SnowflakeReader : public ArrowReader {
                 // Construct Builder Object for Next Batch
                 TableBuilder builder(schema, selected_fields,
                                      next_recordbatch->num_rows(), is_nullable,
-                                     str_as_dict_colnames,
-                                     create_dict_encoding_from_strings);
+                                     str_as_dict_colnames, false);
                 // TODO: Have TableBuilder support RecordBatches
                 auto res = arrow::Table::FromRecordBatches({next_recordbatch})
                                .ValueOrDie();
@@ -325,7 +371,7 @@ class SnowflakeReader : public ArrowReader {
 
 /**
  * @brief Construct a SnowflakeReader pointer to pass to Python
- * for streamining purposes
+ * for streaming purposes
  *
  * TODO: At some point, we should combine with the next py_entry
  * function to avoid duplication
