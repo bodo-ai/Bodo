@@ -1938,3 +1938,43 @@ def test_snowflake_filter_pushdown_edgecase_2(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['full_date', 'other_column']")
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
+
+
+def test_batched_read_dict_encoding(memory_leak_check):
+    """
+    Test that batched SF read works with dictionary encoding.
+    """
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(("l_shipmode",))
+
+    def impl(conn):
+        total_length = 0
+        is_last_global = False
+
+        reader = pd.read_sql("SELECT l_shipmode FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(table), 1, None
+            )
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (table,), index_var, col_meta
+            )
+            total_length += df["l_shipmode"].str.len().sum()
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+        arrow_reader_del(reader)
+        return total_length
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(impl, (conn,), py_output=25717034)
+        check_logger_msg(stream, "Columns ['l_shipmode'] using dictionary encoding")
+    print(stream.getvalue())
