@@ -109,7 +109,9 @@ The arguments to the batch job. The arguments are passed to the batch job script
       ```
 
 - ##### Timeout
-The timeout for the batch job in minutes. The default value is 60 minutes. Note that the timeout applies to each individual retry attempt, and not the total execution time of a batch job run with potentially multiple retries. 
+The timeout for the batch job in minutes. The default value is 60 minutes. 
+Note that the timeout applies to each individual retry attempt, and not the total execution time of a batch job run 
+with potentially multiple retries. 
 
 - ##### Environment Variables 
 Key-value pairs of environment variables for the batch job. Default value is an empty dictionary.
@@ -185,13 +187,24 @@ Each batch job that is not `SUCCEEDED` also has a status reason associated with 
 
 
 
-## Running a SQL Query as a Batch Job {#sql-batch-job}
+### Running a SQL Query as a Batch Job {#sql-batch-job}
 
-Bodo supports running SQL queries as batch jobs without explicitly writing a batch job definition. See [Bodo Platform SDK][sql-job-run] for usage details.
+Bodo supports running SQL queries as batch jobs without explicitly writing a batch job definition. 
+See [Bodo Platform SDK][sql-job-run] for usage details.
 
 
+### Queuing Batch Job Runs
 
+If you submit a batch job run while there's another batch job running on the same cluster, 
+the new batch job will automatically be queued. Currently, at most 100 job runs can be queued on a cluster at a time.
+Note that you can queue job runs for different batch job definitions on the same cluster.
 
+### Submitting Batch Job Runs to a Paused Cluster
+
+You can choose whether to allow a cluster to resume on submission of a job run. This is enabled by default. 
+
+If you submit a batch job run to a paused cluster with auto-resume enabled,
+the cluster will be resumed automatically. If auto-resume is not enabled, then the job run submission will fail. 
 
 [//]: # (TODO: Add batch job update details)
 [//]: # (TODO: Add batch job run config override details)
