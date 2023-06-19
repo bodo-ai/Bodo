@@ -116,7 +116,7 @@ class TableBuilder {
 
 /**
  * Abstract class that implements all of the common functionality to read
- * dataframes from Arrow into Bodo. Subclasses need to implement any
+ * DataFrames from Arrow into Bodo. Subclasses need to implement any
  * functionality that is specific to the source (like parquet).
  */
 class ArrowReader {
