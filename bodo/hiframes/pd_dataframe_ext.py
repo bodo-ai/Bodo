@@ -1383,7 +1383,7 @@ def get_dataframe_all_data_impl(df):
         f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
         for i in range(len(df.columns))
     )
-    comma = "," if len(df.columns) > 1 else ""
+    comma = "," if len(df.columns) != 0 else ""
     return eval(f"lambda df: ({data}{comma})", {"bodo": bodo})
 
 

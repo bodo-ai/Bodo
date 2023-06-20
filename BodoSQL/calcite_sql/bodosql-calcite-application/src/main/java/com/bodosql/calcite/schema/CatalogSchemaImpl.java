@@ -137,6 +137,25 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
     return generateWriteCode(varName, tableName, ifExists, SqlCreateTable.CreateTableType.DEFAULT);
   }
 
+  public Expr generateStreamingWriteInitCode(
+      String tableName,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType) {
+    return this.catalog.generateStreamingWriteInitCode(
+        this.getName(), tableName, ifExists, createTableType);
+  }
+
+  public Expr generateStreamingWriteInitCode(
+      String tableName, BodoSQLCatalog.ifExistsBehavior ifExists) {
+    return this.catalog.generateStreamingWriteInitCode(
+        this.getName(), tableName, ifExists, SqlCreateTable.CreateTableType.DEFAULT);
+  }
+
+  public Expr generateStreamingWriteAppendCode(
+      Variable stateVarName, Variable tableVarName, Variable isLastVarName) {
+    return this.catalog.generateStreamingWriteAppendCode(stateVarName, tableVarName, isLastVarName);
+  }
+
   /**
    * API specific to CatalogSchemaImpl and not all schemas. Since schemas with the same catalog
    * often share the same code generation process, the read code for a given table with a catalog is
@@ -147,13 +166,12 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    * @param tableName The name of the table as the read source.
    * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
-   * @param streamingBatchSize The batch size to use if streaming is enabled.
+   * @param streamingOptions Streaming-related options including batch size
    * @return The generated code to compute the read in Python.
    */
   public Expr generateReadCode(
       String tableName, boolean useStreaming, StreamingOptions streamingOptions) {
-    return this.catalog.generateReadCode(
-        this.getName(), tableName, useStreaming, streamingOptions);
+    return this.catalog.generateReadCode(this.getName(), tableName, useStreaming, streamingOptions);
   }
 
   /** @return The catalog for the schema. */

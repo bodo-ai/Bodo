@@ -1,9 +1,12 @@
 import operator
+import os
+import traceback
 
 import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
+from mpi4py import MPI
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
@@ -17,7 +20,8 @@ from numba.extending import (
 from numba.typed import List
 
 import bodo
-from bodo.hiframes.pd_dataframe_ext import DataFrameType, get_dataframe_table
+from bodo.hiframes.pd_dataframe_ext import DataFrameType, get_dataframe_all_data
+from bodo.hiframes.table import logical_table_to_table
 from bodo.io.helpers import exception_propagating_thread_type
 from bodo.io.parquet_pio import parquet_write_table_cpp
 from bodo.io.snowflake import (
@@ -85,6 +89,8 @@ snowflake_writer_payload_members = (
     ("copy_into_dir", types.unicode_type),
     # Snowflake query ID for previous COPY INTO command
     ("copy_into_prev_sfqid", types.unicode_type),
+    # Flag indicating if the Snowflake transaction has started
+    ("is_initialized", types.boolean),
     # File count for previous COPY INTO command
     ("file_count_prev", types.int64),
     # If we are using the PUT command to upload files, a list of upload
@@ -316,6 +322,31 @@ def unbox_snowflake_writer(typ, val, c):
     )  # pragma: no cover
 
 
+def begin_write_transaction(cursor, location, sf_schema, if_exists, table_type):
+    """
+    Begin the write transactions within the connector
+    This include the BEGIN transaction as well as CREATE TABLE
+    """
+    comm = MPI.COMM_WORLD
+    my_rank = comm.Get_rank()
+
+    err = None
+    if my_rank == 0:
+        try:
+            cursor.execute("BEGIN /* io.snowflake_write.begin_write_transaction() */")
+            bodo.io.snowflake.create_table_handle_exists(
+                cursor, location, sf_schema, if_exists, table_type
+            )
+        except Exception as e:
+            err = RuntimeError(str(e))
+            if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
+
+    err = comm.bcast(err)
+    if isinstance(err, Exception):
+        raise err
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def snowflake_writer_init(
     conn, table_name, schema, if_exists, table_type, _is_parallel=False
@@ -421,6 +452,11 @@ def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
     col_types_arr = df.data
     sf_schema = bodo.io.snowflake.gen_snowflake_schema(df.columns, df.data)
 
+    # Create consistent table information for table format and tuple array format.
+    num_table_cols = len(df.columns)
+    py_table_typ = df.table_type if df.is_table_format else bodo.TableType(df.data)
+    in_col_inds = bodo.utils.typing.MetaType(tuple(range(len(df.columns))))
+
     func_text = (
         "def impl(writer, df, is_last):\n"
         "    if writer['finished']:\n"
@@ -428,7 +464,7 @@ def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
         "    ev = tracing.Event('snowflake_writer_append_df', is_parallel=writer['parallel'])\n"
         # ===== Part 1: Accumulate batch in writer and compute total size
         "    ev_append_batch = tracing.Event(f'append_batch', is_parallel=True)\n"
-        "    py_table = get_dataframe_table(df)\n"
+        f"    py_table = logical_table_to_table(get_dataframe_all_data(df), (), in_col_inds, {num_table_cols})\n"
         "    cpp_table = py_table_to_cpp_table(py_table, py_table_typ)\n"
         "    if writer['batches_exists']:\n"
         "        writer['batches'].append(cpp_table)\n"
@@ -533,17 +569,17 @@ def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
         "            else:\n"
         "                with bodo.objmode():\n"
         "                    bodo.io.helpers.join_all_threads([], parallel)\n"
-        # For the first COPY INTO, create table if it doesn't exist
-        "        if writer['copy_into_prev_sfqid'] == '' and bodo.get_rank() == 0:\n"
+        # For the first COPY INTO, begin the transaction and create table if it doesn't exist
+        "        if not writer['is_initialized']:\n"
         "            cursor = writer['cursor']\n"
         "            location = writer['location']\n"
         "            if_exists = writer['if_exists']\n"
         "            table_type = writer['table_type']\n"
         "            with bodo.objmode():\n"
-        "                cursor.execute('BEGIN /* io.snowflake_write.snowflake_writer_append_df() */')\n"
-        "                bodo.io.snowflake.create_table_handle_exists(\n"
+        "                begin_write_transaction(\n"
         "                    cursor, location, sf_schema, if_exists, table_type\n"
         "                )\n"
+        "            writer['is_initialized'] = True\n"
         # If an async COPY INTO command is in progress, retrieve and validate it.
         # Broadcast errors across ranks as needed.
         "        parallel = writer['parallel']\n"
@@ -639,15 +675,18 @@ def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
         "col_names_arr": col_names_arr,
         "col_types_arr": col_types_arr,
         "concat_tables_cpp": concat_tables_cpp,
-        "get_dataframe_table": get_dataframe_table,
+        "in_col_inds": in_col_inds,
+        "logical_table_to_table": logical_table_to_table,
+        "get_dataframe_all_data": get_dataframe_all_data,
         "make_new_copy_into_dir": make_new_copy_into_dir,
         "np": np,
         "parquet_write_table_cpp": parquet_write_table_cpp,
         "py_table_to_cpp_table": py_table_to_cpp_table,
-        "py_table_typ": df.table_type,
+        "py_table_typ": py_table_typ,
         "sf_schema": sf_schema,
         "tracing": tracing,
         "unicode_to_utf8": unicode_to_utf8,
+        "begin_write_transaction": begin_write_transaction,
     }
 
     l = {}

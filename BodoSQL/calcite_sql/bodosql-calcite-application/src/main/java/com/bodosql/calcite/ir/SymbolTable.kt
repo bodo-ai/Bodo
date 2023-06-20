@@ -16,6 +16,7 @@ class SymbolTable {
     private var accVarId: Int = 1
     private var streamingFlagId: Int = 1
     private var streamingReaderId: Int = 1
+    private var streamingWriterId: Int = 1
     private var groupByApplyFnId: Int = 1
     private var globalVarId: Int = 1
     private var idxVarId: Int = 1
@@ -42,6 +43,11 @@ class SymbolTable {
     fun genReaderVar(): Variable {
         return Variable("__bodo_streaming_reader_${streamingReaderId++}")
     }
+
+    fun genWriterVar(): Variable {
+        return Variable("__bodo_streaming_writer_${streamingWriterId++}")
+    }
+
     fun genGenericTempVar(): Variable {
         return Variable("_temp${dfVarId++}")
     }
