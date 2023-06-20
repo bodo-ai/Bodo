@@ -11,6 +11,8 @@ import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
 
+import javax.annotation.Nullable;
+
 public interface BodoSQLCatalog {
   /**
    * See the design described on Confluence:
@@ -166,6 +168,23 @@ public interface BodoSQLCatalog {
    * @return BodoTZInfo for the default timezone.
    */
   BodoTZInfo getDefaultTimezone();
+
+  /**
+   * Fetch the WEEK_START session parameter for this catalog. If not specified it should return 0 as default.
+   *
+   * @return Integer for the WEEK_START session parameter.
+   */
+  @Nullable
+  Integer getWeekStart();
+
+
+  /**
+   * Fetch the WEEK_OF_YEAR_POLICY session parameter for this catalog. If not specified it should return 0 as default.
+   *
+   * @return Integer for the WEEK_OF_YEAR_POLICY session parameter.
+   */
+  @Nullable
+  Integer getWeekOfYearPolicy();
 
   /**
    * Return the top level name of the Catalog.

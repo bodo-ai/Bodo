@@ -40,8 +40,8 @@ date_funcs_no_arg_map = {
     "dayofweekiso": "DAYOFWEEKISO",
     "dayofyear": "DAYOFYEAR",
     # TODO (srilman): Why are there 2 different ones?
-    "get_week": "WEEK",
-    "get_weekofyear": "WEEKOFYEAR",
+    "week": "WEEK",
+    "weekofyear": "WEEKOFYEAR",
     # TODO (srilman): WEEKISO seems to map to get_weekofyear, but I think thats wrong (non ISO version)
     "get_month": "MONTH",
     "get_quarter": "QUARTER",

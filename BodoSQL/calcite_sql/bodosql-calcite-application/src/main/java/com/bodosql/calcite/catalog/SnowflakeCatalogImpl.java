@@ -92,6 +92,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
 
   private @Nullable static BodoTZInfo sfTZInfo;
 
+  private @Nullable Integer weekStart;
+  private @Nullable Integer weekOfYearPolicy;
+
   /**
    * Create the catalog and store the relevant account information.
    *
@@ -131,6 +134,14 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       // This is an optimization to avoid a trip to Snowflake.
       // Note: We assume the Timestamp information can never be loaded as an int.
       this.sfTZInfo = new BodoTZInfo(accountInfo.getProperty("TIMEZONE"), "str");
+    }
+
+    if (accountInfo.contains("WEEK_START")) {
+      this.weekStart = parseSnowflakeIntegerParam("WEEK_START");
+    }
+
+    if (accountInfo.contains("WEEK_OF_YEAR_POLICY")) {
+      this.weekOfYearPolicy = parseSnowflakeIntegerParam("WEEK_OF_YEAR_POLICY");
     }
   }
 
@@ -194,6 +205,29 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     }
   }
 
+
+  /**
+   * Parse a Snowflake Session parameter into an Integer.
+   *
+   * @param paramName The name of the parameter to fetch.
+   * @return The value of the parameter as an Integer.
+   * @throws RuntimeException An exception occurs parsing the parameter string to an Integer.
+   */
+  private Integer parseSnowflakeIntegerParam(String paramName) throws RuntimeException {
+    Integer result = 0;
+    if (accountInfo.contains(paramName)) {
+      String paramStr = accountInfo.getProperty(paramName);
+      if (paramStr != null) {
+        try {
+          result = Integer.parseInt(paramStr);
+        } catch (NumberFormatException e) {
+          throw new RuntimeException("Unable to parse snowflake session variable " + paramName, e);
+        }
+      }
+    }
+    return result;
+  }
+
   /**
    * Get the Snowflake timezone session parameter and update the cached value.
    *
@@ -207,6 +241,31 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       sfTZInfo = new BodoTZInfo(getSnowflakeParameter("TIMEZONE", shouldRetry), "str");
     }
     return sfTZInfo;
+  }
+
+  /**
+   * Get the Snowflake WEEK_START session parameter and update the cached value.
+   *
+   * @return The value of WEEK_START.
+   * @throws SQLException An exception occurs contacting snowflake.
+   */
+  private Integer getSnowflakeWeekStart(boolean shouldRetry) throws SQLException {
+    if (weekStart == null) {
+      weekStart = parseSnowflakeIntegerParam("WEEK_START");
+    }
+    return weekStart;
+  }
+  /**
+   * Get the Snowflake WEEK_OF_YEAR_POLICY session parameter and update the cached value.
+   *
+   * @return The value of WEEK_OF_YEAR_POLICY.
+   * @throws SQLException An exception occurs contacting snowflake.
+   */
+  private Integer getSnowflakeWeekOfYearPolicy(boolean shouldRetry) throws SQLException {
+    if (weekOfYearPolicy == null) {
+      weekOfYearPolicy = parseSnowflakeIntegerParam("WEEK_OF_YEAR_POLICY");
+    }
+    return weekOfYearPolicy;
   }
 
   /**
@@ -675,6 +734,24 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   public BodoTZInfo getDefaultTimezone() {
     try {
       return getSnowflakeTimezone(true);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public @Nullable Integer getWeekStart() {
+    try {
+      return getSnowflakeWeekStart(true);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public @Nullable Integer getWeekOfYearPolicy() {
+    try {
+      return getSnowflakeWeekOfYearPolicy(true);
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
