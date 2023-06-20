@@ -85,13 +85,13 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
  * build side.
  * @param probe_kept_cols Which columns to generate in the output on the
  * probe side.
- * @param is_parallel parallel flag for tracing purposes
+ * @param parallel_trace parallel flag for tracing purposes
  */
 void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
                                   std::shared_ptr<table_info> probe_table,
                                   const std::vector<uint64_t>& build_kept_cols,
                                   const std::vector<uint64_t>& probe_kept_cols,
-                                  bool parallel) {
+                                  bool parallel_trace) {
     bodo::vector<int64_t> build_idxs;
     bodo::vector<int64_t> probe_idxs;
 
@@ -112,13 +112,15 @@ void nested_loop_join_local_chunk(NestedLoopJoinState* join_state,
     nested_loop_join_table_local(
         join_state->build_table_buffer.data_table, probe_table,
         join_state->build_table_outer, join_state->probe_table_outer, cond_func,
-        parallel, build_idxs, probe_idxs, join_state->build_table_matched,
+        parallel_trace, build_idxs, probe_idxs, join_state->build_table_matched,
         probe_table_matched);
     if (join_state->probe_table_outer) {
         add_unmatched_rows(probe_table_matched, probe_table->nrows(),
                            probe_idxs, build_idxs,
-                           parallel && join_state->build_parallel &&
-                               !join_state->probe_parallel);
+                           // We always broadcast one of the sides. If the build
+                           // side is parallel then either the probe side is
+                           // replicated or we broadcast the probe side.
+                           join_state->build_parallel);
     }
     join_state->output_buffer->AppendJoinOutput(
         join_state->build_table_buffer.data_table, probe_table, build_idxs,
