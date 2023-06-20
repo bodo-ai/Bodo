@@ -935,6 +935,82 @@ def test_snowflake_catalog_create_table_temporary(
     check_func(impl, (bc, succsess_query), only_1D=True, py_output=5)
 
 
+@pytest.mark.parametrize(
+    "params, answers",
+    [
+        pytest.param(
+            ("0", "0"),
+            ([1, 1, 1, 5, 52], [2020, 2016, 1980, 1971, 2000]),
+        ),
+        pytest.param(
+            ("0", "7"),
+            ([1, 1, 1, 5, 1], [2020, 2016, 1980, 1971, 2001]),
+        ),
+        pytest.param(
+            ("1", "0"),
+            ([1, 2, 1, 6, 53], [2020, 2016, 1980, 1971, 2000]),
+        ),
+        pytest.param(
+            ("1", "7"),
+            ([1, 2, 1, 6, 54], [2020, 2016, 1980, 1971, 2000]),
+        ),
+    ],
+)
+def test_snowflake_catalog_week_policy_parameters(params, answers, memory_leak_check):
+    """tests that explicitly supplying WEEK_START and WEEK_OF_YEAR_POLICY works"""
+
+    week_of_year_policy, week_start = params
+    expected_woy, expected_yow = answers
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ.get("SF_USERNAME", ""),
+        os.environ.get("SF_PASSWORD", ""),
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "TEST_DB",
+        connection_params={
+            "schema": "PUBLIC",
+            "WEEK_START": week_start,
+            "WEEK_OF_YEAR_POLICY": week_of_year_policy,
+        },
+    )
+
+    extra_df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [
+                    pd.Timestamp("2020-01-01"),
+                    pd.Timestamp("2016-01-04"),
+                    pd.Timestamp("1980-01-02"),
+                    pd.Timestamp("1971-02-02"),
+                    pd.Timestamp("2000-12-31"),
+                ]
+            )
+        }
+    )
+
+    expected_output = pd.DataFrame(
+        {
+            "A": expected_woy,
+            "B": expected_yow,
+        }
+    )
+
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bc.add_or_replace_view("week_policy_table1", extra_df)
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    query = "select WEEKOFYEAR(A) as A, YEAROFWEEK(A) as B from week_policy_table1"
+    check_func(
+        impl,
+        (bc, query),
+        py_output=expected_output,
+        check_dtype=False,
+    )
+
+
 def test_snowflake_catalog_create_table_transient(memory_leak_check):
     """tests that explicitly supplying "TRANSIENT" as the table type works"""
 

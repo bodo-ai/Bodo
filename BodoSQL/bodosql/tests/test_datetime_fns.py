@@ -3072,32 +3072,10 @@ def test_date_trunc_unquoted_timeunit(dt_fn_dataframe, memory_leak_check):
     )
 
 
-def test_yearofweek(dt_fn_dataframe, memory_leak_check):
-    """
-    Test Snowflake's yearofweek function on columns.
-    """
-    query = f"SELECT YEAROFWEEKISO(TIMESTAMPS) as A from table1"
-    # Use expected output because this function isn't in SparkSQL
-    expected_output = pd.DataFrame(
-        {
-            "A": dt_fn_dataframe["table1"]["timestamps"]
-            .dt.isocalendar()
-            .year.astype("Int64")
-        }
-    )
-    check_query(
-        query,
-        dt_fn_dataframe,
-        spark=None,
-        expected_output=expected_output,
-        check_dtype=False,
-    )
-
-
 @pytest.mark.tz_aware
-def test_tz_aware_yearofweek(tz_aware_df, memory_leak_check):
+def test_tz_aware_yearofweekiso(tz_aware_df, memory_leak_check):
     """
-    Test Snowflake's yearofweek function on columns.
+    Test Snowflake's yearofweekiso function on columns.
     """
     query = f"SELECT YEAROFWEEKISO(A) as A from table1"
     # Use expected output because this function isn't in SparkSQL
@@ -4397,6 +4375,7 @@ def test_current_date(fn_name, memory_leak_check):
         expected_output=pd.DataFrame({"output": [datetime.date.today()]}),
     )
 
+
 def test_months_between(spark_info, date_df, memory_leak_check):
     query = "SELECT MONTHS_BETWEEN(B, A) from table1"
 
@@ -4408,6 +4387,7 @@ def test_months_between(spark_info, date_df, memory_leak_check):
         check_dtype=False,
         equivalent_spark_query=query,
     )
+
 
 def test_add_months(spark_info, date_df, memory_leak_check):
     query = "SELECT ADD_MONTHS(A, -18) from table1"

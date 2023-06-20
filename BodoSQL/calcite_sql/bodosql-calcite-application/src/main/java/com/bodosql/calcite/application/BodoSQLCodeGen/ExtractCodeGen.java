@@ -7,6 +7,8 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.ir.Expr;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.bodosql.calcite.ir.ExprKt;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlKind;
 
@@ -48,15 +50,17 @@ public class ExtractCodeGen {
    * @param isTime Is the input TIME data?
    * @return The code generated that matches the Extract expression.
    */
-  public static String generateExtractCode(
-      String datetimeVal, String column, boolean isTime, boolean isDate) {
+  public static Expr generateExtractCode(
+      String datetimeVal, Expr column, boolean isTime, boolean isDate, Integer weekStart, Integer weekOfYearPolicy) {
     if (isTime && dayPlusUnits.contains(datetimeVal)) {
       throw new BodoSQLCodegenException("Cannot extract unit " + datetimeVal + " from TIME values");
     }
     if (isDate && !dayPlusUnits.contains(datetimeVal)) {
       throw new BodoSQLCodegenException("Cannot extract unit " + datetimeVal + " from DATE values");
     }
-    String extractCode;
+    String kernelName = "";
+    List<Expr> args = new ArrayList<>();
+    args.add(column);
     switch (datetimeVal) {
       case "NANOSECOND":
       case "MICROSECOND":
@@ -67,36 +71,42 @@ public class ExtractCodeGen {
       case "MONTH":
       case "QUARTER":
       case "YEAR":
-        extractCode =
-            "bodo.libs.bodosql_array_kernels.get_" + datetimeVal.toLowerCase() + "(" + column + ")";
+        kernelName = "get_" + datetimeVal.toLowerCase();
         break;
       case "DAY":
       case "DAYOFMONTH":
-        extractCode = "bodo.libs.bodosql_array_kernels.dayofmonth(" + column + ")";
-        break;
-      case "DOW":
-      case "DAYOFWEEK":
-        extractCode = "bodo.libs.bodosql_array_kernels.dayofweek(" + column + ")";
+        kernelName = "dayofmonth";
         break;
       case "DAYOFWEEKISO":
-        extractCode = "bodo.libs.bodosql_array_kernels.dayofweekiso(" + column + ")";
+        kernelName = "dayofweekiso";
         break;
       case "DOY":
       case "DAYOFYEAR":
-        extractCode = "bodo.libs.bodosql_array_kernels.dayofyear(" + column + ")";
+        kernelName = "dayofyear";
+        break;
+      case "DOW":
+      case "DAYOFWEEK":
+        kernelName = "dayofweek";
+        args.add(new Expr.IntegerLiteral(weekStart));
         break;
       case "WEEK":
-        extractCode = "bodo.libs.bodosql_array_kernels.get_week(" + column + ")";
+        kernelName = "week";
+        args.add(new Expr.IntegerLiteral(weekStart));
+        args.add(new Expr.IntegerLiteral(weekOfYearPolicy));
         break;
       case "WEEKOFYEAR":
+        kernelName = "weekofyear";
+        args.add(new Expr.IntegerLiteral(weekStart));
+        args.add(new Expr.IntegerLiteral(weekOfYearPolicy));
+        break;
       case "WEEKISO":
-        extractCode = "bodo.libs.bodosql_array_kernels.get_weekofyear(" + column + ")";
+        kernelName = "get_weekofyear";
         break;
       default:
         throw new BodoSQLCodegenException(
             "ERROR, datetime value: " + datetimeVal + " not supported inside of extract");
     }
-    return extractCode;
+    return ExprKt.BodoSQLKernel(kernelName, args, List.of());
   }
 
   /**
@@ -120,7 +130,7 @@ public class ExtractCodeGen {
    * @param isTime Is the input TIME data?
    * @return The name generated that matches the Extract expression.
    */
-  public static Expr generateDatePart(List<Expr> operandsInfo, boolean isTime, boolean isDate) {
+  public static Expr generateDatePart(List<Expr> operandsInfo, boolean isTime, boolean isDate, int weekStart, int weekOfYearPolicy) {
     String unit = makeQuoted(operandsInfo.get(0).emit().toLowerCase());
     switch (unit) {
       case "\"year\"":
@@ -229,7 +239,6 @@ public class ExtractCodeGen {
         throw new BodoSQLCodegenException(
             "Unsupported DATE_PART unit: " + operandsInfo.get(0).emit());
     }
-    String code = generateExtractCode(unit, operandsInfo.get(1).emit(), isTime, isDate);
-    return new Expr.Raw(code);
+    return generateExtractCode(unit, operandsInfo.get(1), isTime, isDate, weekStart, weekOfYearPolicy);
   }
 }
