@@ -34,7 +34,7 @@ enum class PlannerType {
         override fun traitDefs(): List<RelTraitDef<out RelTrait>> =
             listOf(ConventionTraitDef.INSTANCE, BatchingPropertyTraitDef.INSTANCE)
 
-        override fun programs(): ProgramCollection = HEURISTIC.programs()
+        override fun programs(): ProgramCollection = VOLCANO.programs()
     };
 
     open fun traitDefs(): List<RelTraitDef<out RelTrait>> =
