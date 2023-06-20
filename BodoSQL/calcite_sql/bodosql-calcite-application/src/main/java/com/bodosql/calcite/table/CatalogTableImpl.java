@@ -9,10 +9,9 @@ import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.google.common.base.Suppliers;
-
 import java.util.*;
 import java.util.function.Supplier;
-
+import javax.annotation.Nullable;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.*;
@@ -20,8 +19,6 @@ import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.sql.type.*;
-
-import javax.annotation.Nullable;
 
 /**
  *
@@ -133,6 +130,22 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
   }
 
   /**
+   * Generate the streaming code needed to initialize a writer for the given variable.
+   *
+   * @return The generated streaming code to write the table.
+   */
+  public Expr generateStreamingWriteInitCode() {
+    return this.getCatalogSchema()
+        .generateStreamingWriteInitCode(this.getName(), BodoSQLCatalog.ifExistsBehavior.APPEND);
+  }
+
+  public Expr generateStreamingWriteAppendCode(
+      Variable stateVarName, Variable dfVarName, Variable isLastVarName) {
+    return this.getCatalogSchema()
+        .generateStreamingWriteAppendCode(stateVarName, dfVarName, isLastVarName);
+  }
+
+  /**
    * Return the location from which the table is generated. The return value is always entirely
    * capitalized.
    *
@@ -149,13 +162,12 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
    *
    * @param useStreaming Should we generate code to read the table as streaming (currently only
    *     supported for snowflake tables)
-   * @param streamingBatchSize The batch size to use if streaming is enabled.
+   * @param streamingOptions Streaming-related options including batch size
    * @return The generated code to read the table.
    */
   @Override
   public Expr generateReadCode(boolean useStreaming, StreamingOptions streamingOptions) {
-    return this.getCatalogSchema()
-        .generateReadCode(this.getName(), useStreaming, streamingOptions);
+    return this.getCatalogSchema().generateReadCode(this.getName(), useStreaming, streamingOptions);
   }
 
   /**
@@ -241,8 +253,7 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     private final Supplier<Double> rowCount = Suppliers.memoize(this::estimateRowCount);
 
     /**
-     * Retrieves the estimated row count for this table.
-     * This value is memoized.
+     * Retrieves the estimated row count for this table. This value is memoized.
      *
      * @return estimated row count for this table.
      */
@@ -252,8 +263,8 @@ public class CatalogTableImpl extends BodoSqlTable implements TranslatableTable 
     }
 
     /**
-     * Retrieves the estimated row count for this table.
-     * It performs a query every time this is invoked.
+     * Retrieves the estimated row count for this table. It performs a query every time this is
+     * invoked.
      *
      * @return estimated row count for this table.
      */

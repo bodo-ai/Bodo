@@ -116,6 +116,20 @@ public class LocalTableImpl extends BodoSqlTable {
   }
 
   /**
+   * Generate the streaming code needed to initialize a writer for the given variable.
+   *
+   * @return The generated streaming code to write the table.
+   */
+  public Expr generateStreamingWriteInitCode() {
+    throw new RuntimeException("Internal error: Streaming not supported for non-snowflake tables");
+  }
+
+  public Expr generateStreamingWriteAppendCode(
+      Variable stateVarName, Variable dfVarName, Variable isLastVarName) {
+    throw new RuntimeException("Internal error: Streaming not supported for non-snowflake tables");
+  }
+
+  /**
    * Return the location from which the table is generated. The return value is always entirely
    * capitalized.
    *

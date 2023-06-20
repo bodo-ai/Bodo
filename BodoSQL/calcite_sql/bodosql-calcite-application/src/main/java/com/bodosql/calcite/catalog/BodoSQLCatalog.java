@@ -96,6 +96,34 @@ public interface BodoSQLCatalog {
       SqlCreateTable.CreateTableType createTableType);
 
   /**
+   * Generates the code necessary to produce the streaming write initialization code from the given
+   * catalog.
+   *
+   * @param schemaName Name of the schema to use when writing.
+   * @param tableName Name of the table to use when writing.
+   * @param ifExists Behavior to perform if the table already exists
+   * @param createTableType Type of table to create if it doesn't exist
+   * @return The generated code to produce the write-initialization code
+   */
+  Expr generateStreamingWriteInitCode(
+      String schemaName,
+      String tableName,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType);
+
+  /**
+   * Generates the code necessary to produce code to append tables to the streaming writer of the
+   * given object.
+   *
+   * @param stateVarName Name of the variable of the write state
+   * @param tableVarName Name of the variable storing the table to append
+   * @param isLastVarName Name of the variable indicating the is_last flag
+   * @return The generated code to produce the write-appending code
+   */
+  Expr generateStreamingWriteAppendCode(
+      Variable stateVarName, Variable tableVarName, Variable isLastVarName);
+
+  /**
    * Generates the code necessary to produce a read expression from the given catalog.
    *
    * @param useStreaming Should we generate code to read the table as streaming (currently only
@@ -108,10 +136,7 @@ public interface BodoSQLCatalog {
    * @return The generated code to produce a read.
    */
   Expr generateReadCode(
-      String schemaName,
-      String tableName,
-      boolean useStreaming,
-      StreamingOptions streamingOptions);
+      String schemaName, String tableName, boolean useStreaming, StreamingOptions streamingOptions);
 
   /**
    * Close any connections to the remote DataBase. If there are no connections this should be a

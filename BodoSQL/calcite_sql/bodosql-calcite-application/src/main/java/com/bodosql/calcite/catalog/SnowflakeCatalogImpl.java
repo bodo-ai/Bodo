@@ -32,7 +32,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import kotlin.Pair;
-
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -43,7 +42,6 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.util.SqlString;
-
 import org.json.simple.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -564,6 +562,29 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
             tableType.asStringKeyword()));
   }
 
+  @Override
+  public Expr generateStreamingWriteInitCode(
+      String schemaName,
+      String tableName,
+      BodoSQLCatalog.ifExistsBehavior ifExists,
+      SqlCreateTable.CreateTableType createTableType) {
+    return new Expr.Call(
+        "bodo.io.snowflake_write.snowflake_writer_init",
+        new Expr.StringLiteral(generatePythonConnStr(schemaName)),
+        new Expr.StringLiteral(tableName),
+        new Expr.StringLiteral(schemaName),
+        new Expr.StringLiteral(ifExists.asToSqlKwArgument()),
+        new Expr.StringLiteral(createTableType.asStringKeyword()));
+  }
+
+  @Override
+  public Expr generateStreamingWriteAppendCode(
+      Variable stateVarName, Variable tableVarName, Variable isLastVarName) {
+    return new Expr.Call(
+        "bodo.io.snowflake_write.snowflake_writer_append_df",
+        List.of(stateVarName, tableVarName, isLastVarName));
+  }
+
   /**
    * Generates the code necessary to produce a read expression from Snowflake.
    *
@@ -717,8 +738,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     // So while this function returns an exact row count, the result should just
     // be used as an estimation rather than an exact number of rows.
     SqlSelect select = rowCountQuery(tableName);
-    SqlString sql = select.toSqlString((c) -> c.withClauseStartsLine(false)
-        .withDialect(SnowflakeSqlDialect.DEFAULT));
+    SqlString sql =
+        select.toSqlString(
+            (c) -> c.withClauseStartsLine(false).withDialect(SnowflakeSqlDialect.DEFAULT));
 
     // TODO(jsternberg): This class mostly doesn't handle connections correctly.
     // This should be inside of a try/resource block, but it will likely cause
@@ -745,15 +767,23 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   }
 
   private SqlSelect rowCountQuery(List<String> tableName) {
-    SqlNodeList selectList = SqlNodeList.of(
-        SqlStdOperatorTable.COUNT.createCall(
-            SqlParserPos.ZERO,
-            SqlIdentifier.STAR));
-    SqlNodeList from = SqlNodeList.of(
-        new SqlIdentifier(tableName, SqlParserPos.ZERO));
-    return new SqlSelect(SqlParserPos.ZERO, SqlNodeList.EMPTY,
-        selectList, from, null, null, null,
-        null, null, null, null, null, null);
+    SqlNodeList selectList =
+        SqlNodeList.of(SqlStdOperatorTable.COUNT.createCall(SqlParserPos.ZERO, SqlIdentifier.STAR));
+    SqlNodeList from = SqlNodeList.of(new SqlIdentifier(tableName, SqlParserPos.ZERO));
+    return new SqlSelect(
+        SqlParserPos.ZERO,
+        SqlNodeList.EMPTY,
+        selectList,
+        from,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   /**

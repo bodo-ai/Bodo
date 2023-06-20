@@ -1482,7 +1482,9 @@ def retrieve_async_copy_into(
 # Skip Python type registration if snowflake.connector is not installed,
 # since this is an optional dependency.
 try:
-    import snowflake.connector
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        import snowflake.connector
 
     snowflake_connector_cursor_python_type = snowflake.connector.cursor.SnowflakeCursor
 except (ImportError, AttributeError):

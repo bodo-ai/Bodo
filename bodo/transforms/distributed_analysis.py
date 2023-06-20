@@ -1609,7 +1609,7 @@ class DistributedAnalysis:
             new_state_dist = (build_dist, probe_dist)
             self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
-            
+
         if fdef == (
             "snowflake_writer_append_df",
             "bodo.io.snowflake_write",
@@ -2794,7 +2794,7 @@ class DistributedAnalysis:
         if fdef == ("file_read", "bodo.io.np_io"):
             return
 
-        if fdef == ('array_to_string', 'bodo.libs.bodosql_array_kernels'):
+        if fdef == ("array_to_string", "bodo.libs.bodosql_array_kernels"):
             return
 
         # str_arr_from_sequence() applies to lists/tuples so output is REP

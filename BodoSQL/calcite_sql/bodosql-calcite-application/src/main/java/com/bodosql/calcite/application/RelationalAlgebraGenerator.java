@@ -115,9 +115,7 @@ public class RelationalAlgebraGenerator {
    * the Planner member variables.
    */
   public void setupPlanner(
-      List<SchemaPlus> defaultSchemas,
-      String namedParamTableName,
-      RelDataTypeSystem typeSystem) {
+      List<SchemaPlus> defaultSchemas, String namedParamTableName, RelDataTypeSystem typeSystem) {
     PlannerImpl.Config config =
         new PlannerImpl.Config(defaultSchemas, typeSystem, namedParamTableName, plannerType);
     try {
@@ -343,7 +341,8 @@ public class RelationalAlgebraGenerator {
     String response = "";
 
     try {
-      response = RelOptUtil.toString(getRelationalAlgebra(sql, optimizePlan));
+      RelNode plan = getRelationalAlgebra(sql, optimizePlan);
+      response = RelOptUtil.toString(plan);
     } catch (SqlValidationException ex) {
       // System.out.println(ex.getMessage());
       // System.out.println("Found validation err!");
@@ -454,13 +453,13 @@ public class RelationalAlgebraGenerator {
 
   private static PlannerType choosePlannerType(int plannerType) {
     switch (plannerType) {
-    case VOLCANO_PLANNER:
-      return PlannerType.VOLCANO;
-    case STREAMING_PLANNER:
-      return PlannerType.STREAMING;
-    case HEURISTIC_PLANNER:
-    default:
-      return PlannerType.HEURISTIC;
+      case VOLCANO_PLANNER:
+        return PlannerType.VOLCANO;
+      case STREAMING_PLANNER:
+        return PlannerType.STREAMING;
+      case HEURISTIC_PLANNER:
+      default:
+        return PlannerType.HEURISTIC;
     }
   }
 }

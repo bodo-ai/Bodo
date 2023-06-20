@@ -168,7 +168,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     private fun generateStreamingDataFrame(ctx: PandasRel.BuildContext): Dataframe {
         val readExpr = generateReadExpr(ctx)
         val initOutput: Variable =
-            ctx.initStreamingIoLoop(readExpr, rowType)
+            ctx.initStreamingIoLoop(readExpr, getRowType())
         return Dataframe(initOutput.name, this)
     }
 

@@ -243,6 +243,16 @@ public abstract class BodoSqlTable implements ExtensibleTable {
   public abstract Expr generateWriteCode(Variable varName, String extraArgs);
 
   /**
+   * Generate the streaming code needed to initialize a writer for the given variable.
+   *
+   * @return The generated streaming code to write the table.
+   */
+  public abstract Expr generateStreamingWriteInitCode();
+
+  public abstract Expr generateStreamingWriteAppendCode(
+      Variable stateVarName, Variable dfVarName, Variable isLastVarName);
+
+  /**
    * Return the location from which the table is generated. The return value is always entirely
    * capitalized.
    *
@@ -258,8 +268,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
    * @param streamingOptions The options to be used if streaming is selected.
    * @return The generated code to read the table.
    */
-  public abstract Expr generateReadCode(
-      boolean useStreaming, StreamingOptions streamingOptions);
+  public abstract Expr generateReadCode(boolean useStreaming, StreamingOptions streamingOptions);
 
   /**
    * Generate the code needed to read the table. This function is called by specialized IO
