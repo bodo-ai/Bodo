@@ -18,7 +18,7 @@ from mpi4py import MPI
 
 import bodo
 import bodo.io.snowflake
-from bodo.io.arrow_reader import read_arrow_next
+from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.io.snowflake_write import (
     snowflake_writer_append_df,
     snowflake_writer_init,
@@ -596,6 +596,7 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
 
         start, end = get_start_end(len(df_in))
         df_input = df_in.iloc[start:end]
+
         # Write parquet file with Bodo to be able to handle timestamp tz type.
         def test_write(df_input):
             df_input.to_parquet(df_path, _bodo_timestamp_tz="UTC")
@@ -1696,6 +1697,7 @@ def test_batched_write_agg(
                 )
                 total1 += df["l_partkey"].sum()
 
+            arrow_reader_del(reader1)
             return total1
 
         if is_distributed:
