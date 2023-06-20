@@ -189,7 +189,7 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
 void JoinPartition::BuildHashTable() {
     for (size_t i_row = this->curr_build_size;
          i_row < this->build_table_buffer.data_table->nrows(); i_row++) {
-        this->build_table.emplace(this->curr_build_size, this->curr_build_size);
+        this->InsertLastRowIntoMap();
         this->curr_build_size++;
     }
 }
@@ -208,6 +208,19 @@ void JoinPartition::ReserveProbeTable(
     this->probe_table_buffer.ReserveTable(in_table);
 }
 
+inline void JoinPartition::InsertLastRowIntoMap() {
+    std::vector<std::vector<size_t>>& groups = this->groups;
+    size_t& group_id = this->build_table[this->curr_build_size];
+    // group_id==0 means key doesn't exist in map
+    if (group_id == 0) {
+        // Update the value of group_id stored in the hash map
+        // as well since its pass by reference.
+        group_id = groups.size() + 1;
+        groups.emplace_back();
+    }
+    groups[group_id - 1].emplace_back(this->curr_build_size);
+}
+
 // XXX Currently the implementation for the active and inactive case are
 // very similar, but this will change in the future, hence the template
 // variable.
@@ -217,7 +230,7 @@ void JoinPartition::AppendBuildRow(const std::shared_ptr<table_info>& in_table,
     this->build_table_join_hashes.emplace_back(join_hash);
     this->build_table_buffer.AppendRow(in_table, row_ind);
     if (is_active) {
-        this->build_table.emplace(this->curr_build_size, this->curr_build_size);
+        this->InsertLastRowIntoMap();
         this->curr_build_size++;
     }
 }
@@ -232,7 +245,7 @@ void JoinPartition::AppendBuildBatch(
                                          join_hashes.get() + in_table->nrows());
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         this->build_table_buffer.AppendRow(in_table, i_row);
-        this->build_table.emplace(this->curr_build_size, this->curr_build_size);
+        this->InsertLastRowIntoMap();
         this->curr_build_size++;
     }
 }
@@ -300,33 +313,36 @@ inline void handle_probe_input_for_partition(
     std::vector<void*>& build_col_ptrs, std::vector<void*>& probe_col_ptrs,
     std::vector<void*>& build_null_bitmaps,
     std::vector<void*>& probe_null_bitmaps) {
-    auto range = partition->build_table.equal_range(-i_row - 1);
-    if (probe_table_outer && range.first == range.second) {
-        // Add unmatched rows from probe table to output table
-        build_idxs.push_back(-1);
-        probe_idxs.push_back(i_row);
+    auto iter = partition->build_table.find(-i_row - 1);
+    if (iter == partition->build_table.end()) {
+        if (probe_table_outer) {
+            // Add unmatched rows from probe table to output table
+            build_idxs.push_back(-1);
+            probe_idxs.push_back(i_row);
+        }
         return;
     }
+    const std::vector<size_t>& group = partition->groups[iter->second - 1];
     // Initialize to true for pure hash join so the final branch
     // is non-equality condition only.
     bool has_match = !non_equi_condition;
-    for (auto it = range.first; it != range.second; ++it) {
+    for (size_t j_build : group) {
         if (non_equi_condition) {
             // Check for matches with the non-equality portion.
             bool match =
                 cond_func(build_table_info_ptrs.data(),
                           probe_table_info_ptrs.data(), build_col_ptrs.data(),
                           probe_col_ptrs.data(), build_null_bitmaps.data(),
-                          probe_null_bitmaps.data(), it->second, i_row);
+                          probe_null_bitmaps.data(), j_build, i_row);
             if (!match) {
                 continue;
             }
             has_match = true;
         }
         if (build_table_outer) {
-            SetBitTo(partition->build_table_matched, it->second, 1);
+            SetBitTo(partition->build_table_matched, j_build, 1);
         }
-        build_idxs.push_back(it->second);
+        build_idxs.push_back(j_build);
         probe_idxs.push_back(i_row);
     }
     // non-equality condition only branch
@@ -922,6 +938,7 @@ void join_build_consume_batch(HashJoinState* join_state,
             join_state->build_shuffle_buffer.AppendRow(in_table, i_row);
         }
     }
+
     batch_hashes_partition.reset();
     batch_hashes_join.reset();
     in_table.reset();
