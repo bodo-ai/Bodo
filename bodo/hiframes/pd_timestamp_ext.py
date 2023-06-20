@@ -277,7 +277,6 @@ def box_pandas_timestamp(typ, val, c):
             ),
         )
     else:
-
         if isinstance(typ.tz, int):
             tz_obj = c.pyapi.long_from_longlong(lir.Constant(lir.IntType(64), typ.tz))
         else:
@@ -648,7 +647,6 @@ def overload_pd_timestamp(
             nanosecond=None,
             tzinfo=None,
         ):  # pragma: no cover
-
             year = ts_input.year
             month = ts_input.month
             day = ts_input.day
@@ -687,7 +685,6 @@ def overload_pd_timestamp(
             nanosecond=None,
             tzinfo=None,
         ):  # pragma: no cover
-
             year, month, day = ts_input._ymd
 
             return compute_val_for_timestamp(
@@ -724,7 +721,6 @@ def overload_pd_timestamp(
             nanosecond=None,
             tzinfo=None,
         ):  # pragma: no cover
-
             value = np.int64(ts_input) * nanoseconds
             # Pandas treats datetime64 as wall clock time
             return convert_val_to_timestamp(value, tz)

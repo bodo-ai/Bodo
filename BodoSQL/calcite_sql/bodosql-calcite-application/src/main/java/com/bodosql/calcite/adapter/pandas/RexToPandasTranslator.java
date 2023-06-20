@@ -68,6 +68,7 @@ import com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLExprType;
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.ExprTypeVisitor;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.Utils.BodoCtx;
@@ -126,6 +127,8 @@ import org.apache.calcite.sql.type.TZAwareSqlType;
 import org.apache.calcite.util.Sarg;
 import org.jetbrains.annotations.NotNull;
 
+import javax.annotation.Nullable;
+
 /** Translates a RexNode into a Pandas expression. */
 public class RexToPandasTranslator implements RexVisitor<Expr> {
   // Don't really want this here, but it's easier than trying to move all
@@ -137,6 +140,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   @NotNull protected final Dataframe input;
 
   @NotNull public final BodoCtx ctx;
+  protected final @Nullable Integer weekStart;
+
+  protected final @Nullable Integer weekOfYearPolicy;
 
   public RexToPandasTranslator(
       @NotNull PandasCodeGenVisitor visitor,
@@ -150,6 +156,13 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     this.nodeId = nodeId;
     this.input = input;
     this.ctx = new BodoCtx();
+    if (this.typeSystem instanceof BodoSQLRelDataTypeSystem) {
+      this.weekStart = ((BodoSQLRelDataTypeSystem) this.typeSystem).getWeekStart();
+      this.weekOfYearPolicy = ((BodoSQLRelDataTypeSystem) this.typeSystem).getWeekOfYearPolicy();
+    } else {
+      this.weekStart = 0;
+      this.weekOfYearPolicy = 0;
+    }
   }
 
   public @NotNull Dataframe getInput() {
@@ -731,8 +744,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     boolean isDate = node.operands.get(1).getType().getSqlTypeName().toString().equals("DATE");
     Expr dateVal = args.get(0);
     Expr column = args.get(1);
-    String codeExpr = generateExtractCode(dateVal.emit(), column.emit(), isTime, isDate);
-    return new Expr.Raw(codeExpr);
+    return generateExtractCode(dateVal.emit(), column, isTime, isDate, this.weekStart, this.weekOfYearPolicy);
   }
 
   private Expr visitSubstringScan(RexCall node) {
@@ -1237,12 +1249,17 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "MONTH_NAME":
           case "DAYNAME":
           case "WEEKDAY":
-          case "YEAROFWEEK":
           case "YEAROFWEEKISO":
             assert operands.size() == 1;
             if (getDateTimeDataType(fnOperation.getOperands().get(0)) == DateTimeType.TIME)
               throw new BodoSQLCodegenException("Time object is not supported by " + fnName);
             return getSingleArgDatetimeFnInfo(fnName, operands.get(0).emit());
+          case "YEAROFWEEK":
+            assert operands.size() == 1;
+            List<Expr> args = new ArrayList<>(operands);
+            args.add(new Expr.IntegerLiteral(this.weekStart));
+            args.add(new Expr.IntegerLiteral(this.weekOfYearPolicy));
+            return ExprKt.BodoSQLKernel("yearofweek", args, List.of());
           case "LAST_DAY":
             dateTimeExprType1 = getDateTimeDataType(fnOperation.getOperands().get(0));
             if (dateTimeExprType1 == DateTimeType.TIME)
@@ -1283,7 +1300,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                     .getSqlTypeName()
                     .toString()
                     .equals("DATE");
-            return generateDatePart(operands, isTime, isDate);
+            return generateDatePart(operands, isTime, isDate, this.weekStart, this.weekOfYearPolicy);
           case "TO_DAYS":
             return generateToDaysCode(operands.get(0));
           case "TO_SECONDS":
@@ -1485,8 +1502,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
                     .getSqlTypeName()
                     .toString()
                     .equals("DATE");
-            return new Expr.Raw(
-                generateExtractCode(fnName, operands.get(0).emit(), isTime, isDate));
+            return generateExtractCode(fnName, operands.get(0), isTime, isDate, this.weekStart, this.weekOfYearPolicy);
           case "REGR_VALX":
           case "REGR_VALY":
             return getCondFnInfo(fnName, operands);

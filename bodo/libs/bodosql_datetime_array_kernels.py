@@ -17,6 +17,8 @@ from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
+    get_overload_const_int,
+    is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
     raise_bodo_error,
@@ -280,10 +282,6 @@ def dayofmonth(arr):  # pragma: no cover
     return
 
 
-def dayofweek(arr):  # pragma: no cover
-    return
-
-
 def dayofweekiso(arr):  # pragma: no cover
     return
 
@@ -345,10 +343,6 @@ def get_quarter(arr):  # pragma: no cover
 
 
 def get_month(arr):  # pragma: no cover
-    return
-
-
-def get_week(arr):  # pragma: no cover
     return
 
 
@@ -1022,10 +1016,6 @@ def dayofmonth_util(arr):  # pragma: no cover
     return
 
 
-def dayofweek_util(arr):  # pragma: no cover
-    return
-
-
 def dayofweekiso_util(arr):  # pragma: no cover
     return
 
@@ -1043,10 +1033,6 @@ def get_quarter_util(arr):  # pragma: no cover
 
 
 def get_month_util(arr):  # pragma: no cover
-    return
-
-
-def get_week_util(arr):  # pragma: no cover
     return
 
 
@@ -1137,10 +1123,8 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
             "get_year": "arg0.year",
             "get_quarter": "(arg0.month + 2) // 3 ",
             "get_month": "arg0.month",
-            "get_week": "arg0.isocalendar()[1]",
             "get_weekofyear": "arg0.isocalendar()[1]",
             "dayofmonth": "arg0.day",
-            "dayofweek": "(arg0.weekday() + 1) % 7",
             "dayofweekiso": "arg0.weekday() + 1",
             "dayofyear": "bodo.hiframes.datetime_date_ext._day_of_year(arg0.year, arg0.month, arg0.day)",
         }
@@ -1150,7 +1134,6 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
             "get_year": f"{box_str}(arg0).year",
             "get_quarter": f"{box_str}(arg0).quarter",
             "get_month": f"{box_str}(arg0).month",
-            "get_week": f"{box_str}(arg0).week",
             "get_weekofyear": f"{box_str}(arg0).weekofyear",
             "get_hour": f"{box_str}(arg0).hour",
             "get_minute": f"{box_str}(arg0).minute",
@@ -1159,7 +1142,6 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
             "get_microsecond": f"{box_str}(arg0).microsecond",
             "get_nanosecond": f"{box_str}(arg0).nanosecond",
             "dayofmonth": f"{box_str}(arg0).day",
-            "dayofweek": f"({box_str}(arg0).dayofweek + 1) % 7",
             "dayofweekiso": f"{box_str}(arg0).dayofweek + 1",
             "dayofyear": f"{box_str}(arg0).dayofyear",
         }
@@ -1187,7 +1169,6 @@ def _install_dt_extract_fn_overload():
         ("get_year", get_year, get_year_util),
         ("get_quarter", get_quarter, get_quarter_util),
         ("get_month", get_month, get_month_util),
-        ("get_week", get_week, get_week_util),
         ("get_weekofyear", get_weekofyear, get_weekofyear_util),
         ("get_hour", get_hour, get_hour_util),
         ("get_minute", get_minute, get_minute_util),
@@ -1196,7 +1177,6 @@ def _install_dt_extract_fn_overload():
         ("get_microsecond", get_microsecond, get_microsecond_util),
         ("get_nanosecond", get_nanosecond, get_nanosecond_util),
         ("dayofmonth", dayofmonth, dayofmonth_util),
-        ("dayofweek", dayofweek, dayofweek_util),
         ("dayofweekiso", dayofweekiso, dayofweekiso_util),
         ("dayofyear", dayofyear, dayofyear_util),
     ]
@@ -2885,6 +2865,80 @@ def add_date_interval_to_date_util(start_dt, interval):
 
 
 @numba.generated_jit(nopython=True)
+def dayofweek(arr, week_start):
+    args = [arr, week_start]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.dayofweek",
+                ["arr", "week_start"],
+                i,
+            )
+
+    def impl(arr, week_start):  # pragma: no cover
+        return dayofweek_util(arr, week_start)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def dayofweek_util(arr, week_start):
+    """
+    Python kernel for DAYOFWEEK.
+
+    Returns the day of the week, values ranging from 1-7.
+
+    Takes as input <week_start>, which determines what day of the week
+    the week starts at. Per Snowflake behavior, 0/1 correspond to Monday,
+    7 corresponds to Sunday.
+
+    Args:
+        arr (datetime/timestamp scalar/series): the data
+        week_start (Literal[int]) (0-7): day of the week to start with
+
+    Returns:
+        int (scalar/series): the days of the week of the data values
+    """
+    verify_datetime_arg_allow_tz(arr, "dayofweek", "arr")
+    assert is_overload_constant_int(
+        week_start
+    ), "Invalid week_start parameter! Must be an integer"
+
+    week_start_val = get_overload_const_int(week_start)
+    if week_start_val < 0 or week_start_val > 7:
+        raise_bodo_error(
+            "Invalid week_start parameter! Must be between 0 and 7 (0 and 1 both map to Monday)"
+        )
+
+    arg_names = ["arr", "week_start"]
+    arg_types = [arr, week_start]
+    propagate_null = [True] * 2
+    tz = get_tz_if_exists(arr)
+
+    box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+
+    # pd.Timestamp weekday() and datetime dayofweek are 0-indexed
+    # where 0 is Monday and 6 is Sunday.
+    if is_valid_date_arg(arr):
+        dayofweek_str = "arg0.weekday()"
+    else:
+        dayofweek_str = f"{box_str}(arg0).dayofweek"
+
+    scalar_text = "start_day = max(0, arg1 - 1)\n"
+    scalar_text += f"res[i] = ({dayofweek_str} - start_day + 1) % 7\n"
+
+    out_dtype = bodo.IntegerArrayType(numba.int64)
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+@numba.generated_jit(nopython=True)
 def months_between(dt0, dt1):  # pragma: no cover
     args = [dt0, dt1]
     for i in range(len(args)):
@@ -2966,12 +3020,237 @@ def months_between_util(dt0, dt1):
 
 
 @numba.generated_jit(nopython=True)
+def week(arr, week_start, week_of_year_policy):
+    # NOTE (allai5): this is an alias for weekofyear
+    # We need to have a kernel named week as well
+    # in order to do filter pushdown in Python.
+    args = [arr, week_start, week_of_year_policy]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.weekofyear_util",
+                ["arr", "week_start", "week_of_year_policy"],
+                i,
+            )
+
+    def impl(arr, week_start, week_of_year_policy):  # pragma: no cover
+        return weekofyear_util(arr, week_start, week_of_year_policy)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def weekofyear(arr, week_start, week_of_year_policy):
+    args = [arr, week_start, week_of_year_policy]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.weekofyear",
+                ["arr", "week_start", "week_of_year_policy"],
+                i,
+            )
+
+    def impl(arr, week_start, week_of_year_policy):  # pragma: no cover
+        return weekofyear_util(arr, week_start, week_of_year_policy)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def weekofyear_util(arr, week_start, week_of_year_policy):
+    """
+    Python kernel for WEEKOFYEAR.
+
+    Returns week of the year. Accepts week_start and
+    week_of_year policy parameters, which control what
+    day of the week to start with and what the first week
+    of the year is defined as. See Snowflake docs for more detail.
+
+    NOTE (allai5): edge case behavior for WEEK_OF_YEAR_POLICY = 0
+    and WEEK_START != 0 or 1 differs from Snowflake for
+    dates around the last days of December and the first days of
+    January.
+
+    Args:
+        arr (datetime/timestamp scalar/series): the data
+        week_start (Literal[int]) (0-7): day of the week to start with
+        week_of_year_policy (Literal[int]) (0-1): week of year policy flag
+
+    Returns:
+        datetime/timestamp scalar/series: week of year values
+    """
+    verify_datetime_arg_allow_tz(arr, "weekofyear", "arr")
+
+    assert is_overload_constant_int(
+        week_start
+    ), "Invalid week_start parameter! Must be an integer"
+
+    assert is_overload_constant_int(
+        week_of_year_policy
+    ), "Invalid week_of_year_policy parameter! Must be an integer"
+
+    week_start_val = get_overload_const_int(week_start)
+    if week_start_val < 0 or week_start_val > 7:
+        raise_bodo_error(
+            "Invalid week_start parameter! Must be between 0 and 7 (0 and 1 both map to Monday)"
+        )
+
+    arg_names = ["arr", "week_start", "week_of_year_policy"]
+    arg_types = [arr, week_start, week_of_year_policy]
+    propagate_null = [True] * 3
+    tz = get_tz_if_exists(arr)
+
+    box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+
+    date_to_int_str = "bodo.hiframes.datetime_date_ext.cast_datetime_date_to_int_ns"
+    if is_valid_date_arg(arr):
+        scalar_text = (
+            f"arg0 = pd.Timestamp({date_to_int_str}(arg0)).tz_localize(None)\n"
+        )
+    else:
+        scalar_text = f"arg0 = {box_str}(arg0).tz_localize(None)\n"
+
+    scalar_text += f"start_day = max(0, arg1 - 1)\n"
+
+    if get_overload_const_int(week_of_year_policy) == 1:
+        scalar_text += (
+            "first_day_of_year = pd.Timestamp(year=arg0.year, month=1, day=1)\n"
+        )
+        scalar_text += "days = (start_day - first_day_of_year.weekday()) % 7\n"
+        scalar_text += "first_start_day_of_year = first_day_of_year + datetime.timedelta(days=days)\n"
+        scalar_text += "days_from_start = (arg0 - first_start_day_of_year).days\n"
+        scalar_text += "week_number = (days_from_start // 7) + 1\n"
+        scalar_text += "if days != 0:\n"
+        scalar_text += "  week_number = week_number + 1\n"
+        scalar_text += "res[i] = week_number\n"
+    else:
+        scalar_text += "start_day_offset = -1 * start_day if start_day != 6 else 1\n"
+        scalar_text += (
+            "offset_date = (arg0 + datetime.timedelta(days=start_day_offset))\n"
+        )
+        scalar_text += "res[i] = offset_date.isocalendar()[1]\n"
+
+    out_dtype = bodo.IntegerArrayType(numba.int64)
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def yearofweek(arr, week_start, week_of_year_policy):
+    args = [arr, week_start, week_of_year_policy]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.yearofweek",
+                ["arr", "week_start", "week_of_year_policy"],
+                i,
+            )
+
+    def impl(arr, week_start, week_of_year_policy):  # pragma: no cover
+        return yearofweek_util(arr, week_start, week_of_year_policy)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def yearofweek_util(arr, week_start, week_of_year_policy):
+    """
+    Python kernel for YEAROFWEEK.
+
+    Returns year that corresponds with WEEKOFYEAR. Accepts week_start and
+    week_of_year policy parameters, which control what
+    day of the week to start with and what the first week
+    of the year is defined as. See Snowflake docs for more detail.
+
+    NOTE (allai5): edge case behavior for WEEK_OF_YEAR_POLICY = 0
+    and WEEK_START != 0 or 1 differs from Snowflake for
+    dates around the last days of December and the first days of
+    January.
+
+    Args:
+        arr (datetime/timestamp scalar/series): the data
+        week_start (Literal[int]) (0-7): day of the week to start with
+        week_of_year_policy (Literal[int]) (0-1): week of year policy flag
+
+    Returns:
+        datetime/timestamp scalar/series: year of week values
+    """
+
+    verify_datetime_arg_allow_tz(arr, "yearofweek", "arr")
+
+    assert is_overload_constant_int(
+        week_start
+    ), "Invalid week_start parameter! Must be an integer"
+
+    assert is_overload_constant_int(
+        week_of_year_policy
+    ), "Invalid week_of_year_policy parameter! Must be an integer"
+
+    week_start_val = get_overload_const_int(week_start)
+    if week_start_val < 0 or week_start_val > 7:
+        raise_bodo_error(
+            "Invalid week_start parameter! Must be between 0 and 7 (0 and 1 both map to Monday)"
+        )
+
+    arg_names = ["arr", "week_start", "week_of_year_policy"]
+    arg_types = [arr, week_start, week_of_year_policy]
+    propagate_null = [True] * 3
+    tz = get_tz_if_exists(arr)
+
+    box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+
+    date_to_int_str = "bodo.hiframes.datetime_date_ext.cast_datetime_date_to_int_ns"
+    if is_valid_date_arg(arr):
+        scalar_text = (
+            f"arg0 = pd.Timestamp({date_to_int_str}(arg0)).tz_localize(None)\n"
+        )
+    else:
+        scalar_text = f"arg0 = {box_str}(arg0).tz_localize(None)\n"
+
+    scalar_text += f"start_day = max(0, arg1 - 1)\n"
+
+    if get_overload_const_int(week_of_year_policy) == 1:
+        scalar_text += (
+            "first_day_of_year = pd.Timestamp(year=arg0.year, month=1, day=1)\n"
+        )
+        scalar_text += "days = (start_day - first_day_of_year.weekday()) % 7\n"
+        scalar_text += "first_start_day_of_year = first_day_of_year + datetime.timedelta(days=days)\n"
+        scalar_text += "days_from_start = (arg0 - first_start_day_of_year).days\n"
+        scalar_text += (
+            "year_of_week = arg0.year if days_from_start < 365 else arg0.year - 1\n"
+        )
+    else:
+        scalar_text += "start_day_offset = -1 * start_day if start_day != 6 else 1\n"
+        scalar_text += (
+            "offset_date = (arg0 + datetime.timedelta(days=start_day_offset))\n"
+        )
+        scalar_text += "year_of_week = offset_date.isocalendar()[0]\n"
+    scalar_text += "res[i] = year_of_week\n"
+
+    out_dtype = bodo.IntegerArrayType(numba.int64)
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+@numba.generated_jit(nopython=True)
 def add_months(dt0, num_months):  # pragma: no cover
     args = [dt0, num_months]
     for i in range(len(args)):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.months_between",
+                "bodo.libs.bodosql_array_kernels.add_months",
                 ["dt0", "num_months"],
                 i,
             )

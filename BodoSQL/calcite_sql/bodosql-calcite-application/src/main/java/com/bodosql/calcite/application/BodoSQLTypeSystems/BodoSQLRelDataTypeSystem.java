@@ -5,6 +5,8 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.sql.type.*;
 
+import javax.annotation.Nullable;
+
 /**
  * Class for the RelDataTypeSystem used by BodoSQL. This recycles the default type system but
  * specifies that chars should be converted to varchars.
@@ -16,12 +18,35 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
 
   private final BodoTZInfo defaultTZInfo;
 
+  /*
+  WEEK_START parameter that determines which weekday a week starts with.
+  We follow Snowflake behavior, mapping 0 and 1 to Monday (default), and
+  2-7 for the rest of the days up to and including Sunday.
+
+  Possible values: 0-7
+   */
+  private @Nullable Integer weekStart;
+
+  /*
+  WEEK_OF_YEAR_POLICY parameter that determines whether to follow ISO semantics
+  or determine the first week of the year by looking at if the week of interest
+  contains January 1st of that year.
+
+  0 -> ISO semantics
+  1 -> 1st week of year = week that contains January 1st
+
+  Possible values: 0-1
+   */
+  private @Nullable Integer weekOfYearPolicy;
+
   public BodoSQLRelDataTypeSystem() {
-    this(BodoTZInfo.UTC);
+    this(BodoTZInfo.UTC, 0, 0);
   }
 
-  public BodoSQLRelDataTypeSystem(BodoTZInfo tzInfo) {
+  public BodoSQLRelDataTypeSystem(BodoTZInfo tzInfo, Integer weekStart, Integer weekOfYearPolicy) {
     defaultTZInfo = tzInfo;
+    this.weekStart = weekStart;
+    this.weekOfYearPolicy = weekOfYearPolicy;
   }
 
   /**
@@ -146,5 +171,12 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
   @Override
   public BodoTZInfo getDefaultTZInfo() {
     return defaultTZInfo;
+  }
+
+  public @Nullable Integer getWeekStart() {
+    return weekStart;
+  }
+  public @Nullable Integer getWeekOfYearPolicy() {
+    return weekOfYearPolicy;
   }
 }

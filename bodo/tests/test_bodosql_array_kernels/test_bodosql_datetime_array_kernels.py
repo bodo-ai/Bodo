@@ -1246,28 +1246,32 @@ def test_dayofmonth(dates_scalar_vector, memory_leak_check):
     )
 
 
-def test_dayofweek(dates_scalar_vector, memory_leak_check):
+@pytest.mark.parametrize("week_start", [0, 1, 2, 3, 4, 5, 6, 7])
+def test_dayofweek(dates_scalar_vector, week_start, memory_leak_check):
     def impl(arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.dayofweek(arr))
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayofweek(arr, week_start))
 
     # avoid pd.Series() conversion for scalar output
     if isinstance(dates_scalar_vector, pd.Timestamp):
-        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayofweek(arr)
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayofweek(arr, week_start)
 
     # Simulates DAYOFWEEK on a single row
     def dayofweek_scalar_fn(elem):
         if pd.isna(elem):
             return None
         else:
-            dow_dict = {
-                "Monday": 1,
-                "Tuesday": 2,
-                "Wednesday": 3,
-                "Thursday": 4,
-                "Friday": 5,
-                "Saturday": 6,
-                "Sunday": 0,
-            }
+            start_day = max(0, week_start - 1)
+            keys = [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            ]
+            values = (7 - start_day + np.arange(7) + 1) % 7
+            dow_dict = dict(zip(keys, values))
             return dow_dict[elem.day_name()]
 
     dayname_answer = vectorized_sol((dates_scalar_vector,), dayofweek_scalar_fn, None)
@@ -1341,27 +1345,164 @@ def test_dayofyear(dates_scalar_vector, memory_leak_check):
     )
 
 
-def test_get_weekofyear(dates_scalar_vector, memory_leak_check):
-    def impl(arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.get_weekofyear(arr))
+@pytest.mark.parametrize(
+    "dt_obj, snowflake_params, answers",
+    [
+        # Basic datetime tests
+        pytest.param(datetime.date(2016, 1, 4), (0, 7), (1, 2016), id="datetime-1"),
+        pytest.param(datetime.date(2016, 1, 4), (0, 1), (1, 2016), id="datetime-2"),
+        pytest.param(datetime.date(2016, 1, 4), (1, 7), (2, 2016), id="datetime-3"),
+        pytest.param(datetime.date(2016, 1, 4), (1, 1), (2, 2016), id="datetime-4"),
+        pytest.param(datetime.date(2000, 12, 31), (0, 7), (1, 2001), id="datetime-5"),
+        pytest.param(datetime.date(2000, 12, 31), (0, 1), (52, 2000), id="datetime-6"),
+        pytest.param(datetime.date(2000, 12, 31), (1, 7), (54, 2000), id="datetime-7"),
+        pytest.param(datetime.date(2000, 12, 31), (1, 1), (53, 2000), id="datetime-8"),
+        # Basic timestamp tests
+        pytest.param(
+            pd.Timestamp("2012-01-01T23"), (1, 1), (1, 2012), id="timestamp-1"
+        ),
+        pytest.param(
+            pd.Timestamp("2012-01-01T23"), (1, 7), (1, 2012), id="timestamp-2"
+        ),
+        pytest.param(
+            pd.Timestamp("2012-01-01T23"), (0, 1), (52, 2011), id="timestamp-3"
+        ),
+        pytest.param(
+            pd.Timestamp("2012-01-01T23"), (0, 7), (1, 2012), id="timestamp-4"
+        ),
+        # Test different start_day parameters with datetime objects
+        pytest.param(
+            datetime.date(1970, 2, 2), (1, 2), (5, 1970), id="datetime-day-start-2"
+        ),
+        pytest.param(
+            datetime.date(1970, 2, 2), (1, 3), (5, 1970), id="datetime-day-start-3"
+        ),
+        pytest.param(
+            datetime.date(1970, 2, 2), (1, 4), (5, 1970), id="datetime-day-start-4"
+        ),
+        pytest.param(
+            datetime.date(1970, 2, 2), (1, 5), (6, 1970), id="datetime-day-start-5"
+        ),
+        pytest.param(
+            datetime.date(1970, 2, 2), (1, 6), (6, 1970), id="datetime-day-start-6"
+        ),
+        pytest.param(
+            pd.Timestamp("2000-12-31"), (0, 2), (52, 2000), id="timestamp-day-start-2"
+        ),
+        pytest.param(
+            pd.Timestamp("2014-03-01"), (0, 3), (9, 2014), id="timestamp-day-start-3"
+        ),
+        pytest.param(
+            pd.Timestamp("2008-12-31"), (0, 4), (52, 2008), id="timestamp-day-start-4"
+        ),
+        pytest.param(
+            pd.Timestamp("1980-04-01"), (0, 5), (13, 1980), id="timestamp-day-start-5"
+        ),
+        pytest.param(
+            pd.Timestamp("2004-12-31"), (0, 6), (52, 2004), id="timestamp-day-start-6"
+        ),
+        # Timezone aware timestamp tests
+        pytest.param(
+            pd.Timestamp("2024-02-28T23", tz="Poland"),
+            (1, 1),
+            (9, 2024),
+            id="tz-timestamp-1",
+        ),
+        pytest.param(
+            pd.Timestamp("2024-02-28T23", tz="America/New_York"),
+            (1, 7),
+            (9, 2024),
+            id="tz-timestamp-2",
+        ),
+        pytest.param(
+            pd.Timestamp("2024-02-28T23", tz="Pacific/Honolulu"),
+            (0, 1),
+            (9, 2024),
+            id="tz-timestamp-3",
+        ),
+        pytest.param(
+            pd.Timestamp("2024-02-28T23", tz="Europe/Stockholm"),
+            (0, 7),
+            (9, 2024),
+            id="tz-timestamp-4",
+        ),
+    ],
+)
+def test_weekofyear_yearofweek_scalars(
+    dt_obj, snowflake_params, answers, memory_leak_check
+):
+    week_of_year_policy, week_start = snowflake_params
+    woy_answer, yow_answer = answers
 
-    # avoid pd.Series() conversion for scalar output
-    if isinstance(dates_scalar_vector, pd.Timestamp):
-        impl = lambda arr: bodo.libs.bodosql_array_kernels.get_weekofyear(arr)
+    def weekofyear_impl(arr):
+        return bodo.libs.bodosql_array_kernels.weekofyear(
+            arr, week_start, week_of_year_policy
+        )
 
-    # Simulates get_weekofyear on a single row
-    def get_weekofyear_scalar_fn(elem):
-        if pd.isna(elem):
-            return None
-        else:
-            elem = pd.Timestamp(elem)
-            return elem.weekofyear
+    def yearofweek_impl(arr):
+        return bodo.libs.bodosql_array_kernels.yearofweek(
+            arr, week_start, week_of_year_policy
+        )
 
-    answer = vectorized_sol((dates_scalar_vector,), get_weekofyear_scalar_fn, None)
     check_func(
-        impl,
-        (dates_scalar_vector,),
-        py_output=answer,
+        weekofyear_impl,
+        (dt_obj,),
+        py_output=woy_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+    check_func(
+        yearofweek_impl,
+        (dt_obj,),
+        py_output=yow_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_weekofyear_yearofweek_columns(memory_leak_check):
+    week_of_year_policy, week_start = 1, 7
+
+    ts_series = pd.Series(
+        [
+            pd.Timestamp("2012-12-01"),
+            pd.Timestamp("1992-09-11"),
+            pd.Timestamp("1972-02-14"),
+            pd.Timestamp("2000-01-01"),
+        ]
+        * 4
+    )
+
+    week_of_year_output = pd.Series([48, 37, 8, 1] * 4)
+    year_of_week_output = pd.Series([2012, 1992, 1972, 2000] * 4)
+
+    def week_of_year_impl(arr):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.weekofyear(
+                arr, week_start, week_of_year_policy
+            )
+        )
+
+    def year_of_week_impl(arr):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.yearofweek(
+                arr, week_start, week_of_year_policy
+            )
+        )
+
+    check_func(
+        week_of_year_impl,
+        (ts_series,),
+        py_output=week_of_year_output,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+    check_func(
+        year_of_week_impl,
+        (ts_series,),
+        py_output=year_of_week_output,
         check_dtype=False,
         reset_index=True,
     )
@@ -3302,6 +3443,7 @@ def test_add_months_series(arg0, num_months, answer, memory_leak_check):
     """
     Tests add-months kernel over series.
     """
+
     def impl(arg0, num_months):
         return pd.Series(bodo.libs.bodosql_array_kernels.add_months(arg0, num_months))
 
