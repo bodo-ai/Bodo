@@ -94,10 +94,13 @@ class JoinPartition {
     TableBuildBuffer build_table_buffer;  // Append only buffer.
     bodo::vector<uint32_t> build_table_join_hashes;
 
-    bodo::unordered_multimap<int64_t, int64_t, HashHashJoinTable,
-                             KeyEqualHashJoinTable>
+    bodo::unord_map_container<int64_t, size_t, HashHashJoinTable,
+                              KeyEqualHashJoinTable>
         build_table;  // join hash table (key row number -> matching row
                       // numbers)
+    // Use std::vector to avoid allocation overhead of bodo::vector.
+    // TODO: use bodo::vector when we support spilling
+    std::vector<std::vector<size_t>> groups;
 
     // Probe state (for outer joins). Note we don't use
     // vector<bool> because we may need to do an allreduce
@@ -192,6 +195,13 @@ class JoinPartition {
     template <bool is_active = false>
     void AppendBuildRow(const std::shared_ptr<table_info>& in_table,
                         int64_t row_ind, const uint32_t& join_hash);
+
+    /**
+     * @brief Inserts the last row of build buffer
+     * (build_table_buffer[curr_build_size]) into build hash map
+     *
+     */
+    inline void InsertLastRowIntoMap();
 
     /**
      * @brief Add all rows from in_table to this partition.
