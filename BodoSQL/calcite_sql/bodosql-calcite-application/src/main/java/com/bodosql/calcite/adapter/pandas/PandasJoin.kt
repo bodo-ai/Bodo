@@ -68,6 +68,15 @@ class PandasJoin(
         val conditionCost = condition.accept(RexCostEstimator)
             .multiplyBy(conditionRows)
 
+        // For Bodo the build side is always the left input. This table
+        // influences the total cost because the build table needs to be collected
+        // before the probe side and is inserted into any hashmaps.
+        val buildRows = mq.getRowCount(this.left)
+        val averageBuildRowSize = mq.getAverageRowSize(this.left)
+        // Add a multiplier to try ensure the build cost isn't too impactful.
+        val buildCost = Cost(mem = averageBuildRowSize ?: 0.0).multiplyBy(buildRows).multiplyBy(0.3)
+
+
         // We now want to compute the expected cost of producing this join's output.
         // We do this by taking the output rows and multiplying by the number
         // of rows we are estimated to produce. The join condition itself will influence
@@ -76,8 +85,8 @@ class PandasJoin(
         val averageRowSize = mq.getAverageRowSize(this)
         val outputCost = Cost(mem = averageRowSize ?: 0.0).multiplyBy(rows)
 
-        // Final cost is these two combined.
-        val totalCost = conditionCost.plus(outputCost)
+        // Final cost is these three combined.
+        val totalCost = conditionCost.plus(buildCost).plus(outputCost)
         return planner.makeCost(rows = rows, from = totalCost)
     }
 

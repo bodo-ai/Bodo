@@ -250,6 +250,11 @@ object BodoRules {
             ProjectFilterProjectColumnEliminationRule.Config.DEFAULT.toRule(),
             MinRowNumberFilterRule.Config.DEFAULT.toRule(),
             RexSimplificationRule.Config.DEFAULT.toRule(),
+            // Allow planner to swap inputs between the build/probe join
+            // side to reduce total in-use memory cost.
+            CoreRules.JOIN_COMMUTE_OUTER,
+            // TODO(Nick): Explore JOIN_ASSOCIATE in a future PR to allow
+            // for join reordering.
         )
     ).toList()
 }
