@@ -38,7 +38,8 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             // TODO: remove std::string() after upgrade to C++23
             (*(this->dict_str_to_ind))[std::string(val)] = ind;
             transpose_map.emplace_back(ind);
-            this->dict_buff->AppendRow(batch_dict, i);
+            this->dict_buff->AppendRow<bodo_array_type::STRING, false>(
+                batch_dict, i);
             if (this->is_key) {
                 uint32_t hash;
                 hash_string_32(&data[start_offset], (const int)len,
