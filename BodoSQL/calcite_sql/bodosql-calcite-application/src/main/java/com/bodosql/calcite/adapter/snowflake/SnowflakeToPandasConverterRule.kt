@@ -17,14 +17,12 @@ class SnowflakeToPandasConverterRule private constructor(config: Config) : Conve
 
     override fun convert(rel: RelNode): RelNode {
         val newTraitSet = rel.traitSet.replace(outConvention)
-        var converter: RelNode = SnowflakeToPandasConverter(rel.cluster, newTraitSet, rel)
+        val converter: RelNode = SnowflakeToPandasConverter(rel.cluster, newTraitSet, rel)
         // In addition to the converter, add a projection to return the type
         // to the original type of the input relation.
         val projects = rel.rowType.fieldList.mapIndexed { index, field ->
             RexInputRef(index, field.type)
         }
         return PandasProject.create(converter, projects, rel.rowType)
-
-
     }
 }
