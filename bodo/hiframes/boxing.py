@@ -1774,6 +1774,10 @@ def _infer_array_item_array_type_and_depth(val, nesting_depth):
             struct_arr_typ = numba.typeof(np.array(val, np.object_))
             # returning nesting_depth-1 because struct_arr_typ is based on val not val[i]
             return struct_arr_typ, nesting_depth - 1, True
+        elif isinstance(val[i], tuple):
+            data_types = tuple(_get_struct_value_arr_type(v) for v in val[i])
+            # returning nesting_depth-1 because TupleArrayType is based on val not val[i]
+            return TupleArrayType(data_types), nesting_depth - 1, True
         else:
             typ, depth, nullable = _infer_array_item_array_type_and_depth(val[i], nesting_depth + 1)
             max_depth = max(max_depth, depth)
