@@ -42,7 +42,7 @@ public class SnowflakeGenTest {
     arr.add(column3);
 
     BodoSqlTable table =
-        new LocalTableImpl("localtable", schema, arr, false, "", "", false, "MEMORY");
+        new LocalTableImpl("localtable", schema, arr, false, "", "", false, "MEMORY", null);
     schema.addTable(table);
 
     RelationalAlgebraGenerator generator =

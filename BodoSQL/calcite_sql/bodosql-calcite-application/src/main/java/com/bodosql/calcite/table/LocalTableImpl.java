@@ -5,10 +5,14 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.LocalSchemaImpl;
-import java.util.*;
-import org.apache.calcite.rel.type.*;
+import java.util.ArrayList;
+import java.util.List;
+import javax.annotation.Nullable;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Table;
-import org.apache.calcite.sql.type.*;
+import org.apache.calcite.sql.type.BodoTZInfo;
 
 /**
  * Definition of a table that is not associated with any schema. These tables include in memory
@@ -43,6 +47,10 @@ public class LocalTableImpl extends BodoSqlTable {
   // but only for certain DBs.
   private final String dbType;
 
+  private final @Nullable Long estimatedRowCount;
+
+  private final Statistic statistic = new StatisticImpl();
+
   /**
    * Constructor used for a LocalTableImpl. In addition to the normal table components the table is
    * required to provide code need to read/write it. If a table is not writeable then the write code
@@ -56,6 +64,8 @@ public class LocalTableImpl extends BodoSqlTable {
    * @param writeCodeFormatString A format string to write a given variable. The format is described
    *     above the class member of the same name. If isWriteable=false this value can be garbage.
    * @param useIORead Does calling generateReadCode produce codegen that requires IO?
+   * @param dbType What is the database source.
+   * @param estimatedRowCount Estimated row count passed from Python.
    */
   public LocalTableImpl(
       String name,
@@ -65,7 +75,8 @@ public class LocalTableImpl extends BodoSqlTable {
       String readCode,
       String writeCodeFormatString,
       boolean useIORead,
-      String dbType) {
+      String dbType,
+      @Nullable Long estimatedRowCount) {
 
     super(name, schema, columns);
     if (!(schema instanceof LocalSchemaImpl)) {
@@ -76,6 +87,7 @@ public class LocalTableImpl extends BodoSqlTable {
     this.writeCodeFormatString = writeCodeFormatString;
     this.useIORead = useIORead;
     this.dbType = dbType;
+    this.estimatedRowCount = estimatedRowCount;
   }
 
   /**
@@ -209,7 +221,8 @@ public class LocalTableImpl extends BodoSqlTable {
         readCode,
         writeCodeFormatString,
         useIORead,
-        dbType);
+        dbType,
+        null);
   }
 
   /**
@@ -221,5 +234,26 @@ public class LocalTableImpl extends BodoSqlTable {
   @Override
   public boolean readRequiresIO() {
     return useIORead;
+  }
+
+  @Override
+  public Statistic getStatistic() {
+    return statistic;
+  }
+
+  private class StatisticImpl implements Statistic {
+    /**
+     * Retrieves the estimated row count for this table based on the provided constructor
+     * information. If the information provided is NULL we don't have an estimate and return NULL.
+     *
+     * @return estimated row count for this table.
+     */
+    @Override
+    public @Nullable Double getRowCount() {
+      if (estimatedRowCount == null) {
+        return null;
+      }
+      return Double.valueOf(estimatedRowCount);
+    }
   }
 }
