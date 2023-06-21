@@ -1,5 +1,9 @@
 package com.bodosql.calcite.application.Testing;
 
+import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.rel.RelRoot;
+
+import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.schema.LocalSchemaImpl;
 import com.bodosql.calcite.table.*;
@@ -165,11 +169,20 @@ public class TPCHSchemaTest {
         new RelationalAlgebraGenerator(schema, "", 0, 0, BatchingProperty.defaultBatchSize);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
-    String planStr = generator.getRelationalAlgebraString(sql, true);
+    String planStr = getRelationalAlgebraString(generator, sql, true);
     System.out.println("Optimized plan:");
     System.out.println(planStr + "\n");
     String pandasStr = generator.getPandasString(sql);
     System.out.println("Generated code:");
     System.out.println(pandasStr + "\n");
+  }
+
+  private static String getRelationalAlgebraString(RelationalAlgebraGenerator generator, String sql, boolean optimizePlan) {
+    try {
+      RelRoot root = generator.getRelationalAlgebra(sql, optimizePlan);
+      return RelOptUtil.toString(PandasUtilKt.pandasProject(root));
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 }
