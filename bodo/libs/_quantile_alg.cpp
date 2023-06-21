@@ -479,10 +479,10 @@ struct local_global_stat_nan {
     This is only for non-decimal arrays.
  */
 template <class T, int dtype>
-inline typename std::enable_if<!is_decimal<dtype>::value, void>::type
-collecting_non_nan_entries(bodo::vector<T> &my_array,
-                           std::shared_ptr<array_info> arr,
-                           local_global_stat_nan const &e_stat) {
+    requires(!decimal<dtype>)
+inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
+                                       std::shared_ptr<array_info> arr,
+                                       local_global_stat_nan const &e_stat) {
     if (e_stat.loc_nb_miss == 0) {
         // Remark: The data is indeed copied in that case as well.
         T *data = (T *)arr->data1();
@@ -519,10 +519,10 @@ collecting_non_nan_entries(bodo::vector<T> &my_array,
    well.
  */
 template <class T, int dtype>
-inline typename std::enable_if<is_decimal<dtype>::value, void>::type
-collecting_non_nan_entries(bodo::vector<T> &my_array,
-                           std::shared_ptr<array_info> arr,
-                           local_global_stat_nan const &e_stat) {
+    requires decimal<dtype>
+inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
+                                       std::shared_ptr<array_info> arr,
+                                       local_global_stat_nan const &e_stat) {
     for (size_t i_row = 0; i_row < arr->length; i_row++) {
         if (GetBit((uint8_t *)arr->null_bitmask(), i_row)) {
             __int128 eVal = arr->at<__int128>(i_row);

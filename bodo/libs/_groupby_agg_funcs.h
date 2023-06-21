@@ -90,7 +90,7 @@ struct casted_aggfunc {
  * This template is used for functions that take an input value and
  * reduce its result to a boolean output.
  */
-template <typename T, int dtype, int ftype, typename Enable = void>
+template <typename T, int dtype, int ftype>
 struct bool_aggfunc {
     /**
      * Apply the function.
@@ -99,30 +99,6 @@ struct bool_aggfunc {
      */
     static void apply(const std::shared_ptr<array_info>& arr, int64_t idx,
                       T& v2);
-};
-
-/**
- * This template is used for boolxor_agg.
- */
-template <typename T, int dtype, typename Enable = void>
-struct boolxor_agg {
-    /**
-     * Aggregation function for boolxor_agg. The goal is to
-     * count the number of non-null occurrences and the number of true
-     * occurrences.
-     *
-     * @param[in] arr: array of input values
-     * @param[in,out] one_arr: boolean array indicating which groups have 1+
-     * nonzero observations
-     * @param[in,out] two_arr: boolean array indicating which groups have 2+
-     * nonzero observations
-     * @param[in] idx: index of the array that is being accessed
-     * @param[in] i_grp: index of the corresponding group
-     */
-    inline static void apply(const std::shared_ptr<array_info>& arr,
-                             const std::shared_ptr<array_info>& one_arr,
-                             const std::shared_ptr<array_info>&, int64_t idx,
-                             int64_t i_grp);
 };
 
 /**
@@ -376,15 +352,14 @@ struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::prod> {
 
 // idxmin
 
-template <typename T, int dtype, typename Enable = void>
+template <typename T, int dtype>
 struct idxmin_agg {
     static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i);
 };
 
 template <typename T, int dtype>
-struct idxmin_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value>::type> {
+    requires(!std::floating_point<T>)
+struct idxmin_agg<T, dtype> {
     inline static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
         // TODO should it be >=?
         if (!isnan_alltype<T, dtype>(v2) && (v1 > v2)) {
@@ -398,8 +373,8 @@ struct idxmin_agg<
 // check is not needed for other types but may not be possible to optimize
 // away.
 template <typename T, int dtype>
-struct idxmin_agg<
-    T, dtype, typename std::enable_if<std::is_floating_point<T>::value>::type> {
+    requires std::floating_point<T>
+struct idxmin_agg<T, dtype> {
     inline static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
         if (!isnan(v2)) {
             // v1 is initialized as NaN
@@ -442,15 +417,14 @@ inline static void idxmin_bool(const std::shared_ptr<array_info>& arr,
 
 // idxmax
 
-template <typename T, int dtype, typename Enable = void>
+template <typename T, int dtype>
 struct idxmax_agg {
     static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i);
 };
 
 template <typename T, int dtype>
-struct idxmax_agg<
-    T, dtype,
-    typename std::enable_if<!std::is_floating_point<T>::value>::type> {
+    requires(!std::floating_point<T>)
+struct idxmax_agg<T, dtype> {
     inline static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
         // TODO should it be <=?
         if (!isnan_alltype<T, dtype>(v2) && (v1 < v2)) {
@@ -464,8 +438,8 @@ struct idxmax_agg<
 // check is not needed for other types but may not be possible to optimize
 // away.
 template <typename T, int dtype>
-struct idxmax_agg<
-    T, dtype, typename std::enable_if<std::is_floating_point<T>::value>::type> {
+    requires std::floating_point<T>
+struct idxmax_agg<T, dtype> {
     inline static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
         if (!isnan(v2)) {
             // v1 is initialized as NaN
@@ -509,8 +483,8 @@ inline static void idxmax_bool(const std::shared_ptr<array_info>& arr,
 // boolor_agg
 
 template <typename T, int dtype>
-struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
-                    typename std::enable_if<!is_decimal<dtype>::value>::type> {
+    requires(!decimal<dtype>)
+struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg> {
     /**
      * Aggregation function for boolor_agg. Note this implementation
      * handles both integer and floating point data.
@@ -529,8 +503,8 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
 };
 
 template <typename T, int dtype>
-struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
-                    typename std::enable_if<is_decimal<dtype>::value>::type> {
+    requires decimal<dtype>
+struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg> {
     /**
      * Aggregation function for boolor_agg. Note this implementation
      * handles decimal data.
@@ -552,8 +526,8 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
 // booland_agg
 
 template <typename T, int dtype>
-struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg,
-                    typename std::enable_if<!is_decimal<dtype>::value>::type> {
+    requires(!decimal<dtype>)
+struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg> {
     /**
      * Aggregation function for booland_agg. Note this implementation
      * handles both integer and floating point data.
@@ -572,8 +546,8 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg,
 };
 
 template <typename T, int dtype>
-struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg,
-                    typename std::enable_if<is_decimal<dtype>::value>::type> {
+    requires decimal<dtype>
+struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg> {
     /**
      * Aggregation function for booland_agg. Note this implementation
      * handles decimal data data.
@@ -774,7 +748,7 @@ struct kurt_agg {
 // boolxor_agg
 
 template <typename T, int dtype>
-struct boolxor_agg<T, dtype> {
+struct boolxor_agg {
     /**
      * Aggregation function for boolxor_agg. The goal is to
      * count the number of non-null occurrences and the number of true
