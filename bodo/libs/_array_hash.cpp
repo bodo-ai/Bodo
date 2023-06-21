@@ -2,6 +2,7 @@
 #include "_array_hash.h"
 #include <Python.h>
 #include <arrow/api.h>
+#include <concepts>
 #include <span>
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -37,10 +38,11 @@ static void hash_na_val(const uint32_t seed, uint32_t* hash_value,
  *
  */
 template <typename T>
-static typename std::enable_if<!std::is_floating_point<T>::value, void>::type
-hash_array_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
-                 size_t n_rows, const uint32_t seed, uint8_t* null_bitmask,
-                 bool use_murmurhash = false) {
+    requires(!std::floating_point<T>)
+static void hash_array_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
+                             size_t n_rows, const uint32_t seed,
+                             uint8_t* null_bitmask,
+                             bool use_murmurhash = false) {
     if (null_bitmask) {
         uint32_t na_hash;
         hash_na_val(seed, &na_hash, use_murmurhash);
@@ -118,10 +120,10 @@ static inline Py_hash_t Npy_HashDouble(PyObject* __UNUSED__(identity),
 // https://stackoverflow.com/questions/4238122/hash-function-for-floats
 
 template <typename T>
-static typename std::enable_if<std::is_floating_point<T>::value, void>::type
-hash_array_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
-                 size_t n_rows, const uint32_t seed,
-                 bool use_murmurhash = false) {
+    requires std::floating_point<T>
+static void hash_array_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
+                             size_t n_rows, const uint32_t seed,
+                             bool use_murmurhash = false) {
     for (size_t i = 0; i < n_rows; i++) {
         Py_hash_t py_hash = Npy_HashDouble(nullptr, data[i]);
         if (use_murmurhash) {
@@ -721,10 +723,11 @@ static inline void hash_combine_boost(uint32_t& h1, uint32_t k1) {
 // -------------------------------------------------------------
 
 template <class T>
-static typename std::enable_if<!std::is_floating_point<T>::value, void>::type
-hash_array_combine_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
-                         size_t n_rows, const uint32_t seed,
-                         uint8_t* null_bitmask) {
+    requires(!std::floating_point<T>)
+static void hash_array_combine_inner(std::unique_ptr<uint32_t[]>& out_hashes,
+                                     T* data, size_t n_rows,
+                                     const uint32_t seed,
+                                     uint8_t* null_bitmask) {
     if (null_bitmask) {
         uint32_t na_hash;
         hash_na_val(seed, &na_hash);
@@ -750,9 +753,10 @@ hash_array_combine_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
 // https://stackoverflow.com/questions/4238122/hash-function-for-floats
 
 template <class T>
-static typename std::enable_if<std::is_floating_point<T>::value, void>::type
-hash_array_combine_inner(std::unique_ptr<uint32_t[]>& out_hashes, T* data,
-                         size_t n_rows, const uint32_t seed) {
+    requires std::floating_point<T>
+static void hash_array_combine_inner(std::unique_ptr<uint32_t[]>& out_hashes,
+                                     T* data, size_t n_rows,
+                                     const uint32_t seed) {
     uint32_t out_hash = 0;
     for (size_t i = 0; i < n_rows; i++) {
         Py_hash_t py_hash = Npy_HashDouble(nullptr, data[i]);
@@ -965,8 +969,8 @@ void hash_array_combine(std::unique_ptr<uint32_t[]>& out_hashes,
 }
 
 template <typename T>
-typename std::enable_if<std::is_floating_point<T>::value, double>::type
-get_value(T val) {
+    requires std::floating_point<T>
+double get_value(T val) {
     // I wrote that because I am not sure nan have unique
     // binary representation
     if (isnan(val)) {
@@ -976,8 +980,8 @@ get_value(T val) {
 }
 
 template <typename T>
-typename std::enable_if<!std::is_floating_point<T>::value, double>::type
-get_value(T val) {
+    requires(!std::floating_point<T>)
+double get_value(T val) {
     return val;
 }
 

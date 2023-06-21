@@ -2,6 +2,7 @@
 #ifndef _ARRAY_UTILS_H_INCLUDED
 #define _ARRAY_UTILS_H_INCLUDED
 
+#include <concepts>
 #include <set>
 #include <span>
 #include "_bodo_common.h"
@@ -404,6 +405,9 @@ struct is_datetime_timedelta<Bodo_CTypes::TIMEDELTA> {
     static const bool value = true;
 };
 
+template <int dtype>
+concept datetime_timedelta = is_datetime_timedelta<dtype>::value;
+
 // is_decimal
 
 template <int dtype>
@@ -416,30 +420,31 @@ struct is_decimal<Bodo_CTypes::DECIMAL> {
     static const bool value = true;
 };
 
+template <int dtype>
+concept decimal = is_decimal<dtype>::value;
+
 template <typename T, int dtype>
-inline typename std::enable_if<std::is_integral<T>::value, bool>::type
-isnan_categorical(T const& val) {
+    requires std::integral<T>
+inline bool isnan_categorical(T const& val) {
     T miss_idx = -1;
     return val == miss_idx;
 }
 
 template <typename T, int dtype>
-inline typename std::enable_if<!std::is_integral<T>::value, bool>::type
-isnan_categorical(T const& val) {
+inline bool isnan_categorical(T const& val) {
     return false;
 }
 
 template <typename T, int dtype>
-inline typename std::enable_if<std::is_integral<T>::value, void>::type
-set_na_if_num_categories(T& val, int64_t num_categories) {
+    requires std::integral<T>
+inline void set_na_if_num_categories(T& val, int64_t num_categories) {
     if (val == T(num_categories)) {
         val = T(-1);
     }
 }
 
 template <typename T, int dtype>
-inline typename std::enable_if<!std::is_integral<T>::value, void>::type
-set_na_if_num_categories(T& val, int64_t num_categories) {
+inline void set_na_if_num_categories(T& val, int64_t num_categories) {
     return;
 }
 
@@ -472,27 +477,19 @@ inline bool isnan_categorical_ptr(int dtype, char* ptr) {
 }
 
 template <typename T, int dtype>
-constexpr inline
-    typename std::enable_if<std::is_floating_point<T>::value, bool>::type
-    isnan_alltype(T const& val) {
+    requires std::floating_point<T>
+constexpr inline bool isnan_alltype(T const& val) {
     return isnan(val);
 }
 
 template <typename T, int dtype>
-constexpr inline
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                                is_datetime_timedelta<dtype>::value,
-                            bool>::type
-    isnan_alltype(T const& val) {
+    requires(!std::floating_point<T>) && datetime_timedelta<dtype>
+constexpr inline bool isnan_alltype(T const& val) {
     return val == std::numeric_limits<T>::min();
 }
 
 template <typename T, int dtype>
-constexpr inline
-    typename std::enable_if<!std::is_floating_point<T>::value &&
-                                !is_datetime_timedelta<dtype>::value,
-                            bool>::type
-    isnan_alltype(T const& val) {
+constexpr inline bool isnan_alltype(T const& val) {
     return false;
 }
 
@@ -1029,15 +1026,14 @@ inline void restore_col_order(
  * @return Val as a double.
  */
 template <typename T, int dtype>
-inline typename std::enable_if<!is_decimal<dtype>::value, double>::type
-to_double(T const& val) {
-    return static_cast<double>(val);
+    requires decimal<dtype>
+inline double to_double(T const& val) {
+    return decimal_to_double(val);
 }
 
 template <typename T, int dtype>
-inline typename std::enable_if<is_decimal<dtype>::value, double>::type
-to_double(T const& val) {
-    return decimal_to_double(val);
+inline double to_double(T const& val) {
+    return static_cast<double>(val);
 }
 
 #endif  // _ARRAY_UTILS_H_INCLUDED
