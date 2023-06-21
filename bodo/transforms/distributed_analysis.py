@@ -40,6 +40,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.table import TableType
+from bodo.libs.bodosql_array_kernel_utils import is_array_item_array
 from bodo.libs.bodosql_array_kernels import (
     broadcasted_fixed_arg_functions,
     broadcasted_variadic_functions,
@@ -2795,6 +2796,7 @@ class DistributedAnalysis:
             return
 
         if fdef == ("array_to_string", "bodo.libs.bodosql_array_kernels"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         # str_arr_from_sequence() applies to lists/tuples so output is REP

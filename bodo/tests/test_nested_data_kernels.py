@@ -176,19 +176,20 @@ def test_to_array(to_array_input, dtype, answer, memory_leak_check):
     ]
 )
 def test_array_to_string(array, separator, answer, memory_leak_check):
-    is_out_distributed = True
+    distributed = True
     def impl(array, separator):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.array_to_string(array, separator)
         )
 
     if not isinstance(array, pd.Series):
-        is_out_distributed = False
+        distributed = False
         impl = lambda array, separator: bodo.libs.bodosql_array_kernels.array_to_string(array, separator)
 
     check_func(
         impl,
         (array, separator,),
         py_output=answer,
-        is_out_distributed=is_out_distributed,
+        distributed=distributed,
+        is_out_distributed=distributed,
     )
