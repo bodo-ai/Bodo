@@ -53,7 +53,7 @@ class BodoSQLContextType(types.Type):
     Requires table names and DataFrame types.
     """
 
-    def __init__(self, names, dataframes, catalog):
+    def __init__(self, names, dataframes, estimated_row_counts, catalog):
         if not (isinstance(names, tuple) and all(isinstance(v, str) for v in names)):
             raise BodoError("BodoSQLContext(): 'table' keys must be constant strings")
         if not (
@@ -67,20 +67,34 @@ class BodoSQLContextType(types.Type):
             raise BodoError(
                 "BodoSQLContext(): 'catalog' must be a bodosql.DatabaseCatalog if provided"
             )
+        if not (
+            isinstance(estimated_row_counts, tuple)
+            and all(
+                isinstance(row_count, int) or row_count is None
+                for row_count in estimated_row_counts
+            )
+        ):
+            raise BodoError(
+                "BodoSQLContext(): 'estimated_row_counts' must be a tuple of int or None for each table."
+            )
         self.names = names
         self.dataframes = dataframes
+        self.estimated_row_counts = estimated_row_counts
         # Map None to types.none to use the type in the data model.
         self.catalog_type = types.none if is_overload_none(catalog) else catalog
         super(BodoSQLContextType, self).__init__(
-            name=f"BodoSQLContextType({names}, {dataframes}, {catalog})"
+            name=f"BodoSQLContextType({names}, {dataframes}, {estimated_row_counts}, {catalog})"
         )
 
 
 @typeof_impl.register(BodoSQLContext)
 def typeof_bodo_sql(val, c):
+    dataframes = val.tables.values()
     return BodoSQLContextType(
         tuple(val.tables.keys()),
-        tuple(numba.typeof(v) for v in val.tables.values()),
+        tuple(numba.typeof(df) for df in dataframes),
+        # TODO(njriasan): Handle distributed code.
+        tuple([len(df) if isinstance(df, pd.DataFrame) else None for df in dataframes]),
         numba.typeof(val.catalog),
     )
 
@@ -185,8 +199,10 @@ def init_sql_context(typingctx, names_type, dataframes_type, catalog):
     table_names = tuple(get_overload_const(names_type))
     n_tables = len(names_type.types)
     assert len(dataframes_type.types) == n_tables
+    # Cannot estimate row counts in compiled code at this time.
+    estimated_row_counts = tuple([None] * len(dataframes_type.types))
     sql_ctx_type = BodoSQLContextType(
-        table_names, tuple(dataframes_type.types), catalog
+        table_names, tuple(dataframes_type.types), estimated_row_counts, catalog
     )
     return sql_ctx_type(names_type, dataframes_type, catalog), lower_init_sql_context
 
@@ -406,7 +422,13 @@ def _gen_pd_func_text_and_lowered_globals(
                 write_type = generator.getWriteType(sql_str)
                 # Update the schema with types.
                 update_schema(
-                    schema, table_names, df_types, orig_bodo_types, True, write_type
+                    schema,
+                    table_names,
+                    df_types,
+                    list(bodo_sql_context_type.estimated_row_counts),
+                    orig_bodo_types,
+                    True,
+                    write_type,
                 )
                 if is_optimized:
                     pd_code = str(generator.getPandasString(sql_str))
