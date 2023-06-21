@@ -31,96 +31,6 @@ ArrayBuildBuffer::ArrayBuildBuffer(
     }
 }
 
-void ArrayBuildBuffer::AppendRow(const std::shared_ptr<array_info>& in_arr,
-                                 int64_t row_ind) {
-    switch (in_arr->arr_type) {
-        case bodo_array_type::NULLABLE_INT_BOOL: {
-            if (in_arr->dtype == Bodo_CTypes::_BOOL) {
-                arrow::bit_util::SetBitTo(
-                    (uint8_t*)data_array->data1(), size,
-                    GetBit((uint8_t*)in_arr->data1(), row_ind));
-                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
-                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
-                size++;
-                data_array->length = size;
-                CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
-                                    arrow::bit_util::BytesForBits(size), false),
-                                "Resize Failed!");
-                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
-                                    arrow::bit_util::BytesForBits(size), false),
-                                "Resize Failed!");
-            } else {
-                uint64_t size_type = numpy_item_size[in_arr->dtype];
-                char* out_ptr = data_array->data1() + size_type * size;
-                char* in_ptr = in_arr->data1() + size_type * row_ind;
-                memcpy(out_ptr, in_ptr, size_type);
-                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
-                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
-                size++;
-                data_array->length = size;
-                CHECK_ARROW_MEM(
-                    data_array->buffers[0]->Resize(size * size_type, false),
-                    "Resize Failed!");
-                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
-                                    arrow::bit_util::BytesForBits(size), false),
-                                "Resize Failed!");
-            }
-        } break;
-        case bodo_array_type::STRING: {
-            offset_t* curr_offsets = (offset_t*)data_array->data2();
-            offset_t* in_offsets = (offset_t*)in_arr->data2();
-
-            // append offset
-            int64_t str_len = in_offsets[row_ind + 1] - in_offsets[row_ind];
-            curr_offsets[size + 1] = curr_offsets[size] + str_len;
-
-            // copy characters
-            char* out_ptr = data_array->data1() + curr_offsets[size];
-            char* in_ptr = in_arr->data1() + in_offsets[row_ind];
-            memcpy(out_ptr, in_ptr, str_len);
-
-            // set null bit
-            bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
-            SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
-
-            // update size state
-            size++;
-            data_array->length = size;
-            CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
-                                data_array->n_sub_elems(), false),
-                            "Resize Failed!");
-            CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
-                                (size + 1) * sizeof(offset_t), false),
-                            "Resize Failed!");
-            CHECK_ARROW_MEM(data_array->buffers[2]->Resize(
-                                arrow::bit_util::BytesForBits(size), false),
-                            "Resize Failed!");
-        } break;
-        case bodo_array_type::DICT: {
-            if (this->data_array->child_arrays[0] != in_arr->child_arrays[0]) {
-                throw std::runtime_error("dictionary not unified in AppendRow");
-            }
-            this->dict_indices->AppendRow(in_arr->child_arrays[1], row_ind);
-            size++;
-            data_array->length = size;
-        } break;
-        case bodo_array_type::NUMPY: {
-            uint64_t size_type = numpy_item_size[in_arr->dtype];
-            char* out_ptr = data_array->data1() + size_type * size;
-            char* in_ptr = in_arr->data1() + size_type * row_ind;
-            memcpy(out_ptr, in_ptr, size_type);
-            size++;
-            data_array->length = size;
-            CHECK_ARROW_MEM(
-                data_array->buffers[0]->Resize(size * size_type, false),
-                "Resize Failed!");
-        } break;
-        default:
-            throw std::runtime_error("invalid array type in AppendRow " +
-                                     GetArrType_as_string(in_arr->arr_type));
-    }
-}
-
 void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
     int64_t min_capacity = size + in_arr->length;
     switch (in_arr->arr_type) {
@@ -243,6 +153,136 @@ void ArrayBuildBuffer::Reset() {
     }
 }
 
+void _copy_bitmap(u_int8_t* dest, u_int8_t* src, u_int64_t length) {
+    u_int64_t bytes_to_copy = (length + 7) >> 3;
+    memcpy(dest, src, bytes_to_copy);
+}
+
+void ArrayBuildBuffer::_append_bool_batch(
+    const std::shared_ptr<array_info>& in_arr) {
+    CHECK_ARROW_MEM(
+        data_array->buffers[0]->Resize(
+            arrow::bit_util::BytesForBits(size + in_arr->length), false),
+        "Resize Failed!");
+    CHECK_ARROW_MEM(
+        data_array->buffers[1]->Resize(
+            arrow::bit_util::BytesForBits(size + in_arr->length), false),
+        "Resize Failed!");
+    // Fast path if our buffer is byte aligned
+    if ((size & 7) == 0) {
+        _copy_bitmap((uint8_t*)data_array->data1() + (size >> 3),
+                     (uint8_t*)in_arr->data1(), in_arr->length);
+        _copy_bitmap((uint8_t*)data_array->null_bitmask(),
+                     (uint8_t*)in_arr->null_bitmask(), in_arr->length);
+        size += in_arr->length;
+    } else {
+        for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+            arrow::bit_util::SetBitTo(
+                (uint8_t*)data_array->data1(), size,
+                GetBit((uint8_t*)in_arr->data1(), row_ind));
+            bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+            SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+            size++;
+        }
+    }
+    data_array->length = size;
+}
+
+void ArrayBuildBuffer::_append_nullable_int_batch(
+    const std::shared_ptr<array_info>& in_arr) {
+    uint64_t size_type = numpy_item_size[in_arr->dtype];
+    CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
+                        (size + in_arr->length) * size_type, false),
+                    "Resize Failed!");
+    CHECK_ARROW_MEM(
+        data_array->buffers[1]->Resize(
+            arrow::bit_util::BytesForBits(size + in_arr->length), false),
+        "Resize Failed!");
+
+    char* out_ptr = data_array->data1() + size_type * size;
+    char* in_ptr = in_arr->data1();
+    memcpy(out_ptr, in_ptr, size_type * in_arr->length);
+
+    if ((size & 7) == 0) {
+        // Fast path for byte aligned null bitmask
+        _copy_bitmap((uint8_t*)data_array->null_bitmask() + (size >> 3),
+                     (uint8_t*)in_arr->null_bitmask(), in_arr->length);
+        size += in_arr->length;
+    } else {
+        // Slow path for non-byte aligned null bitmask
+        for (u_int64_t i = 0; i < in_arr->length; i++) {
+            bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), i);
+            SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+            size++;
+        }
+    }
+    data_array->length = size;
+}
+
+// Needs optimized
+void ArrayBuildBuffer::_append_string_batch(
+    const std::shared_ptr<array_info>& in_arr) {
+    for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+        offset_t* curr_offsets = (offset_t*)data_array->data2();
+        offset_t* in_offsets = (offset_t*)in_arr->data2();
+
+        // append offset
+        int64_t str_len = in_offsets[row_ind + 1] - in_offsets[row_ind];
+        curr_offsets[size + 1] = curr_offsets[size] + str_len;
+
+        // copy characters
+        char* out_ptr = data_array->data1() + curr_offsets[size];
+        char* in_ptr = in_arr->data1() + in_offsets[row_ind];
+        memcpy(out_ptr, in_ptr, str_len);
+
+        // set null bit
+        bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+        SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+
+        // update size state
+        size++;
+        data_array->length = size;
+        CHECK_ARROW_MEM(
+            data_array->buffers[0]->Resize(data_array->n_sub_elems(), false),
+            "Resize Failed!");
+        CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
+                            (size + 1) * sizeof(offset_t), false),
+                        "Resize Failed!");
+        CHECK_ARROW_MEM(data_array->buffers[2]->Resize(
+                            arrow::bit_util::BytesForBits(size), false),
+                        "Resize Failed!");
+    }
+}
+
+// Needs optimized
+void ArrayBuildBuffer::_append_dict_batch(
+    const std::shared_ptr<array_info>& in_arr) {
+    for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+        if (this->data_array->child_arrays[0] != in_arr->child_arrays[0]) {
+            throw std::runtime_error("dictionary not unified in AppendRow");
+        }
+        this->dict_indices
+            ->AppendRow<bodo_array_type::NULLABLE_INT_BOOL, false>(
+                in_arr->child_arrays[1], row_ind);
+        size++;
+        data_array->length = size;
+    }
+}
+
+void ArrayBuildBuffer::_append_numpy_batch(
+    const std::shared_ptr<array_info>& in_arr) {
+    uint64_t size_type = numpy_item_size[in_arr->dtype];
+    CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
+                        (size + in_arr->length) * size_type, false),
+                    "Resize Failed!");
+
+    char* out_ptr = data_array->data1() + size_type * size;
+    char* in_ptr = in_arr->data1();
+    memcpy(out_ptr, in_ptr, size_type * in_arr->length);
+    size += in_arr->length;
+    data_array->length = size;
+}
+
 /* ------------------------------------------------------------------------ */
 
 /* -------------------------- TableBuildBuffer ---------------------------- */
@@ -266,12 +306,58 @@ TableBuildBuffer::TableBuildBuffer(
     }
 }
 
-void TableBuildBuffer::AppendRow(const std::shared_ptr<table_info>& in_table,
-                                 int64_t row_ind) {
+void TableBuildBuffer::AppendBatch(const std::shared_ptr<table_info>& in_table,
+                                   const std::vector<bool>& append_rows) {
+#ifndef APPEND_ARRAY_BATCH
+#define APPEND_ARRAY_BATCH(arr_type, arr_type_exp, dtype)                   \
+    if (arr_type == arr_type_exp) {                                         \
+        if (dtype == Bodo_CTypes::_BOOL) {                                  \
+            array_buffers[i].AppendBatch<arr_type_exp, true>(in_arr,        \
+                                                             append_rows);  \
+        } else {                                                            \
+            array_buffers[i].AppendBatch<arr_type_exp, false>(in_arr,       \
+                                                              append_rows); \
+        }                                                                   \
+    }
+#endif
+    for (size_t i = 0; i < in_table->ncols(); i++) {
+        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::STRING,
+                           in_arr->dtype);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::DICT,
+                           in_arr->dtype);
+    }
+#undef APPEND_ARRAY_BATCH
+}
+
+void TableBuildBuffer::AppendBatch(
+    const std::shared_ptr<table_info>& in_table) {
+#ifndef APPEND_ARRAY_BATCH
+#define APPEND_ARRAY_BATCH(arr_type, arr_type_exp, dtype)              \
+    if (arr_type == arr_type_exp) {                                    \
+        if (dtype == Bodo_CTypes::_BOOL) {                             \
+            array_buffers[i].AppendBatch<arr_type_exp, true>(in_arr);  \
+        } else {                                                       \
+            array_buffers[i].AppendBatch<arr_type_exp, false>(in_arr); \
+        }                                                              \
+    }
+#endif
     for (size_t i = 0; i < in_table->ncols(); i++) {
         const std::shared_ptr<array_info>& in_arr = in_table->columns[i];
-        array_buffers[i].AppendRow(in_arr, row_ind);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::STRING,
+                           in_arr->dtype);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::DICT,
+                           in_arr->dtype);
     }
+#undef APPEND_ARRAY_BATCH
 }
 
 void TableBuildBuffer::ReserveTable(

@@ -19,10 +19,7 @@ void NestedLoopJoinState::FinalizeBuild() {
                 this->UnifyBuildTableDictionaryArrays(gathered_table);
             this->build_table_buffer.Reset();
             this->build_table_buffer.ReserveTable(gathered_table);
-            // TODO BSE-580: Add whole table at once
-            for (uint64_t i = 0; i < gathered_table->nrows(); i++) {
-                this->build_table_buffer.AppendRow(gathered_table, i);
-            }
+            this->build_table_buffer.AppendBatch(gathered_table);
         }
     }
 
@@ -64,10 +61,7 @@ void nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
     in_table = join_state->UnifyBuildTableDictionaryArrays(in_table);
 
     join_state->build_table_buffer.ReserveTable(in_table);
-    // TODO BSE-580: Add whole table at once
-    for (uint64_t i = 0; i < in_table->nrows(); i++) {
-        join_state->build_table_buffer.AppendRow(in_table, i);
-    }
+    join_state->build_table_buffer.AppendBatch(in_table);
 
     if (is_last) {
         // Finalize the join state
