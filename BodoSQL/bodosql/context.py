@@ -148,6 +148,7 @@ _numba_to_sql_param_type_map = {
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
 }
 
+
 # Hacky way to get the planner type option to Java.
 # I don't want to access the Java enum class or the constants
 # defined in Java that are used for this decision from Python
@@ -209,15 +210,15 @@ def construct_time_column_type(
 
 def construct_array_column_type(arr_type, col_name):
     """Construct a BodoSQL column type for an array
-        value.
+    value.
 
-        Args:
-            typ (bodo.ArrayItemArrayType): A ArrayItemArray type
-            col_name (str): Column name
+    Args:
+        typ (bodo.ArrayItemArrayType): A ArrayItemArray type
+        col_name (str): Column name
 
-        Returns:
-            JavaObject: The Java Object for the BodoSQL column type.
-        """
+    Returns:
+        JavaObject: The Java Object for the BodoSQL column type.
+    """
     col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Array.value)
     dtype = arr_type.dtype
     warning_msg = f"ARRAY column '{col_name}' with type {dtype} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
@@ -225,7 +226,9 @@ def construct_array_column_type(arr_type, col_name):
     tz_info = None
     precision = -1
     if isinstance(dtype, bodo.DatetimeArrayType):
-        tz_info = BodoTZInfoClass(str(dtype.tz), "int" if isinstance(dtype.tz, int) else "str")
+        tz_info = BodoTZInfoClass(
+            str(dtype.tz), "int" if isinstance(dtype.tz, int) else "str"
+        )
         elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value)
     elif isinstance(arr_type, bodo.TimeArrayType):
         precision = dtype.precision
@@ -448,9 +451,32 @@ def compute_df_types(df_list, is_bodo_type):
 
 
 def add_table_type(
-    table_name, schema, df_type, bodo_type, table_num, from_jit, write_type
+    table_name: str,
+    schema: LocalSchemaClass,
+    df_type: bodo.DataFrameType,
+    estimated_row_count: Optional[int],
+    bodo_type: types.Type,
+    table_num: int,
+    from_jit: bool,
+    write_type: str,
 ):
-    """Add a SQL Table type in Java to the schema."""
+    """Registers a new table into the schema. This is used to pass tables via DataFrames or the
+    TablePath API.
+
+    Args:
+        table_name (str): The name of the table.
+        schema (LocalSchemaClass): The schema to update.
+        df_type (bodo.DataFrameType): The Bodo DataFrame type.
+        estimated_row_count (Optional[int]): The expected number of rows in the table for the
+            Volcano Planner. None if no estimate is provided.
+        bodo_type (types.Type): Bodo type for the table. This stores the original type so a TablePath
+            isn't converted to its DataFrameType, which the df_type always is.
+        table_num (int): ID for the table being processed.
+        from_jit (bool): Is this typing coming from JIT?
+        write_type (str): String describing the type of write used for generating the write code.
+            Will be "MERGE" for MERGE INTO queries, and defaults to "INSERT" for all other
+            queries.
+    """
     assert bodo.get_rank() == 0, "add_table_type should only be called on rank 0."
     col_arr = ArrayClass()
     for i, cname in enumerate(df_type.columns):
@@ -504,6 +530,7 @@ def add_table_type(
         # The only other option is an in memory Pandas DataFrame.
         isinstance(bodo_type, TablePathType),
         db_type,
+        estimated_row_count,
     )
     schema.addTable(table)
 
@@ -595,7 +622,9 @@ def add_param_table(table_name, schema, param_keys, param_values):
     # a table scan. Instead the original Python variable names will always
     # be used.
     schema.addTable(
-        LocalTableClass(table_name, schema, param_arr, False, "", "", False, "MEMORY")
+        LocalTableClass(
+            table_name, schema, param_arr, False, "", "", False, "MEMORY", -1
+        )
     )
 
 
@@ -636,15 +665,25 @@ class BodoSQLContext:
             # we first unpack the dictionary.
             names = []
             dfs = []
+            estimated_row_counts = []
             for k, v in tables.items():
                 names.append(k)
                 dfs.append(v)
+                if isinstance(v, pd.DataFrame):
+                    # TODO: Handle distributed inputs.
+                    # Generate lengths if known.
+                    estimated_row_counts.append(len(v))
+                else:
+                    # Pass None for unknown lengths.
+                    # TODO: Support other inputs types (e.g. TablePath)
+                    estimated_row_counts.append(None)
             orig_bodo_types, df_types = compute_df_types(dfs, False)
             schema = initialize_schema(None)
             self.schema = schema
             self.names = names
             self.df_types = df_types
             self.orig_bodo_types = orig_bodo_types
+            self.estimated_row_counts = estimated_row_counts
         except Exception as e:
             failed = True
             msg = str(e)
@@ -939,6 +978,7 @@ class BodoSQLContext:
                     self.schema,
                     self.names,
                     self.df_types,
+                    self.estimated_row_counts,
                     self.orig_bodo_types,
                     False,
                     write_type,
@@ -976,6 +1016,7 @@ class BodoSQLContext:
                     self.schema,
                     self.names,
                     self.df_types,
+                    self.estimated_row_counts,
                     self.orig_bodo_types,
                     False,
                     write_type,
@@ -1013,6 +1054,7 @@ class BodoSQLContext:
             self.schema,
             self.names,
             self.df_types,
+            self.estimated_row_counts,
             self.orig_bodo_types,
             False,
             write_type,
@@ -1231,6 +1273,7 @@ def update_schema(
     schema: LocalSchemaClass,
     table_names: List[str],
     df_types: List[bodo.DataFrameType],
+    estimated_row_counts: List[Optional[int]],
     bodo_types: List[types.Type],
     from_jit: bool,
     write_type: str,
@@ -1241,13 +1284,15 @@ def update_schema(
         schema (LocalSchemaClass): The schema to update.
         table_names (List[str]): List of tables to add to the schema.
         df_types (List[bodo.DataFrameType]): List of Bodo DataFrame types for each table.
+        estimated_row_counts (List[Optional[int]]): The expected number of rows in each input
+            table for the volcano planner. None if no estimate is provided.
         bodo_types (List[types.Type]): List of Bodo types for each table. This stores
             the original type, so a TablePath isn't converted to its
             DataFrameType, which it is for df_types.
+        from_jit (bool): Is this typing coming from JIT?
         write_type (str): String describing the type of write used for generating the write code.
             Will be "MERGE" for MERGE INTO queries, and defaults to "INSERT" for all other
             queries.
-        from_jit (bool): Is this typing coming from JIT?
     """
     if bodo.get_rank() == 0:
         for i in range(len(table_names)):
@@ -1255,6 +1300,7 @@ def update_schema(
                 table_names[i],
                 schema,
                 df_types[i],
+                estimated_row_counts[i],
                 bodo_types[i],
                 i,
                 from_jit,

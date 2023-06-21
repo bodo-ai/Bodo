@@ -30,7 +30,15 @@ public class PandasGenTest {
 
     BodoSqlTable table =
         new LocalTableImpl(
-            "table1", schema, arr, true, "table1", "TABLE_1 WRITE HERE (%s, %s)", false, "MEMORY");
+            "table1",
+            schema,
+            arr,
+            true,
+            "table1",
+            "TABLE_1 WRITE HERE (%s, %s)",
+            false,
+            "MEMORY",
+            null);
 
     schema.addTable(table);
     arr = new ArrayList();
@@ -42,11 +50,27 @@ public class PandasGenTest {
 
     BodoSqlTable table2 =
         new LocalTableImpl(
-            "table2", schema, arr, true, "table2", "TABLE_2 WRITE HERE (%s, %s)", false, "MEMORY");
+            "table2",
+            schema,
+            arr,
+            true,
+            "table2",
+            "TABLE_2 WRITE HERE (%s, %s)",
+            false,
+            "MEMORY",
+            null);
     schema.addTable(table2);
     BodoSqlTable table3 =
         new LocalTableImpl(
-            "table3", schema, arr, true, "table3", "TABLE_3 WRITE HERE (%s, %s)", false, "MEMORY");
+            "table3",
+            schema,
+            arr,
+            true,
+            "table3",
+            "TABLE_3 WRITE HERE (%s, %s)",
+            false,
+            "MEMORY",
+            null);
 
     schema.addTable(table3);
 
@@ -67,7 +91,8 @@ public class PandasGenTest {
             paramTableName,
             "PARAM_TABLE WRITE HERE (%s, %s)",
             false,
-            "MEMORY");
+            "MEMORY",
+            null);
 
     schema.addTable(paramTable);
 

@@ -4357,6 +4357,8 @@ class TypingTransforms:
                         # Return None if a transformation failed
                         # because a dataframe type is unknown.
                         return None
+                # Cannot estimate length from compiled code at this time.
+                estimate_row_counts = tuple([None] * len(df_typs))
                 catalog_var = folded_args[1]
                 if isinstance(catalog_var, ir.Var):
                     if catalog_var.name not in self.typemap:
@@ -4364,7 +4366,9 @@ class TypingTransforms:
                     catalog_typ = self.typemap[catalog_var.name]
                 else:
                     catalog_typ = types.none
-                return BodoSQLContextType(names, df_typs, catalog_typ)
+                return BodoSQLContextType(
+                    names, df_typs, estimate_row_counts, catalog_typ
+                )
             elif fdef[0] == "add_or_replace_view":
                 context_type = determine_bodosql_context_type(fdef[1])
                 name_typ = self.typemap.get(sql_ctx_def.args[0].name, None)
@@ -4377,16 +4381,25 @@ class TypingTransforms:
                 # Map to a new BodoSQLContextType
                 new_names = []
                 new_df_typs = []
-                for old_name_typ, old_df_typ in zip(
-                    context_type.names, context_type.dataframes
+                new_estimated_row_counts = []
+                for old_name_typ, old_df_typ, old_row_count in zip(
+                    context_type.names,
+                    context_type.dataframes,
+                    context_type.estimated_row_counts,
                 ):
                     if old_name_typ != name_typ:
                         new_names.append(old_name_typ)
                         new_df_typs.append(old_df_typ)
+                        new_estimated_row_counts.append(old_row_count)
                 new_names.append(name_typ)
                 new_df_typs.append(df_typ)
+                # Cannot estimate length from compiled code at this time.
+                new_estimated_row_counts.append(None)
                 return BodoSQLContextType(
-                    tuple(new_names), tuple(new_df_typs), context_type.catalog_type
+                    tuple(new_names),
+                    tuple(new_df_typs),
+                    tuple(new_estimated_row_counts),
+                    context_type.catalog_type,
                 )
             elif fdef[0] == "remove_view":
                 context_type = determine_bodosql_context_type(fdef[1])
@@ -4399,14 +4412,21 @@ class TypingTransforms:
                 # Map to a new BodoSQLContextType
                 new_names = []
                 new_df_typs = []
-                for old_name_typ, old_df_typ in zip(
-                    context_type.names, context_type.dataframes
+                new_estimated_row_counts = []
+                for old_name_typ, old_df_typ, old_row_count in zip(
+                    context_type.names,
+                    context_type.dataframes,
+                    context_type.estimated_row_counts,
                 ):
                     if old_name_typ != name_typ:
                         new_names.append(old_name_typ)
                         new_df_typs.append(old_df_typ)
+                        new_estimated_row_counts.append(old_row_count)
                 return BodoSQLContextType(
-                    tuple(new_names), tuple(new_df_typs), context_type.catalog_type
+                    tuple(new_names),
+                    tuple(new_df_typs),
+                    tuple(new_estimated_row_counts),
+                    context_type.catalog_type,
                 )
             elif fdef[0] in ("add_or_replace_catalog", "remove_catalog"):
                 context_type = determine_bodosql_context_type(fdef[1])
@@ -4419,7 +4439,10 @@ class TypingTransforms:
                 else:
                     catalog_typ = types.none
                 return BodoSQLContextType(
-                    context_type.names, context_type.dataframes, catalog_typ
+                    context_type.names,
+                    context_type.dataframes,
+                    context_type.estimate_row_counts,
+                    catalog_typ,
                 )
             return None
 
