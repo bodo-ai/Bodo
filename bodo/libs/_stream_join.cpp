@@ -1463,7 +1463,7 @@ void join_probe_consume_batch(HashJoinState* join_state,
         // XXX This is temporary until we have proper buffers.
         join_state->ReserveProbeTableForInactivePartitions(new_data);
 
-        append_to_probe_inactive_partition.reserve(new_data->nrows());
+        append_to_probe_inactive_partition.resize(new_data->nrows(), false);
         for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
             if (use_bloom_filter) {
                 // We use partition hashes to use consistent hashing across
