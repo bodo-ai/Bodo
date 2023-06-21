@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cmath>
+#include <concepts>
 #include <memory>
 #include <vector>
 
@@ -36,14 +37,15 @@ class TDigest {
 
     // skip NAN on adding
     template <typename T>
-    typename std::enable_if<std::is_floating_point<T>::value>::type NanAdd(
-        T value) {
+        requires std::floating_point<T>
+    void NanAdd(T value) {
         if (!std::isnan(value))
             Add(value);
     }
 
     template <typename T>
-    typename std::enable_if<std::is_integral<T>::value>::type NanAdd(T value) {
+        requires std::integral<T>
+    void NanAdd(T value) {
         Add(static_cast<double>(value));
     }
 
