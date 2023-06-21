@@ -39,6 +39,11 @@ struct ArrayBuildBuffer {
     ArrayBuildBuffer(
         std::shared_ptr<array_info> _data_array,
         std::shared_ptr<DictionaryBuilder> _dict_builder = nullptr);
+    void _append_bool_batch(const std::shared_ptr<array_info>& in_arr);
+    void _append_nullable_int_batch(const std::shared_ptr<array_info>& in_arr);
+    void _append_string_batch(const std::shared_ptr<array_info>& in_arr);
+    void _append_dict_batch(const std::shared_ptr<array_info>& in_arr);
+    void _append_numpy_batch(const std::shared_ptr<array_info>& in_arr);
 
     /**
      * @brief Append a new data element to the buffer, assuming
@@ -47,7 +52,140 @@ struct ArrayBuildBuffer {
      * @param in_arr input table with the new data element
      * @param row_ind index of data in input
      */
-    void AppendRow(const std::shared_ptr<array_info>& in_arr, int64_t row_ind);
+    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+    void AppendBatch(const std::shared_ptr<array_info>& in_arr,
+                     const std::vector<bool>& append_rows) {
+        for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+            if (append_rows[row_ind]) {
+                AppendRow<arr_type, is_bool>(in_arr, row_ind);
+            }
+        }
+    }
+    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+    void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
+        switch (arr_type) {
+            case bodo_array_type::NULLABLE_INT_BOOL: {
+                if (is_bool) {
+                    _append_bool_batch(in_arr);
+                } else {
+                    _append_nullable_int_batch(in_arr);
+                }
+            } break;
+            case bodo_array_type::STRING: {
+                _append_string_batch(in_arr);
+            } break;
+            case bodo_array_type::DICT: {
+                _append_dict_batch(in_arr);
+            } break;
+            case bodo_array_type::NUMPY: {
+                _append_numpy_batch(in_arr);
+            } break;
+            default:
+                throw std::runtime_error(
+                    "invalid array type in AppendRow " +
+                    GetArrType_as_string(in_arr->arr_type));
+        }
+    }
+
+    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+    void AppendRow(const std::shared_ptr<array_info>& in_arr, int64_t row_ind) {
+        switch (arr_type) {
+            case bodo_array_type::NULLABLE_INT_BOOL: {
+                if (is_bool) {
+                    arrow::bit_util::SetBitTo(
+                        (uint8_t*)data_array->data1(), size,
+                        GetBit((uint8_t*)in_arr->data1(), row_ind));
+                    bool bit =
+                        GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+                    SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+                    size++;
+                    data_array->length = size;
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[0]->Resize(
+                            arrow::bit_util::BytesForBits(size), false),
+                        "Resize Failed!");
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[1]->Resize(
+                            arrow::bit_util::BytesForBits(size), false),
+                        "Resize Failed!");
+                } else {
+                    uint64_t size_type = numpy_item_size[in_arr->dtype];
+                    char* out_ptr = data_array->data1() + size_type * size;
+                    char* in_ptr = in_arr->data1() + size_type * row_ind;
+                    memcpy(out_ptr, in_ptr, size_type);
+                    bool bit =
+                        GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+                    SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+                    size++;
+                    data_array->length = size;
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[0]->Resize(size * size_type, false),
+                        "Resize Failed!");
+                    CHECK_ARROW_MEM(
+                        data_array->buffers[1]->Resize(
+                            arrow::bit_util::BytesForBits(size), false),
+                        "Resize Failed!");
+                }
+            } break;
+            case bodo_array_type::STRING: {
+                offset_t* curr_offsets = (offset_t*)data_array->data2();
+                offset_t* in_offsets = (offset_t*)in_arr->data2();
+
+                // append offset
+                int64_t str_len = in_offsets[row_ind + 1] - in_offsets[row_ind];
+                curr_offsets[size + 1] = curr_offsets[size] + str_len;
+
+                // copy characters
+                char* out_ptr = data_array->data1() + curr_offsets[size];
+                char* in_ptr = in_arr->data1() + in_offsets[row_ind];
+                memcpy(out_ptr, in_ptr, str_len);
+
+                // set null bit
+                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+
+                // update size state
+                size++;
+                data_array->length = size;
+                CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
+                                    data_array->n_sub_elems(), false),
+                                "Resize Failed!");
+                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
+                                    (size + 1) * sizeof(offset_t), false),
+                                "Resize Failed!");
+                CHECK_ARROW_MEM(data_array->buffers[2]->Resize(
+                                    arrow::bit_util::BytesForBits(size), false),
+                                "Resize Failed!");
+            } break;
+            case bodo_array_type::DICT: {
+                if (this->data_array->child_arrays[0] !=
+                    in_arr->child_arrays[0]) {
+                    throw std::runtime_error(
+                        "dictionary not unified in AppendRow");
+                }
+                this->dict_indices
+                    ->AppendRow<bodo_array_type::NULLABLE_INT_BOOL, false>(
+                        in_arr->child_arrays[1], row_ind);
+                size++;
+                data_array->length = size;
+            } break;
+            case bodo_array_type::NUMPY: {
+                uint64_t size_type = numpy_item_size[in_arr->dtype];
+                char* out_ptr = data_array->data1() + size_type * size;
+                char* in_ptr = in_arr->data1() + size_type * row_ind;
+                memcpy(out_ptr, in_ptr, size_type);
+                size++;
+                data_array->length = size;
+                CHECK_ARROW_MEM(
+                    data_array->buffers[0]->Resize(size * size_type, false),
+                    "Resize Failed!");
+            } break;
+            default:
+                throw std::runtime_error(
+                    "invalid array type in AppendRow " +
+                    GetArrType_as_string(in_arr->arr_type));
+        }
+    }
 
     /**
      * @brief Reserve enough space to potentially append all contents of input
@@ -107,14 +245,16 @@ struct TableBuildBuffer {
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders);
 
     /**
-     * @brief Append a row of data to the buffer, assuming
+     * @brief Append a batch of data to the buffer, assuming
      * there is already enough space reserved (with ReserveTable).
      *
      * @param in_table input table with the new row
-     * @param row_ind index of new row in input table
+     * @param row_inds bit vector indicating which rows to append
      */
-    void AppendRow(const std::shared_ptr<table_info>& in_table,
-                   int64_t row_ind);
+    void AppendBatch(const std::shared_ptr<table_info>& in_table,
+                     const std::vector<bool>& append_rows);
+
+    void AppendBatch(const std::shared_ptr<table_info>& in_table);
 
     /**
      * @brief Reserve enough space to potentially append all contents of input

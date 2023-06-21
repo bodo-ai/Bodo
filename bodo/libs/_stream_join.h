@@ -184,17 +184,17 @@ class JoinPartition {
     void BuildHashTable();
 
     /**
-     * @brief Add a row from in_table to this partition.
+     * @brief Add all rows from in_table to this partition.
      * This includes populating the hash table.
      *
      * @tparam is_active Is this the active partition.
-     * @param in_table Table from which we're adding the row.
-     * @param row_ind Index of the row to add.
-     * @param join_hash Join hash for the record.
+     * @param in_table Table to insert.
+     * @param join_hashes Join hashes for the table records.
+     * @param partitioning_hashes Partitioning hashes for the table records.
      */
     template <bool is_active = false>
-    void AppendBuildRow(const std::shared_ptr<table_info>& in_table,
-                        int64_t row_ind, const uint32_t& join_hash);
+    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
+                          const std::shared_ptr<uint32_t[]>& join_hashes);
 
     /**
      * @brief Inserts the last row of build buffer
@@ -207,14 +207,17 @@ class JoinPartition {
      * @brief Add all rows from in_table to this partition.
      * This includes populating the hash table.
      *
+     * @tparam is_active Is this the active partition.
      * @param in_table Table to insert.
      * @param join_hashes Join hashes for the table records.
      * @param partitioning_hashes Partitioning hashes for the table records.
+     * @param append_rows Vector of booleans indicating whether to append the
+     * row
      */
-    void AppendBuildBatch(
-        const std::shared_ptr<table_info>& in_table,
-        const std::shared_ptr<uint32_t[]>& join_hashes,
-        const std::shared_ptr<uint32_t[]>& partitioning_hashes);
+    template <bool is_active = false>
+    void AppendBuildBatch(const std::shared_ptr<table_info>& in_table,
+                          const std::shared_ptr<uint32_t[]>& join_hashes,
+                          const std::vector<bool>& append_rows);
 
     /**
      * @brief Finalize the build step for this partition.
@@ -225,16 +228,19 @@ class JoinPartition {
     void FinalizeBuild();
 
     /**
-     * @brief Append a row into the probe table buffer.
+     * @brief Append a batch of data into the probe table buffer.
      * Note that this is only used for inactive partitions
      * to buffer the inputs before we start processing them.
      *
      * @param in_table Table from which we're adding the row.
      * @param row_ind Index of the row to add.
      * @param join_hash Join hash for the record.
+     * @param append_row Whether to append the row.
      */
-    void AppendInactiveProbeRow(const std::shared_ptr<table_info>& in_table,
-                                int64_t row_ind, const uint32_t& join_hash);
+    void AppendInactiveProbeBatch(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& join_hashes,
+        const std::vector<bool>& append_rows);
 
     /**
      * @brief Process the records in the probe table buffer
@@ -460,19 +466,6 @@ class HashJoinState : public JoinState {
      * added to the hash table of that active partition
      * as well. If record belongs to an inactive partition, it
      * will be simply added to the build buffer of the partition.
-     *
-     * @param in_table Table to add the row from.
-     * @param row_ind Index of the row to add.
-     * @param join_hash Join hash of the record.
-     * @param partitioning_hash Partitioning hash of the record.
-     */
-    void AppendBuildRow(const std::shared_ptr<table_info>& in_table,
-                        int64_t row_ind, const uint32_t& join_hash,
-                        const uint32_t& partitioning_hash);
-
-    /**
-     * @brief Append all rows from a table to their respective partitions.
-     * This is just a utility wrapper around AppendBuildRow.
      * It is slightly optimized for the single partition case.
      *
      * @param in_table Table to add the rows from.
@@ -483,6 +476,27 @@ class HashJoinState : public JoinState {
         const std::shared_ptr<table_info>& in_table,
         const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes);
+
+    /**
+     * @brief Append a build row. It will figure out the correct
+     * partition based on the partitioning hash. If the record
+     * is in the "active" (i.e. index 0) partition, it will be
+     * added to the hash table of that active partition
+     * as well. If record belongs to an inactive partition, it
+     * will be simply added to the build buffer of the partition.
+     * It is slightly optimized for the single partition case.
+     *
+     * @param in_table Table to add the rows from.
+     * @param join_hashes Join hashes for the records.
+     * @param partitioning_hashes Partitioning hashes for the records.
+     * @param append_rows Vector of booleans indicating whether to append the
+     * row
+     */
+    void AppendBuildBatch(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& join_hashes,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+        const std::vector<bool>& append_rows);
 
     /**
      * @brief Finalize build step for all partitions.
@@ -502,7 +516,7 @@ class HashJoinState : public JoinState {
         const std::shared_ptr<table_info>& in_table);
 
     /**
-     * @brief Append probe row to the probe table buffer of the
+     * @brief Append probe batch to the probe table buffer of the
      * appropriate inactive partition. This assumes that the row
      * is _not_ in the active (index 0) partition.
      *
@@ -510,10 +524,13 @@ class HashJoinState : public JoinState {
      * @param row_ind Index of the row to append.
      * @param join_hash Join hash for the record.
      * @param partitioning_hash Partitioning hash for the record.
+     * @param append_row Whether to append the row
      */
-    void AppendProbeRowToInactivePartition(
-        const std::shared_ptr<table_info>& in_table, int64_t row_ind,
-        const uint32_t& join_hash, const uint32_t& partitioning_hash);
+    void AppendProbeBatchToInactivePartition(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& join_hashes,
+        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+        const std::vector<bool>& append_rows);
 
     /**
      * @brief Finalize Probe step for all the inactive partitions.

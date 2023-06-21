@@ -162,23 +162,34 @@ std::vector<std::shared_ptr<JoinPartition>> JoinPartition::SplitPartition(
     // XXX Might be faster to pre-calculate the required
     // sizes, build a bitmap, pre-allocated space and then append
     // into the new partitions.
+    std::vector<bool> append_partion1(
+        this->build_table_buffer.data_table->nrows(), false);
     for (size_t i_row = 0; i_row < build_table_buffer.data_table->nrows();
          i_row++) {
-        if (new_part1->is_in_partition(
-                build_table_partitioning_hashes[i_row])) {
-            // Copy to partition 1 buffers:
-            new_part1->build_table_buffer.AppendRow(
-                this->build_table_buffer.data_table, i_row);
+        append_partion1[i_row] =
+            new_part1->is_in_partition(build_table_partitioning_hashes[i_row]);
+    }
+
+    // Copy the hash values to the new partitions.
+    for (size_t i_row = 0; i_row < build_table_buffer.data_table->nrows();
+         i_row++) {
+        if (append_partion1[i_row]) {
             new_part1->build_table_join_hashes.push_back(
                 this->build_table_join_hashes[i_row]);
         } else {
-            // Copy to partition 2 buffers:
-            new_part2->build_table_buffer.AppendRow(
-                this->build_table_buffer.data_table, i_row);
             new_part2->build_table_join_hashes.push_back(
                 this->build_table_join_hashes[i_row]);
         }
     }
+
+    new_part1->build_table_buffer.AppendBatch(
+        this->build_table_buffer.data_table, append_partion1);
+
+    append_partion1.flip();
+    std::vector<bool>& append_partion2 = append_partion1;
+
+    new_part2->build_table_buffer.AppendBatch(
+        this->build_table_buffer.data_table, append_partion2);
 
     // Splitting happens at build time, so the probe buffers should
     // be empty.
@@ -225,28 +236,33 @@ inline void JoinPartition::InsertLastRowIntoMap() {
 // very similar, but this will change in the future, hence the template
 // variable.
 template <bool is_active>
-void JoinPartition::AppendBuildRow(const std::shared_ptr<table_info>& in_table,
-                                   int64_t row_ind, const uint32_t& join_hash) {
-    this->build_table_join_hashes.emplace_back(join_hash);
-    this->build_table_buffer.AppendRow(in_table, row_ind);
-    if (is_active) {
+void JoinPartition::AppendBuildBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<uint32_t[]>& join_hashes) {
+    this->build_table_join_hashes.insert(this->build_table_join_hashes.end(),
+                                         join_hashes.get(),
+                                         join_hashes.get() + in_table->nrows());
+    this->build_table_buffer.AppendBatch(in_table);
+    for (size_t i_row = 0; is_active && i_row < in_table->nrows(); i_row++) {
         this->InsertLastRowIntoMap();
         this->curr_build_size++;
     }
 }
 
-// TODO BSE-580: Add whole table at once
+template <bool is_active>
 void JoinPartition::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes,
-    const std::shared_ptr<uint32_t[]>& partitioning_hashes) {
-    this->build_table_join_hashes.insert(this->build_table_join_hashes.end(),
-                                         join_hashes.get(),
-                                         join_hashes.get() + in_table->nrows());
+    const std::vector<bool>& append_rows) {
+    this->build_table_buffer.AppendBatch(in_table, append_rows);
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        this->build_table_buffer.AppendRow(in_table, i_row);
-        this->InsertLastRowIntoMap();
-        this->curr_build_size++;
+        if (append_rows[i_row]) {
+            this->build_table_join_hashes.push_back(join_hashes[i_row]);
+            if (is_active) {
+                this->InsertLastRowIntoMap();
+                this->curr_build_size++;
+            }
+        }
     }
 }
 
@@ -266,11 +282,16 @@ void JoinPartition::FinalizeBuild() {
     // TODO Unpin all state
 }
 
-void JoinPartition::AppendInactiveProbeRow(
-    const std::shared_ptr<table_info>& in_table, int64_t row_ind,
-    const uint32_t& join_hash) {
-    this->probe_table_buffer_join_hashes.push_back(join_hash);
-    this->probe_table_buffer.AppendRow(in_table, row_ind);
+void JoinPartition::AppendInactiveProbeBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<uint32_t[]>& join_hashes,
+    const std::vector<bool>& append_rows) {
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        if (append_rows[i_row]) {
+            this->probe_table_buffer_join_hashes.push_back(join_hashes[i_row]);
+        }
+    }
+    this->probe_table_buffer.AppendBatch(in_table, append_rows);
 }
 
 /**
@@ -740,48 +761,94 @@ void HashJoinState::ReserveBuildTable(
     }
 }
 
-void HashJoinState::AppendBuildRow(const std::shared_ptr<table_info>& in_table,
-                                   int64_t row_ind, const uint32_t& join_hash,
-                                   const uint32_t& partitioning_hash) {
-    // If there's a single partition, we can skip the check entirely,
-    // else we check if the row is in the active partition.
-    if (this->partitions.size() == 1 ||
-        this->partitions[0]->is_in_partition(partitioning_hash)) {
-        this->partitions[0]->AppendBuildRow<true>(in_table, row_ind, join_hash);
-    } else {  // If not in active partition, find the correct inactive partition
-              // and append it there
-        bool found_partition = false;
-
-        // TODO (https://bodo.atlassian.net/browse/BSE-472) Optimize partition
-        // search by storing a tree representation of the partition space.
-        for (size_t i_part = 1;
-             (i_part < this->partitions.size() && !found_partition); i_part++) {
-            if (this->partitions[i_part]->is_in_partition(partitioning_hash)) {
-                this->partitions[i_part]->AppendBuildRow<false>(
-                    in_table, row_ind, join_hash);
-                found_partition = true;
-            }
-        }
-        if (!found_partition) {
-            throw std::runtime_error(
-                "HashJoinState::AppendBuildRow: Couldn't find any matching "
-                "partition for row!");
-        }
-    }
-}
-
 void HashJoinState::AppendBuildBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& join_hashes,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes) {
     if (this->partitions.size() == 1) {
         // Fast path for the single partition case
-        this->partitions[0]->AppendBuildBatch(in_table, join_hashes,
-                                              partitioning_hashes);
-    } else {
-        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            this->AppendBuildRow(in_table, i_row, join_hashes[i_row],
-                                 partitioning_hashes[i_row]);
+        this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes);
+        return;
+    }
+
+    std::vector<std::vector<bool>> append_rows_by_partition(
+        this->partitions.size());
+    for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
+        append_rows_by_partition[i_part] = std::vector<bool>(in_table->nrows());
+    }
+
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        bool found_partition = false;
+
+        // TODO (https://bodo.atlassian.net/browse/BSE-472) Optimize partition
+        // search by storing a tree representation of the partition space.
+        for (size_t i_part = 0;
+             (i_part < this->partitions.size() && !found_partition); i_part++) {
+            if (this->partitions[i_part]->is_in_partition(
+                    partitioning_hashes[i_row])) {
+                found_partition = true;
+                append_rows_by_partition[i_part][i_row] = true;
+            }
+        }
+        if (!found_partition) {
+            throw std::runtime_error(
+                "HashJoinState::AppendBuildBatch: Couldn't find "
+                "any matching partition for row!");
+        }
+    }
+    this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
+                                                append_rows_by_partition[0]);
+    for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
+        this->partitions[i_part]->AppendBuildBatch(
+            in_table, join_hashes, append_rows_by_partition[i_part]);
+    }
+}
+
+void HashJoinState::AppendBuildBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<uint32_t[]>& join_hashes,
+    const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+    const std::vector<bool>& append_rows) {
+    if (this->partitions.size() == 1) {
+        // Fast path for the single partition case
+        this->partitions[0]->AppendBuildBatch<true>(in_table, join_hashes,
+                                                    append_rows);
+        return;
+    }
+
+    std::vector<std::vector<bool>> append_rows_by_partition;
+    append_rows_by_partition.resize(this->partitions.size());
+    for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
+        append_rows_by_partition[i_part] = std::vector<bool>(in_table->nrows());
+    }
+
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        if (append_rows[i_row]) {
+            bool found_partition = false;
+
+            // TODO (https://bodo.atlassian.net/browse/BSE-472) Optimize
+            // partition search by storing a tree representation of the
+            // partition space.
+            for (size_t i_part = 0;
+                 (i_part < this->partitions.size() && !found_partition);
+                 i_part++) {
+                if (this->partitions[i_part]->is_in_partition(
+                        partitioning_hashes[i_row])) {
+                    found_partition = true;
+                    append_rows_by_partition[i_part][i_row] = true;
+                }
+            }
+            if (!found_partition) {
+                throw std::runtime_error(
+                    "HashJoinState::AppendBuildBatch: Couldn't find "
+                    "any matching partition for row!");
+            }
+        }
+        this->partitions[0]->AppendBuildBatch<true>(
+            in_table, join_hashes, append_rows_by_partition[0]);
+        for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
+            this->partitions[i_part]->AppendBuildBatch(
+                in_table, join_hashes, append_rows_by_partition[i_part]);
         }
     }
 }
@@ -804,25 +871,45 @@ void HashJoinState::ReserveProbeTableForInactivePartitions(
     }
 }
 
-void HashJoinState::AppendProbeRowToInactivePartition(
-    const std::shared_ptr<table_info>& in_table, int64_t row_ind,
-    const uint32_t& join_hash, const uint32_t& partitioning_hash) {
-    bool found_partition = false;
-
-    // TODO (https://bodo.atlassian.net/browse/BSE-472) Optimize partition
-    // search by storing a tree representation of the partition space.
-    for (size_t i_part = 1;
-         (i_part < this->partitions.size() && !found_partition); i_part++) {
-        if (this->partitions[i_part]->is_in_partition(partitioning_hash)) {
-            this->partitions[i_part]->AppendInactiveProbeRow(in_table, row_ind,
-                                                             join_hash);
-            found_partition = true;
-        }
+void HashJoinState::AppendProbeBatchToInactivePartition(
+    const std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<uint32_t[]>& join_hashes,
+    const std::shared_ptr<uint32_t[]>& partitioning_hashes,
+    const std::vector<bool>& append_rows) {
+    std::vector<std::vector<bool>> append_rows_by_partition;
+    append_rows_by_partition.resize(this->partitions.size());
+    for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
+        append_rows_by_partition[i_part] = std::vector<bool>(in_table->nrows());
     }
-    if (!found_partition) {
-        throw std::runtime_error(
-            "HashJoinState::AppendProbeRowToInactivePartition: Couldn't find "
-            "any matching partition for row!");
+
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        if (append_rows[i_row]) {
+            bool found_partition = false;
+
+            // TODO (https://bodo.atlassian.net/browse/BSE-472) Optimize
+            // partition search by storing a tree representation of the
+            // partition space.
+            for (size_t i_part = 1;
+                 (i_part < this->partitions.size() && !found_partition);
+                 i_part++) {
+                if (this->partitions[i_part]->is_in_partition(
+                        partitioning_hashes[i_row])) {
+                    found_partition = true;
+                    append_rows_by_partition[i_part][i_row] = true;
+                }
+            }
+            if (!found_partition) {
+                throw std::runtime_error(
+                    "HashJoinState::AppendProbeBatchToInactivePartition: "
+                    "Couldn't "
+                    "find "
+                    "any matching partition for row!");
+            }
+        }
+        for (size_t i_part = 1; i_part < this->partitions.size(); i_part++) {
+            this->partitions[i_part]->AppendInactiveProbeBatch(
+                in_table, join_hashes, append_rows_by_partition[i_part]);
+        }
     }
 }
 
@@ -928,16 +1015,22 @@ void join_build_consume_batch(HashJoinState* join_state,
         join_state->global_bloom_filter->AddAll(batch_hashes_partition, 0,
                                                 in_table->nrows());
     }
+
+    std::vector<bool> append_row_to_build_table(in_table->nrows(), false);
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        if (!join_state->build_parallel ||
-            hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank) {
-            join_state->AppendBuildRow(in_table, i_row,
-                                       batch_hashes_join[i_row],
-                                       batch_hashes_partition[i_row]);
-        } else {
-            join_state->build_shuffle_buffer.AppendRow(in_table, i_row);
-        }
+        append_row_to_build_table[i_row] =
+            (!join_state->build_parallel ||
+             hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank);
     }
+
+    join_state->AppendBuildBatch(in_table, batch_hashes_join,
+                                 batch_hashes_partition,
+                                 append_row_to_build_table);
+
+    append_row_to_build_table.flip();
+    std::vector<bool>& append_row_to_shuffle_table = append_row_to_build_table;
+    join_state->build_shuffle_buffer.AppendBatch(in_table,
+                                                 append_row_to_shuffle_table);
 
     batch_hashes_partition.reset();
     batch_hashes_join.reset();
@@ -1220,6 +1313,9 @@ void join_probe_consume_batch(HashJoinState* join_state,
     }
 
     // probe hash table
+    std::vector<bool> append_to_probe_shuffle_buffer(in_table->nrows(), false);
+    std::vector<bool> append_to_probe_inactive_partition(in_table->nrows(),
+                                                         false);
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
         // If just build_parallel = False then we have a broadcast join on the
         // build side. So process all rows.
@@ -1259,14 +1355,20 @@ void join_probe_consume_batch(HashJoinState* join_state,
                     probe_table_info_ptrs, build_col_ptrs, probe_col_ptrs,
                     build_null_bitmaps, probe_null_bitmaps);
             } else {
-                join_state->AppendProbeRowToInactivePartition(
-                    in_table, i_row, batch_hashes_join[i_row],
-                    batch_hashes_partition[i_row]);
+                append_to_probe_inactive_partition[i_row] = true;
             }
         } else if (shuffle_possible) {
-            join_state->probe_shuffle_buffer.AppendRow(in_table, i_row);
+            append_to_probe_shuffle_buffer[i_row] = true;
         }
     }
+
+    join_state->AppendProbeBatchToInactivePartition(
+        in_table, batch_hashes_join, batch_hashes_partition,
+        append_to_probe_inactive_partition);
+    join_state->probe_shuffle_buffer.AppendBatch(
+        in_table, append_to_probe_shuffle_buffer);
+    append_to_probe_inactive_partition.clear();
+    append_to_probe_shuffle_buffer.clear();
 
     // Reset active partition state
     active_partition->probe_table = nullptr;
@@ -1361,6 +1463,7 @@ void join_probe_consume_batch(HashJoinState* join_state,
         // XXX This is temporary until we have proper buffers.
         join_state->ReserveProbeTableForInactivePartitions(new_data);
 
+        append_to_probe_inactive_partition.reserve(new_data->nrows());
         for (size_t i_row = 0; i_row < new_data->nrows(); i_row++) {
             if (use_bloom_filter) {
                 // We use partition hashes to use consistent hashing across
@@ -1388,11 +1491,13 @@ void join_probe_consume_batch(HashJoinState* join_state,
                     probe_table_info_ptrs, build_col_ptrs, probe_col_ptrs,
                     build_null_bitmaps, probe_null_bitmaps);
             } else {
-                join_state->AppendProbeRowToInactivePartition(
-                    new_data, i_row, batch_hashes_join[i_row],
-                    batch_hashes_partition[i_row]);
+                append_to_probe_inactive_partition[i_row] = true;
             }
         }
+
+        join_state->AppendProbeBatchToInactivePartition(
+            new_data, batch_hashes_join, batch_hashes_partition,
+            append_to_probe_inactive_partition);
 
         // Reset active partition state
         active_partition->probe_table_hashes = nullptr;
