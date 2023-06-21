@@ -1,5 +1,9 @@
 package com.bodosql.calcite.application.Testing;
 
+import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.rel.RelRoot;
+
+import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.schema.LocalSchemaImpl;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
@@ -101,10 +105,10 @@ public class PandasGenTest {
             schema, paramTableName, plannerChoice, 0, BatchingProperty.defaultBatchSize);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
-    String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);
+    String unOptimizedPlanStr = getRelationalAlgebraString(generator, sql, false);
     System.out.println("Unoptimized plan:");
     System.out.println(unOptimizedPlanStr + "\n");
-    String optimizedPlanStr = generator.getRelationalAlgebraString(sql, true);
+    String optimizedPlanStr = getRelationalAlgebraString(generator, sql, true);
     System.out.println("Optimized plan:");
     System.out.println(optimizedPlanStr + "\n");
 
@@ -113,5 +117,14 @@ public class PandasGenTest {
     System.out.println(pandasStr + "\n");
     System.out.println("Lowered globals:");
     System.out.println(generator.getLoweredGlobalVariables() + "\n");
+  }
+
+  private static String getRelationalAlgebraString(RelationalAlgebraGenerator generator, String sql, boolean optimizePlan) {
+    try {
+      RelRoot root = generator.getRelationalAlgebra(sql, optimizePlan);
+      return RelOptUtil.toString(PandasUtilKt.pandasProject(root));
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 }

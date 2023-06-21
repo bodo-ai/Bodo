@@ -1,12 +1,15 @@
 package com.bodosql.calcite.application;
 
 import com.bodosql.calcite.adapter.pandas.PandasRel;
+import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
+import com.bodosql.calcite.sql.SqlBodoCreateTable;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -17,9 +20,11 @@ import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlMerge;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
@@ -37,6 +42,21 @@ import org.slf4j.LoggerFactory;
  *
  * The purpose of this class is to hold the planner, the program, and the configuration for reuse
  * based on a schema that is provided. It can then take sql and convert it to relational algebra.
+ * <p/>
+ * TODO(jsternberg): This class needs a future refactor, but it's also closely tied to the
+ * Python code and how it interacts with the Java code. That means that methods defined here can
+ * be invoked from the Python code without having an equivalent Java invocation.
+ * <p/>
+ * In order to simplify modifications of this class, the <b>only</b> methods that should be
+ * public are ones that Python directly interacts with. Everything else should be private.
+ * All public methods should be treated as an API contract and should not be broken or modified
+ * without due diligence to transition outside callers.
+ * <p/>
+ * The reason why this class needs a refactor is because this class has a decent amount of
+ * mutable state and poorly defined interactions with outside callers. It's not thread-safe
+ * and it exposes some APIs for testing that shouldn't be external such as the specific
+ * way plans are constructed or processed. It also keeps and handles resources like database
+ * connections but doesn't clearly label the lifetimes and ownerships of these resources.
  *
  * @author Bodo
  * @version 1.0
@@ -47,6 +67,7 @@ public class RelationalAlgebraGenerator {
 
   /** Planner that converts sql to relational algebra. */
   private Planner planner;
+
   /**
    * Stores the output of parsing the given SQL query. This is done to allow separating parsing from
    * other steps.
@@ -78,7 +99,7 @@ public class RelationalAlgebraGenerator {
    * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
    * SQL queries can be executed within its context.
    */
-  public @Nullable CalciteConnection setupCalciteConnection() {
+  private @Nullable CalciteConnection setupCalciteConnection() {
     CalciteConnection calciteConnection = null;
     try {
       Class.forName("org.apache.calcite.jdbc.Driver");
@@ -101,7 +122,7 @@ public class RelationalAlgebraGenerator {
    * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
    * list of BodoSqlSchemas.
    */
-  public List<SchemaPlus> setupSchema(
+  private List<SchemaPlus> setupSchema(
       @NotNull CalciteConnection calciteConnection,
       BiConsumer<SchemaPlus, ImmutableList.Builder<SchemaPlus>> setup) {
     final SchemaPlus root = calciteConnection.getRootSchema();
@@ -114,8 +135,10 @@ public class RelationalAlgebraGenerator {
    * Helper method for both RelationalAlgebraGenerator constructors to build and set the Config and
    * the Planner member variables.
    */
-  public void setupPlanner(
-      List<SchemaPlus> defaultSchemas, String namedParamTableName, RelDataTypeSystem typeSystem) {
+  private void setupPlanner(
+      List<SchemaPlus> defaultSchemas,
+      String namedParamTableName,
+      RelDataTypeSystem typeSystem) {
     PlannerImpl.Config config =
         new PlannerImpl.Config(defaultSchemas, typeSystem, namedParamTableName, plannerType);
     try {
@@ -254,52 +277,33 @@ public class RelationalAlgebraGenerator {
     }
   }
 
-  public SqlNode validateQuery(String sql) throws SqlSyntaxException, SqlValidationException {
+  private SqlNode validateQuery(String sql) throws SqlSyntaxException, SqlValidationException {
     if (this.parseNode == null) {
       parseQuery(sql);
     }
     SqlNode parseNode = this.parseNode;
     // Clear the parseNode because we will advance the planner
     this.parseNode = null;
-    SqlNode validatedSqlNode;
     try {
-      validatedSqlNode = planner.validate(parseNode);
+      return planner.validate(parseNode);
     } catch (ValidationException e) {
       planner.close();
       throw new SqlValidationException(sql, e);
     }
-    return validatedSqlNode;
   }
 
-  public Pair<SqlNode, RelDataType> validateQueryAndGetType(String sql)
-      throws SqlSyntaxException, SqlValidationException {
-    if (this.parseNode == null) {
-      parseQuery(sql);
-    }
-    SqlNode parseNode = this.parseNode;
-    // Clear the parseNode because we will advance the planner
-    this.parseNode = null;
-    Pair<SqlNode, RelDataType> validatedSqlNodeAndType;
-    try {
-      validatedSqlNodeAndType = planner.validateAndGetType(parseNode);
-    } catch (ValidationException e) {
-      planner.close();
-      throw new SqlValidationException(sql, e);
-    }
-    return validatedSqlNodeAndType;
-  }
-
-  public RelNode getNonOptimizedRelationalAlgebra(String sql, boolean closePlanner)
+  private RelRoot getNonOptimizedRelationalAlgebra(String sql, boolean closePlanner)
       throws SqlSyntaxException, SqlValidationException, RelConversionException {
     SqlNode validatedSqlNode = validateQuery(sql);
-    RelNode result =
-        planner.transform(0, planner.getEmptyTraitSet(), planner.rel(validatedSqlNode).project());
+    RelRoot result = planner.rel(validatedSqlNode);
+    result = result.withRel(
+        planner.transform(0, planner.getEmptyTraitSet(), result.rel));
     if (closePlanner) {
       // TODO(jsternberg): Rework this logic because these are some incredibly leaky abstractions.
       // We won't be doing optimizations so transform the relational algebra to use the pandas nodes
       // now. This is a temporary thing while we transition to using the volcano planner.
       RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
-      result = planner.transform(2, requiredOutputTraits, result);
+      result = result.withRel(planner.transform(2, requiredOutputTraits, result.rel));
       planner.close();
     }
     // Close any open connections from catalogs
@@ -309,10 +313,11 @@ public class RelationalAlgebraGenerator {
     return result;
   }
 
-  public RelNode getOptimizedRelationalAlgebra(RelNode nonOptimizedPlan)
+  private RelRoot getOptimizedRelationalAlgebra(RelRoot nonOptimizedPlan)
       throws RelConversionException {
     RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
-    RelNode optimizedPlan = planner.transform(1, requiredOutputTraits, nonOptimizedPlan);
+    RelRoot optimizedPlan = nonOptimizedPlan.withRel(
+        planner.transform(1, requiredOutputTraits, nonOptimizedPlan.rel));
     planner.close();
     return optimizedPlan;
   }
@@ -327,46 +332,14 @@ public class RelationalAlgebraGenerator {
    *     provided after an optimization step has been completed.
    * @throws SqlSyntaxException, SqlValidationException, RelConversionException
    */
-  public RelNode getRelationalAlgebra(String sql, boolean performOptimizations)
+  @VisibleForTesting
+  public RelRoot getRelationalAlgebra(String sql, boolean performOptimizations)
       throws SqlSyntaxException, SqlValidationException, RelConversionException {
-    RelNode nonOptimizedPlan = getNonOptimizedRelationalAlgebra(sql, !performOptimizations);
-    LOGGER.debug("non optimized\n" + RelOptUtil.toString(nonOptimizedPlan));
-
+    RelRoot nonOptimizedPlan = getNonOptimizedRelationalAlgebra(sql, !performOptimizations);
     if (!performOptimizations) {
       return nonOptimizedPlan;
     }
     return getOptimizedRelationalAlgebra(nonOptimizedPlan);
-  }
-
-  public String getRelationalAlgebraString(String sql, boolean optimizePlan)
-      throws SqlSyntaxException, SqlValidationException, RelConversionException {
-    String response = "";
-
-    try {
-      RelNode plan = getRelationalAlgebra(sql, optimizePlan);
-      response = RelOptUtil.toString(plan);
-    } catch (SqlValidationException ex) {
-      // System.out.println(ex.getMessage());
-      // System.out.println("Found validation err!");
-      throw ex;
-      // return "fail: \n " + ex.getMessage();
-    } catch (SqlSyntaxException ex) {
-      // System.out.println(ex.getMessage());
-      // System.out.println("Found syntax err!");
-      throw ex;
-      // return "fail: \n " + ex.getMessage();
-    } catch (RelConversionException ex) {
-      throw ex;
-    } catch (Exception ex) {
-      // System.out.println(ex.toString());
-      // System.out.println(ex.getMessage());
-      ex.printStackTrace();
-
-      LOGGER.error(ex.getMessage());
-      return "fail: \n " + ex.getMessage();
-    }
-
-    return response;
   }
 
   /**
@@ -395,7 +368,7 @@ public class RelationalAlgebraGenerator {
   }
 
   public String getPandasString(String sql, boolean debugDeltaTable) throws Exception {
-    RelNode optimizedPlan = getRelationalAlgebra(sql, true);
+    RelRoot optimizedPlan = getRelationalAlgebra(sql, true);
     return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
   }
 
@@ -405,7 +378,7 @@ public class RelationalAlgebraGenerator {
   }
 
   public String getPandasStringUnoptimized(String sql, boolean debugDeltaTable) throws Exception {
-    RelNode unOptimizedPlan = getNonOptimizedRelationalAlgebra(sql, true);
+    RelRoot unOptimizedPlan = getNonOptimizedRelationalAlgebra(sql, true);
     return getPandasStringFromPlan(unOptimizedPlan, sql, debugDeltaTable);
   }
 
@@ -414,17 +387,18 @@ public class RelationalAlgebraGenerator {
     return getPandasStringUnoptimized(sql, false);
   }
 
-  private String getPandasStringFromPlan(RelNode plan, String originalSQL, boolean debugDeltaTable)
+  private String getPandasStringFromPlan(RelRoot plan, String originalSQL, boolean debugDeltaTable)
       throws Exception {
     /**
      * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
      * this, we use two components. First, each RelNode comes with a unique id, which This is used
      * to track exprTypes before code generation.
      */
+    RelNode rel = PandasUtilKt.pandasProject(plan);
     HashMap<String, BodoSQLExprType.ExprType> exprTypes = new HashMap<>();
     // Map from search unique id to the expanded code generated
     HashMap<String, RexNode> searchMap = new HashMap<>();
-    ExprTypeVisitor.determineRelNodeExprType(plan, exprTypes, searchMap);
+    ExprTypeVisitor.determineRelNodeExprType(rel, exprTypes, searchMap);
     this.loweredGlobalVariables = new HashMap<>();
     PandasCodeGenVisitor codegen =
         new PandasCodeGenVisitor(
@@ -436,17 +410,18 @@ public class RelationalAlgebraGenerator {
             debugDeltaTable,
             this.verboseLevel,
             this.streamingBatchSize);
-    codegen.go(plan);
-    String pandas_code = codegen.getGeneratedCode();
-    return pandas_code;
+    codegen.go(rel);
+    return codegen.getGeneratedCode();
   }
 
   public String getOptimizedPlanString(String sql) throws Exception {
-    return RelOptUtil.toString(getRelationalAlgebra(sql, true));
+    RelRoot root = getRelationalAlgebra(sql, true);
+    return RelOptUtil.toString(PandasUtilKt.pandasProject(root));
   }
 
   public String getUnoptimizedPlanString(String sql) throws Exception {
-    return RelOptUtil.toString(getRelationalAlgebra(sql, false));
+    RelRoot root = getRelationalAlgebra(sql, false);
+    return RelOptUtil.toString(PandasUtilKt.pandasProject(root));
   }
 
   public HashMap<String, String> getLoweredGlobalVariables() {
