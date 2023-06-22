@@ -85,63 +85,599 @@ struct ChunkedTableArrayBuilder {
     bool CanResize();
 
     /**
-     * @brief Check if the buffers of this array can accommodate row_ind'th row
-     * in in_arr without needing to resize (in the variable size data type
-     * case).
-     * A row can only be appended if size < capacity. For fixed size data
-     * types, this check is sufficient since we always allocate sufficient space
-     * upfront.
-     * For variable size data types like strings, this will check
-     * if there's enough space in the buffers (without resizing).
-     *
-     * @param in_arr Array to insert row from.
-     * @param row_ind Index of the row to insert.
-     * @return true
-     * @return false
-     */
-    bool CanAppendRowWithoutResizing(const std::shared_ptr<array_info>& in_arr,
-                                     const int64_t row_ind);
-
-    /**
-     * @brief Check if the buffers of this array can accommodate row_ind'th row
-     * in in_arr.
-     * A row can only be appended if size < capacity. For fixed size data types,
-     * this check is sufficient since we always allocate sufficient space
-     * upfront. For variable size data types like strings, this will check
-     * if there's enough space (including after allowed number of resizes) in
-     * the buffers.
-     *
-     * @param in_arr Array to insert row from.
-     * @param row_ind Index of the row to insert.
-     */
-    bool CanAppendRow(const std::shared_ptr<array_info>& in_arr,
-                      const int64_t row_ind);
-
-    /**
-     * @brief Append row_ind'th row from in_arr into this array.
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
      * This assumes that enough space is available in the buffers
      * without need to resize. This is useful internally as well
      * as externally when the caller is tracking available space
      * themselves.
      *
-     * @param in_arr Array to insert row from.
-     * @param row_ind Index of the row to insert.
+     * This is the implementation where both arrays are nullable arrays
+     * and not booleans.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
      */
-    void UnsafeAppendRow(const std::shared_ptr<array_info>& in_arr,
-                         const int64_t row_ind);
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 dtype != Bodo_CTypes::_BOOL)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        using T = typename dtype_to_type<dtype>::type;
+        T* out_data = (T*)this->data_array->data1();
+        T* in_data = (T*)in_arr->data1();
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            out_data[size + i] = new_data;
+        }
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            bool null_bit = (row_idx >= 0) &&
+                            GetBit((uint8_t*)in_arr->null_bitmask(), row_idx);
+            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size + i,
+                     null_bit);
+        }
+        this->size += idx_length;
+        data_array->length = size;
+    }
 
     /**
-     * @brief Append row_ind'th row from in_arr into this array safely.
-     * This will handle resizing if required.
-     * If this array cannot accommodate this row (including after resizing),
-     * an error will be thrown.
-     * XXX Explore using arrow::Status instead?
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
      *
-     * @param in_arr Array to insert row from.
-     * @param row_ind Index of the row in in_arr to insert.
+     * This is the implementation where both arrays are nullable
+     * boolean arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
      */
-    void AppendRow(const std::shared_ptr<array_info>& in_arr,
-                   const int64_t row_ind);
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 dtype == Bodo_CTypes::_BOOL)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        uint8_t* out_data = (uint8_t*)this->data_array->data1();
+        uint8_t* in_data = (uint8_t*)in_arr->data1();
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            bool bit = row_idx < 0 ? false : GetBit(in_data, row_idx);
+            arrow::bit_util::SetBitTo(out_data, this->size + i, bit);
+        }
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            bool null_bit = (row_idx >= 0) &&
+                            GetBit((uint8_t*)in_arr->null_bitmask(), row_idx);
+            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size + i,
+                     null_bit);
+        }
+        this->size += idx_length;
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
+     * This is the implementation where a non-boolean NUMPY array is
+     * upcast to a nullable array.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 in_arr_type == bodo_array_type::NUMPY &&
+                 dtype != Bodo_CTypes::_BOOL)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        using T = typename dtype_to_type<dtype>::type;
+        T* out_data = (T*)this->data_array->data1();
+        T* in_data = (T*)in_arr->data1();
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            out_data[size + i] = new_data;
+        }
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            bool null_bit = (row_idx >= 0);
+            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size + i,
+                     null_bit);
+        }
+        this->size += idx_length;
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
+     * This is the implementation where a boolean NUMPY array is
+     * upcast to a nullable array.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 in_arr_type == bodo_array_type::NUMPY &&
+                 dtype == Bodo_CTypes::_BOOL)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        uint8_t* out_data = (uint8_t*)this->data_array->data1();
+        uint8_t* in_data = (uint8_t*)in_arr->data1();
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            bool bit = row_idx < 0 ? false : in_data[row_idx];
+            arrow::bit_util::SetBitTo(out_data, this->size + i, bit);
+        }
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            bool null_bit = (row_idx >= 0);
+            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size + i,
+                     null_bit);
+        }
+        this->size += idx_length;
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
+     * This is the implementation where both arrays are numpy arrays
+     * without SQL NULL sentinels.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::NUMPY &&
+                 in_arr_type == bodo_array_type::NUMPY &&
+                 !SQLNASentinelDtype<dtype>)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        using T = typename dtype_to_type<dtype>::type;
+        T* out_data = (T*)this->data_array->data1();
+        T* in_data = (T*)in_arr->data1();
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            T new_data = row_idx < 0 ? 0 : in_data[row_idx];
+            out_data[size + i] = new_data;
+        }
+        this->size += idx_length;
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
+     * This is the implementation where both arrays are numpy arrays
+     * with SQL NULL sentinels.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::NUMPY &&
+                 in_arr_type == bodo_array_type::NUMPY &&
+                 SQLNASentinelDtype<dtype>)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        // TODO: Remove when Timedelta can be nullable.
+        using T = typename dtype_to_type<dtype>::type;
+        T* out_data = (T*)this->data_array->data1();
+        T* in_data = (T*)in_arr->data1();
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            // Timedelta Sentinel is std::numeric_limits<int64_t>::min()
+            T new_data = row_idx < 0 ? std::numeric_limits<int64_t>::min()
+                                     : in_data[row_idx];
+            out_data[size + i] = new_data;
+        }
+        this->size += idx_length;
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
+     * This is the implementation where both arrays are strings.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::STRING &&
+                 in_arr_type == bodo_array_type::STRING)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        // Copy the offsets
+        offset_t* curr_offsets = (offset_t*)this->data_array->data2() + size;
+        offset_t* in_offsets = (offset_t*)in_arr->data2();
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            offset_t new_length =
+                row_idx < 0 ? 0 : in_offsets[row_idx + 1] - in_offsets[row_idx];
+            curr_offsets[i + 1] = curr_offsets[i] + new_length;
+        }
+        // Copy the data
+        char* out_data = this->data_array->data1();
+        char* in_data = in_arr->data1();
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            offset_t out_offset = curr_offsets[i];
+            offset_t in_offset = row_idx < 0 ? 0 : in_offsets[row_idx];
+            size_t copy_len =
+                row_idx < 0 ? 0 : in_offsets[row_idx + 1] - in_offsets[row_idx];
+            memcpy(out_data + out_offset, in_data + in_offset, copy_len);
+        }
+        // Copy the null bitmap
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            bool null_bit = (row_idx >= 0) &&
+                            GetBit((uint8_t*)in_arr->null_bitmask(), row_idx);
+            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size + i,
+                     null_bit);
+        }
+        this->size += idx_length;
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append the rows from in_arr found via
+     * idxs[idx_start: idx_start + idx_length] into this array.
+     * This assumes that enough space is available in the buffers
+     * without need to resize. This is useful internally as well
+     * as externally when the caller is tracking available space
+     * themselves.
+     *
+     * This is the implementation where both arrays are dicts.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(out_arr_type == bodo_array_type::DICT &&
+                 in_arr_type == bodo_array_type::DICT)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const int64_t> idxs, size_t idx_start,
+                          size_t idx_length) {
+        if (this->data_array->child_arrays[0] != in_arr->child_arrays[0]) {
+            throw std::runtime_error(
+                "ChunkedTableArrayBuilder::UnsafeAppendRows: "
+                "Dictionaries "
+                "not unified!");
+        }
+        this->dict_indices->UnsafeAppendRows<bodo_array_type::NULLABLE_INT_BOOL,
+                                             bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32>(
+            in_arr->child_arrays[1], idxs, idx_start, idx_length);
+        this->size += idx_length;
+        this->data_array->length = size;
+    }
+
+    /**
+     * @brief Determine how many rows can be appended to a given array buffer
+     * from in_arr with the given indices without resizing the underlying
+     * buffers. The attempted append is for idxs[idx_start: idx_start +
+     * idx_length] and the maximum value this will return is idx_length.
+     *
+     * This is the implementation for non-string arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we want to insert.
+     * @return size_t The number of rows that fit in the current chunk in the
+     * interval [0, idx_length].
+     */
+    template <bodo_array_type::arr_type_enum arr_type>
+        requires(arr_type != bodo_array_type::STRING)
+    size_t NumRowsCanAppendWithoutResizing(
+        const std::shared_ptr<array_info>& in_arr,
+        const std::span<const int64_t> idxs, size_t idx_start,
+        size_t idx_length) {
+        return std::min(this->capacity - this->size, idx_length);
+    }
+
+    /**
+     * @brief Determine how many rows can be appended to a given array buffer
+     * from in_arr with the given indices without resizing the underlying
+     * buffers. The attempted append is for idxs[idx_start: idx_start +
+     * idx_length] and the maximum value this will return is idx_length.
+     *
+     * This is the implementation for string arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we want to insert.
+     * @return size_t The number of rows that fit in the current chunk in the
+     * interval [0, idx_length].
+     */
+    template <bodo_array_type::arr_type_enum arr_type>
+        requires(arr_type == bodo_array_type::STRING)
+    size_t NumRowsCanAppendWithoutResizing(
+        const std::shared_ptr<array_info>& in_arr,
+        const std::span<const int64_t> idxs, size_t idx_start,
+        size_t idx_length) {
+        // All types can only return at most as many rows as the capacity
+        // allows.
+        size_t max_rows = std::min(this->capacity - this->size, idx_length);
+        // If we have a string array check the memory usage.
+        int64_t buffer_size = this->data_array->buffers[0]->size();
+        // Compute the total amount of memory needed.
+        int64_t total_memory = this->data_array->n_sub_elems();
+        const offset_t* offsets = (offset_t*)in_arr->data2();
+        // Iterate over the max_rows we might keep and check the memory.
+        size_t idx_end = idx_start + max_rows;
+        for (size_t i = idx_start; i < idx_end; i++) {
+            int64_t row_ind = idxs[i];
+            // Compute the memory for the current string.
+            const int64_t new_str_len =
+                row_ind < 0 ? 0 : offsets[row_ind + 1] - offsets[row_ind];
+            total_memory += new_str_len;
+            // Check if we can fit with resizing.
+            if (total_memory > buffer_size) {
+                return i - idx_start;
+            }
+        }
+        return max_rows;
+    }
+
+    /**
+     * @brief Determine how many rows can be appended to a given array buffer
+     * from in_arr with the given indices. The attempted append is for
+     * idxs[idx_start: idx_start + idx_length] and the maximum value this will
+     * return is idx_length.
+     *
+     * This is the implementation for non-string arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we want to insert.
+     * @return size_t The number of rows that fit in the current chunk in the
+     * interval [0, idx_length].
+     */
+    template <bodo_array_type::arr_type_enum arr_type>
+        requires(arr_type != bodo_array_type::STRING)
+    size_t NumRowsCanAppend(const std::shared_ptr<array_info>& in_arr,
+                            const std::span<const int64_t> idxs,
+                            size_t idx_start, size_t idx_length) {
+        return std::min(this->capacity - this->size, idx_length);
+    }
+
+    /**
+     * @brief Determine how many rows can be appended to a given array buffer
+     * from in_arr with the given indices. The attempted append is for
+     * idxs[idx_start: idx_start + idx_length] and the maximum value this will
+     * return is idx_length.
+     *
+     * This is the implementation for string arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we want to insert.
+     * @return size_t The number of rows that fit in the current chunk in the
+     * interval [0, idx_length].
+     */
+    template <bodo_array_type::arr_type_enum arr_type>
+        requires(arr_type == bodo_array_type::STRING)
+    size_t NumRowsCanAppend(const std::shared_ptr<array_info>& in_arr,
+                            const std::span<const int64_t> idxs,
+                            size_t idx_start, size_t idx_length) {
+        // String is capped by memory and number of rows.
+        size_t max_rows = std::min(this->capacity - this->size, idx_length);
+        // If we have a string array check the memory usage.
+        // TODO: Move to the constructor.
+        int64_t max_possible_buffer_size =
+            this->data_array->buffers[0]->size() *
+            std::pow(2, this->max_resize_count - this->resize_count);
+        // Since we can't track actual resizes, we will track the amount of
+        // memory we would have used if we had resizes remaining.
+        int64_t max_possible_remaining_resize =
+            this->data_array->buffers[0]->size() *
+            std::pow(2, (this->max_resize_count - 1) - (this->resize_count));
+        // Compute the total amount of memory needed.
+        int64_t total_memory = this->data_array->n_sub_elems();
+        const offset_t* offsets = (offset_t*)in_arr->data2();
+        // Iterate over the max_rows we might keep and check the memory.
+        size_t idx_end = idx_start + max_rows;
+        for (size_t i = idx_start; i < idx_end; i++) {
+            int64_t row_ind = idxs[i];
+            // Compute the memory for the current string.
+            const int64_t new_str_len =
+                row_ind < 0 ? 0 : offsets[row_ind + 1] - offsets[row_ind];
+            total_memory += new_str_len;
+            // Check if we can fit with resizing.
+            if (total_memory > max_possible_buffer_size) {
+                size_t allowed_length = i - idx_start;
+                // Check for the case where this string is very large
+                // on its own. We have to support this case in some form
+                // for reliability.
+                // We will allow resizing this buffer endlessly if we
+                // have resize attempts remaining, else we will let the
+                // next chunk handle it. Since other steps may have required
+                // resizing we will check the previous amount of memory would
+                // have fit if we had 1 resize left.
+                int64_t old_memory = total_memory - new_str_len;
+                if ((new_str_len > max_possible_buffer_size) &&
+                    (old_memory <= max_possible_remaining_resize)) {
+                    return allowed_length + 1;
+                } else {
+                    return allowed_length;
+                }
+            }
+        }
+        return max_rows;
+    }
+
+    /**
+     * @brief Append rows into the array buffer from in_arr with the given
+     * indices. The append is for idxs[idx_start: idx_start + idx_length].
+     *
+     * This is the implementation for non-string arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(in_arr_type != bodo_array_type::STRING)
+    void AppendRows(const std::shared_ptr<array_info>& in_arr,
+                    const std::span<const int64_t> idxs, size_t idx_start,
+                    size_t idx_length) {
+        bool can_append =
+            idx_length == this->NumRowsCanAppendWithoutResizing<in_arr_type>(
+                              in_arr, idxs, idx_start, idx_length);
+        if (!can_append) {
+            throw std::runtime_error(
+                "ChunkedTableArrayBuilder::AppendRows: Cannot append row!");
+        }
+        this->UnsafeAppendRows<out_arr_type, in_arr_type, dtype>(
+            in_arr, idxs, idx_start, idx_length);
+    }
+
+    /**
+     * @brief Append rows into the array buffer from in_arr with the given
+     * indices. The append is for idxs[idx_start: idx_start + idx_length].
+     *
+     * This is the implementation for string arrays.
+     *
+     * @param in_arr The array from which we are inserting.
+     * @param idxs The indices giving which rows in in_arr we want to insert.
+     * @param idx_start The start location in idxs from which to insert.
+     * @param idx_length The number of rows we will insert.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(in_arr_type == bodo_array_type::STRING)
+    void AppendRows(const std::shared_ptr<array_info>& in_arr,
+                    const std::span<const int64_t> idxs, size_t idx_start,
+                    size_t idx_length) {
+        // Fast path for most appends.
+        if (idx_length == this->NumRowsCanAppendWithoutResizing<in_arr_type>(
+                              in_arr, idxs, idx_start, idx_length)) {
+            // Fast path for most appends.
+            this->UnsafeAppendRows<out_arr_type, in_arr_type, dtype>(
+                in_arr, idxs, idx_start, idx_length);
+            return;
+        }
+        // Check if it can be appended after resizing:
+        if (idx_length != this->NumRowsCanAppend<in_arr_type>(
+                              in_arr, idxs, idx_start, idx_length)) {
+            throw std::runtime_error(
+                "ChunkedTableArrayBuilder::AppendRow: Cannot append row!");
+        }
+        // TODO: Make this more efficient by getting the string
+        // resize information from CanAppend or similar helper so we don't
+        // have to recompute that
+        // (https://bodo.atlassian.net/browse/BSE-556).
+
+        // Compute the total amount of memory needed.
+        int64_t total_memory = this->data_array->n_sub_elems();
+        const offset_t* offsets = (offset_t*)in_arr->data2();
+        // Iterate over the max_rows we might keep and check the memory.
+        size_t idx_end = idx_start + idx_length;
+        for (size_t i = idx_start; i < idx_end; i++) {
+            int64_t row_ind = idxs[i];
+            // Compute the memory for the current string.
+            const int64_t new_str_len =
+                row_ind < 0 ? 0 : offsets[row_ind + 1] - offsets[row_ind];
+            total_memory += new_str_len;
+        }
+        int64_t buffer_size = this->data_array->buffers[0]->size();
+        // We must resize because NumRowsCanAppendWithoutResizing failed.
+        while ((total_memory > buffer_size) &&
+               (this->resize_count < this->max_resize_count)) {
+            buffer_size *= 2;
+            this->resize_count += 1;
+        }
+        // In case it's still not sufficient (single very large string
+        // case), just resize to required length.
+        buffer_size = std::max(buffer_size, total_memory);
+        CHECK_ARROW_MEM(
+            this->data_array->buffers[0]->Resize(buffer_size, false),
+            "Resize Failed!");
+        // Now simply append into the buffer.
+        this->UnsafeAppendRows<out_arr_type, in_arr_type, dtype>(
+            in_arr, idxs, idx_start, idx_length);
+    }
 
     /**
      * @brief Finalize this array. Once done, no more inserts are allowed (not
@@ -241,27 +777,6 @@ struct ChunkedTableBuilder {
      *
      */
     void FinalizeActiveChunk(bool shrink_to_fit = true);
-
-    /**
-     * @brief Append a new row into this chunked table.
-     * If any of the arrays are full, we will finalize
-     * the active chunk and start a new chunk.
-     *
-     * @param in_table Table to insert row from.
-     * @param row_ind Index of the row to insert.
-     */
-    void AppendRow(const std::shared_ptr<table_info>& in_table,
-                   int64_t row_ind);
-
-    /**
-     * @brief Similar to AppendRow, except we can insert the
-     * specified row indices.
-     *
-     * @param in_table The table to insert the rows from.
-     * @param rowInds Vector of row indices to insert.
-     */
-    void AppendRows(std::shared_ptr<table_info> in_table,
-                    const std::span<const int64_t> row_inds);
 
     /**
      * @brief Similar to AppendRow, but specifically for

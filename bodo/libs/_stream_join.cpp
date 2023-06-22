@@ -1380,7 +1380,7 @@ void join_probe_consume_batch(HashJoinState* join_state,
 
     // Insert output rows into the output buffer:
     join_state->output_buffer->AppendJoinOutput(
-        active_partition->build_table_buffer.data_table, std ::move(in_table),
+        active_partition->build_table_buffer.data_table, std::move(in_table),
         build_idxs, probe_idxs, build_kept_cols, probe_kept_cols);
 
     build_idxs.clear();
