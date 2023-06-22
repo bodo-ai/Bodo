@@ -143,6 +143,11 @@ concept NullSentinelDtype =
     ((DType == Bodo_CTypes::FLOAT32) || (DType == Bodo_CTypes::FLOAT64) ||
      (DType == Bodo_CTypes::DATETIME) || (DType == Bodo_CTypes::TIMEDELTA));
 
+// select dtypes that can have sentinel NAs in SQL which
+// represent NULL.
+template <Bodo_CTypes::CTypeEnum DType>
+concept SQLNASentinelDtype = DType == Bodo_CTypes::TIMEDELTA;
+
 // ------------------------------------------------
 
 inline void CheckEqualityArrayType(std::shared_ptr<array_info> arr1,

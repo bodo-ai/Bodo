@@ -149,265 +149,6 @@ bool ChunkedTableArrayBuilder::CanResize() {
     return false;
 }
 
-bool ChunkedTableArrayBuilder::CanAppendRowWithoutResizing(
-    const std::shared_ptr<array_info>& in_arr, const int64_t row_ind) {
-    // If size >= capacity, we cannot append regardless of the
-    // array type and data type.
-    if (this->size >= this->capacity) {
-        return false;
-    }
-
-    // For non-string types, if size < capacity (checked above)
-    // we can always append.
-    if (this->data_array->arr_type != bodo_array_type::STRING) {
-        return true;
-    } else {
-        // If it's just appending a null value, that should be fine
-        // since it shouldn't require any additional space in the
-        // data buffer itself.
-        if (row_ind < 0) {
-            return true;
-        }
-        // Compare current length with buffer size.
-        const int64_t current_chars_len = this->data_array->n_sub_elems();
-        const offset_t* offsets = (offset_t*)in_arr->data2();
-        const int64_t new_str_len = offsets[row_ind + 1] - offsets[row_ind];
-        const int64_t req_len = current_chars_len + new_str_len;
-        return req_len <= this->data_array->buffers[0]->size();
-    }
-}
-
-bool ChunkedTableArrayBuilder::CanAppendRow(
-    const std::shared_ptr<array_info>& in_arr, const int64_t row_ind) {
-    // If size >= capacity, we cannot append regardless of the
-    // array type and data type.
-    if (this->size >= this->capacity) {
-        return false;
-    }
-    // For non-string types, if size < capacity (checked above)
-    // we can always append.
-    if (this->data_array->arr_type != bodo_array_type::STRING) {
-        return true;
-    } else {
-        // If it's just appending a null value, that should be fine
-        // since it shouldn't require any additional space in the
-        // data buffer itself.
-        if (row_ind < 0) {
-            return true;
-        }
-        // Compare current length with buffer size to see if it
-        // can be appended without resizing.
-        const int64_t current_chars_len = this->data_array->n_sub_elems();
-        const offset_t* offsets = (offset_t*)in_arr->data2();
-        const int64_t new_str_len = offsets[row_ind + 1] - offsets[row_ind];
-        const int64_t req_len = current_chars_len + new_str_len;
-        if (req_len <= this->data_array->buffers[0]->size()) {
-            return true;
-        }
-        // Check if resizing would enable us to do it:
-        int64_t max_possible_buffer_size =
-            this->data_array->buffers[0]->size() *
-            std::pow(2, this->max_resize_count - this->resize_count);
-        if (req_len <= max_possible_buffer_size) {
-            return true;
-        }
-        // Check for the case where this string is very large
-        // on its own. We have to support this case in some form
-        // for reliability.
-        // We will allow resizing this buffer endlessly if we
-        // have resize attempts remaining, else we will let the
-        // next chunk handle it.
-        if ((new_str_len > max_possible_buffer_size) &&
-            (this->resize_count < this->max_resize_count)) {
-            return true;
-        }
-        return false;
-    }
-}
-
-void ChunkedTableArrayBuilder::UnsafeAppendRow(
-    const std::shared_ptr<array_info>& in_arr, const int64_t row_ind) {
-    // TODO These functions are called in loops, so we eventually
-    // need to template it based on array and c-type so that we don't
-    // need to perform these checks every time.
-    // (https://bodo.atlassian.net/browse/BSE-563)
-
-    switch (this->data_array->arr_type) {
-        case bodo_array_type::NULLABLE_INT_BOOL: {
-            // In some cases (e.g. Outer Join, see
-            // HashJoinState::InitOutputBuffer), we might have created the
-            // buffer with a NULLABLE type while the input might still be NUMPY,
-            // so we will handle that case here:
-            if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                bool null_bit = (row_ind >= 0);
-                if (null_bit) {
-                    if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
-                        arrow::bit_util::SetBitTo(
-                            (uint8_t*)this->data_array->data1(), this->size,
-                            GetBit((uint8_t*)in_arr->data1(), row_ind));
-                    } else {
-                        uint64_t size_type =
-                            numpy_item_size[this->data_array->dtype];
-                        char* out_ptr =
-                            this->data_array->data1() + size_type * size;
-                        char* in_ptr = in_arr->data1() + size_type * row_ind;
-                        memcpy(out_ptr, in_ptr, size_type);
-                    }
-                    null_bit =
-                        GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
-                }
-                SetBitTo((uint8_t*)this->data_array->null_bitmask(), size,
-                         null_bit);
-            } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
-                bool null_bit = (row_ind >= 0);
-                if (null_bit) {
-                    if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
-                        // Boolean needs a special implementation since NUMPY
-                        // arrays use 1 byte per value whereas NULLABLE_INT_BOOL
-                        // arrays use 1 bit per value.
-                        bool data_bit = ((char*)in_arr->data1())[row_ind] != 0;
-                        arrow::bit_util::SetBitTo(
-                            (uint8_t*)this->data_array->data1(), this->size,
-                            data_bit);
-                    } else {
-                        uint64_t size_type =
-                            numpy_item_size[this->data_array->dtype];
-                        char* out_ptr =
-                            this->data_array->data1() + size_type * size;
-                        char* in_ptr = in_arr->data1() + size_type * row_ind;
-                        memcpy(out_ptr, in_ptr, size_type);
-                    }
-                }
-                // Mark as not-null if row_ind >= 0, and null otherwise.
-                // Replicates the behavior of
-                // RetrieveArray_SingleColumn_F_numpy's nullable_arr case.
-                SetBitTo((uint8_t*)this->data_array->null_bitmask(), size,
-                         null_bit);
-            } else {
-                throw std::runtime_error(
-                    "ChunkedTableArrayBuilder::UnsafeAppendRow: Tried to "
-                    "append row from array of type " +
-                    GetArrType_as_string(in_arr->arr_type) +
-                    " to a NULLABLE_INT_BOOL array buffer.");
-            }
-            this->size++;
-            data_array->length = size;
-        } break;
-        case bodo_array_type::STRING: {
-            offset_t* curr_offsets = (offset_t*)this->data_array->data2();
-            bool null_bit = (row_ind >= 0);
-            if (null_bit) {
-                offset_t* in_offsets = (offset_t*)in_arr->data2();
-
-                // append offset
-                int64_t str_len = in_offsets[row_ind + 1] - in_offsets[row_ind];
-                curr_offsets[size + 1] = curr_offsets[size] + str_len;
-
-                // copy characters
-                char* out_ptr = this->data_array->data1() + curr_offsets[size];
-                char* in_ptr = in_arr->data1() + in_offsets[row_ind];
-                memcpy(out_ptr, in_ptr, str_len);
-
-                // update null bit based on in_arr
-                null_bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
-            } else {
-                // Still need to set these because otherwise it can lead
-                // to segfaults.
-                curr_offsets[size + 1] = curr_offsets[size];
-            }
-            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size,
-                     null_bit);
-
-            // update size state
-            this->size++;
-            this->data_array->length = size;
-        } break;
-        case bodo_array_type::NUMPY: {
-            uint64_t size_type = numpy_item_size[this->data_array->dtype];
-            char* out_ptr = this->data_array->data1() + size_type * size;
-            if (row_ind >= 0) {
-                char* in_ptr = in_arr->data1() + size_type * row_ind;
-                memcpy(out_ptr, in_ptr, size_type);
-            } else {
-                std::vector<char> vectNaN =
-                    RetrieveNaNentry(this->data_array->dtype);
-                memcpy(out_ptr, vectNaN.data(), size_type);
-            }
-            this->size++;
-            this->data_array->length = size;
-        } break;
-        case bodo_array_type::DICT: {
-            if (this->data_array->child_arrays[0] != in_arr->child_arrays[0]) {
-                throw std::runtime_error(
-                    "ChunkedTableArrayBuilder::UnsafeAppendRow: Dictionaries "
-                    "not unified!");
-            }
-            // Call recursively on the indices array instead.
-            this->dict_indices->UnsafeAppendRow(in_arr->child_arrays[1],
-                                                row_ind);
-            this->size++;
-            this->data_array->length = size;
-        } break;
-        default: {
-            throw std::runtime_error(
-                "Invalid array type in "
-                "ChunkedTableArrayBuilder::UnsafeAppendRow: " +
-                GetArrType_as_string(this->data_array->arr_type));
-        }
-    }
-}
-
-void ChunkedTableArrayBuilder::AppendRow(
-    const std::shared_ptr<array_info>& in_arr, const int64_t row_ind) {
-    // Fast path for most appends:
-    if (this->CanAppendRowWithoutResizing(in_arr, row_ind)) {
-        this->UnsafeAppendRow(in_arr, row_ind);
-        return;
-    }
-
-    // Check if it can be appended after resizing:
-    if (!this->CanAppendRow(in_arr, row_ind)) {
-        throw std::runtime_error(
-            "ChunkedTableArrayBuilder::AppendRow: Cannot append row!");
-    }
-
-    // If the row can be appended and it hasn't been already, this must be the
-    // STRING case.
-    if (this->data_array->arr_type != bodo_array_type::STRING) {
-        throw std::runtime_error(
-            "ChunkedTableArrayBuilder::AppendRow: Expected STRING column but "
-            "encountered " +
-            GetArrType_as_string(this->data_array->arr_type) + " instead.");
-    }
-
-    // Resize as many times as required:
-    const int64_t current_chars_len = this->data_array->n_sub_elems();
-    const offset_t* offsets = (offset_t*)in_arr->data2();
-    const int64_t new_str_len = offsets[row_ind + 1] - offsets[row_ind];
-    const int64_t req_len = current_chars_len + new_str_len;
-
-    // TODO Make this more efficient by getting the string
-    // resize information from CanAppend or similar helper so we don't have
-    // to recompute that (https://bodo.atlassian.net/browse/BSE-556).
-    int64_t buffer_size = this->data_array->buffers[0]->size();
-    if (req_len > buffer_size) {
-        while ((req_len > buffer_size) &&
-               (this->resize_count < this->max_resize_count)) {
-            buffer_size *= 2;
-            this->resize_count += 1;
-        }
-        // In case it's still not sufficient (single very large string
-        // case), just resize to required length.
-        buffer_size = std::max(buffer_size, req_len);
-        CHECK_ARROW_MEM(
-            this->data_array->buffers[0]->Resize(buffer_size, false),
-            "Resize Failed!");
-    }
-
-    // Now simply append into the buffer.
-    this->UnsafeAppendRow(in_arr, row_ind);
-}
-
 void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
     // Get minimum frame size in BufferPool and set that as the
     // minimum size of any of the buffers.
@@ -588,42 +329,6 @@ void ChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
     }
 }
 
-void ChunkedTableBuilder::AppendRow(const std::shared_ptr<table_info>& in_table,
-                                    int64_t row_ind) {
-    // Check if the row can be appended to all arrays. If any of them
-    // return false, then finalize current chunk, start a new one
-    // and append there.
-    for (size_t i = 0; i < this->active_chunk_array_builders.size(); i++) {
-        if (!this->active_chunk_array_builders[i].CanAppendRow(
-                in_table->columns[i], row_ind)) {
-            this->FinalizeActiveChunk();
-            break;
-        }
-    }
-
-    // Now append the row to all the arrays. This is guaranteed to work
-    // since either this is a new chunk, or all builders returned true
-    // for CanAppendRow.
-    for (size_t i = 0; i < this->active_chunk_array_builders.size(); i++) {
-        this->active_chunk_array_builders[i].AppendRow(in_table->columns[i],
-                                                       row_ind);
-    }
-    this->active_chunk_size += 1;
-    this->total_size += 1;
-    this->total_remaining += 1;
-}
-
-void ChunkedTableBuilder::AppendRows(std::shared_ptr<table_info> in_table,
-                                     const std::span<const int64_t> row_inds) {
-    // NOTE: Currently this just iterates over the row indices
-    // and append them one by one (due to complexities with
-    // string handling). In the future, this can be optimized.
-    // (https://bodo.atlassian.net/browse/BSE-555)
-    for (int64_t row_ind : row_inds) {
-        this->AppendRow(in_table, row_ind);
-    }
-}
-
 void ChunkedTableBuilder::AppendJoinOutput(
     std::shared_ptr<table_info> build_table,
     std::shared_ptr<table_info> probe_table,
@@ -631,11 +336,6 @@ void ChunkedTableBuilder::AppendJoinOutput(
     const std::span<const int64_t> probe_idxs,
     const std::vector<uint64_t>& build_kept_cols,
     const std::vector<uint64_t>& probe_kept_cols) {
-    // NOTE: Currently this just iterates over the row indices
-    // and append them one by one (due to complexities with
-    // string handling). In the future, this can be optimized.
-    // (https://bodo.atlassian.net/browse/BSE-555).
-
     if (build_idxs.size() != probe_idxs.size()) {
         throw std::runtime_error(
             "ChunkedTableBuilder::AppendJoinOutput: Length of build_idxs and "
@@ -649,51 +349,221 @@ void ChunkedTableBuilder::AppendJoinOutput(
             "this->active_chunk_array_builders.size()");
     }
 
+#ifndef NUM_ROWS_CAN_APPEND_COL
+// The max value returned is batch_length so we don't need to do
+// a min here.
+#define NUM_ROWS_CAN_APPEND_COL(ARR_TYPE, IS_BUILD)                          \
+    if (col->arr_type == ARR_TYPE) {                                         \
+        if (IS_BUILD) {                                                      \
+            batch_length = this->active_chunk_array_builders[i_col]          \
+                               .NumRowsCanAppend<ARR_TYPE>(                  \
+                                   col, build_idxs, curr_row, batch_length); \
+        } else {                                                             \
+            batch_length = this->active_chunk_array_builders[i_col]          \
+                               .NumRowsCanAppend<ARR_TYPE>(                  \
+                                   col, probe_idxs, curr_row, batch_length); \
+        }                                                                    \
+    }
+#endif
+
+#ifndef APPEND_ROWS_COL
+#define APPEND_ROWS_COL(OUT_ARR_TYPE, IN_ARR_TYPE, DTYPE, IS_BUILD)      \
+    if (this->active_chunk_array_builders[i_col].data_array->arr_type == \
+            OUT_ARR_TYPE &&                                              \
+        col->arr_type == IN_ARR_TYPE && col->dtype == DTYPE) {           \
+        if (IS_BUILD) {                                                  \
+            this->active_chunk_array_builders[i_col]                     \
+                .AppendRows<OUT_ARR_TYPE, IN_ARR_TYPE, DTYPE>(           \
+                    col, build_idxs, curr_row, batch_length);            \
+        } else {                                                         \
+            this->active_chunk_array_builders[i_col]                     \
+                .AppendRows<OUT_ARR_TYPE, IN_ARR_TYPE, DTYPE>(           \
+                    col, probe_idxs, curr_row, batch_length);            \
+        }                                                                \
+    }
+#endif
+
     size_t build_ncols = build_kept_cols.size();
 
-    for (size_t i_row = 0; i_row < build_idxs.size(); i_row++) {
-        // Check if the row can be appended to all arrays. If any of them
-        // return false, then finalize current chunk, start a new one
-        // and append there.
+    // We want to append rows in a columnar process. To do this we split an
+    // append into three steps:
+    //
+    // Step 1: Check how many rows can be appended to active chunk from each
+    // array.
+    //    We will append the minimum of these.
+    // Step 2: Append a batch of rows to the output in a columnar step.
+    // Step 3: Finalize the active chunk if there are more rows to append.
+    //
+    // In this way we can process a table in "batches" of rows based on the
+    // available space.
+    size_t curr_row = 0;
+    size_t max_rows = build_idxs.size();
+    while (curr_row < max_rows) {
+        // initialize the batch end to all rows.
+        size_t batch_length = max_rows - curr_row;
+        // Determine a consistent batch end across all columns. This value will
+        // be the min of any column.
         for (size_t i_col = 0; i_col < this->active_chunk_array_builders.size();
              i_col++) {
-            if (i_col < build_ncols) {
-                if (!this->active_chunk_array_builders[i_col].CanAppendRow(
-                        build_table->columns[build_kept_cols[i_col]],
-                        build_idxs[i_row])) {
-                    this->FinalizeActiveChunk();
-                    break;
-                }
+            bool is_build = i_col < build_ncols;
+            std::shared_ptr<array_info> col;
+            if (is_build) {
+                col = build_table->columns[build_kept_cols[i_col]];
             } else {
-                if (!this->active_chunk_array_builders[i_col].CanAppendRow(
-                        probe_table
-                            ->columns[probe_kept_cols[i_col - build_ncols]],
-                        probe_idxs[i_row])) {
-                    this->FinalizeActiveChunk();
-                    break;
-                }
+                col =
+                    probe_table->columns[probe_kept_cols[i_col - build_ncols]];
             }
+            NUM_ROWS_CAN_APPEND_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                                    is_build)
+            NUM_ROWS_CAN_APPEND_COL(bodo_array_type::NUMPY, is_build)
+            NUM_ROWS_CAN_APPEND_COL(bodo_array_type::STRING, is_build)
+            NUM_ROWS_CAN_APPEND_COL(bodo_array_type::DICT, is_build)
         }
+        // Append the actual rows.
+        for (size_t i_col = 0; i_col < this->active_chunk_array_builders.size();
+             i_col++) {
+            bool is_build = i_col < build_ncols;
+            std::shared_ptr<array_info> col;
+            if (is_build) {
+                col = build_table->columns[build_kept_cols[i_col]];
+            } else {
+                col =
+                    probe_table->columns[probe_kept_cols[i_col - build_ncols]];
+            }
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::_BOOL, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT8, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::UINT8, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT16, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::UINT16, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT32, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::UINT32, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::INT64, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::UINT64, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::FLOAT32, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::FLOAT64, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::DATE, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::DATETIME, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::TIME, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NULLABLE_INT_BOOL,
+                            Bodo_CTypes::DECIMAL, is_build)
 
-        // Now append the row to all the arrays. This is guaranteed to work
-        // since either this is a new chunk, or all builders returned true
-        // for CanAppendRow.
-        for (size_t i_col = 0; i_col < this->active_chunk_array_builders.size();
-             i_col++) {
-            if (i_col < build_ncols) {
-                this->active_chunk_array_builders[i_col].AppendRow(
-                    build_table->columns[build_kept_cols[i_col]],
-                    build_idxs[i_row]);
-            } else {
-                this->active_chunk_array_builders[i_col].AppendRow(
-                    probe_table->columns[probe_kept_cols[i_col - build_ncols]],
-                    probe_idxs[i_row]);
-            }
+            // Input array may be NUMPY and converted to NULLABLE_INT_BOOL
+            // because of an outer join. This will be removed when we remove
+            // Numpy arrays. Once that is done we can also remove references to
+            // the arr_type of the data array.
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::_BOOL,
+                            is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::INT8, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::UINT8,
+                            is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::INT16,
+                            is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::UINT16,
+                            is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::INT32,
+                            is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::UINT32,
+                            is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::INT64,
+                            is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::UINT64,
+                            is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::FLOAT32,
+                            is_build)
+            APPEND_ROWS_COL(bodo_array_type::NULLABLE_INT_BOOL,
+                            bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64,
+                            is_build)
+
+            // BOTH NUMPY
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::_BOOL, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::INT8, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::UINT8, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::INT16, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::UINT16, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::INT32, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::UINT32, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::INT64, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::UINT64, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::FLOAT32, is_build)
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::FLOAT64, is_build)
+            // TODO(njriasan): Support TIMEDELTA array as a nullable array
+            APPEND_ROWS_COL(bodo_array_type::NUMPY, bodo_array_type::NUMPY,
+                            Bodo_CTypes::TIMEDELTA, is_build)
+
+            // String + Binary
+            APPEND_ROWS_COL(bodo_array_type::STRING, bodo_array_type::STRING,
+                            Bodo_CTypes::STRING, is_build)
+            APPEND_ROWS_COL(bodo_array_type::STRING, bodo_array_type::STRING,
+                            Bodo_CTypes::BINARY, is_build)
+
+            // DICT ENCODING
+            APPEND_ROWS_COL(bodo_array_type::DICT, bodo_array_type::DICT,
+                            Bodo_CTypes::STRING, is_build)
         }
-        this->active_chunk_size += 1;
-        this->total_size += 1;
-        this->total_remaining += 1;
+        // Update the metadata.
+        this->active_chunk_size += batch_length;
+        this->total_size += batch_length;
+        this->total_remaining += batch_length;
+        // Update the curr_row
+        curr_row += batch_length;
+        // Check if we need to finalize
+        if (curr_row < max_rows) {
+            this->FinalizeActiveChunk();
+        }
     }
+
+#undef NUM_ROWS_CAN_APPEND_COL
+#undef APPEND_ROWS_COL
 }
 
 void ChunkedTableBuilder::Finalize(bool shrink_to_fit) {
