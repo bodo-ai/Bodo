@@ -4441,7 +4441,7 @@ class TypingTransforms:
                 return BodoSQLContextType(
                     context_type.names,
                     context_type.dataframes,
-                    context_type.estimate_row_counts,
+                    context_type.estimated_row_counts,
                     catalog_typ,
                 )
             return None
