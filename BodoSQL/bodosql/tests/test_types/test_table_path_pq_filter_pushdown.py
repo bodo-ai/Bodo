@@ -1167,6 +1167,8 @@ def test_in_filter_pushdown_e2e(datapath):
             check_names=True,
             check_dtype=False,
             only_1DVar=True,  # Only running 1d var just to save time, since this is a larger query
+            reset_index=True,
+            sort_output=True,
         )
         assert "bodo.libs.bodosql_array_kernels.is_in" in bc.convert_to_pandas(
             test_in_query

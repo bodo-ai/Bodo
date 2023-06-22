@@ -27,7 +27,7 @@ os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 from pyspark.sql import SparkSession
 
 # Disable broadcast join as the default.
-# To test braodcast join either remove or increase this.
+# To test broadcast join either remove or increase this.
 os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "0"
 
 
