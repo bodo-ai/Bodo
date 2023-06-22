@@ -359,7 +359,7 @@ def test_table_path_timing_debug_message(datapath, memory_leak_check):
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
         impl(f1)
-        check_logger_msg(stream, "Finished reading table parquet_table")
+        check_logger_msg(stream, "Execution time for reading table parquet_table")
 
 
 # TODO: Add a test with multiple tables to check reorder_io works as expected.
