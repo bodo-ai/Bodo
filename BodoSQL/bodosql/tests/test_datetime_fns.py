@@ -948,12 +948,21 @@ def test_dayname_cols(spark_info, dt_fn_dataframe, memory_leak_check):
     )
 
 
-def test_dayname_scalars(basic_df, spark_info, memory_leak_check):
+# Tests that implicit casting of string -> timestamp works
+@pytest.mark.parametrize(
+    "date_literal_strings",
+    [
+        ("TIMESTAMP '2021-03-03'", "TIMESTAMP '2021-03-13'", "TIMESTAMP '2021-03-01'"),
+        ("'2021-03-03'", "'2021-03-13'", "'2021-03-01'"),
+    ],
+)
+def test_dayname_scalars(basic_df, date_literal_strings, spark_info, memory_leak_check):
     """tests the dayname function on scalar inputs. Needed since the equivalent function has different syntax"""
 
     # since dayname is a fn we defined, don't need to worry about calcite performing optimizations
     # Use basic_df so the input is expanded and we don't have to worry about empty arrays
-    query = "SELECT A, DAYNAME(TIMESTAMP '2021-03-03'), DAYNAME(TIMESTAMP '2021-03-13'), DAYNAME(TIMESTAMP '2021-03-01') from table1"
+    scalar1, scalar2, scalar3 = date_literal_strings
+    query = f"SELECT A, DAYNAME({scalar1}), DAYNAME({scalar2}), DAYNAME({scalar3}) from table1"
     spark_query = "SELECT A, DATE_FORMAT('2021-03-03', 'EEEE'), DATE_FORMAT('2021-03-13', 'EEEE'), DATE_FORMAT('2021-03-01', 'EEEE') from table1"
 
     check_query(
@@ -2165,6 +2174,56 @@ def test_snowflake_tz_dateadd(tz_dateadd_data, case):
         check_names=False,
         check_dtype=False,
         only_jit_1DVar=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "query, expected_output",
+    [
+        pytest.param(
+            "SELECT DATEADD('MONTH', 10, '2022-06-30'::DATE)",
+            pd.DataFrame({"A": pd.Series([pd.Timestamp("2023-04-30")])}),
+            id="dateadd-date",
+        ),
+        pytest.param(
+            "SELECT DATEADD('MONTH', 10, '2022-06-30')",
+            pd.DataFrame({"A": pd.Series([pd.Timestamp("2023-04-30")])}),
+            id="dateadd-string",
+        ),
+        pytest.param(
+            "SELECT TIMEADD('SECOND', 30, '2022-06-30 12:23:23'::TIMESTAMP)",
+            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-06-30 12:23:53")])}),
+            id="timeadd-timestamp",
+        ),
+        pytest.param(
+            "SELECT TIMEADD('SECOND', 30, '2022-06-30 12:23:23')",
+            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-06-30 12:23:53")])}),
+            id="dateadd-string",
+        ),
+        pytest.param(
+            "SELECT TIMESTAMPADD('DAY', 5, '2022-06-30'::TIMESTAMP)",
+            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-07-05")])}),
+            id="timeadd-timestamp",
+        ),
+        pytest.param(
+            "SELECT TIMESTAMPADD('DAY', 5, '2022-06-30')",
+            pd.DataFrame({"A": pd.Series([pd.Timestamp("2022-07-05")])}),
+            id="dateadd-string",
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_datedadd_date_literals(query, expected_output, basic_df, memory_leak_check):
+    """
+    Checks that calling DATEADD/TIMEADD/TIMESTAMPADD on datetime.date/string literals behaves as expected.
+    """
+    check_query(
+        query,
+        basic_df,
+        spark=None,
+        expected_output=expected_output,
+        check_names=False,
+        check_dtype=False,
     )
 
 

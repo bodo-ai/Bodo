@@ -36,6 +36,10 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
         && expected == SqlTypeFamily.BOOLEAN) {
       return factory.createSqlType(SqlTypeName.BOOLEAN);
     }
+
+    if ((SqlTypeUtil.isCharacter(in)) && (expected == SqlTypeFamily.DATETIME)) {
+      return factory.createSqlType(SqlTypeName.TIMESTAMP);
+    }
     return super.implicitCast(in, expected);
   }
 

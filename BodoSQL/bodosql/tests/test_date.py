@@ -291,6 +291,21 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
             pd.DataFrame({"A": pd.Series([78710400000000000])}),
             id="nanosecond",
         ),
+        pytest.param(
+            "SELECT DATEDIFF('DAY', '2022-06-30', '2000-01-01')",
+            pd.DataFrame({"A": pd.Series([-8216])}),
+            id="day-string",
+        ),
+        pytest.param(
+            "SELECT TIMEDIFF('MILLISECOND', '2000-01-01', '2022-12-31')",
+            pd.DataFrame({"A": pd.Series([725760000000])}),
+            id="millisecond-string",
+        ),
+        pytest.param(
+            "SELECT TIMESTAMPDIFF('NANOSECOND', '2020-01-01', '2022-06-30')",
+            pd.DataFrame({"A": pd.Series([78710400000000000])}),
+            id="nanosecond-string",
+        ),
     ],
 )
 @pytest.mark.slow
