@@ -51,16 +51,213 @@ struct ArrayBuildBuffer {
      * @param row_ind index of data in input
      * @param append_row bitmask indicating whether to append the row
      */
-    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 DType == Bodo_CTypes::_BOOL)
     void AppendBatch(const std::shared_ptr<array_info>& in_arr,
-                     const std::vector<bool>& append_rows) {
+                     const std::vector<bool>& append_rows,
+                     uint64_t append_rows_sum) {
+        CHECK_ARROW_MEM(
+            data_array->buffers[0]->Resize(
+                arrow::bit_util::BytesForBits(size + append_rows_sum), false),
+            "Resize Failed!");
+        CHECK_ARROW_MEM(
+            data_array->buffers[1]->Resize(
+                arrow::bit_util::BytesForBits(size + append_rows_sum), false),
+            "Resize Failed!");
         for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
             if (append_rows[row_ind]) {
-                AppendRow<arr_type, is_bool>(in_arr, row_ind);
+                arrow::bit_util::SetBitTo(
+                    (uint8_t*)data_array->data1(), size,
+                    GetBit((uint8_t*)in_arr->data1(), row_ind));
+                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+                size++;
             }
         }
+        data_array->length = size;
     }
 
+    /**
+     * @brief Append a new data batch to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam DType data type of the data array
+     * @param in_arr input table with the new data
+     * @param append_rows bitmask indicating whether to append the row
+     * @param append_rows_sum number of rows to append
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 DType != Bodo_CTypes::_BOOL)
+    void AppendBatch(const std::shared_ptr<array_info>& in_arr,
+                     const std::vector<bool>& append_rows,
+                     uint64_t append_rows_sum) {
+        using T = typename dtype_to_type<DType>::type;
+
+        CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
+                            sizeof(T) * (size + append_rows_sum), false),
+                        "Resize Failed!");
+        CHECK_ARROW_MEM(
+            data_array->buffers[1]->Resize(
+                arrow::bit_util::BytesForBits(size + append_rows_sum), false),
+            "Resize Failed!");
+
+        int64_t data_size = size;
+        T* out_ptr = (T*)data_array->data1();
+        T* in_ptr = (T*)in_arr->data1();
+        for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+            if (append_rows[row_ind]) {
+                out_ptr[data_size] = in_ptr[row_ind];
+                data_size++;
+            }
+        }
+        for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+            if (append_rows[row_ind]) {
+                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+                size++;
+            }
+        }
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append a new data batch to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam DType data type of the data array
+     * @param in_arr input table with the new data
+     * @param append_rows bitmask indicating whether to append the row
+     * @param append_rows_sum number of rows to append
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::STRING)
+    void AppendBatch(const std::shared_ptr<array_info>& in_arr,
+                     const std::vector<bool>& append_rows,
+                     uint64_t append_rows_sum) {
+        offset_t* curr_offsets = (offset_t*)data_array->data2();
+        offset_t* in_offsets = (offset_t*)in_arr->data2();
+
+        // resize and copy offsets
+        CHECK_ARROW_MEM(
+            data_array->buffers[1]->Resize(
+                (size + 1 + append_rows_sum) * sizeof(offset_t), false),
+            "Resize Failed!");
+        u_int64_t offset_size = size;
+        for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+            if (append_rows[row_ind]) {
+                // append offset
+                int64_t str_len = in_offsets[row_ind + 1] - in_offsets[row_ind];
+                curr_offsets[offset_size + 1] =
+                    curr_offsets[offset_size] + str_len;
+                offset_size++;
+            }
+        }
+
+        // resize and copy characters
+        CHECK_ARROW_MEM(
+            // data_array->n_sub_elems() is correct because we set offsets above
+            // and n_sub_elems is based on the offsets array
+            data_array->buffers[0]->Resize(data_array->n_sub_elems(), false),
+            "Resize Failed!");
+        u_int64_t character_size = size;
+        for (u_int64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+            // TODO If subsequent rows are to be appended, combine the memcpy
+            if (append_rows[row_ind]) {
+                // copy characters
+                int64_t str_len = in_offsets[row_ind + 1] - in_offsets[row_ind];
+                char* out_ptr =
+                    data_array->data1() + curr_offsets[character_size];
+                char* in_ptr = in_arr->data1() + in_offsets[row_ind];
+                memcpy(out_ptr, in_ptr, str_len);
+                character_size++;
+            }
+        }
+
+        CHECK_ARROW_MEM(
+            data_array->buffers[2]->Resize(
+                arrow::bit_util::BytesForBits(size + append_rows_sum), false),
+            "Resize Failed!");
+        for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+            if (append_rows[row_ind]) {
+                // set null bit
+                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+
+                size++;
+            }
+        }
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append a new data batch to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam DType data type of the data array
+     * @param in_arr input table with the new data
+     * @param append_rows bitmask indicating whether to append the row
+     * @param append_rows_sum number of rows to append
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::DICT)
+    void AppendBatch(const std::shared_ptr<array_info>& in_arr,
+                     const std::vector<bool>& append_rows,
+                     uint64_t append_rows_sum) {
+        if (this->data_array->child_arrays[0] != in_arr->child_arrays[0]) {
+            throw std::runtime_error("dictionary not unified in AppendRow");
+        }
+
+        this->dict_indices->AppendBatch<bodo_array_type::NULLABLE_INT_BOOL,
+                                        Bodo_CTypes::INT32>(
+            in_arr->child_arrays[1], append_rows, append_rows_sum);
+        size += append_rows_sum;
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append a new data batch to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam DType data type of the data array
+     * @param in_arr input table with the new data
+     * @param append_rows bitmask indicating whether to append the row
+     * @param append_rows_sum number of rows to append
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::NUMPY)
+    void AppendBatch(const std::shared_ptr<array_info>& in_arr,
+                     const std::vector<bool>& append_rows,
+                     uint64_t append_rows_sum) {
+        using T = typename dtype_to_type<DType>::type;
+
+        CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
+                            sizeof(T) * (size + append_rows_sum), false),
+                        "Resize Failed!");
+        T* out_ptr = (T*)data_array->data1();
+        T* in_ptr = (T*)in_arr->data1();
+        for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+            if (append_rows[row_ind]) {
+                out_ptr[size] = in_ptr[row_ind];
+                size++;
+            }
+        }
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Copy a bitmap from src to dest with length bits.
+     */
     void _copy_bitmap(u_int8_t* dest, u_int8_t* src, u_int64_t length) {
         u_int64_t bytes_to_copy = (length + 7) >> 3;
         memcpy(dest, src, bytes_to_copy);
@@ -76,8 +273,10 @@ struct ArrayBuildBuffer {
      * @param in_arr input table with the new data element
      * @param row_ind index of data in input
      */
-    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
-        requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL && is_bool)
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 DType == Bodo_CTypes::_BOOL)
     void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
         CHECK_ARROW_MEM(
             data_array->buffers[0]->Resize(
@@ -117,8 +316,10 @@ struct ArrayBuildBuffer {
      * @param in_arr input table with the new data element
      * @param row_ind index of data in input
      */
-    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
-        requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL && !is_bool)
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
+        requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 DType != Bodo_CTypes::_BOOL)
     void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
         uint64_t size_type = numpy_item_size[in_arr->dtype];
         CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
@@ -159,7 +360,8 @@ struct ArrayBuildBuffer {
      * @param in_arr input table with the new data element
      * @param row_ind index of data in input
      */
-    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::STRING)
     void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
         offset_t* curr_offsets = (offset_t*)data_array->data2();
@@ -220,15 +422,16 @@ struct ArrayBuildBuffer {
      * @param in_arr input table with the new data element
      * @param row_ind index of data in input
      */
-    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::DICT)
     void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
         if (this->data_array->child_arrays[0] != in_arr->child_arrays[0]) {
             throw std::runtime_error("dictionary not unified in AppendRow");
         }
-        this->dict_indices
-            ->AppendBatch<bodo_array_type::NULLABLE_INT_BOOL, false>(
-                in_arr->child_arrays[1]);
+        this->dict_indices->AppendBatch<bodo_array_type::NULLABLE_INT_BOOL,
+                                        Bodo_CTypes::INT32>(
+            in_arr->child_arrays[1]);
         // Update the size + length which won't be handled by the recursive
         // case.
         size += in_arr->length;
@@ -245,7 +448,8 @@ struct ArrayBuildBuffer {
      * @param in_arr input table with the new data element
      * @param row_ind index of data in input
      */
-    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::NUMPY)
     void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
         uint64_t size_type = numpy_item_size[in_arr->dtype];
@@ -260,11 +464,12 @@ struct ArrayBuildBuffer {
         data_array->length = size;
     }
 
-    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum DType>
     void AppendRow(const std::shared_ptr<array_info>& in_arr, int64_t row_ind) {
         switch (arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL: {
-                if (is_bool) {
+                if (DType == Bodo_CTypes::_BOOL) {
                     arrow::bit_util::SetBitTo(
                         (uint8_t*)data_array->data1(), size,
                         GetBit((uint8_t*)in_arr->data1(), row_ind));
@@ -336,9 +541,9 @@ struct ArrayBuildBuffer {
                     throw std::runtime_error(
                         "dictionary not unified in AppendRow");
                 }
-                this->dict_indices
-                    ->AppendRow<bodo_array_type::NULLABLE_INT_BOOL, false>(
-                        in_arr->child_arrays[1], row_ind);
+                this->dict_indices->AppendRow<
+                    bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32>(
+                    in_arr->child_arrays[1], row_ind);
                 size++;
                 data_array->length = size;
             } break;
