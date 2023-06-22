@@ -179,27 +179,97 @@ TableBuildBuffer::TableBuildBuffer(
 void TableBuildBuffer::AppendBatch(const std::shared_ptr<table_info>& in_table,
                                    const std::vector<bool>& append_rows) {
 #ifndef APPEND_ARRAY_BATCH
-#define APPEND_ARRAY_BATCH(arr_type, arr_type_exp, dtype)                   \
-    if (arr_type == arr_type_exp) {                                         \
-        if (dtype == Bodo_CTypes::_BOOL) {                                  \
-            array_buffers[i].AppendBatch<arr_type_exp, true>(in_arr,        \
-                                                             append_rows);  \
-        } else {                                                            \
-            array_buffers[i].AppendBatch<arr_type_exp, false>(in_arr,       \
-                                                              append_rows); \
-        }                                                                   \
+#define APPEND_ARRAY_BATCH(arr_type, arr_type_exp, dtype, dtype_expr) \
+    if (arr_type == arr_type_exp) {                                   \
+        if (dtype == dtype_expr) {                                    \
+            array_buffers[i].AppendBatch<arr_type_exp, dtype_expr>(   \
+                in_arr, append_rows, append_rows_sum);                \
+        }                                                             \
     }
 #endif
+
+    u_int64_t append_rows_sum =
+        std::accumulate(append_rows.begin(), append_rows.end(), (u_int64_t)0);
+
     for (size_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
-                           in_arr->dtype);
+                           in_arr->dtype, Bodo_CTypes::INT8);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::INT16);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::INT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::INT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::UINT8);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::UINT16);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::UINT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::UINT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::FLOAT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::FLOAT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::_BOOL);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::DATETIME);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::TIMEDELTA);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::TIME);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::DATE);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::DECIMAL);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::INT128);
+
         APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
-                           in_arr->dtype);
+                           in_arr->dtype, Bodo_CTypes::INT8);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::INT16);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::INT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::INT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::UINT8);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::UINT16);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::UINT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::UINT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::FLOAT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::FLOAT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::_BOOL);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::DATETIME);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::TIMEDELTA);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::TIME);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::DATE);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::DECIMAL);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::INT128);
+
         APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::STRING,
-                           in_arr->dtype);
+                           in_arr->dtype, Bodo_CTypes::STRING);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::STRING,
+                           in_arr->dtype, Bodo_CTypes::BINARY);
+
         APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::DICT,
-                           in_arr->dtype);
+                           in_arr->dtype, Bodo_CTypes::STRING);
     }
 #undef APPEND_ARRAY_BATCH
 }
@@ -207,25 +277,93 @@ void TableBuildBuffer::AppendBatch(const std::shared_ptr<table_info>& in_table,
 void TableBuildBuffer::AppendBatch(
     const std::shared_ptr<table_info>& in_table) {
 #ifndef APPEND_ARRAY_BATCH
-#define APPEND_ARRAY_BATCH(arr_type, arr_type_exp, dtype)              \
-    if (arr_type == arr_type_exp) {                                    \
-        if (dtype == Bodo_CTypes::_BOOL) {                             \
-            array_buffers[i].AppendBatch<arr_type_exp, true>(in_arr);  \
-        } else {                                                       \
-            array_buffers[i].AppendBatch<arr_type_exp, false>(in_arr); \
-        }                                                              \
+#define APPEND_ARRAY_BATCH(arr_type, arr_type_exp, dtype, dtype_expr)       \
+    if (arr_type == arr_type_exp) {                                         \
+        if (dtype == dtype_expr) {                                          \
+            array_buffers[i].AppendBatch<arr_type_exp, dtype_expr>(in_arr); \
+        }                                                                   \
     }
 #endif
+
     for (size_t i = 0; i < in_table->ncols(); i++) {
         const std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
-                           in_arr->dtype);
+                           in_arr->dtype, Bodo_CTypes::INT8);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::INT16);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::INT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::INT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::UINT8);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::UINT16);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::UINT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::UINT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::FLOAT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::FLOAT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::_BOOL);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::DATETIME);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::TIMEDELTA);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::TIME);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::DATE);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::DECIMAL);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NULLABLE_INT_BOOL,
+                           in_arr->dtype, Bodo_CTypes::INT128);
+
         APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
-                           in_arr->dtype);
+                           in_arr->dtype, Bodo_CTypes::INT8);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::INT16);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::INT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::INT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::UINT8);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::UINT16);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::UINT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::UINT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::FLOAT32);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::FLOAT64);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::_BOOL);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::DATETIME);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::TIMEDELTA);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::TIME);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::DATE);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::DECIMAL);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::NUMPY,
+                           in_arr->dtype, Bodo_CTypes::INT128);
+
         APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::STRING,
-                           in_arr->dtype);
+                           in_arr->dtype, Bodo_CTypes::STRING);
+        APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::STRING,
+                           in_arr->dtype, Bodo_CTypes::BINARY);
+
         APPEND_ARRAY_BATCH(in_arr->arr_type, bodo_array_type::DICT,
-                           in_arr->dtype);
+                           in_arr->dtype, Bodo_CTypes::STRING);
     }
 #undef APPEND_ARRAY_BATCH
 }
