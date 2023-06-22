@@ -117,6 +117,24 @@ def equal_null(A, B):
 
 
 @numba.generated_jit(nopython=True)
+def not_equal_null(A, B):
+    """Handles cases where NOT_EQUAL_NULL receives optional arguments and forwards
+    to the appropriate version of the real implementation. This is implemented
+    by calling NOT on EQUAL_NULL"""
+    args = [A, B]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.not_equal_null", ["A", "B"], i
+            )
+
+    def impl(A, B):  # pragma: no cover
+        return bodo.libs.bodosql_array_kernels.boolnot(equal_null_util(A, B))
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def booland_util(A, B):
     """A dedicated kernel for the SQL function BOOLAND which takes in two numbers
     (or columns) and returns True if they are both not zero and not null,

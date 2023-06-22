@@ -389,12 +389,16 @@ def test_cond(args, memory_leak_check):
     ],
 )
 def test_bool_equal_null(args, memory_leak_check):
-    def impl(A, B):
+    def impl1(A, B):
         return pd.Series(bodo.libs.bodosql_array_kernels.equal_null(A, B))
+
+    def impl2(A, B):
+        return pd.Series(bodo.libs.bodosql_array_kernels.not_equal_null(A, B))
 
     # avoid Series conversion for scalar output
     if all(not isinstance(arg, pd.Series) for arg in args):
-        impl = lambda A, B: bodo.libs.bodosql_array_kernels.equal_null(A, B)
+        impl1 = lambda A, B: bodo.libs.bodosql_array_kernels.equal_null(A, B)
+        impl2 = lambda A, B: bodo.libs.bodosql_array_kernels.not_equal_null(A, B)
 
     def equal_null_scalar_fn(A, B):
         if (pd.isna(A) and pd.isna(B)) or (pd.notna(A) and pd.notna(B) and A == B):
@@ -402,12 +406,26 @@ def test_bool_equal_null(args, memory_leak_check):
         else:
             return False
 
+    def not_equal_null_scalar_fn(A, B):
+        if (pd.isna(A) and pd.isna(B)) or (pd.notna(A) and pd.notna(B) and A == B):
+            return False
+        else:
+            return True
+
     equal_null_answer = vectorized_sol(args, equal_null_scalar_fn, None)
+    not_equal_null_answer = vectorized_sol(args, not_equal_null_scalar_fn, None)
 
     check_func(
-        impl,
+        impl1,
         args,
         py_output=equal_null_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl2,
+        args,
+        py_output=not_equal_null_answer,
         check_dtype=False,
         reset_index=True,
     )
@@ -961,6 +979,7 @@ def test_option_bool_fns(memory_leak_check):
             bodo.libs.bodosql_array_kernels.boolxor(arg0, arg1),
             bodo.libs.bodosql_array_kernels.boolnot(arg0),
             bodo.libs.bodosql_array_kernels.equal_null(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.not_equal_null(arg0, arg1),
         )
 
     for A in [0, 16]:
@@ -982,8 +1001,9 @@ def test_option_bool_fns(memory_leak_check):
                     A2 = None if a == None or b == None else (a != b)
                     A3 = None if a == None else not a
                     A4 = a == b
+                    A5 = a != b
                     check_func(
-                        impl, (A, B, flag0, flag1), py_output=(A0, A1, A2, A3, A4)
+                        impl, (A, B, flag0, flag1), py_output=(A0, A1, A2, A3, A4, A5)
                     )
 
 
