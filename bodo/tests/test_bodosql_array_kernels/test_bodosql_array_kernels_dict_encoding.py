@@ -1348,7 +1348,9 @@ def test_dict_initcap(args):
     verify_dictionary_optimization(impl, args, "str_strip", output_encoded)
 
 
-@pytest.mark.parametrize("func", ["equal_null", "startswith", "endswith"])
+@pytest.mark.parametrize(
+    "func", ["equal_null", "not_equal_null", "startswith", "endswith"]
+)
 @pytest.mark.parametrize(
     "args, answers",
     [
@@ -1370,6 +1372,7 @@ def test_dict_initcap(args):
             ),
             {
                 "equal_null": np.array([False, True, False, False, False, False] * 2),
+                "not_equal_null": np.array([True, False, True, True, True, True] * 2),
                 "startswith": pd.Series(
                     [True, True, None, False, None, False] * 2, dtype=pd.BooleanDtype()
                 ),
@@ -1397,6 +1400,7 @@ def test_dict_initcap(args):
             ),
             {
                 "equal_null": np.array([False, False, True, False, True, False] * 2),
+                "not_equal_null": np.array([True, True, False, True, False, True] * 2),
             },
             id="scalar_null",
         ),
@@ -1418,6 +1422,9 @@ def test_dict_initcap(args):
             ),
             {
                 "equal_null": np.array([True, True] + [False] * 6 + [True, False] * 2),
+                "not_equal_null": np.array(
+                    [False, False] + [True] * 6 + [False, True] * 2
+                ),
                 "startswith": pd.Series(
                     [True, True, None, False, None, False] + [None] * 6,
                     dtype=pd.BooleanDtype(),
@@ -1436,9 +1443,12 @@ def test_dict_str2bool(args, answers, func):
         return bodo.libs.bodosql_array_kernels.equal_null(s, t)
 
     def impl2(s, t):
-        return pd.Series(bodo.libs.bodosql_array_kernels.startswith(s, t))
+        return bodo.libs.bodosql_array_kernels.not_equal_null(s, t)
 
     def impl3(s, t):
+        return pd.Series(bodo.libs.bodosql_array_kernels.startswith(s, t))
+
+    def impl4(s, t):
         return pd.Series(bodo.libs.bodosql_array_kernels.endswith(s, t))
 
     if func not in answers:
@@ -1446,8 +1456,9 @@ def test_dict_str2bool(args, answers, func):
 
     impl = {
         "equal_null": impl1,
-        "startswith": impl2,
-        "endswith": impl3,
+        "not_equal_null": impl2,
+        "startswith": impl3,
+        "endswith": impl4,
     }[func]
 
     check_func(

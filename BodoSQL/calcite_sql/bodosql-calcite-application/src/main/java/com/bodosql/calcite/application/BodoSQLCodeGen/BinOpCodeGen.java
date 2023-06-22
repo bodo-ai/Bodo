@@ -121,8 +121,12 @@ public class BinOpCodeGen {
       case EQUALS:
         fn = "bodo.libs.bodosql_array_kernels.equal";
         break;
+      case IS_NOT_DISTINCT_FROM:
       case NULL_EQUALS:
         fn = "bodo.libs.bodosql_array_kernels.equal_null";
+        break;
+      case IS_DISTINCT_FROM:
+        fn = "bodo.libs.bodosql_array_kernels.not_equal_null";
         break;
       case NOT_EQUALS:
         fn = "bodo.libs.bodosql_array_kernels.not_equal";

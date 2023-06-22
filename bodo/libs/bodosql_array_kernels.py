@@ -166,6 +166,7 @@ broadcasted_fixed_arg_functions = {
     "negate_interval",
     "next_day",
     "not_equal",
+    "not_equal_null",
     "nullif",
     "ord_ascii",
     "position",
