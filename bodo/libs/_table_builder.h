@@ -39,18 +39,17 @@ struct ArrayBuildBuffer {
     ArrayBuildBuffer(
         std::shared_ptr<array_info> _data_array,
         std::shared_ptr<DictionaryBuilder> _dict_builder = nullptr);
-    void _append_bool_batch(const std::shared_ptr<array_info>& in_arr);
-    void _append_nullable_int_batch(const std::shared_ptr<array_info>& in_arr);
-    void _append_string_batch(const std::shared_ptr<array_info>& in_arr);
-    void _append_dict_batch(const std::shared_ptr<array_info>& in_arr);
-    void _append_numpy_batch(const std::shared_ptr<array_info>& in_arr);
 
     /**
      * @brief Append a new data element to the buffer, assuming
      * there is already enough space reserved (with ReserveArray).
      *
+     * @tparam arr_type type of the data array
+     * @tparam is_bool whether the data array is boolean (only used
+     *  if arr_type is NULLABLE_INT_BOOL)
      * @param in_arr input table with the new data element
      * @param row_ind index of data in input
+     * @param append_row bitmask indicating whether to append the row
      */
     template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
     void AppendBatch(const std::shared_ptr<array_info>& in_arr,
@@ -61,30 +60,204 @@ struct ArrayBuildBuffer {
             }
         }
     }
+
+    void _copy_bitmap(u_int8_t* dest, u_int8_t* src, u_int64_t length) {
+        u_int64_t bytes_to_copy = (length + 7) >> 3;
+        memcpy(dest, src, bytes_to_copy);
+    }
+
+    /**
+     * @brief Append a new data element to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam is_bool whether the data array is boolean (only used
+     *  if arr_type is NULLABLE_INT_BOOL)
+     * @param in_arr input table with the new data element
+     * @param row_ind index of data in input
+     */
     template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+        requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL && is_bool)
     void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
-        switch (arr_type) {
-            case bodo_array_type::NULLABLE_INT_BOOL: {
-                if (is_bool) {
-                    _append_bool_batch(in_arr);
-                } else {
-                    _append_nullable_int_batch(in_arr);
-                }
-            } break;
-            case bodo_array_type::STRING: {
-                _append_string_batch(in_arr);
-            } break;
-            case bodo_array_type::DICT: {
-                _append_dict_batch(in_arr);
-            } break;
-            case bodo_array_type::NUMPY: {
-                _append_numpy_batch(in_arr);
-            } break;
-            default:
-                throw std::runtime_error(
-                    "invalid array type in AppendRow " +
-                    GetArrType_as_string(in_arr->arr_type));
+        CHECK_ARROW_MEM(
+            data_array->buffers[0]->Resize(
+                arrow::bit_util::BytesForBits(size + in_arr->length), false),
+            "Resize Failed!");
+        CHECK_ARROW_MEM(
+            data_array->buffers[1]->Resize(
+                arrow::bit_util::BytesForBits(size + in_arr->length), false),
+            "Resize Failed!");
+        // Fast path if our buffer is byte aligned
+        if ((size & 7) == 0) {
+            _copy_bitmap((uint8_t*)data_array->data1() + (size >> 3),
+                         (uint8_t*)in_arr->data1(), in_arr->length);
+            _copy_bitmap((uint8_t*)data_array->null_bitmask(),
+                         (uint8_t*)in_arr->null_bitmask(), in_arr->length);
+            size += in_arr->length;
+        } else {
+            for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
+                arrow::bit_util::SetBitTo(
+                    (uint8_t*)data_array->data1(), size,
+                    GetBit((uint8_t*)in_arr->data1(), row_ind));
+                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), row_ind);
+                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+                size++;
+            }
         }
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append a new data element to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam is_bool whether the data array is boolean (only used
+     *  if arr_type is NULLABLE_INT_BOOL)
+     * @param in_arr input table with the new data element
+     * @param row_ind index of data in input
+     */
+    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+        requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL && !is_bool)
+    void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
+        uint64_t size_type = numpy_item_size[in_arr->dtype];
+        CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
+                            (size + in_arr->length) * size_type, false),
+                        "Resize Failed!");
+        CHECK_ARROW_MEM(
+            data_array->buffers[1]->Resize(
+                arrow::bit_util::BytesForBits(size + in_arr->length), false),
+            "Resize Failed!");
+
+        char* out_ptr = data_array->data1() + size_type * size;
+        char* in_ptr = in_arr->data1();
+        memcpy(out_ptr, in_ptr, size_type * in_arr->length);
+
+        if ((size & 7) == 0) {
+            // Fast path for byte aligned null bitmask
+            _copy_bitmap((uint8_t*)data_array->null_bitmask() + (size >> 3),
+                         (uint8_t*)in_arr->null_bitmask(), in_arr->length);
+            size += in_arr->length;
+        } else {
+            // Slow path for non-byte aligned null bitmask
+            for (u_int64_t i = 0; i < in_arr->length; i++) {
+                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), i);
+                SetBitTo((uint8_t*)data_array->null_bitmask(), size, bit);
+                size++;
+            }
+        }
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append a new data element to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam is_bool whether the data array is boolean (only used
+     *  if arr_type is NULLABLE_INT_BOOL)
+     * @param in_arr input table with the new data element
+     * @param row_ind index of data in input
+     */
+    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+        requires(arr_type == bodo_array_type::STRING)
+    void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
+        offset_t* curr_offsets = (offset_t*)data_array->data2();
+        offset_t* in_offsets = (offset_t*)in_arr->data2();
+        // Determine the new data sizes
+        offset_t added_data_size = in_offsets[in_arr->length];
+        offset_t old_data_size = curr_offsets[size];
+        offset_t new_data_size = old_data_size + added_data_size;
+        // Determine the new offset size
+        size_t new_offset_size = (size + 1) + in_arr->length;
+        // Determine the new bitmap size
+        size_t new_bitmap_size =
+            arrow::bit_util::BytesForBits(size + in_arr->length);
+
+        // Ensure there is enough space.
+        CHECK_ARROW_MEM(data_array->buffers[0]->Resize(new_data_size, false),
+                        "Resize Failed!");
+        CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
+                            new_offset_size * sizeof(offset_t), false),
+                        "Resize Failed!");
+        CHECK_ARROW_MEM(data_array->buffers[2]->Resize(new_bitmap_size, false),
+                        "Resize Failed!");
+
+        // copy data
+        char* out_ptr = data_array->data1() + old_data_size;
+        char* in_ptr = in_arr->data1();
+        memcpy(out_ptr, in_ptr, added_data_size);
+        // Copy offsets
+        for (uint64_t row_ind = 1; row_ind < in_arr->length + 1; row_ind++) {
+            offset_t offset_val = curr_offsets[size] + in_offsets[row_ind];
+            curr_offsets[size + row_ind] = offset_val;
+        }
+
+        // Copy bitmap
+        if ((size & 7) == 0) {
+            // Fast path for byte aligned null bitmask
+            _copy_bitmap((uint8_t*)data_array->null_bitmask() + (size >> 3),
+                         (uint8_t*)in_arr->null_bitmask(), in_arr->length);
+        } else {
+            // Slow path for non-byte aligned null bitmask
+            for (uint64_t i = 0; i < in_arr->length; i++) {
+                bool bit = GetBit((uint8_t*)in_arr->null_bitmask(), i);
+                SetBitTo((uint8_t*)data_array->null_bitmask(), size + i, bit);
+            }
+        }
+        size += in_arr->length;
+        data_array->length = size;
+    }
+
+    // Needs optimized
+    /**
+     * @brief Append a new data element to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam is_bool whether the data array is boolean (only used
+     *  if arr_type is NULLABLE_INT_BOOL)
+     * @param in_arr input table with the new data element
+     * @param row_ind index of data in input
+     */
+    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+        requires(arr_type == bodo_array_type::DICT)
+    void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
+        if (this->data_array->child_arrays[0] != in_arr->child_arrays[0]) {
+            throw std::runtime_error("dictionary not unified in AppendRow");
+        }
+        this->dict_indices
+            ->AppendBatch<bodo_array_type::NULLABLE_INT_BOOL, false>(
+                in_arr->child_arrays[1]);
+        // Update the size + length which won't be handled by the recursive
+        // case.
+        size += in_arr->length;
+        data_array->length = size;
+    }
+
+    /**
+     * @brief Append a new data element to the buffer, assuming
+     * there is already enough space reserved (with ReserveArray).
+     *
+     * @tparam arr_type type of the data array
+     * @tparam is_bool whether the data array is boolean (only used
+     *  if arr_type is NULLABLE_INT_BOOL)
+     * @param in_arr input table with the new data element
+     * @param row_ind index of data in input
+     */
+    template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
+        requires(arr_type == bodo_array_type::NUMPY)
+    void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
+        uint64_t size_type = numpy_item_size[in_arr->dtype];
+        CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
+                            (size + in_arr->length) * size_type, false),
+                        "Resize Failed!");
+
+        char* out_ptr = data_array->data1() + size_type * size;
+        char* in_ptr = in_arr->data1();
+        memcpy(out_ptr, in_ptr, size_type * in_arr->length);
+        size += in_arr->length;
+        data_array->length = size;
     }
 
     template <bodo_array_type::arr_type_enum arr_type, bool is_bool>
