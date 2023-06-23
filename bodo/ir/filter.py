@@ -34,6 +34,7 @@ date_funcs_no_arg_map = {
     "get_second": "SECOND",
     # TODO (srilman): YEAROFWEEK seems to map to get_year, but I think thats wrong (no account for weeks that start in previous year)
     "get_year": "YEAR",
+    "yearofweek": "YEAROFWEEK",
     "yearofweekiso": "YEAROFWEEKISO",
     "dayofmonth": "DAY",
     "dayofweek": "DAYOFWEEK",
