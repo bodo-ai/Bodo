@@ -80,6 +80,7 @@ public class WindowAggCodeGen {
     windowOptimizedKernels.add("SUM");
     windowOptimizedKernels.add("$SUM0");
     windowOptimizedKernels.add("COUNT");
+    windowOptimizedKernels.add("COUNT(*)");
     windowOptimizedKernels.add("COUNT_IF");
     windowOptimizedKernels.add("AVG");
     windowOptimizedKernels.add("MEDIAN");
@@ -93,6 +94,11 @@ public class WindowAggCodeGen {
     windowOptimizedKernels.add("STDDEV");
     windowOptimizedKernels.add("STDDEV_SAMP");
     windowOptimizedKernels.add("STDDEV_POP");
+    windowOptimizedKernels.add("SKEW");
+    windowOptimizedKernels.add("KURTOSIS");
+    windowOptimizedKernels.add("BITOR_AGG");
+    windowOptimizedKernels.add("BITAND_AGG");
+    windowOptimizedKernels.add("BITXOR_AGG");
     windowOptimizedKernels.add("BOOLOR_AGG");
     windowOptimizedKernels.add("BOOLAND_AGG");
     windowOptimizedKernels.add("BOOLXOR_AGG");
@@ -108,6 +114,7 @@ public class WindowAggCodeGen {
     windowCodeExpressions.put("SUM", "windowed_sum");
     windowCodeExpressions.put("$SUM0", "windowed_sum");
     windowCodeExpressions.put("COUNT", "windowed_count");
+    windowCodeExpressions.put("COUNT(*)", "windowed_count_star");
     windowCodeExpressions.put("COUNT_IF", "windowed_count_if");
     windowCodeExpressions.put("AVG", "windowed_avg");
     windowCodeExpressions.put("MEDIAN", "windowed_median");
@@ -120,24 +127,21 @@ public class WindowAggCodeGen {
     windowCodeExpressions.put("STDDEV", "windowed_stddev_samp");
     windowCodeExpressions.put("STDDEV_SAMP", "windowed_stddev_samp");
     windowCodeExpressions.put("STDDEV_POP", "windowed_stddev_pop");
+    windowCodeExpressions.put("SKEW", "windowed_skew");
+    windowCodeExpressions.put("KURTOSIS", "windowed_kurtosis");
     windowCodeExpressions.put("VARIANCE", "windowed_var_samp");
     windowCodeExpressions.put("VARIANCE_SAMP", "windowed_var_samp");
     windowCodeExpressions.put("VAR_SAMP", "windowed_var_samp");
     windowCodeExpressions.put("VARIANCE_POP", "windowed_var_pop");
     windowCodeExpressions.put("VAR_POP", "windowed_var_pop");
+    windowCodeExpressions.put("BITOR_AGG", "windowed_bitor_agg");
+    windowCodeExpressions.put("BITAND_AGG", "windowed_bitand_agg");
+    windowCodeExpressions.put("BITXOR_AGG", "windowed_bitxor_agg");
     windowCodeExpressions.put("BOOLOR_AGG", "windowed_boolor");
     windowCodeExpressions.put("BOOLAND_AGG", "windowed_booland");
     windowCodeExpressions.put("BOOLXOR_AGG", "windowed_boolxor");
     windowCodeExpressions.put("MIN", "windowed_min");
     windowCodeExpressions.put("MAX", "windowed_max");
-
-    // Window functions that are still implemented via taking slices in a loop
-    // and calling a Pandas method on the result
-    windowFunctions.put("KURTOSIS", "%s.kurtosis()");
-    windowFunctions.put("SKEW", "%s.skew()");
-    windowFunctions.put("BITOR_AGG", "bodo.libs.array_kernels.bitor_agg(%s)");
-    windowFunctions.put("BITAND_AGG", "bodo.libs.array_kernels.bitand_agg(%s)");
-    windowFunctions.put("BITXOR_AGG", "bodo.libs.array_kernels.bitxor_agg(%s)");
   }
 
   /**
@@ -268,23 +272,18 @@ public class WindowAggCodeGen {
      */
     Boolean needsToRevertSort = false;
 
-    // Store information about loop-based aggregations so that they can be
-    // processed all at once by a single for-loop that obtains a single slice
-    List<String> loopAggNames = new ArrayList<String>();
-    List<List<WindowedAggregationArgument>> loopAggArgs =
-        new ArrayList<List<WindowedAggregationArgument>>();
-    List<String> loopAggOutputs = new ArrayList<String>();
-    List<String> loopAggLowerBounds = new ArrayList<String>();
-    List<String> loopAggUpperBounds = new ArrayList<String>();
-    List<Boolean> loopAggLowerBoundeds = new ArrayList<Boolean>();
-    List<Boolean> loopAggUpperBoundeds = new ArrayList<Boolean>();
-
     // Loop over each aggregation in the closure and map it to the correct
     // helper logic
     for (int i = 0; i < aggs.size(); i++) {
       SqlKind agg = aggs.get(i);
       String aggName = aggNames.get(i);
       List<WindowedAggregationArgument> argsList = argsListList.get(i);
+
+      // If COUNT(*), the aggregate will be COUNT with no arguments.
+      // This is treated separately from the normal count.
+      if (aggName.equals("COUNT") && argsList.size() == 0) {
+        aggName = "COUNT(*)";
+      }
 
       // Create easy-to-use string variables for the upper and lower bounds by
       // mapping UNBOUNDED XXX to offsets that match the size of the current
@@ -298,22 +297,6 @@ public class WindowAggCodeGen {
       }
       if (upper.equals(unboundedUpperBound)) {
         upper = partitionLength;
-      }
-
-      // Handle count(*) as a special case of the loop-based functions. This is
-      // a special case because there are no arguments provided to the window
-      // function and COUNT(*) does not require the use of slicing
-      if (aggName == "COUNT" && argsList.size() == 0) {
-        loopAggNames.add("COUNT(*)");
-        loopAggArgs.add(null);
-        loopAggOutputs.add("arr" + String.valueOf(i));
-        colsToAddToOutputDf.add("arr" + String.valueOf(i));
-        loopAggLowerBounds.add(lower);
-        loopAggUpperBounds.add(upper);
-        loopAggLowerBoundeds.add(lowerBounded);
-        loopAggUpperBoundeds.add(upperBounded);
-        needsToRevertSort |= hasOrder;
-        continue;
       }
 
       // Case on the aggregation and redirect to the appropriate code-generating
@@ -453,25 +436,6 @@ public class WindowAggCodeGen {
           }
           break;
 
-          // These functions are handled via a slice and a Pandas method. Add
-          // them to the relevant lists so that they can be dealt with en-masse
-          // at the end.
-        case "KURTOSIS":
-        case "SKEW":
-        case "BITOR_AGG":
-        case "BITAND_AGG":
-        case "BITXOR_AGG":
-          needsToRevertSort |= hasOrder;
-          loopAggNames.add(aggName);
-          loopAggArgs.add(argsList);
-          loopAggOutputs.add("arr" + String.valueOf(i));
-          colsToAddToOutputDf.add("arr" + String.valueOf(i));
-          loopAggLowerBounds.add(lower);
-          loopAggUpperBounds.add(upper);
-          loopAggLowerBoundeds.add(lowerBounded);
-          loopAggUpperBoundeds.add(upperBounded);
-          break;
-
           /* All the remaining window functions have a dedicated kernel. Looks
            * as follows:
            *
@@ -485,35 +449,6 @@ public class WindowAggCodeGen {
           generateSimpleWindowFnCode(
               funcText, argsList, aggName, lower, upper, colsToAddToOutputDf, i);
       }
-    }
-
-    /* Generate the code for all of the loop-based window aggregations. Looks
-     * as follows:
-     *
-     * for i in range(argument_df_len):
-     *    cur_lower_bound = 0
-     *    cur_upper_bound = max(0, i + np.int64(0) + 1)
-     *    slice0 = sorted_df["AGG_OP_0"].iloc[:cur_upper_bound]
-     *    if slice0.count() == 0:
-     *      bodo.libs.array_kernels.setna(arr0, i)
-     *    else:
-     *      arr0[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(slice0.min())
-     *    ...
-     */
-    if (loopAggNames.size() > 0) {
-      generateLoopBasedWindowFn(
-          funcText,
-          typs,
-          partitionLength,
-          loopAggLowerBoundeds,
-          loopAggUpperBoundeds,
-          loopAggLowerBounds,
-          loopAggUpperBounds,
-          colsToAddToOutputDf,
-          loopAggNames,
-          loopAggArgs,
-          loopAggOutputs,
-          zeroExpr);
     }
 
     /* If the sort-reverting flag is true, revert the sort. Afterwards, shove
@@ -1284,9 +1219,6 @@ public class WindowAggCodeGen {
       if (argsList.size() != 2) {
         throw new BodoSQLCodegenException(fnName + " requires 2 column inputs");
       }
-    } else {
-      assertWithErrMsg(argsList.size() == 1, fnName + " requires 1 input");
-      assertWithErrMsg(argsList.get(0).isDfCol(), fnName + " requires a column input");
     }
     String arrName = "arr" + String.valueOf(i);
 
@@ -1298,11 +1230,16 @@ public class WindowAggCodeGen {
         .append(kernelName)
         .append("(");
 
-    for (int j = 0; j < argsList.size(); j++) {
-      if (j != 0) {
-        funcText.append(", ");
+    if (argsList.size() == 0) {
+      // COUNT(*) has no arguments and inserts the length of the window.
+      funcText.append("argument_df_len");
+    } else {
+      for (int j = 0; j < argsList.size(); j++) {
+        if (j != 0) {
+          funcText.append(", ");
+        }
+        funcText.append("sorted_df[").append(makeQuoted(argsList.get(j).getExprString())).append("]");
       }
-      funcText.append("sorted_df[").append(makeQuoted(argsList.get(j).getExprString())).append("]");
     }
 
     if (windowOptimized) {

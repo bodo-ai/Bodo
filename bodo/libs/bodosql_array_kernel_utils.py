@@ -17,6 +17,7 @@ from numba.extending import overload
 import bodo
 from bodo.hiframes.datetime_timedelta_ext import PDTimeDeltaType
 from bodo.hiframes.pd_series_ext import (
+    SeriesType,
     is_timedelta64_series_typ,
     pd_timedelta_type,
 )
@@ -1257,6 +1258,7 @@ def gen_windowed(
     num_args=1,
     propagate_nan=True,
     extra_globals=None,
+    min_elements=1,
 ):
     """Creates an impl for a window frame function that accumulates some value
     as elements enter and exit a window that starts/ends some number of indices
@@ -1297,6 +1299,9 @@ def gen_windowed(
         in the current window frame is NaN. Note: if a NaN is encountered, the
         enter/exit blocks are not invoked. The default value is True.
 
+        min_elements [integer]: the minimum number of non-null elements required
+        to produce a non-null output.
+
     Returns:
         function: a window function that takes in a Series, lower bound,
         and upper bound, and outputs an array where each value corresponds
@@ -1327,6 +1332,7 @@ def gen_windowed(
     empty_block = None
     num_args = 1
     propagate_nan = True
+    min_elements = 1
 
     def impl(S, lower_bound, upper_bound):
         n = len(S)
@@ -1336,12 +1342,12 @@ def gen_windowed(
             for i in range(n):
                 bodo.libs.array_kernels.setna(res, i)
         elif lower_bound <= -n+1 and n-1 <= upper_bound:
-            has_non_null = False
+            non_null_count = False
             has_nan = False
 
             for i in range(n):
                 if not (bodo.libs.array_kernels.isna(arr0, i)):
-                    has_non_null = True
+                    non_null_count += 1
                 if np.isnan(arr0[i]):
                     has_nan = True
 
@@ -1349,7 +1355,7 @@ def gen_windowed(
                 for i in range(n):
                     res[i] = np.nan
 
-            else if not has_non_null:
+            elif non_null_count < 1:
                 for i in range(n):
                     bodo.libs.array_kernels.setna(res, i)
             else:
@@ -1370,7 +1376,7 @@ def gen_windowed(
                     else:
                         total += elem0
             for i in range(n):
-                if in_window == 0:
+                if in_window < 1:
                     bodo.libs.array_kernels.setna(res, i)
                 else:
                     if nan_counter > 0:
@@ -1476,24 +1482,24 @@ def gen_windowed(
 
         # Check to see if there are any non-null entries. If not, set the entire
         # output output array to NULL
-        func_text += "      has_non_null = False\n"
+        func_text += "      non_null_count = 0\n"
         if propagate_nan:
             func_text += "      has_nan = False\n"
         func_text += "      for i in range(n):\n"
         if propagate_nan:
-            func_text += f"         if has_non_null and has_nan:\n"
+            func_text += f"         if non_null_count >= {min_elements} and has_nan:\n"
             func_text += "            break\n"
         func_text += f"         if not ({any_arr_is_null('i')}):\n"
-        func_text += "            has_non_null = True\n"
+        func_text += "            non_null_count += 1\n"
         if propagate_nan:
             func_text += f"         if ({any_arr_is_nan('i')}):\n"
             func_text += "            has_nan = True\n"
             func_text += "      if has_nan:\n"
             func_text += "         for i in range(n):\n"
             func_text += indent_block(nan_block, 12)
-            func_text += "      elif not has_non_null:\n"
+            func_text += f"      elif non_null_count < {min_elements}:\n"
         else:
-            func_text += "      if not has_non_null:\n"
+            func_text += f"      if non_null_count < {min_elements}:\n"
         func_text += "         for i in range(n):\n"
         func_text += indent_block(empty_block, 12)
         func_text += "      else:\n"
@@ -1525,7 +1531,7 @@ def gen_windowed(
     # Loop over the entire array. Anytime there are zero non-null entries, invoke
     # the empty block
     func_text += "      for i in range(n):\n"
-    func_text += "         if in_window == 0:\n"
+    func_text += f"         if in_window < {min_elements}:\n"
     func_text += indent_block(empty_block, 12)
 
     # Otherwise, calculate the value of the current row based on the accumulated
@@ -1581,6 +1587,64 @@ def gen_windowed(
     impl = loc_vars["impl"]
 
     return impl
+
+
+def make_slice_window_agg(
+    out_dtype_fn, agg_func, min_elements=1, propagate_nan=True, extra_globals=None
+):
+    """
+    Generates a kernel for a window function based on calculating a slice
+    of the input for each window frame and then calling an aggregation on
+    the slice.
+
+    Args:
+        out_dtype_fn [function]: a function that takes in the input type of
+                                 the column and returns the datatype of the
+                                 output array
+        agg_func [function]: a funciton that takes in a string representing a
+                             series of values and produces the corresponding
+                             aggregate output
+
+    The following arguments are also available for use to pass on to
+    gen_windowed. For their full meaning, see the doscstring of gen_windowed:
+
+        propagate_nan [boolean]
+        extra_globals [dictionary, optional]
+        min_elements [integer]
+    """
+
+    def impl(S, lower_bound, upper_bound):  # pragma: no cover
+        calculate_block = (
+            "slice = S.iloc[min(max(0, exiting), n):min(max(0, entering + 1), n)]\n"
+        )
+        calculate_block += f"res[i] = {agg_func('slice')}\n"
+        constant_block = f"constant_value = {agg_func('S')}\n"
+        out_dtype = out_dtype_fn(S)
+        return gen_windowed(
+            calculate_block,
+            out_dtype,
+            constant_block=constant_block,
+            propagate_nan=propagate_nan,
+            extra_globals=extra_globals,
+            min_elements=min_elements,
+        )
+
+    return impl
+
+
+def bit_agg_type_inference(arr):
+    """Takes in the input to a bitXXX_agg window function and returns the corresponding
+    output dtype. If the input is an integer type, the output has the same integer
+    dtype. Otherwise, the output uses int64."""
+    if isinstance(arr, SeriesType):
+        arr = arr.data
+    if isinstance(arr.dtype, types.Integer):
+        out_dtype = arr.dtype
+    else:
+        out_dtype = types.int64
+    return bodo.utils.typing.to_nullable_type(
+        bodo.utils.typing.dtype_to_array_type(out_dtype)
+    )
 
 
 def check_insert_args(pos, len):  # pragma: no cover
