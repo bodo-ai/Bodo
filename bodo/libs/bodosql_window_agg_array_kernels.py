@@ -357,6 +357,36 @@ def windowed_count(S, lower_bound, upper_bound):
     )
 
 
+def windowed_count_star(n, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+@overload(windowed_count_star)
+def overload_windowed_count_star(n, lower_bound, upper_bound):
+    # This method cannot use gen_vectorized because gen_vectorized
+    # behavior causes null values to be ignored. count(*) will count
+    # records with null values.
+    # That also simplifies the implementation since we don't need to
+    # look at a specific column. In contrast to most of the window
+    # functions, this one just takes the length of the input.
+    def impl(n, lower_bound, upper_bound):  # pragma: no cover
+        result = bodo.libs.int_arr_ext.alloc_int_array(n, bodo.uint32)
+        if upper_bound < lower_bound:
+            result[:] = np.uint32(0)
+            return result
+        elif lower_bound <= -n+1 and n-1 <= upper_bound:
+            result[:] = np.uint32(n)
+            return result
+
+        for i in range(n):
+            current_lower_bound = min(max(0, i + lower_bound), n)
+            current_upper_bound = min(max(0, i + upper_bound + 1), n)
+            result[i] = current_upper_bound - current_lower_bound
+        return result
+
+    return impl
+
+
 @numba.generated_jit(nopython=True)
 def windowed_count_if(S, lower_bound, upper_bound):
     """Optimized implemention for the window function version of `count_if`. For every ith row in the
@@ -989,3 +1019,68 @@ def _install_windowed_min_max_fns():
 
 
 _install_windowed_min_max_fns()
+
+
+def windowed_skew(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+overload(windowed_skew)(
+    make_slice_window_agg(
+        out_dtype_fn=lambda _: bodo.float64,
+        agg_func=lambda S: f"{S}.skew()",
+        min_elements=3,
+    )
+)
+
+
+def windowed_kurtosis(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+overload(windowed_kurtosis)(
+    make_slice_window_agg(
+        out_dtype_fn=lambda _: bodo.float64,
+        agg_func=lambda S: f"{S}.kurtosis()",
+        min_elements=4,
+    )
+)
+
+
+def windowed_bitor_agg(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+overload(windowed_bitor_agg)(
+    make_slice_window_agg(
+        out_dtype_fn=lambda S: bit_agg_type_inference(S),
+        agg_func=lambda S: f"bodo.libs.array_kernels.bitor_agg({S})",
+        propagate_nan=False,
+    )
+)
+
+
+def windowed_bitand_agg(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+overload(windowed_bitand_agg)(
+    make_slice_window_agg(
+        out_dtype_fn=lambda S: bit_agg_type_inference(S),
+        agg_func=lambda S: f"bodo.libs.array_kernels.bitand_agg({S})",
+        propagate_nan=False,
+    )
+)
+
+
+def windowed_bitxor_agg(S, lower_bound, upper_bound):  # pragma: no cover
+    pass
+
+
+overload(windowed_bitxor_agg)(
+    make_slice_window_agg(
+        out_dtype_fn=lambda S: bit_agg_type_inference(S),
+        agg_func=lambda S: f"bodo.libs.array_kernels.bitxor_agg({S})",
+        propagate_nan=False,
+    )
+)

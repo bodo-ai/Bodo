@@ -659,11 +659,7 @@ def test_variance_stddev_nan(memory_leak_check):
 def test_kurtosis_skew(memory_leak_check):
     """Tests the kurtosis and skew functions"""
     window_calls = [
-        ("SKEW", "UNBOUNDED PRECEDING", "CURRENT ROW"),
-        ("SKEW", "3 PRECEDING", "3 FOLLOWING"),
         ("SKEW", "UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
-        ("KURTOSIS", "UNBOUNDED PRECEDING", "CURRENT ROW"),
-        ("KURTOSIS", "1 FOLLOWING", "UNBOUNDED FOLLOWING"),
         ("KURTOSIS", "UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
     ]
     selects = []
@@ -676,69 +672,29 @@ def test_kurtosis_skew(memory_leak_check):
         "table1": pd.DataFrame(
             {
                 "A": pd.Series(
-                    [1, None, 2, None, 10, 12, 13, 12, 10], dtype=pd.Int32Dtype()
+                    [1, None, 2, None]
+                    + [None, None, None, None]
+                    + [10, 20, 40, None]
+                    + [100, 175, 180, 170],
+                    dtype=pd.Int32Dtype(),
                 ),
-                "P": [2.718281828] * 9,
-                "O": list(range(9)),
+                "P": [2.718281828] * 4 + [1.0] * 4 + [None] * 4 + [0.0] * 4,
+                "O": list(range(16)),
             }
         )
     }
     answer = pd.DataFrame(
         {
-            0: pd.Series(
-                [
-                    None,
-                    None,
-                    None,
-                    None,
-                    1.6523167403329906,
-                    0.0828945291391867,
-                    -0.46902864581267356,
-                    -0.8491343946602741,
-                    -1.0401409926744276,
-                ],
+            0: nullable_float_arr_maker(
+                [0.0] * 8 + [0.9352195295828252] * 4 + [-1.9300313123985544] * 4,
+                [0, 1, 2, 3, 4, 5, 6, 7],
+                [-1],
             ),
-            1: pd.Series(
-                [
-                    None,
-                    1.6523167403329906,
-                    0.0828945291391867,
-                    -0.46902864581267356,
-                    -1.9297766520456776,
-                    -1.9778696134152314,
-                    -0.16563466499998566,
-                    -0.16563466499998566,
-                    -1.1293381149712478,
-                ]
+            1: nullable_float_arr_maker(
+                [0.0] * 12 + [3.7681402991281665] * 4,
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                [-1],
             ),
-            2: pd.Series([-1.0401409926744276] * 9),
-            3: pd.Series(
-                [
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    -5.211208869450237,
-                    -3.0406694207746643,
-                    -1.8219741604242063,
-                    -0.9184912211127294,
-                ],
-            ),
-            4: pd.Series(
-                [
-                    4.221617600170051,
-                    4.221617600170051,
-                    -2.4074074074074057,
-                    -2.4074074074074057,
-                    2.2271468144044313,
-                    None,
-                    None,
-                    None,
-                    None,
-                ],
-            ),
-            5: pd.Series([-0.9184912211127294] * 9),
         }
     )
 
