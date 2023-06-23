@@ -84,7 +84,6 @@ public class ExprTypeVisitor {
           "STR_TO_DATE",
           "TAN",
           "TANH",
-          "TIME_SLICE",
           "TO_CHAR",
           "TO_DAYS",
           "TO_DECIMAL",
