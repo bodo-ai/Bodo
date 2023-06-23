@@ -260,6 +260,12 @@ void nested_loop_join_table_local(std::shared_ptr<table_info> left_table,
     size_t n_rows_left = left_table->nrows();
     size_t n_rows_right = right_table->nrows();
 
+    // if either table is empty, return early
+    // this avoids a division by zero in the block_n_rows calculation
+    if (n_rows_left == 0 || n_rows_right == 0) {
+        return;
+    }
+
     auto [left_table_infos, col_ptrs_left, null_bitmap_left] =
         get_gen_cond_data_ptrs(left_table);
     auto [right_table_infos, col_ptrs_right, null_bitmap_right] =
