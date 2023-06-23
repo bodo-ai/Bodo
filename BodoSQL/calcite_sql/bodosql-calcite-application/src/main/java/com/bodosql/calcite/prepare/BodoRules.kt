@@ -182,6 +182,7 @@ object BodoRules {
         ProjectFilterProjectColumnEliminationRule.Config.DEFAULT.toRule(),
         MinRowNumberFilterRule.Config.DEFAULT.toRule(),
         RexSimplificationRule.Config.DEFAULT.toRule(),
+        ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
     )
 
     private val FILTER_INTO_JOIN_RULE: RelOptRule =
@@ -250,6 +251,7 @@ object BodoRules {
             ProjectFilterProjectColumnEliminationRule.Config.DEFAULT.toRule(),
             MinRowNumberFilterRule.Config.DEFAULT.toRule(),
             RexSimplificationRule.Config.DEFAULT.toRule(),
+            ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
             // Allow planner to swap inputs between the build/probe join
             // side to reduce total in-use memory cost.
             CoreRules.JOIN_COMMUTE_OUTER,

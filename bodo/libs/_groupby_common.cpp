@@ -492,6 +492,9 @@ void get_groupby_output_dtype(int ftype,
             array_type = bodo_array_type::NULLABLE_INT_BOOL;
             dtype = Bodo_CTypes::FLOAT64;
             return;
+        case Bodo_FTypes::listagg:
+            array_type = bodo_array_type::STRING;
+            return;
         case Bodo_FTypes::cumsum:
         case Bodo_FTypes::sum:
             // This is safe even for cumsum because a boolean cumsum is not yet

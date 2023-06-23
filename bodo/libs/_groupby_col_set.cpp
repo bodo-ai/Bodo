@@ -1,5 +1,6 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_col_set.h"
+#include "_array_operations.h"
 #include "_array_utils.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
@@ -15,6 +16,8 @@
  * the groupby col set will largely mirror the general infrastructure.
  *
  */
+
+// ############################## BasicColSet ##############################
 
 BasicColSet::BasicColSet(std::shared_ptr<array_info> in_col, int ftype,
                          bool combine_step, bool use_sql_rules)
@@ -88,9 +91,12 @@ std::shared_ptr<array_info> BasicColSet::getOutputColumn() {
     } else {
         mycols = &update_cols;
     }
+
     std::shared_ptr<array_info> out_col = mycols->at(0);
     return out_col;
 }
+
+// ############################## Mean ##############################
 
 MeanColSet::MeanColSet(std::shared_ptr<array_info> in_col, bool combine_step,
                        bool use_sql_rules)
@@ -145,6 +151,8 @@ void MeanColSet::eval(const grouping_info& grp_info) {
                            grp_info, Bodo_FTypes::mean_eval);
     }
 }
+
+// ############################## IdxMin/IdxMax ##############################
 
 IdxMinMaxColSet::IdxMinMaxColSet(std::shared_ptr<array_info> in_col,
                                  std::shared_ptr<array_info> _index_col,
@@ -241,6 +249,8 @@ void IdxMinMaxColSet::combine(const grouping_info& grp_info) {
     this->combine_cols.pop_back();
 }
 
+// ############################## BoolXorColSet ##############################
+
 BoolXorColSet::BoolXorColSet(std::shared_ptr<array_info> in_col, int ftype,
                              bool combine_step, bool use_sql_rules)
     : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
@@ -294,6 +304,8 @@ void BoolXorColSet::eval(const grouping_info& grp_info) {
     do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
                        Bodo_FTypes::boolxor_eval);
 }
+
+// ############################## Var/Std ##############################
 
 VarStdColSet::VarStdColSet(std::shared_ptr<array_info> in_col, int ftype,
                            bool combine_step, bool use_sql_rules)
@@ -413,6 +425,8 @@ void VarStdColSet::eval(const grouping_info& grp_info) {
     }
 }
 
+// ############################## Skew ##############################
+
 SkewColSet::SkewColSet(std::shared_ptr<array_info> in_col, int ftype,
                        bool combine_step, bool use_sql_rules)
     : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
@@ -522,6 +536,384 @@ void SkewColSet::eval(const grouping_info& grp_info) {
     do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
                        Bodo_FTypes::skew_eval);
 }
+
+// ############################## Listagg ##############################
+
+ListAggColSet::ListAggColSet(
+    std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> sep_col,
+    std::vector<std::shared_ptr<array_info>> _orderby_cols,
+    std::vector<bool> _window_ascending, std::vector<bool> _window_na_position)
+    : BasicColSet(in_col, Bodo_FTypes::listagg, false, true),
+      orderby_cols(_orderby_cols),
+      window_ascending(_window_ascending),
+      window_na_position(_window_na_position) {
+    std::shared_ptr<array_info> string_array;
+    if (sep_col->arr_type == bodo_array_type::arr_type_enum::DICT) {
+        string_array = sep_col->child_arrays[0];
+
+    } else if (sep_col->arr_type == bodo_array_type::arr_type_enum::STRING) {
+        // If NUMBA_DEVELOPER_MODE, output stderr message
+        if (std::getenv("NUMBA_DEVELOPER_MODE") != NULL) {
+            std::cerr
+                << "Internal error in ListAggColSet constructor: Separator "
+                   "array is not dictionary type.\n";
+        }
+
+        string_array = sep_col;
+    } else {
+        throw std::runtime_error(
+            "Internal error in ListAggColSet constructor: Separator array must "
+            "always be "
+            "dictionary type.");
+    }
+
+    char* data_in = string_array->data1();
+    offset_t* offsets_in = (offset_t*)string_array->data2();
+    offset_t end_offset = offsets_in[1];
+    std::string substr(&data_in[0], end_offset);
+    this->listagg_sep = substr;
+}
+
+ListAggColSet::~ListAggColSet() {}
+
+void ListAggColSet::alloc_update_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
+    // Because we can't do a proper allocation until after the shuffle has
+    // ocurred, we allocate a dummy update column here. We then overwrite the
+    // internally stored value in the update function.
+
+    update_cols.push_back(alloc_string_array(Bodo_CTypes::STRING, 0, 0, 0));
+    out_cols.push_back(update_cols[0]);
+}
+
+// Struct that contains templated helper functions
+// for string/dict encoded strings in listagg update
+template <bool is_dict>
+struct listagg_utils {
+    inline static void get_data_and_offsets(
+        const std::shared_ptr<array_info> in_col, char** data_in_ptr,
+        offset_t** offsets_in_ptr,
+        std::shared_ptr<array_info>* dict_indices_ptr);
+    inline static bool get_null_bit(std::shared_ptr<array_info> in_col,
+                                    std::shared_ptr<array_info> dict_indices,
+                                    size_t i);
+    inline static int32_t get_offset_idx(
+        std::shared_ptr<array_info> dict_indices, size_t i);
+};
+
+template <>
+struct listagg_utils<true> {
+    inline static void get_data_and_offsets(
+        const std::shared_ptr<array_info> in_col, char** data_in_ptr,
+        offset_t** offsets_in_ptr,
+        std::shared_ptr<array_info>* dict_indices_ptr) {
+        *dict_indices_ptr = in_col->child_arrays[1];
+        std::shared_ptr<array_info> string_array = in_col->child_arrays[0];
+
+        *data_in_ptr = string_array->data1();
+        *offsets_in_ptr = (offset_t*)string_array->data2();
+    }
+    inline static bool get_null_bit(std::shared_ptr<array_info> in_col,
+                                    std::shared_ptr<array_info> dict_indices,
+                                    size_t i) {
+        return dict_indices->get_null_bit(i);
+    }
+    inline static int32_t get_offset_idx(
+        std::shared_ptr<array_info> dict_indices, size_t i) {
+        return getv<int32_t>(dict_indices, i);
+    }
+};
+
+template <>
+struct listagg_utils<false> {
+    inline static void get_data_and_offsets(
+        const std::shared_ptr<array_info> in_col, char** data_in_ptr,
+        offset_t** offsets_in_ptr,
+        std::shared_ptr<array_info>* dict_indices_ptr) {
+        *data_in_ptr = in_col->data1();
+        *offsets_in_ptr = (offset_t*)in_col->data2();
+    }
+    inline static bool get_null_bit(std::shared_ptr<array_info> in_col,
+                                    std::shared_ptr<array_info> dict_indices,
+                                    size_t i) {
+        return in_col->get_null_bit(i);
+    }
+    inline static int32_t get_offset_idx(
+        std::shared_ptr<array_info> dict_indices, size_t i) {
+        return i;
+    }
+};
+
+// Helper function that returns the order in which to traverse the data elements
+// in the input column for listagg update.
+// (This essentially returns an argsort)
+std::shared_ptr<array_info> get_traversal_order(
+    const std::shared_ptr<array_info> in_col,
+    const std::vector<bool> window_ascending,
+    const std::vector<std::shared_ptr<array_info>> orderby_cols,
+    const std::vector<bool> window_na_position) {
+    int64_t n_sort_keys = orderby_cols.size();
+    int64_t num_rows = in_col->length;
+
+    // Append an index column so we can find the original
+    // index in the out array.
+    std::shared_ptr<array_info> idx_arr =
+        alloc_numpy(num_rows, Bodo_CTypes::INT64);
+    for (int64_t i = 0; i < num_rows; i++) {
+        getv<int64_t>(idx_arr, i) = i;
+    }
+
+    if (n_sort_keys == 0) {
+        return idx_arr;
+    }
+
+    // Create a new table. We want to sort the table first by
+    // the groups and second by the orderby_arr.
+    std::shared_ptr<table_info> sort_table = std::make_shared<table_info>();
+
+    for (std::shared_ptr<array_info> orderby_arr : orderby_cols) {
+        sort_table->columns.push_back(orderby_arr);
+    }
+
+    sort_table->columns.push_back(idx_arr);
+
+    int64_t window_ascending_real[n_sort_keys];
+    int64_t window_na_position_real[n_sort_keys];
+
+    // Initialize the group ordering
+    // Ignore the value for the separator argument and data argument
+    // present at the beginning.
+    // (they are dummy values, required to get the rest of this to work)
+    for (int64_t i = 0; i < n_sort_keys; i++) {
+        window_ascending_real[i] = window_ascending[i + 2];
+        window_na_position_real[i] = window_na_position[i + 2];
+    }
+
+    // new initializes to 0
+    //  int64_t* dead_keys = std::vector<int64_t>(n_sort_keys + 1, 1).data();
+    std::vector<int64_t> dead_keys(n_sort_keys);
+    for (int64_t i = 0; i < n_sort_keys; i++) {
+        // Mark all keys as dead.
+        dead_keys[i] = 1;
+    }
+    // Sort the table
+    // XXX: We don't need the entire chunk of data sorted,
+    // just the final column. We could do a partial sort to avoid
+    // the overhead of sorting the orderby columns in the future.
+    std::shared_ptr<table_info> iter_table =
+        sort_values_table_local(sort_table, n_sort_keys, window_ascending_real,
+                                window_na_position_real, dead_keys.data(),
+                                // TODO: set this correctly
+                                false /* This is just used for tracing */);
+    // All keys are dead so the sorted_idx is column 0.
+    std::shared_ptr<array_info> sorted_idx = iter_table->columns[0];
+    return sorted_idx;
+}
+
+/**
+ * Helper function that does the bulk of the work of update for listagg. The
+ * high level algorithm is as follows: 0. Find the expected order of the input
+ * array (used to traverse the input array in the final step)
+ * 1. Find the expected length of each output string (one output string for each
+ * group)
+ * 2. Determine the offsets of each output string (used to set the offsets of
+ * the output string array)
+ * 3. Allocate the output array, and set the offsets accordingly.
+ * 4. Traverse the input array, copying the data + separator into the output
+ * array. The traversal order of the input array is dependent on the order
+ * obtained in step 0
+ */
+template <bool is_dict>
+void listagg_update_helper(
+    const std::vector<grouping_info>& grp_infos,
+    const std::shared_ptr<array_info>& in_col,
+    const std::vector<std::shared_ptr<array_info>>& update_cols,
+    const std::vector<bool>& window_ascending,
+    const std::vector<std::shared_ptr<array_info>>& orderby_cols,
+    const std::vector<bool>& window_na_position,
+    const std::string listagg_sep) {
+    const grouping_info grp_info = grp_infos.at(0);
+    const size_t listagg_sep_len = listagg_sep.length();
+    const size_t num_groups = grp_info.num_groups;
+
+    // Handle the dict/str cases
+    // These two arguments are initialized in both cases
+    char* data_in = nullptr;
+    offset_t* offsets_in = nullptr;
+    // dict_indices is only used for dict array, uninitialized in string case
+    std::shared_ptr<array_info> dict_indices = nullptr;
+
+    listagg_utils<is_dict>::get_data_and_offsets(in_col, &data_in, &offsets_in,
+                                                 &dict_indices);
+
+    //----------Step 0, find the traversal order of the input array----------
+    std::shared_ptr<array_info> traversal_order = get_traversal_order(
+        in_col, window_ascending, orderby_cols, window_na_position);
+
+    //----------Step 1, Find the expected length of each output string----------
+
+    // This variable is confusingly named. During step 1, it will contain
+    // the length values for each output string. In step 2,
+    // we will re-use this array to store the offsets for each output string
+    // num_groups + 1 is needed to store the final offset value, but is unused
+    // during step 1
+    // In the final step, we will use this array to store the offsets of the
+    // current end of each of the output strings.
+    bodo::vector<offset_t> str_offsets(num_groups + 1, 0);
+
+    // Initialize bool array to False
+    bodo::vector<bool> seen_non_nulls = bodo::vector<bool>(num_groups, false);
+
+    // First, we need to figure out the length of each of the output strings
+    // for each group we store this information in str_offsets
+    for (size_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = grp_info.row_to_group[i];
+
+        if (i_grp == -1) {
+            continue;
+        }
+
+        bool null_bit =
+            listagg_utils<is_dict>::get_null_bit(in_col, dict_indices, i);
+
+        if (null_bit) {
+            int32_t offsets_idx =
+                listagg_utils<is_dict>::get_offset_idx(dict_indices, i);
+
+            offset_t len =
+                offsets_in[offsets_idx + 1] - offsets_in[offsets_idx];
+
+            // seen_non_nulls[i_grp]
+            if (seen_non_nulls[i_grp]) {
+                // if this is not the first string in the group, we need to
+                // add the separator length to the length of the string
+                len += listagg_sep_len;
+            }
+            seen_non_nulls[i_grp] = true;
+            str_offsets[i_grp + 1] += len;
+        }
+    }
+
+    //----------Step 2, Determine the offsets of each output string----------
+
+    // Convert the length information into the actual offset information
+    // y computing the sum of each prefix of the lengths
+    std::partial_sum(str_offsets.begin(), str_offsets.end(),
+                     str_offsets.begin());
+
+    size_t total_output_size = str_offsets[num_groups];
+
+    //----------Step 3, Allocate the output array, and set the offsets
+    // accordingly----------
+    std::shared_ptr<array_info> real_out_arr = alloc_string_array(
+        Bodo_CTypes::CTypeEnum::STRING, num_groups, total_output_size, 0);
+    char* data_out = real_out_arr->data1();
+
+    offset_t* offsets_out = (offset_t*)real_out_arr->data2();
+
+    // Set null bits for the groups that have no non-null values
+    for (size_t i = 0; i < num_groups; i++) {
+        if (!seen_non_nulls[i]) {
+            real_out_arr->set_null_bit(i, false);
+        }
+    }
+
+    // copy to the output offset array
+    // This should be num_groups + 1. If you look inside the allocate,
+    // string function, the allocated offset length is 1+number of strings.
+    // The last element should be the offset of the end of the last string.
+    memcpy(offsets_out, str_offsets.data(),
+           (num_groups + 1) * sizeof(offset_t));
+
+    //----------Step 4, Traverse the input array, copying the data + separator
+    // into the output array.----------
+
+    const char* listagg_sep_c_str = listagg_sep.c_str();
+
+    // Initialize bool array to False
+    // Used to track if we should insert the separator string or not
+    bodo::vector<bool> seen_non_nulls_2 = bodo::vector<bool>(num_groups, false);
+
+    // copy characters to output
+    for (size_t j = 0; j < in_col->length; j++) {
+        size_t i = getv<int64_t>(traversal_order, j);
+
+        int64_t i_grp = grp_info.row_to_group[i];
+        bool null_bit =
+            listagg_utils<is_dict>::get_null_bit(in_col, dict_indices, i);
+
+        // NOTE: i_grp != -1  can happen when the group key is null and,
+        // we still want to do group operation on it (i.e.
+        // groupby(dropna=False))
+        if ((i_grp != -1) && null_bit) {
+            int32_t offsets_idx =
+                listagg_utils<is_dict>::get_offset_idx(dict_indices, i);
+
+            offset_t input_string_len =
+                offsets_in[offsets_idx + 1] - offsets_in[offsets_idx];
+
+            if (seen_non_nulls_2[i_grp]) {
+                // if this is not the first string in the group, we need to
+                // add the separator the output string string
+
+                memcpy(&data_out[str_offsets[i_grp]], listagg_sep_c_str,
+                       listagg_sep_len);
+                memcpy(&data_out[str_offsets[i_grp] + listagg_sep_len],
+                       data_in + offsets_in[offsets_idx], input_string_len);
+
+                str_offsets[i_grp] += input_string_len + listagg_sep_len;
+            } else {
+                memcpy(&data_out[str_offsets[i_grp]],
+                       data_in + offsets_in[offsets_idx], input_string_len);
+                str_offsets[i_grp] += input_string_len;
+            }
+            seen_non_nulls_2[i_grp] = true;
+        }
+    }
+
+    std::shared_ptr<array_info> out_col = update_cols[0];
+    *out_col = std::move(*real_out_arr);
+}
+
+void ListAggColSet::update(const std::vector<grouping_info>& grp_infos) {
+    if (this->combine_step) {
+        throw std::runtime_error(
+            "Internal error in ListAggColSet::update: listAgg must always "
+            "shuffle before update");
+    } else {
+        if (grp_infos.size() != 1) {
+            throw new std::runtime_error(
+                "Internal error in ListAggColSet::update: grp_infos length "
+                "does not equal 1. Each ListAggColSet should handle only one "
+                "group");
+        }
+        if (in_col->arr_type == bodo_array_type::arr_type_enum::STRING) {
+            listagg_update_helper<false>(
+                grp_infos, this->in_col, this->update_cols,
+                this->window_ascending, this->orderby_cols,
+                this->window_na_position, this->listagg_sep);
+        } else if (in_col->arr_type == bodo_array_type::arr_type_enum::DICT) {
+            listagg_update_helper<true>(
+                grp_infos, this->in_col, this->update_cols,
+                this->window_ascending, this->orderby_cols,
+                this->window_na_position, this->listagg_sep);
+        } else {
+            throw std::runtime_error(
+                "Internal error in ListAggColSet::update: input "
+                "data column must be of type string or dict encoded string. "
+                "Found: " +
+                GetArrType_as_string(in_col->arr_type));
+        }
+    }
+}
+
+// Since we don't do combine, output column is always at update_cols[0]
+std::shared_ptr<array_info> ListAggColSet::getOutputColumn() {
+    std::shared_ptr<array_info> out_col = update_cols.at(0);
+    return out_col;
+}
+
+// ############################## Kurtosis ##############################
 
 KurtColSet::KurtColSet(std::shared_ptr<array_info> in_col, int ftype,
                        bool combine_step, bool use_sql_rules)
@@ -645,6 +1037,8 @@ void KurtColSet::combine(const grouping_info& grp_info) {
                  grp_info);
 }
 
+// ############################## UDF ##############################
+
 UdfColSet::UdfColSet(std::shared_ptr<array_info> in_col, bool combine_step,
                      std::shared_ptr<table_info> udf_table, int udf_table_idx,
                      int n_redvars, bool use_sql_rules)
@@ -715,6 +1109,8 @@ void UdfColSet::eval(const grouping_info& grp_info) {
     // from GroupbyPipeline once for all udf columns sets)
 }
 
+// ############################## GeneralUDF ##############################
+
 GeneralUdfColSet::GeneralUdfColSet(std::shared_ptr<array_info> in_col,
                                    std::shared_ptr<table_info> udf_table,
                                    int udf_table_idx, bool use_sql_rules)
@@ -741,6 +1137,8 @@ void GeneralUdfColSet::fill_in_columns(
     }
 }
 
+// ############################## Median ##############################
+
 MedianColSet::MedianColSet(std::shared_ptr<array_info> in_col, bool _skipna,
                            bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::median, false, use_sql_rules),
@@ -752,6 +1150,8 @@ void MedianColSet::update(const std::vector<grouping_info>& grp_infos) {
     median_computation(this->in_col, this->update_cols[0], grp_infos[0],
                        this->skipna, use_sql_rules);
 }
+
+// ############################## NUnique ##############################
 
 NUniqueColSet::NUniqueColSet(std::shared_ptr<array_info> in_col, bool _dropna,
                              std::shared_ptr<table_info> nunique_table,
@@ -788,6 +1188,8 @@ void NUniqueColSet::update(const std::vector<grouping_info>& grp_infos) {
     }
 }
 
+// ############################## CumOp ##############################
+
 CumOpColSet::CumOpColSet(std::shared_ptr<array_info> in_col, int ftype,
                          bool _skipna, bool use_sql_rules)
     : BasicColSet(in_col, ftype, false, use_sql_rules), skipna(_skipna) {}
@@ -815,6 +1217,8 @@ void CumOpColSet::update(const std::vector<grouping_info>& grp_infos) {
                            this->ftype, this->skipna);
 }
 
+// ############################## Shift ##############################
+
 ShiftColSet::ShiftColSet(std::shared_ptr<array_info> in_col, int ftype,
                          int64_t _periods, bool use_sql_rules)
     : BasicColSet(in_col, ftype, false, use_sql_rules), periods(_periods) {}
@@ -834,6 +1238,8 @@ void ShiftColSet::update(const std::vector<grouping_info>& grp_infos) {
     shift_computation(this->in_col, this->update_cols[0], grp_infos[0],
                       this->periods);
 }
+
+// ############################## Transform ##############################
 
 TransformColSet::TransformColSet(std::shared_ptr<array_info> in_col, int ftype,
                                  int _func_num, bool do_combine,
@@ -886,6 +1292,8 @@ void TransformColSet::eval(const grouping_info& grp_info) {
                           this->is_parallel);
 }
 
+// ############################## Head ##############################
+
 HeadColSet::HeadColSet(std::shared_ptr<array_info> in_col, int ftype,
                        bool use_sql_rules)
     : BasicColSet(in_col, ftype, false, use_sql_rules) {}
@@ -910,6 +1318,8 @@ void HeadColSet::update(const std::vector<grouping_info>& grp_infos) {
 void HeadColSet::set_head_row_list(bodo::vector<int64_t>& row_list) {
     head_row_list = row_list;
 }
+
+// ############################## Window ##############################
 
 WindowColSet::WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
                            int64_t _window_func, std::vector<bool>& _asc,
@@ -951,6 +1361,8 @@ void WindowColSet::update(const std::vector<grouping_info>& grp_infos) {
                        grp_infos[0], asc, na_pos, is_parallel, use_sql_rules);
 }
 
+// ############################## Ngroup ##############################
+
 NgroupColSet::NgroupColSet(std::shared_ptr<array_info> in_col,
                            bool _is_parallel, bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::ngroup, false, use_sql_rules),
@@ -986,9 +1398,11 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::shared_ptr<table_info> udf_table, int udf_table_idx,
     std::shared_ptr<table_info> nunique_table, bool use_sql_rules) {
     BasicColSet* colset;
-    if (ftype != Bodo_FTypes::window && in_cols.size() != 1) {
+
+    if ((ftype != Bodo_FTypes::window and ftype != Bodo_FTypes::listagg) &&
+        in_cols.size() != 1) {
         throw std::runtime_error(
-            "Only window functions can have multiple input "
+            "Only window functions and listagg can have multiple input "
             "columns");
     }
     switch (ftype) {
@@ -1060,6 +1474,18 @@ std::unique_ptr<BasicColSet> makeColSet(
             colset = new WindowColSet(in_cols, transform_func, window_ascending,
                                       window_na_position, is_parallel,
                                       use_sql_rules);
+            break;
+        case Bodo_FTypes::listagg:
+
+            colset = new ListAggColSet(
+                // data column
+                in_cols[0],
+                // separator column
+                in_cols[1],
+                // Remaining columns are the columns to order by
+                std::vector<std::shared_ptr<array_info>>(in_cols.begin() + 2,
+                                                         in_cols.end()),
+                window_ascending, window_na_position);
             break;
         default:
             colset =

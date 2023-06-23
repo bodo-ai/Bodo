@@ -1,8 +1,8 @@
 package com.bodosql.calcite.application.Utils;
 
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
-
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.ir.Expr;
+import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -150,6 +150,20 @@ public class AggHelpers {
   }
 
   /**
+   * @param aggCallList List of aggregations
+   * @return Is any column contain a call to listagg
+   */
+  public static boolean aggContainsListagg(List<AggregateCall> aggCallList) {
+
+    for (int i = 0; i < aggCallList.size(); i++) {
+      if (aggCallList.get(i).getAggregation().kind == SqlKind.LISTAGG) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Return the name of the function/method used by count.
    *
    * @param a The aggregate count call
@@ -173,22 +187,19 @@ public class AggHelpers {
   /**
    * Function that generate the code to create the proper group by.
    *
+   * @param inVar DataFrame variable on which to perform the groupby
    * @param inputColumnNames All possible input columns
    * @param groups The groups for the group by.
    * @return The code generated for the group by.
    */
-  public static String generateGroupByCall(List<String> inputColumnNames, List<Integer> groups) {
-    StringBuilder groupbyBuilder = new StringBuilder();
-    List<String> groupList = new ArrayList<>();
+  public static Expr generateGroupByCall(
+      Variable inVar, List<String> inputColumnNames, List<Integer> groups) {
+    List<Expr.StringLiteral> groupList = new ArrayList<>();
     for (int i : groups) {
       String columnName = inputColumnNames.get(i);
-      groupList.add(makeQuoted(columnName));
+      groupList.add(new Expr.StringLiteral(columnName));
     }
-    // Generate the Group By section
-    groupbyBuilder
-        .append(".groupby(")
-        .append(groupList)
-        .append(", as_index=False, dropna=False, _is_bodosql=True)");
-    return groupbyBuilder.toString();
+
+    return new Expr.Groupby(inVar, new Expr.List(groupList), false, false);
   }
 }

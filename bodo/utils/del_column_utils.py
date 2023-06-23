@@ -8,6 +8,7 @@ from typing import Dict, Tuple
 from numba.core import ir, types
 
 from bodo.hiframes.table import TableType
+from bodo.utils.typing import is_overload_none
 
 # This must contain all table functions that can
 # "use" a column. This is used by helper functions
@@ -82,8 +83,11 @@ def get_table_used_columns(
         if "used_cols" in kws:
             used_cols_var = kws["used_cols"]
             used_cols_typ = typemap[used_cols_var.name]
-            used_cols_typ = used_cols_typ.instance_type
-            return set(used_cols_typ.meta)
+            # Double check that someone didn't manually specify
+            # "none" for used_cols.
+            if not is_overload_none(used_cols_typ):
+                used_cols_typ = used_cols_typ.instance_type
+                return set(used_cols_typ.meta)
     elif fdef == ("table_concat", "bodo.utils.table_utils"):
         # Table concat passes the column numbers meta type
         # as argument 1.
