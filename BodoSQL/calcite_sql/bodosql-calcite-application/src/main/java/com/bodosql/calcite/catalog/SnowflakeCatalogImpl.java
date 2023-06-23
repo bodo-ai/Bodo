@@ -90,6 +90,12 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   // Maximum amount of time we are going to wait between retries
   private static final int maxBackoffMilliseconds = 2000;
 
+  // Default value for WEEK_START
+  private static final int defaultWeekStart = 0;
+
+  // Default value for WEEK_OF_YEAR_POLICY
+  private static final int defaultWeekOfYearPolicy = 0;
+
   private @Nullable static BodoTZInfo sfTZInfo;
 
   private @Nullable Integer weekStart;
@@ -136,13 +142,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       this.sfTZInfo = new BodoTZInfo(accountInfo.getProperty("TIMEZONE"), "str");
     }
 
-    if (accountInfo.contains("WEEK_START")) {
-      this.weekStart = parseSnowflakeIntegerParam("WEEK_START");
-    }
-
-    if (accountInfo.contains("WEEK_OF_YEAR_POLICY")) {
-      this.weekOfYearPolicy = parseSnowflakeIntegerParam("WEEK_OF_YEAR_POLICY");
-    }
+    this.weekStart = parseIntegerProperty(accountInfo,"WEEK_START", defaultWeekStart);
+    this.weekOfYearPolicy = parseIntegerProperty(accountInfo,"WEEK_OF_YEAR_POLICY", defaultWeekOfYearPolicy);
   }
 
   /**
@@ -210,19 +211,31 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * Parse a Snowflake Session parameter into an Integer.
    *
    * @param paramName The name of the parameter to fetch.
+   * @param defaultValue The default value of the parameter if it is not found.
    * @return The value of the parameter as an Integer.
    * @throws RuntimeException An exception occurs parsing the parameter string to an Integer.
    */
-  private Integer parseSnowflakeIntegerParam(String paramName) throws RuntimeException {
-    Integer result = 0;
-    if (accountInfo.contains(paramName)) {
-      String paramStr = accountInfo.getProperty(paramName);
-      if (paramStr != null) {
-        try {
-          result = Integer.parseInt(paramStr);
-        } catch (NumberFormatException e) {
-          throw new RuntimeException("Unable to parse snowflake session variable " + paramName, e);
-        }
+  private Integer parseSnowflakeIntegerParam(String paramName, Integer defaultValue) throws RuntimeException {
+    Integer result = defaultValue;
+    String paramStr = accountInfo.getProperty(paramName);
+    if (paramStr != null) {
+      try {
+        result = Integer.valueOf(paramStr);
+      } catch (NumberFormatException e) {
+        throw new RuntimeException("Unable to parse snowflake session variable " + paramName, e);
+      }
+    }
+    return result;
+  }
+
+  private Integer parseIntegerProperty(Properties accountInfo, String propertyName, Integer defaultValue) throws RuntimeException {
+    Integer result = defaultValue;
+    String propertyValueStr = accountInfo.getProperty(propertyName);
+    if (propertyValueStr != null) {
+      try {
+        result = Integer.valueOf(propertyValueStr);
+      } catch (NumberFormatException e) {
+        throw new RuntimeException("Unable to parse snowflake session variable " + propertyName, e);
       }
     }
     return result;
@@ -251,7 +264,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   private Integer getSnowflakeWeekStart(boolean shouldRetry) throws SQLException {
     if (weekStart == null) {
-      weekStart = parseSnowflakeIntegerParam("WEEK_START");
+      weekStart = parseSnowflakeIntegerParam("WEEK_START", defaultWeekStart);
     }
     return weekStart;
   }
@@ -263,7 +276,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   private Integer getSnowflakeWeekOfYearPolicy(boolean shouldRetry) throws SQLException {
     if (weekOfYearPolicy == null) {
-      weekOfYearPolicy = parseSnowflakeIntegerParam("WEEK_OF_YEAR_POLICY");
+      weekOfYearPolicy = parseSnowflakeIntegerParam("WEEK_OF_YEAR_POLICY", defaultWeekOfYearPolicy);
     }
     return weekOfYearPolicy;
   }
@@ -741,20 +754,27 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
 
   @Override
   public @Nullable Integer getWeekStart() {
-    try {
-      return getSnowflakeWeekStart(true);
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
+    if (this.weekStart == null) {
+      try {
+        this.weekStart = getSnowflakeWeekStart(true);
+      } catch (SQLException e) {
+        throw new RuntimeException(e);
+      }
     }
+
+    return this.weekStart;
   }
 
   @Override
   public @Nullable Integer getWeekOfYearPolicy() {
-    try {
-      return getSnowflakeWeekOfYearPolicy(true);
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
+    if (this.weekOfYearPolicy == null) {
+      try {
+        this.weekOfYearPolicy = getSnowflakeWeekOfYearPolicy(true);
+      } catch (SQLException e) {
+        throw new RuntimeException(e);
+      }
     }
+    return this.weekOfYearPolicy;
   }
 
   /**

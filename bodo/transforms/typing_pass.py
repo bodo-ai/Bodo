@@ -2269,6 +2269,42 @@ class TypingTransforms:
                 )
                 return (col_name, fdef[0], args[1])
 
+            if is_bodosql_array_kernel and fdef[0] in (
+                "dayofweek",
+                "weekofyear",
+                "week",
+                "yearofweek"
+            ):  # pragma: no cover
+                bodosql_kernel_name = fdef[0]
+                require(bodosql_kernel_name in supported_funcs_map)
+
+                if bodosql_kernel_name not in supported_arrow_funcs_map:
+                    require(
+                        isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+                        and read_node.db_type in ("snowflake", "iceberg")
+                    )
+
+                args = var_def.args
+
+                col_name = self._get_col_name(
+                    args[0], df_var, df_col_names, func_ir, read_node, new_ir_assigns
+                )
+
+                expr_value = ir.Const(None, var_def.loc)
+                new_name = mk_unique_var("dummy_var")
+
+                new_var = ir.Var(ir.Scope(None, var_def.loc), new_name, var_def.loc)
+                new_assign = ir.Assign(
+                    target=new_var, value=expr_value, loc=var_def.loc
+                )
+                # Append the assign so we update the IR.
+                new_ir_assigns.append(new_assign)
+                # Update the definitions. This is safe since the name is unique.
+                func_ir._definitions[new_name] = [expr_value]
+
+                return (col_name, bodosql_kernel_name, new_var)
+
+
             # All other BodoSQL functions
             if is_bodosql_array_kernel and not var_def.kws:  # pragma: no cover
                 bodosql_kernel_name = fdef[0]
