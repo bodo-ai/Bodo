@@ -97,6 +97,7 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     gen_getitem,
+    get_const_or_build_tuple_of_consts,
     is_assign,
     is_call_assign,
     is_expr,
@@ -279,12 +280,21 @@ supported_agg_funcs = [
     "bitand_agg",
     "bitxor_agg",
     "count_if",
+    "listagg",
     "udf",
     "gen_udf",
     "window",
     "row_number",
     "min_row_number_filter",
 ]
+
+# This is just a list of the functions that can be used with
+# bodo.utils.utils.ExtendedNamedAgg. Any function in this list
+# should also be incldueded in supported_agg_funcs
+supported_extended_agg_funcs = [
+    "listagg",
+]
+
 # Currently supported operations with transform
 supported_transform_funcs = [
     "no_op",
@@ -319,6 +329,14 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         - The list can contain functions and list of functions, meaning
           that for each input column, a single function or list of
           functions can be applied.
+
+    For pd.NamedAggs, rhs is a tuple containing the assigned column name,
+    and the pd.NamedAgg/ExtendedAgg value. For example,
+    in df.groupby("A").agg(New_B=pd.NamedAgg("B", "sum")), rhs is
+    ("new_b", pd.NamedAgg("B", "sum")) (as the relevant numba types).
+
+    For all other cases, it is the the full RHS of whatever operation is
+    called on the groupby object.
     """
     if func_name == "no_op":
         raise BodoError("Unknown aggregation function used in groupby.")
@@ -348,6 +366,21 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.fname = func_name
         func.ncols_pre_shuffle = 4
         func.ncols_post_shuffle = 5
+        return func
+    elif func_name == "listagg":
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        func.ncols_pre_shuffle = 1
+        func.ncols_post_shuffle = 1
+
+        (
+            func.listagg_sep,
+            func.orderby,
+            func.ascending,
+            func.na_position_b,
+        ) = handle_listagg_additional_args(func_ir, rhs)
+
         return func
     elif func_name == "kurtosis":
         func = pytypes.SimpleNamespace()
@@ -531,16 +564,22 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
 
     # NamedAgg case
     if agg_func_typ == types.none:
-        return [
-            get_agg_func_udf(
+        out_list = []
+
+        for i in range(len(rhs.kws)):
+            f_val_name = rhs.kws[i][1].name
+            f_val_name_literal = get_literal_value(typemap[f_val_name])[1]
+            namedaggCall = rhs.kws[i]
+
+            udf = get_agg_func_udf(
                 func_ir,
-                get_literal_value(typemap[f_val.name])[1],
-                rhs,
+                f_val_name_literal,
+                namedaggCall,
                 series_type,
                 typemap,
             )
-            for f_val in kws.values()
-        ]
+            out_list.append(udf)
+        return out_list
 
     # multi-function tuple case
     if isinstance(agg_func_typ, types.BaseTuple) or is_overload_constant_list(
@@ -596,7 +635,16 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
 
 
 def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
-    """get udf value for agg call"""
+    """get udf value for agg call.
+
+    For pd.NamedAggs, rhs is a tuple containing the assigned column name,
+    and the pd.NamedAgg/ExtendedAgg value. For example,
+    in df.groupby("A").agg(New_B=pd.NamedAgg("B", "sum")), rhs is
+    ("new_b", pd.NamedAgg("B", "sum")) (as the relevant numba types).
+
+    For all other cases, it is the the full RHS of whatever operation is
+    called on the groupby object.
+    """
     if isinstance(f_val, str):
         return get_agg_func(func_ir, f_val, rhs, series_type, typemap)
     if bodo.utils.typing.is_builtin_function(f_val):
@@ -653,6 +701,55 @@ def _get_const_agg_func(func_typ, func_ir):
         return agg_func
 
     return agg_func
+
+
+def handle_listagg_additional_args(func_ir, outcol_and_namedagg):
+    """
+    Extract additional arguments for the listagg function.
+
+    In this case, outcol_and_namedagg is a tuple containing the assigned column name,
+    and the pd.NamedAgg/ExtendedAgg value. For example,
+    in df.groupby("A").agg(New_B=pd.NamedAgg("B", "sum")), outcol_and_namedagg is
+    ("new_b", pd.NamedAgg("B", "sum")) (as the relevant numba types).
+
+    """
+    additional_args_values = extract_extendedagg_additional_args_tuple(
+        func_ir, outcol_and_namedagg
+    )
+
+    assert isinstance(
+        additional_args_values[0], (ir.Global, ir.FreeVar, ir.Const)
+    ), "Internal error in handle_listagg_additional_args: listagg_sep should be a constant value"
+    listagg_sep = additional_args_values[0].value
+    orderby = get_const_or_build_tuple_of_consts(additional_args_values[1])
+    ascending = list(get_const_or_build_tuple_of_consts(additional_args_values[2]))
+    na_position_b = [
+        na_pos == "last"
+        for na_pos in get_const_or_build_tuple_of_consts(additional_args_values[3])
+    ]
+    return listagg_sep, orderby, ascending, na_position_b
+
+
+def extract_extendedagg_additional_args_tuple(func_ir, outcol_and_namedagg):
+    """
+    Takes the output column + ExtendedNamedAgg call.
+    extracts the values of the arguments in the additional args tuple,
+    returning a list of variables. There will
+    be a variable number of arguments in the additional args tuple, depending on which
+    specific function is being called.
+    """
+
+    assert (
+        len(outcol_and_namedagg) == 2
+    ), "bodo extended agg tuple should have 2 values (Output column name), and the additional arguments"
+
+    named_agg_args = guard(get_definition, func_ir, outcol_and_namedagg[1]).items
+    extended_args_list = guard(get_definition, func_ir, named_agg_args[2]).items
+
+    out_list = []
+    for item in extended_args_list:
+        out_list.append(guard(get_definition, func_ir, item))
+    return out_list
 
 
 # type(dtype) is called by np.full (used in agg_typer)
@@ -1456,7 +1553,9 @@ def gen_update_cb(
                 col_offset += f.n_redvars + 1
                 data_in_typs.append(data_in_typs_[func_idx_to_in_col[i]])
                 in_col_offsets.append(func_idx_to_in_col[i] + n_keys)
-    assert len(redvar_offsets) == n_red_vars
+    assert (
+        len(redvar_offsets) == n_red_vars
+    ), "Internal error: redvar offsets lenth does not match number of redvars"
 
     # get input data types
     n_data_cols = len(data_in_typs)
@@ -1867,7 +1966,7 @@ def gen_top_level_agg_func(
         func_offsets.append(len(allfuncs))
         ascending = [False] * num_in_cols
         na_position = [False] * num_in_cols
-        if func.ftype in {"median", "nunique", "ngroup"}:
+        if func.ftype in {"median", "nunique", "ngroup", "listagg"}:
             # these operations require shuffle at the beginning, so a
             # local aggregation followed by combine is not necessary
             do_combine = False
@@ -1886,6 +1985,12 @@ def gen_top_level_agg_func(
             do_combine = False  # See median/nunique note ^
             ascending = func.ascending
             na_position = func.na_position_b
+        if func.ftype == "listagg":
+            do_combine = False  # See median/nunique note ^
+            # length of ascending/na_position should be the same as the number of input columns passed to groupby_and_aggregate
+            # Therefore, we add two extra columns to account for the listagg_sep column, and the data argument
+            ascending = [False, False] + func.ascending
+            na_position = [False, False] + func.na_position_b
 
         # Update the current window_ascending and window_na_position
         window_ascending.extend(ascending)
@@ -2062,6 +2167,7 @@ def gen_top_level_agg_func(
     n_shuffle_keys = (
         agg_node._num_shuffle_keys if agg_node._num_shuffle_keys != -1 else n_keys
     )
+
     func_text += (
         f"    out_table = groupby_and_aggregate(table, {n_keys}, cols_per_func.ctypes, "
         f"{len(allfuncs)}, {agg_node.input_has_index}, ftypes.ctypes, func_offsets.ctypes, "
@@ -2098,12 +2204,9 @@ def gen_top_level_agg_func(
         idx += 1
 
     # Index is always stored last
-    dead_out_index = False
     if agg_node.same_index:
         if agg_node.out_vars[-1] is not None:
             out_cpp_col_inds.append(agg_node.n_out_cols - 1)
-        else:
-            dead_out_index = True
 
     # NOTE: cpp_table_to_py_data() needs a type for all logical arrays (even if None)
     # out_cpp_col_inds determines what arrays are dead

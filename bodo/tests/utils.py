@@ -866,6 +866,10 @@ def sort_dataframe_values_index(df):
 
     eName = "index123"
     list_col_names = df.columns.to_list() + [eName]
+    if None in list_col_names:
+        raise RuntimeError(
+            "Testing error in sort_dataframe_values_index: None in column names"
+        )
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
 
 

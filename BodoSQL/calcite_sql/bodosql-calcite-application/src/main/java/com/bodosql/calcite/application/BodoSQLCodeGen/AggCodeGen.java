@@ -1,5 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getAscendingExpr;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getNAPositionStringLiteral;
 import static com.bodosql.calcite.application.Utils.AggHelpers.generateGroupByCall;
 import static com.bodosql.calcite.application.Utils.AggHelpers.getCountCall;
 import static com.bodosql.calcite.application.Utils.AggHelpers.getDummyColName;
@@ -17,6 +19,7 @@ import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.util.Pair;
@@ -39,12 +42,25 @@ public class AggCodeGen {
 
   static HashMap<String, String> equivalentHelperFnMap;
 
+  // Functions which are supported exclusively through
+  // bodo.utils.utils.ExtendedNamedAgg
+  // For context,
+  // Most aggregations are handled via pd.NamedAgg, which allows for specifying one input
+  // column.
+  // However, several aggregations require additional arguments beyond just a single operating
+  // column.
+  // For these aggregations, we use bodo.utils.utils.ExtendedNamedAgg, which takes an additional
+  // tuple
+  // of arguments
+  static HashMap<String, String> equivalentExtendedNamedAggAggregates;
+
   static {
     equivalentPandasMethodMap = new HashMap<>();
     equivalentNumpyFuncMap = new HashMap<>();
     equivalentPandasNameMethodMap = new HashMap<>();
     equivalentNumpyFuncNameMap = new HashMap<>();
     equivalentHelperFnMap = new HashMap<>();
+    equivalentExtendedNamedAggAggregates = new HashMap<>();
 
     equivalentPandasMethodMap.put(SqlKind.SUM, "sum");
     equivalentPandasMethodMap.put(SqlKind.SUM0, "sum");
@@ -80,6 +96,8 @@ public class AggCodeGen {
     equivalentHelperFnMap.put(
         "SINGLE_VALUE", "bodo.libs.bodosql_array_kernels.ensure_single_value");
     equivalentHelperFnMap.put("APPROX_PERCENTILE", "approx_percentile");
+
+    equivalentExtendedNamedAggAggregates.put("LISTAGG", "listagg");
   }
 
   /**
@@ -310,10 +328,9 @@ public class AggCodeGen {
       List<AggregateCall> aggCallList,
       final List<String> aggCallNames) {
     StringBuilder aggString = new StringBuilder();
-    aggString.append(inVar.emit());
 
     // Generate the Group By section
-    aggString.append(generateGroupByCall(inputColumnNames, group));
+    aggString.append(generateGroupByCall(inVar, inputColumnNames, group).emit());
 
     /*
      * create the corresponding aggregation string using named aggregate syntax with tuples.
@@ -348,13 +365,28 @@ public class AggCodeGen {
         throw new BodoSQLCodegenException("APPROX_PERCENTILE not supported with Group By yet");
       }
 
-      aggString
-          .append(tempName)
-          .append("=pd.NamedAgg(column=")
-          .append(makeQuoted(aggCol))
-          .append(", aggfunc=")
-          .append(aggFunc)
-          .append("),");
+      // Most aggregations are handled via pd.NamedAgg, some are handled by ExtendedNamedAgg.
+      // See the comment for equivalentExtendedNamedAggAggregates for more info.
+      if (!equivalentExtendedNamedAggAggregates.containsKey(a.getAggregation().getName())) {
+        aggString
+            .append(tempName)
+            .append("=pd.NamedAgg(column=")
+            .append(makeQuoted(aggCol))
+            .append(", aggfunc=")
+            .append(aggFunc)
+            .append("),");
+      } else {
+        Expr additionalArgs = getAdditionalArgs(a, inputColumnNames);
+        aggString
+            .append(tempName)
+            .append("=bodo.utils.utils.ExtendedNamedAgg(column=")
+            .append(makeQuoted(aggCol))
+            .append(", aggfunc=")
+            .append(aggFunc)
+            .append(", additional_args=")
+            .append(additionalArgs.emit())
+            .append("),");
+      }
     }
     aggString.append(")");
     if (renamedAggColumns.size() > 0) {
@@ -363,6 +395,64 @@ public class AggCodeGen {
       aggString.append(", copy=False)");
     }
     return new Expr.Raw(aggString.toString());
+  }
+
+  /**
+   * Helper function that handles creating the additional_args tuple to pass to
+   * bodo.utils.utils.ExtendedNamedAgg.
+   *
+   * @param agg Aggregate call in question (must be in equivalentExtendedNamedAggAggregates)
+   * @param inputColumnNames The column names to the input dataframe.
+   * @return An expr to be used for the additional_args keyword argument of
+   *     bodo.utils.utils.ExtendedNamedAgg.
+   */
+  static Expr getAdditionalArgs(AggregateCall agg, List<String> inputColumnNames) {
+    SqlKind kind = agg.getAggregation().getKind();
+    assert equivalentExtendedNamedAggAggregates.containsKey(kind.name());
+    List<Integer> argsList = agg.getArgList();
+    List<Expr> additionalArgsList = new ArrayList<>();
+    switch (kind) {
+      case LISTAGG:
+        if (argsList.size() == 1) {
+          throw new BodoSQLCodegenException(
+              "Internal error in getAdditionalArgs: Listagg should be unconditionally converted to"
+                  + " two argument form in ListAggOptionalReplaceRule.java");
+        } else {
+          assert argsList.size() == 2;
+          Expr.StringLiteral colName =
+              new Expr.StringLiteral(inputColumnNames.get(argsList.get(1)));
+          additionalArgsList.add(colName);
+        }
+
+        if (agg.collation != null) {
+          // If the collation exists, populate the relevant fields
+
+          List<Expr.StringLiteral> orderbyList = new ArrayList<>();
+          List<Expr.BooleanLiteral> ascendingList = new ArrayList<>();
+          List<Expr.StringLiteral> nullDirList = new ArrayList<>();
+
+          for (int i = 0; i < agg.collation.getFieldCollations().size(); i++) {
+            RelFieldCollation curCollation = agg.collation.getFieldCollations().get(i);
+            orderbyList.add(
+                new Expr.StringLiteral(inputColumnNames.get(curCollation.getFieldIndex())));
+            ascendingList.add(getAscendingExpr(curCollation.direction));
+            nullDirList.add(getNAPositionStringLiteral(curCollation.nullDirection));
+          }
+          additionalArgsList.add(new Expr.Tuple(orderbyList));
+          additionalArgsList.add(new Expr.Tuple(ascendingList));
+          additionalArgsList.add(new Expr.Tuple(nullDirList));
+        } else {
+          // Otherwise, just add empty tuples
+          for (int i = 0; i < 3; i++) {
+            additionalArgsList.add(new Expr.Tuple());
+          }
+        }
+
+        return new Expr.Tuple(additionalArgsList);
+      default:
+        throw new BodoSQLCodegenException(
+            "Internal error in getAdditionalArgs: " + kind.toString() + "not handled");
+    }
   }
 
   /**
@@ -499,9 +589,7 @@ public class AggCodeGen {
     StringBuilder applyString = new StringBuilder();
 
     // Generate the actual group call
-    applyString.append(inVar.emit());
-    // Generate the Group By section
-    applyString.append(generateGroupByCall(inputColumnNames, group));
+    applyString.append(generateGroupByCall(inVar, inputColumnNames, group).emit());
     // Add the columns from the apply
     // Generate the apply call
     applyString.append(".apply(").append(funcVar.getName()).append(")");
@@ -530,6 +618,8 @@ public class AggCodeGen {
       return new Pair<>(equivalentNumpyFuncNameMap.get(name), false);
     } else if (equivalentHelperFnMap.containsKey(name)) {
       return new Pair<>(equivalentHelperFnMap.get(name), false);
+    } else if (equivalentExtendedNamedAggAggregates.containsKey(name)) {
+      return new Pair<>(equivalentExtendedNamedAggAggregates.get(name), false);
     } else {
       throw new BodoSQLCodegenException(
           "Unsupported Aggregate Function, "

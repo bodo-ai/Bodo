@@ -28,6 +28,7 @@ import static com.bodosql.calcite.application.JoinCondVisitor.getStreamingJoinKe
 import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitNonEquiConditions;
 import static com.bodosql.calcite.application.Utils.AggHelpers.aggContainsFilter;
+import static com.bodosql.calcite.application.Utils.AggHelpers.aggContainsListagg;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.integerLiteralArange;
 import static com.bodosql.calcite.application.Utils.Utils.isSnowflakeCatalogTable;
@@ -1401,8 +1402,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       final List<AggregateCall> aggCallList = node.getAggCallList();
 
       // Expected output column names according to the calcite plan, contains any/all of the
-      // expected
-      // aliases
+      // expected aliases
 
       List<String> aggCallNames = new ArrayList<>();
       for (int i = 0; i < aggCallList.size(); i++) {
@@ -1547,8 +1547,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
       List<Integer> group) {
 
     Pair<Expr, Op> exprAndAdditionalGeneratedCode;
+
     if (aggContainsFilter(aggCallList)) {
       // If we have a Filter we need to generate a groupby apply
+      if (aggContainsListagg(aggCallList)) {
+        throw new BodoSQLCodegenException(
+            "Cannot handle calls to listAgg alongside aggregation calls that contain filters.");
+      }
+
       exprAndAdditionalGeneratedCode =
           generateApplyCodeWithGroupBy(
               inVar,
@@ -1559,10 +1565,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
               this.genGroupbyApplyAggFnVar());
 
     } else {
+
       // Otherwise generate groupby.agg
-      Expr groupbyExpr =
+      Expr output =
           generateAggCodeWithGroupBy(inVar, inputColumnNames, group, aggCallList, aggCallNames);
-      exprAndAdditionalGeneratedCode = new Pair<>(groupbyExpr, null);
+
+      exprAndAdditionalGeneratedCode = new Pair<>(output, null);
     }
 
     return exprAndAdditionalGeneratedCode;

@@ -2,6 +2,8 @@
 """
 Test correctness of SQL aggregation operations with groupby on BodoSQL
 """
+import string
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -1333,4 +1335,116 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
         expected_output=answer,
         check_names=False,
         check_dtype=False,
+    )
+
+
+@pytest.fixture()
+def listagg_data():
+    """When doing listagg without any grouping, the order is completely random.
+    Therefore, to avoid situations, we include several columns for which the
+    value is always the same per group.
+    """
+    return {
+        "table1": pd.DataFrame(
+            {
+                "key_col": [1] * 6 + [2] * 6,
+                "group_constant_str_col": ["a"] * 6 + ["œ"] * 6,
+                "group_constant_str_col2": ["į"] * 6 + ["ë"] * 6,
+                "non_constant_str_col": list(string.ascii_uppercase[:6]) * 2,
+                "order_col_1": [None, 1, None, 2, None, 3] * 2,
+                "order_col_2": [1, None, 2, None, 3, None] * 2,
+            }
+        )
+    }
+
+
+def test_listagg_no_withing_group_no_sep(listagg_data, spark_info, memory_leak_check):
+    """Simple listagg test without sorting."""
+
+    spark_equiv_query = """SELECT array_join(collect_list(table1.group_constant_str_col), '') FROM table1 group by key_col"""
+    check_query(
+        "SELECT listagg(group_constant_str_col) FROM table1 group by key_col",
+        listagg_data,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        equivalent_spark_query=spark_equiv_query,
+    )
+
+
+@pytest.mark.slow
+def test_listagg_no_withing_group_with_sep(listagg_data, spark_info, memory_leak_check):
+    spark_equiv_query = """SELECT array_join(collect_list(table1.group_constant_str_col), ', ') FROM table1 group by key_col"""
+    check_query(
+        "SELECT listagg(group_constant_str_col, ', ') FROM table1 group by key_col",
+        listagg_data,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        equivalent_spark_query=spark_equiv_query,
+    )
+
+
+@pytest.mark.slow
+def test_listagg_no_within_group_with_other_aggregates(
+    listagg_data, spark_info, memory_leak_check
+):
+    spark_equiv_query = """SELECT MAX(group_constant_str_col), key_col, array_join(collect_list(table1.group_constant_str_col), ''), MAX(group_constant_str_col2), array_join(collect_list(table1.group_constant_str_col2), 'å´îøü') FROM table1 group by key_col"""
+    check_query(
+        "SELECT MAX(group_constant_str_col), key_col, listagg(group_constant_str_col), MAX(group_constant_str_col2), listagg(group_constant_str_col2, 'å´îøü') FROM table1 group by key_col",
+        listagg_data,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        equivalent_spark_query=spark_equiv_query,
+    )
+
+
+def test_listagg_within_group_sorting_simple(listagg_data, memory_leak_check):
+    """tests a simple withing group sorting with only one call"""
+    expected = pd.DataFrame(
+        {
+            "agg_output_col": ["F, D, B, A, C, E"] * 2,
+        }
+    )
+
+    check_query(
+        "SELECT listagg(non_constant_str_col, ', ') WITHIN GROUP (ORDER BY order_col_1 DESC NULLS LAST, order_col_2 ASC NULLS FIRST) as agg_output_col FROM table1 group by key_col",
+        listagg_data,
+        None,  # Spark info
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected,
+    )
+
+
+@pytest.mark.slow
+def test_listagg_withing_group_sorting_complex(listagg_data, memory_leak_check):
+    query = """
+SELECT
+   LISTAGG(group_constant_str_col) as agg_output_col1,
+   LISTAGG(group_constant_str_col2, ',') as agg_output_col2,
+   LISTAGG(group_constant_str_col, '*') as agg_output_col3,
+   LISTAGG(non_constant_str_col, ', ') WITHIN GROUP (ORDER BY order_col_1) as agg_output_col4,
+   LISTAGG(non_constant_str_col) WITHIN GROUP (ORDER BY order_col_1 DESC NULLS LAST, order_col_2 ASC) as agg_output_col5,
+   LISTAGG(non_constant_str_col) WITHIN GROUP (ORDER BY order_col_2 ASC NULLS FIRST, order_col_1 ASC NULLS FIRST) as agg_output_col6
+FROM table1
+GROUP BY key_col
+"""
+    expected = pd.DataFrame(
+        {
+            "agg_output_col1": ["aaaaaa", "œœœœœœ"],
+            "agg_output_col2": ["į,į,į,į,į,į", "ë,ë,ë,ë,ë,ë"],
+            "agg_output_col3": ["a*a*a*a*a*a", "œ*œ*œ*œ*œ*œ"],
+            "agg_output_col4": ["B, D, F, A, C, E"] * 2,
+            "agg_output_col5": ["FDBACE"] * 2,
+            "agg_output_col6": ["BDFACE"] * 2,
+        }
+    )
+
+    check_query(
+        query,
+        listagg_data,
+        None,  # Spark info
+        expected_output=expected,
     )

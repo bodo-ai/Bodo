@@ -69,6 +69,7 @@ from bodo.utils.typing import (
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
+    get_overload_const_tuple,
     get_overload_constant_dict,
     get_udf_error_msg,
     get_udf_out_arr_type,
@@ -88,7 +89,7 @@ from bodo.utils.typing import (
     to_numeric_index_if_range_index,
     to_str_arr_if_dict_array,
 )
-from bodo.utils.utils import dt_err, is_expr
+from bodo.utils.utils import dict_add_multimap, dt_err, is_expr
 
 
 class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
@@ -393,6 +394,14 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             None,
             f"For count_if, only boolean columns are allowed",
         )
+    elif func_name == "listagg":
+        # For listagg, output is always string, even if the input is dict encoded.
+        if in_dtype == string_type:
+            return string_array_type, "ok"
+        return (
+            None,
+            f"For listagg, only string columns are allowed",
+        )
 
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if is_list_string or in_dtype == types.unicode_type:
@@ -545,7 +554,7 @@ def get_agg_typ(
                 ind_arr_t, types.StringLiteral(grp.keys[0])
             )
 
-    # gb_info maps (in_cols, func_name) -> out_col
+    # gb_info maps (in_cols, additional_args, func_name) -> out_col
     # where in_cols is a tuple of input column names
     gb_info = {}
     list_err_msg = []
@@ -556,12 +565,12 @@ def get_agg_typ(
         # size always produces one integer output and doesn't depend on any input
         out_data.append(types.Array(types.int64, 1, "C"))
         out_columns.append("size")
-        gb_info[((), "size")] = "size"
+        dict_add_multimap(gb_info, ((), (), "size"), "size")
     elif func_name == "ngroup":
         # ngroup always produces one integer output and doesn't depend on any input
         out_data.append(types.Array(types.int64, 1, "C"))
         out_columns.append("ngroup")
-        gb_info[((), "ngroup")] = "ngroup"
+        dict_add_multimap(gb_info, ((), (), "ngroup"), "ngroup")
         # arguments passed to ngroup(ascending=True)
         kws = dict(kws) if kws else {}
         ascending = args[0] if len(args) > 0 else kws.pop("ascending", True)
@@ -729,9 +738,9 @@ def get_agg_typ(
                     udf_name = bodo.ir.aggregate._get_udf_name(
                         bodo.ir.aggregate._get_const_agg_func(func, None)
                     )
-                    gb_info[((c,), udf_name)] = c
+                    dict_add_multimap(gb_info, ((c,), (), udf_name), c)
                 else:
-                    gb_info[((c,), func_name)] = c
+                    dict_add_multimap(gb_info, ((c,), (), func_name), c)
                 out_column_type.append(e_column_type)
             else:
                 if raise_on_any_error:
@@ -756,13 +765,13 @@ def get_agg_typ(
                 for x, y in zip(out_columns, out_column_type)
                 if y != ColumnType.NonNumericalColumn.value
             ]
-            # gb_info maps (in_cols, func_name) -> out_col
+            # gb_info maps (in_cols, additional_args, func_name) -> [out_col_1, out_col_2, ...]
             # where in_cols is a tuple of input column names
             gb_info = {}
             for c in out_columns:
                 if grp.as_index is False and c in grp.keys:
                     continue
-                gb_info[((c,), func_name)] = c
+                dict_add_multimap(gb_info, ((c,), (), func_name), c)
     nb_drop = len(list_err_msg)
     if len(out_data) == 0:
         if nb_drop == 0:
@@ -819,11 +828,18 @@ def get_agg_name_for_numpy_method(method_name):
 
 
 def get_agg_funcname_and_outtyp(
-    grp, col, f_val, typing_context, target_context, raise_on_any_error
+    grp, col, f_val, additional_args, typing_context, target_context, raise_on_any_error
 ):
-    """Get function name and output type for a function used in
+    """
+    Get function name and output type for a function used in
     groupby.agg(), given by f_val (can be a string constant or
-    user-defined function) applied to column col"""
+    user-defined function) applied to column col
+
+    Additional_args is a tuple of additional arguments to the aggregation call.
+    Empty tuple for aggregation functions which do not require
+    additional arguments.
+    """
+
     is_udf = True  # is user-defined function
     if isinstance(f_val, str):
         is_udf = False
@@ -839,9 +855,19 @@ def get_agg_funcname_and_outtyp(
         is_udf = False
         method_name = bodo.utils.typing.get_builtin_function_name(f_val)
         f_name = get_agg_name_for_numpy_method(method_name)
+
     if not is_udf:
         if f_name not in bodo.ir.aggregate.supported_agg_funcs[:-1]:
             raise BodoError(f"unsupported aggregate function {f_name}")
+
+        if (
+            f_name not in bodo.ir.aggregate.supported_extended_agg_funcs
+            and len(additional_args) != 0
+        ):
+            raise BodoError(
+                f"Internal error: aggregate function {f_name} does not support additional arguments and should not be used with bodo.utils.utils.ExtendedNamedAgg"
+            )
+
         # run typer on a groupby with just column col
         ret_grp = DataFrameGroupByType(
             grp.df_type,
@@ -856,7 +882,7 @@ def get_agg_funcname_and_outtyp(
         )
         out_tp = get_agg_typ(
             ret_grp,
-            (),
+            additional_args,
             f_name,
             typing_context,
             target_context,
@@ -887,7 +913,7 @@ def get_agg_funcname_and_outtyp(
         # out_tp is series because we are passing only one input column
         out_tp = get_agg_typ(
             ret_grp,
-            (),
+            additional_args,
             "agg",
             typing_context,
             target_context,
@@ -897,8 +923,97 @@ def get_agg_funcname_and_outtyp(
     return f_name, out_tp
 
 
+def handle_extended_named_agg_input_cols(data_col_name, f_name, args):
+    assert (
+        len(args) == 3
+    ), "Internal error in handle_extended_named_agg_input_cols: args length does not equal 3"
+    assert is_literal_type(
+        args[0]
+    ), "Internal error in handle_extended_named_agg_input_cols: data column name is not a literal value"
+    assert (
+        get_literal_value(args[0]) == data_col_name
+    ), f"Internal error in handle_extended_named_agg_input_cols: data column name mismatch: {data_col_name} and {get_literal_value(args[0])}"
+
+    additional_args = args[2]
+    additional_args_made_literal = get_overload_const_tuple(additional_args)
+
+    if f_name not in bodo.ir.aggregate.supported_extended_agg_funcs:
+        raise RuntimeError(
+            f"Internal error: aggregate function {f_name} does not support additional arguments and should not be used with bodo.utils.utils.ExtendedNamedAgg"
+        )
+
+    if f_name == "listagg":
+        assert (
+            get_literal_value(args[1]) == "listagg"
+        ), "Internal error in resolve_listagg_func_inputs: Called on not listagg function."
+        return resolve_listagg_func_inputs(data_col_name, additional_args_made_literal)
+
+    raise RuntimeError(
+        f"Internal error in handle_extended_named_agg_input_cols: Unsupported function name: {f_name}"
+    )
+
+
+def resolve_listagg_func_inputs(data_col_name, additional_args) -> Tuple:
+    sep = additional_args[0]
+    order_by = additional_args[1]
+    ascending = additional_args[2]
+    na_position = additional_args[3]
+
+    if not (isinstance(sep, str)):
+        raise_bodo_error(
+            "Groupby.listagg: 'sep' string  of a single column name if provided."
+        )
+    if not (
+        isinstance(order_by, tuple)
+        and all(isinstance(col_name, str) for col_name in order_by)
+    ):
+        raise_bodo_error(
+            "Groupby.listagg: 'order_by' argument must be a tuple of column names if provided."
+        )
+    if not (
+        isinstance(ascending, tuple) and all(isinstance(val, bool) for val in ascending)
+    ):
+        raise_bodo_error(
+            "Groupby.listagg: 'ascending' argument must be a tuple of booleans if provided."
+        )
+
+    if not (
+        isinstance(na_position, tuple)
+        and all(isinstance(val, str) for val in na_position)
+    ):
+        raise_bodo_error(
+            "Groupby.listagg: 'na_position' argument must be a tuple of 'first' or 'last' if provided."
+        )
+
+    if len(order_by) != len(ascending) or len(ascending) != len(na_position):
+        raise_bodo_error(
+            "Groupby.listagg: 'order_by', 'ascending', and 'na_position' arguments must have the same length."
+        )
+
+    # orderby is the only columnar input that should be included in the input columns
+    input_cols = (data_col_name,) + (sep,) + order_by
+    additional_args = (ascending, na_position)
+    return input_cols, additional_args
+
+
+def resolve_named_agg_literals(kws):
+    in_col_names = []
+    f_vals = []
+    additional_args = []
+
+    for out_tuple in kws.values():
+        in_col_names.append(get_literal_value(out_tuple[0]))
+        f_vals.append(get_literal_value(out_tuple[1]))
+        if len(out_tuple) == 2:
+            additional_args.append(tuple())
+        else:
+            additional_args.append(get_literal_value(out_tuple[2]))
+
+    return in_col_names, f_vals, additional_args
+
+
 def resolve_agg(grp, args, kws, typing_context, target_context):
-    """infer groupby output type for agg/aggregate"""
+    """infer groupby output type for agg/aggregate/extended agg"""
     # NamedAgg case has func=None
     # e.g. df.groupby("A").agg(C=pd.NamedAgg(column="B", aggfunc="sum"))
     func = get_call_expr_arg("agg", args, dict(kws), 0, "func", default=types.none)
@@ -907,7 +1022,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
     # This check is same as Pandas:
     # https://github.com/pandas-dev/pandas/blob/64027e60eead00d5ccccc5c7cddc9493a186aa95/pandas/core/aggregation.py#L129
     relabeling = kws and all(
-        isinstance(v, types.Tuple) and len(v) == 2 for v in kws.values()
+        isinstance(v, types.Tuple) and len(v) in (2, 3) for v in kws.values()
     )
     # Should we raise an immediate exception when a particular column cannot be
     # used in an aggregation. If a column is explicitly selected then yes.
@@ -938,12 +1053,12 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         # functions are applied to a column)
         if relabeling:
             # not using a col_map dictionary since input columns could be repeated
-            in_col_names = [get_literal_value(in_col) for (in_col, _) in kws.values()]
-            f_vals = [get_literal_value(col_func) for (_, col_func) in kws.values()]
+            in_col_names, f_vals, additional_args_list = resolve_named_agg_literals(kws)
         else:
             col_map = get_overload_constant_dict(func)
             in_col_names = tuple(col_map.keys())
             f_vals = tuple(col_map.values())
+            additional_args_list = [()] * len(col_map)
         for fn in ("head", "ngroup"):
             if fn in f_vals:
                 raise BodoError(
@@ -967,7 +1082,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
             )
 
         # get output names and output types
-        # gb_info maps (in_cols, func_name) -> out_col
+        # gb_info maps (in_cols, additional_args, func_name) -> out_col
         # where in_cols is a tuple of input column names
         gb_info = {}
         out_columns = []
@@ -982,7 +1097,9 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                 out_column_type,
                 multi_level_names=multi_level_names,
             )
-        for col_name, f_val in zip(in_col_names, f_vals):
+        for col_name, f_val, additional_args in zip(
+            in_col_names, f_vals, additional_args_list
+        ):
             if isinstance(f_val, (tuple, list)):
                 lambda_count = 0
                 for f in f_val:
@@ -990,6 +1107,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                         grp,
                         col_name,
                         f,
+                        additional_args,
                         typing_context,
                         target_context,
                         raise_on_any_error,
@@ -1002,13 +1120,16 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                     # This happens, for example, with
                     # df.groupby(...).agg({"A": [f1, f2]})
                     out_columns.append((col_name, f_name))
-                    gb_info[((col_name,), f_name)] = (col_name, f_name)
+                    dict_add_multimap(
+                        gb_info, ((col_name,), (), f_name), (col_name, f_name)
+                    )
                     _append_out_type(grp, out_data, out_tp)
             else:
                 f_name, out_tp = get_agg_funcname_and_outtyp(
                     grp,
                     col_name,
                     f_val,
+                    additional_args,
                     typing_context,
                     target_context,
                     raise_on_any_error,
@@ -1016,10 +1137,12 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                 has_cumulative_ops = f_name in list_cumulative
                 if multi_level_names:
                     out_columns.append((col_name, f_name))
-                    gb_info[((col_name,), f_name)] = (col_name, f_name)
+                    dict_add_multimap(
+                        gb_info, ((col_name,), (), f_name), (col_name, f_name)
+                    )
                 elif not relabeling:
                     out_columns.append(col_name)
-                    gb_info[((col_name,), f_name)] = col_name
+                    dict_add_multimap(gb_info, ((col_name,), (), f_name), col_name)
                 elif relabeling:
                     f_names.append(f_name)
                 _append_out_type(grp, out_data, out_tp)
@@ -1028,7 +1151,16 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         if relabeling:
             for i, out_col in enumerate(kws.keys()):
                 out_columns.append(out_col)
-                gb_info[(in_col_names[i],), f_names[i]] = out_col
+
+                if len(kws[out_col]) == 3:
+                    input_cols, additional_args = handle_extended_named_agg_input_cols(
+                        in_col_names[i], f_names[i], kws[out_col]
+                    )
+                else:
+                    input_cols, additional_args = (in_col_names[i],), ()
+                dict_add_multimap(
+                    gb_info, (input_cols, additional_args, f_names[i]), out_col
+                )
 
         if has_cumulative_ops:
             # result of groupby.cumsum, etc. doesn't have a group index
@@ -1067,7 +1199,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         lambda_count = 0
         if not grp.as_index:
             get_keys_not_as_index(grp, out_columns, out_data, out_column_type)
-        # gb_info maps (in_cols, func_name) -> out_col
+        # gb_info maps (in_cols, additional_args, func_name) -> out_col
         # where in_cols is a tuple of input column names
         gb_info = {}
         in_col_name = grp.selection[0]
@@ -1076,6 +1208,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                 grp,
                 in_col_name,
                 f_val,
+                (),
                 typing_context,
                 target_context,
                 raise_on_any_error,
@@ -1087,7 +1220,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                 f_name = "<lambda_" + str(lambda_count) + ">"
                 lambda_count += 1
             out_columns.append(f_name)
-            gb_info[((in_col_name,), f_name)] = f_name
+            dict_add_multimap(gb_info, ((in_col_name,), (), f_name), f_name)
             _append_out_type(grp, out_data, out_tp)
         if has_cumulative_ops:
             # result of groupby.cumsum, etc. doesn't have a group index
@@ -1182,12 +1315,12 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
             module_name="GroupBy",
         )
 
-    # gb_info maps (in_cols, func_name) -> out_col
+    # gb_info maps (in_cols, additional_args, func_name) -> out_col
     # where in_cols is a tuple of input column names
     gb_info = {}
     for c in grp.selection:
         out_columns.append(c)
-        gb_info[((c,), name_operation)] = c
+        dict_add_multimap(gb_info, ((c,), (), name_operation), c)
         ind = grp.df_type.column_index[c]
         data = grp.df_type.data[ind]
         operation = (
@@ -1335,9 +1468,9 @@ def resolve_window_funcs(
         # TODO: min_row_number_filter never outputs null
         out_data = [bodo.boolean_array_type]
     # Generate the gb_info
-    # gb_info maps (in_cols, func_name) -> out_col
+    # gb_info maps (in_cols, additional_args, func_name) -> out_col
     # where in_cols is a tuple of input column names
-    gb_info = {(order_by, "window"): out_columns[0]}
+    gb_info = {(order_by, (), "window"): [out_columns[0]]}
 
     out_res = DataFrameType(
         tuple(out_data), index, tuple(out_columns), is_table_format=True
@@ -1356,7 +1489,9 @@ def resolve_window_funcs(
 
 def resolve_gb(grp, args, kws, func_name, typing_context, target_context, err_msg=""):
     """Given a groupby function returns 2-tuple with output signature
-    and dict with mapping of (in_col, func_name) -> out_col"""
+    and dict with mapping of (in_col, func_name) -> [out_col_1, out_col_2, ...]
+    """
+
     if func_name in set(list_cumulative) | {"shift", "transform"}:
         return resolve_transformative(grp, args, kws, err_msg, func_name)
     elif func_name == "window":
@@ -1539,17 +1674,6 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             args,
             kws,
             "kurtosis",
-            self.context,
-            numba.core.registry.cpu_target.target_context,
-        )[0]
-
-    @bound_function("groupby.skew", no_unliteral=True)
-    def resolve_skew(self, grp, args, kws):
-        return resolve_gb(
-            grp,
-            args,
-            kws,
-            "skew",
             self.context,
             numba.core.registry.cpu_target.target_context,
         )[0]
