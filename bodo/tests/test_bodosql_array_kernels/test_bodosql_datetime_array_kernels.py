@@ -2907,7 +2907,7 @@ def test_calendar_optional(memory_leak_check):
             bodo.libs.bodosql_array_kernels.weekday(arg0),
             bodo.libs.bodosql_array_kernels.yearofweekiso(arg0),
             bodo.libs.bodosql_array_kernels.makedate(arg1, arg2),
-            bodo.libs.bodosql_array_kernels.dayofweek(arg0),
+            bodo.libs.bodosql_array_kernels.dayofweek(arg0, 0),
             bodo.libs.bodosql_array_kernels.dayofmonth(arg0),
             bodo.libs.bodosql_array_kernels.dayofyear(arg0),
         )

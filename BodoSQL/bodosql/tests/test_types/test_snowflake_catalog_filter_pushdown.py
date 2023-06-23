@@ -1854,12 +1854,17 @@ def test_no_arg_datetime_functions(
             datetime_test_col = pd.to_datetime(datetime_test_col)
 
         if sql_func == "dayofweek":
+            # this is technically incorrect and does not 100% emulate Snowflake
+            # DAYOFWEEK behavior, but suffices for this test
             computed_col = (datetime_test_col.dt.dayofweek + 1) % 7
         elif sql_func in ("week", "weekofyear"):
+            # this is technically incorrect and does not 100% emulate Snowflake
+            # WEEKOFYEAR behavior, but suffices for this test
             computed_col = datetime_test_col.dt.isocalendar().week
         elif sql_func == "yearofweek":
+            # this is technically incorrect and does not 100% emulate Snowflake
+            # YEAROFWEEK behavior, but suffices for this test
             computed_col = datetime_test_col.dt.isocalendar().year
-            pushdown_sql_func = "year"
         elif sql_func == "yearofweekiso":
             computed_col = datetime_test_col.dt.isocalendar().year
         else:

@@ -941,18 +941,22 @@ def test_snowflake_catalog_create_table_temporary(
         pytest.param(
             ("0", "0"),
             ([1, 1, 1, 5, 52], [2020, 2016, 1980, 1971, 2000]),
+            id="iso",
         ),
         pytest.param(
             ("0", "7"),
             ([1, 1, 1, 5, 1], [2020, 2016, 1980, 1971, 2001]),
+            id="iso-sunday",
         ),
         pytest.param(
             ("1", "0"),
             ([1, 2, 1, 6, 53], [2020, 2016, 1980, 1971, 2000]),
+            id="policy-monday",
         ),
         pytest.param(
             ("1", "7"),
             ([1, 2, 1, 6, 54], [2020, 2016, 1980, 1971, 2000]),
+            id="policy-sunday",
         ),
     ],
 )
