@@ -449,7 +449,7 @@ def window_refsol(S, lower, upper, func, use_nans=False):
     to_null = [-1]
     for i in range(len(S)):
         if upper < lower:
-            result = None
+            result = None if func != "count(*)" else 0
         else:
             # Extract the window frame of elements by slicing about the current
             # index using the lower/upper bounds (without going out of bounds)
@@ -466,6 +466,9 @@ def window_refsol(S, lower, upper, func, use_nans=False):
             )
             if func == "count":
                 result = len(elems)
+            elif func == "count(*)":
+                # Does not filter nulls.
+                result = np.clip(i + upper + 1, 0, len(S)) - np.clip(i + lower, 0, len(S))
             elif func == "count_if":
                 # Summing over booleans will give us the count of true values.
                 result = elems.sum()
@@ -487,6 +490,33 @@ def window_refsol(S, lower, upper, func, use_nans=False):
                     if len(elems) == 0
                     else len(list(filter(lambda x: bool(x), elems))) == 1
                 )
+            elif func == "bitor_agg":
+                def impl(elems):
+                    result = 0
+                    for e in elems:
+                        if pd.isna(e):
+                            continue
+                        result |= np.int64(e)
+                    return result
+                result = None if len(elems) == 0 else impl(elems)
+            elif func == "bitand_agg":
+                def impl(elems):
+                    result = np.int64(-1)
+                    for e in elems:
+                        if pd.isna(e):
+                            continue
+                        result &= np.int64(e)
+                    return result
+                result = None if len(elems) == 0 else impl(elems)
+            elif func == "bitxor_agg":
+                def impl(elems):
+                    result = 0
+                    for e in elems:
+                        if pd.isna(e):
+                            continue
+                        result ^= np.int64(e)
+                    return result
+                result = None if len(elems) == 0 else impl(elems)
             elif use_nans and ("nan" in map(str, elems)):
                 result = np.nan
             elif func == "sum":
@@ -514,8 +544,18 @@ def window_refsol(S, lower, upper, func, use_nans=False):
                 result = None if len(elems) == 0 else np.std(elems, ddof=0)
             elif func == "stddev_samp":
                 result = None if len(elems) <= 1 else np.std(elems, ddof=1)
+            elif func == "skew":
+                result = None if len(elems) < 3 else elems.skew()
+                # result = None if len(elems) == 0 else elems.skew()
+            elif func == "kurtosis":
+                result = None if len(elems) < 4 else elems.kurtosis()
         if use_nans:
-            default = False if func.startswith("bool") else 0.0
+            default = 0.0
+            if func.startswith("bool"):
+                default = False
+            elif func.startswith("bit"):
+                default = 0
+
             if result is None:
                 to_null.append(i)
                 L.append(default)
@@ -839,6 +879,7 @@ def window_kernel_two_arg_data():
         "median",
         "sum",
         "count",
+        "count(*)",
         "avg",
         "ratio_to_report",
         "var_pop",
@@ -848,6 +889,11 @@ def window_kernel_two_arg_data():
         "boolor",
         "booland",
         "boolxor",
+        "skew",
+        "kurtosis",
+        "bitor_agg",
+        "bitand_agg",
+        "bitxor_agg",
     ],
 )
 def test_windowed_kernels_numeric(
@@ -858,79 +904,119 @@ def test_windowed_kernels_numeric(
     upper_bound,
     memory_leak_check,
 ):
-    def impl1(S, lower, upper):
+    def impl_sum(S, lower, upper):
         return pd.Series(bodo.libs.bodosql_array_kernels.windowed_sum(S, lower, upper))
 
-    def impl2(S, lower, upper):
+    def impl_count(S, lower, upper):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_count(S, lower, upper)
         )
 
-    def impl3(S, lower, upper):
+    def impl_count_star(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_count_star(len(S), lower, upper)
+        )
+
+    def impl_avg(S, lower, upper):
         return pd.Series(bodo.libs.bodosql_array_kernels.windowed_avg(S, lower, upper))
 
-    def impl4(S, lower, upper):
+    def impl_median(S, lower, upper):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_median(S, lower, upper)
         )
 
-    def impl5(S, lower, upper):
+    def impl_ratio_to_report(S, lower, upper):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_ratio_to_report(S, lower, upper)
         )
 
-    def impl6(S, lower, upper):
+    def impl_var_pop(S, lower, upper):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_var_pop(S, lower, upper)
         )
 
-    def impl7(S, lower, upper):
+    def impl_var_samp(S, lower, upper):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_var_samp(S, lower, upper)
         )
 
-    def impl8(S, lower, upper):
+    def impl_stddev_pop(S, lower, upper):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_stddev_pop(S, lower, upper)
         )
 
-    def impl9(S, lower, upper):
+    def impl_stddev_samp(S, lower, upper):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_stddev_samp(S, lower, upper)
         )
 
-    def impl10(S, lower, upper):
+    def impl_boolor(S, lower, upper):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_boolor(S, lower, upper)
         )
 
-    def impl11(S, lower, upper):
+    def impl_booland(S, lower, upper):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_booland(S, lower, upper)
         )
 
-    def impl12(S, lower, upper):
+    def impl_boolxor(S, lower, upper):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.windowed_boolxor(S, lower, upper)
+        )
+
+    def impl_skew(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_skew(S, lower, upper)
+        )
+
+    def impl_kurtosis(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_kurtosis(S, lower, upper)
+        )
+
+    def impl_bitor_agg(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_bitor_agg(S, lower, upper)
+        )
+
+    def impl_bitand_agg(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_bitand_agg(S, lower, upper)
+        )
+
+    def impl_bitxor_agg(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_bitxor_agg(S, lower, upper)
         )
 
     S = window_kernel_numeric_data[dataset]
 
     implementations = {
-        "sum": impl1,
-        "count": impl2,
-        "avg": impl3,
-        "median": impl4,
-        "ratio_to_report": impl5,
-        "var_pop": impl6,
-        "var_samp": impl7,
-        "stddev_pop": impl8,
-        "stddev_samp": impl9,
-        "boolor": impl10,
-        "booland": impl11,
-        "boolxor": impl12,
+        "sum": impl_sum,
+        "count": impl_count,
+        "count(*)": impl_count_star,
+        "avg": impl_avg,
+        "median": impl_median,
+        "ratio_to_report": impl_ratio_to_report,
+        "var_pop": impl_var_pop,
+        "var_samp": impl_var_samp,
+        "stddev_pop": impl_stddev_pop,
+        "stddev_samp": impl_stddev_samp,
+        "boolor": impl_boolor,
+        "booland": impl_booland,
+        "boolxor": impl_boolxor,
+        "skew": impl_skew,
+        "kurtosis": impl_kurtosis,
+        "bitor_agg": impl_bitor_agg,
+        "bitand_agg": impl_bitand_agg,
+        "bitxor_agg": impl_bitxor_agg,
     }
     impl = implementations[func]
+
+    # bitXXX_agg functions do not allow NaN
+    if dataset == "float64_nan" and func.startswith("bit"):
+        return
 
     check_func(
         impl,
