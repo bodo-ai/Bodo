@@ -623,6 +623,10 @@ class UntypedPass:
         if fdef == ("NamedAgg", "pandas"):
             return self._handle_pd_named_agg(assign, lhs, rhs)
 
+        # replace bodo.ExtendedNamedAgg() with equivalent tuple to be handled in groupby typing
+        if fdef == ("ExtendedNamedAgg", "bodo.utils.utils"):
+            return self._handle_extended_named_agg(assign, lhs, rhs)
+
         if fdef == ("read_table", "pyarrow.parquet"):
             return self._handle_pq_read_table(assign, lhs, rhs)
 
@@ -2324,6 +2328,24 @@ class UntypedPass:
         column_var = get_call_expr_arg("pd.NamedAgg", rhs.args, kws, 0, "column")
         aggfunc_var = get_call_expr_arg("pd.NamedAgg", rhs.args, kws, 1, "aggfunc")
         assign.value = ir.Expr.build_tuple([column_var, aggfunc_var], rhs.loc)
+        return [assign]
+
+    def _handle_extended_named_agg(self, assign, lhs, rhs):
+        """
+        Replace pd.Extended() with equivalent tuple to be handled in groupby typing.
+        In order to handle a generic extension argument, all arguments are passed without keyword arguments.
+        It's up to the individual function to know which arguments are expected.
+        """
+
+        kws = dict(rhs.kws)
+        column_var = get_call_expr_arg("pd.NamedAgg", rhs.args, kws, 0, "column")
+        aggfunc_var = get_call_expr_arg("pd.NamedAgg", rhs.args, kws, 1, "aggfunc")
+        additional_args_var = get_call_expr_arg(
+            "pd.NamedAgg", rhs.args, kws, 2, "additional_args"
+        )
+        assign.value = ir.Expr.build_tuple(
+            [column_var, aggfunc_var, additional_args_var], rhs.loc
+        )
         return [assign]
 
     def _handle_pq_read_table(self, assign, lhs, rhs):

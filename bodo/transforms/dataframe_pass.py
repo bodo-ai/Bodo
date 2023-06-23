@@ -1765,29 +1765,11 @@ class DataFramePass:
         )
         return nodes[-1].target
 
-    def _run_call_groupby(self, assign, lhs, rhs, grp_var, func_name):
-        """Transform groupby calls into an Aggregate IR node"""
-        if func_name == "apply":
-            return self._run_call_groupby_apply(assign, lhs, rhs, grp_var)
-
-        # DataFrameGroupByType instance with initial typing info
-        grp_typ = self.typemap[grp_var.name]
-        # get dataframe variable of groupby
-        df_var = self._get_groupby_df_obj(grp_var)
-        df_type = self.typemap[df_var.name]
-        # Type of df.groupby() output
-        out_typ = self.typemap[lhs.name]
-
-        # check for duplicate output columns
-        out_colnames = (
-            grp_typ.selection if isinstance(out_typ, SeriesType) else out_typ.columns
-        )
-        if len(out_colnames) != len(set(out_colnames)):
-            raise BodoError("aggregate with duplication in output is not allowed")
-
+    def _gen_gb_info_out(self, rhs, grp_typ, df_type, out_typ, func_name):
         args = tuple([self.typemap[v.name] for v in rhs.args])
         kws = {k: self.typemap[v.name] for k, v in rhs.kws}
-        # gb_info maps (in_cols, func_name) -> out_col
+
+        # gb_info maps (in_cols, additional_args, func_name) -> [out_col_1, out_col_2, ...]
         _, gb_info = bodo.hiframes.pd_groupby_ext.resolve_gb(
             grp_typ,
             args,
@@ -1810,18 +1792,60 @@ class DataFramePass:
 
         used_colnames = set(grp_typ.keys)
         i = 0
-        for (in_cols, fname), out_col in gb_info.items():
+        for (in_cols, additional_args, fname), out_col_list in gb_info.items():
             in_col_inds = tuple(df_type.column_index[in_col] for in_col in in_cols)
+
+            # TODO(keaton): handle the case that we have duplicate aggregation functions
+            # https://bodo.atlassian.net/browse/BSE-609
+            # previously, this was segfaulting. This doesn't resolve the issue, but it at least
+            # prevents segfaults.
+            if len(out_col_list) != 1:
+                raise BodoError(
+                    "Internal error in _gen_gb_info_out: encountered duplicate aggregation functions"
+                )
+
+            out_col = out_col_list[0]
             out_col_ind = (
                 out_typ.column_index[out_col]
                 if not isinstance(out_typ, SeriesType)
                 else 0
             )
             f = agg_funcs[i]
-            assert fname == f.fname
+            assert (
+                out_col_ind not in gb_info_out
+            ), "Internal error in _gen_gb_info_out: duplicate output column assignment"
+            assert (
+                fname == f.fname
+            ), "Internal error in _gen_gb_info_out: fname mismatch"
             gb_info_out[out_col_ind] = (in_col_inds, f)
             used_colnames.update(in_cols)
             i += 1
+
+        return gb_info_out, used_colnames
+
+    def _run_call_groupby(self, assign, lhs, rhs, grp_var, func_name):
+        """Transform groupby calls into an Aggregate IR node"""
+        if func_name == "apply":
+            return self._run_call_groupby_apply(assign, lhs, rhs, grp_var)
+
+        # DataFrameGroupByType instance with initial typing info
+        grp_typ = self.typemap[grp_var.name]
+        # get dataframe variable of groupby
+        df_var = self._get_groupby_df_obj(grp_var)
+        df_type = self.typemap[df_var.name]
+        # Type of df.groupby() output
+        out_typ = self.typemap[lhs.name]
+
+        # check for duplicate output columns
+        out_colnames = (
+            grp_typ.selection if isinstance(out_typ, SeriesType) else out_typ.columns
+        )
+        if len(out_colnames) != len(set(out_colnames)):
+            raise BodoError("aggregate with duplication in output is not allowed")
+
+        gb_info_out, used_colnames = self._gen_gb_info_out(
+            rhs, grp_typ, df_type, out_typ, func_name
+        )
 
         # input_has_index=True means we have to pass Index of input dataframe to groupby
         # since it's needed in creating output, e.g. in shift() but not sum()
@@ -1938,6 +1962,7 @@ class DataFramePass:
             # Should we use SQL or Pandas rules instead groupby
             grp_typ._use_sql_rules,
         )
+
         nodes.append(agg_node)
 
         if same_index:

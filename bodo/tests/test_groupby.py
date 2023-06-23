@@ -7,6 +7,7 @@ from decimal import Decimal
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -535,6 +536,368 @@ def test_kurtosis_skew(df, memory_leak_check):
     answer = py_impl(df)
 
     check_func(impl, (df,), py_output=answer, sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "df_sep_and_expected_out",
+    [
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": list("ABCDEF"),
+                        "B": pd.Series(list(np.arange(3)) * 2),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                [""] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                    }
+                ),
+                pd.DataFrame({"AGG_OUTPUT_0": ["AD", "BE", "CF"]}),
+            ),
+            id="no-null",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": ["A", None, None] + [None, "B", None] + [None, "C", None],
+                        "B": pd.Series(list(np.arange(3)) * 3),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["__different_sep__"] * 9,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                    }
+                ),
+                pd.DataFrame({"AGG_OUTPUT_0": ["A", "B__different_sep__C", None]}),
+            ),
+            id="some-null",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        # A few strings are needed so that the dtype can be inferred
+                        "A": pd.Series((["A"] + [None] * 2) * 5, dtype=str),
+                        "B": pd.Series(list(np.arange(3)) * 5),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["__different_sep__"] * 15,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "AGG_OUTPUT_0": pd.Series(
+                            [
+                                "A__different_sep__A__different_sep__A__different_sep__A__different_sep__A"
+                            ]
+                            + [None] * 2,
+                            dtype=str,
+                        )
+                    }
+                ),
+            ),
+            id="all-null",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": ["½⅓¼⅕⅙⅐⅛⅑ ⅔⅖ ¾⅗ ⅘ ⅚⅝ ⅞", "₩", None]
+                        + [None, "B", None]
+                        + [None, "Å Ů ẘ ẙ", None],
+                        "B": pd.Series(list(np.arange(3)) * 3),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["__« »__"] * 9,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "AGG_OUTPUT_0": [
+                            "½⅓¼⅕⅙⅐⅛⅑ ⅔⅖ ¾⅗ ⅘ ⅚⅝ ⅞",
+                            "₩__« »__B__« »__Å Ů ẘ ẙ",
+                            None,
+                        ]
+                    }
+                ),
+            ),
+            id="listagg_nonascii",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": [""] * 9,
+                        "B": pd.Series(list(np.arange(3)) * 3),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                [""] * 9,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                    }
+                ),
+                pd.DataFrame({"AGG_OUTPUT_0": [""] * 3}),
+            ),
+            id="all-empty-edgecase",
+        ),
+    ],
+)
+def test_listagg_sep(df_sep_and_expected_out, memory_leak_check):
+    """
+    Test simple groupby with listagg + separator
+    """
+    df, expected = df_sep_and_expected_out
+
+    def impl(df):
+        return df.groupby(["B"], dropna=False).agg(
+            AGG_OUTPUT_0=bodo.utils.utils.ExtendedNamedAgg(
+                column="A", aggfunc="listagg", additional_args=("C", (), (), ())
+            )
+        )
+
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        reset_index=True,
+        py_output=expected,
+    )
+
+
+@pytest.mark.parametrize(
+    "df_sep_and_expected_out",
+    [
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": ["A"] * 3 + ["B"] * 3,
+                        "B": pd.Series(list(np.arange(3)) * 2),
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_sep_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "C2": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_sep2_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "D": np.arange(6),
+                        "int_col": [1] * 6,
+                        "int_col2": [1] * 6,
+                    }
+                ),
+                (("D",), (True,), ("first",)),
+                (("D",), (False,), ("first",)),
+                pd.DataFrame(
+                    {
+                        "sum_col": [2] * 3,
+                        "AGG_OUTPUT_0": ["A_sep_B", "A_sep_B", "A_sep_B"],
+                        "max_col": [1] * 3,
+                        "AGG_OUTPUT_1": ["B_sep2_A", "B_sep2_A", "B_sep2_A"],
+                        "max_col_2": [1] * 3,
+                    }
+                ),
+            ),
+            id="simple-1col-sort",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": list(string.ascii_uppercase[:6]),
+                        "B": [1] * 6,
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_ó_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "C2": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_é_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "D": list(np.arange(3)) * 2,
+                        "E": [1] * 3 + [2] * 3,
+                        "int_col": [1] * 6,
+                        "int_col2": [1] * 6,
+                    }
+                ),
+                (
+                    (
+                        "E",
+                        "D",
+                    ),
+                    (True, False),
+                    ("first", "first"),
+                ),
+                (("D", "E"), (False, False), ("first", "first")),
+                pd.DataFrame(
+                    {
+                        "sum_col": [6],
+                        "AGG_OUTPUT_0": [
+                            "C_ó_B_ó_A_ó_F_ó_E_ó_D",
+                        ],
+                        "max_col": [1],
+                        "AGG_OUTPUT_1": ["F_é_C_é_E_é_B_é_D_é_A"],
+                        "max_col_2": [1],
+                    }
+                ),
+            ),
+            id="test-2col-sort",
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(
+                    {
+                        "A": list(string.ascii_uppercase[:6]),
+                        "B": [1] * 6,
+                        "C": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_ó_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "C2": pd.arrays.ArrowStringArray(
+                            pa.array(
+                                ["_é_"] * 6,
+                                type=pa.dictionary(pa.int32(), pa.string()),
+                            )
+                        ),
+                        "D": [None, 1, None, 2, None, 3],
+                        "E": [1, None, 2, None, 3, None],
+                        "int_col": [1] * 6,
+                        "int_col2": [1] * 6,
+                    }
+                ),
+                (
+                    (
+                        "E",
+                        "D",
+                    ),
+                    (True, True),
+                    ("first", "first"),
+                ),
+                (("D", "E"), (True, False), ("last", "first")),
+                pd.DataFrame(
+                    {
+                        "sum_col": [6],
+                        "AGG_OUTPUT_0": [
+                            "B_ó_D_ó_F_ó_A_ó_C_ó_E",
+                        ],
+                        "max_col": [1],
+                        "AGG_OUTPUT_1": ["B_é_D_é_F_é_E_é_C_é_A"],
+                        "max_col_2": [1],
+                    }
+                ),
+            ),
+            id="test-2col-na-sort",
+        ),
+    ],
+)
+def test_listagg_within_group_sorting(df_sep_and_expected_out, memory_leak_check):
+    """
+    Test groupby with listagg with withing group sorting.
+    """
+    df, additional_args_1, additional_args_2, expected = df_sep_and_expected_out
+
+    orderby_cols_1, ascending_1, nulls_first_1 = additional_args_1
+    orderby_cols_2, ascending_2, nulls_first_2 = additional_args_2
+
+    def impl(df):
+        return df.groupby(["B"], dropna=False).agg(
+            sum_col=pd.NamedAgg(column="int_col", aggfunc="sum"),
+            AGG_OUTPUT_0=bodo.utils.utils.ExtendedNamedAgg(
+                column="A",
+                aggfunc="listagg",
+                additional_args=("C", orderby_cols_1, ascending_1, nulls_first_1),
+            ),
+            max_col=pd.NamedAgg(column="int_col", aggfunc="max"),
+            AGG_OUTPUT_1=bodo.utils.utils.ExtendedNamedAgg(
+                column="A",
+                aggfunc="listagg",
+                additional_args=("C2", orderby_cols_2, ascending_2, nulls_first_2),
+            ),
+            max_col_2=pd.NamedAgg(column="int_col2", aggfunc="max"),
+        )
+
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        reset_index=True,
+        py_output=expected,
+    )
+
+
+def test_listagg_non_duplicate():
+    """
+    Tests a specific issue wherein listagg would be treated as being a duplicate aggregation,
+    despite having different additional arguments."""
+    df = pd.DataFrame(
+        {
+            "A": list(string.ascii_uppercase[:6]),
+            "B": [1] * 6,
+            "C": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["_ó_"] * 6,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+            "D": [None, 1, None, 2, None, 3],
+            "E": [1, None, 2, None, 3, None],
+        }
+    )
+
+    def impl(df):
+        return df.groupby(["B"], dropna=False).agg(
+            AGG_OUTPUT_0=bodo.utils.utils.ExtendedNamedAgg(
+                column="A",
+                aggfunc="listagg",
+                additional_args=("C", ("D", "E"), (True, True), ("first", "first")),
+            ),
+            AGG_OUTPUT_1=bodo.utils.utils.ExtendedNamedAgg(
+                column="A",
+                aggfunc="listagg",
+                additional_args=("C", ("D", "E"), (True, False), ("first", "first")),
+            ),
+            AGG_OUTPUT_2=bodo.utils.utils.ExtendedNamedAgg(
+                column="A",
+                aggfunc="listagg",
+                additional_args=("C", ("D", "E"), (True, True), ("first", "last")),
+            ),
+        )
+
+    expected_output = pd.DataFrame(
+        {
+            "AGG_OUTPUT_0": [
+                "A_ó_C_ó_E_ó_B_ó_D_ó_F",
+            ],
+            "AGG_OUTPUT_1": ["E_ó_C_ó_A_ó_B_ó_D_ó_F"],
+            "AGG_OUTPUT_2": ["A_ó_C_ó_E_ó_B_ó_D_ó_F"],
+        }
+    )
+
+    check_func(
+        impl, (df,), sort_output=True, reset_index=True, py_output=expected_output
+    )
 
 
 @pytest.mark.slow
@@ -1865,106 +2228,148 @@ def test_groupby_agg_general_udf(memory_leak_check):
     )
 
 
-def test_groupby_agg_const_dict(memory_leak_check):
+# ------------ Test function implementations to be used in test_groupby_agg_const_dict_part1 ------------
+def groupby_agg_const_dict_impl(df):
+    df2 = df.groupby("A")[["B", "C"]].agg({"B": "count", "C": "sum"})
+    return df2
+
+
+def groupby_agg_const_dict_impl2(df):
+    df2 = df.groupby("A").agg({"B": "count", "C": "sum"})
+    return df2
+
+
+def groupby_agg_const_dict_impl3(df):
+    df2 = df.groupby("A").agg({"B": "median"})
+    return df2
+
+
+def groupby_agg_const_dict_impl4(df):
+    df2 = df.groupby("A").agg({"B": ["median"]})
+    return df2
+
+
+def groupby_agg_const_dict_impl5(df):
+    df2 = df.groupby("A").agg({"D": "nunique", "B": "median", "C": "var"})
+    return df2
+
+
+def groupby_agg_const_dict_impl6(df):
+    df2 = df.groupby("A").agg({"B": ["median", "nunique"]})
+    return df2
+
+
+def groupby_agg_const_dict_impl7(df):
+    df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std", "sum"]})
+    return df2
+
+
+def groupby_agg_const_dict_impl8(df):
+    df2 = df.groupby("A", as_index=False).agg(
+        {"B": ["count", "var", "prod"], "C": ["std", "sum"]}
+    )
+    return df2
+
+
+def groupby_agg_const_dict_impl9(df):
+    df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": "std"})
+    return df2
+
+
+def groupby_agg_const_dict_impl10(df):
+    df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std"]})
+    return df2
+
+
+def groupby_agg_const_dict_impl11(df):
+    df2 = df.groupby("A").agg(
+        {"B": ["count", "median", "prod"], "C": ["nunique", "sum"]}
+    )
+    return df2
+
+
+def groupby_agg_const_dict_impl12(df):
+    def id1(x):
+        return (x >= 2).sum()
+
+    df2 = df.groupby("D").agg({"B": "var", "A": id1, "C": "sum"})
+    return df2
+
+
+def groupby_agg_const_dict_impl13(df):
+    df2 = df.groupby("D").agg({"B": lambda x: x.max() - x.min(), "A": "sum"})
+    return df2
+
+
+def groupby_agg_const_dict_impl14(df):
+    df2 = df.groupby("A").agg(
+        {
+            "D": lambda x: (x == "BB").sum(),
+            "B": lambda x: x.max() - x.min(),
+            "C": "sum",
+        }
+    )
+    return df2
+
+
+def groupby_agg_const_dict_impl15(df):
+    df2 = df.groupby("A").agg({"B": "cumsum", "C": "cumprod"})
+    return df2
+
+
+# reuse a complex dict to test typing transform for const dict removal
+def groupby_agg_const_dict_impl16(df):
+    d = {"B": [lambda a: a.sum(), "mean"]}
+    df1 = df.groupby("A").agg(d)
+    df2 = df.groupby("C").agg(d)
+    return df1, df2
+
+
+# reuse and return a const dict to test typing transform
+def groupby_agg_const_dict_impl17(df):
+    d = {"B": "sum"}
+    df1 = df.groupby("A").agg(d)
+    df2 = df.groupby("C").agg(d)
+    return df1, df2, d
+
+
+# test tuple of UDFs inside agg dict
+def groupby_agg_const_dict_impl18(df):
+    return df.groupby("A").agg(
+        {
+            "C": (lambda x: (x >= 3).sum(),),
+            "B": (lambda x: x.sum(), lambda x: (x < 6.1).sum()),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "cur_impl",
+    [
+        groupby_agg_const_dict_impl,
+        groupby_agg_const_dict_impl2,
+        groupby_agg_const_dict_impl3,
+        groupby_agg_const_dict_impl4,
+        groupby_agg_const_dict_impl5,
+        groupby_agg_const_dict_impl6,
+        groupby_agg_const_dict_impl7,
+        groupby_agg_const_dict_impl8,
+        groupby_agg_const_dict_impl9,
+        groupby_agg_const_dict_impl10,
+        groupby_agg_const_dict_impl11,
+        groupby_agg_const_dict_impl12,
+        groupby_agg_const_dict_impl13,
+        groupby_agg_const_dict_impl14,
+        groupby_agg_const_dict_impl15,
+        groupby_agg_const_dict_impl16,
+        groupby_agg_const_dict_impl17,
+        groupby_agg_const_dict_impl18,
+    ],
+)
+def test_groupby_agg_const_dict(cur_impl, memory_leak_check):
     """
     Test groupy.agg with function spec passed as constant dictionary
     """
-
-    def impl(df):
-        df2 = df.groupby("A")[["B", "C"]].agg({"B": "count", "C": "sum"})
-        return df2
-
-    def impl2(df):
-        df2 = df.groupby("A").agg({"B": "count", "C": "sum"})
-        return df2
-
-    def impl3(df):
-        df2 = df.groupby("A").agg({"B": "median"})
-        return df2
-
-    def impl4(df):
-        df2 = df.groupby("A").agg({"B": ["median"]})
-        return df2
-
-    def impl5(df):
-        df2 = df.groupby("A").agg({"D": "nunique", "B": "median", "C": "var"})
-        return df2
-
-    def impl6(df):
-        df2 = df.groupby("A").agg({"B": ["median", "nunique"]})
-        return df2
-
-    def impl7(df):
-        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std", "sum"]})
-        return df2
-
-    def impl8(df):
-        df2 = df.groupby("A", as_index=False).agg(
-            {"B": ["count", "var", "prod"], "C": ["std", "sum"]}
-        )
-        return df2
-
-    def impl9(df):
-        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": "std"})
-        return df2
-
-    def impl10(df):
-        df2 = df.groupby("A").agg({"B": ["count", "var", "prod"], "C": ["std"]})
-        return df2
-
-    def impl11(df):
-        df2 = df.groupby("A").agg(
-            {"B": ["count", "median", "prod"], "C": ["nunique", "sum"]}
-        )
-        return df2
-
-    def impl12(df):
-        def id1(x):
-            return (x >= 2).sum()
-
-        df2 = df.groupby("D").agg({"B": "var", "A": id1, "C": "sum"})
-        return df2
-
-    def impl13(df):
-        df2 = df.groupby("D").agg({"B": lambda x: x.max() - x.min(), "A": "sum"})
-        return df2
-
-    def impl14(df):
-        df2 = df.groupby("A").agg(
-            {
-                "D": lambda x: (x == "BB").sum(),
-                "B": lambda x: x.max() - x.min(),
-                "C": "sum",
-            }
-        )
-        return df2
-
-    def impl15(df):
-        df2 = df.groupby("A").agg({"B": "cumsum", "C": "cumprod"})
-        return df2
-
-    # reuse a complex dict to test typing transform for const dict removal
-    def impl16(df):
-        d = {"B": [lambda a: a.sum(), "mean"]}
-        df1 = df.groupby("A").agg(d)
-        df2 = df.groupby("C").agg(d)
-        return df1, df2
-
-    # reuse and return a const dict to test typing transform
-    def impl17(df):
-        d = {"B": "sum"}
-        df1 = df.groupby("A").agg(d)
-        df2 = df.groupby("C").agg(d)
-        return df1, df2, d
-
-    # test tuple of UDFs inside agg dict
-    def impl18(df):
-        return df.groupby("A").agg(
-            {
-                "C": (lambda x: (x >= 3).sum(),),
-                "B": (lambda x: x.sum(), lambda x: (x < 6.1).sum()),
-            }
-        )
 
     df = pd.DataFrame(
         {
@@ -1975,122 +2380,45 @@ def test_groupby_agg_const_dict(memory_leak_check):
         },
         index=np.arange(10, 17),
     )
-    check_func(impl, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
-    # For median, var, etc. we output a Float64 even if the input is float64.
-    # As a result we disable the dtype check.
-    check_func(
-        impl3,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl4,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl5,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl6,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl7,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl8,
-        (df,),
-        sort_output=True,
-        reset_index=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl9,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl10,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl11,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl12,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl13,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl14,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    check_func(
-        impl15,
-        (df,),
-        sort_output=True,
-        convert_to_nullable_float=False,
-        check_dtype=False,
-    )
-    # can't use check_func since lambda name in MultiIndex doesn't match Pandas
-    # TODO: fix lambda name
-    # check_func(impl16, (df,), sort_output=True, reset_index=True)
-    bodo.jit(impl16)(df)  # just check for compilation errors
-    # TODO: enable is_out_distributed after fixing gatherv issue for tuple output
-    check_func(
-        impl17,
-        (df,),
-        sort_output=True,
-        dist_test=False,
-        convert_to_nullable_float=False,
-    )
-    # Pandas (as of 1.2.2) produces float instead of int for last column for some reason
-    check_func(
-        impl18,
-        (df,),
-        sort_output=True,
-        check_dtype=False,
-        convert_to_nullable_float=False,
-    )
+    if (
+        cur_impl is groupby_agg_const_dict_impl
+        or cur_impl is groupby_agg_const_dict_impl2
+    ):
+        check_func(cur_impl, (df,), sort_output=True)
+    elif cur_impl is groupby_agg_const_dict_impl8:
+        check_func(
+            cur_impl,
+            (df,),
+            sort_output=True,
+            reset_index=True,
+            convert_to_nullable_float=False,
+            check_dtype=False,
+        )
+    elif cur_impl is groupby_agg_const_dict_impl16:
+        # just check for compilation errors
+        # can't use check_func since lambda name in MultiIndex doesn't match Pandas
+        # TODO: fix lambda name
+        # check_func(impl16, (df,), sort_output=True, reset_index=True)
+        bodo.jit(cur_impl)(df)
+    elif cur_impl is groupby_agg_const_dict_impl17:
+        # TODO: enable is_out_distributed after fixing gatherv issue for tuple output
+        check_func(
+            cur_impl,
+            (df,),
+            sort_output=True,
+            dist_test=False,
+            convert_to_nullable_float=False,
+        )
+    else:
+        # For median, var, etc. we output a Float64 even if the input is float64.
+        # As a result we disable the dtype check.
+        check_func(
+            cur_impl,
+            (df,),
+            sort_output=True,
+            convert_to_nullable_float=False,
+            check_dtype=False,
+        )
 
 
 def test_groupby_agg_func_list(memory_leak_check):

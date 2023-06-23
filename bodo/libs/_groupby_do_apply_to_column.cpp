@@ -1615,7 +1615,6 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
                 return apply_to_column<int, Bodo_FTypes::idxmax_na_first,
                                        Bodo_CTypes::STRING>(in_col, out_col,
                                                             aux_cols, grp_info);
-
             case Bodo_FTypes::bitor_agg:
                 return apply_to_column<int, Bodo_FTypes::bitor_agg,
                                        Bodo_CTypes::STRING>(in_col, out_col,

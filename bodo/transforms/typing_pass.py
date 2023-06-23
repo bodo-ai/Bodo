@@ -4818,6 +4818,7 @@ class TypingTransforms:
         enable constant access in overload. This may force JIT arguments to be literals
         if needed to satify constant requirements.
         """
+
         kws = dict(rhs.kws)
         nodes = []
         for arg_no, arg_name in func_args:
@@ -5862,6 +5863,7 @@ def _create_const_var(val, name, scope, loc, nodes):
     """create a new variable that holds constant value 'val'. Generates constant
     creation IR nodes and adds them to 'nodes'.
     """
+
     # convert pd.Index values (usually coming from "df.columns") to list to enable
     # passing values as constant (list and pd.Index are equivalent for Pandas API calls
     # that take column names).

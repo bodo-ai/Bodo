@@ -280,6 +280,33 @@ class SkewColSet : public BasicColSet {
 };
 
 /**
+ * @brief Colset for ListAgg operation.
+ */
+class ListAggColSet : public BasicColSet {
+   public:
+    ListAggColSet(std::shared_ptr<array_info> in_col,
+                  std::shared_ptr<array_info> sep_col,
+                  std::vector<std::shared_ptr<array_info>> orderby_cols,
+                  std::vector<bool> window_ascending,
+                  std::vector<bool> window_na_position);
+
+    virtual ~ListAggColSet();
+
+    virtual void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
+
+    virtual void update(const std::vector<grouping_info>& grp_infos);
+
+    virtual std::shared_ptr<array_info> getOutputColumn();
+
+   private:
+    std::string listagg_sep;
+    std::vector<std::shared_ptr<array_info>> orderby_cols;
+    std::vector<bool> window_ascending;
+    std::vector<bool> window_na_position;
+};
+
+/**
  * @brief Colset for Kurtosis operation.
  *
  */

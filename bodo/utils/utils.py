@@ -1313,6 +1313,13 @@ def has_supported_h5py():
     return _has_h5py
 
 
+# Dummy funciton, that should be handled in untyped pass
+# Used to handle aggregations that require more arguments than just the column
+# and aggregation name.
+def ExtendedNamedAgg():
+    pass
+
+
 def check_h5py():
     """raise error if h5py/hdf5 is not installed"""
     if not has_supported_h5py():
@@ -1630,3 +1637,24 @@ def get_filter_predicate_compute_func(col_val):
         compute_func in supported_funcs_map
     ), f"Unsupported compute function for column in filter predicate: {compute_func}"
     return compute_func
+
+
+# Helper function that extracts the constant value from a tuple of constants or a constant
+def get_const_or_build_tuple_of_consts(var):
+    if is_expr(var, "build_tuple"):
+        return tuple([item.value for item in var.items])
+    elif isinstance(var, (ir.Global, ir.FreeVar, ir.Const)):
+        return var.value
+    else:
+        raise BodoError(
+            "Value of orderby should be a constant tuple or tuple of constants"
+        )
+
+
+# Helper function that adds a value to a dictionary of lists,
+# creating the list if it doesn't exist, and appending if it does
+def dict_add_multimap(d, k, v):
+    if k in d:
+        d[k].append(v)
+    else:
+        d[k] = [v]

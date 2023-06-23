@@ -1437,7 +1437,6 @@ def can_literalize_type(t, pyobject_to_literal=False):
 def dtype_to_array_type(dtype, convert_nullable=False):
     """get default array type for scalar dtype
 
-
     Args:
         dtype (types.Type): scalar data type
     """

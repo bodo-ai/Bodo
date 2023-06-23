@@ -154,7 +154,8 @@ class GroupbyPipeline {
                        ftype == Bodo_FTypes::shift ||
                        ftype == Bodo_FTypes::transform ||
                        ftype == Bodo_FTypes::ngroup ||
-                       ftype == Bodo_FTypes::window) {
+                       ftype == Bodo_FTypes::window ||
+                       ftype == Bodo_FTypes::listagg) {
                 // these operations first require shuffling the data to
                 // gather all rows with the same key in the same process
                 if (is_parallel) {
@@ -341,11 +342,18 @@ class GroupbyPipeline {
         // typically 1 column.
         int k = 0;
         n_udf = 0;
+
+        // minor note k should equal num_funcs at the end of the loop in all
+        // situations,
+        //  EXCEPT for aggregations that don't take input columns as arguments,
+        //  (Size, count, head, etc)
+        //  since num_keys == num_input_cols in that case.
         for (uint64_t i = num_keys; i < num_input_cols;
              k++) {  // for each data column
             int start = func_offsets[k];
             int end = func_offsets[k + 1];
             int8_t num_used_cols = ncols_per_func[k];
+
             for (int j = start; j != end;
                  j++) {  // for each function applied to this column
                 // Copy the columns because we pass the input vector by
@@ -399,6 +407,7 @@ class GroupbyPipeline {
             // Increment the input columns.
             i += num_used_cols;
         }
+
         // This is needed if aggregation was just size/ngroup operation, it will
         // skip loop (ncols = num_keys + index_i)
         if (col_sets.size() == 0 && (ftypes[0] == Bodo_FTypes::size ||
@@ -551,6 +560,7 @@ class GroupbyPipeline {
         if (!(nunique_only && nunique_tables.size() > 0)) {
             tables.push_back(in_table);
         }
+
         for (auto it = nunique_tables.begin(); it != nunique_tables.end();
              it++) {
             tables.push_back(it->second);
@@ -582,6 +592,7 @@ class GroupbyPipeline {
         // operations shuffle at different times. For example nunique + sum
         // in test_711.py e2e tests.
         update_table = cur_table = std::make_shared<table_info>();
+
         if (cumulative_op || shift_op || transform_op || head_op || ngroup_op ||
             window_op) {
             num_keys = 0;  // there are no key columns in output of cumulative
@@ -602,6 +613,7 @@ class GroupbyPipeline {
             }
             col_set->update(grp_infos);
         }
+
         // gb.head() already added the index to the tables columns.
         // This is need to do head_computation on it as well.
         // since it will not be the same length as the in_table.
@@ -678,7 +690,7 @@ class GroupbyPipeline {
         combine_table = cur_table = std::make_shared<table_info>();
         alloc_init_keys({update_table}, combine_table);
         std::vector<std::shared_ptr<array_info>> list_arr;
-        for (auto col_set : col_sets) {
+        for (auto& col_set : col_sets) {
             std::vector<std::shared_ptr<array_info>> list_arr;
             col_set->alloc_combine_columns(num_groups, list_arr);
             for (auto& e_arr : list_arr) {
@@ -718,7 +730,9 @@ class GroupbyPipeline {
         } else {
             *n_out_rows = cur_table->nrows();
         }
+
         std::shared_ptr<table_info> out_table = std::make_shared<table_info>();
+
         if (return_key) {
             out_table->columns.assign(cur_table->columns.begin(),
                                       cur_table->columns.begin() + num_keys);
@@ -740,6 +754,7 @@ class GroupbyPipeline {
                 out_table->columns.push_back(cur_table->columns.back());
             }
         }
+
         if ((cumulative_op || shift_op || transform_op || ngroup_op ||
              window_op) &&
             is_parallel) {
@@ -749,6 +764,7 @@ class GroupbyPipeline {
             in_hashes.reset();
             out_table = revshuf_table;
         }
+
         return out_table;
     }
 
@@ -1211,6 +1227,7 @@ table_info* groupby_and_aggregate(
     try {
         std::shared_ptr<table_info> in_table =
             std::shared_ptr<table_info>(input_table);
+
         std::shared_ptr<table_info> udf_dummy_table =
             std::shared_ptr<table_info>(in_udf_dummy_table);
 
