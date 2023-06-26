@@ -58,15 +58,9 @@ bool KeyEqualHashJoinTable::operator()(const int64_t iRowA,
     const std::shared_ptr<table_info>& table_B =
         is_build_B ? build_table : probe_table;
 
-    // Determine if NA columns should match. They should always
-    // match when populating the hash map with the build table.
-    // When comparing the build and probe tables this depends on
-    // is_na_equal.
-    // TODO: Eliminate groups with NA columns with is_na_equal=False
-    // from the hashmap.
-    bool set_na_equal = (is_build_A && is_build_B);
-    bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB, this->n_keys,
-                              set_na_equal);
+    // All NA keys have already been pruned.
+    bool test =
+        TestEqualJoin(table_A, table_B, jRowA, jRowB, this->n_keys, false);
     return test;
 }
 
@@ -696,6 +690,10 @@ HashJoinState::HashJoinState(const std::vector<int8_t>& build_arr_c_types,
     this->probe_shuffle_buffer =
         TableBuildBuffer(probe_arr_c_types, probe_arr_array_types,
                          this->probe_table_dict_builders);
+    // Create a build buffer for NA values to skip the hash table.
+    this->build_na_key_buffer =
+        TableBuildBuffer(build_arr_c_types, build_arr_array_types,
+                         this->build_table_dict_builders);
 
     // Create the initial partition
     this->partitions.emplace_back(std::make_shared<JoinPartition>(
@@ -853,6 +851,31 @@ void HashJoinState::AppendBuildBatch(
     }
 }
 
+void HashJoinState::InitOutputBuffer(
+    const std::vector<uint64_t>& build_kept_cols,
+    const std::vector<uint64_t>& probe_kept_cols) {
+    if (this->output_buffer != nullptr) {
+        // Already initialized. We only initialize on the first
+        // iteration.
+        return;
+    }
+    JoinState::InitOutputBuffer(build_kept_cols, probe_kept_cols);
+    // Append any NA values from the NA side.
+    if (this->build_table_outer) {
+        // Create the idxs.
+        int64_t n_rows = this->build_na_key_buffer.data_table->nrows();
+        std::vector<int64_t> build_idxs(n_rows);
+        std::vector<int64_t> probe_idxs(n_rows, -1);
+        for (int64_t i = 0; i < n_rows; i++) {
+            build_idxs[i] = i;
+        }
+        this->output_buffer->AppendJoinOutput(
+            this->build_na_key_buffer.data_table, this->dummy_probe_table,
+            build_idxs, probe_idxs, build_kept_cols, probe_kept_cols);
+        // TODO: Free memory. This is never used again.
+    }
+}
+
 void HashJoinState::FinalizeBuild() {
     // TODO Add steps to make sure only one partition is pinned at a time.
     // TODO Add logic to check if partition is too big and needs to be
@@ -947,8 +970,10 @@ HashJoinState::GetDictionaryHashesForKeys() {
     return dict_hashes;
 }
 
+template <bool build_table_outer>
 std::shared_ptr<table_info> filter_na_values(
-    std::shared_ptr<table_info> in_table, uint64_t n_keys) {
+    HashJoinState* join_state, std::shared_ptr<table_info> in_table,
+    uint64_t n_keys) {
     bodo::vector<bool> not_na(in_table->nrows(), true);
     bool can_have_na = false;
     for (uint64_t i = 0; i < n_keys; i++) {
@@ -968,15 +993,36 @@ std::shared_ptr<table_info> filter_na_values(
     }
     // Retrieve table takes a list of columns. Convert the boolean array.
     bodo::vector<int64_t> idx_list;
+    // For appending NAs in outer join.
+    std::vector<bool> append_nas(in_table->nrows(), false);
+    // If we have a replicated build table without a replicated probe table.
+    // then we only add a fraction of NA rows to the output. Otherwise we add
+    // all rows.
+    const bool add_all =
+        join_state->build_parallel || !join_state->probe_parallel;
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     for (size_t i = 0; i < in_table->nrows(); i++) {
         if (not_na[i]) {
             idx_list.emplace_back(i);
+        } else if (build_table_outer) {
+            // If build table is replicated but output is not
+            // replicated evenly divide NA values across all ranks.
+            append_nas[i] =
+                add_all || ((join_state->build_na_counter % n_pes) == myrank);
+            join_state->build_na_counter++;
         }
     }
     if (idx_list.size() == in_table->nrows()) {
         // No NA values, skip the copy.
         return in_table;
     } else {
+        if (build_table_outer) {
+            // If have an outer join we must push the NA values directly to the
+            // output, not just filter them.
+            join_state->build_na_key_buffer.AppendBatch(in_table, append_nas);
+        }
         return RetrieveTable(std::move(in_table), std::move(idx_list));
     }
 }
@@ -1027,8 +1073,12 @@ void join_build_consume_batch(HashJoinState* join_state,
     // build_table_outer = True then we can skip adding these rows to the hash
     // table (as they can't match), but must write them to the Join output.
     // TODO: Have outer join skip the build table/avoid shuffling.
-    if (!join_state->build_table_outer) {
-        in_table = filter_na_values(std::move(in_table), join_state->n_keys);
+    if (join_state->build_table_outer) {
+        in_table = filter_na_values<true>(join_state, std::move(in_table),
+                                          join_state->n_keys);
+    } else {
+        in_table = filter_na_values<false>(join_state, std::move(in_table),
+                                           join_state->n_keys);
     }
 
     // Get hashes of the new batch (different hashes for partitioning and hash
