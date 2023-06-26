@@ -1076,6 +1076,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return new Expr.Raw(strExpr);
           case "TIMESTAMP":
             return generateTimestampFnCode(operands.get(0).emit());
+          case "TIME_SLICE":
+            return generateTimeSliceFnCode(operands, 0);
           case "DATE":
           case "TO_DATE":
           case "TRY_TO_DATE":
