@@ -348,8 +348,8 @@ class JoinState {
         this->probe_input_finalized = true;
     }
 
-    void InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
-                          const std::vector<uint64_t>& probe_kept_cols);
+    virtual void InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
+                                  const std::vector<uint64_t>& probe_kept_cols);
 
     /**
      * @brief Unify dictionaries of input table with build table
@@ -394,6 +394,15 @@ class HashJoinState : public JoinState {
     // Global bloom-filter. This is built during the build step
     // and used during the probe step.
     std::unique_ptr<BloomFilter> global_bloom_filter;
+
+    // Keep a table of NA keys for bypassing the hash table
+    // if we have an outer join and any keys can contain NAs.
+    TableBuildBuffer build_na_key_buffer;
+    // How many NA values have we seen. This is used for consistent
+    // partitioning if the build table is replicated and the probe table
+    // distributed. This is unused if the build table is distributed or
+    // the final output is replicated.
+    size_t build_na_counter = 0;
 
     // Current iteration of the build and probe steps
     uint64_t build_iter;
@@ -497,6 +506,10 @@ class HashJoinState : public JoinState {
         const std::shared_ptr<uint32_t[]>& join_hashes,
         const std::shared_ptr<uint32_t[]>& partitioning_hashes,
         const std::vector<bool>& append_rows);
+
+    void InitOutputBuffer(
+        const std::vector<uint64_t>& build_kept_cols,
+        const std::vector<uint64_t>& probe_kept_cols) override;
 
     /**
      * @brief Finalize build step for all partitions.
