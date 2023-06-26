@@ -552,6 +552,13 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
+        if fdef == (
+            "init_groupby_state",
+            "bodo.libs.stream_groupby",
+        ) and self._is_1D_or_1D_Var_arr(lhs):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
         if (
             func_name == "fit"
             and "bodo.libs.xgb_ext" in sys.modules

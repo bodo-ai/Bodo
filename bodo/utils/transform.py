@@ -352,6 +352,7 @@ no_side_effect_call_tuples = {
     ("scalar_optional_getitem", "indexing", "utils", bodo),
     # Streaming join
     ("init_join_state", "stream_join", "libs", bodo),
+    ("init_groupby_state", "stream_groupby", "libs", bodo),
 }
 
 
