@@ -31,13 +31,106 @@ ArrayBuildBuffer::ArrayBuildBuffer(
     }
 }
 
+void ArrayBuildBuffer::IncrementSize() {
+    switch (this->data_array->arr_type) {
+        case bodo_array_type::NULLABLE_INT_BOOL: {
+            if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
+                size++;
+                data_array->length = size;
+                CHECK_ARROW_MEM(data_array->buffers[0]->Resize(
+                                    arrow::bit_util::BytesForBits(size), false),
+                                "Resize Failed!");
+                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
+                                    arrow::bit_util::BytesForBits(size), false),
+                                "Resize Failed!");
+            } else {
+                uint64_t size_type = numpy_item_size[this->data_array->dtype];
+                size++;
+                data_array->length = size;
+                CHECK_ARROW_MEM(
+                    data_array->buffers[0]->Resize(size * size_type, false),
+                    "Resize Failed!");
+                CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
+                                    arrow::bit_util::BytesForBits(size), false),
+                                "Resize Failed!");
+            }
+        } break;
+        case bodo_array_type::STRING: {
+            // NOTE: only increments offset and null bitmap sizes but not data
+            // buffer.
+            size++;
+            data_array->length = size;
+
+            CHECK_ARROW_MEM(data_array->buffers[1]->Resize(
+                                (size + 1) * sizeof(offset_t), false),
+                            "Resize Failed!");
+            CHECK_ARROW_MEM(data_array->buffers[2]->Resize(
+                                arrow::bit_util::BytesForBits(size), false),
+                            "Resize Failed!");
+        } break;
+        case bodo_array_type::DICT: {
+            this->dict_indices->IncrementSize();
+            size++;
+            data_array->length = size;
+        } break;
+        case bodo_array_type::NUMPY: {
+            uint64_t size_type = numpy_item_size[this->data_array->dtype];
+            size++;
+            data_array->length = size;
+            CHECK_ARROW_MEM(
+                data_array->buffers[0]->Resize(size * size_type, false),
+                "Resize Failed!");
+        } break;
+        default:
+            throw std::runtime_error(
+                "invalid array type in IncrementSize " +
+                GetArrType_as_string(this->data_array->arr_type));
+    }
+}
+
 void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
-    int64_t min_capacity = size + in_arr->length;
-    switch (in_arr->arr_type) {
+    if (in_arr->arr_type != data_array->arr_type) {
+        throw std::runtime_error(
+            "Array types don't match in ReserveArray, buffer is " +
+            GetArrType_as_string(data_array->arr_type) + ", but input is " +
+            GetArrType_as_string(in_arr->arr_type));
+    }
+    if (in_arr->dtype != data_array->dtype) {
+        throw std::runtime_error(
+            "Array dtypes don't match in ReserveArray, buffer is " +
+            GetDtype_as_string(data_array->dtype) + ", but input is " +
+            GetDtype_as_string(in_arr->dtype));
+    }
+
+    if (in_arr->arr_type == bodo_array_type::DICT &&
+        data_array->child_arrays[0] != in_arr->child_arrays[0]) {
+        throw std::runtime_error("dictionary not unified in ReserveArray");
+    }
+
+    this->ReserveSize(in_arr->length);
+
+    if (in_arr->arr_type == bodo_array_type::STRING) {
+        // update data buffer
+        int64_t capacity_chars = data_array->buffers[0]->capacity();
+        int64_t min_capacity_chars =
+            data_array->n_sub_elems() + in_arr->n_sub_elems();
+        if (min_capacity_chars > capacity_chars) {
+            int64_t new_capacity_chars =
+                std::max(min_capacity_chars, capacity_chars * 2);
+            CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(new_capacity_chars *
+                                                            sizeof(int8_t)),
+                            "Reserve failed!");
+        }
+    }
+}
+
+void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
+    int64_t min_capacity = size + new_data_len;
+    switch (this->data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL:
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
-                if (in_arr->dtype == Bodo_CTypes::_BOOL) {
+                if (this->data_array->dtype == Bodo_CTypes::_BOOL) {
                     CHECK_ARROW_MEM(
                         data_array->buffers[0]->Reserve(
                             arrow::bit_util::BytesForBits(new_capacity)),
@@ -47,7 +140,8 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
                             arrow::bit_util::BytesForBits(new_capacity)),
                         "Reserve failed!");
                 } else {
-                    uint64_t size_type = numpy_item_size[in_arr->dtype];
+                    uint64_t size_type =
+                        numpy_item_size[this->data_array->dtype];
                     CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(
                                         new_capacity * size_type),
                                     "Reserve failed!");
@@ -72,27 +166,12 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
                     "Reserve failed!");
                 capacity = new_capacity;
             }
-            // update data buffer
-            int64_t capacity_chars = data_array->buffers[0]->capacity();
-            int64_t min_capacity_chars =
-                data_array->n_sub_elems() + in_arr->n_sub_elems();
-            if (min_capacity_chars > capacity_chars) {
-                int64_t new_capacity_chars =
-                    std::max(min_capacity_chars, capacity_chars * 2);
-                CHECK_ARROW_MEM(data_array->buffers[0]->Reserve(
-                                    new_capacity_chars * sizeof(int8_t)),
-                                "Reserve failed!");
-            }
         } break;
         case bodo_array_type::DICT: {
-            if (this->data_array->child_arrays[0] != in_arr->child_arrays[0]) {
-                throw std::runtime_error(
-                    "dictionary not unified in ReserveArray");
-            }
-            this->dict_indices->ReserveArray(in_arr->child_arrays[1]);
+            this->dict_indices->ReserveSize(new_data_len);
         } break;
         case bodo_array_type::NUMPY: {
-            uint64_t size_type = numpy_item_size[in_arr->dtype];
+            uint64_t size_type = numpy_item_size[this->data_array->dtype];
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
                 CHECK_ARROW_MEM(
@@ -102,8 +181,9 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
             }
         } break;
         default:
-            throw std::runtime_error("invalid array type in ReserveArray " +
-                                     GetArrType_as_string(in_arr->arr_type));
+            throw std::runtime_error(
+                "invalid array type in ReserveSize " +
+                GetArrType_as_string(this->data_array->arr_type));
     }
 }
 
@@ -368,11 +448,41 @@ void TableBuildBuffer::AppendBatch(
 #undef APPEND_ARRAY_BATCH
 }
 
+void TableBuildBuffer::AppendRowKeys(
+    const std::shared_ptr<table_info>& in_table, int64_t row_ind,
+    uint64_t n_keys) {
+    for (size_t i = 0; i < (size_t)n_keys; i++) {
+        const std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        array_buffers[i].AppendRow(in_arr, row_ind);
+    }
+}
+
+void TableBuildBuffer::IncrementSizeDataColumns(uint64_t n_keys) {
+    for (size_t i = n_keys; i < this->data_table->ncols(); i++) {
+        array_buffers[i].IncrementSize();
+    }
+}
+
 void TableBuildBuffer::ReserveTable(
     const std::shared_ptr<table_info>& in_table) {
     for (size_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info>& in_arr = in_table->columns[i];
         array_buffers[i].ReserveArray(in_arr);
+    }
+}
+
+void TableBuildBuffer::ReserveTableKeys(
+    const std::shared_ptr<table_info>& in_table, uint64_t n_keys) {
+    for (size_t i = 0; i < n_keys; i++) {
+        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        array_buffers[i].ReserveArray(in_arr);
+    }
+}
+
+void TableBuildBuffer::ReserveSizeDataColumns(uint64_t new_data_len,
+                                              uint64_t n_keys) {
+    for (size_t i = n_keys; i < this->data_table->ncols(); i++) {
+        array_buffers[i].ReserveSize(new_data_len);
     }
 }
 

@@ -464,12 +464,12 @@ struct ArrayBuildBuffer {
         data_array->length = size;
     }
 
-    template <bodo_array_type::arr_type_enum arr_type,
-              Bodo_CTypes::CTypeEnum DType>
     void AppendRow(const std::shared_ptr<array_info>& in_arr, int64_t row_ind) {
+        bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+        Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
         switch (arr_type) {
             case bodo_array_type::NULLABLE_INT_BOOL: {
-                if (DType == Bodo_CTypes::_BOOL) {
+                if (dtype == Bodo_CTypes::_BOOL) {
                     arrow::bit_util::SetBitTo(
                         (uint8_t*)data_array->data1(), size,
                         GetBit((uint8_t*)in_arr->data1(), row_ind));
@@ -541,9 +541,7 @@ struct ArrayBuildBuffer {
                     throw std::runtime_error(
                         "dictionary not unified in AppendRow");
                 }
-                this->dict_indices->AppendRow<
-                    bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32>(
-                    in_arr->child_arrays[1], row_ind);
+                this->dict_indices->AppendRow(in_arr->child_arrays[1], row_ind);
                 size++;
                 data_array->length = size;
             } break;
@@ -573,6 +571,24 @@ struct ArrayBuildBuffer {
      * @param in_arr input array used for finding new buffer sizes to reserve
      */
     void ReserveArray(const std::shared_ptr<array_info>& in_arr);
+
+    /**
+     * @brief Reserve enough space to potentially append new_data_len new rows
+     * to buffer.
+     * NOTE: This does not reserve space for variable-sized
+     * elements like strings and nested arrays.
+     *
+     * @param new_data_len number of new rows that need reserved
+     */
+    void ReserveSize(uint64_t new_data_len);
+
+    /**
+     * @brief increment the size of the buffer by one to allow a new row to be
+     * appended.
+     * NOTE: This does not resize data buffers of variable-sized
+     * elements like strings and nested arrays.
+     */
+    void IncrementSize();
 
     /**
      * @brief Clear the buffers, i.e. set size to 0.
@@ -635,6 +651,25 @@ struct TableBuildBuffer {
     void AppendBatch(const std::shared_ptr<table_info>& in_table);
 
     /**
+     * @brief Append key columns of a row of input table, assuming there is
+     * already enough space reserved (with ReserveTable).
+     *
+     * @param in_table input table with the new row
+     * @param row_ind index of new row in input table
+     * @param n_keys number of key columns
+     */
+    void AppendRowKeys(const std::shared_ptr<table_info>& in_table,
+                       int64_t row_ind, uint64_t n_keys);
+
+    /**
+     * @brief increment size of data columns by one to allow appending a new
+     * data row
+     *
+     * @param n_keys number of key columns
+     */
+    void IncrementSizeDataColumns(uint64_t n_keys);
+
+    /**
      * @brief Reserve enough space to potentially append all contents of input
      * table to buffer. NOTE: This requires reserving space for variable-sized
      * elements like strings and nested arrays.
@@ -642,6 +677,26 @@ struct TableBuildBuffer {
      * @param in_table input table used for finding new buffer sizes to reserve
      */
     void ReserveTable(const std::shared_ptr<table_info>& in_table);
+
+    /**
+     * @brief Same as ReserveTable but reserves space only for key columns
+     *
+     * @param in_table input table used for finding new buffer sizes to reserve
+     * @param n_keys number of keys
+     */
+    void ReserveTableKeys(const std::shared_ptr<table_info>& in_table,
+                          uint64_t n_keys);
+
+    /**
+     * @brief Reserve enough space to potentially append new_data_len new rows
+     * to data columns.
+     * NOTE: This does not reserve space for variable-sized
+     * elements like strings and nested arrays.
+     *
+     * @param new_data_len number of new rows that need reserved
+     * @param n_keys number of keys
+     */
+    void ReserveSizeDataColumns(uint64_t new_data_len, uint64_t n_keys);
 
     /**
      * @brief Clear the buffers, i.e. set size to 0.

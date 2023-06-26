@@ -4,6 +4,8 @@
 
 #include "_bodo_common.h"
 #include "_groupby.h"
+#include "_groupby_common.h"
+#include "_groupby_update.h"
 
 /**
  * This file declares the functions used to create "col sets"
@@ -82,8 +84,11 @@ class BasicColSet {
      * Perform combine step for this column set. This will fill my columns with
      * the result of the aggregation operation corresponding to this column set
      * @param grouping info calculated by GroupbyPipeline
+     * @param init_start_row index of first row for initializing output (used in
+     * streaming groupby)
      */
-    virtual void combine(const grouping_info& grp_info);
+    virtual void combine(const grouping_info& grp_info,
+                         int64_t init_start_row = 0);
 
     /**
      * Perform eval step for this column set. This will fill the output column
@@ -99,6 +104,98 @@ class BasicColSet {
      * columns (if any) used by the column set (like reduction variables).
      */
     virtual std::shared_ptr<array_info> getOutputColumn();
+
+    /**
+     * @brief Set input columns of this ColSet (used in streaming groupby for
+     * processing new batches)
+     *
+     * @param new_in_cols new input columns
+     */
+    void setInCol(std::vector<std::shared_ptr<array_info>> new_in_cols) {
+        // TODO[BSE-578]: implement setInCol() for other colsets that can have
+        // more input columns
+        in_col = new_in_cols[0];
+    }
+
+    /**
+     * @brief Get update column types for this ColSet function with the given
+     * input array types
+     *
+     * @param in_arr_types input array types
+     * @param in_dtypes input array dtypes
+     * @return std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+     * std::vector<Bodo_CTypes::CTypeEnum>> update column array types and dtypes
+     */
+    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+               std::vector<Bodo_CTypes::CTypeEnum>>
+    getUpdateColumnTypes(
+        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
+        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) {
+        // TODO[BSE-578]: implement getUpdateColumnTypes() for other colsets
+        // that can have more update columns
+        std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
+            out_arr_type =
+                get_groupby_output_dtype(ftype, in_arr_types[0], in_dtypes[0]);
+        return std::tuple(
+            std::vector<bodo_array_type::arr_type_enum>{
+                std::get<0>(out_arr_type)},
+            std::vector<Bodo_CTypes::CTypeEnum>{std::get<1>(out_arr_type)});
+    }
+
+    /**
+     * @brief Get combine column types for this ColSet function with the given
+     * update array types
+     *
+     * @param update_arr_types update array types
+     * @param update_dtypes update dtypes
+     * @return std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+     * std::vector<Bodo_CTypes::CTypeEnum>> combine column array types and
+     * dtypes
+     */
+    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+               std::vector<Bodo_CTypes::CTypeEnum>>
+    getCombineColumnTypes(
+        const std::vector<bodo_array_type::arr_type_enum>& update_arr_types,
+        const std::vector<Bodo_CTypes::CTypeEnum>& update_dtypes) {
+        // TODO[BSE-578]: implement getCombineColumnTypes() for other colsets
+        // that can have more update columns
+        int combine_ftype = get_combine_func(ftype);
+        std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
+            out_arr_type = get_groupby_output_dtype(
+                combine_ftype, update_arr_types[0], update_dtypes[0]);
+        return std::tuple(
+            std::vector<bodo_array_type::arr_type_enum>{
+                std::get<0>(out_arr_type)},
+            std::vector<Bodo_CTypes::CTypeEnum>{std::get<1>(out_arr_type)});
+    }
+
+    /**
+     * @brief clear the update column vector to allow calling update with new
+     * data batch (used in streaming groupby)
+     *
+     */
+    void clearUpdateCols() { update_cols.clear(); }
+
+    /**
+     * @brief Set update columns to allow calling combine with new data batch
+     * (used in streaming groupby)
+     *
+     * @param update_cols_
+     */
+    void setUpdateCols(std::vector<std::shared_ptr<array_info>> update_cols_) {
+        update_cols = update_cols_;
+    }
+
+    /**
+     * @brief Set combine columns to allow producing combine results in the
+     * given buffer (used in streaming groupby)
+     *
+     * @param combine_cols_
+     */
+    void setCombineCols(
+        std::vector<std::shared_ptr<array_info>> combine_cols_) {
+        combine_cols = combine_cols_;
+    }
 
    protected:
     std::shared_ptr<array_info>
@@ -126,7 +223,8 @@ class MeanColSet : public BasicColSet {
     virtual void alloc_update_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
     virtual void update(const std::vector<grouping_info>& grp_infos);
-    virtual void combine(const grouping_info& grp_info);
+    virtual void combine(const grouping_info& grp_info,
+                         int64_t init_start_row = 0);
     virtual void eval(const grouping_info& grp_info);
 };
 
@@ -204,7 +302,8 @@ class IdxMinMaxColSet : public BasicColSet {
     virtual void alloc_combine_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
-    virtual void combine(const grouping_info& grp_info);
+    virtual void combine(const grouping_info& grp_info,
+                         int64_t init_start_row = 0);
 
    private:
     std::shared_ptr<array_info> index_col;
@@ -226,7 +325,8 @@ class BoolXorColSet : public BasicColSet {
 
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
-    virtual void combine(const grouping_info& grp_info);
+    virtual void combine(const grouping_info& grp_info,
+                         int64_t init_start_row = 0);
 
     virtual void eval(const grouping_info& grp_info);
 };
@@ -250,7 +350,8 @@ class VarStdColSet : public BasicColSet {
     virtual void alloc_combine_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
-    virtual void combine(const grouping_info& grp_info);
+    virtual void combine(const grouping_info& grp_info,
+                         int64_t init_start_row = 0);
 
     virtual void eval(const grouping_info& grp_info);
 };
@@ -274,7 +375,8 @@ class SkewColSet : public BasicColSet {
     virtual void alloc_combine_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
-    virtual void combine(const grouping_info& grp_info);
+    virtual void combine(const grouping_info& grp_info,
+                         int64_t init_start_row = 0);
 
     virtual void eval(const grouping_info& grp_info);
 };
@@ -325,7 +427,8 @@ class KurtColSet : public BasicColSet {
     virtual void alloc_combine_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
-    virtual void combine(const grouping_info& grp_info);
+    virtual void combine(const grouping_info& grp_info,
+                         int64_t init_start_row = 0);
 
     virtual void eval(const grouping_info& grp_info);
 };
@@ -354,7 +457,8 @@ class UdfColSet : public BasicColSet {
     virtual void alloc_combine_columns(
         size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols);
 
-    virtual void combine(const grouping_info& grp_info);
+    virtual void combine(const grouping_info& grp_info,
+                         int64_t init_start_row = 0);
 
     virtual void eval(const grouping_info& grp_info);
 

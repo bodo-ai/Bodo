@@ -934,12 +934,29 @@ NRT_MemInfo* alloc_array_item_arr_meminfo();
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
 
-inline void InitializeBitMask(uint8_t* bits, size_t length, bool val) {
-    size_t n_bytes = (length + 7) >> 3;
+/**
+ * @brief initialize bitmask for array
+ *
+ * @param bits bitmask pointer
+ * @param length total length of array
+ * @param val value to initialize (true or false)
+ * @param start_row first row to start initializing from
+ */
+inline void InitializeBitMask(uint8_t* bits, size_t length, bool val,
+                              int64_t start_row = 0) {
+    // if start row isn't byte aligned for memset
+    if ((start_row & 7) != 0) {
+        for (size_t i = start_row; i < length; i++) {
+            SetBitTo(bits, i, val);
+        }
+        return;
+    }
+    size_t n_bytes = (length - start_row + 7) >> 3;
+    uint8_t* ptr = bits + (start_row >> 3);
     if (!val)
-        memset(bits, 0, n_bytes);
+        memset(ptr, 0, n_bytes);
     else
-        memset(bits, 0xff, n_bytes);
+        memset(ptr, 0xff, n_bytes);
 }
 
 inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
@@ -1016,6 +1033,7 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void);
 PyMODINIT_FUNC PyInit_csv_cpp(void);
 PyMODINIT_FUNC PyInit_json_cpp(void);
 PyMODINIT_FUNC PyInit_stream_join_cpp(void);
+PyMODINIT_FUNC PyInit_stream_groupby_cpp(void);
 }  // extern "C"
 
 #endif /* BODO_COMMON_H_INCLUDED_ */

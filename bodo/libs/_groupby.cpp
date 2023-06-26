@@ -6,6 +6,7 @@
 #include "_array_utils.h"
 #include "_distributed.h"
 #include "_groupby_col_set.h"
+#include "_groupby_common.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_groups.h"
 #include "_groupby_mpi_exscan.h"
@@ -598,7 +599,8 @@ class GroupbyPipeline {
             num_keys = 0;  // there are no key columns in output of cumulative
                            // operations
         } else {
-            alloc_init_keys(tables, update_table);
+            alloc_init_keys(tables, update_table, grp_infos, num_keys,
+                            num_groups);
         }
 
         for (auto col_set : col_sets) {
@@ -688,7 +690,8 @@ class GroupbyPipeline {
         grp_info.mode = 2;
 
         combine_table = cur_table = std::make_shared<table_info>();
-        alloc_init_keys({update_table}, combine_table);
+        alloc_init_keys({update_table}, combine_table, grp_infos, num_keys,
+                        num_groups);
         std::vector<std::shared_ptr<array_info>> list_arr;
         for (auto& col_set : col_sets) {
             std::vector<std::shared_ptr<array_info>> list_arr;
@@ -951,206 +954,6 @@ class GroupbyPipeline {
             // GroupbyPipeline() are not valid, since we have shuffled all of
             // the input columns
             hashes.reset();
-        }
-    }
-
-    /**
-     * @brief Get key_col given a group number
-     *
-     * @param group[in]: group number
-     * @param from_tables[in] list of tables
-     * @param key_col_idx[in]
-     * @return std::tuple<array_info*, int64_t> Tuple of the
-     * column and the row containing the group. Note that we're
-     * returning an unowned pointer to the column. The column
-     * is only guaranteed to be alive for the lifetime of
-     * 'from_tables'.
-     */
-    std::tuple<array_info*, int64_t> find_key_for_group(
-        int64_t group,
-        const std::vector<std::shared_ptr<table_info>>& from_tables,
-        int64_t key_col_idx) {
-        for (size_t k = 0; k < grp_infos.size(); k++) {
-            int64_t key_row = grp_infos[k].group_to_first_row[group];
-            if (key_row >= 0) {
-                array_info* key_col =
-                    (from_tables[k]->columns[key_col_idx]).get();
-                return {key_col, key_row};
-            }
-        }
-        throw std::runtime_error("No valid row found for group: " +
-                                 std::to_string(group));
-    }
-
-    /**
-     * Allocate and fill key columns, based on grouping info. It uses the
-     * values of key columns from from_table to populate out_table.
-     */
-    void alloc_init_keys(
-        const std::vector<std::shared_ptr<table_info>>& from_tables,
-        const std::shared_ptr<table_info>& out_table) {
-        int64_t key_row = 0;
-        for (int64_t i = 0; i < num_keys; i++) {
-            // Use a raw pointer since we only need temporary read access.
-            // The column is guaranteed to be live for the duration
-            // of the loop since 'from_tables' has a live reference
-            // to it.
-            array_info* key_col = (from_tables[0]->columns[i]).get();
-            std::shared_ptr<array_info> new_key_col = nullptr;
-            if (key_col->arr_type == bodo_array_type::NUMPY ||
-                key_col->arr_type == bodo_array_type::CATEGORICAL ||
-                key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                new_key_col =
-                    alloc_array(num_groups, 1, 1, key_col->arr_type,
-                                key_col->dtype, 0, key_col->num_categories);
-                if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-                    key_col->dtype == Bodo_CTypes::_BOOL) {
-                    // Nullable booleans store 1 bit per boolean
-                    for (size_t j = 0; j < num_groups; j++) {
-                        std::tie(key_col, key_row) =
-                            find_key_for_group(j, from_tables, i);
-                        bool bit = GetBit((uint8_t*)key_col->data1(), key_row);
-                        SetBitTo((uint8_t*)new_key_col->data1(), j, bit);
-                    }
-                } else {
-                    int64_t dtype_size = numpy_item_size[key_col->dtype];
-                    for (size_t j = 0; j < num_groups; j++) {
-                        std::tie(key_col, key_row) =
-                            find_key_for_group(j, from_tables, i);
-                        memcpy(new_key_col->data1() + j * dtype_size,
-                               key_col->data1() + key_row * dtype_size,
-                               dtype_size);
-                    }
-                }
-                if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                    for (size_t j = 0; j < num_groups; j++) {
-                        std::tie(key_col, key_row) =
-                            find_key_for_group(j, from_tables, i);
-                        bool bit = key_col->get_null_bit(key_row);
-                        new_key_col->set_null_bit(j, bit);
-                    }
-                }
-            }
-            if (key_col->arr_type == bodo_array_type::DICT) {
-                array_info* key_indices = (key_col->child_arrays[1]).get();
-                std::shared_ptr<array_info> new_key_indices =
-                    alloc_array(num_groups, -1, -1, key_indices->arr_type,
-                                key_indices->dtype, 0, 0);
-                for (size_t j = 0; j < num_groups; j++) {
-                    std::tie(key_col, key_row) =
-                        find_key_for_group(j, from_tables, i);
-                    // Update key_indices with the new key col
-                    key_indices = (key_col->child_arrays[1]).get();
-                    new_key_indices->at<dict_indices_t>(j) =
-                        key_indices->at<dict_indices_t>(key_row);
-                    bool bit = key_indices->get_null_bit(key_row);
-                    new_key_indices->set_null_bit(j, bit);
-                }
-                new_key_col = create_dict_string_array(
-                    key_col->child_arrays[0], new_key_indices,
-                    key_col->has_global_dictionary,
-                    key_col->has_deduped_local_dictionary,
-                    key_col->has_sorted_dictionary);
-            }
-            if (key_col->arr_type == bodo_array_type::STRING) {
-                // new key col will have num_groups rows containing the
-                // string for each group
-                int64_t n_chars = 0;  // total number of chars of all keys for
-                                      // this column
-                offset_t* in_offsets;
-                for (size_t j = 0; j < num_groups; j++) {
-                    std::tie(key_col, key_row) =
-                        find_key_for_group(j, from_tables, i);
-                    in_offsets = (offset_t*)key_col->data2();
-                    n_chars += in_offsets[key_row + 1] - in_offsets[key_row];
-                }
-                new_key_col =
-                    alloc_array(num_groups, n_chars, 1, key_col->arr_type,
-                                key_col->dtype, 0, key_col->num_categories);
-
-                offset_t* out_offsets = (offset_t*)new_key_col->data2();
-                offset_t pos = 0;
-                for (size_t j = 0; j < num_groups; j++) {
-                    std::tie(key_col, key_row) =
-                        find_key_for_group(j, from_tables, i);
-                    in_offsets = (offset_t*)key_col->data2();
-                    offset_t start_offset = in_offsets[key_row];
-                    offset_t str_len = in_offsets[key_row + 1] - start_offset;
-                    out_offsets[j] = pos;
-                    memcpy(&new_key_col->data1()[pos],
-                           &key_col->data1()[start_offset], str_len);
-                    pos += str_len;
-                    bool bit = key_col->get_null_bit(key_row);
-                    new_key_col->set_null_bit(j, bit);
-                }
-                out_offsets[num_groups] = pos;
-            }
-            if (key_col->arr_type == bodo_array_type::LIST_STRING) {
-                // new key col will have num_groups rows containing the
-                // list string for each group
-                int64_t n_strings = 0;  // total number of strings of all keys
-                                        // for this column
-                int64_t n_chars = 0;    // total number of chars of all keys for
-                                        // this column
-                offset_t* in_index_offsets;
-                offset_t* in_data_offsets;
-                for (size_t j = 0; j < num_groups; j++) {
-                    std::tie(key_col, key_row) =
-                        find_key_for_group(j, from_tables, i);
-                    in_index_offsets = (offset_t*)key_col->data3();
-                    in_data_offsets = (offset_t*)key_col->data2();
-                    n_strings += in_index_offsets[key_row + 1] -
-                                 in_index_offsets[key_row];
-                    n_chars += in_data_offsets[in_index_offsets[key_row + 1]] -
-                               in_data_offsets[in_index_offsets[key_row]];
-                }
-                new_key_col = alloc_array(num_groups, n_strings, n_chars,
-                                          key_col->arr_type, key_col->dtype, 0,
-                                          key_col->num_categories);
-                uint8_t* in_sub_null_bitmask =
-                    (uint8_t*)key_col->sub_null_bitmask();
-                uint8_t* out_sub_null_bitmask =
-                    (uint8_t*)new_key_col->sub_null_bitmask();
-                offset_t* out_index_offsets = (offset_t*)new_key_col->data3();
-                offset_t* out_data_offsets = (offset_t*)new_key_col->data2();
-                offset_t pos_data = 0;
-                offset_t pos_index = 0;
-                out_data_offsets[0] = 0;
-                out_index_offsets[0] = 0;
-                for (size_t j = 0; j < num_groups; j++) {
-                    std::tie(key_col, key_row) =
-                        find_key_for_group(j, from_tables, i);
-                    in_index_offsets = (offset_t*)key_col->data3();
-                    in_data_offsets = (offset_t*)key_col->data2();
-                    offset_t size_index = in_index_offsets[key_row + 1] -
-                                          in_index_offsets[key_row];
-                    offset_t pos_start = in_index_offsets[key_row];
-                    for (offset_t i_str = 0; i_str < size_index; i_str++) {
-                        offset_t len_str =
-                            in_data_offsets[pos_start + i_str + 1] -
-                            in_data_offsets[pos_start + i_str];
-                        pos_index++;
-                        out_data_offsets[pos_index] =
-                            out_data_offsets[pos_index - 1] + len_str;
-                        bool bit =
-                            GetBit(in_sub_null_bitmask, pos_start + i_str);
-                        SetBitTo(out_sub_null_bitmask, pos_index, bit);
-                    }
-                    out_index_offsets[j + 1] = pos_index;
-                    // Now the strings themselves
-                    offset_t in_start_offset =
-                        in_data_offsets[in_index_offsets[key_row]];
-                    offset_t n_chars_o =
-                        in_data_offsets[in_index_offsets[key_row + 1]] -
-                        in_data_offsets[in_index_offsets[key_row]];
-                    memcpy(&new_key_col->data1()[pos_data],
-                           &key_col->data1()[in_start_offset], n_chars_o);
-                    pos_data += n_chars_o;
-                    bool bit = key_col->get_null_bit(key_row);
-                    new_key_col->set_null_bit(j, bit);
-                }
-            }
-            out_table->columns.push_back(std::move(new_key_col));
         }
     }
 
