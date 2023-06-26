@@ -2335,3 +2335,317 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
         sort_output=True,
         reset_index=True,
     )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("side", ["build", "probe"])
+@pytest.mark.parametrize("insert_loc", ["middle", "last"])
+def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
+    """Test hash join with empty table inserted in the middle or at the end of all batches,
+    on the build or probe side and with or without broadcast"""
+    df1 = pd.DataFrame(
+        {
+            "A": np.array(list(range(2500)) * 5),
+            "B": np.array(list(range(2500)) * 5),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array(list(range(2499, 4999)) * 5),
+            "D": np.array(list(range(2500, 5000)) * 5),
+        }
+    )
+    build_keys_inds = bodo.utils.typing.MetaType((0,))
+    probe_keys_inds = bodo.utils.typing.MetaType((0,))
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+
+    def test_hash_join(df1, df2):
+        join_state = init_join_state(
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+        )
+        _temp1 = 0
+        build_idx = 0
+        insert_idx = 0
+        is_last1 = False
+        while not is_last1:
+            batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
+            is_last1 = (_temp1 * 4000) >= len(df1)
+
+            is_last1 = bodo.libs.distributed_api.dist_reduce(
+                is_last1,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+            if build_idx == 1 and insert_loc == "middle" and side == "build":
+                batch1 = df1.iloc[(_temp1 * 4000) : (_temp1 * 4000)]
+            else:
+                _temp1 += 1
+
+            if (
+                is_last1
+                and insert_loc == "last"
+                and side == "build"
+                and build_idx != insert_idx
+            ):
+                # Don't mark this batch as last so that an empty batch is inserted next iteration
+                is_last1 = False
+                insert_idx = build_idx + 1
+
+            build_idx += 1
+
+            table1 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
+                (),
+                kept_cols,
+                2,
+            )
+            join_build_consume_batch(join_state, table1, is_last1)
+
+        _temp2 = 0
+        out_dfs = []
+        is_last2 = False
+        is_last3 = False
+        probe_idx = 0
+        insert_idx = 0
+        while not is_last3:
+            batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            is_last2 = bodo.libs.distributed_api.dist_reduce(
+                is_last2,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+            if probe_idx == 1 and insert_loc == "middle" and side == "probe":
+                batch2 = df2.iloc[(_temp2 * 4000) : (_temp2 * 4000)]
+            else:
+                _temp2 += 1
+
+            if (
+                is_last2
+                and insert_loc == "last"
+                and side == "probe"
+                and probe_idx != insert_idx
+            ):
+                # Don't mark this batch as last so that an empty batch is inserted next iteration
+                is_last1 = False
+                insert_idx = probe_idx + 1
+
+            probe_idx += 1
+
+            table2 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
+                (),
+                kept_cols,
+                2,
+            )
+            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df_final)
+            is_last3 = bodo.libs.distributed_api.dist_reduce(
+                is_last3,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+        delete_join_state(join_state)
+        return pd.concat(out_dfs)
+
+    expected_df = pd.DataFrame(
+        {"A": [2499] * 25, "B": [2499] * 25, "C": [2499] * 25, "D": [2500] * 25}
+    )
+
+    with set_broadcast_join(broadcast):
+        check_func(
+            test_hash_join,
+            (df1, df2),
+            py_output=expected_df,
+            reset_index=True,
+            sort_output=True,
+            check_dtype=False,
+        )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("side", ["build", "probe"])
+@pytest.mark.parametrize("insert_loc", ["middle", "last"])
+def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
+    """Test nested loop join with empty table inserted in the middle or at the end of all batches,
+    on the build or probe side and with or without broadcast"""
+    df1 = pd.DataFrame(
+        {
+            "A": np.array(list(range(2500)) * 5),
+            "B": np.array(list(range(2500)) * 5),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array(list(range(2499, 4999)) * 5),
+            "D": np.array(list(range(2500, 5000)) * 5),
+        }
+    )
+    build_keys_inds = bodo.utils.typing.MetaType(())
+    probe_keys_inds = bodo.utils.typing.MetaType(())
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "D",
+        )
+    )
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "D",
+        )
+    )
+    non_equi_condition = "left.A >= right.C"
+
+    def test_nested_loop_join(df1, df2):
+        join_state = init_join_state(
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+            non_equi_condition=non_equi_condition,
+        )
+        _temp1 = 0
+        build_idx = 0
+        is_last1 = False
+        insert_idx = 0
+        while not is_last1:
+            batch1 = df1.iloc[(_temp1 * 4000) : ((_temp1 + 1) * 4000)]
+            is_last1 = (_temp1 * 4000) >= len(df1)
+
+            is_last1 = bodo.libs.distributed_api.dist_reduce(
+                is_last1,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+            if build_idx == 1 and insert_loc == "middle" and side == "build":
+                batch1 = df1.iloc[(_temp1 * 4000) : (_temp1 * 4000)]
+            else:
+                _temp1 += 1
+
+            if (
+                is_last1
+                and insert_loc == "last"
+                and side == "build"
+                and build_idx != insert_idx
+            ):
+                # Don't mark this batch as last so that an empty batch is inserted next iteration
+                is_last1 = False
+                insert_idx = build_idx + 1
+
+            build_idx += 1
+
+            table1 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch1),
+                (),
+                kept_cols,
+                2,
+            )
+            join_build_consume_batch(join_state, table1, is_last1)
+
+        _temp2 = 0
+        out_dfs = []
+        is_last2 = False
+        is_last3 = False
+        probe_idx = 0
+        insert_idx = 0
+        while not is_last3:
+            batch2 = df2.iloc[(_temp2 * 4000) : ((_temp2 + 1) * 4000)]
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            is_last2 = bodo.libs.distributed_api.dist_reduce(
+                is_last2,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+
+            if probe_idx == 1 and insert_loc == "middle" and side == "probe":
+                batch2 = df2.iloc[(_temp2 * 4000) : (_temp2 * 4000)]
+            else:
+                _temp2 += 1
+
+            if (
+                is_last2
+                and insert_loc == "last"
+                and side == "probe"
+                and probe_idx != insert_idx
+            ):
+                # Don't mark this batch as last so that an empty batch is inserted next iteration
+                is_last1 = False
+                insert_idx = probe_idx + 1
+
+            probe_idx += 1
+
+            table2 = bodo.hiframes.table.logical_table_to_table(
+                bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(batch2),
+                (),
+                kept_cols,
+                2,
+            )
+            out_table, is_last3 = join_probe_consume_batch(join_state, table2, is_last2)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df_final)
+            is_last3 = bodo.libs.distributed_api.dist_reduce(
+                is_last3,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+        delete_join_state(join_state)
+        return pd.concat(out_dfs)
+
+    expected_df = pd.DataFrame(
+        {"A": [2499] * 25, "B": [2499] * 25, "C": [2499] * 25, "D": [2500] * 25}
+    )
+
+    with set_broadcast_join(broadcast):
+        check_func(
+            test_nested_loop_join,
+            (df1, df2),
+            py_output=expected_df,
+            reset_index=True,
+            sort_output=True,
+            check_dtype=False,
+        )
