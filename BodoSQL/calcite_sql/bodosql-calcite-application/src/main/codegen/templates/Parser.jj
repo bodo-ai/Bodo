@@ -8928,6 +8928,13 @@ MORE :
 {
     < AT_PARAM_IDENTIFIER: <AT_SYMBOL> (["\u0041"-"\u005a", "\u0061"-"\u007a", "\u005f"]) (["\u0041"-"\u005a", "\u0061"-"\u007a", "\u005f", "\u0030"-"\u0039"])* >
     | < DOLLAR_PARAM_IDENTIFIER: <DOLLAR> (["\u0041"-"\u005a", "\u0061"-"\u007a", "\u005f"]) (["\u0041"-"\u005a", "\u0061"-"\u007a", "\u005f", "\u0030"-"\u0039"])* >
+    | < INTERNAL_OR_EXTERNAL_STAGE :
+        "@"
+        ( ("~" (("/" <IDENTIFIER>)+ ("." <IDENTIFIER>)?)?)
+        | ((<IDENTIFIER> ".")? ("%")? <IDENTIFIER> (("/" <IDENTIFIER>)+ ("." <IDENTIFIER>)?)?) )
+        >
+    // TODO: support .element syntax
+    | < TRANSFORM_COLUMN: (<IDENTIFIER> ".")? "$" <UNSIGNED_INTEGER_LITERAL> >
 }
 
 <DEFAULT, DQID, BTID, BQID, BQHID> TOKEN :

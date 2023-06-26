@@ -146,7 +146,6 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
         (
             <LIKE> query = CompoundIdentifier()
             (
-
               clusterExprs = ClusterBy()
             | ( <COPY> <GRANTS> { copyGrants = true; } )
             )*
@@ -203,6 +202,358 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
             }
         )
     )
+}
+
+void CompressionType(HashMap<String, String> formatOptions) :
+{
+}
+{
+        <AUTO> { formatOptions.put("COMPRESSION", "AUTO"); }
+    |   <GZIP> { formatOptions.put("COMPRESSION", "GZIP"); }
+    |   <BZ2> { formatOptions.put("COMPRESSION", "BZ2"); }
+    |   <BROTLI> { formatOptions.put("COMPRESSION", "BROTLI"); }
+    |   <ZSTD> { formatOptions.put("COMPRESSION", "ZSTD"); }
+    |   <DEFLATE> { formatOptions.put("COMPRESSION", "DEFLATE"); }
+    |   <RAW_DEFLATE> { formatOptions.put("COMPRESSION", "RAW_DEFLATE"); }
+    |   <SNAPPY> { formatOptions.put("COMPRESSION", "SNAPPY"); }
+    |   <NONE> { formatOptions.put("COMPRESSION", "NONE"); }
+}
+
+void BinaryFormat(HashMap<String, String> formatOptions) :
+{
+}
+{
+        <HEX> { formatOptions.put("BINARY_FORMAT", "HEX"); }
+    |   <BASE64> { formatOptions.put("BINARY_FORMAT", "BASE64"); }
+    |   <UTF8> { formatOptions.put("BINARY_FORMAT", "UTF8"); }
+}
+
+void EncodingFormat(HashMap<String, String> formatOptions) :
+{
+    SqlNode stringArg;
+}
+{
+        stringArg = StringLiteral() { formatOptions.put("ENCODING", stringArg.toString()); }
+    |   <UTF8> { formatOptions.put("ENCODING", "UTF8"); }
+}
+
+void FormatArgStringOrNone(String argName, HashMap<String, String> formatOptions) :
+{
+    SqlNode stringArg;
+}
+{
+        stringArg = StringLiteral() { formatOptions.put(argName, stringArg.toString()); }
+    |   <NONE> { formatOptions.put(argName, "NONE"); }
+}
+
+void FormatArgStringOrAuto(String argName, HashMap<String, String> formatOptions) :
+{
+    SqlNode stringArg;
+}
+{
+        stringArg = StringLiteral() { formatOptions.put(argName, stringArg.toString()); }
+    |   <AUTO> { formatOptions.put(argName, "AUTO"); }
+}
+
+void FormatArgParenthesizedStrings(String argName, HashMap<String, String> formatOptions) :
+{
+    SqlNode stringArg;
+    List<String> stringArgs = new ArrayList<String>();
+}
+{
+    <LPAREN>
+        stringArg = StringLiteral() { stringArgs.add(stringArg.toString()); }
+        (
+            <COMMA>
+            stringArg = StringLiteral() { stringArgs.add(stringArg.toString()); }
+        )*
+    <RPAREN>
+    { formatOptions.put(argName, "(" + String.join(", ", stringArgs) + ")"); }
+}
+
+void FormatArgBoolean(String argName, HashMap<String, String> formatOptions) :
+{
+}
+{
+        <TRUE> { formatOptions.put(argName, "TRUE"); }
+    |   <FALSE> { formatOptions.put(argName, "FALSE"); }
+}
+
+void FormatArgInteger(String argName, HashMap<String, String> formatOptions) :
+{
+    SqlNode numericArg;
+}
+{
+        <UNSIGNED_INTEGER_LITERAL> { formatOptions.put(argName, token.image.toString()); }
+}
+
+void FormatOption(HashMap<String, String> formatOptions) :
+{
+}
+{
+    /* The following format options can be provided in any order
+    -- If FILE_FORMAT = ( TYPE = CSV ... )
+        COMPRESSION = AUTO | GZIP | BZ2 | BROTLI | ZSTD | DEFLATE | RAW_DEFLATE | NONE
+        RECORD_DELIMITER = '<character>' | NONE
+        FIELD_DELIMITER = '<character>' | NONE
+        PARSE_HEADER = TRUE | FALSE
+        SKIP_HEADER = <integer>
+        SKIP_BLANK_LINES = TRUE | FALSE
+        DATE_FORMAT = '<string>' | AUTO
+        TIME_FORMAT = '<string>' | AUTO
+        TIMESTAMP_FORMAT = '<string>' | AUTO
+        BINARY_FORMAT = HEX | BASE64 | UTF8
+        ESCAPE = '<character>' | NONE
+        ESCAPE_UNENCLOSED_FIELD = '<character>' | NONE
+        TRIM_SPACE = TRUE | FALSE
+        FIELD_OPTIONALLY_ENCLOSED_BY = '<character>' | NONE
+        NULL_IF = ( '<string>' [ , '<string>' ... ] )
+        ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE | FALSE
+        REPLACE_INVALID_CHARACTERS = TRUE | FALSE
+        EMPTY_FIELD_AS_NULL = TRUE | FALSE
+        SKIP_BYTE_ORDER_MARK = TRUE | FALSE
+        ENCODING = '<string>' | UTF8
+    -- If FILE_FORMAT = ( TYPE = JSON ... )
+        COMPRESSION = AUTO | GZIP | BZ2 | BROTLI | ZSTD | DEFLATE | RAW_DEFLATE | NONE
+        DATE_FORMAT = '<string>' | AUTO
+        TIME_FORMAT = '<string>' | AUTO
+        TIMESTAMP_FORMAT = '<string>' | AUTO
+        BINARY_FORMAT = HEX | BASE64 | UTF8
+        TRIM_SPACE = TRUE | FALSE
+        NULL_IF = ( '<string>' [ , '<string>' ... ] )
+        ENABLE_OCTAL = TRUE | FALSE
+        ALLOW_DUPLICATE = TRUE | FALSE
+        STRIP_OUTER_ARRAY = TRUE | FALSE
+        STRIP_NULL_VALUES = TRUE | FALSE
+        REPLACE_INVALID_CHARACTERS = TRUE | FALSE
+        IGNORE_UTF8_ERRORS = TRUE | FALSE
+        SKIP_BYTE_ORDER_MARK = TRUE | FALSE
+    -- If FILE_FORMAT = ( TYPE = AVRO ... )
+        COMPRESSION = AUTO | GZIP | BROTLI | ZSTD | DEFLATE | RAW_DEFLATE | NONE
+        TRIM_SPACE = TRUE | FALSE
+        NULL_IF = ( '<string>' [ , '<string>' ... ] )
+    -- If FILE_FORMAT = ( TYPE = ORC ... )
+        TRIM_SPACE = TRUE | FALSE
+        NULL_IF = ( '<string>' [ , '<string>' ... ] )
+    -- If FILE_FORMAT = ( TYPE = PARQUET ... )
+        COMPRESSION = AUTO | SNAPPY | NONE
+        BINARY_AS_TEXT = TRUE | FALSE
+        TRIM_SPACE = TRUE | FALSE
+        NULL_IF = ( '<string>' [ , '<string>' ... ] )
+    -- If FILE_FORMAT = ( TYPE = XML ... )
+        COMPRESSION = AUTO | GZIP | BZ2 | BROTLI | ZSTD | DEFLATE | RAW_DEFLATE | NONE
+        IGNORE_UTF8_ERRORS = TRUE | FALSE
+        PRESERVE_SPACE = TRUE | FALSE
+        STRIP_OUTER_ELEMENT = TRUE | FALSE
+        DISABLE_SNOWFLAKE_DATA = TRUE | FALSE
+        DISABLE_AUTO_CONVERT = TRUE | FALSE
+        SKIP_BYTE_ORDER_MARK = TRUE | FALSE
+    */
+    ( <COMPRESSION> <EQ> CompressionType(formatOptions) )
+|   ( <RECORD_DELIMITER> <EQ> FormatArgStringOrNone("RECORD_DELIMITER", formatOptions) )
+|   ( <FIELD_DELIMITER> <EQ> FormatArgStringOrNone("FIELD_DELIMITER", formatOptions) )
+|   ( <PARSE_HEADER> <EQ> FormatArgBoolean("PARSE_HEADER", formatOptions) )
+|   ( <SKIP_HEADER> <EQ> FormatArgInteger("SKIP_HEADER", formatOptions) )
+|   ( <SKIP_BLANK_LINES> <EQ> FormatArgBoolean("SKIP_BLANK_LINES", formatOptions) )
+|   ( <DATE_FORMAT> <EQ> FormatArgStringOrAuto("DATE_FORMAT", formatOptions) )
+|   ( <TIME_FORMAT> <EQ> FormatArgStringOrAuto("TIME_FORMAT", formatOptions) )
+|   ( <TIMESTAMP_FORMAT> <EQ> FormatArgStringOrAuto("TIMESTAMP_FORMAT", formatOptions) )
+|   ( <BINARY_FORMAT> <EQ> BinaryFormat(formatOptions) )
+|   ( <ESCAPE> <EQ> FormatArgStringOrNone("ESCAPE", formatOptions) )
+|   ( <ESCAPE_UNENCLOSED_FIELD> <EQ> FormatArgStringOrNone("ESCAPE_UNENCLOSED_FIELD", formatOptions) )
+|   ( <TRIM_SPACE> <EQ> FormatArgBoolean("TRIM_SPACE", formatOptions) )
+|   ( <FIELD_OPTIONALLY_ENCLOSED_BY> <EQ> FormatArgStringOrNone("FIELD_OPTIONALLY_ENCLOSED_BY", formatOptions) )
+|   ( <NULL_IF>  <EQ> FormatArgParenthesizedStrings("NULL_IF", formatOptions))
+|   ( <ERROR_ON_COLUMN_COUNT_MISMATCH> <EQ> FormatArgBoolean("ERROR_ON_COLUMN_COUNT_MISMATCH", formatOptions) )
+|   ( <REPLACE_INVALID_CHARACTERS> <EQ> FormatArgBoolean("REPLACE_INVALID_CHARACTERS", formatOptions) )
+|   ( <EMPTY_FIELD_AS_NULL> <EQ> FormatArgBoolean("EMPTY_FIELD_AS_NULL", formatOptions) )
+|   ( <SKIP_BYTE_ORDER_MARK> <EQ> FormatArgBoolean("SKIP_BYTE_ORDER_MARK", formatOptions) )
+|   ( <ENCODING> <EQ> EncodingFormat(formatOptions) )
+|   ( <ENABLE_OCTAL> <EQ> FormatArgBoolean("ENABLE_OCTAL", formatOptions) )
+|   ( <ALLOW_DUPLICATE> <EQ> FormatArgBoolean("ALLOW_DUPLICATE", formatOptions) )
+|   ( <STRIP_OUTER_ARRAY> <EQ> FormatArgBoolean("STRIP_OUTER_ARRAY", formatOptions) )
+|   ( <STRIP_NULL_VALUES> <EQ> FormatArgBoolean("STRIP_NULL_VALUES", formatOptions) )
+|   ( <IGNORE_UTF8_ERRORS> <EQ> FormatArgBoolean("IGNORE_UTF8_ERRORS", formatOptions) )
+|   ( <BINARY_AS_TEXT> <EQ> FormatArgBoolean("BINARY_AS_TEXT", formatOptions) )
+|   ( <PRESERVE_SPACE> <EQ> FormatArgBoolean("PRESERVE_SPACE", formatOptions) )
+|   ( <STRIP_OUTER_ELEMENT> <EQ> FormatArgBoolean("STRIP_OUTER_ELEMENT", formatOptions) )
+|   ( <DISABLE_SNOWFLAKE_DATA> <EQ> FormatArgBoolean("DISABLE_SNOWFLAKE_DATA", formatOptions) )
+|   ( <DISABLE_AUTO_CONVERT> <EQ> FormatArgBoolean("DISABLE_AUTO_CONVERT", formatOptions) )
+}
+
+SqlSnowflakeFileFormat FileFormat() :
+{
+    SqlNode formatName = null;
+    SqlNode formatType = null;
+    HashMap<String, String> formatOptions = new HashMap<String, String>();
+}
+{
+    <LPAREN>
+    (
+        ( <FORMAT_NAME> <EQ> formatName = StringLiteral() )
+    |   ( <TYPE> <EQ> formatType = StringLiteral()
+        [ FormatOption(formatOptions) ([<COMMA>] FormatOption(formatOptions))* ]
+        )
+    )
+    <RPAREN>
+    {
+        return new SqlSnowflakeFileFormat(formatName, formatType, formatOptions);
+    }
+}
+
+List<SqlNode> ParenthesizedColumnList() :
+{
+    SqlNode col;
+    List<SqlNode> cols = new ArrayList<SqlNode>();
+}
+{
+    <LPAREN>
+    col = CompoundIdentifier() { cols.add(col); }
+    (
+        <COMMA>
+        col = CompoundIdentifier() { cols.add(col); }
+    )*
+    <RPAREN>
+    { return cols; }
+}
+
+List<SqlNode> TransformationColumns() :
+{
+    SqlNode col;
+    List<SqlNode> cols = new ArrayList<SqlNode>();
+
+}
+{
+    <TRANSFORM_COLUMN> { cols.add(new SqlIdentifier(token.image.toUpperCase(Locale.ROOT), getPos())); }
+    (
+        <COMMA>
+        <TRANSFORM_COLUMN>
+        { cols.add(new SqlIdentifier(token.image.toUpperCase(Locale.ROOT), getPos())); }
+    )*
+    { return cols; }
+}
+
+SqlNode SqlCopyInto() :
+{
+    SqlNode target;
+    List<SqlNode> targetCols = null;
+    SqlNode source = null;
+    List<SqlNode> sourceCols = null;
+    SqlNode sourceSource = null;
+    SqlNode sourceAlias = null;
+    SqlNode sourceQuery = null;
+    SqlNode partition = null;
+    SqlNode pattern = null;
+    SqlSnowflakeFileFormat fileFormat = null;
+    SqlCopyIntoTable.CopyIntoTableSource tableSourceType = null;
+    SqlCopyIntoLocation.CopyIntoLocationTarget locationTargetType = null;
+    SqlCopyIntoLocation.CopyIntoLocationSource locationSourceType = null;
+}
+{
+    <COPY>
+    <INTO>
+(
+    (
+        // COPY INTO <table>
+        target = CompoundIdentifier()
+        (
+            (
+                // Version 1: COPY INTO [namespace.]table_name (col_name_1[, col_name_2, ...])
+                //            FROM (SELECT [<alias>.]$<file_col_num>[.<element>] [ , [<alias>.]$<file_col_num>[.<element>] ... ])
+                //                  FROM { internalStage | externalStage })
+                targetCols = ParenthesizedColumnList()
+                <FROM>
+                <LPAREN>
+                <SELECT>
+                sourceCols = TransformationColumns()
+                <FROM>
+                ( <AT_PARAM_IDENTIFIER>  | <INTERNAL_OR_EXTERNAL_STAGE> ) 
+                { sourceSource = new SqlIdentifier(token.image, getPos()); }
+                [ 
+                    sourceAlias = SimpleIdentifier() 
+                    {
+                        sourceSource = SqlStdOperatorTable.AS.createCall(getPos(), sourceSource, sourceAlias);
+                    }
+                ]
+                <RPAREN>
+                {
+                    tableSourceType = SqlCopyIntoTable.CopyIntoTableSource.QUERY;
+                    source = new SqlSelect(
+                        getPos(), null,
+                        new SqlNodeList(sourceCols, Span.of(sourceCols).pos()),
+                        sourceSource, null, null, null, null, null, null, null, null, null);
+                }
+            ) 
+        |  (
+                <FROM>
+                (
+                    // Version 2: COPY INTO [namespace.]table_name
+                    //            FROM (SELECT [<alias>.]$<file_col_num>[.<element>] [ , [<alias>.]$<file_col_num>[.<element>] ... ])
+                    //                  FROM { internalStage | externalStage })
+                    (
+                        <LPAREN>
+                        <SELECT>
+                        sourceCols = TransformationColumns()
+                        <FROM>
+                        ( <AT_PARAM_IDENTIFIER>  | <INTERNAL_OR_EXTERNAL_STAGE> ) 
+                        { sourceSource = new SqlIdentifier(token.image, getPos()); }
+                        [ 
+                            sourceAlias = SimpleIdentifier() 
+                            {
+                                sourceSource = SqlStdOperatorTable.AS.createCall(getPos(), sourceSource, sourceAlias);
+                            }
+                        ]
+                        <RPAREN>
+                        {
+                            tableSourceType = SqlCopyIntoTable.CopyIntoTableSource.QUERY;
+                            source = new SqlSelect(
+                                getPos(), null,
+                                new SqlNodeList(sourceCols, Span.of(sourceCols).pos()),
+                                sourceSource, null, null, null, null, null, null, null, null, null);
+                        }
+                    )
+                    // Version 3: COPY INTO [namespace.]table_name FROM {internalStage | externalStage | externalLocation}
+                |   ( ( <AT_PARAM_IDENTIFIER>  | <INTERNAL_OR_EXTERNAL_STAGE> )
+                    { source = new SqlIdentifier(token.image, getPos()); 
+                     tableSourceType = SqlCopyIntoTable.CopyIntoTableSource.STAGE; })
+                |   ( source = StringLiteral() 
+                    { tableSourceType = SqlCopyIntoTable.CopyIntoTableSource.LOCATION; } )
+                )
+            )
+        )
+    // The following clauses are optionally allowed in any order
+    (
+        <PATTERN> <EQ> pattern = StringLiteral()
+    |   <FILE_FORMAT> <EQ> fileFormat = FileFormat() 
+    )*
+    {  return new SqlCopyIntoTable(getPos(), target, targetCols, tableSourceType, source, pattern, fileFormat); }
+    ) 
+|   (
+        // COPY INTO <location>
+        (
+            ( target = StringLiteral() 
+            { locationTargetType = SqlCopyIntoLocation.CopyIntoLocationTarget.LOCATION; } )
+        |   ( ( <AT_PARAM_IDENTIFIER>  | <INTERNAL_OR_EXTERNAL_STAGE> )
+            { target = new SqlIdentifier(token.image, getPos());
+              locationTargetType = SqlCopyIntoLocation.CopyIntoLocationTarget.STAGE; } )
+        )
+        <FROM>
+        // The source is either a table or a query
+        (
+            ( source = CompoundIdentifier() 
+            { locationSourceType = SqlCopyIntoLocation.CopyIntoLocationSource.TABLE; } )
+        |   ( <LPAREN> source = SqlSelect() <RPAREN> 
+            { locationSourceType = SqlCopyIntoLocation.CopyIntoLocationSource.QUERY; } )
+        )
+        // The following clauses are optionally allowed in any order
+        (
+            <PARTITION> <BY> partition = Expression(ExprContext.ACCEPT_NON_QUERY)
+        |   <FILE_FORMAT> <EQ> fileFormat = FileFormat() 
+        )*
+        {  return new SqlCopyIntoLocation(getPos(), locationTargetType, target, locationSourceType, source, partition, fileFormat); }
+    )
+)
+    
 }
 
 SqlAlterTable SqlAlterTable() :
