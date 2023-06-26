@@ -541,6 +541,72 @@ struct array_info {
     void set_null_bit(size_t idx, bool bit) {
         SetBitTo((uint8_t*)null_bitmask(), idx, bit);
     }
+
+    /**
+     * @brief Can a given a array contain NA values.
+     * Currently this decides solely based on type but
+     * in the future may be used if a given array statically
+     * has an empty null bitmap.
+     *
+     */
+    bool can_contain_na() {
+        switch (arr_type) {
+            case bodo_array_type::LIST_STRING:
+            case bodo_array_type::STRING:
+            case bodo_array_type::DICT:
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::STRUCT:
+            case bodo_array_type::CATEGORICAL:
+                return true;
+            case bodo_array_type::NUMPY:
+                // TODO: Remove when TIMEDELTA moves to nullable arrays.
+                return dtype == Bodo_CTypes::TIMEDELTA;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * @brief Get a boolean vector indicating if
+     * each element is NOTNA
+     *
+     * @return bodo::vector<bool> bool vector of NOTNA.
+     */
+    bodo::vector<bool> get_notna_vector() {
+        bodo::vector<bool> not_na(length, true);
+        switch (arr_type) {
+            case bodo_array_type::LIST_STRING:
+            case bodo_array_type::STRING:
+            case bodo_array_type::DICT:
+            case bodo_array_type::NULLABLE_INT_BOOL:
+            case bodo_array_type::ARRAY_ITEM:
+            case bodo_array_type::STRUCT:
+                for (size_t i = 0; i < length; i++) {
+                    not_na[i] = get_null_bit(i);
+                }
+                break;
+            case bodo_array_type::CATEGORICAL:
+                for (size_t i = 0; i < length; i++) {
+                    // TODO: Ensure templated for faster access.
+                    not_na[i] = get_code_as_int64(i) != -1;
+                }
+                break;
+            case bodo_array_type::NUMPY:
+                if (dtype == Bodo_CTypes::TIMEDELTA) {
+                    int64_t* data = (int64_t*)data1();
+                    for (size_t i = 0; i < length; i++) {
+                        // TIMEDELTA NaT is the min int64_t.
+                        not_na[i] =
+                            data[i] != std::numeric_limits<int64_t>::min();
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+        return not_na;
+    }
 };
 
 /**
