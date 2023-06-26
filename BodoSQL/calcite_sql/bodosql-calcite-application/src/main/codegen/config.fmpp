@@ -27,7 +27,11 @@ data: {
     # List of additional classes and packages to import.
     # Example: "org.apache.calcite.sql.*", "java.util.List".
     imports: [
+      "java.util.HashMap"
       "com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable",
+      "com.bodosql.calcite.sql.ddl.SqlCopyIntoTable",
+      "com.bodosql.calcite.sql.ddl.SqlCopyIntoLocation",
+      "com.bodosql.calcite.sql.ddl.SqlSnowflakeFileFormat",
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeColumnDeclaration",
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTable",
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableAs",
@@ -56,6 +60,46 @@ data: {
       "TEMP",
       "TRANSIENT",
       "VOLATILE",
+      "COMPRESSION",
+      "RECORD_DELIMITER",
+      "FIELD_DELIMITER",
+      "PARSE_HEADER",
+      "SKIP_HEADER",
+      "SKIP_BLANK_LINES",
+      "DATE_FORMAT",
+      "TIME_FORMAT",
+      "TIMESTAMP_FORMAT",
+      "BINARY_FORMAT",
+      "BINARY_AS_TEXT",
+      "ESCAPE_UNENCLOSED_FIELD",
+      "TRIM_SPACE",
+      "FIELD_OPTIONALLY_ENCLOSED_BY",
+      "NULL_IF",
+      "ERROR_ON_COLUMN_COUNT_MISMATCH",
+      "REPLACE_INVALID_CHARACTERS",
+      "EMPTY_FIELD_AS_NULL",
+      "SKIP_BYTE_ORDER_MARK",
+      "ENABLE_OCTAL",
+      "ALLOW_DUPLICATE",
+      "STRIP_OUTER_ARRAY",
+      "STRIP_NULL_VALUES",
+      "IGNORE_UTF8_ERRORS",
+      "PRESERVE_SPACE",
+      "STRIP_OUTER_ELEMENT",
+      "DISABLE_SNOWFLAKE_DATA",
+      "DISABLE_AUTO_CONVERT",
+      "AUTO",
+      "GZIP",
+      "BZ2",
+      "BROTLI",
+      "ZSTD",
+      "DEFLATE",
+      "RAW_DEFLATE",
+      "SNAPPY",
+      "FORMAT_NAME",
+      "FILE_FORMAT",
+      "HEX",
+      "BASE64",
       "AUTOINCREMENT",
       "CLONE",
       "CLUSTER",
@@ -89,6 +133,46 @@ data: {
         "CLUSTER",
         "COPY",
         "GRANTS",
+        "COMPRESSION",
+        "RECORD_DELIMITER",
+        "FIELD_DELIMITER",
+        "PARSE_HEADER",
+        "SKIP_HEADER",
+        "SKIP_BLANK_LINES",
+        "DATE_FORMAT",
+        "TIME_FORMAT",
+        "TIMESTAMP_FORMAT",
+        "BINARY_FORMAT",
+        "BINARY_AS_TEXT",
+        "ESCAPE_UNENCLOSED_FIELD",
+        "TRIM_SPACE",
+        "FIELD_OPTIONALLY_ENCLOSED_BY",
+        "NULL_IF",
+        "ERROR_ON_COLUMN_COUNT_MISMATCH",
+        "REPLACE_INVALID_CHARACTERS",
+        "EMPTY_FIELD_AS_NULL",
+        "SKIP_BYTE_ORDER_MARK",
+        "ENABLE_OCTAL",
+        "ALLOW_DUPLICATE",
+        "STRIP_OUTER_ARRAY",
+        "STRIP_NULL_VALUES",
+        "IGNORE_UTF8_ERRORS",
+        "PRESERVE_SPACE",
+        "STRIP_OUTER_ELEMENT",
+        "DISABLE_SNOWFLAKE_DATA",
+        "DISABLE_AUTO_CONVERT",
+        "AUTO",
+        "GZIP",
+        "BZ2",
+        "BROTLI",
+        "ZSTD",
+        "DEFLATE",
+        "RAW_DEFLATE",
+        "SNAPPY"
+        "FORMAT_NAME",
+        "FILE_FORMAT",
+        "HEX",
+        "BASE64",
     ]
 
     # List of additional join types. Each is a method with no arguments.
@@ -106,7 +190,7 @@ data: {
     # Each must accept arguments "(SqlParserPos pos, boolean replace)".
     # Example: "SqlCreateForeignSchema".
     createStatementParserMethods: [
-        "SqlCreateTable"
+        "SqlCreateTable",
     ]
 
     # List of methods for parsing extensions to "DROP" calls.
@@ -120,6 +204,7 @@ data: {
     statementParserMethods: [
         "SqlAlterTable()",
         "SqlTruncate()",
+        "SqlCopyInto()",
     ]
 
     # Binary operators tokens.
