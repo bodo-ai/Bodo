@@ -207,6 +207,7 @@ broadcasted_fixed_arg_functions = {
     "subtract_numeric",
     "tan",
     "tanh",
+    "time_slice",
     "to_array",
     "to_boolean",
     "to_char",

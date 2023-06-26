@@ -4459,3 +4459,37 @@ def test_add_months(spark_info, date_df, memory_leak_check):
         check_dtype=False,
         equivalent_spark_query=query,
     )
+
+
+def test_time_slice(memory_leak_check):
+    ts = pd.Timestamp(2012, 1, 1, 12, 59, 59)
+    df = pd.DataFrame({"A": pd.Series([ts] * 12)})
+    ctx = {"table1": df}
+
+    answer = pd.DataFrame(
+        {
+            "t1": pd.Series(([pd.Timestamp(2012, 1, 1)] * 12)),
+            "t2": pd.Series(([pd.Timestamp(2012, 1, 1)] * 12)),
+            "t3": pd.Series(([pd.Timestamp(2012, 1, 1)] * 12)),
+            "t4": pd.Series(([pd.Timestamp(2011, 12, 26)] * 12)),
+            "t5": pd.Series(([pd.Timestamp(2012, 1, 1)] * 12)),
+            "t6": pd.Series(([pd.Timestamp(2012, 1, 1, 12)] * 12)),
+            "t7": pd.Series(([pd.Timestamp(2012, 1, 1, 12, 59)] * 12)),
+            "t8": pd.Series(([pd.Timestamp(2012, 1, 1, 12, 59, 59)] * 12)),
+        }
+    )
+
+    time_units = ["YEAR", "QUARTER", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE", "SECOND"]
+
+    query = "SELECT "
+    query += ", ".join(
+        [
+            "TIME_SLICE(A, 1, '{}', 'START') as t{}".format(unit, i + 1)
+            for i, unit in enumerate(time_units)
+        ]
+    )
+    query += " FROM table1"
+
+    check_query(
+        query, ctx, None, check_names=False, check_dtype=False, expected_output=answer
+    )

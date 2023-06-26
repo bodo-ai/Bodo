@@ -24,6 +24,7 @@ public class DatetimeFnCodeGen {
           "NEXT_DAY",
           "PREVIOUS_DAY",
           "WEEKDAY",
+          "TIME_SLICE",
           "YEAROFWEEK",
           "YEAROFWEEKISO");
 
@@ -265,6 +266,17 @@ public class DatetimeFnCodeGen {
   public static Expr generateLastDayCode(String arg0, String unit) {
     String outputExpression = "bodo.libs.bodosql_array_kernels.last_day_" + unit + "(" + arg0 + ")";
     return new Expr.Raw(outputExpression);
+  }
+
+  public static Expr generateTimeSliceFnCode(List<Expr> operandsInfo, Integer weekStart) {
+    assert (operandsInfo.size() == 3 || operandsInfo.size() == 4);
+
+    List<Expr> args = new ArrayList<>(operandsInfo);
+    if (operandsInfo.size() == 3) {
+      args.add(new Expr.StringLiteral("START"));
+    }
+    args.add(new Expr.IntegerLiteral(weekStart));
+    return ExprKt.BodoSQLKernel("time_slice", args, List.of());
   }
 
   /**
