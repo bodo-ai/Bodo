@@ -986,6 +986,34 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction TIME_SLICE =
+      new SqlFunction(
+          "TIME_SLICE",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.ARG0,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.or(
+            OperandTypes.sequence(
+                    "TIME_SLICE(DATETIME, INT, UNIT)",
+                    OperandTypes.or(OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
+                    OperandTypes.INTEGER,
+                    OperandTypes.ANY),
+            OperandTypes.sequence(
+                    "TIME_SLICE(DATETIME, INT, UNIT, STRING)",
+                    OperandTypes.or(OperandTypes.DATETIME, OperandTypes.TIMESTAMP),
+                    OperandTypes.INTEGER,
+                    OperandTypes.ANY,
+                    OperandTypes.STRING)
+          ),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
 
   private static RelDataType truncReturnType(SqlOperatorBinding binding) {
     RelDataTypeFactory typeFactory = binding.getTypeFactory();
@@ -1154,6 +1182,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           TRY_TO_TIME,
           TIMEFROMPARTS,
           TIME_FROM_PARTS,
+          TIME_SLICE,
           TIME,
           TIMEADD,
           TRUNC,
