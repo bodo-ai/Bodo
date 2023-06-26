@@ -947,6 +947,40 @@ HashJoinState::GetDictionaryHashesForKeys() {
     return dict_hashes;
 }
 
+std::shared_ptr<table_info> filter_na_values(
+    std::shared_ptr<table_info> in_table, uint64_t n_keys) {
+    bodo::vector<bool> not_na(in_table->nrows(), true);
+    bool can_have_na = false;
+    for (uint64_t i = 0; i < n_keys; i++) {
+        // Determine which columns can contain NA/contain NA
+        const std::shared_ptr<array_info>& col = in_table->columns[i];
+        if (col->can_contain_na()) {
+            can_have_na = true;
+            bodo::vector<bool> col_not_na = col->get_notna_vector();
+            // Do an elementwise logical and to update not_na
+            std::transform(not_na.begin(), not_na.end(), col_not_na.begin(),
+                           not_na.begin(), std::logical_and<>());
+        }
+    }
+    if (!can_have_na) {
+        // No NA values, just return.
+        return in_table;
+    }
+    // Retrieve table takes a list of columns. Convert the boolean array.
+    bodo::vector<int64_t> idx_list;
+    for (size_t i = 0; i < in_table->nrows(); i++) {
+        if (not_na[i]) {
+            idx_list.emplace_back(i);
+        }
+    }
+    if (idx_list.size() == in_table->nrows()) {
+        // No NA values, skip the copy.
+        return in_table;
+    } else {
+        return RetrieveTable(std::move(in_table), std::move(idx_list));
+    }
+}
+
 /* ------------------------------------------------------------------------ */
 
 /**
@@ -987,6 +1021,15 @@ void join_build_consume_batch(HashJoinState* join_state,
     // the partitioning hashes:
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes = join_state->GetDictionaryHashesForKeys();
+
+    // Prune any rows with NA keys. If this is an build_table_outer = False,
+    // then we can prune these rows from the table entirely. If
+    // build_table_outer = True then we can skip adding these rows to the hash
+    // table (as they can't match), but must write them to the Join output.
+    // TODO: Have outer join skip the build table/avoid shuffling.
+    if (!join_state->build_table_outer) {
+        in_table = filter_na_values(std::move(in_table), join_state->n_keys);
+    }
 
     // Get hashes of the new batch (different hashes for partitioning and hash
     // table to reduce conflict)
