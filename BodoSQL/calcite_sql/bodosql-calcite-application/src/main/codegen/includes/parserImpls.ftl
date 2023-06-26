@@ -16,6 +16,16 @@
 -->
 
 
+boolean OrReplaceOpt() :
+{
+}
+{
+    <OR> <REPLACE> { return true; }
+    |
+    { return false; }
+}
+
+
 boolean IfNotExistsOpt() :
 {
 }
@@ -26,7 +36,7 @@ boolean IfNotExistsOpt() :
 }
 
 
-SqlBodoCreateTable.CreateTableType TableTypeOpt() :
+SqlSnowflakeCreateTable.CreateTableType TableTypeOpt() :
 {
 }
 {
@@ -37,10 +47,10 @@ SqlBodoCreateTable.CreateTableType TableTypeOpt() :
 // using TEMPORARY.
 // Default: No value. If a table is not declared as TRANSIENT or TEMPORARY, the table is permanent.
 
-    <TRANSIENT> { return SqlBodoCreateTable.CreateTableType.TRANSIENT; }
+    <TRANSIENT> { return SqlSnowflakeCreateTable.CreateTableType.TRANSIENT; }
         |
-    (<VOLATILE> | [<GLOBAL> | <LOCAL>] (<TEMP> | <TEMPORARY>)) { return SqlBodoCreateTable.CreateTableType.TEMPORARY; }
-         | { return SqlBodoCreateTable.CreateTableType.DEFAULT; }
+    (<VOLATILE> | [<GLOBAL> | <LOCAL>] (<TEMP> | <TEMPORARY>)) { return SqlSnowflakeCreateTable.CreateTableType.TEMPORARY; }
+         | { return SqlSnowflakeCreateTable.CreateTableType.DEFAULT; }
 }
 
 SqlNodeList ExtendColumnList() :
@@ -66,28 +76,60 @@ SqlNode ColumnWithType() :
     SqlDataTypeSpec type;
     boolean nullable = true;
     final Span s = Span.of();
+
+    SqlNode defaultExpr = null;
+    Pair<SqlLiteral,SqlLiteral> incrementExpr = null;
+    SqlLiteral incrementStart = null;
+    SqlLiteral incrementStep = null;
 }
 {
     id = CompoundIdentifier()
     type = DataType()
-    [
-        <NOT> <NULL> {
-            nullable = false;
-        }
-    ]
+    // Any of the following additional column modifiers can appear in any order
+    (
+        ( <NOT> <NULL> { nullable = false; } )
+    |   ( <DEFAULT_> defaultExpr = Expression(ExprContext.ACCEPT_SUB_QUERY) )
+    |   ( 
+          ( <AUTOINCREMENT> | <IDENTITY> )
+          ( ( <LPAREN> incrementStart = NumericLiteral() <COMMA> incrementStep = NumericLiteral() <RPAREN> )
+          | ( <START> incrementStart = NumericLiteral() <INCREMENT> incrementStep = NumericLiteral() )
+          )
+          { incrementExpr = new Pair<SqlLiteral, SqlLiteral>(incrementStart, incrementStep); }
+        )
+    )*
     {
-        return SqlDdlNodes.column(s.add(id).end(this), id,
-            type.withNullable(nullable), null, null);
+        return new SqlSnowflakeColumnDeclaration(
+            s.add(id).end(this), 
+            id,
+            type.withNullable(nullable),
+            defaultExpr,
+            incrementExpr,
+            null
+        );
+    }
+}
+
+/* Parse a CLUSTER BY clause for a CREATE TABLE statement */
+SqlNodeList ClusterBy() :
+{
+List<SqlNode> clusterExprsList;
+}
+{
+    <CLUSTER> <BY> <LPAREN> clusterExprsList = SelectList() <RPAREN>
+    { 
+        return new SqlNodeList(clusterExprsList, getPos()); 
     }
 }
 
 SqlCreate SqlCreateTable(Span s, boolean replace) :
 {
-    final SqlBodoCreateTable.CreateTableType tableType;
-    final boolean ifNotExists;
+    final SqlSnowflakeCreateTable.CreateTableType tableType;
     final SqlIdentifier id;
-    final SqlNodeList columnList;
-    final SqlNode query;
+    final boolean ifNotExists;
+    SqlNode query = null;
+    SqlNodeList columnList = null;
+    SqlNodeList clusterExprs = null;
+    boolean copyGrants = false;
 }
 {
     tableType = TableTypeOpt()
@@ -95,21 +137,72 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
     ifNotExists = IfNotExistsOpt()
     id = CompoundIdentifier()
     (
-        columnList = ExtendColumnList()
-    |
-        { columnList = null; }
+        /* LIKE syntax
+         * Column list banned
+         * Following qualifiers optionally allowed in any order (after the LIKE clause):
+         * - CLUSTER BY
+         * - COPY GRANTS
+         */
+        (
+            <LIKE> query = CompoundIdentifier()
+            (
+
+              clusterExprs = ClusterBy()
+            | ( <COPY> <GRANTS> { copyGrants = true; } )
+            )*
+            {
+                return new SqlSnowflakeCreateTableLike(s.end(this), replace, tableType,
+                    ifNotExists, id, query, clusterExprs, copyGrants);
+            }
+        )
+    |   /* CLONE syntax
+         * Column list banned
+         * Following qualifiers optionally allowed in any order (after the CLONE clause):
+         * - COPY GRANTS
+         */
+        (
+            <CLONE> query = CompoundIdentifier()
+            (
+              <COPY> <GRANTS> { copyGrants = true; } 
+            )*
+            {
+                return new SqlSnowflakeCreateTableClone(s.end(this), replace, tableType,
+                    ifNotExists, id, query, copyGrants);
+            }
+        )
+        /* Regular syntax
+         * Column list required
+         * Following qualifiers optionally allowed in any order:
+         * - CLUSTER BY
+         * - COPY GRANTS (if the table is being replaced)
+         * 
+         * CTAS syntax
+         * Column list optional
+         * Following qualifiers optionally allowed in any order (before the AS clause):
+         * - CLUSTER BY
+         * - COPY GRANTS (if the table is being replaced)
+         */
+    |    ( 
+            [ columnList = ExtendColumnList() ]
+            (
+              clusterExprs = ClusterBy()
+            | ( <COPY> <GRANTS> { copyGrants = true; } )
+            ) *
+            [ <AS> query = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY) ]
+            {
+                // The query is only provided for CTAS statements
+                if (query != null) {
+                    return new SqlSnowflakeCreateTableAs(s.end(this), replace, tableType,
+                        ifNotExists, id, columnList, query, clusterExprs, copyGrants);
+                } else {
+                    // Non-CTAS statements require the column names/types to be provided
+                    assert columnList != null;
+                    return new SqlSnowflakeCreateTable(s.end(this), replace, tableType,
+                        ifNotExists, id, columnList, clusterExprs, copyGrants);
+                }
+            }
+        )
     )
-    (
-        <AS> query = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY)
-    |
-        <LIKE> query = TableRef()
-    |
-        { query = null; }
-    )
-    {
-        return new SqlBodoCreateTable(s.end(this), replace, tableType,
-            ifNotExists, id, columnList, query);
-    }
 }
 
 SqlAlterTable SqlAlterTable() :
