@@ -8,7 +8,6 @@ import com.bodosql.calcite.prepare.PlannerImpl;
 import com.bodosql.calcite.prepare.PlannerType;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
-import com.bodosql.calcite.sql.SqlBodoCreateTable;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import java.sql.Connection;
@@ -24,13 +23,11 @@ import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.SchemaPlus;
-import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlMerge;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.type.*;
 import org.apache.calcite.tools.*;
-import org.apache.calcite.util.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,21 +39,21 @@ import org.slf4j.LoggerFactory;
  *
  * The purpose of this class is to hold the planner, the program, and the configuration for reuse
  * based on a schema that is provided. It can then take sql and convert it to relational algebra.
- * <p/>
- * TODO(jsternberg): This class needs a future refactor, but it's also closely tied to the
- * Python code and how it interacts with the Java code. That means that methods defined here can
- * be invoked from the Python code without having an equivalent Java invocation.
- * <p/>
- * In order to simplify modifications of this class, the <b>only</b> methods that should be
- * public are ones that Python directly interacts with. Everything else should be private.
- * All public methods should be treated as an API contract and should not be broken or modified
- * without due diligence to transition outside callers.
- * <p/>
- * The reason why this class needs a refactor is because this class has a decent amount of
- * mutable state and poorly defined interactions with outside callers. It's not thread-safe
- * and it exposes some APIs for testing that shouldn't be external such as the specific
- * way plans are constructed or processed. It also keeps and handles resources like database
- * connections but doesn't clearly label the lifetimes and ownerships of these resources.
+ *
+ * <p>TODO(jsternberg): This class needs a future refactor, but it's also closely tied to the Python
+ * code and how it interacts with the Java code. That means that methods defined here can be invoked
+ * from the Python code without having an equivalent Java invocation.
+ *
+ * <p>In order to simplify modifications of this class, the <b>only</b> methods that should be
+ * public are ones that Python directly interacts with. Everything else should be private. All
+ * public methods should be treated as an API contract and should not be broken or modified without
+ * due diligence to transition outside callers.
+ *
+ * <p>The reason why this class needs a refactor is because this class has a decent amount of
+ * mutable state and poorly defined interactions with outside callers. It's not thread-safe and it
+ * exposes some APIs for testing that shouldn't be external such as the specific way plans are
+ * constructed or processed. It also keeps and handles resources like database connections but
+ * doesn't clearly label the lifetimes and ownerships of these resources.
  *
  * @author Bodo
  * @version 1.0
@@ -136,9 +133,7 @@ public class RelationalAlgebraGenerator {
    * the Planner member variables.
    */
   private void setupPlanner(
-      List<SchemaPlus> defaultSchemas,
-      String namedParamTableName,
-      RelDataTypeSystem typeSystem) {
+      List<SchemaPlus> defaultSchemas, String namedParamTableName, RelDataTypeSystem typeSystem) {
     PlannerImpl.Config config =
         new PlannerImpl.Config(defaultSchemas, typeSystem, namedParamTableName, plannerType);
     try {
@@ -256,7 +251,8 @@ public class RelationalAlgebraGenerator {
     BodoTZInfo tzInfo = catalog.getDefaultTimezone();
     Integer weekStart = catalog.getWeekStart();
     Integer weekOfYearPolicy = catalog.getWeekOfYearPolicy();
-    RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem(tzInfo, weekStart, weekOfYearPolicy);
+    RelDataTypeSystem typeSystem =
+        new BodoSQLRelDataTypeSystem(tzInfo, weekStart, weekOfYearPolicy);
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
   }
@@ -296,8 +292,7 @@ public class RelationalAlgebraGenerator {
       throws SqlSyntaxException, SqlValidationException, RelConversionException {
     SqlNode validatedSqlNode = validateQuery(sql);
     RelRoot result = planner.rel(validatedSqlNode);
-    result = result.withRel(
-        planner.transform(0, planner.getEmptyTraitSet(), result.rel));
+    result = result.withRel(planner.transform(0, planner.getEmptyTraitSet(), result.rel));
     if (closePlanner) {
       // TODO(jsternberg): Rework this logic because these are some incredibly leaky abstractions.
       // We won't be doing optimizations so transform the relational algebra to use the pandas nodes
@@ -316,8 +311,8 @@ public class RelationalAlgebraGenerator {
   private RelRoot getOptimizedRelationalAlgebra(RelRoot nonOptimizedPlan)
       throws RelConversionException {
     RelTraitSet requiredOutputTraits = planner.getEmptyTraitSet().replace(PandasRel.CONVENTION);
-    RelRoot optimizedPlan = nonOptimizedPlan.withRel(
-        planner.transform(1, requiredOutputTraits, nonOptimizedPlan.rel));
+    RelRoot optimizedPlan =
+        nonOptimizedPlan.withRel(planner.transform(1, requiredOutputTraits, nonOptimizedPlan.rel));
     planner.close();
     return optimizedPlan;
   }
