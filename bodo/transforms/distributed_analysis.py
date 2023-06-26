@@ -40,7 +40,6 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.table import TableType
-from bodo.libs.bodosql_array_kernel_utils import is_array_item_array
 from bodo.libs.bodosql_array_kernels import (
     broadcasted_fixed_arg_functions,
     broadcasted_variadic_functions,
@@ -1616,6 +1615,48 @@ class DistributedAnalysis:
             "bodo.io.snowflake_write",
         ):  # pragma: no cover
             self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            return
+
+        if fdef == (
+            "init_groupby_state",
+            "bodo.libs.stream_groupby",
+        ):  # pragma: no cover
+            # Initialize groupby state to 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD, False)
+            return
+
+        if fdef == (
+            "groupby_build_consume_batch",
+            "bodo.libs.stream_groupby",
+        ):  # pragma: no cover
+            self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            return
+
+        if fdef == (
+            "groupby_produce_output_batch",
+            "bodo.libs.stream_groupby",
+        ):  # pragma: no cover
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            state_dist = array_dists[rhs.args[0].name]
+
+            out_dist = Distribution(
+                min(
+                    array_dists[lhs][0].value,
+                    state_dist.value,
+                )
+            )
+            # Update the output
+            self._set_var_dist(lhs, array_dists, out_dist)
+
+            if out_dist == Distribution.REP:
+                # Output can convert inputs to REP.
+                state_dist = Distribution.REP
+
+            # Update the state
+            self._set_var_dist(rhs.args[0].name, array_dists, state_dist, False)
             return
 
         if (
