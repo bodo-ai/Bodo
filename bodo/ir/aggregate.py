@@ -500,23 +500,24 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
             if f_name not in bodo.ir.aggregate.supported_transform_funcs:
                 raise BodoError(f"unsupported transform function {f_name}")
             # TODO: It could be user-defined
-            func.transform_func = supported_agg_funcs.index(f_name)
+            func.transform_funcs = [supported_agg_funcs.index(f_name)]
         else:
-            func.transform_func = supported_agg_funcs.index("no_op")
+            func.transform_funcs = [supported_agg_funcs.index("no_op")]
         return func
     if func_name == "window":
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.fname = func_name
         kws = dict(rhs.kws)
-        func_var = get_call_expr_arg(func_name, rhs.args, kws, 0, "func", "")
-        if func_var == "":  # pragma: no cover
+        func_vars = get_call_expr_arg(func_name, rhs.args, kws, 0, "func", "")
+        if func_vars == ():  # pragma: no cover
             raise BodoError("window function requires a function")
-        window_func = get_literal_value(typemap[func_var.name])
-        if (
-            window_func not in bodo.ir.aggregate.supported_window_funcs
-        ):  # pragma: no cover
-            raise BodoError(f"unsupported window function {window_func}")
+        window_funcs = get_literal_value(typemap[func_vars.name])
+        for window_func in window_funcs:
+            if (
+                window_func not in bodo.ir.aggregate.supported_window_funcs
+            ):  # pragma: no cover
+                raise BodoError(f"unsupported window function {window_func}")
         # Note: Orderby columns are in the gb_info
         ascending_var = get_call_expr_arg(func_name, rhs.args, kws, 2, "ascending", "")
         if ascending_var == "":  # pragma: no cover
@@ -533,7 +534,9 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         # TODO: We may want to allow some update before shuffle for min_row_number_filter.
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
-        func.window_func = supported_agg_funcs.index(window_func)
+        func.window_funcs = [
+            supported_agg_funcs.index(window_func) for window_func in window_funcs
+        ]
         func.ascending = ascending
         func.na_position_b = [na_pos == "last" for na_pos in na_position]
         return func
@@ -1950,7 +1953,8 @@ def gen_top_level_agg_func(
     shift_periods = 1
     head_n = -1
     num_cum_funcs = 0
-    transform_func = 0
+    transform_funcs = []
+    window_calls = []
     window_ascending = []
     window_na_position = []
 
@@ -1966,6 +1970,7 @@ def gen_top_level_agg_func(
         func_offsets.append(len(allfuncs))
         ascending = [False] * num_in_cols
         na_position = [False] * num_in_cols
+        w_calls = 0
         if func.ftype in {"median", "nunique", "ngroup", "listagg"}:
             # these operations require shuffle at the beginning, so a
             # local aggregation followed by combine is not necessary
@@ -1978,10 +1983,12 @@ def gen_top_level_agg_func(
             shift_periods = func.periods
             do_combine = False  # See median/nunique note ^
         if func.ftype == "transform":
-            transform_func = func.transform_func
+            transform_funcs.extend(func.transform_funcs)
+            w_calls = len(func.transform_funcs)
             do_combine = False  # See median/nunique note ^
         if func.ftype == "window":
-            transform_func = func.window_func
+            transform_funcs.extend(func.window_funcs)
+            w_calls = len(func.window_funcs)
             do_combine = False  # See median/nunique note ^
             ascending = func.ascending
             na_position = func.na_position_b
@@ -1995,6 +2002,7 @@ def gen_top_level_agg_func(
         # Update the current window_ascending and window_na_position
         window_ascending.extend(ascending)
         window_na_position.extend(na_position)
+        window_calls.append(w_calls)
 
         if func.ftype == "head":
             head_n = func.head_n
@@ -2146,6 +2154,16 @@ def gen_top_level_agg_func(
     func_text += "    window_na_position = np.array([{}], dtype=np.bool_)\n".format(
         ", ".join([str(i) for i in window_na_position] + ["False"])
     )
+    # NOTE: adding extra 0 to make sure the list is never empty to avoid Numba
+    # typing issues
+    func_text += "    transform_funcs = np.array([{}], dtype=np.int64)\n".format(
+        ", ".join([str(i) for i in transform_funcs] + ["0"])
+    )
+    # NOTE: adding extra 0 to make sure the list is never empty to avoid Numba
+    # typing issues
+    func_text += "    windows_calls_per_func = np.array([{}], dtype=np.int8)\n".format(
+        ", ".join([str(i) for i in window_calls] + ["0"])
+    )
 
     # NOTE: adding extra zero to make sure the list is never empty to avoid Numba
     # typing issues
@@ -2169,10 +2187,10 @@ def gen_top_level_agg_func(
     )
 
     func_text += (
-        f"    out_table = groupby_and_aggregate(table, {n_keys}, cols_per_func.ctypes, "
+        f"    out_table = groupby_and_aggregate(table, {n_keys}, cols_per_func.ctypes, windows_calls_per_func.ctypes,"
         f"{len(allfuncs)}, {agg_node.input_has_index}, ftypes.ctypes, func_offsets.ctypes, "
         f"udf_ncols.ctypes, {parallel}, {skipdropna}, {shift_periods}, "
-        f"{transform_func}, {head_n}, {agg_node.return_key}, {agg_node.same_index}, "
+        f"transform_funcs.ctypes, {head_n}, {agg_node.return_key}, {agg_node.same_index}, "
         f"{agg_node.dropna}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, "
         f"cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes, window_ascending.ctypes, "
         f"window_na_position.ctypes, {agg_node.maintain_input_size}, {n_shuffle_keys}, "
@@ -2199,8 +2217,18 @@ def gen_top_level_agg_func(
             )
             idx += 1
 
+    offset = 0
     for out_col_ind in agg_node.gb_info_out.keys():
-        out_cpp_col_inds.append(out_col_ind)
+        # For window functions, the out_col_ind and possibly several numbers
+        # immediately following since window can return multiple columns
+        # for one single aggregation
+        if agg_node.gb_info_out[out_col_ind][1].ftype == "window":
+            n_window = len(agg_node.gb_info_out[0][1].window_funcs)
+            for i in range(out_col_ind, out_col_ind + n_window):
+                out_cpp_col_inds.append(offset + i)
+            offset += n_window - 1
+        else:
+            out_cpp_col_inds.append(offset + out_col_ind)
         idx += 1
 
     # Index is always stored last
@@ -2241,7 +2269,6 @@ def gen_top_level_agg_func(
 
     comma = "," if len(unknown_cat_arrs) == 1 else ""
     func_text += f"    out_data = cpp_table_to_py_data(out_table, out_col_inds, {out_types_str}, total_rows_np[0], {agg_node.n_out_table_arrays}, ({', '.join(unknown_cat_arrs)}{comma}), unknown_cat_out_inds)\n"
-
     # clean up
     func_text += (
         f"    ev_clean = bodo.utils.tracing.Event('tables_clean_up', {parallel})\n"

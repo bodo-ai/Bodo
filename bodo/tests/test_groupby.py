@@ -7271,3 +7271,97 @@ def test_tz_aware_gb_apply(memory_leak_check):
         sort_output=True,
         reset_index=True,
     )
+
+
+@pytest.mark.parametrize(
+    "keys, funcs, orderby, ascending, napos, answer",
+    [
+        pytest.param(
+            ["A"],
+            ("row_number",),
+            ("B",),
+            (True,),
+            ("last",),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": [5, 4, 3, 4, 3, 5, 3, 2, 2, 2, 5, 1, 1, 1, 4],
+                }
+            ),
+            id="row_number-simple_ordering",
+        ),
+        pytest.param(
+            ["A"],
+            ("row_number",),
+            ("C", "B"),
+            (False, True),
+            ("last", "first"),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": [4, 2, 3, 3, 5, 1, 2, 4, 2, 5, 3, 4, 1, 1, 5],
+                }
+            ),
+            id="row_number-compound_ordering",
+        ),
+        pytest.param(
+            ["A"],
+            ("min_row_number_filter",),
+            ("B",),
+            (True,),
+            ("last",),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": [False] * 11 + [True] * 3 + [False],
+                }
+            ),
+            id="min_row_number_filter-simple_ordering",
+        ),
+        pytest.param(
+            ["A"],
+            ("row_number", "min_row_number_filter", "row_number"),
+            ("B",),
+            (True,),
+            ("last",),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": [5, 4, 3, 4, 3, 5, 3, 2, 2, 2, 5, 1, 1, 1, 4],
+                    "AGG_OUTPUT_1": [False] * 11 + [True] * 3 + [False],
+                    "AGG_OUTPUT_2": [5, 4, 3, 4, 3, 5, 3, 2, 2, 2, 5, 1, 1, 1, 4],
+                }
+            ),
+            id="multiple_calls-simple_ordering",
+        ),
+    ],
+)
+def test_window(keys, funcs, orderby, ascending, napos, answer, memory_leak_check):
+    """
+    Tests using groupby.window on various aggregation types, sometimes
+    multiple at once
+    """
+
+    func_text = "def impl(df):\n"
+    func_text += f"   return df.groupby({keys}, as_index = False, dropna = False, _is_bodosql = True)"
+    func_text += f".window({funcs}, {orderby}, {ascending}, {napos})"
+    local_vars = {}
+    exec(func_text, local_vars)
+    impl = local_vars["impl"]
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(["A", "B", "C"] * 5),
+            "B": pd.Series(
+                [None if i % 5 == 0 else int(10 * np.tan(i)) for i in range(15)],
+                dtype=pd.Int32Dtype(),
+            ),
+            "C": pd.Series(list("ALPHATHETAGAMMA")),
+        }
+    )
+
+    check_func(
+        impl,
+        (df,),
+        py_output=answer,
+        sort_output=False,
+        reset_index=True,
+        check_names=False,
+        check_dtype=False,
+    )

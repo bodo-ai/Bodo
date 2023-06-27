@@ -20,10 +20,10 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.genera
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.generateSortCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getAscendingExpr;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getNAPositionStringLiteral;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.generateOptimizedEngineKernelCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.generateGroupbyWindow;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.generateWindowedAggFn;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.revertSortColumnName;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.usesOptimizedEngineKernel;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.usesGroupbyWindow;
 import static com.bodosql.calcite.application.JoinCondVisitor.getStreamingJoinKeyIndices;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitNonEquiConditions;
@@ -77,7 +77,6 @@ import com.bodosql.calcite.traits.CombineStreamsExchange;
 import com.bodosql.calcite.traits.SeparateStreamExchange;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -1608,45 +1607,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     RexToPandasTranslator translator = getRexTranslator(id, inputVar);
 
-    // Check if we can use the optimized groupby.window C++ kernel. If so
-    // we directly to that codegen path.
-    if (usesOptimizedEngineKernel(aggOperations)) {
-      // usesOptimizedEngineKernel enforces that we have exactly 1 aggOperation
-      // and exactly 1 order by column.
-      RexOver windowFunc = aggOperations.get(0);
-      RexWindow window = windowFunc.getWindow();
-      // We need to visit all partition keys before generating
-      // code for the kernel
-      List<Expr> childExprs = new ArrayList<>();
-      List<BodoSQLExprType.ExprType> childExprTypes = new ArrayList<>();
-      for (int i = 0; i < window.partitionKeys.size(); i++) {
-        RexNode node = window.partitionKeys.get(i);
-        Expr curInfo = node.accept(translator);
-        childExprs.add(curInfo);
-        childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
-      }
-      // Visit the order by key. This is required to be a single column.
-      // The RHS of order keys is a set of SqlKind Values. These are used to stored information
-      // about ascending and nulls first/last
-      for (int i = 0; i < window.orderKeys.size(); i++) {
-        RexNode node = window.orderKeys.get(i).left;
-        Expr curRexInfo = node.accept(translator);
-        childExprs.add(curRexInfo);
-        childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
-      }
-      Variable outputVar = this.genWindowedAggDf();
-      Expr outputCode =
-          generateOptimizedEngineKernelCode(
-              inputVar.getName(),
-              outputVar,
-              aggOperations,
-              childExprs,
-              childExprTypes,
-              this.generatedCode);
-
-      return Collections.singletonList(outputCode);
-    }
-
     // The overall goal of this section of code is to separate the input list
     // of agg operations into groups that can be done in the same group-by
     // function.
@@ -1801,8 +1761,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
   /**
    * Helper function for visitAggOverOp. Return a pandas expression that replicates a SQL windowed
    * aggregation function, given a list of aggregation functions and the window over which they
-   * occur. Currently, in all cases but first_value, we do not support fusing multiple window
-   * functions into one groupby apply, and the length of aggOperations is 1.
+   * occur. It is assumed that all of the input window function calls use the same partition and
+   * order by keys.
    *
    * @param aggOperations A list
    * @param colNames List of colNames used in the relational expression
@@ -1830,7 +1790,62 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inputVar,
       RexToPandasTranslator translator) {
 
-    /*
+    // Verify that the partition/ordering assumptions are correct
+    RexWindow window = windows.get(0);
+
+    if (window.partitionKeys.size() == 0) {
+      for (String name : names) {
+        if (!name.equals("ROW_NUMBER")) {
+          throw new BodoSQLCodegenException(
+              "BODOSQL currently requires a partition column when handling windowed aggregation"
+                  + " functions, except for ROW_NUMBER()");
+        }
+      }
+    }
+
+    for (int i = 1; i < windows.size(); i++) {
+      if (!windows.get(i).partitionKeys.equals(window.partitionKeys)) {
+        throw new BodoSQLCodegenException(
+            "BODOSQL currently requires all window functions in the same closure to have the same"
+                + " PARTITION BY");
+      }
+      if (!windows.get(i).orderKeys.equals(window.orderKeys)) {
+        throw new BodoSQLCodegenException(
+            "BODOSQL currently requires all window functions in the same closure to have the same"
+                + " ORDER BY");
+      }
+    }
+
+    // Check if we can use the optimized groupby.window C++ kernel. If so
+    // we directly to that codegen path.
+    if (usesGroupbyWindow(aggOperations)) {
+      // We need to visit all partition keys before generating
+      // code for the kernel
+      List<Expr> childExprs = new ArrayList<>();
+      List<BodoSQLExprType.ExprType> childExprTypes = new ArrayList<>();
+      for (int i = 0; i < window.partitionKeys.size(); i++) {
+        RexNode node = window.partitionKeys.get(i);
+        Expr curInfo = node.accept(translator);
+        childExprs.add(curInfo);
+        childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
+      }
+      // Visit the order by key. This is required to be a single column.
+      // The RHS of order keys is a set of SqlKind Values. These are used to stored information
+      // about ascending and nulls first/last
+      for (int i = 0; i < window.orderKeys.size(); i++) {
+        RexNode node = window.orderKeys.get(i).left;
+        Expr curRexInfo = node.accept(translator);
+        childExprs.add(curRexInfo);
+        childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
+      }
+      Variable dfExpr = this.genWindowedAggDf();
+      List<String> outputDfColnameList =
+          generateGroupbyWindow(
+              inputVar, dfExpr, aggOperations, childExprs, childExprTypes, this.generatedCode);
+      return new Pair<String, List<String>>(dfExpr.getName(), outputDfColnameList);
+    }
+
+    /* Otherwise we go down the groupby.apply codegen path:
     BASIC STEPS:
       First, generate a projection, something like
 
@@ -1867,31 +1882,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // simple incremented variable, used for making sure we don't have duplicate column names
     int col_id_var = 0;
-
-    RexWindow window = windows.get(0);
-
-    if (window.partitionKeys.size() == 0) {
-      for (String name : names) {
-        if (!name.equals("ROW_NUMBER")) {
-          throw new BodoSQLCodegenException(
-              "BODOSQL currently requires a partition column when handling windowed aggregation"
-                  + " functions, except for ROW_NUMBER()");
-        }
-      }
-    }
-
-    for (int i = 1; i < windows.size(); i++) {
-      if (!windows.get(i).partitionKeys.equals(window.partitionKeys)) {
-        throw new BodoSQLCodegenException(
-            "BODOSQL currently requires all window functions in the same closure to have the same"
-                + " PARTITION BY");
-      }
-      if (!windows.get(i).orderKeys.equals(window.orderKeys)) {
-        throw new BodoSQLCodegenException(
-            "BODOSQL currently requires all window functions in the same closure to have the same"
-                + " ORDER BY");
-      }
-    }
 
     // Ensure that all the columns needed to correctly do the groupby are added, and record their
     // names for later, so we know what columns by which to group when generating the groupby

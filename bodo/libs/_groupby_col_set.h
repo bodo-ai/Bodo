@@ -99,11 +99,13 @@ class BasicColSet {
     virtual void eval(const grouping_info& grp_info);
 
     /**
-     * Obtain the final output column resulting from the groupby operation on
-     * this column set. This will free all other intermediate or auxiliary
+     * Obtain the final output columns resulting from the groupby operation on
+     * this column set by appending them into a provided vector. This will free
+     * all other intermediate or auxiliary
      * columns (if any) used by the column set (like reduction variables).
      */
-    virtual std::shared_ptr<array_info> getOutputColumn();
+    virtual void addOutputColumns(
+        std::vector<std::shared_ptr<array_info>>& out_cols);
 
     /**
      * @brief Set input columns of this ColSet (used in streaming groupby for
@@ -238,7 +240,7 @@ class WindowColSet : public BasicColSet {
      * Construct Window column set
      * @param in_cols input columns of groupby associated with this column set.
      * There are the columns that we will sort on.
-     * @param _window_func: What function are we computing.
+     * @param _window_funcs: What function(s) are we computing.
      * @param _asc: Are the sort columns ascending on the input column.
      * @param _na_pos: Are NAs last in the sort columns
      * @param _is_parallel: flag to identify whether data is distributed
@@ -246,7 +248,7 @@ class WindowColSet : public BasicColSet {
      *
      */
     WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
-                 int64_t _window_func, std::vector<bool>& _asc,
+                 std::vector<int64_t> _window_funcs, std::vector<bool>& _asc,
                  std::vector<bool>& _na_pos, bool _is_parallel,
                  bool use_sql_rules);
     virtual ~WindowColSet();
@@ -273,9 +275,16 @@ class WindowColSet : public BasicColSet {
      */
     virtual void update(const std::vector<grouping_info>& grp_infos);
 
+    /**
+     * Obtain the final output columns resulting from the groupby operation on
+     * this column set by appending them into a provided vector.
+     */
+    virtual void addOutputColumns(
+        std::vector<std::shared_ptr<array_info>>& out_cols);
+
    private:
     std::vector<std::shared_ptr<array_info>> input_cols;
-    int64_t window_func;
+    std::vector<int64_t> window_funcs;
     std::vector<bool> asc;
     std::vector<bool> na_pos;
     bool is_parallel;  // whether input column data is distributed or
@@ -691,8 +700,8 @@ class NgroupColSet : public BasicColSet {
 std::unique_ptr<BasicColSet> makeColSet(
     std::vector<std::shared_ptr<array_info>> in_cols,
     std::shared_ptr<array_info> index_col, int ftype, bool do_combine,
-    bool skipna, int64_t periods, int64_t transform_func, int n_udf,
-    bool is_parallel, std::vector<bool> window_ascending,
+    bool skipna, int64_t periods, std::vector<int64_t> transform_funcs,
+    int n_udf, bool is_parallel, std::vector<bool> window_ascending,
     std::vector<bool> window_na_position, int* udf_n_redvars = nullptr,
     std::shared_ptr<table_info> udf_table = nullptr, int udf_table_idx = 0,
     std::shared_ptr<table_info> nunique_table = nullptr,
