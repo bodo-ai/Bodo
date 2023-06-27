@@ -422,7 +422,22 @@ cdef class BufferPoolOptions(_Weakrefable):
         return options
 
 
-cdef class BufferPool(MemoryPool):
+cdef class IBufferPool(MemoryPool):
+    """
+    Python interface to IBufferPool class defined in C++.
+    This is just an abstract class defined for consistency
+    between the Python and C++ class hierarchy.
+    """
+
+    def __init__(self):
+        raise TypeError("{} is an abstract class. Use "
+                        "default_buffer_pool(), "
+                        "BufferPool.default() or "
+                        "BufferPool.from_options() instead."
+                        .format(self.__class__.__name__))
+
+
+cdef class BufferPool(IBufferPool):
     """
     Python interface to BufferPool class defined in C++.
     This will be primarily used for unit-testing and
