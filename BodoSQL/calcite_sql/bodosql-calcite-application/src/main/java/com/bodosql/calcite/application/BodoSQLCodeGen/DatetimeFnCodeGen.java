@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 
 import com.bodosql.calcite.ir.ExprKt;
+import kotlin.Pair;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -130,7 +131,7 @@ public class DatetimeFnCodeGen {
   public static Expr generateCurrTimeCode(String opName, BodoTZInfo tzInfo) {
     String fnExpression =
         String.format(
-            "bodo.libs.bodosql_array_kernels.to_time(pd.Timestamp.now(%s), True)",
+            "bodo.libs.bodosql_array_kernels.to_time(pd.Timestamp.now(%s), format_str=None, _try=True)",
             tzInfo == null ? "" : tzInfo.getPyZone());
     return new Expr.Raw(fnExpression);
   }
@@ -241,19 +242,20 @@ public class DatetimeFnCodeGen {
   /**
    * Helper function that handles the codegen for snowflake SQL's TIME, TO_TIME, and TRY_TO_TIME
    *
-   * @param arg1Type The type of the first argument.
-   * @param arg1Info The VisitorInfo for the first argument.
+   * @param args The VisitorInfo for the arguments.
    * @param opName should be either "TIME", "TO_TIME", or "TRY_TO_TIME"
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static Expr generateToTimeCode(SqlTypeName arg1Type, Expr arg1Info, String opName) {
-    String outputExpression =
-        "bodo.libs.bodosql_array_kernels.to_time("
-            + arg1Info.emit()
-            + ", _try="
-            + (opName.contains("TRY") ? "True" : "False")
-            + ")";
-    return new Expr.Raw(outputExpression);
+  public static Expr generateToTimeCode(List<Expr> args, String opName) {
+    Pair<String, Expr> tryPair = new Pair<>("_try", new Expr.BooleanLiteral(opName.contains("TRY")));
+    List<Pair<String, Expr>> keywordArgs = new ArrayList<>();
+
+    if (args.size() == 1) {
+      keywordArgs.add(new Pair<>("format_str", Expr.None.INSTANCE));
+    }
+    keywordArgs.add(tryPair);
+    
+    return ExprKt.BodoSQLKernel("to_time", args, keywordArgs);
   }
 
   /**

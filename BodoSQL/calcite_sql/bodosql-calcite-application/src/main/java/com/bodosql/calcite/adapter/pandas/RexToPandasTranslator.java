@@ -1313,8 +1313,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
           case "TO_TIME":
           case "TRY_TO_TIME":
             return generateToTimeCode(
-                fnOperation.getOperands().get(0).getType().getSqlTypeName(),
-                operands.get(0),
+                operands,
                 fnName);
           case "DATE_FROM_PARTS":
           case "DATEFROMPARTS":

@@ -205,7 +205,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+          OperandTypes.or(
+              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+              OperandTypes.sequence("TO_TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)
+          ),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -219,7 +222,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+          OperandTypes.or(
+              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+              OperandTypes.sequence("TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)
+          ),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -233,7 +239,10 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+          OperandTypes.or(
+              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+              OperandTypes.sequence("TRY_TO_TIME(STRING, STRING)", OperandTypes.STRING, OperandTypes.STRING)
+          ),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
