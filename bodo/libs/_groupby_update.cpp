@@ -1006,169 +1006,300 @@ void nunique_computation(std::shared_ptr<array_info> arr,
 
 // WINDOW
 
+/**
+ * min_row_number_filter is used to evaluate the following type
+ * of expression in BodoSQL:
+ *
+ * row_number() over (partition by ... order by ...) == 1.
+ *
+ * This function creates a boolean array of all-false, then finds the indices
+ * corresponding to the idxmin/idxmax of the orderby columns and sets those
+ * indices to true. This implementaiton does so without sorting the array since
+ * if no other window functions being calculated require sorting, then we can
+ * find the idxmin/idxmax without bothering to sort the whole table seciton.
+ *
+ * @param[in] orderby_arrs: the columns used in the order by clause of the query
+ * @param[in,out] out_arr: output array where the true values will be placed
+ * @param[in] grp_info: groupby information
+ * @param[in] asc_vect: vector indicating which of the orderby columns are
+ * ascending
+ * @param[in] na_pos_vect: vector indicating which of the orderby columns are
+ * null first/last
+ * @param[in] is_parallel: is the function being run in parallel?
+ * @param[in] use_sql_rules: should initialization functions obey SQL semantics?
+ */
+void min_row_number_filter_window_computation_no_sort(
+    std::vector<std::shared_ptr<array_info>>& orderby_arrs,
+    std::shared_ptr<array_info> out_arr, grouping_info const& grp_info,
+    std::vector<bool>& asc_vect, std::vector<bool>& na_pos_vect,
+    bool is_parallel, bool use_sql_rules) {
+    // To compute min_row_number_filter we want to find the
+    // idxmin/idxmax based on the orderby columns. Then in the output
+    // array those locations will have the value true. We have already
+    // initialized all other locations to false.
+    size_t num_groups = grp_info.num_groups;
+    int64_t ftype;
+    std::shared_ptr<array_info> idx_col;
+    if (orderby_arrs.size() == 1) {
+        // We generate an optimized and templated path for 1 column.
+        std::shared_ptr<array_info> orderby_arr = orderby_arrs[0];
+        bool asc = asc_vect[0];
+        bool na_pos = na_pos_vect[0];
+        bodo_array_type::arr_type_enum idx_arr_type;
+        if (asc) {
+            // The first value of an array in ascending order is the
+            // min.
+            if (na_pos) {
+                ftype = Bodo_FTypes::idxmin;
+                // We don't need null values for indices
+                idx_arr_type = bodo_array_type::NUMPY;
+            } else {
+                ftype = Bodo_FTypes::idxmin_na_first;
+                // We need null values to signal we found an NA
+                // value.
+                idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+            }
+        } else {
+            // The first value of an array in descending order is the
+            // max.
+            if (na_pos) {
+                ftype = Bodo_FTypes::idxmax;
+                // We don't need null values for indices
+                idx_arr_type = bodo_array_type::NUMPY;
+            } else {
+                ftype = Bodo_FTypes::idxmax_na_first;
+                // We need null values to signal we found an NA
+                // value.
+                idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+            }
+        }
+        // Allocate intermediate buffer to find the true element for
+        // each group.
+        idx_col = alloc_array(num_groups, 1, 1, idx_arr_type,
+                              Bodo_CTypes::UINT64, 0, 0);
+        // create array to store min/max value
+        std::shared_ptr<array_info> data_col = alloc_array(
+            num_groups, 1, 1, orderby_arr->arr_type, orderby_arr->dtype, 0, 0);
+        // Initialize the index column. This is 0 initialized and will
+        // not initialize the null values.
+        aggfunc_output_initialize(idx_col, Bodo_FTypes::count, use_sql_rules);
+        std::vector<std::shared_ptr<array_info>> aux_cols = {idx_col};
+        // Initialize the min/max column
+        if (ftype == Bodo_FTypes::idxmax ||
+            ftype == Bodo_FTypes::idxmax_na_first) {
+            aggfunc_output_initialize(data_col, Bodo_FTypes::max,
+                                      use_sql_rules);
+        } else {
+            aggfunc_output_initialize(data_col, Bodo_FTypes::min,
+                                      use_sql_rules);
+        }
+        // Compute the idxmin/idxmax
+        do_apply_to_column(orderby_arr, data_col, aux_cols, grp_info, ftype);
+    } else {
+        ftype = Bodo_FTypes::idx_n_columns;
+        // We don't need null for indices
+        // We only allocate an index column.
+        idx_col = alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
+                              Bodo_CTypes::UINT64, 0, 0);
+        aggfunc_output_initialize(idx_col, Bodo_FTypes::count, use_sql_rules);
+        // Call the idx_n_columns function path.
+        idx_n_columns_apply(idx_col, orderby_arrs, asc_vect, na_pos_vect,
+                            grp_info, ftype);
+    }
+    // Now we have the idxmin/idxmax in the idx_col for each group.
+    // We need to set the corresponding indices in the final array to true.
+    for (size_t group_idx = 0; group_idx < idx_col->length; group_idx++) {
+        int64_t row_one_idx = getv<int64_t>(idx_col, group_idx);
+        SetBitTo((uint8_t*)out_arr->data1(), row_one_idx, true);
+    }
+}
+
+/**
+ * Alternative implementaiton for min_row_number_filter if another window
+ * computation already requires sorting the table: iterates through
+ * the sorted groups and sets the corresponding row to true if the
+ * current row belongs to a differnet group than the previous row.
+ *
+ * @param[in,out] out_arr: output array where the row numbers are stored
+ * @param[in] sorted_groups: sorted array of group numbers
+ * @param[in] sorted_idx: array mapping each index in the sorted table back
+ * to its location in the original unsorted table
+ */
+void min_row_number_filter_window_computation_already_sorted(
+    std::shared_ptr<array_info> out_arr,
+    std::shared_ptr<array_info> sorted_groups,
+    std::shared_ptr<array_info> sorted_idx) {
+    int64_t prev_group = -1;
+    for (int64_t i = 0; i < out_arr->length; i++) {
+        int64_t curr_group = getv<int64_t>(sorted_groups, i);
+        // If the current group is differne from the group of the previous row,
+        // then this row is the row where the row number is 1
+        if (curr_group != prev_group) {
+            int64_t row_one_idx = getv<int64_t>(sorted_idx, i);
+            SetBitTo((uint8_t*)out_arr->data1(), row_one_idx, true);
+            prev_group = curr_group;
+        }
+    }
+}
+
+/**
+ * Computes the BodoSQL window function ROW_NUMBER() on a subset of a table
+ * containing complete partitions, where the rows are sorted first by group
+ * (so each partition is clustered togeher) and then by the columns in the
+ * orderby clause.
+ *
+ * The computaiton works by having a counter that starts at 1, increases by
+ * 1 each row, and resets to 1 whenever a new group is reached.
+ *
+ * @param[in,out] out_arr: output array where the row numbers are stored
+ * @param[in] sorted_groups: sorted array of group numbers
+ * @param[in] sorted_idx: array mapping each index in the sorted table back
+ * to its location in the original unsorted table
+ */
+void row_number_computation(std::shared_ptr<array_info> out_arr,
+                            std::shared_ptr<array_info> sorted_groups,
+                            std::shared_ptr<array_info> sorted_idx) {
+    // Start the counter at 1, increase by 1 each time, and reset
+    // the counter to 1 when we reach a new group
+    int64_t prev_group = -1;
+    int64_t row_num = 1;
+    for (int64_t i = 0; i < out_arr->length; i++) {
+        int64_t curr_group = getv<int64_t>(sorted_groups, i);
+        if (curr_group != prev_group) {
+            row_num = 1;
+        } else {
+            row_num++;
+        }
+        // Get the index in the output array.
+        int64_t idx = getv<int64_t>(sorted_idx, i);
+        getv<int64_t>(out_arr, idx) = row_num;
+        // Set the prev group
+        prev_group = curr_group;
+    }
+}
+
 void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
-                        int64_t window_func,
-                        std::shared_ptr<array_info> out_arr,
+                        std::vector<int64_t> window_funcs,
+                        std::vector<std::shared_ptr<array_info>> out_arrs,
                         grouping_info const& grp_info,
                         std::vector<bool>& asc_vect,
                         std::vector<bool>& na_pos_vect, bool is_parallel,
                         bool use_sql_rules) {
-    switch (window_func) {
-        case Bodo_FTypes::row_number: {
-            const bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
-            int64_t num_rows = row_to_group.size();
-            // Wrap the row_to_group in an array info so we can use it to sort.
-            std::shared_ptr<array_info> group_arr =
-                alloc_numpy(num_rows, Bodo_CTypes::INT64);
-            // TODO: Reuse the row_to_group buffer
-            for (int64_t i = 0; i < num_rows; i++) {
-                getv<int64_t>(group_arr, i) = row_to_group[i];
+    // Create a new table. We want to sort the table first by
+    // the groups and second by the orderby_arr.
+    std::shared_ptr<table_info> sort_table = std::make_shared<table_info>();
+    std::shared_ptr<table_info> iter_table = nullptr;
+    const bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
+    int64_t num_rows = row_to_group.size();
+    int64_t n_keys = orderby_arrs.size() + 1;
+    int64_t vect_ascending[n_keys];
+    int64_t na_position[n_keys];
+    // The sort table will be the same for every window function call that uses
+    // it, so the table will be unitialized until one of the calls specifies
+    // that we do need to sort
+    bool needs_sort = false;
+    bool sort_has_required_cols = false;
+    int64_t idx_col = 0;
+    for (size_t i = 0; i < window_funcs.size(); i++) {
+        switch (window_funcs[i]) {
+            case Bodo_FTypes::min_row_number_filter: {
+                // Window functions that do not require the sorted table
+                break;
             }
-            // Create a new table. We want to sort the table first by
-            // the groups and second by the orderby_arr.
-            std::shared_ptr<table_info> sort_table =
-                std::make_shared<table_info>();
-            sort_table->columns.push_back(group_arr);
-            for (std::shared_ptr<array_info> orderby_arr : orderby_arrs) {
-                sort_table->columns.push_back(orderby_arr);
-            }
-            // Append an index column so we can find the original
-            // index in the out array.
-            std::shared_ptr<array_info> idx_arr =
-                alloc_numpy(num_rows, Bodo_CTypes::INT64);
-            for (int64_t i = 0; i < num_rows; i++) {
-                getv<int64_t>(idx_arr, i) = i;
-            }
-            sort_table->columns.push_back(idx_arr);
-            int64_t n_keys = orderby_arrs.size() + 1;
-            int64_t vect_ascending[n_keys];
-            int64_t na_position[n_keys];
-            // Initialize the group ordering
-            vect_ascending[0] = asc_vect[0];
-            na_position[0] = na_pos_vect[0];
-            for (int64_t i = 1; i < n_keys; i++) {
-                vect_ascending[i] = asc_vect[i - 1];
-                na_position[i] = na_pos_vect[i - 1];
-            }
-
-            // Sort the table
-            // XXX: We don't need the entire chunk of data sorted,
-            // just the groups. We could do a partial sort to avoid
-            // the overhead of sorting the data and in the future
-            // we may be want to explore if we can use hashing
-            // instead to avoid sort overhead.
-            std::shared_ptr<table_info> iter_table = sort_values_table_local(
-                sort_table, n_keys, vect_ascending, na_position, nullptr,
-                is_parallel /* This is just used for tracing */);
-            std::shared_ptr<array_info> sorted_groups = iter_table->columns[0];
-            std::shared_ptr<array_info> sorted_idx =
-                iter_table->columns[n_keys];
-            sort_table.reset();
-
-            int64_t prev_group = -1;
-            int64_t row_num = 1;
-            for (int64_t i = 0; i < num_rows; i++) {
-                int64_t curr_group = getv<int64_t>(sorted_groups, i);
-                if (curr_group != prev_group) {
-                    row_num = 1;
-                } else {
-                    row_num++;
-                }
-                // Get the index in the output array.
-                int64_t idx = getv<int64_t>(sorted_idx, i);
-                getv<int64_t>(out_arr, idx) = row_num;
-                // Set the prev group
-                prev_group = curr_group;
-            }
-            break;
-        }
-        case Bodo_FTypes::min_row_number_filter: {
-            // To compute min_row_number_filter we want to find the
-            // idxmin/idxmax based on the orderby columns. Then in the output
-            // array those locations will have the value true. We have already
-            // initialized all other locations to false.
-            size_t num_groups = grp_info.num_groups;
-            int64_t ftype;
-            std::shared_ptr<array_info> idx_col;
-            if (orderby_arrs.size() == 1) {
-                // We generate an optimized and templated path for 1 column.
-                std::shared_ptr<array_info> orderby_arr = orderby_arrs[0];
-                bool asc = asc_vect[0];
-                bool na_pos = na_pos_vect[0];
-                bodo_array_type::arr_type_enum idx_arr_type;
-                if (asc) {
-                    // The first value of an array in ascending order is the
-                    // min.
-                    if (na_pos) {
-                        ftype = Bodo_FTypes::idxmin;
-                        // We don't need null values for indices
-                        idx_arr_type = bodo_array_type::NUMPY;
-                    } else {
-                        ftype = Bodo_FTypes::idxmin_na_first;
-                        // We need null values to signal we found an NA
-                        // value.
-                        idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+            case Bodo_FTypes::row_number: {
+                needs_sort = true;
+                /* If this is the first function encountered that requires,
+                 * a sort, populate sort_table with the following columns:
+                 * - 1 column containing the group numbers so that when the
+                 *   table is sorted, each partition has its rows clustered
+                 * together
+                 * - 1 column for each of the orderby cols so that within each
+                 *   partition, the values are sorted as desired
+                 * - 1 extra column that is set to 0...n-1 so that when it is
+                 *   sorted, we have a way of converting rows in the sorted
+                 *   table back to rows in the original table.
+                 */
+                if (!sort_has_required_cols) {
+                    // Wrap the row_to_group in an array info so we can use it
+                    // to sort.
+                    std::shared_ptr<array_info> group_arr =
+                        alloc_numpy(num_rows, Bodo_CTypes::INT64);
+                    // TODO: Reuse the row_to_group buffer
+                    for (int64_t i = 0; i < num_rows; i++) {
+                        getv<int64_t>(group_arr, i) = row_to_group[i];
                     }
-                } else {
-                    // The first value of an array in descending order is the
-                    // max.
-                    if (na_pos) {
-                        ftype = Bodo_FTypes::idxmax;
-                        // We don't need null values for indices
-                        idx_arr_type = bodo_array_type::NUMPY;
-                    } else {
-                        ftype = Bodo_FTypes::idxmax_na_first;
-                        // We need null values to signal we found an NA
-                        // value.
-                        idx_arr_type = bodo_array_type::NULLABLE_INT_BOOL;
+                    sort_table->columns.push_back(group_arr);
+                    // Push each orderby column into the sort table
+                    for (std::shared_ptr<array_info> orderby_arr :
+                         orderby_arrs) {
+                        sort_table->columns.push_back(orderby_arr);
                     }
+                    // Append an index column so we can find the original
+                    // index in the out array, and mark which column
+                    // is the index column
+                    idx_col = sort_table->columns.size();
+                    std::shared_ptr<array_info> idx_arr =
+                        alloc_numpy(num_rows, Bodo_CTypes::INT64);
+                    for (int64_t i = 0; i < num_rows; i++) {
+                        getv<int64_t>(idx_arr, i) = i;
+                    }
+                    sort_table->columns.push_back(idx_arr);
+                    /* Populate the buffers to indicate which columns are
+                     * ascending/descending and which have nulls first/last
+                     * according to the input specifications, plus the
+                     * group key column in front which is hardcoded to
+                     * use the same rules as the first orderby column
+                     */
+                    vect_ascending[0] = asc_vect[0];
+                    na_position[0] = na_pos_vect[0];
+                    for (int64_t i = 1; i < n_keys; i++) {
+                        vect_ascending[i] = asc_vect[i - 1];
+                        na_position[i] = na_pos_vect[i - 1];
+                    }
+                    sort_has_required_cols = true;
                 }
-                // Allocate intermediate buffer to find the true element for
-                // each group. Indices
-                idx_col = alloc_array(num_groups, 1, 1, idx_arr_type,
-                                      Bodo_CTypes::UINT64, 0, 0);
-                // create array to store min/max value
-                std::shared_ptr<array_info> data_col =
-                    alloc_array(num_groups, 1, 1, orderby_arr->arr_type,
-                                orderby_arr->dtype, 0, 0);
-                // Initialize the index column. This is 0 initialized and will
-                // not initial the null values.
-                aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
-                                          use_sql_rules);
-                std::vector<std::shared_ptr<array_info>> aux_cols = {idx_col};
-                // Initialize the max column
-                if (ftype == Bodo_FTypes::idxmax ||
-                    ftype == Bodo_FTypes::idxmax_na_first) {
-                    aggfunc_output_initialize(data_col, Bodo_FTypes::max,
-                                              use_sql_rules);
-                } else {
-                    aggfunc_output_initialize(data_col, Bodo_FTypes::min,
-                                              use_sql_rules);
-                }
-                // Compute the idxmin/idxmax
-                do_apply_to_column(orderby_arr, data_col, aux_cols, grp_info,
-                                   ftype);
-            } else {
-                ftype = Bodo_FTypes::idx_n_columns;
-                // We don't need null for indices
-                // We only allocate an index column.
-                idx_col = alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                                      Bodo_CTypes::UINT64, 0, 0);
-                aggfunc_output_initialize(idx_col, Bodo_FTypes::count,
-                                          use_sql_rules);
-                // Call the idx_n_columns function path.
-                idx_n_columns_apply(idx_col, orderby_arrs, asc_vect,
-                                    na_pos_vect, grp_info, ftype);
+                break;
             }
-            // Now we have the idxmin/idxmax in the idx_col. We need to set the
-            // indices to true.
-            for (size_t i = 0; i < idx_col->length; i++) {
-                int64_t idx = getv<int64_t>(idx_col, i);
-                SetBitTo((uint8_t*)out_arr->data1(), idx, true);
-            }
-            break;
+            default:
+                throw std::runtime_error("Invalid window function");
         }
-        default:
-            throw std::runtime_error("Invalid window function");
+    }
+    if (needs_sort) {
+        // Sort the table so that all window functions that use the
+        // sorted table can access it
+        iter_table = sort_values_table_local(
+            sort_table, n_keys, vect_ascending, na_position, nullptr,
+            is_parallel /* This is just used for tracing */);
+        sort_table.reset();
+    }
+    // For each window function call, compute the answer using the
+    // sorted table to lookup the rows in the original ordering
+    // that are to be modified
+    for (size_t i = 0; i < window_funcs.size(); i++) {
+        switch (window_funcs[i]) {
+            // min_row_number_filter uses a sort-less implementaiton if no
+            // other window functions being calculated require sorting. However,
+            // if another window funciton in this computation requires sorting
+            // the table, then we can just use the sorted groups isntead.
+            case Bodo_FTypes::min_row_number_filter: {
+                if (needs_sort) {
+                    min_row_number_filter_window_computation_already_sorted(
+                        out_arrs[i], iter_table->columns[0],
+                        iter_table->columns[idx_col]);
+                } else {
+                    min_row_number_filter_window_computation_no_sort(
+                        orderby_arrs, out_arrs[i], grp_info, asc_vect,
+                        na_pos_vect, is_parallel, use_sql_rules);
+                }
+                break;
+            }
+            case Bodo_FTypes::row_number: {
+                row_number_computation(out_arrs[i], iter_table->columns[0],
+                                       iter_table->columns[idx_col]);
+                break;
+            }
+            default:
+                throw std::runtime_error("Invalid window function");
+        }
     }
 }

@@ -231,8 +231,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
  * @param[in] orderby_arrs The arrays that is being "sorted" to determine
  * the groups. In some situations it may be possible to do a partial sort
  * or avoid sorting.
- * @param[in] window_func The name of the window function being computed.
- * Currently we only support row_number.
+ * @param[in] window_func The name(s) of the window function(s) being computed.
  * @param[out] out_arr The output array being population.
  * @param[in] grp_info Struct containing information about the groups.
  * @param[in] asc Should the arrays be sorted in ascending order?
@@ -241,8 +240,8 @@ void nunique_computation(std::shared_ptr<array_info> arr,
  * @param[in] use_sql_rules Do we use SQL or Pandas Null rules?
  */
 void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
-                        int64_t window_func,
-                        std::shared_ptr<array_info> out_arr,
+                        std::vector<int64_t> window_funcs,
+                        std::vector<std::shared_ptr<array_info>> out_arrs,
                         grouping_info const& grp_info,
                         std::vector<bool>& asc_vect,
                         std::vector<bool>& na_pos_vect, bool is_parallel,

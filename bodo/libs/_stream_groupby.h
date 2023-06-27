@@ -151,7 +151,7 @@ class GroupbyState {
                     (Bodo_CTypes::CTypeEnum)in_arr_c_types[input_ind]);
             }
             std::shared_ptr<BasicColSet> col_set = makeColSet(
-                input_cols, index_col, ftypes[i], do_combine, skipna, 0, 0, 0,
+                input_cols, index_col, ftypes[i], do_combine, skipna, 0, {0}, 0,
                 parallel, window_ascending_vect, window_na_position_vect,
                 nullptr, nullptr, 0, nullptr, use_sql_rules);
             // get update/combine type info to initialize build state

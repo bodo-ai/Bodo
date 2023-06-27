@@ -1238,7 +1238,10 @@ public class WindowAggCodeGen {
         if (j != 0) {
           funcText.append(", ");
         }
-        funcText.append("sorted_df[").append(makeQuoted(argsList.get(j).getExprString())).append("]");
+        funcText
+            .append("sorted_df[")
+            .append(makeQuoted(argsList.get(j).getExprString()))
+            .append("]");
       }
     }
 
@@ -1444,34 +1447,46 @@ public class WindowAggCodeGen {
 
   /**
    * Determine if this group of window operations can be computed in the Bodo-Engine optimized C++
-   * kernel. Right now we only support computing a single ROW_NUMBER and MIN_ROW_NUMBER_FILTER with
-   * partition keys.
+   * kernel via groupby.window. Only supported if a partition is used and all the functions in the
+   * set are from a limited collection that are supported in groupby.window.
    *
    * @param aggOperations The list of RexOver operations that are being computed.
    * @return Can these operations take the optimized C++ kernel path.
    */
-  public static boolean usesOptimizedEngineKernel(List<RexOver> aggOperations) {
-    if (aggOperations.size() == 1) {
-      RexOver windowFunc = aggOperations.get(0);
-      String fnName = windowFunc.getAggOperator().getName();
-      RexWindow window = windowFunc.getWindow();
-      if (window.partitionKeys.size() > 0) {
-        // Right now it's simpler to add more functions, so we separate these conditions.
-        return fnName.equals("ROW_NUMBER") || fnName.equals("MIN_ROW_NUMBER_FILTER");
+  public static boolean usesGroupbyWindow(List<RexOver> aggOperations) {
+    for (RexOver agg : aggOperations) {
+      String fnName = agg.getAggOperator().getName();
+      if (agg.getWindow().partitionKeys.size() == 0
+          || !(fnName.equals("ROW_NUMBER") || fnName.equals("MIN_ROW_NUMBER_FILTER"))) {
+        return false;
       }
     }
-    return false;
+    return true;
   }
 
-  public static Expr generateOptimizedEngineKernelCode(
+  /**
+   * Generates the codegen for the Bodo-Engine optimized C++ kernel via groupby.window on a
+   * collection of window functions using the same partition/orderby terms. The codegen will produce
+   * a DataFrame whose columns contain the answers. The funciton returns the names of these columns.
+   *
+   * @param inputVar Name of the DataFrame containing the input data.
+   * @param outputVar Name of the output DataFrame where the answers are to be stored.
+   * @param aggOperations List of the window functions that are being computed. Importantly, these
+   *     are all expected to have the same partition/orderby terms since this funciton should be
+   *     called after window fusion.
+   * @param childExprs List of expressions for any child columns that need to be projected to
+   *     calculate the partition/orderby terms
+   * @param childExprTypes ExprType for each childExpr being projected.
+   * @param builder The builder for appending generated code.
+   * @return A list of the names of the columsn of each of the answer within the output DataFrame.
+   */
+  public static List<String> generateGroupbyWindow(
       String inputVar,
       Variable outputVar,
       List<RexOver> aggOperations,
       List<Expr> childExprs,
       List<BodoSQLExprType.ExprType> childExprTypes,
       Module.Builder builder) {
-    // usesOptimizedEngineKernel enforces that we have exactly 1 aggOperation
-    // and exactly 1 order by column.
     RexOver windowFunc = aggOperations.get(0);
     RexWindow window = windowFunc.getWindow();
     List<String> childColNames = new ArrayList<>();
@@ -1516,15 +1531,18 @@ public class WindowAggCodeGen {
     // Generate the groupby
     Expr.List groupbyKeys = new Expr.List(groupByColNames);
     Expr.Groupby groupby = new Expr.Groupby(projectionExpr, groupbyKeys, false, false);
+    List<Expr> functionNames = new ArrayList<Expr>();
+    for (RexOver agg : aggOperations) {
+      functionNames.add(
+          new Expr.StringLiteral(agg.getAggOperator().getName().toLowerCase(Locale.ROOT)));
+    }
     // Generate the Window call
     Expr.Method windowExpr =
         new Expr.Method(
             groupby,
             "window",
-            // The two supported window functions share the same name with the Python function.
             List.of(
-                new Expr.StringLiteral(
-                    windowFunc.getAggOperator().getName().toLowerCase(Locale.ROOT)),
+                new Expr.Tuple(functionNames),
                 new Expr.Tuple(orderByLiteralList),
                 new Expr.Tuple(ascendingList),
                 new Expr.Tuple(NAPositionList)),
@@ -1533,9 +1551,11 @@ public class WindowAggCodeGen {
     // Add the window function to the codegen
     Op.Assign assignment = new Op.Assign(outputVar, windowExpr);
     builder.addToMainFunction(assignment);
-    String outputColName = "AGG_OUTPUT_0";
-    return new Expr.Call(
-        "bodo.hiframes.pd_series_ext.get_series_data",
-        new Expr.Raw(String.format("%s[%s]", outputVar.emit(), makeQuoted(outputColName))));
+    List<String> outputs = new ArrayList<String>();
+    for (int i = 0; i < aggOperations.size(); i++) {
+      String outputColName = "AGG_OUTPUT_" + String.valueOf(i);
+      outputs.add(outputColName);
+    }
+    return outputs;
   }
 }

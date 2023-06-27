@@ -86,7 +86,8 @@
 class GroupbyPipeline {
    public:
     GroupbyPipeline(std::shared_ptr<table_info> _in_table, int64_t _num_keys,
-                    int8_t* _ncols_per_func, int64_t num_funcs,
+                    int8_t* _ncols_per_func, int8_t* _nwindow_calls_per_func,
+                    int64_t num_funcs,
                     std::shared_ptr<table_info> _dispatch_table,
                     std::shared_ptr<table_info> _dispatch_info,
                     bool input_has_index, bool _is_parallel, int* ftypes,
@@ -94,7 +95,7 @@ class GroupbyPipeline {
                     std::shared_ptr<table_info> _udf_table,
                     udf_table_op_fn update_cb, udf_table_op_fn combine_cb,
                     udf_eval_fn eval_cb, udf_general_fn general_udfs_cb,
-                    bool skipna, int64_t periods, int64_t transform_func,
+                    bool skipna, int64_t periods, int64_t* transform_funcs,
                     int64_t _head_n, bool _return_key, bool _return_index,
                     bool _key_dropna, bool* window_ascending,
                     bool* window_na_position, bool _maintain_input_size,
@@ -103,6 +104,7 @@ class GroupbyPipeline {
           in_table(_in_table),
           num_keys(_num_keys),
           ncols_per_func(_ncols_per_func),
+          nwindow_calls_per_func(_nwindow_calls_per_func),
           dispatch_table(_dispatch_table),
           dispatch_info(_dispatch_info),
           is_parallel(_is_parallel),
@@ -354,14 +356,20 @@ class GroupbyPipeline {
             int start = func_offsets[k];
             int end = func_offsets[k + 1];
             int8_t num_used_cols = ncols_per_func[k];
+            int8_t nwindow_colls = nwindow_calls_per_func[k];
 
             for (int j = start; j != end;
                  j++) {  // for each function applied to this column
                 // Copy the columns because we pass the input vector by
                 // reference.
                 std::vector<std::shared_ptr<array_info>> input_cols;
+                std::vector<int64_t> transform_funcs_vect;
                 std::vector<bool> window_ascending_vect;
                 std::vector<bool> window_na_position_vect;
+                for (int m = 0; m < nwindow_colls; m++) {
+                    transform_funcs_vect.push_back(
+                        transform_funcs[(i - num_keys) + m]);
+                }
                 for (int m = 0; m < num_used_cols; m++) {
                     // There is no ascending or na_position for the key columns
                     window_ascending_vect.push_back(
@@ -377,7 +385,7 @@ class GroupbyPipeline {
                     }
                     col_sets.push_back(makeColSet(
                         input_cols, index_col, ftypes[j], do_combine, skipna,
-                        periods, transform_func, n_udf, is_parallel,
+                        periods, transform_funcs_vect, n_udf, is_parallel,
                         window_ascending_vect, window_na_position_vect,
                         udf_n_redvars, udf_table, udf_table_idx,
                         nunique_tables[i], use_sql_rules));
@@ -387,7 +395,7 @@ class GroupbyPipeline {
                     }
                     col_sets.push_back(makeColSet(
                         input_cols, index_col, ftypes[j], do_combine, skipna,
-                        periods, transform_func, n_udf, is_parallel,
+                        periods, transform_funcs_vect, n_udf, is_parallel,
                         window_ascending_vect, window_na_position_vect,
                         udf_n_redvars, udf_table, udf_table_idx, nullptr,
                         use_sql_rules));
@@ -415,9 +423,9 @@ class GroupbyPipeline {
                                      ftypes[0] == Bodo_FTypes::ngroup)) {
             col_sets.push_back(
                 makeColSet({in_table->columns[0]}, index_col, ftypes[0],
-                           do_combine, skipna, periods, transform_func, n_udf,
-                           is_parallel, {false}, {false}, udf_n_redvars,
-                           udf_table, udf_table_idx, nullptr, use_sql_rules));
+                           do_combine, skipna, periods, {0}, n_udf, is_parallel,
+                           {false}, {false}, udf_n_redvars, udf_table,
+                           udf_table_idx, nullptr, use_sql_rules));
         }
         // Add key-sort column and index to col_sets
         // to apply head_computation on them as well.
@@ -425,16 +433,15 @@ class GroupbyPipeline {
             // index-column
             col_sets.push_back(
                 makeColSet({index_col}, index_col, Bodo_FTypes::head,
-                           do_combine, skipna, periods, transform_func, n_udf,
-                           is_parallel, {false}, {false}, udf_n_redvars,
-                           udf_table, udf_table_idx, nullptr, use_sql_rules));
+                           do_combine, skipna, periods, {0}, n_udf, is_parallel,
+                           {false}, {false}, udf_n_redvars, udf_table,
+                           udf_table_idx, nullptr, use_sql_rules));
             if (head_i) {
                 col_sets.push_back(makeColSet(
                     {in_table->columns[in_table->columns.size() - 1]},
                     index_col, Bodo_FTypes::head, do_combine, skipna, periods,
-                    transform_func, n_udf, is_parallel, {false}, {false},
-                    udf_n_redvars, udf_table, udf_table_idx, nullptr,
-                    use_sql_rules));
+                    {0}, n_udf, is_parallel, {false}, {false}, udf_n_redvars,
+                    udf_table, udf_table_idx, nullptr, use_sql_rules));
             }
         }
         in_table->id = 0;
@@ -750,7 +757,7 @@ class GroupbyPipeline {
             }
         } else {
             for (std::shared_ptr<BasicColSet> col_set : col_sets) {
-                out_table->columns.push_back(col_set->getOutputColumn());
+                col_set->addOutputColumns(out_table->columns);
             }
             // gb.head() already added index to out_table.
             if (!head_op && return_index) {
@@ -961,7 +968,9 @@ class GroupbyPipeline {
         orig_in_table;  // original input table of groupby received from Python
     std::shared_ptr<table_info> in_table;  // input table of groupby
     int64_t num_keys;
-    int8_t* ncols_per_func;  // number of input columns per function
+    int8_t* ncols_per_func;          // number of input columns per aggregation
+    int8_t* nwindow_calls_per_func;  // number of window function calls per
+                                     // aggregation
     std::shared_ptr<table_info>
         dispatch_table;  // input dispatching table of pivot_table
     std::shared_ptr<table_info>
@@ -1020,13 +1029,14 @@ class GroupbyPipeline {
 
 table_info* groupby_and_aggregate(
     table_info* input_table, int64_t num_keys, int8_t* ncols_per_func,
-    int64_t num_funcs, bool input_has_index, int* ftypes, int* func_offsets,
-    int* udf_nredvars, bool is_parallel, bool skipdropna, int64_t periods,
-    int64_t transform_func, int64_t head_n, bool return_key, bool return_index,
-    bool key_dropna, void* update_cb, void* combine_cb, void* eval_cb,
-    void* general_udfs_cb, table_info* in_udf_dummy_table, int64_t* n_out_rows,
-    bool* window_ascending, bool* window_na_position, bool maintain_input_size,
-    int64_t n_shuffle_keys, bool use_sql_rules) {
+    int8_t* nwindow_calls_per_func, int64_t num_funcs, bool input_has_index,
+    int* ftypes, int* func_offsets, int* udf_nredvars, bool is_parallel,
+    bool skipdropna, int64_t periods, int64_t* transform_funcs, int64_t head_n,
+    bool return_key, bool return_index, bool key_dropna, void* update_cb,
+    void* combine_cb, void* eval_cb, void* general_udfs_cb,
+    table_info* in_udf_dummy_table, int64_t* n_out_rows, bool* window_ascending,
+    bool* window_na_position, bool maintain_input_size, int64_t n_shuffle_keys,
+    bool use_sql_rules) {
     try {
         std::shared_ptr<table_info> in_table =
             std::shared_ptr<table_info>(input_table);
@@ -1044,14 +1054,15 @@ table_info* groupby_and_aggregate(
             std::shared_ptr<table_info> dispatch_info = nullptr;
             std::shared_ptr<table_info> dispatch_table = nullptr;
             GroupbyPipeline groupby(
-                in_table, num_keys, ncols_per_func, num_funcs, dispatch_table,
-                dispatch_info, input_has_index, is_parallel, ftypes,
-                func_offsets, udf_nredvars, udf_dummy_table,
-                (udf_table_op_fn)update_cb, (udf_table_op_fn)combine_cb,
-                (udf_eval_fn)eval_cb, (udf_general_fn)general_udfs_cb,
-                skipdropna, periods, transform_func, head_n, return_key,
-                return_index, key_dropna, window_ascending, window_na_position,
-                maintain_input_size, n_shuffle_keys, use_sql_rules);
+                in_table, num_keys, ncols_per_func, nwindow_calls_per_func,
+                num_funcs, dispatch_table, dispatch_info, input_has_index,
+                is_parallel, ftypes, func_offsets, udf_nredvars,
+                udf_dummy_table, (udf_table_op_fn)update_cb,
+                (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
+                (udf_general_fn)general_udfs_cb, skipdropna, periods,
+                transform_funcs, head_n, return_key, return_index, key_dropna,
+                window_ascending, window_na_position, maintain_input_size,
+                n_shuffle_keys, use_sql_rules);
 
             std::shared_ptr<table_info> ret_table = groupby.run(n_out_rows);
             return new table_info(*ret_table);
