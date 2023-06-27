@@ -55,6 +55,45 @@ static int64_t zero_size_area[1];
 static uint8_t* const kZeroSizeArea =
     reinterpret_cast<uint8_t*>(&zero_size_area);
 
+typedef uint8_t* Swip;
+typedef Swip* OwningSwip;
+
+/**
+ * @brief Abstract class for Buffer Pool implementations.
+ * ::arrow::MemoryPool already defines Allocate, Free, Reallocate,
+ * bytes_allocated, max_memory, etc., therefore this
+ * extends it to define the additional functions that are required for
+ * a Buffer Pool.
+ *
+ */
+class IBufferPool : public ::arrow::MemoryPool {
+   public:
+    /// @brief The number of bytes currently pinned by this
+    /// pool. Pinned bytes can never be spilled to disk.
+    virtual uint64_t bytes_pinned() const = 0;
+
+    /**
+     * @brief Pin an allocation to memory.
+     * This will ensure that the allocation will never be
+     * evicted to storage
+     *
+     * @param[in, out] ptr Location of swip pointer containing
+     *   allocation to pin
+     * @return ::arrow::Status If the pin succeeded, if it
+     *   failed due to OOM, or failed for another reason
+     */
+    virtual ::arrow::Status Pin(uint8_t** ptr) = 0;
+
+    /**
+     * @brief Unpin an allocation.
+     * This allows future allocations to evict this
+     * allocation from memory to storage.
+     *
+     * @param[in, out] ptr Swip pointer to allocation to unpin
+     */
+    virtual void Unpin(uint8_t* ptr) = 0;
+};
+
 /// @brief Enum to Indicate which Manager to Use
 enum StorageType : uint8_t { Local = 0 };
 
@@ -253,9 +292,6 @@ class LocalStorageManager final : public StorageManager {
     /// @brief LocalFileSystem handler for reading and writing
     ::arrow::fs::LocalFileSystem fs;
 };
-
-typedef uint8_t* Swip;
-typedef Swip* OwningSwip;
 
 /// @brief Represents a range of virtual addresses used for allocating
 /// buffer frames of a fixed size. Very similar to Velox's SizeClass
@@ -503,7 +539,7 @@ class SizeClass final {
     void adviseAwayFrame(uint64_t idx);
 };
 
-class BufferPool final : public ::arrow::MemoryPool {
+class BufferPool final : public IBufferPool {
    public:
     /* ------ Functions arrow::MemoryPool that we override ------ */
 
@@ -517,9 +553,9 @@ class BufferPool final : public ::arrow::MemoryPool {
     // get destroyed when this object does.
     ~BufferPool() override = default;
 
-    using ::arrow::MemoryPool::Allocate;
-    using ::arrow::MemoryPool::Free;
-    using ::arrow::MemoryPool::Reallocate;
+    using IBufferPool::Allocate;
+    using IBufferPool::Free;
+    using IBufferPool::Reallocate;
 
     /**
      * @brief Allocate a new memory region of at least 'size' bytes.
@@ -571,10 +607,9 @@ class BufferPool final : public ::arrow::MemoryPool {
     /// this allocator.
     virtual int64_t bytes_allocated() const override;
 
-    /// @brief The number of bytes currently pinned by this
-    /// allocator. Pinned bytes can never be spilled to disk
+    /// @brief The number of bytes currently pinned.
     /// TODO: Get inline to work correctly
-    uint64_t bytes_pinned() const;
+    uint64_t bytes_pinned() const override;
 
     /// @brief Get peak memory allocation in this memory pool
     virtual int64_t max_memory() const override;
@@ -623,25 +658,22 @@ class BufferPool final : public ::arrow::MemoryPool {
     }
 
     /**
-     * @brief Pin a previously allocated region to memory.
-     * This will ensure that the allocation will never be
-     * spilled to storage
+     * @brief Pin an allocation/block to memory.
      *
      * @param[in, out] ptr Location of swip pointer containing
-     *   allocation to pin
-     * @return ::arrow::Status If the pin succeeded, if it
-     *   failed due to OOM, or failed for another reason
+     *   allocation to pin.
+     * @return ::arrow::Status
      */
-    ::arrow::Status Pin(uint8_t** ptr);
+    ::arrow::Status Pin(uint8_t** ptr) override;
 
     /**
-     * @brief Unpin a previously allocation from memory.
-     * This allows future allocations to evict this
-     * allocation from memory to storage.
+     * @brief Unpin an allocation/block. This makes the block eligible
+     * for eviction when the BufferPool needs to free up
+     * space in memory.
      *
      * @param[in, out] ptr Swip pointer to allocation to unpin
      */
-    void Unpin(uint8_t* ptr);
+    void Unpin(uint8_t* ptr) override;
 
     // XXX Add Reserve/Release functions, or re-use planned
     // functions RegisterOffPoolUsage and DeregisterOffPoolUsage
