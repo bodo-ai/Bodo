@@ -62,27 +62,31 @@ struct Bodo_FTypes {
         window = 38,
         row_number = 39,
         min_row_number_filter = 40,
-        num_funcs = 41,  // num_funcs is used to know how many functions up to
+        rank = 41,
+        dense_rank = 42,
+        percent_rank = 43,
+        cume_dist = 44,
+        num_funcs = 45,  // num_funcs is used to know how many functions up to
                          // this point. Below this point are functions that are
                          // defined in the C++ code but not the Python enum.
-        mean_eval = 42,
-        var_pop_eval = 43,
-        std_pop_eval = 44,
-        var_eval = 45,
-        std_eval = 46,
-        kurt_eval = 47,
-        skew_eval = 48,
-        boolxor_eval = 49,
+        mean_eval = 46,
+        var_pop_eval = 47,
+        std_pop_eval = 48,
+        var_eval = 49,
+        std_eval = 50,
+        kurt_eval = 51,
+        skew_eval = 52,
+        boolxor_eval = 53,
         // These are internal operators used by groupby.window
         // when the orderby clause has na values first.
-        idxmin_na_first = 50,
-        idxmax_na_first = 51,
+        idxmin_na_first = 54,
+        idxmax_na_first = 55,
         // This is the operator for when we are generating one
         // of the 4 idx functions to operate over N columns. Each
         // column may have a different function so we cannot defineF
         // more explicit ftypes. This is used only in the min_row_number_filter
         // window function path.
-        idx_n_columns = 52
+        idx_n_columns = 56,
     };
 };
 

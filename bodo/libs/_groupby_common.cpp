@@ -531,8 +531,15 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum array_type,
             // dtype)
             break;
         case Bodo_FTypes::row_number:
-            out_array_type = bodo_array_type::NUMPY;
-            out_dtype = Bodo_CTypes::UINT64;
+        case Bodo_FTypes::rank:
+        case Bodo_FTypes::dense_rank:
+            array_type = bodo_array_type::NUMPY;
+            dtype = Bodo_CTypes::UINT64;
+            break;
+        case Bodo_FTypes::percent_rank:
+        case Bodo_FTypes::cume_dist:
+            array_type = bodo_array_type::NUMPY;
+            dtype = Bodo_CTypes::FLOAT64;
             break;
         case Bodo_FTypes::min_row_number_filter:
             out_array_type = bodo_array_type::NULLABLE_INT_BOOL;

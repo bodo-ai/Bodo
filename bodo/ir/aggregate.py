@@ -286,6 +286,10 @@ supported_agg_funcs = [
     "window",
     "row_number",
     "min_row_number_filter",
+    "rank",
+    "dense_rank",
+    "percent_rank",
+    "cume_dist",
 ]
 
 # This is just a list of the functions that can be used with
@@ -316,6 +320,10 @@ supported_window_funcs = [
     "no_op",  # needed to ensure that 0 value isn't matched with any function
     "row_number",
     "min_row_number_filter",
+    "rank",
+    "dense_rank",
+    "percent_rank",
+    "cume_dist",
 ]
 
 
