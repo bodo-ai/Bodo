@@ -57,7 +57,15 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         CBufferPoolOptions Defaults()
 
 
-    cdef cppclass CBufferPool" bodo::BufferPool"(CMemoryPool):
+    cdef cppclass CIBufferPool" bodo::IBufferPool"(CMemoryPool):
+        # put overloads under a different name to avoid cython bug with multiple
+        # layers of inheritance
+        uint64_t i_get_bytes_pinned" bytes_pinned"()
+        CStatus i_Pin" Pin"(uint8_t** ptr)
+        void i_Unpin" Unpin"(uint8_t* ptr)
+
+
+    cdef cppclass CBufferPool" bodo::BufferPool"(CIBufferPool):
         void Cleanup()
 
         CStatus Allocate(int64_t size, int64_t alignment, uint8_t** out)
