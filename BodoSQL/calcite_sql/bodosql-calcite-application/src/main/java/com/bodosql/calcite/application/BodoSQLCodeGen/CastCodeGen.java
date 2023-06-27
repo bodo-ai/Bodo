@@ -132,7 +132,7 @@ public class CastCodeGen {
       codeBuilder.append("try_to_double(").append(arg).append(", None)");
       break;
     case TIME:
-      codeBuilder.append("to_time(").append(arg).append(", _try=True)");
+      codeBuilder.append("to_time(").append(arg).append(", format_str=None, _try=True)");
       break;
     case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
       String tzStr = ((TZAwareSqlType) outputType).getTZInfo().getPyZone();

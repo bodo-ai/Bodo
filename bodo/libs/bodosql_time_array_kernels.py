@@ -7,11 +7,15 @@ import numba
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import get_overload_const_bool, raise_bodo_error
+from bodo.libs.bodosql_snowflake_conversion_array_kernels import (
+    convert_snowflake_date_format_str_to_py_format,
+    pd_to_datetime_error_checked,
+)
+from bodo.utils.typing import get_overload_const_bool, raise_bodo_error, is_overload_none
 
 
 @numba.generated_jit(nopython=True)
-def to_time(arr, _try):
+def to_time(arr, format_str, _try):
     """Handles TIME/TO_TIME/TRY_TO_TIME and forwards
     to the appropriate version of the real implementation"""
 
@@ -20,29 +24,37 @@ def to_time(arr, _try):
             "bodo.libs.bodosql_array_kernels.to_time_util",
             [
                 "arr",
+                "format_str",
                 "_try",
             ],
             0,
         )
 
-    def impl(arr, _try):  # pragma: no cover
-        return to_time_util(arr, _try)
+    def impl(arr, format_str, _try):  # pragma: no cover
+        return to_time_util(arr, format_str, _try)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def to_time_util(arr, _try):  # pragma: no cover
+def to_time_util(arr, format_str, _try):  # pragma: no cover
     """Kernel for `TO_TIME`, `TIME`, and `TRY_TO_TIME`"""
 
-    arg_names = ["arr", "_try"]
-    arg_types = [arr, _try]
-    propagate_null = [True]
+    arg_names = ["arr", "format_str", "_try"]
+    arg_types = [arr, format_str, _try]
+    propagate_null = [True, False, False]
 
     _try = get_overload_const_bool(_try)
 
     if is_valid_string_arg(arr) or is_overload_none(arr):
-        scalar_text = "hr, mi, sc, ns, succeeded = bodo.parse_time_string(arg0)\n"
+        if is_overload_none(format_str):
+            scalar_text = "hr, mi, sc, ns, succeeded = bodo.parse_time_string(arg0)\n"
+        else:
+            scalar_text = "py_format_str = bodo.libs.bodosql_snowflake_conversion_array_kernels.convert_snowflake_date_format_str_to_py_format(arg1)\n"
+            scalar_text += "succeeded, val = bodo.libs.bodosql_snowflake_conversion_array_kernels.pd_to_datetime_error_checked(arg0, format=py_format_str)\n"
+            scalar_text += (
+                "hr, mi, sc, ns = val.hour, val.minute, val.second, val.nanosecond\n"
+            )
         scalar_text += "if succeeded:\n"
         scalar_text += "   res[i] = bodo.Time(hr, mi, sc, nanosecond=ns, precision=9)\n"
         scalar_text += "else:\n"
@@ -64,7 +76,6 @@ def to_time_util(arr, _try):  # pragma: no cover
 
 @numba.generated_jit(nopython=True)
 def time_from_parts(hour, minute, second, nanosecond):
-
     args = [hour, minute, second, nanosecond]
     for i in range(len(args)):
         if isinstance(args[i], types.optional):  # pragma: no cover
