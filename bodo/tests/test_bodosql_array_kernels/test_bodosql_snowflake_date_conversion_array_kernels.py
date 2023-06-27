@@ -157,6 +157,86 @@ def valid_to_date_strings_with_format_str(request):
 
 @pytest.fixture(
     params=[
+        ("12:23:00 PM", "HH12:MI:SS PM"),
+        ("12:23:00 AM", "HH12:MI:SS AM"),
+        ("23:23:52 PM", "HH24:MI:SS"),
+        (
+            pd.Series(
+                [
+                    "05-05-06 PM",
+                    None,
+                    "12-00-00 PM",
+                    "09-59-59 PM",
+                    "01-15-26 PM",
+                ]
+                * 4
+            ),
+            "HH12-MI-SS PM",
+        ),
+        (
+            pd.Series(
+                [
+                    "00*15*20",
+                    "23*06*13",
+                    None,
+                    "15*04*44",
+                    "12*30*00",
+                ]
+                * 4
+            ),
+            "HH24*MI*SS",
+        ),
+    ]
+)
+def valid_to_time_strings_with_format_str(request):
+    """
+    See https://docs.snowflake.com/en/sql-reference/functions-conversion.html#label-date-time-format-conversion
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        ("Apr 15, 2000 | 12:23:00 PM", "MON DD, YYYY | HH12:MI:SS PM"),
+        ("2000:08:17 06:45:00", "YYYY:MM:DD HH24:MI:SS"),
+        ("20/12/25 06:45:00 AM", "YY/MM/DD HH12:MI:SS AM"),
+        (
+            pd.Series(
+                [
+                    "2023-09-15 06-42-37 PM",
+                    "2022-12-03 11-11-11 PM",
+                    "2023-07-28 03-20-50 PM",
+                    "2022-11-10 09-30-25 PM",
+                    "2023-05-02 12-55-05 PM",
+                ]
+                * 4
+            ),
+            "YYYY-MM-DD HH12-MI-SS PM",
+        ),
+        (
+            pd.Series(
+                [
+                    "07/15/23 16*42*37",
+                    "12/03/22 11*11*11",
+                    "08/28/23 15*20*50",
+                    "11/10/22 21*30*25",
+                    "05/02/23 00*55*05",
+                ]
+                * 4
+            ),
+            "MM/DD/YY HH24*MI*SS",
+        ),
+    ]
+)
+def valid_to_timestamp_strings_with_format_str(request):
+    """
+    See https://docs.snowflake.com/en/sql-reference/functions-conversion.html#label-date-time-format-conversion
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
         ("02-18-2022", "yyyy-mm-dd"),
         ("03/23/2023", "mmmm/dd/yyyy"),
         ("//23/03/2023//", "yy*dd*mon"),
@@ -240,12 +320,22 @@ def to_date_td_vals(request):
 
 @pytest.fixture(
     params=[
-        pytest.param("DATE", id="date"),
-        pytest.param("TRY_TO_DATE", id="try_to_date"),
-        pytest.param("TO_DATE", id="to_date"),
+        pytest.param("date", id="date"),
+        pytest.param("try_to_date", id="try_to_date"),
+        pytest.param("to_date", id="to_date"),
     ]
 )
-def test_fn(request):
+def to_date_kernel(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param("to_timestamp", id="to_timestamp"),
+        pytest.param("try_to_timestamp", id="try_to_timestamp"),
+    ]
+)
+def to_timestamp_kernel(request):
     return request.param
 
 
@@ -258,7 +348,7 @@ def scalar_to_date_equiv_fn(val, formatstr=None, tz=None, scale=0):
 
 
 def scalar_to_date_equiv_fn_inner(val, formatstr=None, scale=0):
-    """equivalent to TO_DATE for scalar value and formatstring"""
+    """equivalent to to_date for scalar value and formatstring"""
     if pd.isna(val):
         return None
     elif not pd.isna(formatstr):
@@ -329,7 +419,7 @@ def scalar_to_date_equiv_fn_inner(val, formatstr=None, scale=0):
     ],
 )
 def test_to_date_valid_strings(
-    valid_to_date_strings, test_fn, use_dict_enc, memory_leak_check
+    valid_to_date_strings, to_date_kernel, use_dict_enc, memory_leak_check
 ):
     if not use_dict_enc:
         return
@@ -348,7 +438,7 @@ def test_to_date_valid_strings(
     if isinstance(to_date_sol, pd.Series):
         to_date_sol = to_date_sol.to_numpy()
 
-    if test_fn == "TRY_TO_DATE":
+    if to_date_kernel == "try_to_date":
         check_func(
             try_to_date_impl,
             valid_to_date_strings,
@@ -356,7 +446,7 @@ def test_to_date_valid_strings(
             sort_output=False,
             use_dict_encoded_strings=use_dict_enc,
         )
-    elif test_fn == "TO_DATE":
+    elif to_date_kernel == "to_date":
         check_func(
             to_date_impl,
             valid_to_date_strings,
@@ -375,7 +465,7 @@ def test_to_date_valid_strings(
 
 
 def test_to_date_valid_digit_strings(
-    valid_to_date_integers_for_strings, test_fn, memory_leak_check
+    valid_to_date_integers_for_strings, to_date_kernel, memory_leak_check
 ):
     if isinstance(valid_to_date_integers_for_strings[0], int):
         valid_digit_strs = (str(valid_to_date_integers_for_strings[0]),)
@@ -399,14 +489,14 @@ def test_to_date_valid_digit_strings(
     if isinstance(to_date_sol, pd.Series):
         to_date_sol = to_date_sol.to_numpy()
 
-    if test_fn == "TRY_TO_DATE":
+    if to_date_kernel == "try_to_date":
         check_func(
             try_to_date_impl,
             valid_digit_strs,
             py_output=to_date_sol,
             sort_output=False,
         )
-    elif test_fn == "TO_DATE":
+    elif to_date_kernel == "to_date":
         check_func(
             to_date_impl,
             valid_digit_strs,
@@ -422,7 +512,9 @@ def test_to_date_valid_digit_strings(
         )
 
 
-def test_to_date_valid_datetime_types(to_date_td_vals, test_fn, memory_leak_check):
+def test_to_date_valid_datetime_types(
+    to_date_td_vals, to_date_kernel, memory_leak_check
+):
     def date_impl(val):
         return bodo.libs.bodosql_array_kernels.date(val, None)
 
@@ -437,14 +529,14 @@ def test_to_date_valid_datetime_types(to_date_td_vals, test_fn, memory_leak_chec
     if isinstance(to_date_sol, pd.Series):
         to_date_sol = to_date_sol.to_numpy()
 
-    if test_fn == "TRY_TO_DATE":
+    if to_date_kernel == "try_to_date":
         check_func(
             try_to_date_impl,
             to_date_td_vals,
             py_output=to_date_sol,
             sort_output=False,
         )
-    elif test_fn == "TO_DATE":
+    elif to_date_kernel == "to_date":
         check_func(
             to_date_impl,
             to_date_td_vals,
@@ -461,7 +553,7 @@ def test_to_date_valid_datetime_types(to_date_td_vals, test_fn, memory_leak_chec
 
 
 def test_to_date_valid_strings_with_format(
-    valid_to_date_strings_with_format_str, test_fn, memory_leak_check
+    valid_to_date_strings_with_format_str, to_date_kernel, memory_leak_check
 ):
     """
     Tests date/to_date/try_to_date kernels with valid format strings
@@ -483,7 +575,7 @@ def test_to_date_valid_strings_with_format(
     if isinstance(to_date_sol, pd.Series):
         to_date_sol = to_date_sol.to_numpy()
 
-    if test_fn == "TRY_TO_DATE":
+    if to_date_kernel == "try_to_date":
         check_func(
             try_to_date_impl,
             valid_to_date_strings_with_format_str,
@@ -491,7 +583,7 @@ def test_to_date_valid_strings_with_format(
             check_dtype=False,
             sort_output=False,
         )
-    elif test_fn == "TO_DATE":
+    elif to_date_kernel == "to_date":
         check_func(
             to_date_impl,
             valid_to_date_strings_with_format_str,
@@ -510,7 +602,7 @@ def test_to_date_valid_strings_with_format(
 
 
 def test_to_date_invalid_strings_with_format(
-    invalid_to_date_strings_with_format_str, test_fn
+    invalid_to_date_strings_with_format_str, to_date_kernel
 ):
     """
     Tests date/to_date/try_to_date kernels with invalid format strings
@@ -532,13 +624,13 @@ def test_to_date_invalid_strings_with_format(
     if isinstance(to_date_sol, pd.Series):
         to_date_sol = to_date_sol.to_numpy()
 
-    if test_fn == "TRY_TO_DATE":
+    if to_date_kernel == "try_to_date":
         check_func(
             try_to_date_impl,
             invalid_to_date_strings_with_format_str,
             py_output=to_date_sol,
         )
-    elif test_fn == "TO_DATE":
+    elif to_date_kernel == "to_date":
         msg = "Invalid input while converting to date value"
         with pytest.raises(ValueError, match=msg):
             check_func(
@@ -556,7 +648,7 @@ def test_to_date_invalid_strings_with_format(
             )
 
 
-def test_invalid_to_date_args(invalid_to_date_args, test_fn):
+def test_invalid_to_date_args(invalid_to_date_args, to_date_kernel):
     """set of arguments which cause NA in try_to_date, and throw an error for date/to_date"""
 
     def date_impl(val):
@@ -573,13 +665,13 @@ def test_invalid_to_date_args(invalid_to_date_args, test_fn):
     if isinstance(to_date_sol, pd.Series):
         to_date_sol = to_date_sol.to_numpy()
 
-    if test_fn == "TRY_TO_DATE":
+    if to_date_kernel == "try_to_date":
         check_func(
             try_to_date_impl,
             invalid_to_date_args,
             py_output=to_date_sol,
         )
-    elif test_fn == "TO_DATE":
+    elif to_date_kernel == "to_date":
         msg = "Invalid input while converting to date value"
         with pytest.raises(ValueError, match=msg):
             check_func(
@@ -595,6 +687,105 @@ def test_invalid_to_date_args(invalid_to_date_args, test_fn):
                 invalid_to_date_args,
                 py_output=to_date_sol,
             )
+
+
+@pytest.mark.parametrize(
+    "timestamp_str, format_str, answer",
+    [
+        pytest.param(
+            "2000:08:17 06:45:00",
+            "YYYY:MM:DD HH24:MI:SS",
+            pd.Timestamp(2000, 8, 17, 6, 45, 0),
+            id="scalar-1",
+        ),
+        pytest.param(
+            "20/12/25 06:45:00 AM",
+            "YY/MM/DD HH12:MI:SS AM",
+            pd.Timestamp(2020, 12, 25, 6, 45, 0),
+            id="scalar-2",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "2023-09-15 06-42-37 PM",
+                    "2022-12-03 11-11-11 PM",
+                    "2023-07-28 03-20-50 PM",
+                    "2022-11-10 09-30-25 PM",
+                    "2023-05-02 12-55-05 PM",
+                ]
+                * 4
+            ),
+            "YYYY-MM-DD HH12-MI-SS PM",
+            pd.Series(
+                [
+                    pd.Timestamp(2023, 9, 15, 18, 42, 37),
+                    pd.Timestamp(2022, 12, 3, 23, 11, 11),
+                    pd.Timestamp(2023, 7, 28, 15, 20, 50),
+                    pd.Timestamp(2022, 11, 10, 21, 30, 25),
+                    pd.Timestamp(2023, 5, 2, 12, 55, 5),
+                ]
+                * 4
+            ),
+            id="series-1",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "07/15/23 16*42*37",
+                    "12/03/22 11*11*11",
+                    "08/28/23 15*20*50",
+                    "11/10/22 21*30*25",
+                    "05/02/23 00*55*05",
+                ]
+                * 4
+            ),
+            "MM/DD/YY HH24*MI*SS",
+            pd.Series(
+                [
+                    pd.Timestamp(2023, 7, 15, 16, 42, 37),
+                    pd.Timestamp(2022, 12, 3, 11, 11, 11),
+                    pd.Timestamp(2023, 8, 28, 15, 20, 50),
+                    pd.Timestamp(2022, 11, 10, 21, 30, 25),
+                    pd.Timestamp(2023, 5, 2, 0, 55, 5),
+                ]
+                * 4
+            ),
+            id="series-2",
+        ),
+    ],
+)
+def test_to_timestamp_valid_strings_with_format(
+    timestamp_str, format_str, answer, to_timestamp_kernel, memory_leak_check
+):
+    """
+    Tests to_timestamp/try_to_timestamp kernel with valid format strings
+    """
+
+    def to_timestamp_impl(val, format):
+        return bodo.libs.bodosql_array_kernels.to_timestamp(val, format, None, 0)
+
+    def try_to_timestamp_impl(val, format):
+        return bodo.libs.bodosql_array_kernels.try_to_timestamp(val, format, None, 0)
+
+    if isinstance(answer, pd.Series):
+        answer = answer.to_numpy()
+
+    if to_timestamp_kernel == "try_to_timestamp":
+        check_func(
+            try_to_timestamp_impl,
+            (timestamp_str, format_str),
+            py_output=answer,
+            check_dtype=False,
+            sort_output=False,
+        )
+    else:
+        check_func(
+            to_timestamp_impl,
+            (timestamp_str, format_str),
+            py_output=answer,
+            check_dtype=False,
+            sort_output=False,
+        )
 
 
 @pytest.mark.slow
