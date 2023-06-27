@@ -1178,6 +1178,324 @@ void row_number_computation(std::shared_ptr<array_info> out_arr,
     }
 }
 
+/** Returns whether the current row of orderby keys is distinct from
+ * the previous row when performing a rank computation.
+ *
+ * @param[in] sorted_orderbys: the columns used to order the table
+ * when performing a window computation.
+ * @param[in] i: the row that is being queried to see if it is distinct
+ * from the previous row.
+ */
+inline bool distinct_from_previous_row(
+    std::vector<std::shared_ptr<array_info>> sorted_orderbys, int64_t i) {
+    if (i == 0) {
+        return true;
+    }
+    for (auto arr : sorted_orderbys) {
+        if (!TestEqualColumn(arr, i, arr, i - 1, true)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Perform the division step for a group once an entire group has had
+ * its regular rank values calculated.
+ *
+ * @param[in,out] out_arr input value, and holds the result
+ * @param[in] sorted_idx the array mapping sorted rows back to locaitons in
+ * the original array
+ * @param[in] rank_arr stores the regular rank values for each row
+ * @param[in] group_start_idx the index in rank_arr where the current group
+ * begins
+ * @param[in] group_end_idx the index in rank_arr where the current group ends
+ * @param[in] numerator_offset the amount to subtract from the regular rank
+ * @param[in] denominator_offset the amount to subtract from the group size
+ *
+ * The formula for each row is:
+ * out_arr[i] = (r - numerator_offset) / (n - denominator_offset)
+ * where r is the rank and  n is the size of the group
+ */
+inline void rank_division_batch_update(std::shared_ptr<array_info> out_arr,
+                                       std::shared_ptr<array_info> sorted_idx,
+                                       std::shared_ptr<array_info> rank_arr,
+                                       int64_t group_start_idx,
+                                       int64_t group_end_idx,
+                                       int64_t numerator_offset,
+                                       int64_t denominator_offset) {
+    // Special case: if the group has size below the offset, set the result to
+    // zero
+    int64_t group_size = group_end_idx - group_start_idx;
+    if (group_size <= denominator_offset) {
+        int64_t idx = getv<int64_t>(sorted_idx, group_start_idx);
+        getv<double>(out_arr, idx) = 0.0;
+    } else {
+        // Otherwise, iterate through the entire group that just finished
+        for (int64_t j = group_start_idx; j < group_end_idx; j++) {
+            int64_t idx = getv<int64_t>(sorted_idx, j);
+            getv<double>(out_arr, idx) =
+                (static_cast<double>(getv<int64_t>(rank_arr, j)) -
+                 numerator_offset) /
+                (group_size - denominator_offset);
+        }
+    }
+}
+
+/**
+ * Populate the rank values from tie_start_idx to tie_end_idx with
+ * the current rank value using the rule all ties are brought upward.
+ *
+ * @param[in] rank_arr stores the regular rank values for each row
+ * @param[in] group_start_idx the index in rank_arr where the current group
+ * begins
+ * @param[in] tie_start_idx the index in rank_arr where the tie group begins
+ * @param[in] tie_end_idx the index in rank_arr where the tie group ends
+ */
+inline void rank_tie_upward_batch_update(std::shared_ptr<array_info> rank_arr,
+                                         int64_t group_start_idx,
+                                         int64_t tie_start_idx,
+                                         int64_t tie_end_idx) {
+    int64_t fill_value = tie_end_idx - group_start_idx;
+    std::fill((int64_t*)(rank_arr->data1()) + tie_start_idx,
+              (int64_t*)(rank_arr->data1()) + tie_end_idx, fill_value);
+}
+
+/**
+ * Computes the BodoSQL window function RANK() on a subset of a table
+ * containing complete partitions, where the rows are sorted first by group
+ * (so each partition is clustered togeher) and then by the columns in the
+ * orderby clause.
+ *
+ * The computaiton works by having a counter that starts at 1, increases
+ * whenever the orderby columns change values, and resets to 1 whenever a new
+ * group is reached.
+ *
+ * @param[in,out] out_arr: output array where the row numbers are stored
+ * @param[in] sorted_groups: sorted array of group numbers
+ * @param[in] sorted_orderbys the vector of sorted orderby columns, used to
+ * keep track of when we have encountered a distinct row
+ * @param[in] sorted_idx: array mapping each index in the sorted table back
+ * to its location in the original unsorted table
+ */
+void rank_computation(std::shared_ptr<array_info> out_arr,
+                      std::shared_ptr<array_info> sorted_groups,
+                      std::vector<std::shared_ptr<array_info>> sorted_orderbys,
+                      std::shared_ptr<array_info> sorted_idx) {
+    // Start the counter at 1, snap upward each we encounter a row
+    // that is distinct from the previous row, and reset the counter
+    // to 1 when we reach a new group
+    int64_t prev_group = -1;
+    int64_t rank_val = 1;
+    int64_t group_start_idx = 0;
+    int64_t n = out_arr->length;
+    for (int64_t i = 0; i < n; i++) {
+        int64_t curr_group = getv<int64_t>(sorted_groups, i);
+        if (curr_group != prev_group) {
+            rank_val = 1;
+            group_start_idx = i;
+            // Set the prev group
+            prev_group = curr_group;
+        } else if (distinct_from_previous_row(sorted_orderbys, i)) {
+            rank_val = i - group_start_idx + 1;
+        }
+        // Get the index in the output array.
+        int64_t idx = getv<int64_t>(sorted_idx, i);
+        getv<int64_t>(out_arr, idx) = rank_val;
+    }
+};
+
+/**
+ * Computes the BodoSQL window function DENSE_RANK() on a subset of a table
+ * containing complete partitions, where the rows are sorted first by group
+ * (so each partition is clustered togeher) and then by the columns in the
+ * orderby clause.
+ *
+ * The computaiton works by having a counter that starts at 1, increases by 1
+ * the orderby columns change values, and resets to 1 whenever a new group is
+ * reached.
+ *
+ * @param[in,out] out_arr: output array where the row numbers are stored
+ * @param[in] sorted_groups: sorted array of group numbers
+ * @param[in] sorted_orderbys the vector of sorted orderby columns, used to
+ * keep track of when we have encountered a distinct row
+ * @param[in] sorted_idx: array mapping each index in the sorted table back
+ * to its location in the original unsorted table
+ */
+void dense_rank_computation(
+    std::shared_ptr<array_info> out_arr,
+    std::shared_ptr<array_info> sorted_groups,
+    std::vector<std::shared_ptr<array_info>> sorted_orderbys,
+    std::shared_ptr<array_info> sorted_idx) {
+    // Start the counter at 1, increase by 1 each we encounter a row
+    // that is distinct from the previous row, and reset the counter
+    // to 1 when we reach a new group
+    int64_t prev_group = -1;
+    int64_t rank_val = 1;
+    int64_t n = out_arr->length;
+    for (int64_t i = 0; i < n; i++) {
+        int64_t curr_group = getv<int64_t>(sorted_groups, i);
+        if (curr_group != prev_group) {
+            rank_val = 1;
+            // Set the prev group
+            prev_group = curr_group;
+        } else if (distinct_from_previous_row(sorted_orderbys, i)) {
+            rank_val++;
+        }
+        // Get the index in the output array.
+        int64_t idx = getv<int64_t>(sorted_idx, i);
+        getv<int64_t>(out_arr, idx) = rank_val;
+    }
+};
+
+/**
+ * Computes the BodoSQL window function PERCENT_RANK() on a subset of a table
+ * containing complete partitions, where the rows are sorted first by group
+ * (so each partition is clustered togeher) and then by the columns in the
+ * orderby clause.
+ *
+ * The computaiton works by calculating the regular rank for each row. Then,
+ * after a group is finished, the percent rank for each row is calculated
+ * via the formula (r-1)/(n-1) where r is the rank and n is the group size.
+ *
+ * @param[in,out] out_arr: output array where the row numbers are stored
+ * @param[in] sorted_groups: sorted array of group numbers
+ * @param[in] sorted_orderbys the vector of sorted orderby columns, used to
+ * keep track of when we have encountered a distinct row
+ * @param[in] sorted_idx: array mapping each index in the sorted table back
+ * to its location in the original unsorted table
+ */
+void percent_rank_computation(
+    std::shared_ptr<array_info> out_arr,
+    std::shared_ptr<array_info> sorted_groups,
+    std::vector<std::shared_ptr<array_info>> sorted_orderbys,
+    std::shared_ptr<array_info> sorted_idx) {
+    // Create an intermediary column to store the regular rank
+    int64_t n = out_arr->length;
+    std::shared_ptr<array_info> rank_arr =
+        alloc_array(n, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64, 0, 0);
+    // Start the counter at 1, snap upward each we encounter a row
+    // that is distinct from the previous row, and reset the counter
+    // to 1 when we reach a new group. When a group ends, set
+    // all rows in the output table to (r-1)/(n-1) where r is
+    // the regular rank value and n is the group size (or 0 if n=1)
+    int64_t prev_group = -1;
+    int64_t rank_val = 1;
+    int64_t group_start_idx = 0;
+    for (int64_t i = 0; i < n; i++) {
+        int64_t curr_group = getv<int64_t>(sorted_groups, i);
+        if ((curr_group != prev_group)) {
+            rank_val = 1;
+            // Update the group that just finished by calculating
+            // (r-1)/(n-1)
+            rank_division_batch_update(out_arr, sorted_idx, rank_arr,
+                                       group_start_idx, i, 1, 1);
+            group_start_idx = i;
+            // Set the prev group
+            prev_group = curr_group;
+        } else if (distinct_from_previous_row(sorted_orderbys, i)) {
+            rank_val = i - group_start_idx + 1;
+        }
+        getv<int64_t>(rank_arr, i) = rank_val;
+    }
+    // Repeat the group ending procedure after the main loop finishes
+    rank_division_batch_update(out_arr, sorted_idx, rank_arr, group_start_idx,
+                               n, 1, 1);
+};
+
+/**
+ * Computes the BodoSQL window function CUME_DIST() on a subset of a table
+ * containing complete partitions, where the rows are sorted first by group
+ * (so each partition is clustered togeher) and then by the columns in the
+ * orderby clause.
+ *
+ * The computaiton works by calculating the tie-upward rank for each row. Then,
+ * after a group is finished, the percent rank for each row is calculated
+ * via the formula r/n where r is the tie-upward rank and n is the group size.
+ *
+ * Suppose the sorted values in an array are as follows:
+ * ["A", "B", "B", "B", "C", "C", "D", "E", "E", "E"]
+ *
+ * The regular rank would be as follows:
+ * [1, 2, 2, 2, 5, 5, 7, 8, 8, 8]
+ *
+ * But the tie-upward rank is as follows:
+ * [1, 4, 4, 4, 6, 6, 7, 10, 10, 10]
+ *
+ * @param[in,out] out_arr: output array where the row numbers are stored
+ * @param[in] sorted_groups: sorted array of group numbers
+ * @param[in] sorted_orderbys the vector of sorted orderby columns, used to
+ * keep track of when we have encountered a distinct row
+ * @param[in] sorted_idx: array mapping each index in the sorted table back
+ * to its location in the original unsorted table
+ */
+void cume_dist_computation(
+    std::shared_ptr<array_info> out_arr,
+    std::shared_ptr<array_info> sorted_groups,
+    std::vector<std::shared_ptr<array_info>> sorted_orderbys,
+    std::shared_ptr<array_info> sorted_idx) {
+    // Create an intermediary column to store the tie-up rank
+    int64_t n = out_arr->length;
+    std::shared_ptr<array_info> rank_arr =
+        alloc_array(n, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64, 0, 0);
+    // Start the counter at 1, snap upward each we encounter a row
+    // that is distinct from the previous row, and reset the counter
+    // to 1 when we reach a new group. When a group ends, set
+    // all rows in the output table to r/n where r is
+    // the tie-up rank value and n is the group size
+    int64_t prev_group = -1;
+    int64_t group_start_idx = 0;
+    int64_t tie_start_idx = 0;
+    for (int64_t i = 0; i < n; i++) {
+        int64_t curr_group = getv<int64_t>(sorted_groups, i);
+        if ((curr_group != prev_group)) {
+            // Update the group of ties that just finished by setting
+            // all of them to the rank value of the last position
+            rank_tie_upward_batch_update(rank_arr, group_start_idx,
+                                         tie_start_idx, i);
+            // Update the group that just finished by calculating
+            // r/n
+            rank_division_batch_update(out_arr, sorted_idx, rank_arr,
+                                       group_start_idx, i, 0, 0);
+            group_start_idx = i;
+            tie_start_idx = i;
+            // Set the prev group
+            prev_group = curr_group;
+        } else if (distinct_from_previous_row(sorted_orderbys, i)) {
+            // Update the group of ties that just finished by setting
+            // all of them to the rank value of the last position
+            rank_tie_upward_batch_update(rank_arr, group_start_idx,
+                                         tie_start_idx, i);
+            tie_start_idx = i;
+        }
+    }
+    // Repeat the tie ending procedure after the final group finishes
+    rank_tie_upward_batch_update(rank_arr, group_start_idx, tie_start_idx, n);
+    // Repeat the group ending procedure after the final group finishes
+    rank_division_batch_update(out_arr, sorted_idx, rank_arr, group_start_idx,
+                               n, 0, 0);
+};
+
+/**
+ * Computes a batch of window functions for BodoSQL on a subset of a table
+ * containing complete partitions. All of the window functions in the
+ * batch use the same partitioning and orderby scheme. If any of the window
+ * functions require the table to be sorted in order for the result to be
+ * calculated, performs a sort on the table first by group and then by
+ * the orderby columns.
+ *
+ * @param[in] orderby_arrs: the columns being used to order the rows of
+ * the table when computing a window function.
+ * @param[in] window_funcs: the vector of window functions being computed
+ * @param[in,out] out_arrs: the arrays where the final answer for each window
+ * function computed will be stored
+ * @param[in] asc_vect: vector indicating which of the orderby columns are
+ * to be sorted in ascending vs descending order
+ * @param[in] na_pos_vect: vector indicating which of the orderby columns are
+ * to place nulls first vs last
+ * @param[in] is_parallel: is the function being run in parallel?
+ * @param[in] use_sql_rules: should initialization functions obey SQL semantics?
+ */
 void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
                         std::vector<int64_t> window_funcs,
                         std::vector<std::shared_ptr<array_info>> out_arrs,
@@ -1206,7 +1524,11 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
                 // Window functions that do not require the sorted table
                 break;
             }
-            case Bodo_FTypes::row_number: {
+            case Bodo_FTypes::row_number:
+            case Bodo_FTypes::rank:
+            case Bodo_FTypes::dense_rank:
+            case Bodo_FTypes::percent_rank:
+            case Bodo_FTypes::cume_dist: {
                 needs_sort = true;
                 /* If this is the first function encountered that requires,
                  * a sort, populate sort_table with the following columns:
@@ -1296,6 +1618,41 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
             case Bodo_FTypes::row_number: {
                 row_number_computation(out_arrs[i], iter_table->columns[0],
                                        iter_table->columns[idx_col]);
+                break;
+            }
+            case Bodo_FTypes::rank: {
+                rank_computation(out_arrs[i], iter_table->columns[0],
+                                 std::vector<std::shared_ptr<array_info>>(
+                                     iter_table->columns.begin() + 1,
+                                     iter_table->columns.begin() + idx_col),
+                                 iter_table->columns[idx_col]);
+                break;
+            }
+            case Bodo_FTypes::dense_rank: {
+                dense_rank_computation(
+                    out_arrs[i], iter_table->columns[0],
+                    std::vector<std::shared_ptr<array_info>>(
+                        iter_table->columns.begin() + 1,
+                        iter_table->columns.begin() + idx_col),
+                    iter_table->columns[idx_col]);
+                break;
+            }
+            case Bodo_FTypes::percent_rank: {
+                percent_rank_computation(
+                    out_arrs[i], iter_table->columns[0],
+                    std::vector<std::shared_ptr<array_info>>(
+                        iter_table->columns.begin() + 1,
+                        iter_table->columns.begin() + idx_col),
+                    iter_table->columns[idx_col]);
+                break;
+            }
+            case Bodo_FTypes::cume_dist: {
+                cume_dist_computation(
+                    out_arrs[i], iter_table->columns[0],
+                    std::vector<std::shared_ptr<array_info>>(
+                        iter_table->columns.begin() + 1,
+                        iter_table->columns.begin() + idx_col),
+                    iter_table->columns[idx_col]);
                 break;
             }
             default:

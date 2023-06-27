@@ -74,8 +74,17 @@ public class WindowAggCodeGen {
   // used to directly compute the result of the window function of interest
   static HashMap<String, String> windowFunctions = new HashMap<String, String>();
 
+  static HashSet<String> optimizedEngineKernelFunctions = new HashSet<String>();
+
   // Note: $SUM0 is included in addition to SUM because of some Calcite quirks
   static {
+    optimizedEngineKernelFunctions.add("ROW_NUMBER");
+    optimizedEngineKernelFunctions.add("MIN_ROW_NUMBER_FILTER");
+    optimizedEngineKernelFunctions.add("RANK");
+    optimizedEngineKernelFunctions.add("DENSE_RANK");
+    optimizedEngineKernelFunctions.add("PERCENT_RANK");
+    optimizedEngineKernelFunctions.add("CUME_DIST");
+
     // Window functions that have a sliding-window kernel
     windowOptimizedKernels.add("SUM");
     windowOptimizedKernels.add("$SUM0");
@@ -1457,7 +1466,7 @@ public class WindowAggCodeGen {
     for (RexOver agg : aggOperations) {
       String fnName = agg.getAggOperator().getName();
       if (agg.getWindow().partitionKeys.size() == 0
-          || !(fnName.equals("ROW_NUMBER") || fnName.equals("MIN_ROW_NUMBER_FILTER"))) {
+          || !optimizedEngineKernelFunctions.contains(fnName)) {
         return false;
       }
     }
