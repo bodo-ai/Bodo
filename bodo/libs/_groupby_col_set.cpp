@@ -86,7 +86,8 @@ void BasicColSet::combine(const grouping_info& grp_info,
 
 void BasicColSet::eval(const grouping_info& grp_info) {}
 
-std::shared_ptr<array_info> BasicColSet::getOutputColumn() {
+void BasicColSet::addOutputColumns(
+    std::vector<std::shared_ptr<array_info>>& out_cols) {
     std::vector<std::shared_ptr<array_info>>* mycols;
     if (combine_step) {
         mycols = &combine_cols;
@@ -95,7 +96,7 @@ std::shared_ptr<array_info> BasicColSet::getOutputColumn() {
     }
 
     std::shared_ptr<array_info> out_col = mycols->at(0);
-    return out_col;
+    out_cols.push_back(out_col);
 }
 
 // ############################## Mean ##############################
@@ -1269,7 +1270,7 @@ TransformColSet::TransformColSet(std::shared_ptr<array_info> in_col, int ftype,
       transform_func(_func_num) {
     transform_op_col =
         makeColSet({in_col}, nullptr, transform_func, do_combine, false, 0,
-                   transform_func, 0, is_parallel, {false}, {false}, nullptr,
+                   {transform_func}, 0, is_parallel, {false}, {false}, nullptr,
                    nullptr, 0, nullptr, use_sql_rules);
 }
 
@@ -1307,8 +1308,10 @@ void TransformColSet::eval(const grouping_info& grp_info) {
     transform_op_col->eval(grp_info);
     // copy_values need to know type of the data it'll copy.
     // Hence we use switch case on the column dtype
-    std::shared_ptr<array_info> child_out_col =
-        this->transform_op_col->getOutputColumn();
+    std::vector<std::shared_ptr<array_info>> out_cols;
+    this->transform_op_col->addOutputColumns(out_cols);
+    std::shared_ptr<array_info> child_out_col = out_cols.at(0);
+
     copy_values_transform(this->update_cols[0], child_out_col, grp_info,
                           this->is_parallel);
 }
@@ -1343,14 +1346,15 @@ void HeadColSet::set_head_row_list(bodo::vector<int64_t>& row_list) {
 // ############################## Window ##############################
 
 WindowColSet::WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
-                           int64_t _window_func, std::vector<bool>& _asc,
-                           std::vector<bool>& _na_pos, bool _is_parallel,
+                           std::vector<int64_t> _window_funcs,
+                           std::vector<bool>& _asc, std::vector<bool>& _na_pos,
+                           bool _is_parallel,
                            bool use_sql_rules)
     :  // Note the inputCol in BasicColSet is not used by
        // WindowColSet
       BasicColSet(nullptr, Bodo_FTypes::window, false, use_sql_rules),
       input_cols(in_cols),
-      window_func(_window_func),
+      window_funcs(_window_funcs),
       asc(_asc),
       na_pos(_na_pos),
       is_parallel(_is_parallel) {}
@@ -1359,27 +1363,37 @@ WindowColSet::~WindowColSet() {}
 
 void WindowColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols) {
-    // arr_type and dtype are assigned dummy default values.
-    // This is simple to ensure they are initialized but should
-    // always be modified by get_groupby_output_dtype.
-    bodo_array_type::arr_type_enum arr_type =
-        bodo_array_type::NULLABLE_INT_BOOL;
-    Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT64;
-    // Output dtype is based on the window function.
-    std::tie(arr_type, dtype) =
-        get_groupby_output_dtype(this->window_func, arr_type, dtype);
-    // NOTE: output size of ngroup is the same as input size
-    //       (NOT the number of groups)
-    std::shared_ptr<array_info> c = alloc_array(this->input_cols[0]->length, -1,
-                                                -1, arr_type, dtype, 0, -1);
-    aggfunc_output_initialize(c, window_func, use_sql_rules);
-    out_cols.push_back(c);
-    this->update_cols.push_back(c);
+    // Allocate one output coumn for each window function call
+    for (int64_t window_func : window_funcs) {
+        // arr_type and dtype are assigned dummy default values.
+        // This is simple to ensure they are initialized but should
+        // always be modified by get_groupby_output_dtype.
+        bodo_array_type::arr_type_enum arr_type =
+            bodo_array_type::NULLABLE_INT_BOOL;
+        Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT64;
+        // calling this modifies arr_type and dtype
+        // Output dtype is based on the window function.
+        get_groupby_output_dtype(window_func, arr_type, dtype);
+        // NOTE: output size of ngroup is the same as input size
+        //       (NOT the number of groups)
+        std::shared_ptr<array_info> c = alloc_array(
+            this->input_cols[0]->length, -1, -1, arr_type, dtype, 0, -1);
+        aggfunc_output_initialize(c, window_func, use_sql_rules);
+        out_cols.push_back(c);
+        this->update_cols.push_back(c);
+    }
 }
 
 void WindowColSet::update(const std::vector<grouping_info>& grp_infos) {
-    window_computation(this->input_cols, window_func, this->update_cols[0],
+    window_computation(this->input_cols, window_funcs, this->update_cols,
                        grp_infos[0], asc, na_pos, is_parallel, use_sql_rules);
+}
+
+void WindowColSet::addOutputColumns(
+    std::vector<std::shared_ptr<array_info>>& out_cols) {
+    for (std::shared_ptr<array_info> out_col : update_cols) {
+        out_cols.push_back(out_col);
+    }
 }
 
 // ############################## Ngroup ##############################
@@ -1413,8 +1427,8 @@ void NgroupColSet::update(const std::vector<grouping_info>& grp_infos) {
 std::unique_ptr<BasicColSet> makeColSet(
     std::vector<std::shared_ptr<array_info>> in_cols,
     std::shared_ptr<array_info> index_col, int ftype, bool do_combine,
-    bool skipna, int64_t periods, int64_t transform_func, int n_udf,
-    bool is_parallel, std::vector<bool> window_ascending,
+    bool skipna, int64_t periods, std::vector<int64_t> transform_funcs,
+    int n_udf, bool is_parallel, std::vector<bool> window_ascending,
     std::vector<bool> window_na_position, int* udf_n_redvars,
     std::shared_ptr<table_info> udf_table, int udf_table_idx,
     std::shared_ptr<table_info> nunique_table, bool use_sql_rules) {
@@ -1482,7 +1496,7 @@ std::unique_ptr<BasicColSet> makeColSet(
             break;
         case Bodo_FTypes::transform:
             colset =
-                new TransformColSet(in_cols[0], ftype, transform_func,
+                new TransformColSet(in_cols[0], ftype, transform_funcs[0],
                                     do_combine, is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::head:
@@ -1492,9 +1506,9 @@ std::unique_ptr<BasicColSet> makeColSet(
             colset = new NgroupColSet(in_cols[0], is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::window:
-            colset = new WindowColSet(in_cols, transform_func, window_ascending,
-                                      window_na_position, is_parallel,
-                                      use_sql_rules);
+            colset = new WindowColSet(in_cols, transform_funcs,
+                                      window_ascending, window_na_position,
+                                      is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::listagg:
 

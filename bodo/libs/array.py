@@ -2656,6 +2656,7 @@ def groupby_and_aggregate(
     table_t,
     n_keys_t,
     cols_per_func_t,
+    nwindows_calls_per_func_t,
     n_funcs_t,
     input_has_index,
     ftypes,
@@ -2695,6 +2696,7 @@ def groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(8).as_pointer(),
@@ -2703,7 +2705,7 @@ def groupby_and_aggregate(
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(64),  # shift_periods_t
-                lir.IntType(64),  # transform_func
+                lir.IntType(8).as_pointer(),  # transform_func
                 lir.IntType(64),  # head_n
                 lir.IntType(1),
                 lir.IntType(1),
@@ -2735,6 +2737,7 @@ def groupby_and_aggregate(
             table_t,
             types.int64,
             types.voidptr,
+            types.voidptr,
             types.int64,
             types.boolean,
             types.voidptr,
@@ -2743,7 +2746,7 @@ def groupby_and_aggregate(
             types.boolean,
             types.boolean,
             types.int64,  # shift_periods
-            types.int64,  # transform_func
+            types.voidptr,  # transform_func
             types.int64,  # head_n
             types.boolean,
             types.boolean,
