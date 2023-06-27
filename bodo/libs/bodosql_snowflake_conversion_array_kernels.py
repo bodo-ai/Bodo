@@ -858,71 +858,27 @@ def convert_snowflake_date_format_str_to_py_format(val):  # pragma: no cover
     Python syntax reference: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior
     Snowflake allows for arbitrary format strings with patterns YYYY, YY, MMMM, MM, MON, DD, DY
     """
-
     format_str = val.upper()
-    year = False
-    month = False
-    day = False
-    day_of_week = False
-    py_format = ""
-    i = 0
-    n = len(format_str)
-    while i < n:
-        if i + 4 <= n and format_str[i : i + 4] == "YYYY":
-            if year:
-                return ""
-            else:
-                year = True
-                py_format += "%Y"
-                i += 4
-        elif i + 2 <= n and format_str[i : i + 2] == "YY":
-            if year:
-                return ""
-            else:
-                year = True
-                py_format += "%y"
-                i += 2
-        elif i + 4 <= n and format_str[i : i + 4] == "MMMM":
-            if month:
-                return ""
-            else:
-                month = True
-                py_format += "%B"
-                i += 4
-        elif i + 2 <= n and format_str[i : i + 2] == "MM":
-            if month:
-                return ""
-            else:
-                month = True
-                py_format += "%m"
-                i += 2
-        elif i + 3 <= n and format_str[i : i + 3] == "MON":
-            if month:
-                return ""
-            else:
-                month = True
-                py_format += "%b"
-                i += 3
-        elif i + 2 <= n and format_str[i : i + 2] == "DD":
-            if day:
-                return ""
-            else:
-                day = True
-                py_format += "%d"
-                i += 2
-        elif i + 2 <= n and format_str[i : i + 2] == "DY":
-            if day_of_week:
-                return ""
-            else:
-                day_of_week = True
-                py_format += "%a"
-                i += 2
-        else:
-            py_format += format_str[i]
-            i += 1
-    if not (year and month and day):
-        return ""
-    return py_format
+    format_map = {
+        "YYYY": "%Y",
+        "YY": "%y",
+        "MMMM": "%B",
+        "MM": "%m",
+        "MON": "%b",
+        "HH12": "%I",
+        "HH24": "%H",
+        "AM": "%p",
+        "PM": "%p",
+        "DD": "%d",
+        "DY": "%a",
+        "MI": "%M",
+        "SS": "%S",
+    }
+
+    for elem in format_map:
+        format_str = format_str.replace(elem, format_map[elem])
+
+    return format_str
 
 
 @numba.generated_jit(nopython=True)
@@ -974,37 +930,23 @@ def pd_to_datetime_error_checked(
     pd.to_datetime in objmode, which returns a tuple (success flag, value). If
     the success flag evaluates to True, then the paired value is the correctly parsed timestamp, otherwise  the paired value is a dummy timestamp.
     """
-    # Manual check for invalid date strings to match behavior of Snowflake
-    # since Pandas accepts dates in more formats. The legal patterns for
-    # the date component in Snowflake:
-    # YYYY/MM/DD
-    # YYYY-MM-DD
-    # YYYY-M-DD
-    # YYYY-M-D
-    # YYYY-MM-D
-    # Return a default value to avoid optional types.
-    default_value = pd.Timestamp(year=1970, month=1, day=1)
-    if val is not None:
-        # account for case where val has a time component by finding everything
-        # before the first character that is not a digit/dash/slash
-        split_index = 0
-        for i in range(len(val)):
-            if not (val[i].isdigit() or val[i] in "/-"):
-                break
-            split_index += 1
-        date_comp = val[:split_index]
 
-        # The legal range is 8, 9 or 10 characters
-        if len(date_comp) == 8 or len(date_comp) == 9:
-            # 8/9 characters: must be YYYY-M-D, YYYY-M-DD or YYYY-M-DD
-            if date_comp.count("-") != 2:
-                return (False, default_value)
-        elif len(date_comp) == 10:
-            # 10 characters: must be YYYY-MM-DD or YYYY/MM/DD
-            if ~((date_comp.count("/") == 2) ^ (date_comp.count("-") == 2)):
-                return (False, default_value)
+    if format is None:
+        list_tokens = val.split()
+        if len(list_tokens) == 0:
+            return (False, pd.Timestamp(0))
         else:
-            return (False, default_value)
+            first_token = list_tokens[0]
+
+            dash_count = first_token.count("-")
+            slash_count = first_token.count("/")
+
+            # Acceptable cases are: two dashes or two slashes, the other must be 0
+            is_date_format_1 = dash_count == 2 and slash_count == 0
+            is_date_format_2 = dash_count == 0 and slash_count == 2
+
+            if not (is_date_format_1 or is_date_format_2):
+                return (False, pd.Timestamp(0))
 
     with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
