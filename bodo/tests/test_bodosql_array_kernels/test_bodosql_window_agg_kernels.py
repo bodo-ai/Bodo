@@ -15,7 +15,6 @@ import bodo
 from bodo.tests.utils import check_func
 
 
-@bodo.jit(distributed=False)
 def nullable_float_arr_maker(L, to_null, to_nan):
     """
     Utility funciton for helping test cases to generate nullable floating
@@ -39,6 +38,17 @@ def nullable_float_arr_maker(L, to_null, to_nan):
     9    <NA>
     dtype: Float64
     """
+    S = _nullable_float_arr_maker(L, to_null, to_nan)
+    # Remove the bodo metadata. It improperly assigns
+    # 1D_Var to the series which interferes with the test
+    # functionality. Deleting the metadata sets it back to
+    # the default of REP distribution.
+    del S._bodo_meta
+    return S
+
+
+@bodo.jit(distributed=False)
+def _nullable_float_arr_maker(L, to_null, to_nan):
     n = len(L)
     data_arr = np.empty(n, np.float64)
     nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
