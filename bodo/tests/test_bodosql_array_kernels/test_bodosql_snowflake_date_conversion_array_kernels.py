@@ -705,6 +705,12 @@ def test_invalid_to_date_args(invalid_to_date_args, to_date_kernel):
             id="scalar-2",
         ),
         pytest.param(
+            "01---01---2000",
+            "DD---MM---YYYY",
+            pd.Timestamp(2000, 1, 1, 0, 0, 0),
+            id="scalar-3",
+        ),
+        pytest.param(
             pd.Series(
                 [
                     "2023-09-15 06-42-37 PM",
@@ -786,6 +792,88 @@ def test_to_timestamp_valid_strings_with_format(
             check_dtype=False,
             sort_output=False,
         )
+
+
+@pytest.mark.parametrize(
+    "time_str, format_str, answer",
+    [
+        pytest.param(
+            "06:45:00",
+            "HH24:MI:SS",
+            bodo.Time(6, 45, 0),
+            id="scalar-24",
+        ),
+        pytest.param(
+            "10:45:59 PM",
+            "HH12:MI:SS PM",
+            bodo.Time(22, 45, 59),
+            id="scalar-PM",
+        ),
+        pytest.param(
+            "12:00:00 AM",
+            "HH12:MI:SS AM",
+            bodo.Time(0, 0, 0),
+            id="scalar-AM",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "12:34:56 PM",
+                    "05:45:23 PM",
+                    "10:15:30 AM",
+                    "07:55:10 PM",
+                ]
+                * 4
+            ),
+            "HH12:MI:SS PM",
+            pd.Series(
+                [
+                    bodo.Time(12, 34, 56),
+                    bodo.Time(17, 45, 23),
+                    bodo.Time(10, 15, 30),
+                    bodo.Time(19, 55, 10),
+                ]
+                * 4
+            ),
+            id="series-12",
+        ),
+        pytest.param(
+            pd.Series(["08:12:34", "14:23:45", "18:36:59", "22:48:15"] * 4),
+            "HH24:MI:SS",
+            pd.Series(
+                [
+                    bodo.Time(8, 12, 34),
+                    bodo.Time(14, 23, 45),
+                    bodo.Time(18, 36, 59),
+                    bodo.Time(22, 48, 15),
+                ]
+                * 4
+            ),
+            id="series-24",
+        ),
+    ],
+)
+@pytest.mark.parametrize("_try", [False, True])
+def test_to_time_valid_strings_with_format(
+    time_str, format_str, _try, answer, memory_leak_check
+):
+    """
+    Tests to_time kernel with valid format strings
+    """
+
+    if isinstance(answer, pd.Series):
+        answer = answer.to_numpy()
+
+    def to_time_impl(val, format):
+        return bodo.libs.bodosql_array_kernels.to_time(val, format, _try=_try)
+
+    check_func(
+        to_time_impl,
+        (time_str, format_str),
+        py_output=answer,
+        check_dtype=False,
+        sort_output=False,
+    )
 
 
 @pytest.mark.slow
