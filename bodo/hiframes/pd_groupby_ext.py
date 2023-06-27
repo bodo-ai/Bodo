@@ -1427,9 +1427,6 @@ def resolve_window_funcs(
     na_position = get_literal_value(
         args[3] if len(args) > 3 else kws.pop("na_position", default_tuple)
     )
-    for window_func in window_funcs:
-        if window_func not in ("row_number", "min_row_number_filter"):
-            raise_bodo_error(msg)
     # We currently require only a single order by column as that satisfies the initial
     
     if not (
@@ -1464,6 +1461,10 @@ def resolve_window_funcs(
     window_func_types = {
         "row_number": dtype_to_array_type(types.uint64),
         "min_row_number_filter": bodo.boolean_array_type,
+        "rank": dtype_to_array_type(types.uint64),
+        "dense_rank": dtype_to_array_type(types.uint64),
+        "percent_rank": dtype_to_array_type(types.float64),
+        "cume_dist": dtype_to_array_type(types.float64),
     }
     for window_func in window_funcs:
         if window_func not in window_func_types:

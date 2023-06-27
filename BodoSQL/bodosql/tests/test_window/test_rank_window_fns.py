@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 from bodosql.tests.test_window.window_common import (  # noqa
     all_types_window_df,
+    all_window_df,
     count_window_applies,
 )
 from bodosql.tests.utils import check_query
@@ -429,4 +430,29 @@ def test_row_number_filter_multicolumn(input_arrs, memory_leak_check):
         ctx,
         None,
         expected_output=py_output,
+    )
+
+
+def test_rank_optimized(all_window_df, spark_info, memory_leak_check):
+    """Tests rank functions that all allow use of groupby.window"""
+    selects = []
+    funcs = [
+        "RANK()",
+        "DENSE_RANK()",
+        "PERCENT_RANK()",
+        "CUME_DIST()",
+        "ROW_NUMBER()",
+    ]
+    for i, func in enumerate(funcs):
+        selects.append(
+            f"{func} OVER (PARTITION BY W2 ORDER BY U8 ASC NULLS LAST, BI DESC NULLS FIRST) AS C{i}"
+        )
+    query = f"SELECT W2, U8, BI, W4, {', '.join(selects)} FROM table1"
+    check_query(
+        query,
+        all_window_df,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        convert_columns_bytearray=["BI"],
     )
