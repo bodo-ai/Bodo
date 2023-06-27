@@ -173,11 +173,11 @@ atexit.register(dump)
 cdef aggregate_helper(values, arg_name, out):
     index_min = int(np.argmin(values))
     index_max = int(np.argmax(values))
-    out["args"][arg_name + "_min"] = values[index_min]
-    out["args"][arg_name + "_avg"] = values.mean()
-    out["args"][arg_name + "_max"] = values[index_max]
-    out["args"][arg_name + "_min_rank"] = index_min
-    out["args"][arg_name + "_max_rank"] = index_max
+    out["args"][arg_name + "_min"] = values[index_min].item()
+    out["args"][arg_name + "_avg"] = values.mean().item()
+    out["args"][arg_name + "_max"] = values[index_max].item()
+    out["args"][arg_name + "_min_rank"] = index_min.item()
+    out["args"][arg_name + "_max_rank"] = index_max.item()
 
 
 cdef generic_aggregate_func(object traces_all):
@@ -276,7 +276,7 @@ cdef aggregate_events():
             events_all = comm.gather(e)
             new_e = generic_aggregate_func(events_all)
             durations = np.array([t["dur"] for t in events_all])
-            new_e["dur"] = durations.max()
+            new_e["dur"] = durations.max().item()
             aggregate_helper(durations, "dur", new_e)
             traceEvents[i] = new_e
         else:
@@ -375,7 +375,7 @@ cdef class ResumableEvent(Event):
         if self.current_iter_start != -1:
             self.end_iteration()
 
-        self.trace["iteration_count"] = self.iteration_count
+        self.trace["iteration_count"] = int(self.iteration_count)
         self.trace["resumable"] = True
         # Get the total duration from the superclass, which counts the total
         # amount of time the event was alive.
