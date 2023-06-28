@@ -873,20 +873,30 @@ class STLBufferPoolAllocator {
         using other = STLBufferPoolAllocator<U>;
     };
 
-    explicit STLBufferPoolAllocator() noexcept = default;
+    STLBufferPoolAllocator(IBufferPool* pool) noexcept : pool_(pool) {}
+
+    STLBufferPoolAllocator() noexcept
+        : STLBufferPoolAllocator(BufferPool::DefaultPtr()) {}
+
+    ~STLBufferPoolAllocator() {}
 
     template <class U>
-    STLBufferPoolAllocator(const STLBufferPoolAllocator<U>& rhs) noexcept {
-        (void)rhs;
+    STLBufferPoolAllocator(const STLBufferPoolAllocator<U>& other) noexcept
+        : STLBufferPoolAllocator(other.pool()) {}
+
+    template <class U>
+    STLBufferPoolAllocator(STLBufferPoolAllocator<U>&& other)
+        : STLBufferPoolAllocator(other.pool()) {}
+
+    template <class U>
+    STLBufferPoolAllocator& operator=(const STLBufferPoolAllocator<U>& other) {
+        this->pool_ = other.pool();
     }
 
-    ~STLBufferPoolAllocator() = default;
-
-    STLBufferPoolAllocator(const STLBufferPoolAllocator& other) = default;
-    STLBufferPoolAllocator(STLBufferPoolAllocator&& other) = default;
-    STLBufferPoolAllocator& operator=(const STLBufferPoolAllocator& other) =
-        default;
-    STLBufferPoolAllocator& operator=(STLBufferPoolAllocator&& other) = default;
+    template <class U>
+    STLBufferPoolAllocator& operator=(STLBufferPoolAllocator<U>&& other) {
+        this->pool_ = other.pool();
+    }
 
     T* address(T& r) const noexcept { return std::addressof(r); }
 
@@ -894,18 +904,17 @@ class STLBufferPoolAllocator {
 
     template <class U>
     inline bool operator==(const STLBufferPoolAllocator<U>& rhs) {
-        return true;
+        return this->pool_ == rhs.pool();
     }
 
     template <class U>
     inline bool operator!=(const STLBufferPoolAllocator<U>& rhs) {
-        return false;
+        return this->pool_ != rhs.pool();
     }
 
     T* allocate(size_t n) {
         uint8_t* data;
-        ::arrow::Status s =
-            bodo::BufferPool::DefaultPtr()->Allocate(n * sizeof(T), &data);
+        ::arrow::Status s = this->pool_->Allocate(n * sizeof(T), &data);
         if (!s.ok()) {
             throw std::bad_alloc();
         }
@@ -913,8 +922,7 @@ class STLBufferPoolAllocator {
     }
 
     void deallocate(T* p, size_t n) {
-        bodo::BufferPool::DefaultPtr()->Free(reinterpret_cast<uint8_t*>(p),
-                                             n * sizeof(T));
+        this->pool_->Free(reinterpret_cast<uint8_t*>(p), n * sizeof(T));
     }
 
     size_t size_max() const noexcept { return size_t(-1) / sizeof(T); }
@@ -928,6 +936,11 @@ class STLBufferPoolAllocator {
     void destroy(U* p) {
         p->~U();
     }
+
+    IBufferPool* pool() const noexcept { return this->pool_; }
+
+   private:
+    IBufferPool* const pool_;
 };
 
 template <typename T>
