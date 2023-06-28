@@ -139,18 +139,20 @@ def test_resumable_event():
         simple2 = tracing_info.get_event("simple2", 0)
         resumable = tracing_info.get_event("resumable", 0)
 
-        assert resumable["resumable"], "No resumable attribute on resumable event"
+        assert resumable["args"][
+            "resumable"
+        ], "No resumable attribute on resumable event"
         assert (
-            resumable["iteration_count"] == 2
+            resumable["args"]["iteration_count"] == 2
         ), "Resumable event iteration count is wrong"
 
         # the first and second simple event occur around the two iterations of resumable, thus they should take longer
         assert (
-            simple1["dur"] + simple2["dur"] >= resumable["dur"]
+            simple1["dur"] + simple2["dur"] >= resumable["tdur"]
         ), "Resumable event duration is incorrect"
         # However, the simple events occur in between the construction and finalization of resumable, so the total duration should be longer
         assert (
-            simple1["dur"] + simple2["dur"] <= resumable["total_dur"]
+            simple1["dur"] + simple2["dur"] <= resumable["dur"]
         ), "Resumable event duration is incorrect"
 
     impl1()
