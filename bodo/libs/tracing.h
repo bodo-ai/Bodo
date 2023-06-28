@@ -80,13 +80,18 @@ class Event {
 
    protected:
     Event(const std::string& name, const char* clsnm, bool is_parallel = true,
-          bool sync = true) {
+          bool sync = true, bool is_batchable = true) {
         // TODO pass aggregate and sync options for finalize here in case
         // we want to use these options on Event destruction when going out of
         // scope
         // TODO error checking
         // import bodo.utils.tracing
         PyObject* tracing_mod = PyImport_ImportModule("bodo.utils.tracing");
+        if (!tracing_mod) {
+            PyErr_Print();
+            throw std::runtime_error(
+                "Could not import 'bodo.util.tracing' module");
+        }
         PyObject* is_tracing_func =
             PyObject_GetAttrString(tracing_mod, "is_tracing");
         PyObject* is_tracing_obj = PyObject_CallFunction(is_tracing_func, NULL);
@@ -97,8 +102,9 @@ class Event {
             // event_py = tracing.Event(name, is_parallel=is_parallel,
             // sync=sync)
             PyObject* event_ctor = PyObject_GetAttrString(tracing_mod, clsnm);
-            event_py = PyObject_CallFunction(event_ctor, "sii", name.c_str(),
-                                             int(is_parallel), int(sync));
+            event_py = PyObject_CallFunction(event_ctor, "siii", name.c_str(),
+                                             int(is_parallel), int(sync),
+                                             int(is_batchable));
             Py_DECREF(event_ctor);
         }
         Py_DECREF(tracing_mod);

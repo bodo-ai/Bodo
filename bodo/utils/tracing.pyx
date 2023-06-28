@@ -293,13 +293,16 @@ cdef aggregate_events():
         traceEvents = []
 
 
-cdef class Event:
+ITERATION_STACK = []
+
+
+cdef class EventBase:
 
     cdef bint is_parallel  # True if refers to parallel event, False if replicated
     cdef bint sync # Should we sync the event
     cdef dict trace  # dictionary with event data
 
-    def __cinit__(self, name not None, bint is_parallel=1, bint sync=1):
+    def __cinit__(self, name not None, bint is_parallel=1, bint sync=1, bint is_batchable=1): # Base
         """ Start event named 'name'
             is_parallel=True indicates a parallel event, otherwise replicated
             If sync=True do a barrier before creating the event
@@ -331,43 +334,71 @@ cdef class Event:
         # add attributes always to avoid overhead of checking
         self.trace["args"][name] = value
 
-    def _get_duration(self):
-        '''Get duration for this event.
-
-        Overriden in subclasses, like ResumableEvent, in order to provide a
-        custom definition of duration for an event.'''
-        return get_timestamp() - self.trace["ts"]
-
     def finalize(self, bint aggregate=True):
         """ Finalize event
             If aggregate=True, aggregate the info of the event across all ranks
         """
         if TRACING == 0:
             return  # nop
-        self.trace["dur"] = self._get_duration()
+        self.trace["dur"] = get_timestamp() - self.trace["ts"]
         if self.sync and self.is_parallel:
             # wait for all processes to finish event
             MPI_Barrier(MPI_COMM_WORLD)
         if aggregate and self.is_parallel:
             self.trace["_bodo_aggr"] = 1
-        traceEvents.append(self.trace)
 
-cdef class ResumableEvent(Event):
+
+cdef class Event(EventBase):
+
+    cdef object parent_event
+
+    def __cinit__(self, name not None, bint is_parallel=1, bint sync=1, bint is_batchable=1):  # Event
+        """Create an event and determine if we're going to batch this event within an existing iteration."""
+        super().__init__(name, is_parallel, sync)
+        if TRACING == 0:
+            return  # nop
+        if is_batchable and len(ITERATION_STACK) > 0:
+            self.parent_event = ITERATION_STACK[-1].get_or_create_child_event(name)
+            self.parent_event.start_iteration()
+        else:
+            self.parent_event = None
+
+    def finalize(self, bint aggregate=True):
+        super().finalize(aggregate)
+
+        if self.parent_event is not None:
+            self.parent_event.end_iteration()
+        else:  # No parent, behave as normal
+            traceEvents.append(self.trace)
+
+
+
+cdef class ResumableEvent(EventBase):
 
     cdef long long current_iter_start
     cdef int resumable_dur
     cdef int iteration_count
+    cdef dict _child_events
 
-    def __cinit__(self, name not None, bint is_parallel=1, bint sync=1):
+    def __cinit__(self, name not None, bint is_parallel=1, bint sync=1, bint is_batchable=0): # Resumable
         """Create a resumable event named 'name'.
         Other arguments are the same as for Event.
         """
-        super().__init__(name, is_parallel, sync)
+        super().__init__(name, is_parallel, sync, 0)
+        if TRACING == 0:
+            return  # nop
         self.current_iter_start = -1
         self.resumable_dur = 0
         self.iteration_count = 0
+        self._child_events = {}
 
-    def finalize(self, bint aggregate=True):
+    def get_or_create_child_event(self, name not None, bint is_parallel=1, bint sync=1):
+        if name not in self._child_events:
+            self._child_events[name] = ResumableEvent(name, is_parallel, sync)
+        return self._child_events[name]
+        
+
+    def finalize(self, bint aggregate=True, bint autobatched=False):
         """Finalize an event, taking care to end any current iteration
         """
         if TRACING == 0:
@@ -375,12 +406,19 @@ cdef class ResumableEvent(Event):
         if self.current_iter_start != -1:
             self.end_iteration()
 
-        self.trace["iteration_count"] = int(self.iteration_count)
-        self.trace["resumable"] = True
+        for child_event in self._child_events.values():
+            child_event.finalize(aggregate, True)
+
+        self.trace["args"]["iteration_count"] = self.iteration_count
+        self.trace["args"]["resumable"] = True
         # Get the total duration from the superclass, which counts the total
         # amount of time the event was alive.
-        self.trace["total_dur"] = super()._get_duration()
+        self.trace["args"]["internal_dur"] = self.resumable_dur
+        self.trace["tdur"] = self.resumable_dur
+        if autobatched:
+            self.trace["args"]["autobatched"] = True
         super().finalize(aggregate)
+        traceEvents.append(self.trace)
 
     @contextlib.contextmanager
     def iteration(self):
@@ -402,12 +440,16 @@ cdef class ResumableEvent(Event):
         if self.current_iter_start < 0:
             self.current_iter_start = get_timestamp()
             self.iteration_count += 1
+        ITERATION_STACK.append(self)
 
     def end_iteration(self):
         """End the current iteration if any and aggregate runtime statistics"""
+        if ITERATION_STACK[-1] is not self:
+            raise TypeError("end_iteration() called in wrong order. Please use context manager for sanity")
         if self.current_iter_start >= 0:
             self.resumable_dur += (get_timestamp() - self.current_iter_start)
             self.current_iter_start = -1
+        ITERATION_STACK.pop()
 
     def _get_duration(self):
         return self.resumable_dur
