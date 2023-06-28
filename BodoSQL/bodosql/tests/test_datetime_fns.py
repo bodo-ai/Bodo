@@ -1403,7 +1403,7 @@ def test_date_part_unquoted_timeunit(memory_leak_check):
     """
     query_fmt = "DATE_PART({!s}, A) AS my_{}"
     selects = []
-    for unit in ["year", "quarter", "month", "week", "day", "hour", "minute", "second"]:
+    for unit in ["year", "quarter", "month", "week", "day", "hour", "minute", "second", "dow"]:
         selects.append(query_fmt.format(unit, unit))
     query = f"SELECT {', '.join(selects)} FROM table1"
     ctx = {
@@ -1432,6 +1432,7 @@ def test_date_part_unquoted_timeunit(memory_leak_check):
             "my_hour": df.A.dt.hour,
             "my_minute": df.A.dt.minute,
             "my_second": df.A.dt.second,
+            "my_dow": pd.Series([None, 0, 6, 3, 2]),
         }
     )
 

@@ -6405,7 +6405,12 @@ SqlNode BuiltinFunctionCall() :
     |
         <DATE_PART> { s = span(); }
         <LPAREN>
-        args = QuotedOrUnquotedInterval()
+        (
+            args = QuotedOrUnquotedInterval()
+        |   <DOW> {
+                args = startList(SqlLiteral.createSymbol(TimeUnit.DOW, getPos()));
+            }
+        )
         <COMMA>
         e = Expression(ExprContext.ACCEPT_SUB_QUERY) { args.add(e); }
         <RPAREN> {
