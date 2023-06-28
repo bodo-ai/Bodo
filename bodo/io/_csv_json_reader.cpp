@@ -559,7 +559,8 @@ typedef struct {
     size_t chunk_start;   // start of our chunk
     size_t chunk_size;    // size of our chunk
     size_t chunk_pos;     // current position in our chunk
-    bodo::vector<char>
+
+    std::shared_ptr<bodo::vector<char>>
         buf;  // internal buffer for converting stream input to Unicode object
 
     // The following attributes are needed for chunksize Iterator support
@@ -623,6 +624,7 @@ static PyObject *stream_reader_new(PyTypeObject *type, PyObject *args,
     self->header_size_bytes = 0;
     self->path_info = NULL;
     self->first_read = false;
+    self->buf = std::make_shared<bodo::vector<char>>(0);
 
     return (PyObject *)self;
 }
@@ -746,8 +748,8 @@ static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
             size = 0;
     }
 
-    self->buf.resize(size);
-    bool ok = self->ifs->read(self->buf.data(), size);
+    self->buf->resize(size);
+    bool ok = self->ifs->read(self->buf->data(), size);
     self->chunk_pos += size;
     if (!ok) {
         std::cerr << "Failed reading " << size << " bytes" << std::endl;
@@ -756,7 +758,7 @@ static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
     // buffer_rd_bytes() function of pandas expects a Bytes object
     // using PyUnicode_FromStringAndSize is wrong since 'size'
     // may end up in the middle a multi-byte UTF-8 character
-    return PyBytes_FromStringAndSize(self->buf.data(), size);
+    return PyBytes_FromStringAndSize(self->buf->data(), size);
 }
 
 // Needed to make Pandas accept it, never used
