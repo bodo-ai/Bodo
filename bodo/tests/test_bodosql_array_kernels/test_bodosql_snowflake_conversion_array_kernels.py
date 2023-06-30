@@ -302,6 +302,46 @@ def test_to_char(args):
 
 
 @pytest.mark.parametrize(
+    "arr, format_str, answer",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp(2020, 8, 17, 10, 10, 10),
+                    pd.Timestamp(2022, 9, 18, 20, 20, 20),
+                    pd.Timestamp(2023, 10, 19, 0, 30, 30),
+                    pd.Timestamp(2024, 11, 20, 10, 40, 40),
+                ]
+                * 3
+            ),
+            "MM/DD/YYYY HH24:MI:SS",
+            pd.Series(
+                [
+                    "08/17/2020 10:10:10",
+                    "09/18/2022 20:20:20",
+                    "10/19/2023 00:30:30",
+                    "11/20/2024 10:40:40",
+                ]
+                * 3
+            ),
+        )
+    ],
+)
+def test_to_char_format_str(arr, format_str, answer):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.to_char(arr, format_str))
+
+    check_func(
+        impl,
+        (arr,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
     "args",
     [
         pytest.param(

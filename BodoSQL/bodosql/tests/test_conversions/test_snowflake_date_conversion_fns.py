@@ -804,6 +804,86 @@ def test_to_timestamp_numeric(
     )
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        "08/17/2000 06:45:00",
+                        "12/31/2010 12:12:12",
+                        "01/03/1970 23:10:01",
+                        "02/28/2016 10:10:10",
+                    ]
+                    * 4,
+                ),
+                "MM/DD/YYYY HH24:MI:SS",
+                pd.Series(
+                    [
+                        pd.Timestamp(2000, 8, 17, 6, 45, 0),
+                        pd.Timestamp(2010, 12, 31, 12, 12, 12),
+                        pd.Timestamp(1970, 1, 3, 23, 10, 1),
+                        pd.Timestamp(2016, 2, 28, 10, 10, 10),
+                    ]
+                    * 4
+                ),
+            ),
+            id="format-1",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        "2022-11-17 08:26:51 AM",
+                        "2023-04-05 03:59:14 PM",
+                        "2021-09-29 11:12:27 AM",
+                        "2023-02-14 06:37:05 PM",
+                    ]
+                    * 4,
+                ),
+                "YYYY-MM-DD HH12:MI:SS PM",
+                pd.Series(
+                    [
+                        pd.Timestamp(2022, 11, 17, 8, 26, 51),
+                        pd.Timestamp(2023, 4, 5, 15, 59, 14),
+                        pd.Timestamp(2021, 9, 29, 11, 12, 27),
+                        pd.Timestamp(2023, 2, 14, 18, 37, 5),
+                    ]
+                    * 4
+                ),
+            ),
+            id="format-2",
+        ),
+    ]
+)
+def to_timestamp_string_data_format_str(request):
+    """
+    String data with format strings to be converted to timestamp types.
+    """
+    return request.param
+
+
+def test_to_timestamp_format_str(
+    to_timestamp_fn, to_timestamp_string_data_format_str, memory_leak_check
+):
+    """
+    Test TO_TIMESTAMP with optional format string argument
+    """
+    data, format_str, answer = to_timestamp_string_data_format_str
+    query = f"SELECT {to_timestamp_fn}(t, '{format_str}') FROM table1"
+
+    ctx = {"table1": pd.DataFrame({"t": data})}
+    expected_output = pd.DataFrame({0: answer})
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
+
+
 @pytest.mark.parametrize(
     "tz_naive_df",
     [
