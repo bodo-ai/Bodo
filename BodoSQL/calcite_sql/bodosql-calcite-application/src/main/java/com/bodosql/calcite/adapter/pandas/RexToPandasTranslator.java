@@ -1094,7 +1094,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             if (fnOperation.getType() instanceof TZAwareSqlType) {
               tzStr = ((TZAwareSqlType) fnOperation.getType()).getTZInfo().getPyZone();
             }
-            return generateToTimestampFnCode(operands, fnOperation.getOperands(), tzStr, fnName);
+            return generateToTimestampFnCode(operands, tzStr, fnName);
           case "TRY_TO_BOOLEAN":
           case "TO_BOOLEAN":
             return generateToBooleanFnCode(operands, fnName);
@@ -1103,10 +1103,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
             return generateToBinaryFnCode(operands, fnName);
           case "TO_CHAR":
           case "TO_VARCHAR":
-            assert fnOperation.getOperands().size() == 1
-                : "Error: TO_CHAR supplied improper number of arguments, Bodo only supports one"
-                    + " argument.";
-            return generateToCharFnCode(operands, fnName);
+            return generateToCharFnCode(operands);
           case "TO_DOUBLE":
           case "TRY_TO_DOUBLE":
             return generateToDoubleFnCode(operands, fnName);
