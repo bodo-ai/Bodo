@@ -11,7 +11,11 @@ from bodo.libs.bodosql_snowflake_conversion_array_kernels import (
     convert_snowflake_date_format_str_to_py_format,
     pd_to_datetime_error_checked,
 )
-from bodo.utils.typing import get_overload_const_bool, raise_bodo_error, is_overload_none
+from bodo.utils.typing import (
+    get_overload_const_bool,
+    raise_bodo_error,
+    is_overload_none,
+)
 
 
 @numba.generated_jit(nopython=True)

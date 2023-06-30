@@ -205,6 +205,59 @@ def test_to_time_valid(to_time_fn, to_time_valid_data, use_case, memory_leak_che
 
 
 @pytest.mark.parametrize(
+    "arr, format_str, answer",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    "12:50:45",
+                    "02:43:30",
+                    "10:23:00",
+                    "20:00:10",
+                ]
+            ),
+            "HH24:MI:SS",
+            pd.Series(
+                [
+                    bodo.Time(12, 50, 45, precision=9),
+                    bodo.Time(2, 43, 30, precision=9),
+                    bodo.Time(10, 23, 0, precision=9),
+                    bodo.Time(20, 0, 10, precision=9),
+                ]
+            ),
+            id="format-24",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "01:15:30 AM",
+                    "11:45:15 PM",
+                    "12:00:00 AM",
+                    "12:30:45 PM",
+                ]
+            ),
+            "HH12:MI:SS PM",
+            pd.Series(
+                [
+                    bodo.Time(1, 15, 30, precision=9),
+                    bodo.Time(23, 45, 15, precision=9),
+                    bodo.Time(0, 0, 0, precision=9),
+                    bodo.Time(12, 30, 45, precision=9),
+                ]
+            ),
+            id="format-12",
+        ),
+    ],
+)
+def test_to_time_format_str(to_time_fn, arr, format_str, answer, memory_leak_check):
+    query = f"SELECT {to_time_fn}(S, '{format_str}') as A FROM table1"
+    ctx = {"table1": pd.DataFrame({"S": arr})}
+    expected_output = pd.DataFrame({"A": answer})
+
+    check_query(query, ctx, None, expected_output=expected_output)
+
+
+@pytest.mark.parametrize(
     "use_case",
     [
         pytest.param(False, id="no_case", marks=pytest.mark.slow),

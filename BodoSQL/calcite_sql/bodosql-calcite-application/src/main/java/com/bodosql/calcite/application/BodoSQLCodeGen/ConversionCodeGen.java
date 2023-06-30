@@ -5,7 +5,11 @@ import static com.bodosql.calcite.application.SQLToPython.FormatHelpers.SQLForma
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.ir.Expr;
+
+import java.util.ArrayList;
 import java.util.List;
+
+import com.bodosql.calcite.ir.ExprKt;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.SqlTypeName;
 
@@ -96,23 +100,12 @@ public class ConversionCodeGen {
    * Handles codegen for Snowflake TO_TIMESTAMP/TRY_TO_TIMESTAMP function.
    *
    * @param operandsInfo List of operands
-   * @param operandsTypeInfo List of type information about the operands
    * @param tzStr String representing the timezone of the output data
    * @param fnName The name of the function being called
    * @return RexVisitorInfo for the TO_TIMESTAMP/TRY_TO_TIMESTAMP function
    */
   public static Expr generateToTimestampFnCode(
-      List<Expr> operandsInfo, List<RexNode> operandsTypeInfo, String tzStr, String fnName) {
-    String scaleStr = "0";
-    if (operandsInfo.size() == 2) {
-      if (SqlTypeName.INT_TYPES.contains(operandsTypeInfo.get(1).getType().getSqlTypeName())) {
-        scaleStr = operandsInfo.get(1).emit();
-      } else {
-        throw new BodoSQLCodegenException(
-            "Error, format string for " + fnName + " not yet supported");
-      }
-    }
-    StringBuilder exprCode = new StringBuilder();
+      List<Expr> operandsInfo, String tzStr, String fnName) {
 
     String kernelName;
     if (fnName.startsWith("TRY_")) {
@@ -120,18 +113,21 @@ public class ConversionCodeGen {
     } else {
       kernelName = "to_timestamp";
     }
+    List<Expr> args;
 
-    exprCode
-        .append("bodo.libs.bodosql_array_kernels.")
-        .append(kernelName)
-        .append("(")
-        .append(operandsInfo.get(0).emit())
-        .append(", None, ")
-        .append(tzStr)
-        .append(", ")
-        .append(scaleStr)
-        .append(")");
-    return new Expr.Raw(exprCode.toString());
+    if (operandsInfo.size() == 2) {
+      // 2nd argument is a format string
+      if (operandsInfo.get(1) instanceof Expr.StringLiteral) {
+        // kernel argument order: conversionVal, format_str, time_zone, scale
+        args = List.of(operandsInfo.get(0), operandsInfo.get(1), new Expr.Raw(tzStr), new Expr.IntegerLiteral(0));
+      } else {
+        // 2nd argument is a scale (integer)
+        args = List.of(operandsInfo.get(0), Expr.None.INSTANCE, new Expr.Raw(tzStr), operandsInfo.get(1));
+      }
+    } else {
+      args = List.of(operandsInfo.get(0), Expr.None.INSTANCE, new Expr.Raw(tzStr), new Expr.IntegerLiteral(0));
+    }
+    return ExprKt.BodoSQLKernel(kernelName, args, List.of());
   }
 
   /**
@@ -159,17 +155,15 @@ public class ConversionCodeGen {
    * Handles codegen for Snowflake TO_CHAR function.
    *
    * @param operandsInfo List of operands
-   * @param fnName Name of the function (TO_CHAR or TRY_VARCHAR)
    * @return RexVisitorInfo for the TO_CHAR function
    */
-  public static Expr generateToCharFnCode(List<Expr> operandsInfo, String fnName) {
-    if (operandsInfo.size() > 1) {
-      // TODO (BE-3742): Support format string for TO_CHAR
-      throw new BodoSQLCodegenException(
-          "Error, format string for " + fnName + " not yet supported");
+  public static Expr generateToCharFnCode(List<Expr> operandsInfo) {
+    List<Expr> args = new ArrayList<>();
+    args.addAll(operandsInfo);
+    if (operandsInfo.size() == 1) {
+      args.add(Expr.None.INSTANCE);
     }
-    String exprCode = "bodo.libs.bodosql_array_kernels.to_char(" + operandsInfo.get(0).emit() + ")";
-    return new Expr.Raw(exprCode);
+    return ExprKt.BodoSQLKernel("to_char", args, List.of());
   }
 
   /**

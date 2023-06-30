@@ -364,24 +364,6 @@ def test_to_char_scalars(spark_info, func):
     )
 
 
-def test_to_char_error():
-    """Test that we raise an error when we try to use a format string with TO_CHAR."""
-    ctx = {
-        "table1": pd.DataFrame(
-            {
-                "a": [1, 2, 3, 4, 5] * 3,
-            }
-        )
-    }
-    query = f"SELECT TO_CHAR(a, 'YYYY-MM-DD') FROM table1"
-    bc = bodosql.BodoSQLContext(ctx)
-    with pytest.raises(
-        BodoError,
-        match="format string for TO_CHAR not yet supported",
-    ):
-        bc.sql(query)
-
-
 @pytest.mark.tz_aware
 def test_tz_aware_datetime_to_char(tz_aware_df, memory_leak_check):
     """simplest test for TO_CHAR on timezone aware data"""
@@ -437,6 +419,39 @@ def test_date_to_char(memory_leak_check):
             "A": pd.DatetimeIndex(dt_series)
             .to_series(index=pd.RangeIndex(30))
             .dt.strftime("%Y-%m-%d")
+        }
+    )
+
+    ctx = {"table1": df}
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output,
+    )
+
+
+def test_to_char_datetime_format_str(memory_leak_check):
+    """test for TO_CHAR with a datetime format string"""
+    datetime_string_series = pd.Series(
+        [
+            pd.Timestamp(1990, 2, 7, 12, 12, 12),
+            pd.Timestamp(2000, 8, 17, 22, 12, 22),
+            pd.Timestamp(1965, 3, 3, 2, 12, 42),
+            pd.Timestamp(2010, 12, 25, 4, 12, 52),
+        ]
+        * 4
+    )
+    sql_format_str = "MMMM DD, YYYY HH24:MI:SS"
+    query = f"SELECT TO_CHAR(A, '{sql_format_str}') as A from table1"
+    df = pd.DataFrame({"A": datetime_string_series})
+    expected_output = pd.DataFrame(
+        {
+            "A": pd.DatetimeIndex(datetime_string_series)
+            .to_series(index=pd.RangeIndex(16))
+            .dt.strftime("%B %d, %Y %H:%M:%S")
         }
     )
 

@@ -560,21 +560,27 @@ def try_to_binary(arr):
 
 
 @numba.generated_jit(nopython=True)
-def to_char(arr):
+def to_char(arr, format_str=None):
     """Handles cases where TO_CHAR receives optional arguments and forwards
     to the appropriate version of the real implementation"""
 
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument("bodo.libs.bodosql_array_kernels.to_char", ["arr"], 0)
+    args = [arr, format_str]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.to_char",
+                ["arr", "format_str"],
+                i,
+            )
 
-    def impl(arr):  # pragma: no cover
-        return to_char_util(arr)
+    def impl(arr, format_str=None):  # pragma: no cover
+        return to_char_util(arr, format_str)
 
     return impl
 
 
 @numba.generated_jit(nopython=True)
-def to_char_util(arr):
+def to_char_util(arr, format_str=None):
     """A dedicated kernel for the SQL function TO_CHAR which takes in a
     number (or column) and returns a string representation of it.
 
@@ -590,13 +596,18 @@ def to_char_util(arr):
         string series/scalar: the string representation of the number(s) with the
         specified null handling rules
     """
-    arg_names = ["arr"]
-    arg_types = [arr]
-    propagate_null = [True]
+    arg_names = ["arr", "format_str"]
+    arg_types = [arr, format_str]
+    propagate_null = [True, False]
 
+    assert is_overload_none(format_str) or is_overload_constant_str(
+        format_str
+    ), "format_str must be a string literal or None"
+
+    convert_func_str = "bodo.libs.bodosql_snowflake_conversion_array_kernels.convert_snowflake_date_format_str_to_py_format"
     if is_str_arr_type(arr):
         # Strings are unchanged.
-        return lambda arr: arr  # pragma: no cover
+        return lambda arr, format_str: arr  # pragma: no cover
     # TODO [BE-3744]: support binary data for to_char
     elif is_valid_binary_arg(arr):
         # currently only support hex encoding
@@ -604,49 +615,36 @@ def to_char_util(arr):
         scalar_text += "  r = arg0.hex()\n"
         scalar_text += "res[i] = r"
     elif is_valid_time_arg(arr):
-        # Currently, time -> string conversions always use the default format
-        # of HH:MM:SS (1 digits are always extended to 2, and sub-second units
-        # are ignored)
-        scalar_text = "res[i] = format(arg0.hour, '0>2') + ':' + format(arg0.minute, '0>2') + ':' + format(arg0.second, '0>2')"
-    elif isinstance(arr, bodo.TimeType) or (
-        bodo.utils.utils.is_array_typ(arr) and isinstance(arr.dtype, bodo.TimeType)
-    ):
-        scalar_text = (
-            "h_str = str(arg0.hour) if arg0.hour > 10 else '0' + str(arg0.hour)\n"
-        )
-        scalar_text += (
-            "m_str = str(arg0.minute) if arg0.minute > 10 else '0' + str(arg0.minute)\n"
-        )
-        scalar_text += (
-            "s_str = str(arg0.second) if arg0.second > 10 else '0' + str(arg0.second)\n"
-        )
-        scalar_text += "ms_str = str(arg0.millisecond) if arg0.millisecond > 100 else ('0' + str(arg0.millisecond) if arg0.millisecond > 10 else '00' + str(arg0.millisecond))\n"
-        scalar_text += "us_str = str(arg0.microsecond) if arg0.microsecond > 100 else ('0' + str(arg0.microsecond) if arg0.microsecond > 10 else '00' + str(arg0.microsecond))\n"
-        scalar_text += "ns_str = str(arg0.nanosecond) if arg0.nanosecond > 100 else ('0' + str(arg0.nanosecond) if arg0.nanosecond > 10 else '00' + str(arg0.nanosecond))\n"
-        scalar_text += "part_str = h_str + ':' + m_str + ':' + s_str\n"
-        scalar_text += "if arg0.nanosecond > 0:\n"
-        scalar_text += "  part_str = part_str + '.' + ms_str + us_str + ns_str\n"
-        scalar_text += "elif arg0.microsecond > 0:\n"
-        scalar_text += "  part_str = part_str + '.' + ms_str + us_str\n"
-        scalar_text += "elif arg0.millisecond > 0:\n"
-        scalar_text += "  part_str = part_str + '.' + ms_str\n"
-        scalar_text += "res[i] = part_str"
+        if not is_overload_none(format_str):
+            scalar_text = f"res[i] = arg0.strftime({convert_func_str}(arg1))\n"
+        else:
+            # Use the default format of HH:MM:SS (1 digits are always extended to 2,
+            # and sub-second units are ignored)
+            scalar_text = "res[i] = format(arg0.hour, '0>2') + ':' + format(arg0.minute, '0>2') + ':' + format(arg0.second, '0>2')"
     elif is_valid_timedelta_arg(arr):
         scalar_text = "v = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg0)\n"
         scalar_text += "with bodo.objmode(r=bodo.string_type):\n"
         scalar_text += "    r = str(v)\n"
         scalar_text += "res[i] = r"
     elif is_valid_datetime_or_date_arg(arr):
-        if is_valid_date_arg(arr):
-            scalar_text = "res[i] = str(arg0)\n"
+        box_str = (
+            "bodo.utils.conversion.box_if_dt64"
+            if bodo.utils.utils.is_array_typ(arr, True)
+            else ""
+        )
+        scalar_text = f"arg0 = {box_str}(arg0)\n"
+        if not is_overload_none(format_str):
+            scalar_text += f"res[i] = arg0.strftime({convert_func_str}(arg1))\n"
+        elif is_valid_date_arg(arr):
+            scalar_text += "res[i] = str(arg0)\n"
         elif is_valid_tz_aware_datetime_arg(arr):
             # strftime returns (-/+) HHMM for UTC offset, when the default Bodo
             # timezone format is (-/+) HH:MM. So we must manually insert a ":" character
-            scalar_text = "tz_raw = arg0.strftime('%z')\n"
+            scalar_text += "tz_raw = arg0.strftime('%z')\n"
             scalar_text += 'tz = tz_raw[:3] + ":" + tz_raw[3:]\n'
             scalar_text += "res[i] = arg0.isoformat(' ') + tz\n"
         else:
-            scalar_text = "res[i] = pd.Timestamp(arg0).isoformat(' ')\n"
+            scalar_text += "res[i] = pd.Timestamp(arg0).isoformat(' ')\n"
     elif is_valid_float_arg(arr):
         scalar_text = "if np.isinf(arg0):\n"
         scalar_text += "  res[i] = 'inf' if arg0 > 0 else '-inf'\n"
@@ -851,14 +849,14 @@ def to_double_util(val, optional_format_string, _try=False):
 
 
 @register_jitable
-def convert_snowflake_date_format_str_to_py_format(val):  # pragma: no cover
+def convert_snowflake_date_format_str_to_py_format(format_str):  # pragma: no cover
     """Helper fn for the TO_DATE/TO_TIMESTAMP fns. This fn takes a format string
     in SQL syntax, and converts it to the python syntax.
     Snowflake syntax reference: https://docs.snowflake.com/en/user-guide/date-time-input-output
     Python syntax reference: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior
     Snowflake allows for arbitrary format strings with patterns YYYY, YY, MMMM, MM, MON, DD, DY
     """
-    format_str = val.upper()
+    format_str = format_str.upper()
     format_map = {
         "YYYY": "%Y",
         "YY": "%y",
