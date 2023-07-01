@@ -295,11 +295,17 @@ def sf_writer_setattr(typingctx, writer_typ, attr_typ, val_typ):  # pragma: no c
 
 @overload(operator.getitem, no_unliteral=True)
 def snowflake_writer_getitem(writer, attr):
+    if not isinstance(writer, SnowflakeWriterType):
+        return
+
     return lambda writer, attr: sf_writer_getattr(writer, attr)  # pragma: no cover
 
 
 @overload(operator.setitem, no_unliteral=True)
 def snowflake_writer_setitem(writer, attr, val):
+    if not isinstance(writer, SnowflakeWriterType):
+        return
+
     return lambda writer, attr, val: sf_writer_setattr(
         writer, attr, val
     )  # pragma: no cover
