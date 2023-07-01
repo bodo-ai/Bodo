@@ -243,14 +243,15 @@ class WindowColSet : public BasicColSet {
      * @param _window_funcs: What function(s) are we computing.
      * @param _asc: Are the sort columns ascending on the input column.
      * @param _na_pos: Are NAs last in the sort columns
+     * @param _windiw_args: Any additional window arguments
      * @param _is_parallel: flag to identify whether data is distributed
      * @param use_sql_rules: Do we use SQL or Pandas null handling rules.
      *
      */
     WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
                  std::vector<int64_t> _window_funcs, std::vector<bool>& _asc,
-                 std::vector<bool>& _na_pos, bool _is_parallel,
-                 bool use_sql_rules);
+                 std::vector<bool>& _na_pos, std::vector<void*>& _window_args,
+                 int n_input_cols, bool _is_parallel, bool use_sql_rules);
     virtual ~WindowColSet();
 
     /**
@@ -287,6 +288,8 @@ class WindowColSet : public BasicColSet {
     std::vector<int64_t> window_funcs;
     std::vector<bool> asc;
     std::vector<bool> na_pos;
+    std::vector<void*> window_args;
+    int n_input_cols;
     bool is_parallel;  // whether input column data is distributed or
                        // replicated
 };
@@ -702,7 +705,8 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::shared_ptr<array_info> index_col, int ftype, bool do_combine,
     bool skipna, int64_t periods, std::vector<int64_t> transform_funcs,
     int n_udf, bool is_parallel, std::vector<bool> window_ascending,
-    std::vector<bool> window_na_position, int* udf_n_redvars = nullptr,
+    std::vector<bool> window_na_position, std::vector<void*> window_args,
+    int n_input_cols, int* udf_n_redvars = nullptr,
     std::shared_ptr<table_info> udf_table = nullptr, int udf_table_idx = 0,
     std::shared_ptr<table_info> nunique_table = nullptr,
     bool use_sql_rules = false);

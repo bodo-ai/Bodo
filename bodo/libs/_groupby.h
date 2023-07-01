@@ -105,6 +105,11 @@ struct grouping_info {
  * all the output columns are dead and only number of rows is used.
  * @param window_ascending: For groupby.window is each orderby column asc?
  * @param window_na_position: For groupby.window is each orderby column na last?
+ * @param window_args: For groupby.window provides any extra arguments
+ * @param n_window_args_per_func: For groupby.window provides offsets
+ * to associate each window funciton call with its scalar arguments
+ * @param n_window_args_per_func: For groupby.window provides offsets
+ * to associate each window funciton call with its column arguments
  * @param maintain_input_size: Will the input df and output df have the same
  * length?
  * @param n_shuffle_keys: the number of keys to use when shuffling data across
@@ -114,14 +119,15 @@ struct grouping_info {
  */
 table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, int8_t* ncols_per_func,
-    int8_t* nwindow_calls_per_func, int64_t num_funcs, bool input_has_index,
+    int8_t* n_window_calls_per_func, int64_t num_funcs, bool input_has_index,
     int* ftypes, int* func_offsets, int* udf_nredvars, bool is_parallel,
     bool skipdropna, int64_t periods, int64_t* transform_funcs, int64_t head_n,
     bool return_key, bool return_index, bool key_dropna, void* update_cb,
     void* combine_cb, void* eval_cb, void* general_udfs_cb,
     table_info* udf_dummy_table, int64_t* n_out_rows, bool* window_ascending,
-    bool* window_na_position, bool maintain_input_size, int64_t n_shuffle_keys,
-    bool use_sql_rules);
+    bool* window_na_position, void** window_args,
+    int8_t* n_window_args_per_func, int* n_input_cols_per_func,
+    bool maintain_input_size, int64_t n_shuffle_keys, bool use_sql_rules);
 
 /**
  * @brief Get total number of groups for input key arrays

@@ -533,6 +533,9 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum array_type,
         case Bodo_FTypes::row_number:
         case Bodo_FTypes::rank:
         case Bodo_FTypes::dense_rank:
+        case Bodo_FTypes::ntile:
+        case Bodo_FTypes::conditional_true_event:
+        case Bodo_FTypes::conditional_change_event:
             out_array_type = bodo_array_type::NUMPY;
             out_dtype = Bodo_CTypes::UINT64;
             break;
