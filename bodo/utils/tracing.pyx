@@ -166,8 +166,9 @@ cdef inline object get_timestamp():
     return (time.time() - time_start) * 1e6  # convert to us
 
 
-# On exit, call dump
-atexit.register(dump)
+# On exit, call dump if tracing is set
+if is_tracing():
+    atexit.register(dump)
 
 
 cdef aggregate_helper(values, arg_name, out):
@@ -176,8 +177,8 @@ cdef aggregate_helper(values, arg_name, out):
     out["args"][arg_name + "_min"] = values[index_min].item()
     out["args"][arg_name + "_avg"] = values.mean().item()
     out["args"][arg_name + "_max"] = values[index_max].item()
-    out["args"][arg_name + "_min_rank"] = index_min.item()
-    out["args"][arg_name + "_max_rank"] = index_max.item()
+    out["args"][arg_name + "_min_rank"] = index_min
+    out["args"][arg_name + "_max_rank"] = index_max
 
 
 cdef generic_aggregate_func(object traces_all):
