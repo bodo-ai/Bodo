@@ -1838,10 +1838,45 @@ public class PandasCodeGenVisitor extends RelVisitor {
         childExprs.add(curRexInfo);
         childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
       }
+      // Visit the column arguments for each window aggregation function.
+      int numColumnArgs = 0;
+      for (RexOver agg : aggOperations) {
+        // Identify which of the arguments correspond to column inputs
+        List<Integer> columnArguments = new ArrayList<Integer>();
+        switch (agg.getOperator().toString()) {
+          case "CONDITIONAL_TRUE_EVENT":
+          case "CONDITIONAL_CHANGE_EVENT":
+            {
+              // Functions where the first argument is a column argument
+              columnArguments.add(0);
+              numColumnArgs++;
+              break;
+            }
+          default:
+            {
+              // The remaining functions have no column arguments
+              break;
+            }
+        }
+        // Add each column argument to the child expressions
+        for (Integer i : columnArguments) {
+          RexNode node = agg.getOperands().get(i);
+          Expr curRexInfo = node.accept(translator);
+          childExprs.add(curRexInfo);
+          childExprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
+        }
+      }
       Variable dfExpr = this.genWindowedAggDf();
       List<String> outputDfColnameList =
           generateGroupbyWindow(
-              inputVar, dfExpr, aggOperations, childExprs, childExprTypes, this.generatedCode);
+              inputVar,
+              dfExpr,
+              aggOperations,
+              childExprs,
+              childExprTypes,
+              numColumnArgs,
+              this.generatedCode,
+              translator);
       return new Pair<String, List<String>>(dfExpr.getName(), outputDfColnameList);
     }
 

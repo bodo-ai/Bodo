@@ -2678,6 +2678,9 @@ def groupby_and_aggregate(
     n_out_rows_t,
     window_ascending_t,
     window_na_position_t,
+    window_args_t,
+    n_window_args_per_func_t,
+    n_input_cols_per_func_t,
     maintain_input_size_t,
     n_shuffle_keys_t,
     use_sql_rules_t,
@@ -2718,6 +2721,9 @@ def groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),  # window_ascending
                 lir.IntType(8).as_pointer(),  # window_na_position
+                lir.IntType(8).as_pointer(),  # window_args
+                lir.IntType(8).as_pointer(),  # n_window_args_per_func
+                lir.IntType(8).as_pointer(),  # n_input_cols_per_func
                 lir.IntType(1),  # maintain_input_size
                 lir.IntType(64),  # n_shuffle_keys_t
                 lir.IntType(1),  # use_sql_rules_t
@@ -2759,6 +2765,9 @@ def groupby_and_aggregate(
             types.voidptr,
             types.voidptr,  # window_ascending
             types.voidptr,  # window_na_position
+            types.voidptr,  # window_args
+            types.voidptr,  # n_window_args_per_func
+            types.voidptr,  # n_input_cols_per_func
             types.boolean,  # maintain_input_size
             types.int64,  # n_shuffle_keys_t
             types.boolean,  # use_sql_rules_t

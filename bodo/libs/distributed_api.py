@@ -537,6 +537,17 @@ def value_to_ptr(typingctx, val_tp=None):
 
 
 @intrinsic
+def value_to_ptr_as_int64(typingctx, val_tp=None):
+    def codegen(context, builder, sig, args):
+        ptr = cgutils.alloca_once(builder, args[0].type)
+        builder.store(args[0], ptr)
+        void_star = builder.bitcast(ptr, lir.IntType(8).as_pointer())
+        return builder.ptrtoint(void_star, lir.IntType(64))
+
+    return types.int64(val_tp), codegen
+
+
+@intrinsic
 def load_val_ptr(typingctx, ptr_tp, val_tp=None):
     def codegen(context, builder, sig, args):
         ptr = builder.bitcast(args[0], args[1].type.as_pointer())

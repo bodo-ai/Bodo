@@ -1270,8 +1270,8 @@ TransformColSet::TransformColSet(std::shared_ptr<array_info> in_col, int ftype,
       transform_func(_func_num) {
     transform_op_col =
         makeColSet({in_col}, nullptr, transform_func, do_combine, false, 0,
-                   {transform_func}, 0, is_parallel, {false}, {false}, nullptr,
-                   nullptr, 0, nullptr, use_sql_rules);
+                   {transform_func}, 0, is_parallel, {false}, {false}, {0}, 0,
+                   nullptr, nullptr, 0, nullptr, use_sql_rules);
 }
 
 TransformColSet::~TransformColSet() {}
@@ -1348,8 +1348,8 @@ void HeadColSet::set_head_row_list(bodo::vector<int64_t>& row_list) {
 WindowColSet::WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
                            std::vector<int64_t> _window_funcs,
                            std::vector<bool>& _asc, std::vector<bool>& _na_pos,
-                           bool _is_parallel,
-                           bool use_sql_rules)
+                           std::vector<void*>& _window_args, int _n_input_cols,
+                           bool _is_parallel, bool use_sql_rules)
     :  // Note the inputCol in BasicColSet is not used by
        // WindowColSet
       BasicColSet(nullptr, Bodo_FTypes::window, false, use_sql_rules),
@@ -1357,6 +1357,8 @@ WindowColSet::WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
       window_funcs(_window_funcs),
       asc(_asc),
       na_pos(_na_pos),
+      window_args(_window_args),
+      n_input_cols(_n_input_cols),
       is_parallel(_is_parallel) {}
 
 WindowColSet::~WindowColSet() {}
@@ -1373,7 +1375,8 @@ void WindowColSet::alloc_update_columns(
         Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT64;
         // calling this modifies arr_type and dtype
         // Output dtype is based on the window function.
-        get_groupby_output_dtype(window_func, arr_type, dtype);
+        std::tie(arr_type, dtype) =
+            get_groupby_output_dtype(window_func, arr_type, dtype);
         // NOTE: output size of ngroup is the same as input size
         //       (NOT the number of groups)
         std::shared_ptr<array_info> c = alloc_array(
@@ -1386,7 +1389,8 @@ void WindowColSet::alloc_update_columns(
 
 void WindowColSet::update(const std::vector<grouping_info>& grp_infos) {
     window_computation(this->input_cols, window_funcs, this->update_cols,
-                       grp_infos[0], asc, na_pos, is_parallel, use_sql_rules);
+                       grp_infos[0], asc, na_pos, window_args, n_input_cols,
+                       is_parallel, use_sql_rules);
 }
 
 void WindowColSet::addOutputColumns(
@@ -1429,9 +1433,10 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::shared_ptr<array_info> index_col, int ftype, bool do_combine,
     bool skipna, int64_t periods, std::vector<int64_t> transform_funcs,
     int n_udf, bool is_parallel, std::vector<bool> window_ascending,
-    std::vector<bool> window_na_position, int* udf_n_redvars,
-    std::shared_ptr<table_info> udf_table, int udf_table_idx,
-    std::shared_ptr<table_info> nunique_table, bool use_sql_rules) {
+    std::vector<bool> window_na_position, std::vector<void*> window_args,
+    int n_input_cols, int* udf_n_redvars, std::shared_ptr<table_info> udf_table,
+    int udf_table_idx, std::shared_ptr<table_info> nunique_table,
+    bool use_sql_rules) {
     BasicColSet* colset;
 
     if ((ftype != Bodo_FTypes::window and ftype != Bodo_FTypes::listagg) &&
@@ -1506,9 +1511,9 @@ std::unique_ptr<BasicColSet> makeColSet(
             colset = new NgroupColSet(in_cols[0], is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::window:
-            colset = new WindowColSet(in_cols, transform_funcs,
-                                      window_ascending, window_na_position,
-                                      is_parallel, use_sql_rules);
+            colset = new WindowColSet(
+                in_cols, transform_funcs, window_ascending, window_na_position,
+                window_args, n_input_cols, is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::listagg:
 

@@ -1474,7 +1474,176 @@ void cume_dist_computation(
     // Repeat the group ending procedure after the final group finishes
     rank_division_batch_update(out_arr, sorted_idx, rank_arr, group_start_idx,
                                n, 0, 0);
-};
+}
+
+void ntile_batch_update(std::shared_ptr<array_info> out_arr,
+                        std::shared_ptr<array_info> sorted_idx,
+                        int64_t group_start_idx, int64_t group_end_idx,
+                        int num_bins) {
+    // Calculate the number of items in the group, the number
+    // of elements that will go into small vs large groups, and
+    // the number of bins that will require a larger group
+    int n = group_end_idx - group_start_idx;
+    if (n == 0)
+        return;
+    int remainder = n % num_bins;
+    int n_smaller = n / num_bins;
+    int n_larger = n_smaller + (remainder ? 1 : 0);
+
+    // Calculate the indices of bins that will use the large group
+    // vs the small group
+    int hi_cutoff = std::min(n, num_bins) + 1;
+    int lo_cutoff = std::min(remainder, hi_cutoff) + 1;
+
+    // For each bin from 1 to lo_cutoff, assign the next n_larger
+    // indices to the current bin
+    int bin_start_index = group_start_idx;
+    for (int bin = 1; bin < lo_cutoff; bin++) {
+        int bin_end_index = bin_start_index + n_larger;
+        for (int i = bin_start_index; i < bin_end_index; i++) {
+            // Get the index in the output array.
+            int64_t idx = getv<int64_t>(sorted_idx, i);
+            getv<int64_t>(out_arr, idx) = bin;
+        }
+        bin_start_index = bin_end_index;
+    }
+
+    // For each bin from lo_cutoff to hi_cutoff, assign the next n_smaller
+    // indices to the current bin
+    for (int64_t bin = lo_cutoff; bin < hi_cutoff; bin++) {
+        int bin_end_index = bin_start_index + n_smaller;
+        for (int i = bin_start_index; i < bin_end_index; i++) {
+            // Get the index in the output array.
+            int64_t idx = getv<int64_t>(sorted_idx, i);
+            getv<int64_t>(out_arr, idx) = bin;
+        }
+        bin_start_index = bin_end_index;
+    }
+}
+
+void ntile_computation(std::shared_ptr<array_info> out_arr,
+                       std::shared_ptr<array_info> sorted_groups,
+                       std::shared_ptr<array_info> sorted_idx,
+                       int64_t num_bins) {
+    // Each time we find the end of a group, invoke the ntile
+    // procedure on all the rows between that index and
+    // the index where the group started
+    int64_t n = out_arr->length;
+    int64_t prev_group = -1;
+    int64_t group_start_idx = 0;
+    for (int64_t i = 0; i < n; i++) {
+        int64_t curr_group = getv<int64_t>(sorted_groups, i);
+        if (curr_group != prev_group) {
+            ntile_batch_update(out_arr, sorted_idx, group_start_idx, i,
+                               num_bins);
+            // Set the prev group
+            prev_group = curr_group;
+            group_start_idx = i;
+        }
+    }
+    // Repeat the ntile batch procedure at the end on the final group
+    ntile_batch_update(out_arr, sorted_idx, group_start_idx, n, num_bins);
+}
+
+/**
+ * Computes the BodoSQL window function CONDITIONAL_TRUE_EVENT(A) on a
+ * subset of a table containing complete partitions, where the rows are
+ * sorted first by group (so each partition is clustered togeher) and then
+ * by the columns in the orderby clause.
+ *
+ * The computaiton works by starting a counter at zero, resetting it to
+ * zero each time a new group is reached, and otherwise only incrementing
+ * the counter when the current row of the input column is set to true.
+ *
+ * @param[in,out] out_arr: output array where the row numbers are stored
+ * @param[in] sorted_groups: sorted array of group numbers
+ * @param[in] sorted_idx: array mapping each index in the sorted table back
+ * to its location in the original unsorted table
+ * @param[in] input_col: the boolean array whose values are used to calculate
+ * the conditional_true_event calculation
+ */
+void conditional_true_event_computation(
+    std::shared_ptr<array_info> out_arr,
+    std::shared_ptr<array_info> sorted_groups,
+    std::shared_ptr<array_info> sorted_idx,
+    std::shared_ptr<array_info> input_col) {
+    int64_t n = out_arr->length;
+    int64_t prev_group = -1;
+    int64_t counter = 0;
+    for (int64_t i = 0; i < n; i++) {
+        // Get the index in the output array.
+        int64_t idx = getv<int64_t>(sorted_idx, i);
+        // If we have crossed the threshold into a new group,
+        // reset the counter to zero
+        int64_t curr_group = getv<int64_t>(sorted_groups, i);
+        if (curr_group != prev_group) {
+            prev_group = curr_group;
+            counter = 0;
+        }
+        // If the current row is true, increment the counter
+        if (input_col->arr_type == bodo_array_type::NUMPY) {
+            if (getv<uint8_t>(input_col, idx))
+                counter++;
+        } else {
+            if (GetBit((uint8_t*)input_col->data1(), idx))
+                counter++;
+        }
+        getv<int64_t>(out_arr, idx) = counter;
+    }
+}
+
+/**
+ * Computes the BodoSQL window function CONDITIONAL_CHANGE_EVENT(A) on a
+ * subset of a table containing complete partitions, where the rows are
+ * sorted first by group (so each partition is clustered togeher) and then
+ * by the columns in the orderby clause.
+ *
+ * The computaiton works by starting a counter at zero, resetting it to
+ * zero each time a new group is reached, and otherwise only incrementing
+ * the counter when the current row of the input column is a non-null
+ * value that is distinct from the most recent non-null value.
+ *
+ * @param[in,out] out_arr: output array where the row numbers are stored
+ * @param[in] sorted_groups: sorted array of group numbers
+ * @param[in] sorted_idx: array mapping each index in the sorted table back
+ * to its location in the original unsorted table
+ * @param[in] input_col: the array whose values are used to calculate
+ * the conditional_true_event calculation
+ */
+void conditional_change_event_computation(
+    std::shared_ptr<array_info> out_arr,
+    std::shared_ptr<array_info> sorted_groups,
+    std::shared_ptr<array_info> sorted_idx,
+    std::shared_ptr<array_info> input_col) {
+    int64_t n = out_arr->length;
+    int64_t prev_group = -1;
+    int64_t counter = 0;
+    int64_t last_non_null = -1;
+    for (int64_t i = 0; i < n; i++) {
+        // Get the index in the output array.
+        int64_t idx = getv<int64_t>(sorted_idx, i);
+        // If we have crossed the threshold into a new group,
+        // reset the counter to zero
+        int64_t curr_group = getv<int64_t>(sorted_groups, i);
+        if (curr_group != prev_group) {
+            prev_group = curr_group;
+            counter = 0;
+            last_non_null = -1;
+        }
+        // If the current row is non-null and does not equal
+        // the most recent non-null row, increment the counter
+        if (input_col->arr_type == bodo_array_type::NUMPY ||
+            input_col->get_null_bit(idx)) {
+            if (last_non_null != -1 &&
+                !TestEqualColumn(input_col, idx, input_col, last_non_null,
+                                 true)) {
+                counter++;
+            }
+            last_non_null = idx;
+        }
+        getv<int64_t>(out_arr, idx) = counter;
+    }
+}
 
 /**
  * Computes a batch of window functions for BodoSQL on a subset of a table
@@ -1484,8 +1653,9 @@ void cume_dist_computation(
  * calculated, performs a sort on the table first by group and then by
  * the orderby columns.
  *
- * @param[in] orderby_arrs: the columns being used to order the rows of
- * the table when computing a window function.
+ * @param[in] input_arrs: the columns being used to order the rows of
+ * the table when computing a window function, as well as any additional
+ * columns that are being aggregated by the window functions.
  * @param[in] window_funcs: the vector of window functions being computed
  * @param[in,out] out_arrs: the arrays where the final answer for each window
  * function computed will be stored
@@ -1493,16 +1663,27 @@ void cume_dist_computation(
  * to be sorted in ascending vs descending order
  * @param[in] na_pos_vect: vector indicating which of the orderby columns are
  * to place nulls first vs last
+ * @param[in] window_args: vector of any scalar arguments for the window
+ * functions being calculated. It is the responsibility of each function to know
+ * how many arguments it is expected and to cast them to the correct type.
+ * @param[in] n_input_cols: the number of arrays from input_arrs that correspond
+ * to inputs to the window functions. If there are any, they are at the end
+ * of the vector in the same order as the functions in window_funcs.
  * @param[in] is_parallel: is the function being run in parallel?
  * @param[in] use_sql_rules: should initialization functions obey SQL semantics?
  */
-void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
+void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                         std::vector<int64_t> window_funcs,
                         std::vector<std::shared_ptr<array_info>> out_arrs,
                         grouping_info const& grp_info,
                         std::vector<bool>& asc_vect,
-                        std::vector<bool>& na_pos_vect, bool is_parallel,
-                        bool use_sql_rules) {
+                        std::vector<bool>& na_pos_vect,
+                        std::vector<void*>& window_args, int n_input_cols,
+                        bool is_parallel, bool use_sql_rules) {
+    int64_t window_arg_offset = 0;
+    int64_t window_col_offset = input_arrs.size() - n_input_cols;
+    std::vector<std::shared_ptr<array_info>> orderby_arrs(
+        input_arrs.begin(), input_arrs.begin() + window_col_offset);
     // Create a new table. We want to sort the table first by
     // the groups and second by the orderby_arr.
     std::shared_ptr<table_info> sort_table = std::make_shared<table_info>();
@@ -1528,7 +1709,10 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
             case Bodo_FTypes::rank:
             case Bodo_FTypes::dense_rank:
             case Bodo_FTypes::percent_rank:
-            case Bodo_FTypes::cume_dist: {
+            case Bodo_FTypes::cume_dist:
+            case Bodo_FTypes::ntile:
+            case Bodo_FTypes::conditional_true_event:
+            case Bodo_FTypes::conditional_change_event: {
                 needs_sort = true;
                 /* If this is the first function encountered that requires,
                  * a sort, populate sort_table with the following columns:
@@ -1653,6 +1837,29 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
                         iter_table->columns.begin() + 1,
                         iter_table->columns.begin() + idx_col),
                     iter_table->columns[idx_col]);
+                break;
+            }
+            case Bodo_FTypes::ntile: {
+                ntile_computation(out_arrs[i], iter_table->columns[0],
+                                  iter_table->columns[idx_col],
+                                  *((int64_t*)window_args[window_arg_offset]));
+                window_arg_offset += 1;
+                break;
+            }
+            case Bodo_FTypes::conditional_true_event: {
+                conditional_true_event_computation(
+                    out_arrs[i], iter_table->columns[0],
+                    iter_table->columns[idx_col],
+                    input_arrs[window_col_offset]);
+                window_col_offset += 1;
+                break;
+            }
+            case Bodo_FTypes::conditional_change_event: {
+                conditional_change_event_computation(
+                    out_arrs[i], iter_table->columns[0],
+                    iter_table->columns[idx_col],
+                    input_arrs[window_col_offset]);
+                window_col_offset += 1;
                 break;
             }
             default:
