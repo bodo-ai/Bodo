@@ -7278,7 +7278,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
     [
         pytest.param(
             ["A"],
-            ("row_number",),
+            (("row_number",),),
             ("B",),
             (True,),
             ("last",),
@@ -7291,7 +7291,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
         ),
         pytest.param(
             ["A"],
-            ("row_number",),
+            (("row_number",),),
             ("C", "B"),
             (False, True),
             ("last", "first"),
@@ -7304,7 +7304,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
         ),
         pytest.param(
             ["A"],
-            ("min_row_number_filter",),
+            (("min_row_number_filter",),),
             ("B",),
             (True,),
             ("last",),
@@ -7317,7 +7317,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
         ),
         pytest.param(
             ["A"],
-            ("row_number", "min_row_number_filter", "row_number"),
+            (("row_number",), ("min_row_number_filter",), ("row_number",)),
             ("B",),
             (True,),
             ("last",),
@@ -7332,7 +7332,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
         ),
         pytest.param(
             ["A"],
-            ("rank", "dense_rank", "percent_rank", "cume_dist"),
+            (("rank",), ("dense_rank",), ("percent_rank",), ("cume_dist",)),
             ("C",),
             (True,),
             ("last",),
@@ -7380,7 +7380,7 @@ def test_tz_aware_gb_apply(memory_leak_check):
         ),
         pytest.param(
             ["C"],
-            ("rank", "dense_rank", "percent_rank", "cume_dist"),
+            (("rank",), ("dense_rank",), ("percent_rank",), ("cume_dist",)),
             ("A",),
             (True,),
             ("first",),
@@ -7426,6 +7426,60 @@ def test_tz_aware_gb_apply(memory_leak_check):
             ),
             id="rank_fns-mixed_sized_groups",
         ),
+        pytest.param(
+            ["D"],
+            (
+                # Note: row_number is included so that there is a mix of window functions that do & don't
+                # take in arguments, to verify that the offsets are used correctly.
+                ("ntile", 2),
+                ("ntile", 3),
+                ("row_number",),
+                ("ntile", 5),
+                ("ntile", 6),
+                ("ntile", 10),
+            ),
+            ("B",),
+            (False,),
+            ("last",),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": [2, 1, 2, 1, 1, 2, 1, 1, 2, 1, 2, 2, 2, 1, 1],
+                    "AGG_OUTPUT_1": [3, 1, 2, 1, 1, 3, 2, 1, 2, 2, 3, 3, 3, 2, 1],
+                    "AGG_OUTPUT_2": [10, 1, 7, 4, 2, 11, 5, 3, 8, 6, 12, 9, 3, 2, 1],
+                    "AGG_OUTPUT_3": [4, 1, 3, 2, 1, 5, 2, 1, 3, 2, 5, 4, 3, 2, 1],
+                    "AGG_OUTPUT_4": [5, 1, 4, 2, 1, 6, 3, 2, 4, 3, 6, 5, 3, 2, 1],
+                    "AGG_OUTPUT_5": [8, 1, 5, 2, 1, 9, 3, 2, 6, 4, 10, 7, 3, 2, 1],
+                }
+            ),
+            id="ntile",
+        ),
+        pytest.param(
+            ["D"],
+            (
+                # Note: row_number & ntile are included so that there is a mix of window functions that
+                # take in scalar arguments, vector arguments, and no arguments.
+                ("conditional_true_event", "E"),
+                ("row_number",),
+                ("conditional_change_event", "E"),
+                ("conditional_change_event", "F"),
+                ("ntile", 6),
+                ("conditional_change_event", "G"),
+            ),
+            ("B",),
+            (True,),
+            ("first",),
+            pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": [1, 5, 4, 5, 5, 2, 4, 5, 4, 4, 3, 3, 0, 1, 1],
+                    "AGG_OUTPUT_1": [1, 12, 6, 9, 11, 2, 8, 10, 5, 7, 3, 4, 1, 2, 3],
+                    "AGG_OUTPUT_2": [0, 5, 2, 4, 5, 0, 3, 4, 2, 3, 0, 1, 0, 0, 1],
+                    "AGG_OUTPUT_3": [0, 5, 4, 4, 4, 1, 4, 4, 3, 4, 1, 2, 0, 0, 1],
+                    "AGG_OUTPUT_4": [1, 6, 3, 5, 6, 1, 4, 5, 3, 4, 2, 2, 1, 2, 3],
+                    "AGG_OUTPUT_5": [0, 6, 2, 4, 5, 0, 3, 5, 1, 3, 1, 1, 0, 0, 0],
+                }
+            ),
+            id="conditional_events",
+        ),
     ],
 )
 def test_window(keys, funcs, orderby, ascending, napos, answer, memory_leak_check):
@@ -7449,6 +7503,18 @@ def test_window(keys, funcs, orderby, ascending, napos, answer, memory_leak_chec
                 dtype=pd.Int32Dtype(),
             ),
             "C": pd.Series(list("ALPHATHETAGAMMA")),
+            "D": pd.Series([0] * 12 + [1] * 3),
+            "E": pd.Series(
+                [[True, False, None, True, False][i % 5] for i in range(15)],
+                dtype=pd.BooleanDtype(),
+            ),
+            "F": pd.Series(
+                [["A", "B", "A", None, "A", "B", None][i % 7] for i in range(15)]
+            ),
+            "G": pd.Series(
+                [None if i % 6 == 0 else i // 4 for i in range(15)],
+                dtype=pd.Int32Dtype(),
+            ),
         }
     )
 

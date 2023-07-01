@@ -9,6 +9,7 @@ import static com.bodosql.calcite.application.Utils.Utils.assertWithErrMsg;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
+import com.bodosql.calcite.adapter.pandas.RexToPandasTranslator;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.ir.Expr;
@@ -24,6 +25,7 @@ import java.util.Locale;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexFieldCollation;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.rex.RexWindow;
 import org.apache.calcite.sql.SqlKind;
@@ -84,6 +86,9 @@ public class WindowAggCodeGen {
     optimizedEngineKernelFunctions.add("DENSE_RANK");
     optimizedEngineKernelFunctions.add("PERCENT_RANK");
     optimizedEngineKernelFunctions.add("CUME_DIST");
+    optimizedEngineKernelFunctions.add("NTILE");
+    optimizedEngineKernelFunctions.add("CONDITIONAL_TRUE_EVENT");
+    optimizedEngineKernelFunctions.add("CONDITIONAL_CHANGE_EVENT");
 
     // Window functions that have a sliding-window kernel
     windowOptimizedKernels.add("SUM");
@@ -1486,7 +1491,12 @@ public class WindowAggCodeGen {
    * @param childExprs List of expressions for any child columns that need to be projected to
    *     calculate the partition/orderby terms
    * @param childExprTypes ExprType for each childExpr being projected.
+   * @param numColumnArgs Number of column arguments that the window aggregation functions take in.
    * @param builder The builder for appending generated code.
+   * @param translator A ctx object containing the Hashset of columns used that need null handling,
+   *     the List of precomputed column variables that need to be added to the dataframe before an
+   *     apply, and the list of named parameters that need to be passed to an apply function as
+   *     arguments.
    * @return A list of the names of the columsn of each of the answer within the output DataFrame.
    */
   public static List<String> generateGroupbyWindow(
@@ -1495,7 +1505,9 @@ public class WindowAggCodeGen {
       List<RexOver> aggOperations,
       List<Expr> childExprs,
       List<BodoSQLExprType.ExprType> childExprTypes,
-      Module.Builder builder) {
+      int numColumnArgs,
+      Module.Builder builder,
+      RexToPandasTranslator translator) {
     RexOver windowFunc = aggOperations.get(0);
     RexWindow window = windowFunc.getWindow();
     List<String> childColNames = new ArrayList<>();
@@ -1531,6 +1543,13 @@ public class WindowAggCodeGen {
       col_id_var++;
     }
 
+    // Give each window function column argument its own name
+    int argColOffset = childColNames.size();
+    for (int i = 0; i < numColumnArgs; i++) {
+      String argColName = "ARG_COL_" + i;
+      childColNames.add(argColName);
+    }
+
     // Generate a projection in case we needed to compute anything for the orderby/partition by
     // columns
     String projection =
@@ -1540,10 +1559,35 @@ public class WindowAggCodeGen {
     // Generate the groupby
     Expr.List groupbyKeys = new Expr.List(groupByColNames);
     Expr.Groupby groupby = new Expr.Groupby(projectionExpr, groupbyKeys, false, false);
-    List<Expr> functionNames = new ArrayList<Expr>();
+    List<Expr> functionNamesAndArgs = new ArrayList<Expr>();
     for (RexOver agg : aggOperations) {
-      functionNames.add(
-          new Expr.StringLiteral(agg.getAggOperator().getName().toLowerCase(Locale.ROOT)));
+      List<Expr> tupleArgs = new ArrayList<Expr>();
+      Expr nameExpr =
+          new Expr.StringLiteral(agg.getAggOperator().getName().toLowerCase(Locale.ROOT));
+      tupleArgs.add(nameExpr);
+      switch (agg.getOperator().getName()) {
+        case "CONDITIONAL_TRUE_EVENT":
+        case "CONDITIONAL_CHANGE_EVENT":
+          {
+            // Functions where the only argument is 1 column argument
+            tupleArgs.add(new Expr.StringLiteral(childColNames.get(argColOffset)));
+            argColOffset++;
+            break;
+          }
+        default:
+          {
+            // Default behavior: loop through all arguments and add them to the tuple
+            // by emitting their literal string
+            for (RexNode operand : agg.getOperands()) {
+              Expr curInfo = operand.accept(translator);
+              WindowedAggregationArgument arg =
+                  WindowedAggregationArgument.fromLiteralExpr(curInfo.emit());
+              tupleArgs.add(new Expr.StringLiteral(arg.getExprString()));
+            }
+            break;
+          }
+      }
+      functionNamesAndArgs.add(new Expr.Tuple(tupleArgs));
     }
     // Generate the Window call
     Expr.Method windowExpr =
@@ -1551,7 +1595,7 @@ public class WindowAggCodeGen {
             groupby,
             "window",
             List.of(
-                new Expr.Tuple(functionNames),
+                new Expr.Tuple(functionNamesAndArgs),
                 new Expr.Tuple(orderByLiteralList),
                 new Expr.Tuple(ascendingList),
                 new Expr.Tuple(NAPositionList)),

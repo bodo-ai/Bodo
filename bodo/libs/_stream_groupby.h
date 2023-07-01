@@ -153,7 +153,7 @@ class GroupbyState {
             std::shared_ptr<BasicColSet> col_set = makeColSet(
                 input_cols, index_col, ftypes[i], do_combine, skipna, 0, {0}, 0,
                 parallel, window_ascending_vect, window_na_position_vect,
-                nullptr, nullptr, 0, nullptr, use_sql_rules);
+                {nullptr}, 0, nullptr, nullptr, 0, nullptr, use_sql_rules);
             // get update/combine type info to initialize build state
             std::tuple<std::vector<bodo_array_type::arr_type_enum>,
                        std::vector<Bodo_CTypes::CTypeEnum>>

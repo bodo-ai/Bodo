@@ -244,7 +244,8 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
                         std::vector<std::shared_ptr<array_info>> out_arrs,
                         grouping_info const& grp_info,
                         std::vector<bool>& asc_vect,
-                        std::vector<bool>& na_pos_vect, bool is_parallel,
-                        bool use_sql_rules);
+                        std::vector<bool>& na_pos_vect,
+                        std::vector<void*>& window_args, int n_input_cols,
+                        bool is_parallel, bool use_sql_rules);
 
 #endif  // _GROUPBY_UPDATE_H_INCLUDED

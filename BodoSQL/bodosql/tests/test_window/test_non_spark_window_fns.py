@@ -12,98 +12,85 @@ from bodo.tests.test_bodosql_array_kernels.test_bodosql_window_agg_kernels impor
 )
 
 
-@pytest.mark.timeout(600)
-@pytest.mark.slow
 @pytest.mark.tz_aware
-@pytest.mark.parametrize(
-    "partition_col, answer",
-    [
-        pytest.param(
-            pd.Series(["A"] * 10),
-            pd.DataFrame(
-                {
-                    "O": list(range(10)),
-                    "U8": [0, 0, 0, 0, 1, 2, 2, 3, 3, 3],
-                    "I16": [0, 1, 2, 3, 3, 4, 4, 4, 5, 6],
-                    "U32": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                    "I64": [0, 0, 1, 1, 2, 2, 2, 2, 3, 3],
-                    "BO": [0, 1, 2, 2, 2, 2, 3, 4, 5, 5],
-                    "BI": [0, 0, 0, 0, 0, 1, 2, 3, 3, 4],
-                    "S": [0, 0, 1, 2, 2, 3, 4, 5, 6, 6],
-                    "TS": [0, 1, 2, 2, 3, 4, 5, 6, 6, 7],
-                    "TZ": [0, 1, 2, 2, 3, 4, 5, 6, 6, 7],
-                }
-            ),
-            id="single_partiton",
-        ),
-        pytest.param(
-            pd.Series(["A"] * 5 + ["B"] * 5),
-            pd.DataFrame(
-                {
-                    "O": list(range(10)),
-                    "U8": [0, 0, 0, 0, 1, 0, 0, 1, 1, 1],
-                    "I16": [0, 1, 2, 3, 3, 0, 0, 0, 1, 2],
-                    "U32": [0, 1, 2, 3, 4, 0, 1, 2, 3, 4],
-                    "I64": [0, 0, 1, 1, 2, 0, 0, 0, 0, 0],
-                    "BO": [0, 1, 2, 2, 2, 0, 0, 1, 2, 2],
-                    "BI": [0, 0, 0, 0, 0, 0, 1, 2, 2, 3],
-                    "S": [0, 0, 1, 2, 2, 0, 1, 2, 3, 3],
-                    "TS": [0, 1, 2, 2, 3, 0, 1, 2, 2, 3],
-                    "TZ": [0, 1, 2, 2, 3, 0, 1, 2, 2, 3],
-                }
-            ),
-            id="two_partitions",
-        ),
-    ],
-)
-def test_conditional_change_event(partition_col, answer, memory_leak_check):
+def test_conditional_event_pure(memory_leak_check):
+    """
+    Tests CONDITIONAL_TRUE_EVENT and CONDITIONAL_CHANGE_EVENT in isolation
+    (thus ensuring that groupby.window can be used)
+    """
     ctx = {
         "table1": pd.DataFrame(
             {
-                "P": partition_col,
+                "P": ["A"] * 10,
                 "O": pd.Series(list(range(10))),
-                "U8": pd.Series(
-                    [None, 1, None, 1, 2, 3, None, 4, None, None], dtype=pd.UInt8Dtype()
-                ),
-                "I16": pd.Series(
-                    [4, 9, 16, 4, None, 9, 9, None, -25, 36], dtype=pd.Int16Dtype()
-                ),
-                "U32": pd.Series(
-                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], dtype=pd.UInt32Dtype()
-                ),
-                "I64": pd.Series(
+                "I64_NULLABLE": pd.Series(
                     [100, None, 200, None, 100, None, None, None, -100, None],
                     dtype=pd.Int64Dtype(),
                 ),
-                "BO": pd.Series(
+                "I64_NUMPY": np.array(
+                    [1024, 1024, -1, -1, 0, 0, 0, 0, 8589934591, 8589934591],
+                    dtype=np.int64,
+                ),
+                "BOOL_NULLABLE": pd.Series(
                     [True, False, True, True, True, None, False, True, False, False],
                     dtype=pd.BooleanDtype(),
                 ),
-                "BI": pd.Series(
+                "BOOL_NUMPY": np.array(
+                    [True, False, True, True, True, True, False, True, False, False],
+                ),
+                "BINARY_COL": pd.Series(
                     [b"", None, b"", None, b"", b"0", b"", b"1", b"1", b"0"]
                 ),
-                "S": pd.Series(["A", "A", "B", "A", "A", "B", "C", "B", "A", "A"]),
-                "TS": pd.Series(
+                "STRING_COL": pd.Series(
+                    ["A", "A", "B", "A", "A", "B", "C", "B", "A", "A"]
+                ),
+                "TIMESTAMP_NAIVE": pd.Series(
                     [
                         pd.Timestamp(f"201{y}-01-01")
                         for y in [0, 1, 0, 0, 1, 8, 0, 8, 8, 1]
                     ]
                 ),
-                "TZ": pd.Series(
+                "TIMESTAMP_TZ": pd.Series(
                     [
                         pd.Timestamp(f"201{y}-01-01", tz="US/PACIFIC")
                         for y in [0, 1, 0, 0, 1, 8, 0, 8, 8, 1]
                     ]
                 ),
+                "DATE": pd.Series(
+                    [
+                        datetime.date.fromordinal(730119 + i)
+                        for i in [0] * 2 + [10000] * 7 + [3000]
+                    ]
+                ),
             }
         ),
     }
+    window = " partition by P order by O"
     selects = []
-    for col in ["U8", "I16", "U32", "I64", "BO", "BI", "S", "TS", "TZ"]:
-        selects.append(
-            f"CONDITIONAL_CHANGE_EVENT({col}) OVER (partition by P order by O)"
-        )
+    for col in ctx["table1"].columns[2:]:
+        selects.append(f"CONDITIONAL_CHANGE_EVENT({col}) OVER ({window})")
+    selects.append(f"CONDITIONAL_TRUE_EVENT(BOOL_NULLABLE) OVER ({window})")
+    selects.append(f"CONDITIONAL_TRUE_EVENT(BOOL_NUMPY) OVER ({window})")
+    selects.append(f"CONDITIONAL_TRUE_EVENT(STRING_COL = 'A') OVER ({window})")
     query = f"SELECT O, {', '.join(selects)} FROM table1"
+
+    answer = pd.DataFrame(
+        {
+            "O": list(range(10)),
+            "CHANGE_1": [0, 0, 1, 1, 2, 2, 2, 2, 3, 3],
+            "CHANGE_2": [0, 0, 1, 1, 2, 2, 2, 2, 3, 3],
+            "CHANGE_3": [0, 1, 2, 2, 2, 2, 3, 4, 5, 5],
+            "CHANGE_4": [0, 1, 2, 2, 2, 2, 3, 4, 5, 5],
+            "CHANGE_5": [0, 0, 0, 0, 0, 1, 2, 3, 3, 4],
+            "CHANGE_6": [0, 0, 1, 2, 2, 3, 4, 5, 6, 6],
+            "CHANGE_7": [0, 1, 2, 2, 3, 4, 5, 6, 6, 7],
+            "CHANGE_8": [0, 1, 2, 2, 3, 4, 5, 6, 6, 7],
+            "CHANGE_9": [0, 0, 1, 1, 1, 1, 1, 1, 1, 2],
+            "TRUE_1": [1, 1, 2, 3, 4, 4, 4, 5, 5, 5],
+            "TRUE_2": [1, 1, 2, 3, 4, 5, 5, 6, 6, 6],
+            "TRUE_3": [1, 2, 2, 3, 4, 4, 4, 4, 5, 6],
+        }
+    )
 
     pandas_code = check_query(
         query,
@@ -116,77 +103,54 @@ def test_conditional_change_event(partition_col, answer, memory_leak_check):
         return_codegen=True,
     )["pandas_code"]
 
-    # Verify that fusion is working correctly.
-    count_window_applies(pandas_code, 1, ["CONDITIONAL_CHANGE_EVENT"])
+    # All of the functions are CONDITIONAL_CHANGE_EVENT/CONDITIONAL_TRUE_EVENT
+    # which support groupby.window, so there should be no groupby.apply calls
+    count_window_applies(pandas_code, 0, ["CONDITIONAL_CHANGE_EVENT"])
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "partition_col, expressions, window, answer",
-    [
-        pytest.param(
-            pd.Series(["A"] * 10),
-            ["A = B", "A < B", "A * B > 0"],
-            "partition by P order by O",
-            pd.DataFrame(
-                {
-                    "O": list(range(10)),
-                    "A = B": [1, 1, 1, 1, 1, 1, 2, 2, 2, 2],
-                    "A < B": [0, 1, 2, 2, 3, 3, 3, 4, 5, 6],
-                    "A * B > 0": [0, 0, 1, 1, 1, 1, 2, 3, 3, 4],
-                }
-            ),
-            id="single_partiton",
-        ),
-        pytest.param(
-            pd.Series(["A"] * 5 + ["B"] * 5),
-            ["A = B", "A < B", "A * B > 0"],
-            "partition by P order by O",
-            pd.DataFrame(
-                {
-                    "O": list(range(10)),
-                    "A = B": [1, 1, 1, 1, 1, 0, 1, 1, 1, 1],
-                    "A < B": [0, 1, 2, 2, 3, 0, 0, 1, 2, 3],
-                    "A * B > 0": [0, 0, 1, 1, 1, 0, 1, 2, 2, 3],
-                }
-            ),
-            id="two_partition_vals",
-        ),
-        pytest.param(
-            pd.Series([0, 1, 0, None, 0, 1, 0, 0, None, 1], dtype=pd.Int32Dtype()),
-            ["COALESCE(P, 0) = 0", "A = B % 2", "TRUE"],
-            "partition by A, B % 2 order by O",
-            pd.DataFrame(
-                {
-                    "O": list(range(10)),
-                    "COALESCE(P, 0) = 0": [1, 0, 1, 1, 2, 1, 1, 2, 1, 2],
-                    "A = B % 2": [1, 0, 0, 0, 2, 0, 1, 0, 0, 0],
-                    "TRUE": [1, 1, 1, 1, 2, 2, 1, 3, 2, 4],
-                }
-            ),
-            id="two_partition_keys",
-        ),
-    ],
-)
-def test_conditional_true_event(
-    partition_col, expressions, window, answer, memory_leak_check
-):
+def test_conditional_event_mixed(memory_leak_check):
     ctx = {
         "table1": pd.DataFrame(
             {
-                "P": partition_col,
-                "O": list(range(10)),
-                "A": pd.Series([0, 0, 1, 0, 0, 1, 1, 1, 0, 1], dtype=pd.Int32Dtype()),
-                "B": pd.Series(
-                    [0, 1, 2, None, 4, 0, 1, 2, 3, 4], dtype=pd.Int32Dtype()
+                "P": ["A"] * 10,
+                "O": pd.Series(list(range(10))),
+                "INT_COL": pd.Series(
+                    [100, None, 200, None, 100, None, None, None, -100, None],
+                    dtype=pd.Int64Dtype(),
+                ),
+                "BINARY_COL": pd.Series(
+                    [b"", None, b"", None, b"", b"0", b"", b"1", b"1", b"0"]
+                ),
+                "STRING_COL": pd.Series(
+                    ["A", "A", "B", "A", "A", "B", "C", "B", "A", "A"]
+                ),
+                "BOOL_COL": pd.Series(
+                    [None, False, True, True, True, None, None, True, False, False],
+                    dtype=pd.BooleanDtype(),
                 ),
             }
         ),
     }
     selects = []
-    for expr in expressions:
-        selects.append(f"CONDITIONAL_TRUE_EVENT({expr}) OVER ({window})")
-    query = f"SELECT O, {', '.join(selects)} FROM table1"
+    window = "partition by P order by O"
+    selects.append(f"CONDITIONAL_CHANGE_EVENT(INT_COL) OVER ({window})")
+    selects.append(f"CONDITIONAL_CHANGE_EVENT(BINARY_COL) OVER ({window})")
+    selects.append(f"CONDITIONAL_CHANGE_EVENT(STRING_COL) OVER ({window})")
+    selects.append(f"CONDITIONAL_TRUE_EVENT(BOOL_COL) OVER ({window})")
+    query = (
+        f"SELECT O, {', '.join(selects)}, MODE(STRING_COL) OVER ({window}) FROM table1"
+    )
+
+    answer = pd.DataFrame(
+        {
+            "O": list(range(10)),
+            "CHANGE_INT": [0, 0, 1, 1, 2, 2, 2, 2, 3, 3],
+            "CHANGE_BIN": [0, 0, 0, 0, 0, 1, 2, 3, 3, 4],
+            "CHANGE_STR": [0, 0, 1, 2, 2, 3, 4, 5, 6, 6],
+            "TRUE_BOOL": [0, 0, 1, 2, 3, 3, 3, 4, 4, 4],
+            "MODE_STR": ["A"] * 10,
+        }
+    )
 
     pandas_code = check_query(
         query,
@@ -199,9 +163,13 @@ def test_conditional_true_event(
         return_codegen=True,
     )["pandas_code"]
 
-    # Verify that fusion is working correctly. The term window_frames[1] refers
-    # to how many distinct groupby-apply calls are expected after fusion.
-    count_window_applies(pandas_code, 1, ["CONDITIONAL_TRUE_EVENT"])
+    # Verify that fusion is working correctly. There are multiple window
+    # functions being used with the same partition/orderby, but
+    # only some of them can use groupby.window so groupby.window
+    # will not be used here
+    count_window_applies(
+        pandas_code, 1, ["CONDITIONAL_CHANGE_EVENT", "CONDITIONAL_TRUE_EVENT", "MODE"]
+    )
 
 
 @pytest.mark.slow
