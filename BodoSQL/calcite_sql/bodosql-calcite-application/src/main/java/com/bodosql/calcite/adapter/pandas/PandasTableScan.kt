@@ -24,7 +24,7 @@ class PandasTableScan(
         TODO("Not yet implemented")
     }
 
-    override fun getSingleBatchTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
+    override fun getTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
     override fun operationDescriptor() = "reading table"
     override fun loggingTitle() = "IO TIMING"
 

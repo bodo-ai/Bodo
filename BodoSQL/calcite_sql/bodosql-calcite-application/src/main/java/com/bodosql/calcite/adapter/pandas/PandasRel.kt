@@ -41,7 +41,7 @@ interface PandasRel : RelNode {
     /**
      * Generates the SingleBatchRelNodeTimer for the appropriate operator.
      */
-    fun getSingleBatchTimerType(): SingleBatchRelNodeTimer.OperationType = SingleBatchRelNodeTimer.OperationType.BATCH
+    fun getTimerType(): SingleBatchRelNodeTimer.OperationType = SingleBatchRelNodeTimer.OperationType.BATCH
 
     fun operationDescriptor() = "RelNode"
     fun loggingTitle() = "RELNODE_TIMING"
@@ -51,6 +51,11 @@ interface PandasRel : RelNode {
             .split("\n".toRegex()).dropLastWhile { it.isEmpty() }
             .toTypedArray()).findFirst().get()
 
+    /**
+     * Determine if an operator is streaming.
+     */
+    fun isStreaming() = traitSet.contains(BatchingProperty.STREAMING)
+
     interface Implementor {
         fun visitChild(input: RelNode, ordinal: Int): Dataframe
 
@@ -58,6 +63,8 @@ interface PandasRel : RelNode {
             inputs.mapIndexed { index, input -> visitChild(input, index) }
 
         fun build(fn: (BuildContext) -> Dataframe): Dataframe
+
+        fun buildStreaming(fn: (BuildContext) -> Dataframe): Dataframe
     }
 
     interface BuildContext {
