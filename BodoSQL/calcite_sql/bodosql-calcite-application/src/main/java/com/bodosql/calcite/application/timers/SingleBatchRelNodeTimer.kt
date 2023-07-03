@@ -15,7 +15,7 @@ private const val RelNodeTimingVerboseLevel = 2
 /**
  * Class that builds the framework for implementing runtime timers around the various components in a non-streaming
  * operator. This holds state shared between timer steps but the code generation is responsible for calling the
- * correct APIs. This class should be removed when streaming is fully supported.
+ * correct APIs. This class should be removed when streaming is fully supported so there is some duplicate code for now.
  */
 class SingleBatchRelNodeTimer(private val builder: Module.Builder, private val isNoOp: Boolean, private val operationDescriptor: String, private val loggingTitle: String, private val nodeDetails: String) {
     private var startTimerVar = if (isNoOp) {
@@ -49,8 +49,6 @@ class SingleBatchRelNodeTimer(private val builder: Module.Builder, private val i
         if (isNoOp) {
             return
         }
-        // Add an assert to help catch errors in development
-        assert (startTimerVar != noOpVar)
         val endTimerVar = builder.symbolTable.genGenericTempVar()
         // Generate the time call
         val timeCall = Expr.Call("time.time")

@@ -2,11 +2,11 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
+import com.bodosql.calcite.application.timers.StreamingRelNodeTimer
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.plan.makeCost
-import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.*
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterImpl
@@ -30,7 +30,7 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      */
     override fun splitCount(numRanks: Int): Int = 1
 
-    override fun getSingleBatchTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
+    override fun getTimerType() = SingleBatchRelNodeTimer.OperationType.IO_BATCH
 
     override fun operationDescriptor() = "reading table"
     override fun loggingTitle() = "IO TIMING"
@@ -167,6 +167,8 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
      */
     private fun generateStreamingDataFrame(ctx: PandasRel.BuildContext): Dataframe {
         val readExpr = generateReadExpr(ctx)
+        // Note: Using getRowType() instead of rowType because Calcite
+        // lazily initializes the data.
         val initOutput: Variable =
             ctx.initStreamingIoLoop(readExpr, getRowType())
         return Dataframe(initOutput.name, this)
@@ -178,12 +180,5 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     private fun generateNonStreamingDataFrame(ctx: PandasRel.BuildContext): Dataframe {
         val readExpr = generateReadExpr(ctx)
         return ctx.returns(readExpr)
-    }
-
-    /**
-     * Is this used in a streaming operation
-     */
-    private fun isStreaming(): Boolean {
-        return traitSet.contains(BatchingProperty.STREAMING)
     }
 }

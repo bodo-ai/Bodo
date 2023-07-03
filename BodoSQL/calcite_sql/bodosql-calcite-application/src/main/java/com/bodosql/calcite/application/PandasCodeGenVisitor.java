@@ -58,6 +58,7 @@ import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer;
+import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.ir.Dataframe;
 import com.bodosql.calcite.ir.Expr;
@@ -82,6 +83,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Stack;
 import java.util.TreeMap;
+import java.util.function.Supplier;
 import kotlin.jvm.functions.Function1;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -789,7 +791,25 @@ public class PandasCodeGenVisitor extends RelVisitor {
     assert node.getTraitSet().contains(BatchingProperty.STREAMING)
         : "Internal error in visitLogicalProjectStreaming: Input node not streaming";
     this.visit(node.getInput(), 0, node);
+    // TODO: Move to a wrapper function to avoid the timerInfo calls.
+    // This requires more information about the high level design of the streaming
+    // operators since there are several parts (e.g. state, multiple loop sections, etc.)
+    // At this time it seems like it would be too much work to have a clean interface.
+    // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+    // constant rewriting.
+    StreamingRelNodeTimer timerInfo =
+        StreamingRelNodeTimer.createStreamingTimer(
+            this.generatedCode,
+            this.verboseLevel,
+            node.operationDescriptor(),
+            node.loggingTitle(),
+            node.nodeDetails(),
+            node.getTimerType());
+    timerInfo.initializeTimer();
+    timerInfo.insertLoopOperationStartTimer();
     this.visitLogicalProjectCommon(node);
+    timerInfo.insertLoopOperationEndTimer();
+    timerInfo.terminateTimer();
   }
 
   /**
@@ -987,21 +1007,41 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate Streaming Code in this case
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
+    // TODO: Move to a wrapper function to avoid the timerInfo calls.
+    // This requires more information about the high level design of the streaming
+    // operators since there are several parts (e.g. state, multiple loop sections, etc.)
+    // At this time it seems like it would be too much work to have a clean interface.
+    // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+    // constant rewriting.
+    StreamingRelNodeTimer timerInfo =
+        StreamingRelNodeTimer.createStreamingTimer(
+            this.generatedCode,
+            this.verboseLevel,
+            node.operationDescriptor(),
+            node.loggingTitle(),
+            node.nodeDetails(),
+            node.getTimerType());
+    timerInfo.initializeTimer();
 
     // First, create the writer state before the loop
+    timerInfo.insertStateStartTimer();
     Expr writeInitCode =
         outputSchemaAsCatalog.generateStreamingWriteInitCode(
             node.getTableName(), ifExists, createTableType);
     Variable writerVar = this.genWriterVar();
     currentPipeline.addInitialization((new Op.Assign(writerVar, writeInitCode)));
+    timerInfo.insertStateEndTimer();
 
     // Second, append the Dataframe to the writer
+    timerInfo.insertLoopOperationStartTimer();
     Expr writerAppendCall =
         outputSchemaAsCatalog.generateStreamingWriteAppendCode(
             writerVar, this.varGenStack.pop(), currentPipeline.getExitCond());
     this.generatedCode.add(new Op.Stmt(writerAppendCall));
+    timerInfo.insertLoopOperationEndTimer();
 
     // Lastly, end the loop
+    timerInfo.terminateTimer();
     StreamingPipelineFrame finishedPipeline = this.generatedCode.endCurrentStreamingPipeline();
     this.generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
   }
@@ -1202,18 +1242,39 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
 
+    // TODO: Move to a wrapper function to avoid the timerInfo calls.
+    // This requires more information about the high level design of the streaming
+    // operators since there are several parts (e.g. state, multiple loop sections, etc.)
+    // At this time it seems like it would be too much work to have a clean interface.
+    // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+    // constant rewriting.
+    StreamingRelNodeTimer timerInfo =
+        StreamingRelNodeTimer.createStreamingTimer(
+            this.generatedCode,
+            this.verboseLevel,
+            node.operationDescriptor(),
+            node.loggingTitle(),
+            node.nodeDetails(),
+            node.getTimerType());
+    timerInfo.initializeTimer();
+
     // First, create the writer state before the loop
+    timerInfo.insertStateStartTimer();
     Expr writeInitCode = bodoSqlTable.generateStreamingWriteInitCode();
     Variable writerVar = this.genWriterVar();
     currentPipeline.addInitialization((new Op.Assign(writerVar, writeInitCode)));
+    timerInfo.insertStateEndTimer();
 
     // Second, append the Dataframe to the writer
+    timerInfo.insertLoopOperationStartTimer();
     Expr writerAppendCall =
         bodoSqlTable.generateStreamingWriteAppendCode(
             writerVar, castedAndRenamedDfVar, currentPipeline.getExitCond());
     this.generatedCode.add(new Op.Stmt(writerAppendCall));
+    timerInfo.insertLoopOperationEndTimer();
 
     // Lastly, end the loop
+    timerInfo.terminateTimer();
     StreamingPipelineFrame finishedPipeline = this.generatedCode.endCurrentStreamingPipeline();
     this.generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
   }
@@ -2384,17 +2445,36 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param columnNames The expected output column names.
    * @return Dataframe variable for a fully initialized dataframe, containing a batch of data.
    */
-  public Variable initStreamingIoLoop(Expr readCode, List<String> columnNames) {
+  public Variable initStreamingIoLoop(PandasRel node, Expr readCode, List<String> columnNames) {
 
     Variable flagVar = genFinishedStreamingFlag();
     // start the streaming pipeline
     this.generatedCode.startStreamingPipelineFrame(flagVar);
 
+    // TODO: Move to a wrapper function to avoid the timerInfo calls.
+    // This requires more information about the high level design of the streaming
+    // operators since there are several parts (e.g. state, multiple loop sections, etc.)
+    // At this time it seems like it would be too much work to have a clean interface.
+    // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+    // constant rewriting.
+    StreamingRelNodeTimer timerInfo =
+        StreamingRelNodeTimer.createStreamingTimer(
+            this.generatedCode,
+            this.verboseLevel,
+            node.operationDescriptor(),
+            node.loggingTitle(),
+            node.nodeDetails(),
+            node.getTimerType());
+    timerInfo.initializeTimer();
+
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
     // Create the reader before the loop
+    timerInfo.insertStateStartTimer();
     Variable readerVar = this.genReaderVar();
     currentPipeline.addInitialization(new Op.Assign(readerVar, readCode));
+    timerInfo.insertStateEndTimer();
 
+    timerInfo.insertLoopOperationStartTimer();
     Variable dfChunkVar = this.genTableVar();
 
     Call read_arrow_next_call =
@@ -2431,6 +2511,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     Variable outVar = this.genDfVar();
     this.generatedCode.add(new Op.Assign(outVar, init_dataframe_call));
+    timerInfo.insertLoopOperationEndTimer();
+    timerInfo.terminateTimer();
 
     return outVar;
   }
@@ -2440,7 +2522,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node join node being visited
    */
-  public void visitPandasJoin(PandasJoin node) {
+  private void visitPandasJoin(PandasJoin node) {
     if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
       visitStreamingPandasJoin(node);
     } else {
@@ -2453,7 +2535,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * @param node join node being visited
    */
-  public void visitBatchedPandasJoin(PandasJoin node) {
+  private void visitBatchedPandasJoin(PandasJoin node) {
     /* get left/right tables */
     Variable outVar = this.genDfVar();
     int nodeId = node.getId();
@@ -2512,8 +2594,30 @@ public class PandasCodeGenVisitor extends RelVisitor {
    *
    * <p>Note: Streaming doesn't support caching yet.
    */
-  void visitStreamingPandasJoin(PandasJoin node) {
+  private void visitStreamingPandasJoin(PandasJoin node) {
+    // TODO: Move to a wrapper function to avoid the timerInfo calls.
+    // This requires more information about the high level design of the streaming
+    // operators since there are several parts (e.g. state, multiple loop sections, etc.)
+    // At this time it seems like it would be too much work to have a clean interface.
+    // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+    // constant rewriting.
+    StreamingRelNodeTimer timerInfo =
+        StreamingRelNodeTimer.createStreamingTimer(
+            this.generatedCode,
+            this.verboseLevel,
+            node.operationDescriptor(),
+            node.loggingTitle(),
+            node.nodeDetails(),
+            node.getTimerType());
+    Variable joinStateVar = visitStreamingPandasJoinBatch(node, timerInfo);
+    visitStreamingPandasJoinProbe(node, joinStateVar, timerInfo);
+    timerInfo.terminateTimer();
+  }
+
+  private Variable visitStreamingPandasJoinState(PandasJoin node, StreamingRelNodeTimer timerInfo) {
     // Extract the Hash Join information
+    timerInfo.initializeTimer();
+    timerInfo.insertStateStartTimer();
     JoinInfo joinInfo = node.analyzeCondition();
     Pair<Variable, Variable> keyIndices = getStreamingJoinKeyIndices(joinInfo, this);
     List<String> buildNodeNames = node.getLeft().getRowType().getFieldNames();
@@ -2536,10 +2640,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
       namedArgs =
           List.of(new kotlin.Pair<>("non_equi_condition", new Expr.StringLiteral(condString)));
     }
-
-    // Visit the batch side
-    this.visit(node.getLeft(), 0, node);
-    Variable buildDf = varGenStack.pop();
     // Fetch the batch state
     StreamingPipelineFrame batchPipeline = generatedCode.getCurrentStreamingPipeline();
     // Create the state var.
@@ -2561,6 +2661,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
             namedArgs);
     Op.Assign joinInit = new Op.Assign(joinStateVar, stateCall);
     batchPipeline.addInitialization(joinInit);
+    timerInfo.insertStateEndTimer();
+    return joinStateVar;
+  }
+
+  private Variable visitStreamingPandasJoinBatch(PandasJoin node, StreamingRelNodeTimer timerInfo) {
+    // Visit the batch side
+    this.visit(node.getLeft(), 0, node);
+    Variable buildDf = varGenStack.pop();
+    Variable joinStateVar = visitStreamingPandasJoinState(node, timerInfo);
+    timerInfo.insertLoopOperationStartTimer();
+    // Fetch the batch state
+    StreamingPipelineFrame batchPipeline = generatedCode.getCurrentStreamingPipeline();
     // Join needs the isLast to be global before calling the build side change.
     batchPipeline.ensureExitCondSynchronized();
     Variable batchExitCond = batchPipeline.getExitCond();
@@ -2584,10 +2696,17 @@ public class PandasCodeGenVisitor extends RelVisitor {
             "bodo.libs.stream_join.join_build_consume_batch",
             List.of(joinStateVar, buildTable, batchExitCond));
     generatedCode.add(new Op.Stmt(batchCall));
+    timerInfo.insertLoopOperationEndTimer();
     // Finalize and add the batch pipeline.
     generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
+    return joinStateVar;
+  }
+
+  private void visitStreamingPandasJoinProbe(
+      PandasJoin node, Variable joinStateVar, StreamingRelNodeTimer timerInfo) {
     // Visit the probe side
     this.visit(node.getRight(), 1, node);
+    timerInfo.insertLoopOperationStartTimer();
     Variable probeDf = varGenStack.pop();
     StreamingPipelineFrame probePipeline = generatedCode.getCurrentStreamingPipeline();
     Variable oldFlag = probePipeline.getExitCond();
@@ -2639,6 +2758,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             "bodo.hiframes.pd_dataframe_ext.init_dataframe",
             List.of(tableTuple, indexVar, colNamesMeta));
     generatedCode.add(new Op.Assign(outDf, initDfCall));
+    timerInfo.insertLoopOperationEndTimer();
     // Append the code to delete the state
     Op.Stmt deleteState =
         new Op.Stmt(
@@ -2727,15 +2847,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     return true;
   }
 
-  private interface CodeVisitor {
-    void apply();
-  }
-
-  private interface DataframeReturningFunction {
-    Dataframe apply();
-  }
-
-  private void singleBatchTimer(PandasRel node, CodeVisitor visitor) {
+  private void singleBatchTimer(PandasRel node, Runnable fn) {
     SingleBatchRelNodeTimer timerInfo =
         SingleBatchRelNodeTimer.createSingleBatchTimer(
             this.generatedCode,
@@ -2743,14 +2855,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
             node.operationDescriptor(),
             node.loggingTitle(),
             node.nodeDetails(),
-            node.getSingleBatchTimerType());
+            node.getTimerType());
     timerInfo.insertStartTimer();
-    visitor.apply();
+    fn.run();
     timerInfo.insertEndTimer();
   }
 
   // TODO: Fuse with above so everything returns a DataFrame
-  private Dataframe singleBatchTimer(PandasRel node, DataframeReturningFunction fn) {
+  private Dataframe singleBatchTimer(PandasRel node, Supplier<Dataframe> fn) {
     SingleBatchRelNodeTimer timerInfo =
         SingleBatchRelNodeTimer.createSingleBatchTimer(
             this.generatedCode,
@@ -2758,9 +2870,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
             node.operationDescriptor(),
             node.loggingTitle(),
             node.nodeDetails(),
-            node.getSingleBatchTimerType());
+            node.getTimerType());
     timerInfo.insertStartTimer();
-    Dataframe res = fn.apply();
+    Dataframe res = fn.get();
     timerInfo.insertEndTimer();
     return res;
   }
@@ -2810,6 +2922,32 @@ public class PandasCodeGenVisitor extends RelVisitor {
     public Dataframe build(@NotNull final Function1<? super PandasRel.BuildContext, Dataframe> fn) {
       return singleBatchTimer(node, () -> fn.invoke(new PandasCodeGenVisitor.BuildContext(node)));
     }
+
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public Dataframe buildStreaming(
+        @NotNull Function1<? super PandasRel.BuildContext, Dataframe> fn) {
+      // TODO: Move to a wrapper function to avoid the timerInfo calls.
+      // This requires more information about the high level design of the streaming
+      // operators since there are several parts (e.g. state, multiple loop sections, etc.)
+      // At this time it seems like it would be too much work to have a clean interface.
+      // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+      // constant rewriting.
+      StreamingRelNodeTimer timerInfo =
+          StreamingRelNodeTimer.createStreamingTimer(
+              generatedCode,
+              verboseLevel,
+              node.operationDescriptor(),
+              node.loggingTitle(),
+              node.nodeDetails(),
+              node.getTimerType());
+      timerInfo.initializeTimer();
+      timerInfo.insertLoopOperationStartTimer();
+      Dataframe res = fn.invoke(new PandasCodeGenVisitor.BuildContext(node));
+      timerInfo.insertLoopOperationEndTimer();
+      timerInfo.terminateTimer();
+      return res;
+    }
   }
 
   private class BuildContext implements PandasRel.BuildContext {
@@ -2850,7 +2988,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     public Dataframe initStreamingIoLoop(
         @NotNull final Expr expr, @NotNull final RelDataType rowType) {
       List<String> columnNames = rowType.getFieldNames();
-      Variable out = PandasCodeGenVisitor.this.initStreamingIoLoop(expr, columnNames);
+      Variable out = PandasCodeGenVisitor.this.initStreamingIoLoop(node, expr, columnNames);
       return new Dataframe(out.getName(), node);
     }
   }
