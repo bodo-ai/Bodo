@@ -59,8 +59,40 @@ class PandasFilter(
     }
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe {
+        return if (isStreaming()) {
+            emitStreaming(implementor)
+        } else {
+            emitSingleBatch(implementor)
+        }
+    }
+
+    fun emitSingleBatch(implementor: PandasRel.Implementor): Dataframe {
         val input = implementor.visitChild(input, 0)
         return implementor.build { ctx ->
+            val translator = ctx.rexTranslator(input)
+            val condition = this.condition.accept(translator).let { filter ->
+                if (isScalarCondition()) {
+                    // If the output of this filter is a scalar, we need to
+                    // coerce it to an array value for the filter operation.
+                    coerceScalar(input, filter)
+                } else {
+                    filter
+                }
+            }
+            // Generate the filter df1[df2] operation and assign to the destination.
+            ctx.returns(Expr.GetItem(input, condition))
+        }
+    }
+
+    fun emitStreaming(implementor: PandasRel.Implementor): Dataframe {
+        val input = implementor.visitChild(input, 0)
+        // TODO: Move to a wrapper function to avoid the timerInfo calls.
+        // This requires more information about the high level design of the streaming
+        // operators since there are several parts (e.g. state, multiple loop sections, etc.)
+        // At this time it seems like it would be too much work to have a clean interface.
+        // There may be a need to pass in several lambdas, so other changes may be needed to avoid
+        // constant rewriting.
+        return implementor.buildStreaming { ctx ->
             val translator = ctx.rexTranslator(input)
             val condition = this.condition.accept(translator).let { filter ->
                 if (isScalarCondition()) {

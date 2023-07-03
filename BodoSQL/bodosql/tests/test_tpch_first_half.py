@@ -193,7 +193,11 @@ def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
         # Check the columns were pruned
         for relNodeStr in plan.split("\n"):
             relNodeStr = relNodeStr.strip()
-            if not relNodeStr.startswith("PandasTableScan"):
+            if not (
+                relNodeStr.startswith("PandasTableScan")
+                or relNodeStr.startswith("CombineStreamsExchange")
+                or relNodeStr.startswith("SeparateStreamExchange")
+            ):
                 check_logger_msg(stream, relNodeStr, check_case=False)
 
 
