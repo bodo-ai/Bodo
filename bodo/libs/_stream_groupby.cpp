@@ -111,8 +111,17 @@ std::shared_ptr<table_info> get_update_table(
     size_t nunique_hashes = get_nunique_hashes(
         batch_hashes_groupby, in_table->nrows(), groupby_state->parallel);
     std::vector<grouping_info> grp_infos;
-    get_group_info(tables, batch_hashes_groupby, nunique_hashes, grp_infos,
-                   true, false, groupby_state->parallel);
+    if (groupby_state->req_extended_group_info) {
+        // TODO[BSE-578]: set to true when handling cumulative operations that
+        // need the list of NA row indexes.
+        const bool consider_missing = false;
+        get_group_info_iterate(tables, batch_hashes_groupby, nunique_hashes,
+                               grp_infos, consider_missing, false,
+                               groupby_state->parallel);
+    } else {
+        get_group_info(tables, batch_hashes_groupby, nunique_hashes, grp_infos,
+                       true, false, groupby_state->parallel);
+    }
     grouping_info& grp_info = grp_infos[0];
     grp_info.mode = 1;
     size_t num_groups = grp_info.num_groups;
@@ -331,6 +340,93 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
                             local_init_start_row, new_data, local_grp_info);
     }
 
+    if (is_last) {
+        // TODO[BSE-573]: use proper chunked output buffer
+        // TODO[BSE-578]: call eval() to support functions that need it
+        groupby_state->out_table = groupby_state->local_table_buffer.data_table;
+    }
+
+    groupby_state->build_iter++;
+}
+
+/**
+ * @brief consume build table batch in streaming groupby by just accumulating
+ * rows (used in cases where at least one groupby function requires all group
+ * data upfront)
+ *
+ * @param groupby_state groupby state pointer
+ * @param in_table build table batch
+ * @param is_last is last batch
+ */
+void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
+                                     std::shared_ptr<table_info> in_table,
+                                     bool is_last) {
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    // append input rows to local or shuffle buffer
+    std::shared_ptr<uint32_t[]> batch_hashes_partition =
+        hash_keys_table(in_table, groupby_state->n_keys, SEED_HASH_PARTITION,
+                        groupby_state->parallel, false);
+
+    groupby_state->local_table_buffer.ReserveTable(in_table);
+    groupby_state->shuffle_table_buffer.ReserveTable(in_table);
+
+    std::vector<bool> append_row_to_build_table(in_table->nrows(), false);
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        append_row_to_build_table[i_row] =
+            (!groupby_state->parallel ||
+             hash_to_rank(batch_hashes_partition[i_row], n_pes) == myrank);
+    }
+
+    groupby_state->local_table_buffer.AppendBatch(in_table,
+                                                  append_row_to_build_table);
+    append_row_to_build_table.flip();
+    std::vector<bool>& append_row_to_shuffle_table = append_row_to_build_table;
+    groupby_state->shuffle_table_buffer.AppendBatch(
+        in_table, append_row_to_shuffle_table);
+
+    batch_hashes_partition.reset();
+    in_table.reset();
+
+    // shuffle data of other ranks and append received data to local buffer
+    if (shuffle_this_iter(groupby_state->parallel, is_last,
+                          groupby_state->shuffle_table_buffer.data_table,
+                          groupby_state->build_iter)) {
+        std::shared_ptr<table_info> shuffle_table =
+            groupby_state->shuffle_table_buffer.data_table;
+
+        std::shared_ptr<uint32_t[]> shuffle_hashes = hash_keys_table(
+            shuffle_table, groupby_state->n_keys, SEED_HASH_PARTITION,
+            groupby_state->parallel, false);
+        // make dictionaries global for shuffle
+        for (size_t i = 0; i < shuffle_table->ncols(); i++) {
+            std::shared_ptr<array_info> arr = shuffle_table->columns[i];
+            if (arr->arr_type == bodo_array_type::DICT) {
+                make_dictionary_global_and_unique(arr, groupby_state->parallel);
+            }
+        }
+        mpi_comm_info comm_info_table(shuffle_table->columns);
+        comm_info_table.set_counts(shuffle_hashes, groupby_state->parallel);
+        std::shared_ptr<table_info> new_data =
+            shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
+                                 comm_info_table, groupby_state->parallel);
+        shuffle_hashes.reset();
+        groupby_state->shuffle_table_buffer.Reset();
+
+        groupby_state->local_table_buffer.ReserveTable(new_data);
+        groupby_state->local_table_buffer.AppendBatch(new_data);
+    }
+
+    // compute output when all input batches are accumulated
+    if (is_last) {
+        groupby_state->local_table_buffer.data_table->num_keys =
+            groupby_state->n_keys;
+        groupby_state->out_table = get_update_table(
+            groupby_state, groupby_state->local_table_buffer.data_table);
+    }
+
     groupby_state->build_iter++;
 }
 
@@ -344,9 +440,8 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
 std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
     GroupbyState* groupby_state) {
     // TODO[BSE-573]: use proper chunked output buffer
-    // TODO[BSE-578]: call eval() to support functions that need it
     bool is_last = true;
-    return std::tuple(groupby_state->local_table_buffer.data_table, is_last);
+    return std::tuple(groupby_state->out_table, is_last);
 }
 
 /**
@@ -359,8 +454,14 @@ std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
 void groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
                                           table_info* in_table, bool is_last) {
     try {
-        groupby_build_consume_batch(
-            groupby_state, std::unique_ptr<table_info>(in_table), is_last);
+        if (groupby_state->accumulate_before_update) {
+            groupby_acc_build_consume_batch(
+                groupby_state, std::unique_ptr<table_info>(in_table), is_last);
+        } else {
+            groupby_build_consume_batch(
+                groupby_state, std::unique_ptr<table_info>(in_table), is_last);
+        }
+
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }

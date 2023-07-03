@@ -90,6 +90,18 @@ class GroupbyState {
     // Current iteration of build steps
     uint64_t build_iter;
 
+    // Accumulating all values before update is needed
+    // when one of the groupby functions is
+    // median/nunique/...
+    // similar to shuffle_before_update in non-streaming groupby
+    // see:
+    // https://bodo.atlassian.net/wiki/spaces/B/pages/1346568245/Vectorized+Groupby+Design#Getting-All-Group-Data-before-Computation
+    bool accumulate_before_update = false;
+    bool req_extended_group_info = false;
+
+    // TODO[BSE-573]: use proper chunked output buffer
+    std::shared_ptr<table_info> out_table = nullptr;
+
     GroupbyState(std::vector<int8_t> in_arr_c_types,
                  std::vector<int8_t> in_arr_array_types,
                  std::vector<int32_t> ftypes,
@@ -128,12 +140,37 @@ class GroupbyState {
         f_combine_offsets.push_back(n_keys);
         int32_t curr_combine_offset = n_keys;
 
+        for (size_t i = 0; i < ftypes.size(); i++) {
+            int ftype = ftypes[i];
+            // NOTE: adding all functions that need accumulating inputs for now
+            // but they may not be supported in streaming groupby yet
+            if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::cumsum ||
+                ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummin ||
+                ftype == Bodo_FTypes::cummax || ftype == Bodo_FTypes::shift ||
+                ftype == Bodo_FTypes::transform ||
+                ftype == Bodo_FTypes::ngroup || ftype == Bodo_FTypes::window ||
+                ftype == Bodo_FTypes::listagg ||
+                ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::head ||
+                ftype == Bodo_FTypes::gen_udf) {
+                accumulate_before_update = true;
+            }
+            if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::cumsum ||
+                ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummin ||
+                ftype == Bodo_FTypes::cummax || ftype == Bodo_FTypes::shift ||
+                ftype == Bodo_FTypes::transform ||
+                ftype == Bodo_FTypes::ngroup || ftype == Bodo_FTypes::window ||
+                ftype == Bodo_FTypes::listagg ||
+                ftype == Bodo_FTypes::nunique) {
+                req_extended_group_info = true;
+            }
+        }
+
         // TODO[BSE-578]: handle all necessary ColSet parameters for BodoSQL
         // groupby functions
         std::shared_ptr<array_info> index_col = nullptr;
         bool skipna = false;
         bool use_sql_rules = true;
-        bool do_combine = true;
+        bool do_combine = !accumulate_before_update;
         std::vector<bool> window_ascending_vect;
         std::vector<bool> window_na_position_vect;
         for (size_t i = 0; i < ftypes.size(); i++) {
@@ -154,27 +191,37 @@ class GroupbyState {
                 input_cols, index_col, ftypes[i], do_combine, skipna, 0, {0}, 0,
                 parallel, window_ascending_vect, window_na_position_vect,
                 {nullptr}, 0, nullptr, nullptr, 0, nullptr, use_sql_rules);
-            // get update/combine type info to initialize build state
-            std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                       std::vector<Bodo_CTypes::CTypeEnum>>
-                update_arr_types =
-                    col_set->getUpdateColumnTypes(in_arr_types, in_dtypes);
-            std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-                       std::vector<Bodo_CTypes::CTypeEnum>>
-                combine_arr_types = col_set->getCombineColumnTypes(
-                    std::get<0>(update_arr_types),
-                    std::get<1>(update_arr_types));
-            for (auto t : std::get<0>(combine_arr_types)) {
-                build_arr_array_types.push_back(t);
+
+            if (!accumulate_before_update) {
+                // get update/combine type info to initialize build state
+                std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+                           std::vector<Bodo_CTypes::CTypeEnum>>
+                    update_arr_types =
+                        col_set->getUpdateColumnTypes(in_arr_types, in_dtypes);
+                std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+                           std::vector<Bodo_CTypes::CTypeEnum>>
+                    combine_arr_types = col_set->getCombineColumnTypes(
+                        std::get<0>(update_arr_types),
+                        std::get<1>(update_arr_types));
+                for (auto t : std::get<0>(combine_arr_types)) {
+                    build_arr_array_types.push_back(t);
+                }
+                for (auto t : std::get<1>(combine_arr_types)) {
+                    build_arr_c_types.push_back(t);
+                }
+                curr_update_offset += std::get<0>(update_arr_types).size();
+                f_update_offsets.push_back(curr_update_offset);
+                curr_combine_offset += std::get<0>(combine_arr_types).size();
+                f_combine_offsets.push_back(curr_combine_offset);
             }
-            for (auto t : std::get<1>(combine_arr_types)) {
-                build_arr_c_types.push_back(t);
-            }
-            curr_update_offset += std::get<0>(update_arr_types).size();
-            f_update_offsets.push_back(curr_update_offset);
-            curr_combine_offset += std::get<0>(combine_arr_types).size();
-            f_combine_offsets.push_back(curr_combine_offset);
+
             this->col_sets.push_back(col_set);
+        }
+
+        // build buffer types are same as input if just accumulating batches
+        if (accumulate_before_update) {
+            build_arr_array_types = in_arr_array_types;
+            build_arr_c_types = in_arr_c_types;
         }
 
         // TODO[BSE-566]: support dictionary arrays

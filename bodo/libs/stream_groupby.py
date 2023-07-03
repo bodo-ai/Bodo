@@ -244,8 +244,24 @@ class GroupbyStateType(types.Type):
 
     @cached_property
     def out_table_type(self):
-        # TODO[BSE-578]: get proper output type when not same as input
-        return self.build_table_type
+        if self.build_table_type == types.unknown:
+            return types.unknown
+
+        # TODO[BSE-578]: get proper output type for all functions
+        out_arr_types = []
+        for i, f_type in enumerate(self.ftypes):
+            assert (
+                self.f_in_offsets[i + 1] == self.f_in_offsets[i] + 1
+            ), "only functions with single input column supported in streaming groupby currently"
+            in_type = self.build_table_type.arr_types[
+                self.f_in_cols[self.f_in_offsets[i]]
+            ]
+            out_type, err_msg = bodo.hiframes.pd_groupby_ext.get_groupby_output_dtype(
+                in_type, bodo.ir.aggregate.supported_agg_funcs[f_type]
+            )
+            assert err_msg == "ok", "Function typing failed in streaming groupby"
+            out_arr_types.append(out_type)
+        return bodo.TableType(tuple(self.key_types + out_arr_types))
 
 
 register_model(GroupbyStateType)(models.OpaqueModel)

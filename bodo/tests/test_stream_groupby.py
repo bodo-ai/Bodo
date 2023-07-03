@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 import bodo
 import bodo.io.snowflake
@@ -14,7 +15,8 @@ from bodo.libs.stream_groupby import (
 from bodo.tests.utils import check_func
 
 
-def test_groupby_basic(memory_leak_check):
+@pytest.mark.parametrize("func_name", ["sum", "median"])
+def test_groupby_basic(func_name, memory_leak_check):
     """
     Tests support for the basic streaming groupby functionality.
     """
@@ -28,7 +30,7 @@ def test_groupby_basic(memory_leak_check):
     )
     kept_cols = bodo.utils.typing.MetaType((0, 1))
     batch_size = 3
-    ftypes = bodo.utils.typing.MetaType((supported_agg_funcs.index("sum"),))
+    ftypes = bodo.utils.typing.MetaType((supported_agg_funcs.index(func_name),))
     f_in_offsets = bodo.utils.typing.MetaType((0, 1))
     f_in_cols = bodo.utils.typing.MetaType((1,))
 
@@ -73,7 +75,7 @@ def test_groupby_basic(memory_leak_check):
             "B": [1, 3, 5, 11, 1, 3],
         }
     )
-    expected_df = df.groupby("A", as_index=False).sum()
+    expected_df = df.groupby("A", as_index=False).agg(func_name)
 
     check_func(
         test_groupby,
