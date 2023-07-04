@@ -498,8 +498,9 @@ inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
             }
         }
         if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            const uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
             for (size_t i_row = 0; i_row < arr->length; i_row++) {
-                if (GetBit((uint8_t *)arr->null_bitmask(), i_row)) {
+                if (GetBit(null_bitmask, i_row)) {
                     T eVal = arr->at<T>(i_row);
                     my_array.emplace_back(eVal);
                 }
@@ -523,8 +524,9 @@ template <class T, int dtype>
 inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
                                        std::shared_ptr<array_info> arr,
                                        local_global_stat_nan const &e_stat) {
+    const uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
     for (size_t i_row = 0; i_row < arr->length; i_row++) {
-        if (GetBit((uint8_t *)arr->null_bitmask(), i_row)) {
+        if (GetBit(null_bitmask, i_row)) {
             __int128 eVal = arr->at<__int128>(i_row);
             double eVal_d = decimal_to_double(eVal);
             my_array.emplace_back(eVal_d);
@@ -566,21 +568,24 @@ template <typename T, int dtype>
 std::pair<int64_t, int64_t> nb_entries_local(std::shared_ptr<array_info> arr) {
     int64_t nb_ok = 0, nb_miss = 0;
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        const uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
         for (size_t i_row = 0; i_row < arr->length; i_row++) {
-            if (GetBit((uint8_t *)arr->null_bitmask(), i_row))
+            if (GetBit(null_bitmask, i_row)) {
                 nb_ok++;
-            else
+            } else {
                 nb_miss++;
+            }
         }
     }
     if (arr->arr_type == bodo_array_type::NUMPY) {
         for (size_t i_row = 0; i_row < arr->length; i_row++) {
             T eVal = arr->at<T>(i_row);
             bool isna = isnan_alltype<T, dtype>(eVal);
-            if (isna)
+            if (isna) {
                 nb_miss++;
-            else
+            } else {
                 nb_ok++;
+            }
         }
     }
     return {nb_ok, nb_miss};
@@ -1116,7 +1121,7 @@ double approx_percentile_T(std::shared_ptr<array_info> arr, double percentile,
     TDigest td(/*delta*/ 100, /*buffer_size*/ 500);
     tracing::Event ev("approx_percentile_T", parallel);
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
+        const uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
         for (uint64_t i = 0; i < arr->length; i++) {
             if (GetBit(null_bitmask, i)) {
                 double val_double = to_double<T, dtype>(getv<T>(arr, i));

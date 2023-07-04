@@ -112,20 +112,21 @@ struct ChunkedTableArrayBuilder {
         using T = typename dtype_to_type<dtype>::type;
         T* out_data = (T*)this->data_array->data1();
         T* in_data = (T*)in_arr->data1();
+        uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
+        const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             T new_data = row_idx < 0 ? 0 : in_data[row_idx];
-            out_data[size + i] = new_data;
+            out_data[this->size + i] = new_data;
         }
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            bool null_bit = (row_idx >= 0) &&
-                            GetBit((uint8_t*)in_arr->null_bitmask(), row_idx);
-            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size + i,
-                     null_bit);
+            bool null_bit = (row_idx >= 0) && GetBit(in_bitmask, row_idx);
+            SetBitTo(out_bitmask, this->size + i, null_bit);
         }
         this->size += idx_length;
-        data_array->length = size;
+        data_array->length = this->size;
     }
 
     /**
@@ -155,6 +156,9 @@ struct ChunkedTableArrayBuilder {
                           size_t idx_length) {
         uint8_t* out_data = (uint8_t*)this->data_array->data1();
         uint8_t* in_data = (uint8_t*)in_arr->data1();
+        uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
+        const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
+
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             bool bit = row_idx < 0 ? false : GetBit(in_data, row_idx);
@@ -162,13 +166,11 @@ struct ChunkedTableArrayBuilder {
         }
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            bool null_bit = (row_idx >= 0) &&
-                            GetBit((uint8_t*)in_arr->null_bitmask(), row_idx);
-            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size + i,
-                     null_bit);
+            bool null_bit = (row_idx >= 0) && GetBit(in_bitmask, row_idx);
+            SetBitTo(out_bitmask, this->size + i, null_bit);
         }
         this->size += idx_length;
-        data_array->length = size;
+        data_array->length = this->size;
     }
 
     /**
@@ -199,19 +201,20 @@ struct ChunkedTableArrayBuilder {
         using T = typename dtype_to_type<dtype>::type;
         T* out_data = (T*)this->data_array->data1();
         T* in_data = (T*)in_arr->data1();
+        uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
+
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             T new_data = row_idx < 0 ? 0 : in_data[row_idx];
-            out_data[size + i] = new_data;
+            out_data[this->size + i] = new_data;
         }
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             bool null_bit = (row_idx >= 0);
-            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size + i,
-                     null_bit);
+            SetBitTo(out_bitmask, this->size + i, null_bit);
         }
         this->size += idx_length;
-        data_array->length = size;
+        data_array->length = this->size;
     }
 
     /**
@@ -241,6 +244,8 @@ struct ChunkedTableArrayBuilder {
                           size_t idx_length) {
         uint8_t* out_data = (uint8_t*)this->data_array->data1();
         uint8_t* in_data = (uint8_t*)in_arr->data1();
+        uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
+
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             bool bit = row_idx < 0 ? false : in_data[row_idx];
@@ -249,11 +254,10 @@ struct ChunkedTableArrayBuilder {
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             bool null_bit = (row_idx >= 0);
-            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size + i,
-                     null_bit);
+            SetBitTo(out_bitmask, this->size + i, null_bit);
         }
         this->size += idx_length;
-        data_array->length = size;
+        data_array->length = this->size;
     }
 
     /**
@@ -284,13 +288,14 @@ struct ChunkedTableArrayBuilder {
         using T = typename dtype_to_type<dtype>::type;
         T* out_data = (T*)this->data_array->data1();
         T* in_data = (T*)in_arr->data1();
+
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             T new_data = row_idx < 0 ? 0 : in_data[row_idx];
-            out_data[size + i] = new_data;
+            out_data[this->size + i] = new_data;
         }
         this->size += idx_length;
-        data_array->length = size;
+        data_array->length = this->size;
     }
 
     /**
@@ -322,15 +327,16 @@ struct ChunkedTableArrayBuilder {
         using T = typename dtype_to_type<dtype>::type;
         T* out_data = (T*)this->data_array->data1();
         T* in_data = (T*)in_arr->data1();
+
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
             // Timedelta Sentinel is std::numeric_limits<int64_t>::min()
             T new_data = row_idx < 0 ? std::numeric_limits<int64_t>::min()
                                      : in_data[row_idx];
-            out_data[size + i] = new_data;
+            out_data[this->size + i] = new_data;
         }
         this->size += idx_length;
-        data_array->length = size;
+        data_array->length = this->size;
     }
 
     /**
@@ -357,7 +363,7 @@ struct ChunkedTableArrayBuilder {
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length) {
         // Copy the offsets
-        offset_t* curr_offsets = (offset_t*)this->data_array->data2() + size;
+        offset_t* curr_offsets = (offset_t*)this->data_array->data2() + this->size;
         offset_t* in_offsets = (offset_t*)in_arr->data2();
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
@@ -377,15 +383,15 @@ struct ChunkedTableArrayBuilder {
             memcpy(out_data + out_offset, in_data + in_offset, copy_len);
         }
         // Copy the null bitmap
+        uint8_t* out_bitmask = (uint8_t*)this->data_array->null_bitmask();
+        const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask();
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];
-            bool null_bit = (row_idx >= 0) &&
-                            GetBit((uint8_t*)in_arr->null_bitmask(), row_idx);
-            SetBitTo((uint8_t*)this->data_array->null_bitmask(), size + i,
-                     null_bit);
+            bool null_bit = (row_idx >= 0) && GetBit(in_bitmask, row_idx);
+            SetBitTo(out_bitmask, this->size + i, null_bit);
         }
         this->size += idx_length;
-        data_array->length = size;
+        data_array->length = this->size;
     }
 
     /**
@@ -422,7 +428,7 @@ struct ChunkedTableArrayBuilder {
                                              Bodo_CTypes::INT32>(
             in_arr->child_arrays[1], idxs, idx_start, idx_length);
         this->size += idx_length;
-        this->data_array->length = size;
+        this->data_array->length = this->size;
     }
 
     /**
