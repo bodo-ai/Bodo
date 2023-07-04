@@ -731,14 +731,16 @@ size_t BufferPool::num_size_classes() const {
     return this->size_classes_.size();
 }
 
-int64_t BufferPool::size_align(int64_t size, int64_t alignment) {
+int64_t BufferPool::size_align(int64_t size, int64_t alignment) const {
     const auto remainder = size % alignment;
     return (remainder == 0) ? size : (size + alignment - remainder);
 }
 
-int64_t BufferPool::max_memory() const { return stats_.max_memory(); }
+int64_t BufferPool::max_memory() const { return this->stats_.max_memory(); }
 
-int64_t BufferPool::bytes_allocated() const { return stats_.bytes_allocated(); }
+int64_t BufferPool::bytes_allocated() const {
+    return this->stats_.bytes_allocated();
+}
 
 uint64_t BufferPool::bytes_pinned() const { return this->bytes_pinned_.load(); }
 
@@ -1008,7 +1010,7 @@ arrow::Status BufferPool::evict(uint64_t size_class_idx) {
 }
 
 std::tuple<bool, int64_t, int64_t, int64_t> BufferPool::get_alloc_details(
-    uint8_t* buffer, int64_t size, int64_t alignment) {
+    uint8_t* buffer, int64_t size, int64_t alignment) const {
     if (size == -1) {
         // If we don't know the size, we need to find the buffer frame
         // (if there is one).
@@ -1114,6 +1116,21 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     // that size be provided?
 }
 
+bool BufferPool::IsPinned(uint8_t* buffer, int64_t size,
+                          int64_t alignment) const {
+    if (is_unswizzled(buffer)) {
+        // If it's been evicted to disk, it must be unpinned.
+        return false;
+    }
+    auto [is_mmap_alloc, size_class_idx, frame_idx, _] =
+        this->get_alloc_details(buffer, size, alignment);
+    if (is_mmap_alloc) {
+        return this->size_classes_[size_class_idx]->isFramePinned(frame_idx);
+    }
+    // Malloc allocations are always pinned:
+    return true;
+}
+
 ::arrow::Status BufferPool::Reallocate(int64_t old_size, int64_t new_size,
                                        int64_t alignment, uint8_t** ptr) {
     if (new_size < 0) {
@@ -1155,6 +1172,15 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     auto [is_mmap_alloc, size_class_idx, frame_idx, old_size_aligned] =
         this->get_alloc_details(old_memory_ptr, old_size, alignment);
 
+    // In case of an mmap frame: pin it if it isn't already. We either
+    // need it to be in memory for the memcpy or even if we end up re-using
+    // the same frame, Reallocate needs to pin the frame.
+    if (is_mmap_alloc) {
+        if (!this->size_classes_[size_class_idx]->isFramePinned(frame_idx)) {
+            this->size_classes_[size_class_idx]->PinFrame(frame_idx);
+            this->update_pinned_bytes(this->size_class_bytes_[size_class_idx]);
+        }
+    }
     // In case of an mmap frame: if new_size still fits, it's a NOP.
     // Note that we only do this when new_size >= old_size, because
     // otherwise we should change the SizeClass (to make sure assumptions
@@ -1171,6 +1197,8 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     // Allocate new_size
     // Point ptr to the new memory. We have a pointer to old
     // memory in old_memory_ptr that we can use for the memcpy.
+    // Since we pinned the old frame, this allocate won't evict
+    // the old block which is required for the memcpy.
     CHECK_ARROW_MEM(this->Allocate(new_size, alignment, ptr),
                     "Allocation failed!");
 
@@ -1193,7 +1221,8 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     return ::arrow::Status::OK();
 }
 
-::arrow::Status BufferPool::Pin(uint8_t** ptr) {
+::arrow::Status BufferPool::Pin(uint8_t** ptr, int64_t size,
+                                int64_t alignment) {
     // Handle zero case.
     if (*ptr == kZeroSizeArea) {
         return arrow::Status::OK();
@@ -1256,7 +1285,7 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
         // If ptr is swizzled, then just need to mark the
         // associated frame as pinned
         auto [is_pool_alloc, size_class_idx, frame_idx, _] =
-            this->get_alloc_details(*ptr, -1);
+            this->get_alloc_details(*ptr, size, alignment);
 
         // If allocated through malloc, Pin is No-op
         if (!is_pool_alloc) {
@@ -1271,7 +1300,7 @@ void BufferPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
     }
 }
 
-void BufferPool::Unpin(uint8_t* ptr) {
+void BufferPool::Unpin(uint8_t* ptr, int64_t size, int64_t alignment) {
     // Handle zero case.
     if (ptr == kZeroSizeArea) {
         return;
@@ -1290,15 +1319,18 @@ void BufferPool::Unpin(uint8_t* ptr) {
     }
 
     auto [is_pool_alloc, size_class_idx, frame_idx, _] =
-        this->get_alloc_details(ptr, -1);
+        this->get_alloc_details(ptr, size, alignment);
 
     // If allocated through malloc, Unpin is No-op
     if (!is_pool_alloc) {
         return;
     }
 
-    this->size_classes_[size_class_idx]->UnpinFrame(frame_idx);
-    this->update_pinned_bytes(-this->size_class_bytes_[size_class_idx]);
+    // If pinned, unpin and update stats, else we don't need to do anything
+    if (this->size_classes_[size_class_idx]->isFramePinned(frame_idx)) {
+        this->size_classes_[size_class_idx]->UnpinFrame(frame_idx);
+        this->update_pinned_bytes(-this->size_class_bytes_[size_class_idx]);
+    }
 }
 
 SizeClass* BufferPool::GetSizeClass_Unsafe(uint64_t idx) const {

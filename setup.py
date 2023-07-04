@@ -260,6 +260,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_dict_builder.cpp",
     "bodo/libs/_table_builder.cpp",
     "bodo/libs/_chunked_table_builder.cpp",
+    "bodo/libs/_operator_pool.cpp",
 ]
 ext_metadata["depends"] += [
     "bodo/io/_bodo_file_reader.h",
@@ -305,6 +306,7 @@ ext_metadata["depends"] += [
     "bodo/libs/_dict_builder.h",
     "bodo/libs/_table_builder.h",
     "bodo/libs/_chunked_table_builder.h",
+    "bodo/libs/_operator_pool.h",
 ]
 
 # We cannot compile with -Werror yet because _fsspec_reader.cpp
@@ -389,7 +391,11 @@ pyx_builtins.append(os.path.join("bodo", "utils", "tracing.pyx"))
 
 ext_memory = Extension(
     name="bodo.libs.memory",
-    sources=["bodo/libs/memory.pyx", "bodo/libs/_memory.cpp"],
+    sources=[
+        "bodo/libs/memory.pyx",
+        "bodo/libs/_memory.cpp",
+        "bodo/libs/_operator_pool.cpp",
+    ],
     include_dirs=np_compile_args["include_dirs"]
     + ind
     + pa_compile_args["include_dirs"],
