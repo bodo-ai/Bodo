@@ -11,6 +11,7 @@ from bodo.libs.memory import (
     BufferPool,
     BufferPoolAllocation,
     BufferPoolOptions,
+    OperatorBufferPool,
     SizeClass,
     StorageOptions,
     get_arrow_memory_pool_wrapper_for_buffer_pool,
@@ -2066,4 +2067,860 @@ def test_local_spill_file(tmp_path: Path):
     assert len(list(tmp_path.iterdir())) == 0
 
     # Delete pool (to be conservative)
+    del pool
+
+
+def test_buffer_pool_eq():
+    """
+    Test that the == and != operators work as expected.
+    """
+
+    default_pool1: BufferPool = BufferPool.default()
+    default_pool2: BufferPool = BufferPool.default()
+    options = BufferPoolOptions(
+        memory_size=8, min_size_class=8, max_num_size_classes=10
+    )
+    pool1: BufferPool = BufferPool.from_options(options)
+    pool2: BufferPool = BufferPool.from_options(options)
+    pool3 = pool1
+
+    # Test with "not" of inverse everywhere to ensure
+    # that both eq and ne are working correctly.
+    assert default_pool1 == default_pool2
+    assert not (default_pool1 != default_pool2)
+    assert pool1 == pool3
+    assert not (pool1 != pool3)
+    assert pool1 != pool2
+    assert not (pool1 == pool2)
+    assert default_pool1 != pool1
+    assert not (default_pool1 == pool1)
+
+    del pool1
+    del pool2
+    del pool3
+
+
+## OperatorBufferPool tests
+
+
+def test_operator_pool_attributes():
+    """
+    Verify that the operator pool attributes are
+    initialized correctly (including the
+    defaults).
+    """
+
+    # Create one with default BufferPool as its parent
+    pool = BufferPool.default()
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.4)
+    assert op_pool.parent_pool == pool
+    assert op_pool.backend_name == pool.backend_name
+    assert op_pool.max_pinned_size_bytes == 512 * 1024
+    assert op_pool.memory_error_threshold == int(512 * 1024 * 0.4)
+    assert op_pool.threshold_enforcement_enabled  # default behavior
+    del op_pool
+
+    # Create one with a custom pool
+    options = BufferPoolOptions(
+        memory_size=8, min_size_class=8, max_num_size_classes=10
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.8)
+    assert op_pool.parent_pool == pool
+    assert op_pool.backend_name == pool.backend_name
+    assert op_pool.max_pinned_size_bytes == 512 * 1024
+    assert op_pool.memory_error_threshold == int(512 * 1024 * 0.8)
+    assert op_pool.threshold_enforcement_enabled  # default behavior
+    del op_pool
+    del pool
+
+    # Create one without specifying the pool and threshold (verify defaults)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024)
+    assert op_pool.parent_pool == BufferPool.default()
+    assert op_pool.backend_name == BufferPool.default().backend_name
+    assert op_pool.max_pinned_size_bytes == 512 * 1024
+    assert op_pool.memory_error_threshold == int(512 * 1024 * 0.5)  # default is 0.5
+    assert op_pool.threshold_enforcement_enabled  # default behavior
+    del op_pool
+
+
+def test_operator_pool_enable_disable_enforcement():
+    """
+    Test that threshold enforcement works as expected.
+    Only tests the basic functionality. The more advanced
+    functionality and edge cases are tested in the
+    other tests.
+    """
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024)
+
+    # Verify default
+    assert op_pool.threshold_enforcement_enabled
+
+    # Check that disabling works as expected:
+    op_pool.disable_threshold_enforcement()
+    assert not op_pool.threshold_enforcement_enabled
+
+    # Check that turning it back on works as expected:
+    op_pool.enable_threshold_enforcement()
+    assert op_pool.threshold_enforcement_enabled
+
+    # Test that if number of pinned bytes is above error
+    # threshold (256KiB) and we try to enable enforcement, it errors out:
+    op_pool.disable_threshold_enforcement()  # Disable temporarily
+    allocation: BufferPoolAllocation = op_pool.allocate(
+        300 * 1024
+    )  # Will go through while enforcement is disabled
+    with pytest.raises(
+        RuntimeError,
+        match="OperatorPoolThresholdExceededError: Tried allocating more space than what's allowed to be pinned!",
+    ):
+        op_pool.enable_threshold_enforcement()
+    assert not op_pool.threshold_enforcement_enabled
+
+    op_pool.free(allocation)
+    del op_pool
+
+
+def test_operator_pool_allocation():
+    """
+    Test multiple allocation/free scenarios, including
+    ensuring that threshold enforcement and limit
+    enforcement work as expected.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(memory_size=4, min_size_class=8)  # 4MiB, 8KiB
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.5)
+
+    ##
+    ## ------ 1: Basic allocation test (allocate and then free) ------ ##
+    ##
+
+    allocation: BufferPoolAllocation = op_pool.allocate(5 * 1024)
+
+    # Verify that default allocation is 64B
+    assert allocation.alignment == 64
+    assert allocation.get_ptr_as_int() % 64 == 0
+
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 5 * 1024
+    assert op_pool.bytes_pinned() == 5 * 1024
+    assert op_pool.max_memory() == 5 * 1024
+    assert pool.bytes_allocated() == 5 * 1024
+    assert pool.bytes_pinned() == 5 * 1024
+    assert pool.max_memory() == 5 * 1024
+
+    # Free and verify stats
+    op_pool.free(allocation)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    # Max memory should still be the same
+    assert op_pool.max_memory() == 5 * 1024
+    assert pool.max_memory() == 5 * 1024
+
+    ##
+    ## --------------- 2: Allocate, unpin and then free -------------- ##
+    ##
+
+    # Allocate 10KiB. Anything above 6KiB will go through
+    # the SizeClasses, so we'll be able to actually pin and unpin
+    allocation: BufferPoolAllocation = op_pool.allocate(10 * 1024)
+
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 10 * 1024
+    assert op_pool.bytes_pinned() == 10 * 1024
+    assert op_pool.max_memory() == 10 * 1024
+    assert pool.bytes_allocated() == 16 * 1024  # Comes from the 16KiB SizeClass
+    assert pool.bytes_pinned() == 16 * 1024
+    assert pool.max_memory() == 16 * 1024
+    # Verify through the parent pool that it is pinned
+    assert pool.is_pinned(allocation)
+
+    op_pool.unpin(allocation)
+
+    # Verify stats after unpinning
+    assert op_pool.bytes_allocated() == 10 * 1024
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 10 * 1024
+    assert pool.bytes_allocated() == 16 * 1024
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 16 * 1024
+    # Verify through the parent pool that it is indeed unpinned
+    assert not pool.is_pinned(allocation)
+
+    # Free and verify stats
+    op_pool.free(allocation)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 10 * 1024
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 16 * 1024
+
+    ##
+    ## --- 3: Same as (2), but where allocation goes through malloc -- ##
+    ##
+
+    # Allocate 4KiB. Anything below 6KiB will go through
+    # malloc.
+    allocation: BufferPoolAllocation = op_pool.allocate(4 * 1024)
+
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 4 * 1024
+    assert op_pool.bytes_pinned() == 4 * 1024
+    assert op_pool.max_memory() == 10 * 1024
+    assert pool.bytes_allocated() == 4 * 1024
+    assert pool.bytes_pinned() == 4 * 1024
+    assert pool.max_memory() == 16 * 1024
+    # Verify through the parent pool that it is pinned
+    assert pool.is_pinned(allocation)
+
+    op_pool.unpin(allocation)
+
+    # Verify stats after unpinning
+    assert op_pool.bytes_allocated() == 4 * 1024
+    assert pool.bytes_allocated() == 4 * 1024
+    # Still 4KiB since malloc allocations cannot be unpinned
+    assert op_pool.bytes_pinned() == 4 * 1024
+    assert op_pool.max_memory() == 10 * 1024
+    assert pool.bytes_pinned() == 4 * 1024
+    assert pool.max_memory() == 16 * 1024
+    # Verify through the parent pool that it is indeed still pinned
+    assert pool.is_pinned(allocation)
+
+    # Free and verify stats
+    op_pool.free(allocation)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 10 * 1024
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 16 * 1024
+
+    ##
+    ## ----- 4: Allocate small, then try to allocate amount that ----- ##
+    ## -----    would cross threshold (w/ and w/o threshold      ----- ##
+    ## -----    enforcement)                                     ----- ##
+    ##
+
+    allocation1: BufferPoolAllocation = op_pool.allocate(50 * 1024)
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 50 * 1024
+    assert op_pool.bytes_pinned() == 50 * 1024
+    assert op_pool.max_memory() == 50 * 1024
+    assert pool.bytes_allocated() == 64 * 1024
+    assert pool.bytes_pinned() == 64 * 1024
+    assert pool.max_memory() == 64 * 1024
+    # Verify through the parent pool that it is pinned
+    assert pool.is_pinned(allocation1)
+
+    # With threshold enforcement enabled:
+    op_pool.enable_threshold_enforcement()
+    assert op_pool.threshold_enforcement_enabled
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        # Total of 260KiB would be above the 256KiB threshold
+        op_pool.allocate(210 * 1024)
+    # Verify stats after allocation attempt
+    assert op_pool.bytes_allocated() == 50 * 1024
+    assert op_pool.bytes_pinned() == 50 * 1024
+    assert op_pool.max_memory() == 50 * 1024
+    assert pool.bytes_allocated() == 64 * 1024
+    assert pool.bytes_pinned() == 64 * 1024
+    assert pool.max_memory() == 64 * 1024
+    # Verify through the parent pool that the first allocation is still pinned
+    assert pool.is_pinned(allocation1)
+
+    # Without threshold enforcement enabled:
+    op_pool.disable_threshold_enforcement()
+    assert not op_pool.threshold_enforcement_enabled
+
+    allocation2: BufferPoolAllocation = op_pool.allocate(210 * 1024)
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 260 * 1024
+    assert op_pool.bytes_pinned() == 260 * 1024
+    assert op_pool.max_memory() == 260 * 1024
+    assert pool.bytes_allocated() == 320 * 1024
+    assert pool.bytes_pinned() == 320 * 1024
+    assert pool.max_memory() == 320 * 1024
+    # Verify through the parent pool that both allocations are pinned
+    assert pool.is_pinned(allocation1)
+    assert pool.is_pinned(allocation2)
+
+    # Free both
+    op_pool.free(allocation1)
+    op_pool.free(allocation2)
+
+    # Verify stats
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 260 * 1024
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 320 * 1024
+
+    ##
+    ## ----- 5: Allocate small, then try to allocate amount that ----- ##
+    ## -----    would cross max limit (w/ and w/o threshold      ----- ##
+    ## -----    enforcement)                                     ----- ##
+    ##
+
+    allocation1: BufferPoolAllocation = op_pool.allocate(220 * 1024)
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 220 * 1024
+    assert op_pool.bytes_pinned() == 220 * 1024
+    assert op_pool.max_memory() == 260 * 1024
+    assert pool.bytes_allocated() == 256 * 1024
+    assert pool.bytes_pinned() == 256 * 1024
+    assert pool.max_memory() == 320 * 1024
+    # Verify through the parent pool that it is pinned
+    assert pool.is_pinned(allocation1)
+
+    # With threshold enforcement enabled:
+    op_pool.enable_threshold_enforcement()
+    assert op_pool.threshold_enforcement_enabled
+
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        # This would take the total to 520KiB, which is higher than
+        # 256KiB threshold
+        op_pool.allocate(300 * 1024)
+
+    # Verify stats after allocation attempt
+    assert op_pool.bytes_allocated() == 220 * 1024
+    assert op_pool.bytes_pinned() == 220 * 1024
+    assert op_pool.max_memory() == 260 * 1024
+    assert pool.bytes_allocated() == 256 * 1024
+    assert pool.bytes_pinned() == 256 * 1024
+    assert pool.max_memory() == 320 * 1024
+    # Verify through the parent pool that the first allocation is still pinned
+    assert pool.is_pinned(allocation1)
+
+    # Without threshold enforcement enabled:
+    op_pool.disable_threshold_enforcement()
+    assert not op_pool.threshold_enforcement_enabled
+
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Allocation failed. This allocation would lead to more pinned memory than what is allowed for this operator.",
+    ):
+        # This would take the total to 520KiB, which is higher than
+        # 512KiB limit.
+        op_pool.allocate(300 * 1024)
+
+    # Verify stats after allocation attempt
+    assert op_pool.bytes_allocated() == 220 * 1024
+    assert op_pool.bytes_pinned() == 220 * 1024
+    assert op_pool.max_memory() == 260 * 1024
+    assert pool.bytes_allocated() == 256 * 1024
+    assert pool.bytes_pinned() == 256 * 1024
+    assert pool.max_memory() == 320 * 1024
+    # Verify through the parent pool that the first allocation is still pinned
+    assert pool.is_pinned(allocation1)
+
+    # Free and verify stats
+    op_pool.free(allocation1)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 260 * 1024
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 320 * 1024
+
+    del op_pool
+    del pool
+
+
+def test_operator_pool_pin_unpin():
+    """
+    Test multiple pin/unpin scenarios, including
+    ensuring that threshold enforcement and limit
+    enforcement work as expected.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(
+        memory_size=2, min_size_class=8
+    )  # 2MiB total, 8KiB min size class
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool)
+
+    ##
+    ## ------------- 1: Allocate, then pin, then pin again ----------- ##
+    ##
+
+    # 20KiB is above malloc threshold (6KiB), so pin and unpin can be
+    # tested properly.
+    allocation: BufferPoolAllocation = op_pool.allocate(20 * 1024)
+
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 20 * 1024
+    assert op_pool.bytes_pinned() == 20 * 1024
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 32 * 1024
+    assert pool.bytes_pinned() == 32 * 1024
+    assert pool.max_memory() == 32 * 1024
+
+    # Pin it
+    op_pool.pin(allocation)
+
+    # Verify stats after pinning
+    assert op_pool.bytes_allocated() == 20 * 1024
+    assert op_pool.bytes_pinned() == 20 * 1024
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 32 * 1024
+    assert pool.bytes_pinned() == 32 * 1024
+    assert pool.max_memory() == 32 * 1024
+
+    # Now pin again
+    op_pool.pin(allocation)
+
+    # Verify stats after pinning
+    assert op_pool.bytes_allocated() == 20 * 1024
+    assert op_pool.bytes_pinned() == 20 * 1024
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 32 * 1024
+    assert pool.bytes_pinned() == 32 * 1024
+    assert pool.max_memory() == 32 * 1024
+
+    # Free and verify stats
+    op_pool.free(allocation)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 32 * 1024
+
+    ##
+    ## -------------- 2: Allocate, then unpin, then pin -------------- ##
+    ##
+
+    allocation: BufferPoolAllocation = op_pool.allocate(20 * 1024)
+
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 20 * 1024
+    assert op_pool.bytes_pinned() == 20 * 1024
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 32 * 1024
+    assert pool.bytes_pinned() == 32 * 1024
+    assert pool.max_memory() == 32 * 1024
+
+    # Unpin
+    op_pool.unpin(allocation)
+    # Verify stats after unpinning
+    assert op_pool.bytes_allocated() == 20 * 1024
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 32 * 1024
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 32 * 1024
+
+    # Unpin again
+    op_pool.unpin(allocation)
+    # Verify stats after unpinning
+    assert op_pool.bytes_allocated() == 20 * 1024
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 32 * 1024
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 32 * 1024
+
+    # Pin it back
+    op_pool.pin(allocation)
+    # Verify stats after pinning
+    assert op_pool.bytes_allocated() == 20 * 1024
+    assert op_pool.bytes_pinned() == 20 * 1024
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 32 * 1024
+    assert pool.bytes_pinned() == 32 * 1024
+    assert pool.max_memory() == 32 * 1024
+
+    # Unpin it again
+    op_pool.unpin(allocation)
+    # Verify stats after unpinning
+    assert op_pool.bytes_allocated() == 20 * 1024
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 32 * 1024
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 32 * 1024
+
+    # Free and verify stats
+    op_pool.free(allocation)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 32 * 1024
+
+    ##
+    ## ---- 3: Allocate moderate size, then try to allocate amount --- ##
+    ## ----    such that both together are not below threshold     --- ##
+    ## ----    but after unpinning 1st allocation, the second is.  --- ##
+    ## ----    Try pinning the 1st allocation and verify behavior. --- ##
+    ##
+
+    # 110 + 160 is above the threshold (256KiB), but they individually are not.
+
+    allocation1: BufferPoolAllocation = op_pool.allocate(110 * 1024)
+    op_pool.enable_threshold_enforcement()
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_pool.allocate(160 * 1024)
+
+    # Verify stats after both allocation attempts
+    assert op_pool.bytes_allocated() == 110 * 1024
+    assert op_pool.bytes_pinned() == 110 * 1024
+    assert op_pool.max_memory() == 110 * 1024
+    assert pool.bytes_allocated() == 128 * 1024
+    assert pool.bytes_pinned() == 128 * 1024
+    assert pool.max_memory() == 128 * 1024
+
+    # Unpin allocation and try again:
+    op_pool.unpin(allocation1)
+    allocation2: BufferPoolAllocation = op_pool.allocate(160 * 1024)
+    assert op_pool.bytes_allocated() == 270 * 1024
+    assert op_pool.bytes_pinned() == 160 * 1024
+    assert op_pool.max_memory() == 270 * 1024
+    assert pool.bytes_allocated() == 384 * 1024
+    assert pool.bytes_pinned() == 256 * 1024
+    assert pool.max_memory() == 384 * 1024
+
+    # Trying to pin allocation1 back should error out
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_pool.pin(allocation1)
+
+    # Verify stats after pin attempt
+    assert op_pool.bytes_allocated() == 270 * 1024
+    assert op_pool.bytes_pinned() == 160 * 1024
+    assert op_pool.max_memory() == 270 * 1024
+    assert pool.bytes_allocated() == 384 * 1024
+    assert pool.bytes_pinned() == 256 * 1024
+    assert pool.max_memory() == 384 * 1024
+
+    # Try allocating another within threshold
+    allocation3: BufferPoolAllocation = op_pool.allocate(90 * 1024)
+
+    assert op_pool.bytes_allocated() == 360 * 1024
+    assert op_pool.bytes_pinned() == 250 * 1024
+    assert op_pool.max_memory() == 360 * 1024
+    assert pool.bytes_allocated() == 512 * 1024
+    assert pool.bytes_pinned() == 384 * 1024
+    assert pool.max_memory() == 512 * 1024
+
+    ##
+    ## ---- 4: Verify that we can allocate as much as parent pool ---- ##
+    ## ----    allows, as long as pinned amount is below limit.   ---- ##
+    ##
+
+    op_pool.enable_threshold_enforcement()
+
+    # Continue allocating and unpinning (to keep pinned amount below 256KiB)
+    # and verify that we can go up to 2MiB (parent pool size -- we can technically
+    # go higher, but we haven't set up spilling)
+
+    # Unpin allocation2
+    op_pool.unpin(allocation2)
+    assert op_pool.bytes_allocated() == 360 * 1024
+    assert op_pool.bytes_pinned() == 90 * 1024
+    assert op_pool.max_memory() == 360 * 1024
+    assert pool.bytes_allocated() == 512 * 1024
+    assert pool.bytes_pinned() == 128 * 1024
+    assert pool.max_memory() == 512 * 1024
+
+    # Allocate another
+    allocation4: BufferPoolAllocation = op_pool.allocate(110 * 1024)
+    assert op_pool.bytes_allocated() == 470 * 1024
+    assert op_pool.bytes_pinned() == 200 * 1024
+    assert pool.bytes_allocated() == 640 * 1024
+    assert pool.bytes_pinned() == 256 * 1024
+
+    # Go up to 2MiB
+    op_pool.unpin(allocation3)
+    op_pool.unpin(allocation4)
+    allocation5: BufferPoolAllocation = op_pool.allocate(160 * 1024)
+    op_pool.unpin(allocation5)
+    assert op_pool.bytes_allocated() == 630 * 1024
+    assert op_pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 896 * 1024
+    assert pool.bytes_pinned() == 0
+    allocation6: BufferPoolAllocation = op_pool.allocate(240 * 1024)
+    op_pool.unpin(allocation6)
+    allocation7: BufferPoolAllocation = op_pool.allocate(240 * 1024)
+    op_pool.unpin(allocation7)
+    allocation8: BufferPoolAllocation = op_pool.allocate(240 * 1024)
+    op_pool.unpin(allocation8)
+    allocation9: BufferPoolAllocation = op_pool.allocate(240 * 1024)
+    op_pool.unpin(allocation9)
+    assert op_pool.bytes_allocated() == 1590 * 1024
+    assert op_pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 1920 * 1024
+    assert pool.bytes_pinned() == 0
+
+    # Check that error is raised when trying over 2MiB total
+    # (at the BufferPool level since it uses frame sizes and not
+    # just the actual allocation amounts)
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Allocation failed. No storage locations provided to evict to.",
+    ):
+        op_pool.allocate(240 * 1024)
+
+    # Try pinning existing allocations and it should raise threshold error
+    op_pool.pin(allocation1)
+    assert op_pool.bytes_allocated() == 1590 * 1024
+    assert op_pool.bytes_pinned() == 110 * 1024
+    assert pool.bytes_allocated() == 1920 * 1024
+    assert pool.bytes_pinned() == 128 * 1024
+
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_pool.pin(allocation2)
+
+    # Verify stats after pin attempt
+    assert op_pool.bytes_allocated() == 1590 * 1024
+    assert op_pool.bytes_pinned() == 110 * 1024
+    assert pool.bytes_allocated() == 1920 * 1024
+    assert pool.bytes_pinned() == 128 * 1024
+
+    # Disable threshold enforcement and try pinning again and it should succeed.
+    op_pool.disable_threshold_enforcement()
+    op_pool.pin(allocation2)
+    assert op_pool.bytes_allocated() == 1590 * 1024
+    assert op_pool.bytes_pinned() == 270 * 1024
+    assert pool.bytes_allocated() == 1920 * 1024
+    assert pool.bytes_pinned() == 384 * 1024
+
+    # Pin all this way (up to 512KiB)
+    op_pool.pin(allocation6)  # This takes it to 510KiB
+    assert op_pool.bytes_allocated() == 1590 * 1024
+    assert op_pool.bytes_pinned() == 510 * 1024
+    assert pool.bytes_allocated() == 1920 * 1024
+    assert pool.bytes_pinned() == 640 * 1024
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Allocation failed. This allocation would lead to more pinned memory than what is allowed for this operator.",
+    ):
+        op_pool.pin(allocation3)
+    assert op_pool.bytes_allocated() == 1590 * 1024
+    assert op_pool.bytes_pinned() == 510 * 1024
+    assert pool.bytes_allocated() == 1920 * 1024
+    assert pool.bytes_pinned() == 640 * 1024
+
+    # Then free all.
+    op_pool.free(allocation1)
+    op_pool.free(allocation2)
+    op_pool.free(allocation3)
+    op_pool.free(allocation4)
+    op_pool.free(allocation5)
+    op_pool.free(allocation6)
+    op_pool.free(allocation7)
+    op_pool.free(allocation8)
+    op_pool.free(allocation9)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+
+    del op_pool
+    del pool
+
+
+def test_operator_pool_reallocate_basic():
+    """
+    Test basic reallocate functionality of the
+    OperatorBufferPool.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(memory_size=4, min_size_class=8)  # 4MiB, 8KiB
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.5)
+
+    ## Simple reallocate
+
+    allocation: BufferPoolAllocation = op_pool.allocate(20 * 1024)
+
+    # Verify stats after allocation
+    assert op_pool.bytes_allocated() == 20 * 1024
+    assert op_pool.bytes_pinned() == 20 * 1024
+    assert op_pool.max_memory() == 20 * 1024
+    assert pool.bytes_allocated() == 32 * 1024
+    assert pool.bytes_pinned() == 32 * 1024
+    assert pool.max_memory() == 32 * 1024
+    assert pool.is_pinned(allocation)
+
+    op_pool.reallocate(40 * 1024, allocation)
+
+    # Verify stats after re-allocation
+    assert op_pool.bytes_allocated() == 40 * 1024
+    assert op_pool.bytes_pinned() == 40 * 1024
+    assert op_pool.max_memory() == 40 * 1024
+    assert pool.bytes_allocated() == 64 * 1024
+    assert pool.bytes_pinned() == 64 * 1024
+    assert (
+        pool.max_memory() == 96 * 1024
+    )  # 64 + 32 since we needed both in memory at the same time
+    assert pool.is_pinned(allocation)
+
+    # Unpin and reallocate again
+    op_pool.unpin(allocation)
+    op_pool.reallocate(60 * 1024, allocation)
+    assert op_pool.bytes_allocated() == 60 * 1024
+    assert op_pool.bytes_pinned() == 60 * 1024
+    assert op_pool.max_memory() == 60 * 1024
+    assert pool.bytes_allocated() == 64 * 1024
+    assert pool.bytes_pinned() == 64 * 1024
+    assert pool.max_memory() == 96 * 1024
+    assert pool.is_pinned(allocation)  # reallocate pins by default
+
+    # Free and verify stats
+    op_pool.free(allocation)
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert op_pool.max_memory() == 60 * 1024
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+    assert pool.max_memory() == 96 * 1024
+
+    del op_pool
+    del pool
+
+
+def test_operator_pool_reallocate_edge_cases():
+    """
+    Test certain edge case scenarios of the reallocate
+    functionality in OperatorBufferPool.
+    """
+
+    # Allocate a very small pool for testing
+    options = BufferPoolOptions(memory_size=4, min_size_class=8)  # 4MiB, 8KiB
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Create a small operator pool (512KiB)
+    op_pool: OperatorBufferPool = OperatorBufferPool(512 * 1024, pool, 0.5)
+
+    ## 1: Allocate within threshold, then unpin it. Then allocate another such
+    ##    both together cannot be pinned. Trying to reallocate first allocation
+    ##    (even to a lesser amount) should raise an error
+
+    allocation1: BufferPoolAllocation = op_pool.allocate(200 * 1024)
+    op_pool.unpin(allocation1)
+
+    allocation2: BufferPoolAllocation = op_pool.allocate(200 * 1024)
+
+    # Fails since 400KiB is above the threshold.
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        # 200 (from allocation2) + 30 is lower than threshold, but won't be allowed
+        # since it still requires pinning the original 200KiB.
+        op_pool.reallocate(30 * 1024, allocation1)
+
+    assert op_pool.bytes_allocated() == 400 * 1024
+    assert op_pool.bytes_pinned() == 200 * 1024
+    assert pool.bytes_allocated() == 512 * 1024
+    assert pool.bytes_pinned() == 256 * 1024
+    assert pool.is_pinned(allocation2)
+    assert not pool.is_pinned(allocation1)
+
+    # Should pass when threshold enforcement is disabled:
+    op_pool.disable_threshold_enforcement()
+    op_pool.reallocate(30 * 1024, allocation1)
+    assert op_pool.bytes_allocated() == 230 * 1024
+    assert op_pool.bytes_pinned() == 230 * 1024
+    assert pool.bytes_allocated() == 288 * 1024
+    assert pool.bytes_pinned() == 288 * 1024
+    assert pool.is_pinned(allocation2)
+    assert pool.is_pinned(allocation1)
+
+    op_pool.free(allocation1)
+    op_pool.free(allocation2)
+    op_pool.enable_threshold_enforcement()  # Reset for future tests
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+
+    ## 2: Similar to (1), but check if old_size + new_size together would take it
+    ##    above the threshold.
+    allocation: BufferPoolAllocation = op_pool.allocate(120 * 1024)
+    op_pool.enable_threshold_enforcement()
+    # Fails since 150 + 120 is above the threshold.
+    with pytest.raises(RuntimeError, match="OperatorPoolThresholdExceededError"):
+        op_pool.reallocate(150 * 1024, allocation)
+    assert op_pool.bytes_allocated() == 120 * 1024
+    assert op_pool.bytes_pinned() == 120 * 1024
+    assert pool.bytes_allocated() == 128 * 1024
+    assert pool.bytes_pinned() == 128 * 1024
+    assert pool.is_pinned(allocation)
+
+    op_pool.disable_threshold_enforcement()
+    # Should go through now
+    op_pool.reallocate(150 * 1024, allocation)
+    assert op_pool.bytes_allocated() == 150 * 1024
+    assert op_pool.bytes_pinned() == 150 * 1024
+    assert pool.bytes_allocated() == 256 * 1024
+    assert pool.bytes_pinned() == 256 * 1024
+    assert pool.is_pinned(allocation)
+
+    op_pool.free(allocation)
+    op_pool.enable_threshold_enforcement()  # Reset for future tests
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+
+    ## 3: Similar to (2), but check if old_size + new_size together would take it
+    ##    above max pinned bytes limit.
+
+    # Need to disable for testing this code path:
+    op_pool.disable_threshold_enforcement()
+    allocation = op_pool.allocate(250 * 1024)
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Allocation failed. This allocation would lead to more pinned memory than what is allowed for this operator.",
+    ):
+        op_pool.reallocate(300 * 1024, allocation)
+    assert op_pool.bytes_allocated() == 250 * 1024
+    assert op_pool.bytes_pinned() == 250 * 1024
+    assert pool.bytes_allocated() == 256 * 1024
+    assert pool.bytes_pinned() == 256 * 1024
+    assert pool.is_pinned(allocation)
+
+    # Try with unpinned:
+    op_pool.unpin(allocation)
+    assert op_pool.bytes_allocated() == 250 * 1024
+    assert op_pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 256 * 1024
+    assert pool.bytes_pinned() == 0
+    assert not pool.is_pinned(allocation)
+
+    with pytest.raises(
+        pyarrow.lib.ArrowMemoryError,
+        match="Allocation failed. This allocation would lead to more pinned memory than what is allowed for this operator.",
+    ):
+        op_pool.reallocate(300 * 1024, allocation)
+    assert op_pool.bytes_allocated() == 250 * 1024
+    assert op_pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 256 * 1024
+    assert pool.bytes_pinned() == 0
+    assert not pool.is_pinned(allocation)
+
+    # Free and verify stats
+    op_pool.free(allocation)
+    op_pool.enable_threshold_enforcement()  # Reset for future tests
+    assert op_pool.bytes_allocated() == 0
+    assert op_pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+    assert pool.bytes_pinned() == 0
+
+    del op_pool
     del pool

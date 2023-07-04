@@ -562,7 +562,7 @@ cdef class BufferPool(IBufferPool):
         size_class.cinit(c_size_class)
         return size_class
 
-    cdef BufferPoolAllocation c_allocate(self, int size, int alignment):
+    cdef BufferPoolAllocation c_allocate(self, int size, int alignment) except +:
         # Create an empty BufferPoolAllocation instance.
         allocation = BufferPoolAllocation()
         # Allocate memory through the BufferPool.
@@ -583,10 +583,13 @@ cdef class BufferPool(IBufferPool):
         allocation.size = new_size
 
     cdef void c_pin(self, BufferPoolAllocation allocation) except *:
-        check_status(deref(self.c_pool).Pin(&(allocation.ptr)))
+        check_status(deref(self.c_pool).Pin(&(allocation.ptr), allocation.size, allocation.alignment))
 
     cdef void c_unpin(self, BufferPoolAllocation allocation) noexcept:
-        deref(self.c_pool).Unpin(allocation.ptr)
+        deref(self.c_pool).Unpin(allocation.ptr, allocation.size, allocation.alignment)
+    
+    cdef c_bool c_is_pinned(self, BufferPoolAllocation allocation) except *:
+        return deref(self.c_pool).IsPinned(allocation.ptr, allocation.size, allocation.alignment)
 
     def allocate(self, size, alignment=64) -> BufferPoolAllocation:
         """
@@ -623,6 +626,13 @@ cdef class BufferPool(IBufferPool):
         it to be spilled if storage managers are provided
         """
         self.c_unpin(allocation)
+    
+    def is_pinned(self, allocation: BufferPoolAllocation) -> bool:
+        """
+        Check if an allocation is pinned.
+        """
+        return self.c_is_pinned(allocation)
+
 
     cdef uint64_t c_get_smallest_size_class_size(self):
         return deref(self.c_pool).GetSmallestSizeClassSize()
@@ -633,6 +643,23 @@ cdef class BufferPool(IBufferPool):
         Returns 0 when there are no SizeClass-es.
         """
         return self.c_get_smallest_size_class_size()
+
+    def __eq__(self, other: BufferPool) -> bool:
+        """
+        Check if two BufferPool instances are
+        equivalent, i.e. they both point to the same
+        underlying pool in C++.
+        """
+        if isinstance(other, BufferPool):
+            return self.c_pool.get() == other.c_pool.get()
+        else:
+            return False
+
+    def __ne__(self, other: BufferPool) -> bool:
+        """
+        Inverse of __eq__.
+        """
+        return not self.__eq__(other)
 
 
 def default_buffer_pool():
@@ -674,3 +701,202 @@ def set_default_buffer_pool_as_arrow_memory_pool():
     as the default MemoryPool for all PyArrow allocations.
     """
     pa.set_memory_pool(get_arrow_memory_pool_wrapper_for_default_buffer_pool())
+
+
+cdef class OperatorBufferPool(IBufferPool):
+    """
+    Python interface to OperatorBufferPool class defined in C++.
+    This will be used for unit-testing purposes only at this point.
+    """
+
+    # Each instance will store a shared_ptr to the
+    # C++ instance of the OperatorBufferPool
+    cdef shared_ptr[COperatorBufferPool] c_pool
+
+    def __init__(self, 
+                 int max_pinned_size_bytes,
+                 parent_pool: BufferPool = None, 
+                 double error_threshold = 0.5):
+        """
+        Create a new OperatorBufferPool which can have
+        a maximum of 'max_pinned_size_bytes' bytes pinned
+        at any time. It will use the provided 'parent_pool'.
+        If a parent_pool is not specified, the default
+        BufferPool will be used.
+        The 'error_threshold' defines the fraction of
+        'max_pinned_size_bytes' at which the OperatorBufferPool
+        will raise a 'OperatorPoolThresholdExceededError' error.
+        """
+        if parent_pool is None:
+            parent_pool = BufferPool.default()
+        
+        self.c_pool = make_shared[COperatorBufferPool](max_pinned_size_bytes, 
+                                                       parent_pool.c_pool, 
+                                                       error_threshold)
+
+    @property
+    def max_pinned_size_bytes(self) -> int:
+        """
+        Getter for the 'max_pinned_size_bytes' attribute.
+        """
+        return (deref(self.c_pool)).get_max_pinned_size_bytes()
+    
+    @property
+    def memory_error_threshold(self) -> int:
+        """
+        Getter for the 'memory_error_threshold' attribute.
+        """
+        return (deref(self.c_pool)).get_memory_error_threshold()
+    
+    @property
+    def threshold_enforcement_enabled(self) -> bool:
+        """
+        Getter for the 'threshold_enforcement_enabled' attribute.
+        """
+        return (deref(self.c_pool)).ThresholdEnforcementEnabled()
+    
+    @property
+    def parent_pool(self) -> BufferPool:
+        """
+        Getter for the parent pool. We wrap it in a new
+        BufferPool instance.
+        """
+        cdef:
+            # Create an uninitialized instance.
+            BufferPool parent_pool = BufferPool.__new__(BufferPool)
+            # Get shared_ptr to the parent pool
+            shared_ptr[CBufferPool] parent_pool_shared_ptr = (deref(self.c_pool)).get_parent_pool()
+        # Set the shared_ptr for the instance.
+        parent_pool.cinit(parent_pool_shared_ptr)
+        return parent_pool
+    
+    cdef void c_enable_threshold_enforcement(self) except *:
+        (deref(self.c_pool)).EnableThresholdEnforcement()
+    
+    def enable_threshold_enforcement(self):
+        """
+        Enable threshold enforcement for this OperatorBufferPool.
+        """
+        self.c_enable_threshold_enforcement()
+
+    cdef void c_disable_threshold_enforcement(self) except *:
+        (deref(self.c_pool)).DisableThresholdEnforcement()
+
+    def disable_threshold_enforcement(self):
+        """
+        Disable threshold enforcement for this OperatorBufferPool.
+        """
+        self.c_disable_threshold_enforcement()
+
+    ## NOTE: The functions below are mostly copied over from BufferPool implementation.
+    ## Ideally we'd be able to move them to IBufferPool and reuse them in both
+    ## BufferPool and OperatorBufferPool, but Cython's support for inheritance
+    ## is not great and there were a lot of conflicts/errors when trying to do
+    ## that.
+    
+    def bytes_pinned(self) -> int:
+        """
+        Get the number of bytes currently pinned by the
+        OperatorBufferPool.
+        """
+        return deref(self.c_pool).get_bytes_pinned()
+
+    def bytes_allocated(self) -> int:
+        """
+        Get number of bytes currently allocated by the
+        OperatorBufferPool.
+        """
+        return deref(self.c_pool).get_bytes_allocated()
+    
+    def max_memory(self) -> int:
+        """
+        Get the max-memory usage of the OperatorBufferPool
+        at any point in its lifetime.
+        """
+        return deref(self.c_pool).get_max_memory()
+    
+    @property
+    def backend_name(self) -> str:
+        """
+        Get the memory backend. Returns memory backend
+        of the parent pool.
+        """
+        return frombytes(deref(self.c_pool).get_backend_name())
+
+    cdef BufferPoolAllocation c_allocate(self, int size, int alignment):
+        # Create an empty BufferPoolAllocation instance.
+        allocation = BufferPoolAllocation()
+        # Allocate memory through the OperatorBufferPool.
+        # Pass the pointer in the BufferPoolAllocation instance
+        # to be used as the "swip".
+        check_status(deref(self.c_pool).Allocate(size, alignment, &(allocation.ptr)))
+        # Set the allocation size. This is required during
+        # free and reallocate.
+        allocation.size = size
+        allocation.alignment = alignment
+        return allocation
+
+    cdef void c_free(self, BufferPoolAllocation allocation) except *:
+        deref(self.c_pool).Free(allocation.ptr, allocation.size, allocation.alignment)
+    
+    cdef void c_reallocate(self, int new_size, BufferPoolAllocation allocation) except *:
+        check_status(deref(self.c_pool).Reallocate(allocation.size, new_size, allocation.alignment, &(allocation.ptr)))
+        allocation.size = new_size
+
+    cdef void c_pin(self, BufferPoolAllocation allocation) except *:
+        check_status(deref(self.c_pool).Pin(&(allocation.ptr), allocation.size, allocation.alignment))
+
+    cdef void c_unpin(self, BufferPoolAllocation allocation) except *:
+        deref(self.c_pool).Unpin(allocation.ptr, allocation.size, allocation.alignment)
+
+    def allocate(self, size, alignment=64) -> BufferPoolAllocation:
+        """
+        Wrapper around c_allocate. We encode the information
+        from the allocation in a BufferPoolAllocation object. 
+        """
+        return self.c_allocate(size, alignment)
+
+    def free(self, allocation: BufferPoolAllocation):
+        """
+        Free memory allocated through OperatorBuferrPool.
+        We use the information from a BufferPoolAllocation
+        instance to get the information about the memory region
+        and allocated size.
+        """
+        self.c_free(allocation)
+    
+    def reallocate(self, new_size: int, allocation: BufferPoolAllocation):
+        """
+        Resize an allocation to 'new_size' bytes.
+        The BufferPoolAllocation instance is updated in place.
+        """
+        self.c_reallocate(new_size, allocation)
+
+    def pin(self, allocation: BufferPoolAllocation):
+        """
+        Pin an allocation to memory.
+        """
+        self.c_pin(allocation)
+
+    def unpin(self, allocation: BufferPoolAllocation):
+        """
+        Unpin an allocation from memory.
+        """
+        self.c_unpin(allocation)
+
+    def __eq__(self, other: OperatorBufferPool) -> bool:
+        """
+        Check if two OperatorBufferPool instances are
+        equivalent, i.e. they both point to the same
+        underlying pool in C++.
+        """
+        if isinstance(other, OperatorBufferPool):
+            return self.c_pool.get() == other.c_pool.get()
+        else:
+            return False
+
+    def __ne__(self, other: OperatorBufferPool) -> bool:
+        """
+        Inverse of __eq__.
+        """
+        return not self.__eq__(other)
