@@ -42,7 +42,7 @@ mkdir -p wheelhouse
 # build Bodo wheels
 for PYTHON_VER in "3.8" "3.9" "3.10"
 do
-    conda create -n BUILDPIP python=$PYTHON_VER boost-cpp -c conda-forge -y
+    conda create -n BUILDPIP python=$PYTHON_VER boost-cpp=1.82 -c conda-forge -y
     source activate BUILDPIP
     # For Python 3.10, the earliest numpy binaries available are 1.21, and source
     # packages prior to 1.21 do not build.
