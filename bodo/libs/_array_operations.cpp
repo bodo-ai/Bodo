@@ -2339,13 +2339,8 @@ array_info* get_replace_regex_py_entry(array_info* p_in_arr,
                                                dict_arr->length);
         }
         std::shared_ptr<array_info> new_indices = copy_array(indices_arr);
-        out_arr = std::make_shared<array_info>(
-            bodo_array_type::DICT, Bodo_CTypes::STRING, in_arr->length,
-            std::vector<std::shared_ptr<BodoBuffer>>({}),
-            std::vector<std::shared_ptr<array_info>>({new_dict, new_indices}),
-            0, 0, 0, in_arr->has_global_dictionary,
-            false,  // Note replace can create collisions.
-            false);
+        out_arr = create_dict_string_array(new_dict, new_indices,
+                                           in_arr->has_global_dictionary);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "array in_arr type should be string");

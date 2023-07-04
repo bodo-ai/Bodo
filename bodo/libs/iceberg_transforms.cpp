@@ -417,14 +417,9 @@ std::shared_ptr<array_info> array_transform_truncate_W(
         // transformed dictionary would be sorted too since
         // it's just a truncation. It might not have all
         // unique elements though.
-        out_arr = std::make_shared<array_info>(
-            bodo_array_type::DICT, in_arr->dtype, in_arr->length,
-            std::vector<std::shared_ptr<BodoBuffer>>({}),
-            std::vector<std::shared_ptr<array_info>>(
-                {trunc_dict_data_arr, indices_copy}),
-            0, 0, 0, in_arr->has_global_dictionary,
-            in_arr->has_deduped_local_dictionary,
-            in_arr->has_sorted_dictionary);
+        out_arr = create_dict_string_array(trunc_dict_data_arr, indices_copy,
+                                           in_arr->has_global_dictionary, false,
+                                           in_arr->has_sorted_dictionary);
         return out_arr;
     }
     // Throw an error if type is not supported (e.g. CATEGORICAL)

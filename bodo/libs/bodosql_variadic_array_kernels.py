@@ -325,7 +325,7 @@ def overload_coalesce_util(A):
                 suffix_code += f"curr_index += 1\n"
         # Wrap the output into an actual dictionary encoded array.
         # Note: We cannot assume it is unique even if each component were unique.
-        suffix_code += "duplicated_res = bodo.libs.dict_arr_ext.init_dict_arr(dict_data, res, is_dict_global, False)\n"
+        suffix_code += "duplicated_res = bodo.libs.dict_arr_ext.init_dict_arr(dict_data, res, is_dict_global, False, None)\n"
         # Drop any duplicates and update the dictionary
         suffix_code += "res = bodo.libs.array.drop_duplicates_local_dictionary(duplicated_res, False)\n"
 

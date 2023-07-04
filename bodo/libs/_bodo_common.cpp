@@ -312,7 +312,8 @@ std::unique_ptr<array_info> alloc_string_array(Bodo_CTypes::CTypeEnum typ_enum,
 
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
-    bool has_global_dictionary, bool has_deduped_local_dictionary) {
+    bool has_global_dictionary, bool has_deduped_local_dictionary,
+    int64_t dict_id) {
     // dictionary
     std::shared_ptr<array_info> dict_data_arr = alloc_string_array(
         Bodo_CTypes::CTypeEnum::STRING, n_keys, n_chars_keys, 0);
@@ -320,12 +321,17 @@ std::unique_ptr<array_info> alloc_dict_string_array(
     std::shared_ptr<array_info> indices_data_arr =
         alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
 
+    if (dict_id < 0) {
+        dict_id = generate_dict_id(n_keys);
+    }
+
     return std::make_unique<array_info>(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
         std::vector<std::shared_ptr<BodoBuffer>>({}),
         std::vector<std::shared_ptr<array_info>>(
             {dict_data_arr, indices_data_arr}),
-        0, 0, 0, has_global_dictionary, has_deduped_local_dictionary, false);
+        0, 0, 0, dict_id, has_global_dictionary, has_deduped_local_dictionary,
+        false);
 }
 
 std::unique_ptr<array_info> create_string_array(
@@ -432,12 +438,16 @@ std::unique_ptr<array_info> create_list_string_array(
 std::unique_ptr<array_info> create_dict_string_array(
     std::shared_ptr<array_info> dict_arr,
     std::shared_ptr<array_info> indices_arr, bool has_global_dictionary,
-    bool has_deduped_local_dictionary, bool has_sorted_dictionary) {
+    bool has_deduped_local_dictionary, bool has_sorted_dictionary,
+    int64_t dict_id) {
+    if (dict_id < 0) {
+        dict_id = generate_dict_id(dict_arr->length);
+    }
     std::unique_ptr<array_info> out_col = std::make_unique<array_info>(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
         indices_arr->length, std::vector<std::shared_ptr<BodoBuffer>>({}),
         std::vector<std::shared_ptr<array_info>>({dict_arr, indices_arr}), 0, 0,
-        0, has_global_dictionary, has_deduped_local_dictionary,
+        0, dict_id, has_global_dictionary, has_deduped_local_dictionary,
         has_sorted_dictionary);
     return out_col;
 }
@@ -776,12 +786,10 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr) {
         std::shared_ptr<array_info> dictionary =
             copy_array(earr->child_arrays[0]);
         std::shared_ptr<array_info> indices = copy_array(earr->child_arrays[1]);
-        farr = std::make_shared<array_info>(
-            bodo_array_type::DICT, earr->dtype, indices->length,
-            std::vector<std::shared_ptr<BodoBuffer>>({}),
-            std::vector<std::shared_ptr<array_info>>({dictionary, indices}), 0,
-            0, 0, earr->has_global_dictionary,
-            earr->has_deduped_local_dictionary, earr->has_sorted_dictionary);
+        farr = create_dict_string_array(
+            dictionary, indices, earr->has_global_dictionary,
+            earr->has_deduped_local_dictionary, earr->has_sorted_dictionary,
+            earr->dict_id);
     } else {
         farr = alloc_array(earr->length, earr->n_sub_elems(),
                            earr->n_sub_sub_elems(), earr->arr_type, earr->dtype,
@@ -875,6 +883,34 @@ size_t get_stats_alloc() { return NRT_MemSys_get_stats_alloc(); }
 size_t get_stats_free() { return NRT_MemSys_get_stats_free(); }
 size_t get_stats_mi_alloc() { return NRT_MemSys_get_stats_mi_alloc(); }
 size_t get_stats_mi_free() { return NRT_MemSys_get_stats_mi_free(); }
+
+// Dictionary utilities
+
+/**
+ * @brief Generate a new local id for a dictionary. These
+ * can be used to identify if dictionaries are "equivalent"
+ * because they share an id. Other than ==, a particular
+ * id has no significance.
+ *
+ * @param length The length of the dictionary being assigned
+ * the id. All dictionaries of length 0 should get the same
+ * id.
+ * @return int64_t The new id that is generated.
+ */
+static int64_t generate_dict_id_state(int64_t length) {
+    static int64_t id_counter = 1;
+    if (length == 0) {
+        // Ensure we can identify all length 0 dictionaries
+        // and that all can be unified without transposing.
+        return 0;
+    } else {
+        return id_counter++;
+    }
+}
+
+int64_t generate_dict_id(int64_t length) {
+    return generate_dict_id_state(length);
+}
 
 extern "C" {
 

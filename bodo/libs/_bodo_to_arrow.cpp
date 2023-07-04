@@ -725,7 +725,7 @@ std::shared_ptr<array_info> arrow_struct_array_to_bodo(
     return std::make_shared<array_info>(
         bodo_array_type::STRUCT, Bodo_CTypes::STRUCT, n,
         std::vector<std::shared_ptr<BodoBuffer>>({null_bitmap_buffer}),
-        inner_arrs_vec, 0, 0, 0, false, false, false, 0, field_names_vec);
+        inner_arrs_vec, 0, 0, 0, -1, false, false, false, 0, field_names_vec);
 }
 
 /**
@@ -799,7 +799,7 @@ std::shared_ptr<array_info> arrow_decimal_array_to_bodo(
         bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::DECIMAL, n,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {data_buf_buffer, null_bitmap_buffer}),
-        std::vector<std::shared_ptr<array_info>>({}), precision, scale, 0,
+        std::vector<std::shared_ptr<array_info>>({}), precision, scale, 0, -1,
         false, false, false);
 }
 
@@ -913,8 +913,6 @@ std::shared_ptr<array_info> arrow_string_binary_array_to_bodo(
  */
 std::shared_ptr<array_info> arrow_dictionary_array_to_bodo(
     std::shared_ptr<arrow::DictionaryArray> arrow_dict_arr) {
-    int64_t n = arrow_dict_arr->length();
-
     // Recurse on the dictionary and index arrays
     std::shared_ptr<array_info> dict_array =
         arrow_array_to_bodo(arrow_dict_arr->dictionary());
@@ -927,12 +925,7 @@ std::shared_ptr<array_info> arrow_dictionary_array_to_bodo(
             "be string, but found " +
             std::to_string(dict_array->dtype));
     }
-
-    return std::make_shared<array_info>(
-        bodo_array_type::DICT, dict_array->dtype, n,
-        std::vector<std::shared_ptr<BodoBuffer>>({}),
-        std::vector<std::shared_ptr<array_info>>({dict_array, idx_array}), 0, 0,
-        0, false, false, false);
+    return create_dict_string_array(dict_array, idx_array);
 }
 
 std::shared_ptr<array_info> arrow_array_to_bodo(
