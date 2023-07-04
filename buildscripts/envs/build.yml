@@ -10,7 +10,7 @@ platforms:
 dependencies:
   - setuptools <63
   - cython
-  - boost-cpp =1.74.0  # Unrestrict?
+  - boost-cpp =1.82
 
   # C++
   - clang_osx-arm64    #[arm64]
