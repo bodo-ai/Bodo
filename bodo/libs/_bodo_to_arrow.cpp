@@ -70,10 +70,9 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         } else {
             null_bitmap = array->buffers[1];
         }
+        const uint8_t *null_bitmask = (uint8_t *)array->null_bitmask();
         for (size_t i = 0; i < array->length; i++) {
-            if (!GetBit((uint8_t *)array->null_bitmask(), i)) {
-                null_count_++;
-            }
+            null_count_ += !GetBit(null_bitmask, i);
         }
     } else {
         // TODO: Remove for arrays that don't need it
@@ -464,8 +463,10 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                 list_builder.value_builder()));
         bool failed = false;
 
+        const uint8_t *null_bitmask = (uint8_t *)array->null_bitmask();
+        const uint8_t *sub_null_bitmask = (uint8_t *)array->sub_null_bitmask();
         for (int64_t i = 0; i < num_lists; i++) {
-            bool is_null = !GetBit((uint8_t *)array->null_bitmask(), i);
+            bool is_null = !GetBit(null_bitmask, i);
             if (is_null) {
                 arrowOpStatus = list_builder.AppendNull();
                 failed = failed || !arrowOpStatus.ok();
@@ -475,8 +476,7 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                 int64_t l_string = string_offsets[i];
                 int64_t r_string = string_offsets[i + 1];
                 for (int64_t j = l_string; j < r_string; j++) {
-                    bool is_null =
-                        !GetBit((uint8_t *)array->sub_null_bitmask(), j);
+                    bool is_null = !GetBit(sub_null_bitmask, j);
                     if (is_null) {
                         arrowOpStatus = string_builder.AppendNull();
                     } else {
