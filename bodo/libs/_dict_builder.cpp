@@ -1,5 +1,6 @@
 #include "_dict_builder.h"
 #include "_array_hash.h"
+#include "_bodo_common.h"
 #include "_table_builder.h"
 
 /* -------------------------- DictionaryBuilder --------------------------- */
@@ -69,13 +70,10 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
             out_indices_arr->set_null_bit(i, true);
         }
     }
-    return std::make_shared<array_info>(
-        bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-        out_indices_arr->length, std::vector<std::shared_ptr<BodoBuffer>>({}),
-        std::vector<std::shared_ptr<array_info>>(
-            {this->dict_buff->data_array, out_indices_arr}),
-        0, 0, 0, false,
-        /*_has_deduped_local_dictionary=*/true, false);
+    this->dict_id = generate_dict_id(this->dict_buff->data_array->length);
+    return create_dict_string_array(
+        this->dict_buff->data_array, out_indices_arr, false,
+        /*_has_deduped_local_dictionary=*/true, false, this->dict_id);
 }
 
 std::shared_ptr<bodo::vector<uint32_t>>

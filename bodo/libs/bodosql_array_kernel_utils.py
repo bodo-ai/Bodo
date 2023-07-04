@@ -449,7 +449,7 @@ def gen_vectorized(
                 func_text += "            bodo.libs.array_kernels.setna(indices, i)\n"
             # If the output dtype is a string array, create the new dictionary encoded array
             if out_dtype == bodo.string_array_type:
-                func_text += "   res = bodo.libs.dict_arr_ext.init_dict_arr(res, indices, has_global, is_dict_unique)\n"
+                func_text += "   res = bodo.libs.dict_arr_ext.init_dict_arr(res, indices, has_global, is_dict_unique, None)\n"
             # Otherwise, use the indices to copy the values from the smaller array
             # into a larger one (flushing nulls along the way)
             else:
@@ -480,7 +480,7 @@ def gen_vectorized(
 
         # If using dictionary encoded synthesis, construct the final dict-encoded array
         if use_dict_synthesis:
-            func_text += f"   return bodo.libs.dict_arr_ext.init_dict_arr(dict_res, res, {synthesize_dict_global}, {synthesize_dict_unique})\n"
+            func_text += f"   return bodo.libs.dict_arr_ext.init_dict_arr(dict_res, res, {synthesize_dict_global}, {synthesize_dict_unique}, None)\n"
         else:
             func_text += "   return res"
     loc_vars = {}

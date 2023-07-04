@@ -221,6 +221,8 @@ struct ArrayBuildBuffer {
             in_arr->child_arrays[1], append_rows, append_rows_sum);
         size += append_rows_sum;
         data_array->length = size;
+        // Update the dict id to be consistent
+        this->data_array->dict_id = dict_builder->dict_id;
     }
 
     /**
@@ -436,6 +438,8 @@ struct ArrayBuildBuffer {
         // case.
         size += in_arr->length;
         data_array->length = size;
+        // Update the dict id to be consistent
+        this->data_array->dict_id = dict_builder->dict_id;
     }
 
     /**
@@ -544,6 +548,8 @@ struct ArrayBuildBuffer {
                 this->dict_indices->AppendRow(in_arr->child_arrays[1], row_ind);
                 size++;
                 data_array->length = size;
+                // Update the dict id to be consistent
+                this->data_array->dict_id = dict_builder->dict_id;
             } break;
             case bodo_array_type::NUMPY: {
                 uint64_t size_type = numpy_item_size[in_arr->dtype];

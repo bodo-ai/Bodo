@@ -250,6 +250,8 @@ TableBuildBuffer::TableBuildBuffer(
             // Set the dictionary to the one from the dict builder:
             this->data_table->columns[i]->child_arrays[0] =
                 dict_builders[i]->dict_buff->data_array;
+            // Update the dict id to be consistent
+            this->data_table->columns[i]->dict_id = dict_builders[i]->dict_id;
         }
         array_buffers.emplace_back(this->data_table->columns[i],
                                    dict_builders[i]);

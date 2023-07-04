@@ -1837,7 +1837,7 @@ def concat_overload(arr_list):
                     curr_elem_ind += num_elems
 
                 out_arr = init_dict_arr(
-                    out_dict_arr, out_ind_arr, has_global_dictionary, False
+                    out_dict_arr, out_ind_arr, has_global_dictionary, False, None
                 )
                 # drop_duplicates_local_dictionary will drop any local duplicates,
                 # potentially remaping the indices.
@@ -2560,7 +2560,9 @@ def overload_gen_na_array(n, arr, use_dict_arr=False):
             numba.parfors.parfor.init_prange()
             for i in numba.parfors.parfor.internal_prange(n):
                 setna(indices, i)
-            return bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True, True)
+            return bodo.libs.dict_arr_ext.init_dict_arr(
+                dict_arr, indices, True, True, None
+            )
 
         return impl_dict
 
@@ -3039,6 +3041,7 @@ def repeat_kernel_overload(A, repeats):
                     out_ind_arr,
                     A._has_global_dictionary,
                     A._has_deduped_local_dictionary,
+                    A._dict_id,
                 )
 
             return impl_dict_int
@@ -3081,6 +3084,7 @@ def repeat_kernel_overload(A, repeats):
                 out_ind_arr,
                 A._has_global_dictionary,
                 A._has_deduped_local_dictionary,
+                A._dict_id,
             )
 
         return impl_dict_arr

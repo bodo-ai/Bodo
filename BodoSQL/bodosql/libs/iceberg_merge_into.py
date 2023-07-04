@@ -355,7 +355,7 @@ def merge_sorted_dataframes(target_df: DataFrameType, delta_df: DataFrameType):
     for i in range(n_out_cols):
         if out_arr_types[i] == bodo.dict_str_arr_type:
             # Note: We cannot assume it is unique even if each component were unique.
-            func_text += f"  out_dict_arr_{i} = bodo.libs.dict_arr_ext.init_dict_arr(out_dict_data_{i}, arr{i}, dict_is_global_{i}, False)\n"
+            func_text += f"  out_dict_arr_{i} = bodo.libs.dict_arr_ext.init_dict_arr(out_dict_data_{i}, arr{i}, dict_is_global_{i}, False, None)\n"
             # Drop any duplicates and update the dictionary
             func_text += f"  arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(out_dict_arr_{i}, False)\n"
 

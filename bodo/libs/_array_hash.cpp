@@ -1754,6 +1754,8 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
     std::vector<bool> is_parallel = {arr1_is_parallel, arr2_is_parallel};
     ensure_dicts_can_unify(arrs, is_parallel);
 
+    // TODO(njriasan): Update this check to include || ids are the same.
+    // This requires making the same check everywhere most likely.
     if (arr1->child_arrays[0] == arr2->child_arrays[0])
         return;  // dictionaries are the same
 
@@ -1858,6 +1860,10 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
 
     // convert old indices to new ones for arr2
     replace_dict_arr_indices(arr2, arr2_index_map);
+    // Replace the dictionary ids
+    int64_t dict_id = generate_dict_id(new_dict->length);
+    arr1->dict_id = dict_id;
+    arr2->dict_id = dict_id;
 }
 
 // CACHE FOR LIKE KERNEL DICT-ENCODING CASE

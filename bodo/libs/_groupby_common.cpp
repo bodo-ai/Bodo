@@ -647,7 +647,7 @@ void alloc_init_keys(
                 key_col->child_arrays[0], new_key_indices,
                 key_col->has_global_dictionary,
                 key_col->has_deduped_local_dictionary,
-                key_col->has_sorted_dictionary);
+                key_col->has_sorted_dictionary, key_col->dict_id);
         }
         if (key_col->arr_type == bodo_array_type::STRING) {
             // new key col will have num_groups rows containing the

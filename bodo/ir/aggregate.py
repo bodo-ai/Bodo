@@ -1489,7 +1489,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
     elif isinstance(t, StringArrayType):
         return "pre_alloc_string_array(1, 1)"
     elif t == bodo.dict_str_arr_type:
-        return "bodo.libs.dict_arr_ext.init_dict_arr(pre_alloc_string_array(1, 1), bodo.libs.int_arr_ext.alloc_int_array(1, np.int32), False, False)"
+        return "bodo.libs.dict_arr_ext.init_dict_arr(pre_alloc_string_array(1, 1), bodo.libs.int_arr_ext.alloc_int_array(1, np.int32), False, False, None)"
     elif isinstance(t, BinaryArrayType):
         return "pre_alloc_binary_array(1, 1)"
     elif t == ArrayItemArrayType(string_array_type):

@@ -72,6 +72,7 @@ ll.add_symbol("get_has_global_dictionary", array_ext.get_has_global_dictionary)
 ll.add_symbol(
     "get_has_deduped_local_dictionary", array_ext.get_has_deduped_local_dictionary
 )
+ll.add_symbol("get_dict_id", array_ext.get_dict_id)
 ll.add_symbol("numpy_array_to_info", array_ext.numpy_array_to_info)
 ll.add_symbol("categorical_array_to_info", array_ext.categorical_array_to_info)
 ll.add_symbol("null_array_to_info", array_ext.null_array_to_info)
@@ -358,6 +359,7 @@ def array_to_info_codegen(context, builder, sig, args):
                 lir.IntType(8).as_pointer(),  # indices_arr_info
                 lir.IntType(32),  # has_global_dictionary flag
                 lir.IntType(32),  # has_deduped_local_dictionary flag
+                lir.IntType(64),  # dict_id
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -376,6 +378,7 @@ def array_to_info_codegen(context, builder, sig, args):
                 indices_arr_info,
                 has_global_dictionary,
                 has_deduped_local_dictionary,
+                arr.dict_id,
             ],
         )
 
@@ -962,6 +965,20 @@ def info_to_array_codegen(context, builder, sig, args):
         # cast int32 to bool
         dict_array.has_deduped_local_dictionary = builder.trunc(
             has_deduped_local_dictionary, cgutils.bool_t
+        )
+
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [
+                lir.IntType(8).as_pointer(),  # info
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="get_dict_id")
+        dict_array.dict_id = builder.call(
+            fn_tp,
+            [
+                in_info,
+            ],
         )
 
         return dict_array._getvalue()

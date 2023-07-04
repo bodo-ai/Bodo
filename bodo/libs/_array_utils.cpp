@@ -542,15 +542,11 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             std::shared_ptr<array_info> out_indices =
                 RetrieveArray_SingleColumn_F_nullable(in_indices, in_arr_idxs,
                                                       nRowOut);
-
-            out_arr = std::make_shared<array_info>(
-                bodo_array_type::DICT, in_arr->dtype, out_indices->length,
-                std::vector<std::shared_ptr<BodoBuffer>>({}),
-                std::vector<std::shared_ptr<array_info>>(
-                    {in_arr->child_arrays[0], out_indices}),
-                0, 0, 0, in_arr->has_global_dictionary,
+            out_arr = create_dict_string_array(
+                in_arr->child_arrays[0], out_indices,
+                in_arr->has_global_dictionary,
                 in_arr->has_deduped_local_dictionary,
-                in_arr->has_sorted_dictionary);
+                in_arr->has_sorted_dictionary, in_arr->dict_id);
             break;
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
@@ -854,13 +850,10 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             }
             out_indices->set_null_bit(iRow, bit);
         }
-        out_arr = std::make_shared<array_info>(
-            bodo_array_type::DICT, arr1->dtype, out_indices->length,
-            std::vector<std::shared_ptr<BodoBuffer>>({}),
-            std::vector<std::shared_ptr<array_info>>(
-                {arr1->child_arrays[0], out_indices}),
-            0, 0, 0, arr1->has_global_dictionary,
-            arr1->has_deduped_local_dictionary, arr1->has_sorted_dictionary);
+        out_arr = create_dict_string_array(
+            arr1->child_arrays[0], out_indices, arr1->has_global_dictionary,
+            arr1->has_deduped_local_dictionary, arr1->has_sorted_dictionary,
+            arr1->dict_id);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // In the case of NULLABLE array, we do a single loop for

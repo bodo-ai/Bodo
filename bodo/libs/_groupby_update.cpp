@@ -1130,7 +1130,7 @@ void min_row_number_filter_window_computation_already_sorted(
     std::shared_ptr<array_info> sorted_groups,
     std::shared_ptr<array_info> sorted_idx) {
     int64_t prev_group = -1;
-    for (int64_t i = 0; i < out_arr->length; i++) {
+    for (size_t i = 0; i < out_arr->length; i++) {
         int64_t curr_group = getv<int64_t>(sorted_groups, i);
         // If the current group is differne from the group of the previous row,
         // then this row is the row where the row number is 1
@@ -1163,7 +1163,7 @@ void row_number_computation(std::shared_ptr<array_info> out_arr,
     // the counter to 1 when we reach a new group
     int64_t prev_group = -1;
     int64_t row_num = 1;
-    for (int64_t i = 0; i < out_arr->length; i++) {
+    for (size_t i = 0; i < out_arr->length; i++) {
         int64_t curr_group = getv<int64_t>(sorted_groups, i);
         if (curr_group != prev_group) {
             row_num = 1;

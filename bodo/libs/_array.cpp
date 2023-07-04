@@ -41,8 +41,8 @@ array_info* struct_array_to_info(int64_t n_fields, array_info** inner_arrays,
 
     // Python is responsible for deleting pointer
     return new array_info(bodo_array_type::STRUCT, Bodo_CTypes::STRUCT, n_items,
-                          {null_bitmap_buff}, inner_arrs_vec, 0, 0, 0, false,
-                          false, false, 0, field_names_vec);
+                          {null_bitmap_buff}, inner_arrs_vec, 0, 0, 0, -1,
+                          false, false, false, 0, field_names_vec);
 }
 
 array_info* array_item_array_to_info(uint64_t n_items, array_info* inner_array,
@@ -95,7 +95,8 @@ array_info* string_array_to_info(uint64_t n_items, NRT_MemInfo* data,
 
 array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                                    int32_t has_global_dictionary,
-                                   int32_t has_deduped_local_dictionary) {
+                                   int32_t has_deduped_local_dictionary,
+                                   int64_t dict_id) {
     // For now has_sorted_dictionary is only available and exposed in the C++
     // struct, so we set it to false
 
@@ -104,7 +105,7 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                           indices_arr->length, {},
                           {std::shared_ptr<array_info>(str_arr),
                            std::shared_ptr<array_info>(indices_arr)},
-                          0, 0, 0, bool(has_global_dictionary),
+                          0, 0, 0, dict_id, bool(has_global_dictionary),
                           bool(has_deduped_local_dictionary), false);
 }
 
@@ -117,6 +118,9 @@ int32_t get_has_global_dictionary(array_info* dict_arr) {
 int32_t get_has_deduped_local_dictionary(array_info* dict_arr) {
     return int32_t(dict_arr->has_deduped_local_dictionary);
 }
+
+// Raw pointer since called from Python
+int64_t get_dict_id(array_info* dict_arr) { return dict_arr->dict_id; }
 
 array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                 NRT_MemInfo* meminfo) {
@@ -132,7 +136,7 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // Python is responsible for deleting
     return new array_info(bodo_array_type::NUMPY,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
-                          {data_buff}, {}, 0, 0, 0, false, false, false,
+                          {data_buff}, {}, 0, 0, 0, -1, false, false, false,
                           /*offset*/ data - (char*)meminfo->data);
 }
 
@@ -144,7 +148,7 @@ array_info* categorical_array_to_info(uint64_t n_items, char* data,
     // Python is responsible for deleting
     return new array_info(
         bodo_array_type::CATEGORICAL, (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
-        {data_buff}, {}, 0, 0, num_categories, false, false, false,
+        {data_buff}, {}, 0, 0, num_categories, -1, false, false, false,
         /*offset*/ data - (char*)meminfo->data);
 }
 
@@ -172,7 +176,7 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // Python is responsible for deleting
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items,
-                          {data_buff, null_bitmap_buff}, {}, 0, 0, 0, false,
+                          {data_buff, null_bitmap_buff}, {}, 0, 0, 0, -1, false,
                           false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
@@ -211,8 +215,8 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // Python is responsible for deleting
     return new array_info(
         bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
-        n_items, {data_buff, null_bitmap_buff}, {}, precision, scale, 0, false,
-        false, false, /*offset*/ data - (char*)meminfo->data);
+        n_items, {data_buff, null_bitmap_buff}, {}, precision, scale, 0, -1,
+        false, false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
 array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -229,7 +233,7 @@ array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // Python is responsible for deleting
     return new array_info(
         bodo_array_type::NULLABLE_INT_BOOL, (Bodo_CTypes::CTypeEnum)typ_enum,
-        n_items, {data_buff, null_bitmap_buff}, {}, precision, 0, 0, false,
+        n_items, {data_buff, null_bitmap_buff}, {}, precision, 0, 0, -1, false,
         false, false, /*offset*/ data - (char*)meminfo->data);
 }
 
@@ -1437,6 +1441,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, dict_str_array_to_info);
     SetAttrStringFromVoidPtr(m, get_has_global_dictionary);
     SetAttrStringFromVoidPtr(m, get_has_deduped_local_dictionary);
+    SetAttrStringFromVoidPtr(m, get_dict_id);
     // Not covered by error handler
     SetAttrStringFromVoidPtr(m, numpy_array_to_info);
     // Not covered by error handler
