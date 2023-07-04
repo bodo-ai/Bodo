@@ -161,6 +161,14 @@ def test_unbox(dict_arr_value, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_lower_constant(dict_arr_value, memory_leak_check):
+    def impl():
+        return dict_arr_value
+
+    check_func(impl, (), only_seq=True)
+
+
+@pytest.mark.slow
 def test_len(dict_arr_value, memory_leak_check):
     def test_impl(A):
         return len(A)
@@ -210,7 +218,6 @@ def test_all_null_pa_bug(memory_leak_check):
 
     def test_impl(A):
         df = pd.DataFrame({"A": A})
-        print(df)
         return df
 
     A = pd.arrays.ArrowStringArray(
@@ -1359,6 +1366,7 @@ def test_str_extract(memory_leak_check, test_unicode_dict_str_arr):
 
 def test_str_extractall(memory_leak_check):
     """test optimizaton of Series.str.extractall() for dict array"""
+
     # non-string index, single group
     def impl1(A):
         return pd.Series(A, name="AA").str.extractall(r"(?P<BBB>[abd]+)\d+")

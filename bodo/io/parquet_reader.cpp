@@ -297,13 +297,10 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
 
         // create the final dictionary-encoded input_file_name
         // column from the indices array and dictionary
-        this->input_file_name_col_arr = std::make_shared<array_info>(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, this->count,
-            std::vector<std::shared_ptr<BodoBuffer>>({}),
-            std::vector<std::shared_ptr<array_info>>(
-                {this->input_file_name_col_dict_arr,
-                 this->input_file_name_col_indices_arr}),
-            0, 0, 0, false, false, false);
+        // TODO(njriasan): Are the file names always unique locally?
+        this->input_file_name_col_arr =
+            create_dict_string_array(this->input_file_name_col_dict_arr,
+                                     this->input_file_name_col_indices_arr);
     }
 
     table_info* table = builder.get_table();

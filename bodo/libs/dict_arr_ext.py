@@ -12,6 +12,7 @@ https://arrow.apache.org/docs/cpp/api/array.html#dictionary-encoded
 import operator
 import re
 
+import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -19,6 +20,7 @@ import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_new_ref, lower_builtin, lower_constant
+from numba.core.typing import signature
 from numba.extending import (
     NativeValue,
     box,
@@ -36,6 +38,7 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.ext import stream_join_cpp
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     StringArrayType,
@@ -50,6 +53,9 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 from bodo.utils.utils import synchronize_error_njit
+
+ll.add_symbol("generate_dict_id", stream_join_cpp.generate_dict_id)
+
 
 # we use nullable int32 for dictionary indices to match Arrow for faster and easier IO.
 # more than 2 billion unique values doesn't make sense for a dictionary-encoded array.
@@ -113,6 +119,9 @@ class DictionaryArrayModel(models.StructModel):
             # This is used to support optimized implementations where decisions can be
             # made just based on indices.
             ("has_deduped_local_dictionary", types.bool_),
+            # Dictionary id that helps identify identical equivalent dictionaries quickly.
+            # This is unique inside a rank but not globally.
+            ("dict_id", types.int64),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -125,34 +134,57 @@ make_attribute_wrapper(
 make_attribute_wrapper(
     DictionaryArrayType, "has_deduped_local_dictionary", "_has_deduped_local_dictionary"
 )
-
+make_attribute_wrapper(DictionaryArrayType, "dict_id", "_dict_id")
 
 lower_builtin("getiter", dict_str_arr_type)(numba.np.arrayobj.getiter_array)
 
 
 @intrinsic
-def init_dict_arr(typingctx, data_t, indices_t, glob_dict_t, unique_dict_t):
+def init_dict_arr(
+    typingctx, data_t, indices_t, glob_dict_t, unique_dict_t, dict_id_if_present_t
+):
     """Create a dictionary-encoded array with provided index and data values."""
 
     assert indices_t == dict_indices_arr_type, "invalid indices type for dict array"
+    assert (
+        is_overload_none(dict_id_if_present_t) or dict_id_if_present_t == types.int64
+    ), "ID must be none if we are generating an ID or an id of a matching dictionary"
+    generate_id = is_overload_none(dict_id_if_present_t)
 
-    def codegen(context, builder, signature, args):
-        data, indices, glob_dict, unique_dict = args
+    def codegen(context, builder, sig, args):
+        data, indices, glob_dict, unique_dict, dict_id = args
         # create dict arr struct and store values
-        dict_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+        dict_arr = cgutils.create_struct_proxy(sig.return_type)(context, builder)
         dict_arr.data = data
         dict_arr.indices = indices
         dict_arr.has_global_dictionary = glob_dict
         dict_arr.has_deduped_local_dictionary = unique_dict
+        if generate_id:
+            fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64)])
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="generate_dict_id"
+            )
+            # Fetch the length of the data.
+            # TODO: Is this too much compilation?
+            len_sig = signature(types.int64, sig.args[0])
+            nitems = context.compile_internal(
+                builder, lambda a: len(a), len_sig, [data]
+            )
+            id_args = [nitems]
+            new_dict_id = builder.call(fn_tp, id_args)
+            bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+            dict_arr.dict_id = new_dict_id
+        else:
+            dict_arr.dict_id = dict_id
 
         # increase refcount of stored values
-        context.nrt.incref(builder, signature.args[0], data)
-        context.nrt.incref(builder, signature.args[1], indices)
+        context.nrt.incref(builder, sig.args[0], data)
+        context.nrt.incref(builder, sig.args[1], indices)
 
         return dict_arr._getvalue()
 
     ret_typ = DictionaryArrayType(data_t)
-    sig = ret_typ(data_t, indices_t, types.bool_, types.bool_)
+    sig = ret_typ(data_t, indices_t, types.bool_, types.bool_, dict_id_if_present_t)
     return sig, codegen
 
 
@@ -226,8 +258,20 @@ def unbox_dict_arr(typ, val, c):
     dict_arr.has_global_dictionary = c.context.get_constant(types.bool_, False)
     # assume dictionaries are not unique to be conservative
     dict_arr.has_deduped_local_dictionary = c.context.get_constant(types.bool_, False)
+    # Fetch the length of the dictionary.
+    nitems_obj = c.pyapi.call_method(np_str_arr_obj, "__len__", [])
+    nitems = c.unbox(types.int64, nitems_obj).value
+    # Generate a new id for this dictionary
+    fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64)])
+    fn_tp = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="generate_dict_id"
+    )
+    id_args = [nitems]
+    new_dict_id = c.builder.call(fn_tp, id_args)
+    dict_arr.dict_id = new_dict_id
 
     c.pyapi.decref(data_obj)
+    c.pyapi.decref(nitems_obj)
     c.pyapi.decref(false_obj)
     c.pyapi.decref(np_str_arr_obj)
     c.pyapi.decref(indices_obj)
@@ -343,6 +387,7 @@ def overload_dict_arr_copy(A):
             A._indices.copy(),
             A._has_global_dictionary,
             A._has_deduped_local_dictionary,
+            A._dict_id,
         )
 
     return copy_impl
@@ -363,9 +408,13 @@ def lower_constant_dict_arr(context, builder, typ, pyval):
     """embed constant dict array value by getting constant values for underlying
     indices and data arrays.
     """
-
-    if bodo.hiframes.boxing._use_dict_str_type and isinstance(pyval, np.ndarray):
-        pyval = pa.array(pyval).dictionary_encode()
+    if isinstance(pyval, pd.arrays.ArrowStringArray):
+        pyval = pyval._data
+        if isinstance(pyval, pa.ChunkedArray):
+            pyval = pyval.combine_chunks()
+    else:
+        if bodo.hiframes.boxing._use_dict_str_type and isinstance(pyval, np.ndarray):
+            pyval = pa.array(pyval).dictionary_encode()
 
     data_arr = pyval.dictionary.to_numpy(False)
     indices_arr = pd.array(pyval.indices, "Int32")
@@ -377,11 +426,22 @@ def lower_constant_dict_arr(context, builder, typ, pyval):
 
     has_global_dictionary = context.get_constant(types.bool_, False)
     has_deduped_local_dictionary = context.get_constant(types.bool_, False)
+    # TODO(njriasan): FIXME. We cannot call the C++ function because it doesn't
+    # get registered as a global function. There is probably a way to do this
+    # with cgutils.global_constant, but that could mess up the id's properties.
+    # For now, future work with dict_ids so check to ensure they are valid.
+    dict_id = context.get_constant(types.int64, -1)
 
-    dic_array = lir.Constant.literal_struct(
-        [data_arr, indices_arr, has_global_dictionary, has_deduped_local_dictionary]
+    dict_array = lir.Constant.literal_struct(
+        [
+            data_arr,
+            indices_arr,
+            has_global_dictionary,
+            has_deduped_local_dictionary,
+            dict_id,
+        ]
     )
-    return dic_array
+    return dict_array
 
 
 @overload(operator.getitem, no_unliteral=True)
@@ -408,6 +468,7 @@ def dict_arr_getitem(A, ind):
         A._indices[ind],
         A._has_global_dictionary,
         A._has_deduped_local_dictionary,
+        A._dict_id,
     )  # pragma: no cover
 
 
@@ -671,7 +732,7 @@ def cat_dict_str_overload(arrs, sep):
     func_text += (
         "  out_str_arr = bodo.libs.str_arr_ext.str_arr_from_sequence(out_strs)\n"
     )
-    func_text += "  return bodo.libs.dict_arr_ext.init_dict_arr(out_str_arr, out_indices, False, False)\n"
+    func_text += "  return bodo.libs.dict_arr_ext.init_dict_arr(out_str_arr, out_indices, False, False, None)\n"
 
     loc_vars = {}
     exec(
@@ -757,7 +818,7 @@ def str_replace(arr, pat, repl, flags, regex):  # pragma: no cover
     # NOTE: this operation may introduce non-unique values in the dictionary. Therefore,
     # We have to set _has_deduped_local_dictionary to false
     return init_dict_arr(
-        out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False
+        out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False, None
     )
 
 
@@ -956,9 +1017,9 @@ def create_simple_str2str_methods(func_name, func_args, can_create_non_unique):
     )
 
     if can_create_non_unique:
-        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False)\n"
+        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False, None)\n"
     else:
-        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, arr._has_deduped_local_dictionary)\n"
+        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, arr._has_deduped_local_dictionary, None)\n"
 
     loc_vars = {}
     exec(
@@ -1212,7 +1273,7 @@ def str_slice(arr, start, stop, step):  # pragma: no cover
     # Slice can result in duplicate values in the data array, so we have to set
     # _has_deduped_local_dictionary to False in the output
     return init_dict_arr(
-        out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False
+        out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False, None
     )
 
 
@@ -1267,6 +1328,7 @@ def str_repeat_int(arr, repeats):  # pragma: no cover
         arr._indices.copy(),
         arr._has_global_dictionary,
         arr._has_deduped_local_dictionary and repeats != 0,
+        None,
     )
 
 
@@ -1365,6 +1427,7 @@ def str_extract(arr, pat, flags, n_cols):  # pragma: no cover
             out_indices_arr.copy(),
             arr._has_global_dictionary,
             False,
+            None,
         )
         for i in range(n_cols)
     ]
@@ -1452,7 +1515,7 @@ def create_extractall_methods(is_multi_group):
         "    out_arr_list = [\n"
         # Note: This operation can produce duplicate values.
         "        init_dict_arr(\n"
-        "            out_dict_arr_list[i], out_indices_arr.copy(), arr._has_global_dictionary, False\n"
+        "            out_dict_arr_list[i], out_indices_arr.copy(), arr._has_global_dictionary, False, None\n"
         "        )\n"
         "        for i in range(n_cols)\n"
         "    ]\n"

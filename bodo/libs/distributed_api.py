@@ -2515,7 +2515,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
             )
             # the dictionary is global by construction (broadcast)
             return bodo.libs.dict_arr_ext.init_dict_arr(
-                str_arr, new_indices, True, data._has_deduped_local_dictionary
+                str_arr, new_indices, True, data._has_deduped_local_dictionary, None
             )
 
         return impl_dict_arr

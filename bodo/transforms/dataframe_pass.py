@@ -2326,7 +2326,7 @@ class DataFramePass:
         for i in range(n_keys):
             key_typ = df.data[df.column_index[grp_typ.keys[i]]]
             if key_typ == bodo.dict_str_arr_type:
-                func_text += f"  in_key_arrs{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, dict_key_indices_arrs{i}, False, False)\n"
+                func_text += f"  in_key_arrs{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, dict_key_indices_arrs{i}, False, False, s_key{i}._dict_id)\n"
 
         if isinstance(out_typ.index, MultiIndexType):
             out_key_arr_names = ", ".join(f"in_key_arrs{i}" for i in range(n_keys))
@@ -2429,7 +2429,7 @@ class DataFramePass:
                 key_typ = df.data[df.column_index[grp_typ.keys[i]]]
                 if key_typ == bodo.dict_str_arr_type:
                     func_text += f"  out_key_arr_dict_index{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
-                    func_text += f"  out_key_arr{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, out_key_arr_dict_index{i}, s_key{i}._has_global_dictionary, s_key{i}._has_deduped_local_dictionary)\n"
+                    func_text += f"  out_key_arr{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, out_key_arr_dict_index{i}, s_key{i}._has_global_dictionary, s_key{i}._has_deduped_local_dictionary, s_key{i}._dict_id)\n"
                 else:
                     func_text += f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
 

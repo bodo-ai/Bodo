@@ -777,6 +777,9 @@ void update_local_dictionary_remove_duplicates(
             }
         }
     }
+    // Update the dict id since dictionary values changed
+    int64_t dict_id = generate_dict_id(global_dictionary->length);
+    dict_array->dict_id = dict_id;
 }
 
 void drop_duplicates_local_dictionary(std::shared_ptr<array_info> dict_array,
@@ -1575,13 +1578,10 @@ std::shared_ptr<table_info> shuffle_table_kernel(
         // from Python.
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
-            std::shared_ptr<array_info> out_dict_arr =
-                std::make_shared<array_info>(
-                    bodo_array_type::DICT, in_arr->dtype, out_arr->length,
-                    std::vector<std::shared_ptr<BodoBuffer>>({}),
-                    std::vector<std::shared_ptr<array_info>>(
-                        {in_arr->child_arrays[0], out_arr}),
-                    0, 0, 0, true, true, in_arr->has_sorted_dictionary);
+            std::shared_ptr<array_info> out_dict_arr = create_dict_string_array(
+                in_arr->child_arrays[0], out_arr, in_arr->has_global_dictionary,
+                in_arr->has_deduped_local_dictionary,
+                in_arr->has_sorted_dictionary, in_arr->dict_id);
             out_arr = out_dict_arr;
         }
         in_arr.reset();
@@ -2025,13 +2025,10 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
         }
         if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i];
-            std::shared_ptr<array_info> out_dict_arr =
-                std::make_shared<array_info>(
-                    bodo_array_type::DICT, in_arr->dtype, out_arr->length,
-                    std::vector<std::shared_ptr<BodoBuffer>>({}),
-                    std::vector<std::shared_ptr<array_info>>(
-                        {in_arr->child_arrays[0], out_arr}),
-                    0, 0, 0, true, true, in_arr->has_sorted_dictionary);
+            std::shared_ptr<array_info> out_dict_arr = create_dict_string_array(
+                in_arr->child_arrays[0], out_arr, in_arr->has_global_dictionary,
+                in_arr->has_deduped_local_dictionary,
+                in_arr->has_sorted_dictionary, in_arr->dict_id);
             out_arr = out_dict_arr;
         }
         in_arr.reset();
@@ -2606,17 +2603,13 @@ std::shared_ptr<table_info> broadcast_table(
         // dictionary that can be used for the final dictionary output
         // array.
         if (ref_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
-            std::shared_ptr<array_info> dict_arr =
-                ref_table->columns[i_col]->child_arrays[0];
+            std::shared_ptr<array_info> ref_arr = ref_table->columns[i_col];
+            std::shared_ptr<array_info> dict_arr = ref_arr->child_arrays[0];
             // Create a DICT out_arr
-            out_arr = std::make_shared<array_info>(
-                bodo_array_type::DICT, dict_arr->dtype, out_arr->length,
-                std::vector<std::shared_ptr<BodoBuffer>>({}),
-                std::vector<std::shared_ptr<array_info>>({dict_arr, out_arr}),
-                0, 0, 0,
-                /*has_global_dictionary=*/true,
-                /*has_deduped_local_dictionary=*/true,
-                ref_table->columns[i_col]->has_sorted_dictionary);
+            out_arr = create_dict_string_array(
+                dict_arr, out_arr, ref_arr->has_global_dictionary,
+                ref_arr->has_deduped_local_dictionary,
+                ref_arr->has_sorted_dictionary, ref_arr->dict_id);
         }
         in_arr.reset();
         out_arrs.push_back(out_arr);
@@ -3305,15 +3298,11 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
         if (in_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i_col];
             if (all_gather || myrank == mpi_root) {
-                out_arr = std::make_shared<array_info>(
-                    bodo_array_type::DICT, in_arr->dtype, out_arr->length,
-                    std::vector<std::shared_ptr<BodoBuffer>>({}),
-                    std::vector<std::shared_ptr<array_info>>(
-                        {in_arr->child_arrays[0], out_arr}),
-                    0, 0, 0,
-                    /*has_global_dictionary=*/true,
-                    /*has_deduped_local_dictionary=*/true,
-                    in_arr->has_sorted_dictionary);
+                out_arr = create_dict_string_array(
+                    in_arr->child_arrays[0], out_arr,
+                    in_arr->has_global_dictionary,
+                    in_arr->has_deduped_local_dictionary,
+                    in_arr->has_sorted_dictionary, in_arr->dict_id);
             }  // else out_arr is already NULL, so doesn't need to be
                // handled
         }

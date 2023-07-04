@@ -612,14 +612,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         indices_builder.append(
             std::make_shared<arrow::ChunkedArray>(indices_chunks));
         std::shared_ptr<array_info> bodo_indices = indices_builder.get_output();
-
-        out_array = std::make_shared<array_info>(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
-            std::vector<std::shared_ptr<BodoBuffer>>({}),
-            std::vector<std::shared_ptr<array_info>>(
-                {bodo_dictionary, bodo_indices}),
-            0, 0, 0, false, false, false);
-
+        out_array = create_dict_string_array(bodo_dictionary, bodo_indices);
         all_chunks.clear();
         return out_array;
     }
@@ -707,12 +700,8 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         // We set _has_deduped_local_dictionary=true since we constructed the
         // dictionary ourselves and made sure not to put nulls in the
         // dictionary.
-        out_array = std::make_shared<array_info>(
-            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
-            std::vector<std::shared_ptr<BodoBuffer>>({}),
-            std::vector<std::shared_ptr<array_info>>({dict_arr, indices_arr}),
-            0, 0, 0, false,
-            /*_has_deduped_local_dictionary=*/true, false);
+        out_array =
+            create_dict_string_array(dict_arr, indices_arr, false, true);
         return out_array;
     }
 
