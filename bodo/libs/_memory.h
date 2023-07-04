@@ -79,10 +79,14 @@ class IBufferPool : public ::arrow::MemoryPool {
      *
      * @param[in, out] ptr Location of swip pointer containing
      *   allocation to pin
+     * @param size Size of the allocation (original requested size)
+     * @param alignment Alignment used for the allocation
      * @return ::arrow::Status If the pin succeeded, if it
      *   failed due to OOM, or failed for another reason
      */
-    virtual ::arrow::Status Pin(uint8_t** ptr) = 0;
+    virtual ::arrow::Status Pin(
+        uint8_t** ptr, int64_t size = -1,
+        int64_t alignment = arrow::kDefaultBufferAlignment) = 0;
 
     /**
      * @brief Unpin an allocation.
@@ -90,8 +94,11 @@ class IBufferPool : public ::arrow::MemoryPool {
      * allocation from memory to storage.
      *
      * @param[in, out] ptr Swip pointer to allocation to unpin
+     * @param size Size of the allocation (original requested size)
+     * @param alignment Alignment used for the allocation
      */
-    virtual void Unpin(uint8_t* ptr) = 0;
+    virtual void Unpin(uint8_t* ptr, int64_t size = -1,
+                       int64_t alignment = arrow::kDefaultBufferAlignment) = 0;
 };
 
 /// @brief Enum to Indicate which Manager to Use
@@ -541,7 +548,7 @@ class SizeClass final {
 
 class BufferPool final : public IBufferPool {
    public:
-    /* ------ Functions arrow::MemoryPool that we override ------ */
+    /* ------ Functions from IBufferPool that we implement ------ */
 
     /// @brief Default constructor which will use the default
     /// options.
@@ -562,7 +569,7 @@ class BufferPool final : public IBufferPool {
      * The allocated region will be 'alignment' byte aligned (64 by
      * default).
      *
-     * @param size Number of bytes to allocated
+     * @param size Number of bytes to allocate.
      * @param alignment Alignment that needs to be guaranteed for the
      * allocation.
      * @param[in, out] out Pointer to pointer which should store the address of
@@ -589,10 +596,6 @@ class BufferPool final : public IBufferPool {
     /**
      * @brief Free an allocated region.
      *
-     * NOTE: The signature has changed in Arrow-11, it will
-     * need to be updated when we upgrade. The change is that now there is a
-     * field to specify the alignment.
-     *
      * @param buffer Pointer to the start of the allocated memory region
      * @param size Allocated size located at buffer. Pass -1 if size is not
      * known. If -1 is passed and if the memory was originally allocated using
@@ -602,6 +605,31 @@ class BufferPool final : public IBufferPool {
      */
     virtual void Free(uint8_t* buffer, int64_t size,
                       int64_t alignment) override;
+
+    /**
+     * @brief Pin an allocation/block to memory.
+     *
+     * @param[in, out] ptr Location of swip pointer containing
+     *   allocation to pin.
+     * @param size Size of the allocation (original requested size)
+     * @param alignment Alignment used for the allocation
+     * @return ::arrow::Status
+     */
+    ::arrow::Status Pin(
+        uint8_t** ptr, int64_t size = -1,
+        int64_t alignment = arrow::kDefaultBufferAlignment) override;
+
+    /**
+     * @brief Unpin an allocation/block. This makes the block eligible
+     * for eviction when the BufferPool needs to free up
+     * space in memory.
+     *
+     * @param[in, out] ptr Swip pointer to allocation to unpin
+     * @param size Size of the allocation (original requested size)
+     * @param alignment Alignment used for the allocation
+     */
+    void Unpin(uint8_t* ptr, int64_t size = -1,
+               int64_t alignment = arrow::kDefaultBufferAlignment) override;
 
     /// @brief The number of bytes currently allocated through
     /// this allocator.
@@ -657,24 +685,6 @@ class BufferPool final : public IBufferPool {
         }
     }
 
-    /**
-     * @brief Pin an allocation/block to memory.
-     *
-     * @param[in, out] ptr Location of swip pointer containing
-     *   allocation to pin.
-     * @return ::arrow::Status
-     */
-    ::arrow::Status Pin(uint8_t** ptr) override;
-
-    /**
-     * @brief Unpin an allocation/block. This makes the block eligible
-     * for eviction when the BufferPool needs to free up
-     * space in memory.
-     *
-     * @param[in, out] ptr Swip pointer to allocation to unpin
-     */
-    void Unpin(uint8_t* ptr) override;
-
     // XXX Add Reserve/Release functions, or re-use planned
     // functions RegisterOffPoolUsage and DeregisterOffPoolUsage
     // for that (or rename those to be Reserve and Release).
@@ -704,6 +714,22 @@ class BufferPool final : public IBufferPool {
      * @return uint64_t
      */
     uint64_t GetSmallestSizeClassSize() const;
+
+    /**
+     * @brief Check if the buffer/swip is pinned.
+     * If the swip is unswizzled, this will return false.
+     * If the swip is swizzled, i.e. the allocation is still
+     * in memory:
+     * - If it's a frame in a SizeClass, we check there.
+     * - If it was allocated through malloc, we return true
+     *   since malloc allocations always stay pinned.
+     *
+     * @param buffer Pointer/Swip to the allocated buffer
+     * @param size Size of the allocation (original requested size)
+     * @param alignment Alignment used for the allocation
+     */
+    bool IsPinned(uint8_t* buffer, int64_t size = -1,
+                  int64_t alignment = arrow::kDefaultBufferAlignment) const;
 
    protected:
     /// @brief Options that were used for building the BufferPool.
@@ -761,8 +787,8 @@ class BufferPool final : public IBufferPool {
      * @param alignment Alignment to use. Defaults to 64.
      * @return int64_t Aligned size
      */
-    int64_t size_align(int64_t size,
-                       int64_t alignment = arrow::kDefaultBufferAlignment);
+    int64_t size_align(
+        int64_t size, int64_t alignment = arrow::kDefaultBufferAlignment) const;
 
     /**
      * @brief Get the index of the size-class that would be most
@@ -801,7 +827,7 @@ class BufferPool final : public IBufferPool {
      */
     std::tuple<bool, int64_t, int64_t, int64_t> get_alloc_details(
         uint8_t* buffer, int64_t size,
-        int64_t alignment = arrow::kDefaultBufferAlignment);
+        int64_t alignment = arrow::kDefaultBufferAlignment) const;
 
     /**
      * @brief Helper for free-ing a memory allocation.

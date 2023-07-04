@@ -61,18 +61,19 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         # put overloads under a different name to avoid cython bug with multiple
         # layers of inheritance
         uint64_t i_get_bytes_pinned" bytes_pinned"()
-        CStatus i_Pin" Pin"(uint8_t** ptr)
-        void i_Unpin" Unpin"(uint8_t* ptr)
+        CStatus i_Pin" Pin"(uint8_t** ptr, int64_t size, int64_t alignment)
+        void i_Unpin" Unpin"(uint8_t* ptr, int64_t size, int64_t alignment)
 
 
     cdef cppclass CBufferPool" bodo::BufferPool"(CIBufferPool):
         void Cleanup()
 
-        CStatus Allocate(int64_t size, int64_t alignment, uint8_t** out)
-        CStatus Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr)
-        void Free(uint8_t* buffer, int64_t size, int64_t alignment)
-        CStatus Pin(uint8_t** ptr)
-        void Unpin(uint8_t* ptr)
+        CStatus Allocate(int64_t size, int64_t alignment, uint8_t** out) except +
+        CStatus Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) except +
+        void Free(uint8_t* buffer, int64_t size, int64_t alignment) except +
+        CStatus Pin(uint8_t** ptr, int64_t size, int64_t alignment) except +
+        void Unpin(uint8_t* ptr, int64_t size, int64_t alignment) except +
+        c_bool IsPinned(uint8_t* buffer, int64_t size, int64_t alignment) const
 
         # put overloads under a different name to avoid cython bug with multiple
         # layers of inheritance
@@ -86,3 +87,28 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
 
         @staticmethod
         shared_ptr[CBufferPool] Default()
+    
+
+cdef extern from "_operator_pool.h" namespace "bodo" nogil:
+
+    cdef cppclass COperatorBufferPool" bodo::OperatorBufferPool"(CIBufferPool):
+
+        COperatorBufferPool(uint64_t max_pinned_size_bytes, shared_ptr[CBufferPool] parent_pool, double error_threshold)
+        CStatus Allocate(int64_t size, int64_t alignment, uint8_t** out) except +
+        CStatus Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) except +
+        void Free(uint8_t* buffer, int64_t size, int64_t alignment) except +
+        CStatus Pin(uint8_t** ptr, int64_t size, int64_t alignment) except +
+        void Unpin(uint8_t* ptr, int64_t size, int64_t alignment) except +
+        c_bool ThresholdEnforcementEnabled() const
+        void DisableThresholdEnforcement()
+        void EnableThresholdEnforcement() except +
+        shared_ptr[CBufferPool] get_parent_pool() const
+        uint64_t get_max_pinned_size_bytes() const
+        uint64_t get_memory_error_threshold() const
+
+        # put overloads under a different name to avoid cython bug with multiple
+        # layers of inheritance
+        uint64_t get_bytes_pinned" bytes_pinned"()
+        int64_t get_bytes_allocated" bytes_allocated"()
+        int64_t get_max_memory" max_memory"()
+        c_string get_backend_name" backend_name"()
