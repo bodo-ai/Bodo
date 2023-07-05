@@ -931,12 +931,22 @@ class UntypedPass:
             default=None,
         )
         # TODO[BE-4362]: detect table input automatically
-        _bodo_is_table_input = self._get_const_arg(
+        _bodo_is_table_input: bool = self._get_const_arg(
             "read_sql",
             rhs.args,
             kws,
             10e5,
             "_bodo_is_table_input",
+            rhs.loc,
+            default=False,
+        )
+        # Allow Unsafe Downcasting to Double when we dont support decimal computation
+        _bodo_downcast_decimal_to_double: bool = self._get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            10e5,
+            "_bodo_downcast_decimal_to_double",
             rhs.loc,
             default=False,
         )
@@ -970,6 +980,7 @@ class UntypedPass:
             "_bodo_chunksize",
             "_bodo_read_as_dict",
             "_bodo_is_table_input",
+            "_bodo_downcast_decimal_to_double",
         )
 
         unsupported_args = set(kws.keys()) - set(supported_args)
@@ -998,7 +1009,9 @@ class UntypedPass:
             rhs.loc,
             _bodo_is_table_input,
             self._is_independent,
+            _bodo_downcast_decimal_to_double,
         )
+
         if chunksize is not None and db_type != "snowflake":  # pragma: no cover
             raise BodoError(
                 "pd.read_sql(): The `chunksize` argument is only supported for Snowflake table reads"
@@ -1070,6 +1083,7 @@ class UntypedPass:
                 False,  # is_merge_into
                 types.none,  # file_list_type
                 types.none,  # snapshot_id_type
+                _bodo_downcast_decimal_to_double,
                 chunksize,
             )
         ]
@@ -3165,8 +3179,9 @@ def _get_sql_types_arr_colnames(
     _bodo_read_as_dict,
     lhs,
     loc,
-    is_table_input,
+    is_table_input: bool,
     is_independent: bool,
+    downcast_decimal_to_double: bool,
 ):
     """
     Wrapper function to determine the db_type, column names,
@@ -3232,6 +3247,7 @@ def _get_sql_types_arr_colnames(
         loc,
         is_table_input,
         is_independent,
+        downcast_decimal_to_double,
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
@@ -3271,6 +3287,7 @@ def _get_sql_df_type_from_db(
     loc,
     is_table_input: bool,
     is_independent: bool,
+    downcast_decimal_to_double: bool,
 ):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
@@ -3278,6 +3295,12 @@ def _get_sql_df_type_from_db(
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
+
+    if downcast_decimal_to_double and db_type != "snowflake":  # pragma: no cover
+        raise BodoError(
+            "pd.read_sql(): The `_bodo_downcast_decimal_to_double` argument is only supported for "
+            "Snowflake table reads"
+        )
 
     if _bodo_read_as_dict and db_type != "snowflake":
         if bodo.get_rank() == 0:
@@ -3328,6 +3351,7 @@ def _get_sql_df_type_from_db(
                     is_select_query,
                     is_table_input,
                     _bodo_read_as_dict,
+                    downcast_decimal_to_double,
                 )
 
                 # Log the chosen dict-encoding timeout behavior

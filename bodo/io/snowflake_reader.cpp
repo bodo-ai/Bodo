@@ -64,14 +64,16 @@ class SnowflakeReader : public ArrowReader {
                     std::set<int> selected_fields,
                     std::vector<bool> is_nullable,
                     std::vector<int> str_as_dict_cols, bool _only_length_query,
-                    bool _is_select_query, int64_t batch_size = -1)
+                    bool _is_select_query, bool _downcast_decimal_to_double,
+                    int64_t batch_size = -1)
         : ArrowReader(_parallel, pyarrow_schema, -1, selected_fields,
                       is_nullable, batch_size),
           query(_query),
           conn(_conn),
           only_length_query(_only_length_query),
           is_select_query(_is_select_query),
-          is_independent(_is_independent) {
+          is_independent(_is_independent),
+          downcast_decimal_to_double(_downcast_decimal_to_double) {
         // Initialize reader
         init_arrow_reader(str_as_dict_cols, true);
     }
@@ -180,7 +182,8 @@ class SnowflakeReader : public ArrowReader {
 
         // Upcast Arrow table to expected schema
         // TODO: Integrate within TableBuilder
-        table = ArrowReader::cast_arrow_table(table);
+        table =
+            ArrowReader::cast_arrow_table(table, downcast_decimal_to_double);
         end = steady_clock::now();
         cast_arrow_table_time =
             duration_cast<microseconds>((end - start)).count();
@@ -356,6 +359,8 @@ class SnowflakeReader : public ArrowReader {
     PyObject* sf_conn = nullptr;
     // Are the ranks executing the function independently?
     bool is_independent = false;
+    // Should we unsafely downcast decimal columns to double
+    bool downcast_decimal_to_double = false;
 
     // Number of total pieces / ResultBatches the SnowflakeReader
     // has for all ranks
@@ -394,6 +399,8 @@ class SnowflakeReader : public ArrowReader {
  *        only compute the length.
  * @param _is_select_query: Boolean value for if the query is a select
  *        statement.
+ * @param downcast_decimal_to_double Always unsafely downcast double columns to
+ *        decimal.
  * @param batch_size Size of batches for the ArrowReader to produce
  * @return ArrowReader* Output streaming entity
  */
@@ -402,7 +409,7 @@ ArrowReader* snowflake_reader_init_py_entry(
     PyObject* arrow_schema, int64_t n_fields, int32_t* _is_nullable,
     int32_t num_str_as_dict_cols, int32_t* _str_as_dict_cols,
     int64_t* total_nrows, bool _only_length_query, bool _is_select_query,
-    int64_t batch_size) {
+    bool downcast_decimal_to_double, int64_t batch_size) {
     try {
         std::set<int> selected_fields;
         for (auto i = 0; i < n_fields; i++) {
@@ -415,7 +422,7 @@ ArrowReader* snowflake_reader_init_py_entry(
         SnowflakeReader* snowflake = new SnowflakeReader(
             query, conn, parallel, is_independent, arrow_schema,
             selected_fields, is_nullable, str_as_dict_cols, _only_length_query,
-            _is_select_query, batch_size);
+            _is_select_query, downcast_decimal_to_double, batch_size);
         return static_cast<ArrowReader*>(snowflake);
 
     } catch (const std::exception& e) {
@@ -446,17 +453,26 @@ ArrowReader* snowflake_reader_init_py_entry(
  only compute the length.
  * @param _is_select_query: Boolean value for if the query is a select
  statement.
+ * @param downcast_decimal_to_double Always unsafely downcast double columns to
+ *        decimal.
  * @return table containing all the arrays read
  */
 table_info* snowflake_read_py_entry(
     const char* query, const char* conn, bool parallel, bool is_independent,
     PyObject* arrow_schema, int64_t n_fields, int32_t* _is_nullable,
     int32_t* _str_as_dict_cols, int32_t num_str_as_dict_cols,
-    int64_t* total_nrows, bool _only_length_query, bool _is_select_query) {
+    int64_t* total_nrows, bool _only_length_query, bool _is_select_query,
+    bool downcast_decimal_to_double) {
+    table_info* out = nullptr;
+    // Need to synchronize exceptions in the top level case
+    // TODO: This would be a nice macro to have in general
+    std::optional<const char*> err_str;
+
     try {
         std::set<int> selected_fields;
-        for (auto i = 0; i < n_fields; i++)
+        for (auto i = 0; i < n_fields; i++) {
             selected_fields.insert(i);
+        }
         std::vector<bool> is_nullable(_is_nullable, _is_nullable + n_fields);
         std::vector<int> str_as_dict_cols(
             {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols});
@@ -464,17 +480,34 @@ table_info* snowflake_read_py_entry(
         SnowflakeReader reader(query, conn, parallel, is_independent,
                                arrow_schema, selected_fields, is_nullable,
                                str_as_dict_cols, _only_length_query,
-                               _is_select_query);
+                               _is_select_query, downcast_decimal_to_double);
 
         *total_nrows = reader.get_total_source_rows();
-        return reader.read_all();
+        out = reader.read_all();
 
     } catch (const std::exception& e) {
+        err_str = e.what();
+    }
+
+    bool has_err_global;
+    if (is_independent) {
+        has_err_global = err_str.has_value();
+    } else {
+        auto has_err_local = err_str.has_value();
+        has_err_global = false;
+        MPI_Allreduce(&has_err_local, &has_err_global, 1, MPI_C_BOOL, MPI_LOR,
+                      MPI_COMM_WORLD);
+    }
+
+    if (has_err_global) {
         // if the error string is "python" this means the C++ exception is
         // a result of a Python exception, so we don't call PyErr_SetString
         // because we don't want to replace the original Python error
-        if (std::string(e.what()) != "python")
-            PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        if (std::string(err_str.value_or("")) != "python") {
+            PyErr_SetString(
+                PyExc_RuntimeError,
+                err_str.value_or("See other ranks for runtime errors"));
+        }
     }
+    return out;
 }

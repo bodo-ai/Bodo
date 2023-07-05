@@ -149,6 +149,40 @@ def test_snowflake_performance_warning(memory_leak_check):
             os.environ["BODO_PLATFORM_WORKSPACE_REGION"] = old_region_info
 
 
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Only runs on 1 rank tests")
+def test_decimal_metadata_handling():
+    """
+    Test that Bodo's Snowflake schema inference can
+    determine the correct output size of various
+    """
+    from bodo.io.snowflake import snowflake_connect
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    cursor = snowflake_connect(conn).cursor()
+
+    # Test an int, double, maybe decimal, and decimal col for typing
+    pa_fields, _, _, _, _ = bodo.io.snowflake.get_schema_from_metadata(
+        cursor,
+        "SELECT 10, 10.11, 1.1010101::decimal(30, 8), 12345678901234567890.0987654321",
+        True,
+        False,
+        False,
+    )
+
+    assert len(pa_fields) == 4
+    int_col, double_col, maybe_dec_col, dec_col = pa_fields
+    assert pa.types.is_int8(int_col.type)
+    assert pa.types.is_float64(double_col.type)
+    assert pa.types.is_float64(maybe_dec_col.type)
+    assert (
+        pa.types.is_decimal128(dec_col.type)
+        and dec_col.type.precision == 30
+        and dec_col.type.scale == 10
+    )
+
+
 @pytest.mark.parametrize(
     "schema",
     [
@@ -352,6 +386,55 @@ def test_snowflake_runtime_downcasting_timestamp_fail(mocker: "MockerFixture"):
         match=re.escape("Invalid Downcast from timestamp[ns] to timestamp[ms]"),
     ):
         bodo.jit(impl)(query, conn)
+
+
+def test_snowflake_runtime_downcasting_decimal(mocker: "MockerFixture"):
+    """
+    Check that Bodo normally throws an error when downcasting
+    decimal, but will downcast to double with a flag
+    """
+    mocker.patch(
+        "bodo.io.snowflake.get_schema",
+        return_value=(
+            bodo.DataFrameType(
+                data=(
+                    types.Array(bodo.float64, 1, "C"),
+                    types.Array(bodo.float64, 1, "C"),
+                ),
+                columns=("h", "i"),
+            ),
+            set(["h", "i"]),
+            [],
+            [],
+            pa.schema(
+                [
+                    pa.field("H", pa.float64(), nullable=True),
+                    pa.field("I", pa.float64(), nullable=True),
+                ]
+            ),
+            None,
+        ),
+    )
+
+    def impl(query, conn, downcast):
+        df = pd.read_sql(query, conn, _bodo_downcast_decimal_to_double=downcast)  # type: ignore
+        return df
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    query = "SELECT H, I FROM DECIMAL_TEST"
+    with pytest.raises(RuntimeError) as exc_info:
+        bodo.jit(impl)(query, conn, False)
+    assert exc_info.value.args[0] in [
+        "Invalid Downcast from decimal128(38, 18) to double",
+        "See other ranks for runtime errors",
+    ]
+
+    check_func(
+        impl, (query, conn, True), py_output=pd.read_sql(query, conn), check_dtype=False
+    )
 
 
 def test_snowflake_bodo_read_as_dict_no_table(memory_leak_check):
@@ -1752,9 +1835,6 @@ def test_batched_read_only_len(memory_leak_check):
         check_logger_msg(stream, "Columns loaded []")
 
 
-@pytest.mark.skip(
-    reason="[BSE-394] Limit Pushdown with batched reads is current failing"
-)
 def test_batched_read_limit_pushdown_query(memory_leak_check):
     """
     Test shape pushdown with batched Snowflake reads

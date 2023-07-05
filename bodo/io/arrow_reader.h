@@ -283,7 +283,7 @@ class ArrowReader {
      * @return Casted output table
      */
     std::shared_ptr<arrow::Table> cast_arrow_table(
-        std::shared_ptr<arrow::Table> table);
+        std::shared_ptr<arrow::Table> table, bool downcast_decimal_to_double);
 
     /**
      * Register a piece for this process to read
