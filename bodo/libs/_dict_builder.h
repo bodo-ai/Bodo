@@ -35,6 +35,15 @@ struct DictionaryBuilder {
     // Current id for the dictionary.
     int64_t dict_id;
 
+    // Caching information for UnifyDictionaryArray. Snowflake Batches
+    // should follow a pattern where several input batches in a row all use
+    // the same dictionary. When we encounter a new array we will
+    // cache the transpose information to limit the compute per batch.
+    // We will only store 1 element because we expect we will never encounter
+    // that dictionary again once we have finished using it.
+    int64_t cached_dict_id = -1;
+    std::vector<dict_indices_t> cached_transpose_map;
+
     /**
      * @brief Construct a new Dictionary Builder.
      *
