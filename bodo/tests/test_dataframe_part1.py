@@ -571,6 +571,7 @@ def test_unbox_df_multi(memory_leak_check):
     box/unbox dataframe with MultiIndex columns structure (sometimes created in groupby,
     ...)
     """
+
     # TODO: add a MultiIndex dataframe to all tests
     def impl(df):
         return df
@@ -916,6 +917,7 @@ def test_rebalance():
     df_out = bodo.libs.distributed_api.rebalance(df_in)
     df_out_merge = bodo.gatherv(df_out)
     pd.testing.assert_frame_equal(df_in_merge, df_out_merge, check_column_type=False)
+
     # The distributed case
     def f(df):
         return bodo.rebalance(df)
@@ -1175,6 +1177,24 @@ def test_df_empty(df, memory_leak_check):
 
     bodo_func = bodo.jit(impl)
     assert bodo_func(df) == impl(df)
+
+
+@pytest.mark.parametrize("dtype", [np.int64, "datetime64[ns]", str, pd.StringDtype()])
+def test_tz_aware_df_astype(dtype, memory_leak_check):
+    df = pd.date_range(
+        start="2018-04-24",
+        end="2018-04-29",
+        periods=5,
+        tz="Poland",
+    ).to_frame()
+
+    def impl(df):
+        return df.astype(dtype)
+
+    if dtype == pd.StringDtype():
+        impl = lambda df: df.astype(str)
+
+    check_func(impl, (df,))
 
 
 def test_df_astype_num(numeric_df_value, memory_leak_check):
@@ -2076,6 +2096,7 @@ def test_df_idxmax_all_types_axis1(df_value, memory_leak_check):
     """
     Test df.idxmax on all df types with axis=1
     """
+
     # TODO: Support axis=1 [BE-281]
     def test_impl(df):
         return df.idxmax(axis=1)
@@ -2167,6 +2188,7 @@ def test_df_idxmin_all_types_axis1(df_value, memory_leak_check):
     """
     Test df.idxmin on all df types with axis=1
     """
+
     # TODO: Support axis=1 [BE-281]
     def test_impl(df):
         return df.idxmin(axis=1)

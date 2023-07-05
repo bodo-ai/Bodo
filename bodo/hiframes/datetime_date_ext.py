@@ -58,6 +58,7 @@ ll.add_symbol("unbox_datetime_date_array", hdatetime_ext.unbox_datetime_date_arr
 ll.add_symbol("get_isocalendar", hdatetime_ext.get_isocalendar)
 ll.add_symbol("get_days_from_date", hdatetime_ext.get_days_from_date)
 
+
 # datetime.date implementation that uses a single int to store year/month/day
 # Does not need refcounted object wrapping since it is immutable
 #
@@ -545,7 +546,6 @@ def overload_add_operator_datetime_date(lhs, rhs):
 
 
 def overload_sub_operator_datetime_date(lhs, rhs):
-
     if lhs == datetime_date_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -701,6 +701,7 @@ types.datetime_date_array_type = datetime_date_array_type
 
 data_type = types.Array(types.int32, 1, "C")
 nulls_type = types.Array(types.uint8, 1, "C")
+
 
 # datetime.date array has only an array integers to store data
 @register_model(DatetimeDateArrayType)
@@ -929,7 +930,6 @@ def dt_date_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-
         if types.unliteral(val) == datetime_date_type:
 
             def impl(A, idx, val):  # pragma: no cover
@@ -950,7 +950,6 @@ def dt_date_arr_setitem(A, idx, val):
 
     # array of integers
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
-
         if types.unliteral(val) == datetime_date_type:
             return lambda A, idx, val: array_setitem_int_index(
                 A, idx, cast_datetime_date_to_int(val)
@@ -964,7 +963,6 @@ def dt_date_arr_setitem(A, idx, val):
 
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-
         if types.unliteral(val) == datetime_date_type:
             return lambda A, idx, val: array_setitem_bool_index(
                 A, idx, cast_datetime_date_to_int(val)
@@ -977,7 +975,6 @@ def dt_date_arr_setitem(A, idx, val):
 
     # slice case
     if isinstance(idx, types.SliceType):
-
         if types.unliteral(val) == datetime_date_type:
             return lambda A, idx, val: array_setitem_slice_index(
                 A, idx, cast_datetime_date_to_int(val)
