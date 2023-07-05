@@ -93,7 +93,7 @@ jobs:
   - script: |
       set -exo pipefail
       export PATH=$HOME/mambaforge/bin:$PATH
-      mamba create -y -n bodo_build boa anaconda-client conda-verify 'python=3.10' -c conda-forge
+      mamba create -y -n bodo_build boa anaconda-client conda-verify 'python=3.10' 'python-libarchive-c=4.0' -c conda-forge
     displayName: 'Create Mamba Env'
 
   # It was taken from code in the Numba feedstock that handles cross compiling,

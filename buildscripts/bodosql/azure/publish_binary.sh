@@ -5,7 +5,7 @@ export PATH=$HOME/mambaforge/bin:$PATH
 source activate $CONDA_ENV
 
 # Upload to artifactory
-mamba install -y conda-build anaconda-client conda-verify curl -c conda-forge
+mamba install -y conda-build anaconda-client conda-verify curl 'python-libarchive-c=4.0' -c conda-forge
 
 BODOSQL_CHANNEL_NAME=${1:-bodo-binary}
 
@@ -15,7 +15,7 @@ TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
 ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
 
 # Get the BodoSQL version
-# Since we build BodoSQL after Bodo on Azure, we can tie the BodoSQL and Bodo version together 
+# Since we build BodoSQL after Bodo on Azure, we can tie the BodoSQL and Bodo version together
 export BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
 export BODO_VERSION=$BODOSQL_VERSION
 export IS_RELEASE=`git tag --points-at HEAD`
@@ -42,7 +42,7 @@ elif [[ "$BODOSQL_CHANNEL_NAME" == "bodo.ai" ]] && [[ -n "$IS_RELEASE" ]]; then
     label="dev"
 fi
 
-# Since we build BodoSQL after Bodo on Azure, we can tie the BodoSQL and Bodo version & channel together 
+# Since we build BodoSQL after Bodo on Azure, we can tie the BodoSQL and Bodo version & channel together
 BODO_CHANNEL_NAME=$BODOSQL_CHANNEL_NAME
 
 conda-build buildscripts/bodosql/conda-recipe -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$BODO_CHANNEL_NAME -c conda-forge --no-test
@@ -60,3 +60,14 @@ done
 
 # reindex conda
 curl -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$BODOSQL_CHANNEL_NAME/reindex
+
+
+# Block on checking if the reindex has failed.
+set +e
+exit_status=1
+while [[ $exit_status != 0 ]]
+do
+    sleep 30
+    conda search bodosql="${BODOSQL_VERSION}" -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODOSQL_CHANNEL_NAME}/noarch
+    exit_status=$?
+done
