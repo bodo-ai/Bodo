@@ -314,6 +314,7 @@ def test_series_replace_bitwidth(memory_leak_check):
 def test_series_float_literal(memory_leak_check):
     """Checks that series.replace with an integer and a float
     that can never be equal will return a copy."""
+
     # Tests for [BE-468]
     def impl(S):
         return S.replace(np.inf, np.nan)
@@ -817,6 +818,33 @@ def test_series_name(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
+@pytest.mark.parametrize(
+    "dtype",
+    [np.int64, str, pd.StringDtype(), "datetime64[ns]"],
+)
+def test_tz_aware_series_astype(dtype, memory_leak_check):
+    def test_impl(S):
+        return S.astype(dtype)
+
+    S = pd.Series(
+        [
+            pd.Timestamp("2018-08-17", tz="America/New_York"),
+            pd.Timestamp("2020-10-01", tz="America/New_York"),
+            pd.Timestamp("2021-12-31", tz="America/New_York"),
+            pd.Timestamp("2022-01-01", tz="America/New_York"),
+        ]
+        * 4
+    )
+
+    if dtype == pd.StringDtype():
+        check_func(test_impl, (S,), py_output=S.astype(str))
+    else:
+        check_func(
+            test_impl,
+            (S,),
+        )
+
+
 def test_series_astype_numeric(numeric_series_val, memory_leak_check):
     # datetime can't be converted to float
     if numeric_series_val.dtype == np.dtype("datetime64[ns]"):
@@ -830,7 +858,6 @@ def test_series_astype_numeric(numeric_series_val, memory_leak_check):
 
 # TODO: add memory_leak_check
 def test_series_astype_str(series_val):
-
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -1052,6 +1079,7 @@ def test_series_to_list(series_val, memory_leak_check):
     """Test Series.to_list(): non-float NAs throw a runtime error since can't be
     represented in lists.
     """
+
     # TODO: [BE-498] Correctly convert nan
     def impl(S):
         return S.to_list()
@@ -1122,7 +1150,6 @@ def test_series_iat_getitem_datetime(memory_leak_check):
 
 @pytest.mark.smoke
 def test_series_iat_setitem(series_val, memory_leak_check):
-
     val = series_val.iat[0]
 
     def test_impl(S, val):

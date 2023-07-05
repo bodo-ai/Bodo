@@ -649,6 +649,27 @@ def test_series_max(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
+def test_tz_aware_series_max_min(memory_leak_check):
+    series_val = pd.Series(
+        [
+            pd.Timestamp("2018-08-17", tz="America/New_York"),
+            pd.Timestamp("2020-10-01", tz="America/New_York"),
+            pd.Timestamp("2021-12-31", tz="America/New_York"),
+            pd.Timestamp("2022-01-01", tz="America/New_York"),
+        ]
+        * 4
+    )
+
+    def max_impl(A):
+        return A.max()
+
+    def min_impl(A):
+        return A.min()
+
+    check_func(max_impl, (series_val,))
+    check_func(min_impl, (series_val,))
+
+
 @pytest.mark.slow
 def test_series_min_max_cat(memory_leak_check):
     """test min/max of Categorical data"""

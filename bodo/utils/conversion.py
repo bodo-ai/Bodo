@@ -871,18 +871,9 @@ def overload_fix_arr_dtype(
     operations where the casting behavior changes depending on if the input is a Series
     or an Array (specifically, S.astype(str) vs S.values.astype(str))
     """
-    # We don't support fix_arr_dtype if we have to cast the data.
-    # This means we support none and keeping the same type.
-    can_cast_tz_aware = False
-    if is_overload_none(new_dtype):
-        can_cast_tz_aware = True
-    elif isinstance(new_dtype, types.TypeRef):
-        can_cast_tz_aware = new_dtype.instance_type == data
-
-    if not can_cast_tz_aware:
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            data, "fix_arr_dtype()"
-        )
+    data_is_tz_aware = isinstance(
+        data.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+    )
     do_copy = is_overload_true(copy)
 
     # If the new dtype is "object", we treat it as a no-op.
@@ -1346,24 +1337,30 @@ def overload_fix_arr_dtype(
 
     # Note astype(datetime.date) isn't possible in Pandas because its treated
     # as an object type. We support it to maintain parity with Spark's cast.
-    if nb_dtype == bodo.datetime_date_type:
+    if nb_dtype == bodo.datetime_date_type and (
+        data.dtype == bodo.datetime64ns or data_is_tz_aware
+    ):
         # This operation isn't defined in Pandas, so we opt to implement it as
         # truncating to the date, which best resembles a cast.
-        if data.dtype == bodo.datetime64ns:
 
-            def impl_date(
-                data, new_dtype, copy=None, nan_to_str=True, from_series=False
-            ):  # pragma: no cover
-                n = len(data)
-                out_arr = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
-                for i in numba.parfors.parfor.internal_prange(n):
-                    if bodo.libs.array_kernels.isna(data, i):
-                        bodo.libs.array_kernels.setna(out_arr, i)
+        def impl_date(
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
+        ):  # pragma: no cover
+            n = len(data)
+            out_arr = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(data, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+                else:
+                    if data_is_tz_aware:
+                        out_arr[i] = bodo.utils.conversion.box_if_dt64(
+                            data[i].tz_convert(None)
+                        ).date()
                     else:
                         out_arr[i] = bodo.utils.conversion.box_if_dt64(data[i]).date()
-                return out_arr
+            return out_arr
 
-            return impl_date
+        return impl_date
 
     # Datetime64 case
     if nb_dtype == bodo.datetime64ns:
@@ -1389,6 +1386,15 @@ def overload_fix_arr_dtype(
                 )
 
             return impl_date
+
+        if data_is_tz_aware:
+
+            def impl_tz_ts(
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
+            ):
+                return data.tz_convert(None)
+
+            return impl_tz_ts
 
         if isinstance(data.dtype, types.Number) or data.dtype in [
             bodo.timedelta64ns,
@@ -1457,7 +1463,7 @@ def overload_fix_arr_dtype(
 
     # Pandas currently only supports dt64/td64 -> int64
     if (nb_dtype == types.int64) and (
-        data.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+        data.dtype in [bodo.datetime64ns, bodo.timedelta64ns] or data_is_tz_aware
     ):
 
         def impl_datelike_to_integer(
@@ -1470,7 +1476,10 @@ def overload_fix_arr_dtype(
                 if bodo.libs.array_kernels.isna(data, i):
                     bodo.libs.array_kernels.setna(A, i)
                 else:
-                    A[i] = np.int64(data[i])
+                    if data_is_tz_aware:
+                        A[i] = np.int64(data[i].value)
+                    else:
+                        A[i] = np.int64(data[i])
             return A
 
         return impl_datelike_to_integer

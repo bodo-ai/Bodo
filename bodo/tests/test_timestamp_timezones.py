@@ -170,22 +170,6 @@ def test_tz_datetime_arr_no_tz_supported():
     bodo.jit(impl)(no_tz_arr)
 
 
-def test_tz_index_unsupported():
-    def impl(idx):
-        return idx.min()
-
-    non_tz_idx = pd.date_range("2020-01-01", periods=10)
-    tz_idx = pd.date_range("2020-01-01", periods=10, tz="US/Eastern")
-
-    check_func(impl, (non_tz_idx,))
-
-    with pytest.raises(
-        BodoError,
-        match=".*Timezone-aware index not yet supported.*",
-    ):
-        bodo.jit(impl)(tz_idx)
-
-
 def test_tz_date_scalar_cmp(sample_tz, cmp_op, memory_leak_check):
     """Check that scalar comparison operators work between dates and
     Timestamps
