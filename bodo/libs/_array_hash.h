@@ -141,7 +141,7 @@ struct multi_col_key {
                         c2->has_deduped_local_dictionary &&
                         (!is_parallel || c1->has_global_dictionary) &&
                         (!other.is_parallel || c2->has_global_dictionary)) {
-                        if (c1->child_arrays[0] != c2->child_arrays[0]) {
+                        if (!is_matching_dictionary(c1, c2)) {
                             throw std::runtime_error(
                                 "multi-key-hashing dictionary the columns are "
                                 "not unified.");
@@ -407,7 +407,7 @@ class ElementComparator {
         // comparisons are not accurate).
         if (arr1_->arr_type == bodo_array_type::DICT &&
             arr2_->arr_type == bodo_array_type::DICT) {
-            if (arr1_->child_arrays[0] != arr2_->child_arrays[0]) {
+            if (!is_matching_dictionary(arr1_, arr2_)) {
                 throw std::runtime_error(
                     "ElementComparator: don't know if arrays have "
                     "unified dictionary.");

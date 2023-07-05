@@ -956,6 +956,29 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
 int64_t generate_dict_id(int64_t length);
 
 /**
+ * @brief Determine if two dictionaries are equivalent. The two dictionaries are
+ * equivalent if either they have the same exact child array or the dictionary
+ * ids are the same. There is also support for a special case when the dict_id
+ * == 0, which means a dictionary is empty. Since there are no valid indices
+ * every dictionary matches. This is mostly relevant for initialization when
+ * "building" a dictionary.
+ *
+ * @param arr1 The first dictionary
+ * @param arr2 The second dictionary
+ * @return Do the dictionaries match (and therefore are the indices equivalent).
+ */
+static inline bool is_matching_dictionary(
+    const std::shared_ptr<array_info>& arr1,
+    const std::shared_ptr<array_info>& arr2) {
+    bool arr1_valid_id = arr1->dict_id >= 0;
+    bool arr2_valid_id = arr2->dict_id >= 0;
+    return (arr1->child_arrays[0] == arr2->child_arrays[0]) ||
+           (arr1_valid_id && arr2_valid_id &&
+            (arr1->dict_id == 0 || arr2->dict_id == 0 ||
+             (arr1->dict_id == arr2->dict_id)));
+}
+
+/**
  * @brief initialize bitmask for array
  *
  * @param bits bitmask pointer
