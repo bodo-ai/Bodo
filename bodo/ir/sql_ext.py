@@ -148,6 +148,9 @@ class SqlReader(ir.Stmt):
         is_merge_into: bool,
         file_list_type,
         snapshot_id_type,
+        # Runtime should downcast decimal columns to double
+        # Only relavent for Snowflake ATM
+        downcast_decimal_to_double: bool,
         # Batch size to read chunks in, or none, to read the entire table together
         # Only supported for Snowflake
         # Treated as compile-time constant for simplicity
@@ -213,11 +216,12 @@ class SqlReader(ir.Stmt):
             self.file_list_type = types.none
             self.snapshot_id_type = types.none
 
+        self.downcast_decimal_to_double = downcast_decimal_to_double
         self.chunksize = chunksize
 
     def __repr__(self):  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
-        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into})"
+        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into}, downcast_decimal_to_double={self.downcast_decimal_to_double})"
 
 
 def parse_dbtype(con_str) -> Tuple[str, str]:
@@ -617,6 +621,7 @@ def sql_distributed_run(
         "is_select_query": sql_node.is_select_query,
         "is_merge_into": sql_node.is_merge_into,
         "is_independent": is_independent,
+        "downcast_decimal_to_double": sql_node.downcast_decimal_to_double,
     }
     if sql_node.chunksize is not None:  # pragma: no cover
         sql_reader_py = _gen_sql_reader_chunked_py(
@@ -1234,6 +1239,7 @@ def _gen_sql_reader_chunked_py(
     is_select_query: bool,
     is_merge_into: bool,
     is_independent: bool,
+    downcast_decimal_to_double: bool,
     chunksize: int,
     out_type,
 ):  # pragma: no cover
@@ -1296,6 +1302,7 @@ def _gen_sql_reader_chunked_py(
             f"    total_rows_np.ctypes,",
             f"    {is_select_query and len(used_col_names) == 0},",
             f"    {is_select_query},",
+            f"    {downcast_decimal_to_double},",
             f"    {chunksize},",
             f"    out_type,",
             f"  )",
@@ -1347,6 +1354,7 @@ def _gen_sql_reader_py(
     is_select_query: bool,
     is_merge_into: bool,
     is_independent: bool,
+    downcast_decimal_to_double: bool,
 ):
     """
     Function that generates the main SQL implementation. There are
@@ -1612,6 +1620,7 @@ def _gen_sql_reader_py(
             f"    total_rows_np.ctypes,\n"
             f"    {is_select_query and len(used_col_names) == 0},\n"
             f"    {is_select_query},\n"
+            f"    {downcast_decimal_to_double},\n"
             f"  )\n"
             f"  check_and_propagate_cpp_exception()\n"
         )
@@ -1939,6 +1948,7 @@ _snowflake_read = types.ExternalFunction(
         types.voidptr,  # total_nrows
         types.boolean,  # _only_length_query
         types.boolean,  # _is_select_query
+        types.boolean,  # downcast_decimal_to_double
     ),
 )
 
@@ -1958,6 +1968,7 @@ def snowflake_reader_init_py_entry(
     total_nrows_t,
     only_length_query_t,
     is_select_query_t,
+    downcast_decimal_to_double_t,
     chunksize_t,
     arrow_reader_t,
 ):  # pragma: no cover
@@ -1984,6 +1995,7 @@ def snowflake_reader_init_py_entry(
                 lir.IntType(8).as_pointer(),  # total_nrows void*
                 lir.IntType(1),  # _only_length_query bool
                 lir.IntType(1),  # _is_select_query bool
+                lir.IntType(1),  # downcast_decimal_to_double
                 lir.IntType(64),  # chunksize
             ],
         )
@@ -2009,6 +2021,7 @@ def snowflake_reader_init_py_entry(
         types.voidptr,  # total_nrows
         types.boolean,  # _only_length_query
         types.boolean,  # _is_select_query
+        types.boolean,  # downcast_decimal_to_double
         types.int64,  # chunksize
         arrow_reader_t,  # typing only
     )

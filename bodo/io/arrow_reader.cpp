@@ -1183,7 +1183,7 @@ void ArrowReader::init_arrow_reader(
 }
 
 std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
-    std::shared_ptr<arrow::Table> table) {
+    std::shared_ptr<arrow::Table> table, bool downcast_decimal_to_double) {
     if (!table->schema()->Equals(this->schema)) {
         arrow::ChunkedArrayVector new_cols;
         for (int i = 0; i < table->num_columns(); i++) {
@@ -1196,6 +1196,7 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
             auto act_type = col->type();
             auto act_nullable = table->schema()->field(i)->nullable();
 
+            // TODO: Simplify and update for nullable float and timestamps
             // Either
             // 1) Expected nullable and actually nullable
             // 2) Expected not nullable and actually not nullable
@@ -1228,28 +1229,49 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
             if (act_type->Equals(exp_type) && nullable_eq) {
                 new_cols.push_back(col);
 
+            } else if ((act_type->bit_width() < exp_type->bit_width()) &&
+                       nullable_eq) {
+                // Check if upcast is possible in this case
                 // Dont bother checking if types are compatible, should
                 // be done at compile-time. Only sizes can change.
-            } else if (act_type->bit_width() < exp_type->bit_width() &&
-                       nullable_eq) {
-                // bit-width is we-defined for all types with a fixed width. For
-                // other types, such as strings it's always set to -1, and hence
-                // should be safe to compare.
+
+                // bit-width is well-defined for all types with a fixed width.
+                // For other types, such as strings it's always set to -1, and
+                // hence should be safe to compare.
                 // (https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4NK5arrow8DataType9bit_widthEv)
 
                 auto res = arrow::compute::Cast(
                     col, exp_type, arrow::compute::CastOptions::Safe(),
                     bodo::buffer_exec_context());
-                // TODO: Use std::format after fixing C++ compiler errors
+                // TODO: Use fmt::format or std::format on C++23
                 CHECK_ARROW(res.status(),
-                            "Unable to upcast from " + col->type()->ToString() +
-                                " to " + exp_type->ToString() +
+                            "Failed to safely cast from " +
+                                col->type()->ToString() + " to " +
+                                exp_type->ToString() +
                                 " before appending to TableBuilder");
                 auto casted_datum = res.ValueOrDie();
                 new_cols.push_back(casted_datum.chunked_array());
 
+            } else if (downcast_decimal_to_double &&
+                       act_type->id() == Type::DECIMAL128 &&
+                       exp_type->id() == Type::DOUBLE && nullable_eq) {
+                // Bodo has limited support for decimal columns right now
+                // We can attempt to get around it by unsafely downcasting to
+                // double
+                auto opt = arrow::compute::CastOptions::Safe();
+                opt.allow_decimal_truncate = true;
+
+                auto res = arrow::compute::Cast(col, exp_type, opt,
+                                                bodo::buffer_exec_context());
+                CHECK_ARROW(res.status(), "Failed to downcast from " +
+                                              col->type()->ToString() + " to " +
+                                              exp_type->ToString());
+
+                auto casted_datum = res.ValueOrDie();
+                new_cols.push_back(casted_datum.chunked_array());
+
             } else {
-                // TODO: Use std::format after fixing C++ compiler errors
+                // TODO: Use fmt::format or std::format on C++23
                 throw std::runtime_error("Invalid Downcast from " +
                                          col->type()->ToString() + " to " +
                                          exp_type->ToString());

@@ -39,14 +39,15 @@ table_info* snowflake_read_py_entry(
     const char* query, const char* conn, bool parallel, bool is_independent,
     PyObject* arrow_schema, int64_t n_fields, int32_t* _is_nullable,
     int32_t* _str_as_dict_cols, int32_t num_str_as_dict_cols,
-    int64_t* total_nrows, bool _only_length_query, bool _is_select_query);
+    int64_t* total_nrows, bool _only_length_query, bool _is_select_query,
+    bool downcast_decimal_to_double);
 
 ArrowReader* snowflake_reader_init_py_entry(
     const char* query, const char* conn, bool parallel, bool is_independent,
     PyObject* arrow_schema, int64_t n_fields, int32_t* _is_nullable,
     int32_t num_str_as_dict_cols, int32_t* _str_as_dict_cols,
     int64_t* total_nrows, bool _only_length_query, bool _is_select_query,
-    int64_t batch_size);
+    bool downcast_decimal_to_double, int64_t batch_size);
 
 // --------- functions defined in parquet_write.cpp ---------
 int64_t pq_write_py_entry(const char* _path_name, table_info* table,
