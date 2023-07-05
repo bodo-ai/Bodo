@@ -222,7 +222,7 @@ struct ArrayBuildBuffer {
     void AppendBatch(const std::shared_ptr<array_info>& in_arr,
                      const std::vector<bool>& append_rows,
                      uint64_t append_rows_sum) {
-        if (this->data_array->child_arrays[0] != in_arr->child_arrays[0]) {
+        if (!is_matching_dictionary(this->data_array, in_arr)) {
             throw std::runtime_error("dictionary not unified in AppendRow");
         }
 
@@ -448,7 +448,7 @@ struct ArrayBuildBuffer {
               Bodo_CTypes::CTypeEnum DType>
         requires(arr_type == bodo_array_type::DICT)
     void AppendBatch(const std::shared_ptr<array_info>& in_arr) {
-        if (this->data_array->child_arrays[0] != in_arr->child_arrays[0]) {
+        if (!is_matching_dictionary(this->data_array, in_arr)) {
             throw std::runtime_error("dictionary not unified in AppendRow");
         }
         this->dict_indices->AppendBatch<bodo_array_type::NULLABLE_INT_BOOL,
@@ -560,8 +560,7 @@ struct ArrayBuildBuffer {
                                 "Resize Failed!");
             } break;
             case bodo_array_type::DICT: {
-                if (this->data_array->child_arrays[0] !=
-                    in_arr->child_arrays[0]) {
+                if (!is_matching_dictionary(this->data_array, in_arr)) {
                     throw std::runtime_error(
                         "dictionary not unified in AppendRow");
                 }

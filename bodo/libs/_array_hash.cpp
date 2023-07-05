@@ -1064,7 +1064,7 @@ void coherent_hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
                          std::shared_ptr<array_info> ref_array, size_t n_rows,
                          const uint32_t seed, bool is_parallel = true) {
     if ((array->arr_type == bodo_array_type::DICT) &&
-        (array->child_arrays[0] != ref_array->child_arrays[0])) {
+        !is_matching_dictionary(array, ref_array)) {
         // This implementation of coherent_hash_array hashes data based on
         // the values in the indices array. To do this, we make and enforce
         // a few assumptions
