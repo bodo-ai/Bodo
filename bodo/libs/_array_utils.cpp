@@ -678,7 +678,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
     if ((arr1 != nullptr) && (arr2 != nullptr) &&
         (arr1->arr_type == bodo_array_type::DICT) &&
         (arr2->arr_type == bodo_array_type::DICT) &&
-        (arr1->child_arrays[0] != arr2->child_arrays[0])) {
+        !is_matching_dictionary(arr1, arr2)) {
         throw std::runtime_error(
             "RetrieveArray_TwoColumns: don't know if arrays have unified "
             "dictionary");
@@ -1270,7 +1270,7 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
     if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         arr1->arr_type == bodo_array_type::DICT) {
         if (arr1->arr_type == bodo_array_type::DICT) {
-            if (arr1->child_arrays[0] != arr2->child_arrays[0]) {
+            if (!is_matching_dictionary(arr1, arr2)) {
                 throw std::runtime_error(
                     "TestEqualColumn: don't know if arrays have unified "
                     "dictionary");
@@ -1589,7 +1589,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
     }
     if (arr1->arr_type == bodo_array_type::DICT) {
         if (arr2->arr_type == bodo_array_type::DICT) {
-            if (arr1->child_arrays[0] != arr2->child_arrays[0]) {
+            if (!is_matching_dictionary(arr1, arr2)) {
                 throw std::runtime_error(
                     "KeyComparisonAsPython_Column: don't know if arrays "
                     "have unified dictionary");

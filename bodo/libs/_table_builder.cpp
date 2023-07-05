@@ -103,7 +103,7 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
     }
 
     if (in_arr->arr_type == bodo_array_type::DICT &&
-        data_array->child_arrays[0] != in_arr->child_arrays[0]) {
+        !is_matching_dictionary(this->data_array, in_arr)) {
         throw std::runtime_error("dictionary not unified in ReserveArray");
     }
 

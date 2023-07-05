@@ -12,6 +12,27 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     }
 
     std::shared_ptr<array_info> batch_dict = in_arr->child_arrays[0];
+    bool valid_arr_id = in_arr->dict_id >= 0;
+    bool dicts_match =
+        valid_arr_id && (this->dict_id == 0 || in_arr->dict_id == 0 ||
+                         this->dict_id == in_arr->dict_id);
+    if (dicts_match) {
+        if (this->dict_id == 0 && in_arr->dict_id != 0) {
+            // The dictionary is empty and we are adding entries.
+            // We need to append the whole new dictionary.
+            this->dict_buff->ReserveArray(batch_dict);
+            // Append all entries
+            this->dict_buff
+                ->AppendBatch<bodo_array_type::STRING, Bodo_CTypes::STRING>(
+                    batch_dict);
+            // Update the id
+            this->dict_id = in_arr->dict_id;
+        }
+        // If the dictionaries already match we can just return without
+        // transposing.
+        return in_arr;
+    }
+
     this->dict_buff->ReserveArray(batch_dict);
 
     // Check/update dictionary hash table and create transpose map
