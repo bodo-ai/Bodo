@@ -152,25 +152,29 @@ def check_tz_aware_unsupported(val, func_name):
         raise BodoError(
             f"{func_name} on Timezone-aware timestamp not yet supported. Please convert to timezone naive with ts.tz_convert(None)"
         )
-    elif isinstance(val, bodo.DatetimeArrayType):
+    elif isinstance(val, bodo.DatetimeArrayType) and val.tz is not None:
         raise BodoError(
             f"{func_name} on Timezone-aware array not yet supported. Please convert to timezone naive with arr.tz_convert(None)"
         )
-    elif isinstance(val, bodo.DatetimeIndexType) and isinstance(
-        val.data, bodo.DatetimeArrayType
+    elif (
+        isinstance(val, bodo.DatetimeIndexType)
+        and isinstance(val.data, bodo.DatetimeArrayType)
+        and val.data.tz is not None
     ):
         raise BodoError(
             f"{func_name} on Timezone-aware index not yet supported. Please convert to timezone naive with index.tz_convert(None)"
         )
-    elif isinstance(val, bodo.SeriesType) and isinstance(
-        val.data, bodo.DatetimeArrayType
+    elif (
+        isinstance(val, bodo.SeriesType)
+        and isinstance(val.data, bodo.DatetimeArrayType)
+        and val.data.tz is not None
     ):
         raise BodoError(
             f"{func_name} on Timezone-aware series not yet supported. Please convert to timezone naive with series.dt.tz_convert(None)"
         )
     elif isinstance(val, bodo.DataFrameType):
         for arr_typ in val.data:
-            if isinstance(arr_typ, bodo.DatetimeArrayType):
+            if isinstance(arr_typ, bodo.DatetimeArrayType) and arr_typ.tz is not None:
                 raise BodoError(
                     f"{func_name} on Timezone-aware columns not yet supported. Please convert each column to timezone naive with series.dt.tz_convert(None)"
                 )
@@ -2659,13 +2663,35 @@ def overload_sub_operator_timestamp(lhs, rhs):
         return impl
 
 
+def to_nanoseconds(td):
+    pass
+
+
+@overload(to_nanoseconds)
+def to_nanoseconds_impl(td):
+    if td == datetime_timedelta_type:
+
+        def impl(td):  # pragma: no cover
+            return bodo.hiframes.datetime_timedelta_ext._to_nanoseconds(td)
+
+        return impl
+    elif isinstance(td, numba.types.NPTimedelta):
+
+        def impl(td):  # pragma: no cover
+            return td.value
+
+        return impl
+
+
 def overload_add_operator_timestamp(lhs, rhs):
-    if isinstance(lhs, PandasTimestampType) and rhs == datetime_timedelta_type:
+    if isinstance(lhs, PandasTimestampType) and (
+        rhs == datetime_timedelta_type or isinstance(rhs, numba.types.NPTimedelta)
+    ):
         tz_literal = lhs.tz
 
         def impl(lhs, rhs):  # pragma: no cover
             # Compute total nanoseconds to allow the timestamp constructor
-            rhs_nanoseconds = bodo.hiframes.datetime_timedelta_ext._to_nanoseconds(rhs)
+            rhs_nanoseconds = to_nanoseconds(rhs)
             return pd.Timestamp(lhs.value + rhs_nanoseconds, tz=tz_literal)
 
         return impl
