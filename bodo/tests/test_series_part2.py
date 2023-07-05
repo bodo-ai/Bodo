@@ -144,6 +144,7 @@ def test_series_map_func_cases1(memory_leak_check):
     """test map() called with a function defined as global/freevar outside or passed as
     argument.
     """
+
     # const function defined as global
     def test_impl1(S):
         return S.map(g1)
@@ -370,6 +371,7 @@ def test_series_map_timestamp(memory_leak_check):
 
 def test_series_map_decimal(memory_leak_check):
     """make sure Decimal output can be handled in map() properly"""
+
     # just returning input value since we don't support any Decimal creation yet
     # TODO: support Decimal(str) constructor
     # TODO: fix using freevar constants in UDFs
@@ -701,7 +703,6 @@ def test_series_min_max_int_output_type(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_idxmin(series_val, memory_leak_check):
-
     # Binary not supported in pandas
     if isinstance(series_val.values[0], bytes):
         return
@@ -752,7 +753,6 @@ def test_series_idxmin(series_val, memory_leak_check):
 
 
 def test_series_idxmax(series_val, memory_leak_check):
-
     # Binary not supported in pandas
     if isinstance(series_val.values[0], bytes):
         return
@@ -875,8 +875,15 @@ def test_series_equals(memory_leak_check):
 
     S1 = pd.Series([0] + list(range(20)))
     S2 = pd.Series([1] + list(range(20)))
+    S3 = pd.date_range(
+        start="1/1/2018", end="1/08/2018", tz="America/Los_Angeles"
+    ).to_series()
+    S4 = pd.date_range(
+        start="1/1/2018", end="1/08/2018", tz="America/New_York"
+    ).to_series()
     check_func(f, (S1, S1))
     check_func(f, (S1, S2))
+    check_func(f, (S3, S4))
 
 
 @pytest.mark.slow
@@ -1136,7 +1143,6 @@ def test_series_argsort_fast(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_argsort(series_val, memory_leak_check):
-
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -1284,7 +1290,6 @@ def test_series_append_multi(series_val, ignore_index, memory_leak_check):
 
 @pytest.mark.slow
 def test_series_quantile(numeric_series_val, memory_leak_check):
-
     if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
         # as of Pandas 1.3, quantile throws an error when called on nullable integer Series
         # In bodo, this doesn't cause an error at the moment.
@@ -1585,6 +1590,13 @@ def test_series_fillna_inplace(S, value, memory_leak_check):
     [
         pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A"),
         pd.Series(["aa", "b", "AA", None, "ccc"], [3, 4, -1, 2, 1], name="A"),
+        pd.Series(
+            [
+                pd.Timestamp("2018-08-19", tz="America/New_York"),
+                pd.Timestamp("2022-09-28", tz="America/New_York"),
+                pd.Timestamp("2020-01-01", tz="America/New_York"),
+            ]
+        ),
     ],
 )
 def test_series_dropna(S, memory_leak_check):
@@ -1596,6 +1608,7 @@ def test_series_dropna(S, memory_leak_check):
 
 def test_series_to_frame(memory_leak_check):
     """test Series.to_frame(). Series name should be known at compile time"""
+
     # Series name is constant
     def impl1():
         S = pd.Series([1, 2, 3], name="A")
@@ -3083,6 +3096,7 @@ def test_series_round(S, d, memory_leak_check):
 @pytest.mark.slow
 def test_series_unsupported_error_checking(memory_leak_check):
     """make sure BodoError is raised for unsupported Series attributes and methods"""
+
     # test an example attribute
     def test_attr(S):
         return S.axes
