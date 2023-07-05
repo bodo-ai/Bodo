@@ -1638,8 +1638,31 @@ def test_datetime_max(dti_val, memory_leak_check):
     np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
 
 
+def test_tz_aware_datetime_max_min(memory_leak_check):
+    def max_impl(A):
+        return A.max()
+
+    def min_impl(A):
+        return A.min()
+
+    dti_val = pd.date_range(
+        start="2018-04-24",
+        end="2018-04-30",
+        periods=10,
+        name="A",
+        tz="America/Los_Angeles",
+    )
+
+    bodo_func = bodo.jit(min_impl)
+    np.testing.assert_array_equal(bodo_func(dti_val), min_impl(dti_val))
+
+    bodo_func = bodo.jit(max_impl)
+    np.testing.assert_array_equal(bodo_func(dti_val), max_impl(dti_val))
+
+
 def test_datetime_sub(dti_val, memory_leak_check):
     t = dti_val.min()  # Timestamp object
+
     # DatetimeIndex - Timestamp
     def impl(A, t):
         return A - t
@@ -1855,6 +1878,7 @@ def test_init_datetime_index_array_analysis(memory_leak_check):
 
 def test_pd_date_range(memory_leak_check):
     """test pd.date_range() support with various argument combinations"""
+
     # start/end provided (default freq="D")
     def impl():
         return pd.date_range(start="2018-01-01", end="2018-01-08")
@@ -3418,6 +3442,7 @@ def test_index_unsupported(data):
 
 def test_heter_index_binop():
     """test binary operations on heterogeneous Index values"""
+
     # TODO(ehsan): fix Numba bugs for passing list literal to pd.Index
     def impl1():
         A = pd.Index(("A", 2))

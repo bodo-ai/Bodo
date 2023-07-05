@@ -1764,9 +1764,6 @@ def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str
             "Series.astype(): 'dtype' when passed as string must be a constant value"
         )
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.astype()")
-
     # TODO: other data types like datetime, records/tuples
     def impl(
         S, dtype, copy=True, errors="raise", _bodo_nan_to_str=True

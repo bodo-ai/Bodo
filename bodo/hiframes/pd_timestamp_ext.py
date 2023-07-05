@@ -889,6 +889,7 @@ def overload_pd_timestamp_isocalendar(ptt):
 
 @overload_method(PandasTimestampType, "isoformat", no_unliteral=True)
 def overload_pd_timestamp_isoformat(ts, sep=None):
+    has_tz = ts.tz is not None
     if is_overload_none(sep):
 
         def timestamp_isoformat_impl(ts, sep=None):  # pragma: no cover
@@ -897,6 +898,12 @@ def overload_pd_timestamp_isoformat(ts, sep=None):
                 _time += "." + str_2d(ts.microsecond)
                 if ts.nanosecond != 0:
                     _time += str_2d(ts.nanosecond)
+            _tz = ""
+            if has_tz:
+                # strftime returns (-/+) HHMM for UTC offset, when the default Bodo
+                # timezone format is (-/+) HH:MM. So we must manually insert a ":" character
+                utc_offset = ts.strftime("%z")
+                _tz = f"{utc_offset[:3]}:{utc_offset[3:]}"
             res = (
                 str(ts.year)
                 + "-"
@@ -905,6 +912,7 @@ def overload_pd_timestamp_isoformat(ts, sep=None):
                 + str_2d(ts.day)
                 + "T"
                 + _time
+                + _tz
             )
             return res
 
@@ -918,6 +926,13 @@ def overload_pd_timestamp_isoformat(ts, sep=None):
                 _time += "." + str_2d(ts.microsecond)
                 if ts.nanosecond != 0:
                     _time += str_2d(ts.nanosecond)
+            _tz = ""
+            if has_tz:
+                # strftime returns (-/+) HHMM for UTC offset, when the default Bodo
+                # timezone format is (-/+) HH:MM. So we must manually insert a ":" character
+                utc_offset = ts.strftime("%z")
+                _tz = f"{utc_offset[:3]}:{utc_offset[3:]}"
+
             res = (
                 str(ts.year)
                 + "-"
@@ -926,6 +941,7 @@ def overload_pd_timestamp_isoformat(ts, sep=None):
                 + str_2d(ts.day)
                 + sep
                 + _time
+                + _tz
             )
             return res
 
@@ -1123,7 +1139,7 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
 @overload(str, no_unliteral=True)
 def ts_str_overload(a):
     # isoformat omits nanosecond values, see BE-1407
-    if a == pd_timestamp_tz_naive_type:
+    if isinstance(a, PandasTimestampType):
         return lambda a: a.isoformat(" ")
 
 

@@ -228,7 +228,9 @@ def typeof_datetime_index(val, c):
         return DatetimeIndexType(
             get_val_type_maybe_str_literal(val.name), DatetimeArrayType(val.tz)
         )
-    return DatetimeIndexType(get_val_type_maybe_str_literal(val.name))
+
+    res = DatetimeIndexType(get_val_type_maybe_str_literal(val.name))
+    return res
 
 
 @register_model(DatetimeIndexType)
@@ -476,6 +478,10 @@ def _tdi_val_finalize(s, count):  # pragma: no cover
 
 @overload_method(DatetimeIndexType, "min", no_unliteral=True)
 def overload_datetime_index_min(dti, axis=None, skipna=True):
+    dti_is_tz_aware = isinstance(
+        dti.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+    )
+    tz = dti.dtype.tz if dti_is_tz_aware else None
     # TODO skipna = False
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=None, skipna=True)
@@ -486,7 +492,6 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
         package_name="pandas",
         module_name="Index",
     )
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(dti, "Index.min()")
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -495,10 +500,21 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
         count = 0
         for i in numba.parfors.parfor.internal_prange(len(in_arr)):
             if not bodo.libs.array_kernels.isna(in_arr, i):
-                val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
+                if dti_is_tz_aware:
+                    val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(
+                        in_arr[i].tz_localize(None).value
+                    )
+                else:
+                    val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
                 s = min(s, val)
                 count += 1
-        return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
+
+        if dti_is_tz_aware:
+            return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count).tz_localize(
+                tz
+            )
+        else:
+            return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
 
     return impl
 
@@ -506,6 +522,10 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
 # TODO: refactor min/max
 @overload_method(DatetimeIndexType, "max", no_unliteral=True)
 def overload_datetime_index_max(dti, axis=None, skipna=True):
+    dti_is_tz_aware = isinstance(
+        dti.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+    )
+    tz = dti.dtype.tz if dti_is_tz_aware else None
     # TODO skipna = False
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=None, skipna=True)
@@ -516,7 +536,6 @@ def overload_datetime_index_max(dti, axis=None, skipna=True):
         package_name="pandas",
         module_name="Index",
     )
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(dti, "Index.max()")
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -525,10 +544,21 @@ def overload_datetime_index_max(dti, axis=None, skipna=True):
         count = 0
         for i in numba.parfors.parfor.internal_prange(len(in_arr)):
             if not bodo.libs.array_kernels.isna(in_arr, i):
-                val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
+                if dti_is_tz_aware:
+                    val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(
+                        in_arr[i].tz_localize(None).value
+                    )
+                else:
+                    val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
                 s = max(s, val)
                 count += 1
-        return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
+
+        if dti_is_tz_aware:
+            return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count).tz_localize(
+                tz
+            )
+        else:
+            return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
 
     return impl
 
@@ -703,7 +733,6 @@ def overload_binop_dti_str(op):
 
 @overload(pd.Index, inline="always", no_unliteral=True)
 def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "pandas.Index()")
 
     # Todo: support Categorical dtype, Interval dtype, Period dtype, MultiIndex (?)
@@ -1112,7 +1141,6 @@ def pd_timedelta_range_overload(
         name=None,
         closed=None,
     ):  # pragma: no cover
-
         # pandas source code performs the below conditional in timedelta_range
         if freq is None and (start is None or end is None or periods is None):
             freq = "D"
@@ -1180,7 +1208,6 @@ def pd_timedelta_range_overload(
 
 @overload_method(DatetimeIndexType, "isocalendar", inline="always", no_unliteral=True)
 def overload_pd_timestamp_isocalendar(idx):
-
     __col_name_meta_value_pd_timestamp_isocalendar = ColNamesMetaType(
         ("year", "week", "day")
     )
@@ -1831,7 +1858,6 @@ def range_index_overload(
     copy=False,
     name=None,
 ):
-
     # validate the arguments
     def _ensure_int_or_none(value, field):
         msg = (
@@ -3074,7 +3100,6 @@ def get_binary_str_codegen(is_binary=False):
 @overload_method(BinaryIndexType, "copy", no_unliteral=True)
 @overload_method(StringIndexType, "copy", no_unliteral=True)
 def overload_binary_string_index_copy(A, name=None, deep=False, dtype=None, names=None):
-
     typ = type(A)
 
     err_str = idx_typ_to_format_str_map[typ].format("copy()")
@@ -3645,7 +3670,6 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
         return impl_range
 
     def impl(I, key, method=None, tolerance=None):  # pragma: no cover
-
         key = bodo.utils.conversion.unbox_if_tz_naive_timestamp(key)
         # build the index dict if not initialized yet
         if not is_null_value(I._dict):
@@ -4067,7 +4091,6 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_get_index_data = (
 @overload_method(DatetimeIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(TimedeltaIndexType, "map", inline="always", no_unliteral=True)
 def overload_index_map(I, mapper, na_action=None):
-
     if not is_const_func_type(mapper):
         raise BodoError("Index.map(): 'mapper' should be a function")
 
@@ -4186,7 +4209,6 @@ def range_index_is(context, builder, sig, args):
 
 def create_binary_op_overload(op):
     def overload_index_binary_op(lhs, rhs):
-
         # left arg is Index
         if is_index_type(lhs):
             func_text = (
@@ -4389,7 +4411,6 @@ class HeterogeneousIndexType(types.Type):
     ndim = 1
 
     def __init__(self, data=None, name_typ=None):
-
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
@@ -4545,7 +4566,6 @@ def overload_nbytes(I):
 
         return _impl_nbytes
     elif isinstance(I, MultiIndexType):
-
         func_text = "def _impl_nbytes(I):\n"
         func_text += "    total = 0\n"
         func_text += "    data = I._data\n"
@@ -4747,7 +4767,6 @@ def overload_multi_index_to_frame(I, index=True, name=None):
 
     # Otherwise, the column name is either the name provided or the name of the Index
     else:
-
         if is_overload_none(name):
             columns = ColNamesMetaType(I.names_typ)
         else:
@@ -5665,6 +5684,7 @@ def overload_index_sort_values(
     constructor = get_index_constructor(I)
 
     meta_data = ColNamesMetaType(("$_bodo_col_",))
+
     # reusing dataframe sort_values() in implementation.
     def impl(
         I, return_indexer=False, ascending=True, na_position="last", key=None
@@ -5745,7 +5765,6 @@ def overload_index_argsort(I, axis=0, kind="quicksort", order=None):
 @overload_method(CategoricalIndexType, "where", no_unliteral=True, inline="always")
 @overload_method(RangeIndexType, "where", no_unliteral=True, inline="always")
 def overload_index_where(I, cond, other=np.nan):
-
     """Supports pd.Index.where() on tagged Index types.
 
     Args:

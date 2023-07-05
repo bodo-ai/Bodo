@@ -638,11 +638,7 @@ def to_char_util(arr, format_str=None):
         elif is_valid_date_arg(arr):
             scalar_text += "res[i] = str(arg0)\n"
         elif is_valid_tz_aware_datetime_arg(arr):
-            # strftime returns (-/+) HHMM for UTC offset, when the default Bodo
-            # timezone format is (-/+) HH:MM. So we must manually insert a ":" character
-            scalar_text += "tz_raw = arg0.strftime('%z')\n"
-            scalar_text += 'tz = tz_raw[:3] + ":" + tz_raw[3:]\n'
-            scalar_text += "res[i] = arg0.isoformat(' ') + tz\n"
+            scalar_text += "res[i] = arg0.isoformat(' ')\n"
         else:
             scalar_text += "res[i] = pd.Timestamp(arg0).isoformat(' ')\n"
     elif is_valid_float_arg(arr):
