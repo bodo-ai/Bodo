@@ -237,10 +237,10 @@ class GroupbyStateType(types.Type):
     def build_indices(self):
         if self.build_table_type == types.unknown:
             return ()
-        else:
-            return self._derive_cpp_indices(
-                self.key_inds, len(self.build_table_type.arr_types)
-            )
+
+        return self._derive_cpp_indices(
+            self.key_inds, len(self.build_table_type.arr_types)
+        )
 
     @cached_property
     def out_table_type(self):
@@ -261,6 +261,7 @@ class GroupbyStateType(types.Type):
             )
             assert err_msg == "ok", "Function typing failed in streaming groupby"
             out_arr_types.append(out_type)
+
         return bodo.TableType(tuple(self.key_types + out_arr_types))
 
 

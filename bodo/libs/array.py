@@ -1438,7 +1438,7 @@ def cpp_table_to_py_table(
         and table_idx_arr_t.dtype == types.int64
     ), "invalid table index array"
     assert isinstance(py_table_type_t, types.TypeRef), "invalid py table ref"
-    assert default_length_t == types.int64, "invalid length type"
+    assert isinstance(default_length_t, types.Integer), "invalid length type"
     py_table_type = py_table_type_t.instance_type
 
     def codegen(context, builder, sig, args):
@@ -1527,7 +1527,7 @@ def cpp_table_to_py_table(
         return table._getvalue()
 
     return (
-        py_table_type(cpp_table_t, table_idx_arr_t, py_table_type_t, default_length_t),
+        py_table_type(cpp_table_t, table_idx_arr_t, py_table_type_t, types.int64),
         codegen,
     )
 
