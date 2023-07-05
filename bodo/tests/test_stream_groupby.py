@@ -15,7 +15,7 @@ from bodo.libs.stream_groupby import (
 from bodo.tests.utils import check_func
 
 
-@pytest.mark.parametrize("func_name", ["sum", "median", "mean"])
+@pytest.mark.parametrize("func_name", ["sum", "median", "mean", "nunique"])
 def test_groupby_basic(func_name, memory_leak_check):
     """
     Tests support for the basic streaming groupby functionality.
@@ -71,8 +71,8 @@ def test_groupby_basic(func_name, memory_leak_check):
 
     df = pd.DataFrame(
         {
-            "A": [1, 2, 1, 1, 2, 0],
-            "B": [1, 3, 5, 11, 1, 3],
+            "A": [1, 2, 1, 1, 2, 0, 1, 2],
+            "B": [1, 3, 5, 11, 1, 3, 5, 3],
         }
     )
     expected_df = df.groupby("A", as_index=False).agg(func_name)
