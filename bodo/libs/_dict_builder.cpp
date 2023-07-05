@@ -16,20 +16,13 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     bool dicts_match =
         valid_arr_id && (this->dict_id == 0 || in_arr->dict_id == 0 ||
                          this->dict_id == in_arr->dict_id);
-    if (dicts_match) {
-        if (this->dict_id == 0 && in_arr->dict_id != 0) {
-            // The dictionary is empty and we are adding entries.
-            // We need to append the whole new dictionary.
-            this->dict_buff->ReserveArray(batch_dict);
-            // Append all entries
-            this->dict_buff
-                ->AppendBatch<bodo_array_type::STRING, Bodo_CTypes::STRING>(
-                    batch_dict);
-            // Update the id
-            this->dict_id = in_arr->dict_id;
-        }
-        // If the dictionaries already match we can just return without
-        // transposing.
+    bool not_empty_builder = this->dict_id != 0;
+    bool empty_arr = in_arr->dict_id == 0;
+    if (dicts_match && (not_empty_builder || empty_arr)) {
+        // If the dictionaries already match and we don't need
+        // to update either dictionary, we can just return without
+        // transposing. Otherwise if we need to update the
+        // builder we need to insert into the metadata.
         return in_arr;
     }
 
@@ -44,7 +37,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         // Check/update dictionary hash table and create transpose map
         char* data = batch_dict->data1();
         offset_t* offsets = (offset_t*)batch_dict->data2();
-        bool found_change = false;
+        bool found_insert = false;
         for (size_t i = 0; i < batch_dict->length; i++) {
             // handle nulls in the dictionary
             if (!batch_dict->get_null_bit(i)) {
@@ -60,7 +53,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
                 dict_indices_t ind = this->dict_str_to_ind->find(val)->second;
                 this->cached_transpose_map.emplace_back(ind);
             } else {
-                found_change = true;
+                found_insert = true;
                 // insert into hash table if not exists
                 dict_indices_t ind = this->dict_str_to_ind->size();
                 // TODO: remove std::string() after upgrade to C++23
@@ -77,7 +70,15 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         }
         // Update the cached id
         this->cached_dict_id = in_arr->dict_id;
-        if (found_change) {
+        if (dicts_match && (batch_dict->length == this->dict_buff->size)) {
+            // If the dictionary was copied without changing (e.g. no entries
+            // had to be removed, then we can take the id of the input and
+            // simply return the input without remapping.
+            this->dict_id = in_arr->dict_id;
+            // We now know the dictionary is unique
+            in_arr->has_deduped_local_dictionary = true;
+            return in_arr;
+        } else if (found_insert) {
             // Update the dict id if there was any change to the dictionary.
             this->dict_id =
                 generate_dict_id(this->dict_buff->data_array->length);
