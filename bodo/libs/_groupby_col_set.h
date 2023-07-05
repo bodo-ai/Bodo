@@ -121,15 +121,16 @@ class BasicColSet {
 
     /**
      * @brief Get update column types for this ColSet function with the given
-     * input array types
+     * input array types.
+     * Should match arrays allocated with alloc_update_columns().
      *
      * @param in_arr_types input array types
      * @param in_dtypes input array dtypes
      * @return std::tuple<std::vector<bodo_array_type::arr_type_enum>,
      * std::vector<Bodo_CTypes::CTypeEnum>> update column array types and dtypes
      */
-    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
-               std::vector<Bodo_CTypes::CTypeEnum>>
+    virtual std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+                       std::vector<Bodo_CTypes::CTypeEnum>>
     getUpdateColumnTypes(
         const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
         const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) {
@@ -146,7 +147,8 @@ class BasicColSet {
 
     /**
      * @brief Get combine column types for this ColSet function with the given
-     * update array types
+     * update array types.
+     * Should match arrays allocated with alloc_combine_columns().
      *
      * @param update_arr_types update array types
      * @param update_dtypes update dtypes
@@ -162,13 +164,17 @@ class BasicColSet {
         // TODO[BSE-578]: implement getCombineColumnTypes() for other colsets
         // that can have more update columns
         int combine_ftype = get_combine_func(ftype);
-        std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
-            out_arr_type = get_groupby_output_dtype(
-                combine_ftype, update_arr_types[0], update_dtypes[0]);
-        return std::tuple(
-            std::vector<bodo_array_type::arr_type_enum>{
-                std::get<0>(out_arr_type)},
-            std::vector<Bodo_CTypes::CTypeEnum>{std::get<1>(out_arr_type)});
+        std::vector<bodo_array_type::arr_type_enum> out_arr_types;
+        std::vector<Bodo_CTypes::CTypeEnum> out_dtypes;
+        for (size_t i = 0; i < update_arr_types.size(); i++) {
+            std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
+                out_arr_type_info = get_groupby_output_dtype(
+                    combine_ftype, update_arr_types[i], update_dtypes[i]);
+            out_arr_types.push_back(std::get<0>(out_arr_type_info));
+            out_dtypes.push_back(std::get<1>(out_arr_type_info));
+        }
+
+        return std::tuple(out_arr_types, out_dtypes);
     }
 
     /**
@@ -228,6 +234,21 @@ class MeanColSet : public BasicColSet {
     virtual void combine(const grouping_info& grp_info,
                          int64_t init_start_row = 0);
     virtual void eval(const grouping_info& grp_info);
+
+    std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+               std::vector<Bodo_CTypes::CTypeEnum>>
+    getUpdateColumnTypes(
+        const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
+        const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) override {
+        // Mean's update columns are always float64 for sum data and uint64 for
+        // count data. See MeanColSet::alloc_update_columns()
+        return std::tuple(
+            std::vector<bodo_array_type::arr_type_enum>{
+                bodo_array_type::NULLABLE_INT_BOOL,
+                bodo_array_type::NULLABLE_INT_BOOL},
+            std::vector<Bodo_CTypes::CTypeEnum>{Bodo_CTypes::FLOAT64,
+                                                Bodo_CTypes::UINT64});
+    }
 };
 
 /**

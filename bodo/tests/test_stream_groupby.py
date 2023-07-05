@@ -15,7 +15,7 @@ from bodo.libs.stream_groupby import (
 from bodo.tests.utils import check_func
 
 
-@pytest.mark.parametrize("func_name", ["sum", "median"])
+@pytest.mark.parametrize("func_name", ["sum", "median", "mean"])
 def test_groupby_basic(func_name, memory_leak_check):
     """
     Tests support for the basic streaming groupby functionality.

@@ -191,6 +191,33 @@ void combine_input_table(GroupbyState* groupby_state,
 }
 
 /**
+ * @brief Calls groupby eval() functions of groupby operations on running values
+ * to compute final output.
+ *
+ * @param groupby_state streaming groupby state
+ * @param build_table build table with running values
+ */
+void eval_groupby_funcs(GroupbyState* groupby_state,
+                        std::shared_ptr<table_info> build_table) {
+    const std::vector<int32_t>& f_combine_offsets =
+        groupby_state->f_combine_offsets;
+    for (size_t i = 0; i < groupby_state->col_sets.size(); i++) {
+        std::shared_ptr<BasicColSet>& col_set = groupby_state->col_sets[i];
+        std::vector<std::shared_ptr<array_info>> out_combine_cols;
+
+        for (size_t col_ind = (size_t)f_combine_offsets[i];
+             col_ind < (size_t)f_combine_offsets[i + 1]; col_ind++) {
+            out_combine_cols.push_back(build_table->columns[col_ind]);
+        }
+        col_set->setCombineCols(out_combine_cols);
+        // calling eval() doesn't require grouping info.
+        // TODO(ehsan): refactor eval not take grouping info input.
+        grouping_info dummy_grp_info;
+        col_set->eval(dummy_grp_info);
+    }
+}
+
+/**
  * @brief consume build table batch in streaming groupby (insert into hash
  * table and update running values)
  *
@@ -341,9 +368,19 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
     }
 
     if (is_last) {
+        // call eval() on running values to get final output
+        std::shared_ptr<table_info> combine_data =
+            groupby_state->local_table_buffer.data_table;
+        eval_groupby_funcs(groupby_state, combine_data);
+        std::shared_ptr<table_info> out_table = std::make_shared<table_info>();
+        out_table->columns.assign(
+            combine_data->columns.begin(),
+            combine_data->columns.begin() + groupby_state->n_keys);
+        for (std::shared_ptr<BasicColSet> col_set : groupby_state->col_sets) {
+            col_set->addOutputColumns(out_table->columns);
+        }
         // TODO[BSE-573]: use proper chunked output buffer
-        // TODO[BSE-578]: call eval() to support functions that need it
-        groupby_state->out_table = groupby_state->local_table_buffer.data_table;
+        groupby_state->out_table = out_table;
     }
 
     groupby_state->build_iter++;
