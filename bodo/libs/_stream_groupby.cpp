@@ -102,6 +102,12 @@ inline void update_groups(
  */
 std::shared_ptr<table_info> get_update_table(
     GroupbyState* groupby_state, std::shared_ptr<table_info> in_table) {
+    // empty function set means drop_duplicates operation, which doesn't require
+    // update
+    if (groupby_state->col_sets.size() == 0) {
+        return in_table;
+    }
+
     // similar to update() function of GroupbyPipeline:
     // https://github.com/Bodo-inc/Bodo/blob/58f995dec2507a84afefbb27af01d67bd40fabb4/bodo/libs/_groupby.cpp#L546
     std::shared_ptr<uint32_t[]> batch_hashes_groupby = hash_keys_table(
