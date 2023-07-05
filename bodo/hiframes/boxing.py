@@ -42,7 +42,7 @@ from bodo.hiframes.pd_index_ext import (
 )
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
-from bodo.hiframes.time_ext import TimeArrayType
+from bodo.hiframes.time_ext import TimeArrayType, TimeType
 from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
@@ -51,6 +51,7 @@ from bodo.libs.float_arr_ext import FloatDtype, FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.null_arr_ext import null_array_type
+from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.libs.str_arr_ext import string_array_type, string_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
@@ -314,6 +315,8 @@ class SeriesDtypeEnum(Enum):
     PD_nullable_Float64 = 47
     FloatingArray = 48
     NullArray = 49
+    PD_datetime_tz = 50
+    Time = 51
 
 
 # Map of types that can be mapped to a singular enum. Maps type -> enum
@@ -343,6 +346,7 @@ _one_to_one_type_to_enum_map = {
     IntDtype(types.uint64): SeriesDtypeEnum.PD_nullable_UInt64.value,
     FloatDtype(types.float32): SeriesDtypeEnum.PD_nullable_Float32.value,
     FloatDtype(types.float64): SeriesDtypeEnum.PD_nullable_Float64.value,
+    TimeType: SeriesDtypeEnum.Time.value,
     bytes_type: SeriesDtypeEnum.BINARY.value,
     string_type: SeriesDtypeEnum.STRING.value,
     bodo.bool_: SeriesDtypeEnum.Bool.value,
@@ -464,6 +468,12 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
             typ_enum_list[1:],
             _one_to_one_enum_to_type_map[typ_enum_list[0]],
         )
+    elif typ_enum_list[0] == SeriesDtypeEnum.Time.value:
+        precision: int = typ_enum_list[1]
+        return (typ_enum_list[2:], TimeType(precision))
+    elif typ_enum_list[0] == SeriesDtypeEnum.PD_datetime_tz.value:
+        tz: str | None = typ_enum_list[1]
+        return (typ_enum_list[2:], PandasDatetimeTZDtype(tz))
     # Integer array needs special handling, as integerArray.dtype does not return
     # a nullable integer type
     elif typ_enum_list[0] == SeriesDtypeEnum.IntegerArray.value:
@@ -612,7 +622,6 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
     For a complete example of the general process of converting to/from this stack, see
     _dtype_from_type_enum_list_recursor.
     """
-
     # handle common cases first
     if typ.__hash__ and typ in _one_to_one_type_to_enum_map:
         return [_one_to_one_type_to_enum_map[typ]]
@@ -662,6 +671,10 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
         return [SeriesDtypeEnum.ARRAY.value] + _dtype_to_type_enum_list_recursor(
             typ.dtype
         )
+    elif isinstance(typ, PandasDatetimeTZDtype):
+        return [SeriesDtypeEnum.PD_datetime_tz.value, typ.tz]
+    elif isinstance(typ, TimeType):
+        return [SeriesDtypeEnum.Time.value, typ.precision]
     # TODO: add Categorical, String
     elif isinstance(typ, StructType):
         # for struct include the type ID and number of fields
@@ -1779,7 +1792,9 @@ def _infer_array_item_array_type_and_depth(val, nesting_depth):
             # returning nesting_depth-1 because TupleArrayType is based on val not val[i]
             return TupleArrayType(data_types), nesting_depth - 1, True
         else:
-            typ, depth, nullable = _infer_array_item_array_type_and_depth(val[i], nesting_depth + 1)
+            typ, depth, nullable = _infer_array_item_array_type_and_depth(
+                val[i], nesting_depth + 1
+            )
             max_depth = max(max_depth, depth)
             if typ != None:
                 return typ, max_depth, nullable
