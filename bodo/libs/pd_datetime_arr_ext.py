@@ -350,6 +350,8 @@ def init_pandas_datetime_array(typingctx, data, null_bitmap, tz):
 
     if is_overload_constant_str(tz) or is_overload_constant_int(tz):
         tz_str = get_literal_value(tz)
+    elif tz is types.none:
+        tz_str = None
     else:
         raise BodoError("tz must be a constant string or Fixed Offset")
 
