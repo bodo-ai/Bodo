@@ -3833,6 +3833,7 @@ class TypingTransforms:
                 _bodo_merge_into,  # is_merge_into
                 file_list_type,  # file_list_type
                 snapshot_id_type,  # snapshot_id_type
+                False,  # downcast_decimal_to_double
             )
         ]
         data_args = ["table_val", "idx_arr_val", "file_list_val", "snapshot_id_val"]

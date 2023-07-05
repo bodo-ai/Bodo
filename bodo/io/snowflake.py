@@ -92,9 +92,7 @@ SCALE_TO_UNIT_PRECISION: Dict[int, Literal["s", "ms", "us", "ns"]] = {
 }
 TYPE_CODE_TO_ARROW_TYPE: List[Callable[["ResultMetadata", str], pa.DataType]] = [
     # Number / Int - Always Signed
-    lambda m, _: pa.int64()
-    if m.scale == 0
-    else (pa.float64() if m.scale < 18 else pa.decimal128(m.precision, m.scale)),
+    lambda m, _: pa.decimal128(m.precision, m.scale),
     # Float / Double
     lambda _, __: pa.float64(),
     # String
@@ -472,6 +470,7 @@ def get_schema_from_metadata(
     sql_query: str,
     is_select_query: bool,
     is_table_input: bool,
+    downcast_decimal_to_double: bool,
 ) -> Tuple[
     List[pa.Field], List, List[bool], List[int], List[pa.DataType]
 ]:  # pragma: no cover
@@ -516,7 +515,7 @@ def get_schema_from_metadata(
         # Only check dictionary encoding for STRING columns, not other columns
         # that we load as strings.
         check_dict_encoding.append(field_meta.type_code == STRING_TYPE_CODE)
-        if pa.types.is_int64(dtype):
+        if pa.types.is_decimal(dtype):
             col_names_to_check.append(field_meta.name)
             col_idxs_to_check.append(i)
 
@@ -557,7 +556,16 @@ def get_schema_from_metadata(
                 byte_size = int(
                     re.search("NUMBER\(\d+,\d+\)\[SB(\d+)\]", typing_info).group(1)
                 )
-                out_type = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
+
+                # Map Byte Width for Integer Only Columns
+                if query_field_metadata[idx].scale == 0:
+                    out_type = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
+                # Any non-16 byte decimal columns map to double
+                elif byte_size <= 8 or downcast_decimal_to_double:
+                    out_type = pa.float64()
+                # Stick to existing decimal type in this case
+                else:
+                    out_type = arrow_fields[idx].type
                 arrow_fields[idx] = arrow_fields[idx].with_type(out_type)
 
     # Convert Arrow Types to Bodo Types
@@ -750,6 +758,7 @@ def get_schema(
     is_select_query: bool,
     is_table_input: bool,
     _bodo_read_as_dict: Optional[List[str]],
+    downcast_decimal_to_double: bool,
 ):  # pragma: no cover
     conn = snowflake_connect(conn_str)
     cursor = conn.cursor()
@@ -760,7 +769,9 @@ def get_schema(
         check_dict_encoding,
         unsupported_columns,
         unsupported_arrow_types,
-    ) = get_schema_from_metadata(cursor, sql_query, is_select_query, is_table_input)
+    ) = get_schema_from_metadata(
+        cursor, sql_query, is_select_query, is_table_input, downcast_decimal_to_double
+    )
 
     str_as_dict_cols = _bodo_read_as_dict if _bodo_read_as_dict else []
     str_col_name_to_ind = {}
