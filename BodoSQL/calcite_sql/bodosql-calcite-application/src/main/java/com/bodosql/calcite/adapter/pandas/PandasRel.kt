@@ -66,6 +66,8 @@ interface PandasRel : RelNode {
         fun build(fn: (BuildContext) -> Dataframe): Dataframe
 
         fun buildStreaming(fn: (BuildContext) -> Dataframe): Dataframe
+
+        fun buildStreamingNoTimer(fn: (BuildContext) -> Dataframe): Dataframe
     }
 
     interface BuildContext {

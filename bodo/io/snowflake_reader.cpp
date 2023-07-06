@@ -26,23 +26,41 @@ class SnowflakeDictionaryBuilder {
           selected_fields(_selected_fields),
           str_as_dict_cols(_str_as_dict_cols) {}
 
-    std::shared_ptr<arrow::Table> convert(
+    std::tuple<std::shared_ptr<arrow::Table>, std::vector<int64_t>> convert(
         std::shared_ptr<arrow::Table> in_table) {
-        arrow::ChunkedArrayVector new_cols;
+        arrow::ChunkedArrayVector new_cols(in_table->num_columns());
+        std::vector<int64_t> dict_ids(in_table->num_columns());
         for (int i = 0; i < in_table->num_columns(); i++) {
             auto col = in_table->column(i);
             if (selected_fields.contains(i) &&
                 str_as_dict_cols.contains(schema->field(i)->name())) {
                 // We have a dictionary column to convert.
                 auto new_col = arrow::compute::DictionaryEncode(col);
-                new_cols.push_back(new_col->chunked_array());
+                std::shared_ptr<arrow::ChunkedArray> chunked_arr =
+                    new_col->chunked_array();
+                new_cols[i] = chunked_arr;
+                // Fetch the dictionary from the first chunk to get the length.
+                // DictionaryEncode outputs the same dictionary in every batch.
+                // https://github.com/apache/arrow/blob/ea5ce0305d0792517183408e2eed25bdac267e54/cpp/src/arrow/compute/kernels/vector_hash.cc#L644
+                // This code is not documented because the publicly visible API
+                // is just the Python API.
+                // https://arrow.apache.org/docs/python/generated/pyarrow.compute.dictionary_encode.html
+                std::shared_ptr<arrow::Array> first_chunk =
+                    (chunked_arr->chunk(0));
+                std::shared_ptr<arrow::Array> dictionary =
+                    reinterpret_cast<arrow::DictionaryArray*>(first_chunk.get())
+                        ->dictionary();
+                dict_ids[i] = generate_dict_id(dictionary->length());
             } else {
                 // For all other columns just copy the column to the table.
-                new_cols.push_back(col);
+                new_cols[i] = col;
+                dict_ids[i] = -1;
             }
         }
 
-        return arrow::Table::Make(this->schema, new_cols, in_table->num_rows());
+        return std::tuple(
+            arrow::Table::Make(this->schema, new_cols, in_table->num_rows()),
+            dict_ids);
     }
 
    private:
@@ -294,10 +312,11 @@ class SnowflakeReader : public ArrowReader {
             // Build the dictionary
             SnowflakeDictionaryBuilder dict_builder(schema, selected_fields,
                                                     str_as_dict_colnames);
-            table = dict_builder.convert(table);
+            // Generate the dict_ids
+            auto [batch_table, dict_ids] = dict_builder.convert(table);
             // Arrow utility to iterate over row-chunks of an input table
             // Useful for us to construct batches of Bodo tables from the piece
-            auto reader = arrow::TableBatchReader(table);
+            auto reader = arrow::TableBatchReader(batch_table);
             reader.set_chunksize(batch_size);
 
             std::shared_ptr<arrow::RecordBatch> next_recordbatch;
@@ -307,7 +326,7 @@ class SnowflakeReader : public ArrowReader {
                 // Construct Builder Object for Next Batch
                 TableBuilder builder(schema, selected_fields,
                                      next_recordbatch->num_rows(), is_nullable,
-                                     str_as_dict_colnames, false);
+                                     str_as_dict_colnames, false, dict_ids);
                 // TODO: Have TableBuilder support RecordBatches
                 auto res = arrow::Table::FromRecordBatches({next_recordbatch})
                                .ValueOrDie();
