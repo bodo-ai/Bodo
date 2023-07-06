@@ -47,12 +47,15 @@ class TableBuilder {
      * @param is_nullable : indicates which of the selected fields is nullable
      * @param str_as_dict_cols: indices of string cols to be dictionary-encoded
      * @param create_dict_from_string: whether the data source is Snowflake
+     * @param dict_ids: vector of dictionary ids used to get consistent ids when
+     * streaming.
      */
     TableBuilder(std::shared_ptr<arrow::Schema> schema,
                  std::set<int>& selected_fields, const int64_t num_rows,
                  std::vector<bool>& is_nullable,
                  const std::set<std::string>& str_as_dict_cols,
-                 const bool create_dict_from_string);
+                 const bool create_dict_from_string,
+                 const std::vector<int64_t>& dict_ids = {});
 
     /**
      * @brief Construct a new Table Builder object with the same column types as
@@ -196,7 +199,6 @@ class ArrowReader {
             is_last = true;
             total_rows_out = 0;
             ev.finalize();
-
             TableBuilder builder(schema, selected_fields, 0, is_nullable,
                                  str_as_dict_colnames, false);
             return builder.get_table();

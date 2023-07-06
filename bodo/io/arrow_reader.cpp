@@ -528,8 +528,8 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
      * @param type : Arrow type of input array
      */
     DictionaryEncodedStringBuilder(std::shared_ptr<arrow::DataType> type,
-                                   int64_t length)
-        : length(length) {
+                                   int64_t length, int64_t dict_id = -1)
+        : length(length), dict_id(dict_id) {
         //  'type' comes from the schema returned from
         //  bodo.io.parquet_pio.get_parquet_dataset() which always has
         //  string columns as STRING (not DICT)
@@ -542,7 +542,8 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         }
     }
 
-    DictionaryEncodedStringBuilder(int64_t length) : length(length) {}
+    DictionaryEncodedStringBuilder(int64_t length, int64_t dict_id = -1)
+        : length(length), dict_id(dict_id) {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // Store the chunks
@@ -612,7 +613,11 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         indices_builder.append(
             std::make_shared<arrow::ChunkedArray>(indices_chunks));
         std::shared_ptr<array_info> bodo_indices = indices_builder.get_output();
-        out_array = create_dict_string_array(bodo_dictionary, bodo_indices);
+        if (dict_id < 0) {
+            dict_id = generate_dict_id(bodo_dictionary->length);
+        }
+        out_array = create_dict_string_array(bodo_dictionary, bodo_indices,
+                                             false, false, false, dict_id);
         all_chunks.clear();
         return out_array;
     }
@@ -620,6 +625,8 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
    private:
     const int64_t length;  // number of indices of output array
     arrow::ArrayVector all_chunks;
+    int64_t dict_id;  // ID used for generating the dictionaries. This is used
+                      // by streaming to classify dictionaries as the same.
 };
 
 /// Column builder for constructing dictionary-encoded string arrays from string
@@ -898,7 +905,8 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                            const int64_t num_rows,
                            std::vector<bool>& is_nullable,
                            const std::set<std::string>& str_as_dict_cols,
-                           const bool create_dict_from_string) {
+                           const bool create_dict_from_string,
+                           const std::vector<int64_t>& dict_ids) {
     total_rows = num_rows;
     rem_rows = num_rows;
 
@@ -928,8 +936,10 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                 columns.push_back(new DictionaryEncodedFromStringBuilder(
                     field->type(), num_rows));
             } else {
+                // Only Snowflake streaming will pass in dict ids.
+                int64_t dict_id = dict_ids.size() > 0 ? dict_ids[i] : -1;
                 columns.push_back(new DictionaryEncodedStringBuilder(
-                    field->type(), num_rows));
+                    field->type(), num_rows, dict_id));
             }
         } else if (arrow::is_base_binary_like(type)) {
             Bodo_CTypes::CTypeEnum dtype;

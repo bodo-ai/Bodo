@@ -2,7 +2,6 @@ package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.pandas.PandasRel
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
-import com.bodosql.calcite.application.timers.StreamingRelNodeTimer
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
@@ -76,12 +75,10 @@ class SnowflakeToPandasConverter(cluster: RelOptCluster, traits: RelTraitSet, in
     }
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe =
-        implementor.build { ctx ->
-            if (isStreaming()) {
-                generateStreamingDataFrame(ctx)
-            } else {
-                generateNonStreamingDataFrame(ctx)
-            }
+        if (isStreaming()) {
+            implementor.buildStreamingNoTimer { ctx -> generateStreamingDataFrame(ctx) }
+        } else {
+            implementor.build { ctx -> generateNonStreamingDataFrame(ctx)}
         }
 
     /**
