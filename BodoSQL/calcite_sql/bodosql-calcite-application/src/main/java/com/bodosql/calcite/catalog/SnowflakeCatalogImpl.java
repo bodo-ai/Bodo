@@ -142,8 +142,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       this.sfTZInfo = new BodoTZInfo(accountInfo.getProperty("TIMEZONE"), "str");
     }
 
-    this.weekStart = parseIntegerProperty(accountInfo,"WEEK_START", defaultWeekStart);
-    this.weekOfYearPolicy = parseIntegerProperty(accountInfo,"WEEK_OF_YEAR_POLICY", defaultWeekOfYearPolicy);
+    this.weekStart = parseIntegerProperty(accountInfo, "WEEK_START", defaultWeekStart);
+    this.weekOfYearPolicy =
+        parseIntegerProperty(accountInfo, "WEEK_OF_YEAR_POLICY", defaultWeekOfYearPolicy);
   }
 
   /**
@@ -206,7 +207,6 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     }
   }
 
-
   /**
    * Parse a Snowflake Session parameter into an Integer.
    *
@@ -215,7 +215,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @return The value of the parameter as an Integer.
    * @throws RuntimeException An exception occurs parsing the parameter string to an Integer.
    */
-  private Integer parseSnowflakeIntegerParam(String paramName, Integer defaultValue) throws RuntimeException {
+  private Integer parseSnowflakeIntegerParam(String paramName, Integer defaultValue)
+      throws RuntimeException {
     Integer result = defaultValue;
     String paramStr = accountInfo.getProperty(paramName);
     if (paramStr != null) {
@@ -228,7 +229,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     return result;
   }
 
-  private Integer parseIntegerProperty(Properties accountInfo, String propertyName, Integer defaultValue) throws RuntimeException {
+  private Integer parseIntegerProperty(
+      Properties accountInfo, String propertyName, Integer defaultValue) throws RuntimeException {
     Integer result = defaultValue;
     String propertyValueStr = accountInfo.getProperty(propertyName);
     if (propertyValueStr != null) {
