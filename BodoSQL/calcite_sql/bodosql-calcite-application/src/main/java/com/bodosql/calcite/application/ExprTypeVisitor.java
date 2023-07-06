@@ -350,6 +350,9 @@ public class ExprTypeVisitor {
     if (node instanceof RexInputRef) {
       // InputRef is always a column
       exprTypes.put(key, BodoSQLExprType.ExprType.COLUMN);
+    } else if (node instanceof RexLocalRef) {
+      // Always a column
+      exprTypes.put(key, BodoSQLExprType.ExprType.COLUMN);
     } else if (node instanceof RexLiteral || node instanceof RexNamedParam) {
       // Literal or NamedParam is always a scalar
       exprTypes.put(key, BodoSQLExprType.ExprType.SCALAR);

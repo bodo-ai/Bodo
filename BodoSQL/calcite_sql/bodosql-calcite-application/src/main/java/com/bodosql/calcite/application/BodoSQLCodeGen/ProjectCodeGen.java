@@ -18,6 +18,7 @@ import java.util.TreeMap;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.util.Pair;
 
 /**
  * Class that returns the generated code for Project expressions after all inputs have been visited.
@@ -45,9 +46,8 @@ public class ProjectCodeGen {
    *     calculations)
    * @return The code generated for the Project expression.
    */
-  public static List<Op.Assign> generateProjectCode(
+  public static Pair<Variable, List<Op.Assign>> generateProjectCode(
       Variable inVar,
-      Variable outVar,
       List<String> outputColumns,
       List<RexNodeVisitorInfo> childExprs,
       List<BodoSQLExprType.ExprType> exprTypes,
@@ -183,8 +183,9 @@ public class ProjectCodeGen {
         new Expr.Call(
             "bodo.hiframes.pd_dataframe_ext.init_dataframe",
             List.of(tableTuple, indexVar, globalVar));
+    Variable outVar = pdVisitorClass.genDfVar();
     outAssigns.add(new Op.Assign(outVar, initDf));
-    return outAssigns;
+    return new Pair<>(outVar, outAssigns);
   }
 
   /**
