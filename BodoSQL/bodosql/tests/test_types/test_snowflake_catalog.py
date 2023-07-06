@@ -1534,7 +1534,13 @@ def test_snowflake_catalog_create_table_tpch(
     try_body_threw_error = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
-        check_func(impl, (bc, ctas_tpch_query), only_1D=True, py_output=5)
+        check_func(
+            impl,
+            (bc, ctas_tpch_query),
+            only_1D=True,
+            py_output=5,
+            use_dict_encoded_strings=False,
+        )
 
         output_df = None
         expected_output = None

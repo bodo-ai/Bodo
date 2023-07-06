@@ -4,16 +4,60 @@
 
 import argparse
 import json
+import sys
 import time
 from urllib.parse import urlencode
 
 import bodosql
+import pandas as pd
+from numba import types
+from numba.extending import overload
 
 import bodo
 import bodo.utils.tracing as tracing
 
 # Turn verbose mode on
 bodo.set_verbose_level(2)
+
+
+def save_output(
+    output, print_output, pq_out_filename, sf_out_table_name, sf_write_conn
+):
+    pass
+
+
+@overload(save_output)
+def save_output_impl(
+    output, print_output, pq_out_filename, sf_out_table_name, sf_write_conn
+):
+    if output == types.none:
+
+        def impl(
+            output, print_output, pq_out_filename, sf_out_table_name, sf_write_conn
+        ):
+            print("Skip save since output is none")
+
+        return impl
+    else:
+
+        def impl(
+            output, print_output, pq_out_filename, sf_out_table_name, sf_write_conn
+        ):
+            print("Output Shape: ", output.shape)
+            if print_output:
+                print("Output:")
+            if pq_out_filename != "":
+                print("Saving output as parquet dataset to: ", pq_out_filename)
+                t0 = time.time()
+                output.to_parquet(pq_out_filename)
+                print(f"Finished parquet write. It took {time.time() - t0} seconds.")
+            if sf_out_table_name != "":
+                print("Saving output to Snowflake table: ", sf_out_table_name)
+                t0 = time.time()
+                output.to_sql(sf_out_table_name, sf_write_conn, if_exists="replace")
+                print(f"Finished snowflake write. It took {time.time() - t0} seconds.")
+
+        return impl
 
 
 @bodo.jit(cache=True)
@@ -34,24 +78,51 @@ def run_sql_query(
     t0 = time.time()
     output = bc.sql(query_str)
     print(f"Finished executing the query. It took {time.time() - t0} seconds.")
-    print("Output Shape: ", output.shape)
-    if print_output:
-        print("Output:")
-        print(output)
-    if pq_out_filename != "":
-        print("Saving output as parquet dataset to: ", pq_out_filename)
-        t0 = time.time()
-        output.to_parquet(pq_out_filename)
-        print(f"Finished parquet write. It took {time.time() - t0} seconds.")
-    if sf_out_table_name != "":
-        print("Saving output to Snowflake table: ", sf_out_table_name)
-        t0 = time.time()
-        output.to_sql(sf_out_table_name, sf_write_conn, if_exists="replace")
-        print(f"Finished snowflake write. It took {time.time() - t0} seconds.")
+    save_output(output, print_output, pq_out_filename, sf_out_table_name, sf_write_conn)
+
+
+def load_tables(args):
+    tables = {}
+    for tbl in args.table:
+        tblinfo = tbl.split(":")
+        assert (
+            len(tblinfo) == 2 or len(tblinfo) == 3
+        ), "--table must be specified as tablename:tablefile[:format]"
+        tblname = tblinfo[0]
+        tblfile = tblinfo[1]
+        format = "parquet"
+        if len(tblinfo) > 2:
+            format = tblinfo[2]
+
+        if format == "parquet":
+            tables[tblname] = pd.read_parquet(tblfile)
+        else:
+            assert False, f"Format {format} not supported"
+    return tables
 
 
 def main(args):
+    if args.volcano:
+        bodo.bodosql_use_volcano_plan = True
 
+    if args.no_volcano:
+        bodo.bodosql_use_volcano_plan = False
+
+    if args.streaming:
+        bodo.bodosql_use_streaming_plan = True
+    else:
+        bodo.bodosql_use_streaming_plan = False
+
+    print(
+        "VOLCANO:",
+        bodo.bodosql_use_volcano_plan,
+        "STREAMING: ",
+        bodo.bodosql_use_streaming_plan,
+    )
+
+    if args.streaming_batch_size:
+        print("Set batch size to ", args.streaming_batch_size, file=sys.stderr)
+        bodo.bodosql_streaming_batch_size = args.streaming_batch_size
     # Throw an error in the case that the use supplied both only_test_compiles, and an argument that
     # requires a full run
     if args.only_test_compiles:
@@ -79,17 +150,27 @@ def main(args):
             "No database specified in either the credentials file or through the arguments."
         )
 
-    # Create catalog from credentials and args
-    bsql_catalog = bodosql.SnowflakeCatalog(
-        username=catalog["SF_USERNAME"],
-        password=catalog["SF_PASSWORD"],
-        account=catalog["SF_ACCOUNT"],
-        warehouse=warehouse,
-        database=database,
-    )
+    cparams = {}
+    if args.sf_schema:
+        cparams["schema"] = args.sf_schema
 
-    # Create context
-    bc = bodosql.BodoSQLContext(catalog=bsql_catalog)
+    if args.local_catalog:
+        tables = load_tables(args)
+        bc = bodosql.BodoSQLContext(tables)
+    else:
+        print("USING SNOWFLAKE")
+        # Create catalog from credentials and args
+        bsql_catalog = bodosql.SnowflakeCatalog(
+            username=catalog["SF_USERNAME"],
+            password=catalog["SF_PASSWORD"],
+            account=catalog["SF_ACCOUNT"],
+            warehouse=warehouse,
+            database=database,
+            connection_params=cparams,
+        )
+
+        # Create context
+        bc = bodosql.BodoSQLContext(catalog=bsql_catalog)
 
     # Generate the plan and write it to a file
     if args.generate_plan_filename:
@@ -163,6 +244,25 @@ if __name__ == "__main__":
         required=True,
         help="Path to Snowflake credentials file. The following keys must be present: SF_USERNAME, SF_PASSWORD and SF_ACCOUNT. The following keys are optional: SF_WAREHOUSE, SF_DATABASE",
     )
+    parser.add_argument("--sf-schema", help="Snowflake schema to use")
+    parser.add_argument(
+        "--volcano",
+        action="store_true",
+        help="Enable the volcano planner",
+        default=False,
+    )
+    parser.add_argument(
+        "--no-volcano",
+        action="store_true",
+        help="Disable the volcano planner",
+        default=False,
+    )
+    parser.add_argument(
+        "--streaming", action="store_true", help="Enable streaming execution"
+    )
+    parser.add_argument(
+        "--streaming-batch-size", type=int, help="Streaming batch size to use"
+    )
     parser.add_argument(
         "-f", "--filename", required=True, help="Path to .sql file with the query."
     )
@@ -221,6 +321,19 @@ if __name__ == "__main__":
         required=False,
         action="store_true",
         help="Optional: If provided, will only attempt to compile the query, instead of running it end to end.\nIncompatible with print_output, sf_out_table_loc, trace, and sf_out_table_loc.",
+    )
+
+    parser.add_argument(
+        "--local-catalog",
+        action="store_true",
+        required=False,
+        help="Use a local catalog, instead of Snowflake. Local tables should be specified via the '--table' option",
+    )
+    parser.add_argument(
+        "--table",
+        nargs="*",
+        help="Add a table into the local catalog. Tables should be specified like 'tablename:tablefile[:format]'.",
+        metavar="TABLENAME:TABLEFILE[:FORMAT]",
     )
 
     args = parser.parse_args()
