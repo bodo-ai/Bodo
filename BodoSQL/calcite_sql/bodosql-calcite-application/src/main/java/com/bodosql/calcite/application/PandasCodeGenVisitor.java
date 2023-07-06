@@ -2025,6 +2025,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
       timerInfo.terminateTimer();
       return res;
     }
+
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public Dataframe buildStreamingNoTimer(
+        @NotNull Function1<? super PandasRel.BuildContext, Dataframe> fn) {
+      // This is a temporary function call for sections that require manual timer calls.
+      return fn.invoke(new PandasCodeGenVisitor.BuildContext(node));
+    }
   }
 
   private class BuildContext implements PandasRel.BuildContext {

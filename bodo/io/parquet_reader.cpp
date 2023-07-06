@@ -150,7 +150,6 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
         throw std::runtime_error(
             "ParquetReader::read does not support custom batch sizes");
     }
-
     TableBuilder builder(schema, selected_fields, count, is_nullable,
                          str_as_dict_colnames,
                          create_dict_encoding_from_strings);
