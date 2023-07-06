@@ -100,6 +100,21 @@ interface Op {
     }
 
     /**
+     * Represents a for loop in python.
+     */
+    data class For(val identifier: String, val collection: Expr, val body: List<Op>) : Op {
+        constructor(identifier: String, collection: Expr, body: (Variable, MutableList<Op>) -> Unit)
+                : this(identifier, collection, buildList<Op> { body(Variable(identifier), this) })
+
+        override fun emit(doc: Doc) {
+            doc.write("for $identifier in ${collection.emit()}:")
+            doc.indent().also {
+                body.forEach { stmt -> stmt.emit(it) }
+            }
+        }
+    }
+
+    /**
      * Represents a streaming pipeline. Used to provide a layer of
      * abstraction with the actual pipeline details.
      */
@@ -136,5 +151,13 @@ interface Op {
             }
         }
 
+    }
+
+    class Function(val name: String, val args: List<Variable>, val body: Frame) : Op {
+        override fun emit(doc: Doc) {
+            val argList = args.joinToString(separator = ", ") { it.name }
+            doc.write("def $name($argList):")
+            body.emit(doc.indent())
+        }
     }
 }

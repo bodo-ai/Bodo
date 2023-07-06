@@ -138,6 +138,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
   @NotNull protected final RelDataTypeSystem typeSystem;
   protected final int nodeId;
   @NotNull protected final Dataframe input;
+  protected final List<? extends Expr> localRefs;
 
   @NotNull public final BodoCtx ctx;
   protected final @Nullable Integer weekStart;
@@ -149,12 +150,14 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       @NotNull Module.Builder builder,
       @NotNull RelDataTypeSystem typeSystem,
       int nodeId,
-      @NotNull Dataframe input) {
+      @NotNull Dataframe input,
+      @NotNull List<? extends Expr> localRefs) {
     this.visitor = visitor;
     this.builder = builder;
     this.typeSystem = typeSystem;
     this.nodeId = nodeId;
     this.input = input;
+    this.localRefs = localRefs;
     this.ctx = new BodoCtx();
     if (this.typeSystem instanceof BodoSQLRelDataTypeSystem) {
       this.weekStart = ((BodoSQLRelDataTypeSystem) this.typeSystem).getWeekStart();
@@ -163,6 +166,15 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
       this.weekStart = 0;
       this.weekOfYearPolicy = 0;
     }
+  }
+
+  public RexToPandasTranslator(
+      @NotNull PandasCodeGenVisitor visitor,
+      @NotNull Module.Builder builder,
+      @NotNull RelDataTypeSystem typeSystem,
+      int nodeId,
+      @NotNull Dataframe input) {
+    this(visitor, builder, typeSystem, nodeId, input, List.of());
   }
 
   public @NotNull Dataframe getInput() {
@@ -178,7 +190,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   @Override
   public Expr visitLocalRef(RexLocalRef localRef) {
-    throw unsupportedNode();
+    return localRefs.get(localRef.getIndex());
   }
 
   @Override
@@ -416,15 +428,6 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    * @return The resulting expression from generating case code.
    */
   protected Expr visitCaseOp(RexCall node, boolean isSingleRow) {
-    // TODO: Technical debt, this should be done in our fork of calcite
-    // Calcite optimizes a large number of windowed aggregation functions into case statements,
-    // which check if the window is valid. This can be during the parsing step by setting the
-    // "allowPartial" variable to be true.
-
-    if (isWindowedAggFn(node)) {
-      return node.getOperands().get(1).accept(this);
-    }
-
     List<RexNode> operands = node.getOperands();
     // Even if the contents are scalars, we will always have a dataframe unless we
     // are inside another case statement. We opt to use the case kernel to avoid
@@ -441,7 +444,7 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
     }
     /** Create the translator for visiting the operands. */
     RexToPandasTranslator localTranslator =
-        new RexToPandasTranslator.ScalarContext(visitor, builder, typeSystem, nodeId, input);
+        new RexToPandasTranslator.ScalarContext(visitor, builder, typeSystem, nodeId, input, localRefs);
     /** Generate the code for visiting the operands to case. */
     Variable outputVar = visitCaseOperands(localTranslator, operands);
     if (callCaseKernel) {
@@ -1513,16 +1516,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
   @Override
   public Expr visitOver(RexOver over) {
-    return visitOver(over, false);
-  }
-
-  protected Expr visitOver(RexOver over, boolean isSingleRow) {
-    // Windowed aggregation is special, since it needs to add generated
-    // code in order to define functions to be used with groupby apply.
-    List<RexOver> tmp = Collections.singletonList(over);
-    List<String> colNames = input.getRowType().getFieldNames();
-    List<Expr> results = visitor.visitAggOverOp(tmp, colNames, nodeId, input, isSingleRow, ctx);
-    return results.get(0);
+    throw new BodoSQLCodegenException(
+        "Internal Error: Calcite Plan Produced an Unsupported RexOver: " + over.getOperator());
   }
 
   @Override
@@ -1578,8 +1573,9 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
         @NotNull Module.Builder builder,
         @NotNull RelDataTypeSystem typeSystem,
         int nodeId,
-        @NotNull Dataframe input) {
-      super(visitor, builder, typeSystem, nodeId, input);
+        @NotNull Dataframe input,
+        @NotNull List<? extends Expr> localRefs) {
+      super(visitor, builder, typeSystem, nodeId, input, localRefs);
     }
 
     @Override
@@ -1626,7 +1622,8 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
 
     @Override
     public Expr visitOver(RexOver over) {
-      return visitOver(over, true);
+      throw new BodoSQLCodegenException(
+          "Internal Error: Calcite Plan Produced an Unsupported RexOver: " + over.getOperator());
     }
   }
 

@@ -130,6 +130,10 @@ class Module(private val frame: Frame) {
             return Module(functionFrame)
         }
 
+        fun buildFunction(name: String, args: List<Variable>): Op.Function {
+            return Op.Function(name, args, functionFrame)
+        }
+
         /**
          * Updates a builder to create a new activeFrame
          * as a CodegenFrame.
