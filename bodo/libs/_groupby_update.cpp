@@ -50,7 +50,7 @@ int get_combine_func(int update_ftype) { return combine_funcs[update_ftype]; }
  * @param[in] ftype: THe function type.
  * @param[in] skipna: Whether to skip NA values.
  */
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 void cumulative_computation_T(std::shared_ptr<array_info> arr,
                               std::shared_ptr<array_info> out_arr,
                               grouping_info const& grp_info,
@@ -104,8 +104,7 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
                 i = grp_info.next_row_in_group[i];
             }
         }
-        T eVal_nan = GetTentry<T>(
-            RetrieveNaNentry((Bodo_CTypes::CTypeEnum)dtype).data());
+        T eVal_nan = GetTentry<T>(RetrieveNaNentry(DType).data());
         std::pair<bool, T> pairNaN{true, eVal_nan};
         for (auto& idx_miss : grp_info.list_missing) {
             set_entry(idx_miss, pairNaN);
@@ -113,7 +112,7 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
     };
 
     if (arr->arr_type == bodo_array_type::NUMPY) {
-        if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA) {
+        if (DType == Bodo_CTypes::DATETIME || DType == Bodo_CTypes::TIMEDELTA) {
             cum_computation(
                 [=](int64_t pos) -> std::pair<bool, T> {
                     // in DATETIME/TIMEDELTA case, the types is necessarily
@@ -132,7 +131,7 @@ void cumulative_computation_T(std::shared_ptr<array_info> arr,
             cum_computation(
                 [=](int64_t pos) -> std::pair<bool, T> {
                     T eVal = arr->at<T>(pos);
-                    bool isna = isnan_alltype<T, dtype>(eVal);
+                    bool isna = isnan_alltype<T, DType>(eVal);
                     return {isna, eVal};
                 },
                 [=](int64_t pos, std::pair<bool, T> const& ePair) -> void {
