@@ -61,7 +61,7 @@ int compare_list_string(
  * This is defined for the generic aggfunc that doesn't require any additional
  * arguments.
  */
-template <typename T, int dtype, int ftype>
+template <typename T, Bodo_CTypes::CTypeEnum DType, int ftype>
 struct aggfunc {
     /**
      * Apply the function.
@@ -76,7 +76,8 @@ struct aggfunc {
  * input and output types, T_in and T_out, and don't require additional
  * arguments.
  */
-template <typename T_out, typename T_in, int dtype, int ftype>
+template <typename T_out, typename T_in, Bodo_CTypes::CTypeEnum DType,
+          int ftype>
 struct casted_aggfunc {
     /**
      * Apply the function.
@@ -90,7 +91,7 @@ struct casted_aggfunc {
  * This template is used for functions that take an input value and
  * reduce its result to a boolean output.
  */
-template <typename T, int dtype, int ftype>
+template <typename T, Bodo_CTypes::CTypeEnum DType, int ftype>
 struct bool_aggfunc {
     /**
      * Apply the function.
@@ -151,8 +152,8 @@ struct aggliststring {
 
 // sum
 
-template <typename T, int dtype>
-struct aggfunc<T, dtype, Bodo_FTypes::sum> {
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+struct aggfunc<T, DType, Bodo_FTypes::sum> {
     /**
      * Aggregation function for sum. Modifies current sum if value is not a nan
      *
@@ -160,7 +161,7 @@ struct aggfunc<T, dtype, Bodo_FTypes::sum> {
      * @param second input value.
      */
     inline static void apply(T& v1, T& v2) {
-        if (!isnan_alltype<T, dtype>(v2)) {
+        if (!isnan_alltype<T, DType>(v2)) {
             v1 += v2;
         }
     }
@@ -191,8 +192,8 @@ struct aggliststring<Bodo_FTypes::sum> {
 
 // min
 
-template <typename T, int dtype>
-struct aggfunc<T, dtype, Bodo_FTypes::min> {
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+struct aggfunc<T, DType, Bodo_FTypes::min> {
     /**
      * Aggregation function for min. Modifies current min if value is not a nan
      *
@@ -201,7 +202,7 @@ struct aggfunc<T, dtype, Bodo_FTypes::min> {
      * @param second input value.
      */
     inline static void apply(T& v1, T& v2) {
-        if (!isnan_alltype<T, dtype>(v2)) {
+        if (!isnan_alltype<T, DType>(v2)) {
             v1 = std::min(v2, v1);  // Max(x, Nan) = x
         }
     }
@@ -254,8 +255,8 @@ struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::min> {
 
 // max
 
-template <typename T, int dtype>
-struct aggfunc<T, dtype, Bodo_FTypes::max> {
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+struct aggfunc<T, DType, Bodo_FTypes::max> {
     /**
      * Aggregation function for max. Modifies current max if value is not a nan
      *
@@ -264,7 +265,7 @@ struct aggfunc<T, dtype, Bodo_FTypes::max> {
      * @param second input value.
      */
     inline static void apply(T& v1, T& v2) {
-        if (!isnan_alltype<T, dtype>(v2)) {
+        if (!isnan_alltype<T, DType>(v2)) {
             v1 = std::max(v2, v1);  // Max(x, Nan) = x
         }
     }
@@ -318,8 +319,8 @@ struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::max> {
 // prod
 // Note: product of date and timedelta is not possible
 
-template <typename T, int dtype>
-struct aggfunc<T, dtype, Bodo_FTypes::prod> {
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+struct aggfunc<T, DType, Bodo_FTypes::prod> {
     /**
      * Aggregation function for product. Modifies current product if value is
      * not a nan
@@ -328,7 +329,7 @@ struct aggfunc<T, dtype, Bodo_FTypes::prod> {
      * @param second input value.
      */
     inline static void apply(T& v1, T& v2) {
-        if (!isnan_alltype<T, dtype>(v2)) {
+        if (!isnan_alltype<T, DType>(v2)) {
             v1 *= v2;
         }
     }
@@ -352,17 +353,17 @@ struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::prod> {
 
 // idxmin
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 struct idxmin_agg {
     static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i);
 };
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
     requires(!std::floating_point<T>)
-struct idxmin_agg<T, dtype> {
+struct idxmin_agg<T, DType> {
     inline static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
         // TODO should it be >=?
-        if (!isnan_alltype<T, dtype>(v2) && (v1 > v2)) {
+        if (!isnan_alltype<T, DType>(v2) && (v1 > v2)) {
             v1 = v2;
             index_pos = i;
         }
@@ -372,9 +373,9 @@ struct idxmin_agg<T, dtype> {
 // TODO: Should we get rid of the float specialization? This extra isna
 // check is not needed for other types but may not be possible to optimize
 // away.
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
     requires std::floating_point<T>
-struct idxmin_agg<T, dtype> {
+struct idxmin_agg<T, DType> {
     inline static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
         if (!isnan(v2)) {
             // v1 is initialized as NaN
@@ -417,17 +418,17 @@ inline static void idxmin_bool(const std::shared_ptr<array_info>& arr,
 
 // idxmax
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 struct idxmax_agg {
     static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i);
 };
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
     requires(!std::floating_point<T>)
-struct idxmax_agg<T, dtype> {
+struct idxmax_agg<T, DType> {
     inline static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
         // TODO should it be <=?
-        if (!isnan_alltype<T, dtype>(v2) && (v1 < v2)) {
+        if (!isnan_alltype<T, DType>(v2) && (v1 < v2)) {
             v1 = v2;
             index_pos = i;
         }
@@ -437,9 +438,9 @@ struct idxmax_agg<T, dtype> {
 // TODO: Should we get rid of the float specialization? This extra isna
 // check is not needed for other types but may not be possible to optimize
 // away.
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
     requires std::floating_point<T>
-struct idxmax_agg<T, dtype> {
+struct idxmax_agg<T, DType> {
     inline static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
         if (!isnan(v2)) {
             // v1 is initialized as NaN
@@ -482,9 +483,9 @@ inline static void idxmax_bool(const std::shared_ptr<array_info>& arr,
 
 // boolor_agg
 
-template <typename T, int dtype>
-    requires(!decimal<dtype>)
-struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg> {
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+    requires(!decimal<DType>)
+struct bool_aggfunc<T, DType, Bodo_FTypes::boolor_agg> {
     /**
      * Aggregation function for boolor_agg. Note this implementation
      * handles both integer and floating point data.
@@ -502,9 +503,9 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg> {
     }
 };
 
-template <typename T, int dtype>
-    requires decimal<dtype>
-struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg> {
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+    requires decimal<DType>
+struct bool_aggfunc<T, DType, Bodo_FTypes::boolor_agg> {
     /**
      * Aggregation function for boolor_agg. Note this implementation
      * handles decimal data.
@@ -525,9 +526,9 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg> {
 
 // booland_agg
 
-template <typename T, int dtype>
-    requires(!decimal<dtype>)
-struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg> {
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+    requires(!decimal<DType>)
+struct bool_aggfunc<T, DType, Bodo_FTypes::booland_agg> {
     /**
      * Aggregation function for booland_agg. Note this implementation
      * handles both integer and floating point data.
@@ -545,9 +546,9 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg> {
     }
 };
 
-template <typename T, int dtype>
-    requires decimal<dtype>
-struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg> {
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+    requires decimal<DType>
+struct bool_aggfunc<T, DType, Bodo_FTypes::booland_agg> {
     /**
      * Aggregation function for booland_agg. Note this implementation
      * handles decimal data data.
@@ -567,8 +568,8 @@ struct bool_aggfunc<T, dtype, Bodo_FTypes::booland_agg> {
 };
 
 // last
-template <typename T, int dtype>
-struct aggfunc<T, dtype, Bodo_FTypes::last> {
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+struct aggfunc<T, DType, Bodo_FTypes::last> {
     /**
      * Aggregation function for last. Always selects v2
      * if its not NaN.
@@ -577,7 +578,7 @@ struct aggfunc<T, dtype, Bodo_FTypes::last> {
      * @param second input value.
      */
     inline static void apply(T& v1, T& v2) {
-        if (!isnan_alltype<T, dtype>(v2)) {
+        if (!isnan_alltype<T, DType>(v2)) {
             v1 = v2;
         }
     }
@@ -614,7 +615,7 @@ struct bool_aggfunc<bool, Bodo_CTypes::_BOOL, Bodo_FTypes::last> {
 
 // count
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 struct count_agg {
     /**
      * Aggregation function for count. Increases count if value is not a nan
@@ -623,7 +624,7 @@ struct count_agg {
      * @param second input value.
      */
     inline static void apply(int64_t& v1, T& v2) {
-        if (!isnan_alltype<T, dtype>(v2)) {
+        if (!isnan_alltype<T, DType>(v2)) {
             v1 += 1;
         }
     }
@@ -631,7 +632,7 @@ struct count_agg {
 
 // size
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 struct size_agg {
     /**
      * Aggregation function for size. Increases size
@@ -644,7 +645,7 @@ struct size_agg {
 
 // mean
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 struct mean_agg {
     /**
      * Aggregation function for mean. Modifies count and sum of observed input
@@ -655,8 +656,8 @@ struct mean_agg {
      * @param[in,out] count: current number of observations
      */
     inline static void apply(double& v1, T& v2, uint64_t& count) {
-        if (!isnan_alltype<T, dtype>(v2)) {
-            v1 += to_double<T, dtype>(v2);
+        if (!isnan_alltype<T, DType>(v2)) {
+            v1 += to_double<T, DType>(v2);
             count += 1;
         }
     }
@@ -664,7 +665,7 @@ struct mean_agg {
 
 // variance
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 struct var_agg {
     /**
      * Aggregation function for variance. Modifies count, mean and m2 (sum of
@@ -680,8 +681,8 @@ struct var_agg {
      */
     inline static void apply(T val, uint64_t& count, double& mean_x,
                              double& m2) {
-        if (!isnan_alltype<T, dtype>(val)) {
-            double val_double = to_double<T, dtype>(val);
+        if (!isnan_alltype<T, DType>(val)) {
+            double val_double = to_double<T, DType>(val);
             count += 1;
             double delta = val_double - mean_x;
             mean_x += delta / count;
@@ -693,7 +694,7 @@ struct var_agg {
 
 // Skew
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 struct skew_agg {
     /**
      * Aggregation function for skew. The same principle as variance, but
@@ -707,8 +708,8 @@ struct skew_agg {
      */
     inline static void apply(T val, uint64_t& count, double& m1, double& m2,
                              double& m3) {
-        if (!isnan_alltype<T, dtype>(val)) {
-            double val_double = to_double<T, dtype>(val);
+        if (!isnan_alltype<T, DType>(val)) {
+            double val_double = to_double<T, DType>(val);
             count += 1;
             m1 += val_double;
             m2 += val_double * val_double;
@@ -719,7 +720,7 @@ struct skew_agg {
 
 // kurtosis
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 struct kurt_agg {
     /**
      * Aggregation function for kurtosis. The same principle as variance, but
@@ -734,8 +735,8 @@ struct kurt_agg {
      */
     inline static void apply(T val, uint64_t& count, double& m1, double& m2,
                              double& m3, double& m4) {
-        if (!isnan_alltype<T, dtype>(val)) {
-            double val_double = to_double<T, dtype>(val);
+        if (!isnan_alltype<T, DType>(val)) {
+            double val_double = to_double<T, DType>(val);
             count += 1;
             m1 += val_double;
             m2 += val_double * val_double;
@@ -747,7 +748,7 @@ struct kurt_agg {
 
 // boolxor_agg
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 struct boolxor_agg {
     /**
      * Aggregation function for boolxor_agg. The goal is to
@@ -775,9 +776,9 @@ struct boolxor_agg {
 
 // bitor_agg
 
-template <typename T_out, typename T_in, int dtype>
+template <typename T_out, typename T_in, Bodo_CTypes::CTypeEnum DType>
     requires std::integral<T_in> && std::same_as<T_in, T_out>
-struct casted_aggfunc<T_out, T_in, dtype, Bodo_FTypes::bitor_agg> {
+struct casted_aggfunc<T_out, T_in, DType, Bodo_FTypes::bitor_agg> {
     /**
      * Applies BITOR_AGG for *integer* inputs.
      * For integers, T_out and T_in should be the same dtype.
@@ -788,9 +789,9 @@ struct casted_aggfunc<T_out, T_in, dtype, Bodo_FTypes::bitor_agg> {
     static void apply(T_out& v1, T_in& v2) { v1 |= v2; }
 };
 
-template <typename T_in, int dtype>
+template <typename T_in, Bodo_CTypes::CTypeEnum DType>
     requires std::floating_point<T_in>
-struct casted_aggfunc<int64_t, T_in, dtype, Bodo_FTypes::bitor_agg> {
+struct casted_aggfunc<int64_t, T_in, DType, Bodo_FTypes::bitor_agg> {
     /**
      * Applies BITOR_AGG for *floating point* inputs.
      *
@@ -802,9 +803,9 @@ struct casted_aggfunc<int64_t, T_in, dtype, Bodo_FTypes::bitor_agg> {
 
 // bitand_agg
 
-template <typename T_out, typename T_in, int dtype>
+template <typename T_out, typename T_in, Bodo_CTypes::CTypeEnum DType>
     requires std::integral<T_in> && std::same_as<T_in, T_out>
-struct casted_aggfunc<T_out, T_in, dtype, Bodo_FTypes::bitand_agg> {
+struct casted_aggfunc<T_out, T_in, DType, Bodo_FTypes::bitand_agg> {
     /**
      * Applies BITAND_AGG for *integer* inputs.
      * For integers, T_out and T_in should be the same dtype.
@@ -815,9 +816,9 @@ struct casted_aggfunc<T_out, T_in, dtype, Bodo_FTypes::bitand_agg> {
     static void apply(T_out& v1, T_in& v2) { v1 &= v2; }
 };
 
-template <typename T_in, int dtype>
+template <typename T_in, Bodo_CTypes::CTypeEnum DType>
     requires std::floating_point<T_in>
-struct casted_aggfunc<int64_t, T_in, dtype, Bodo_FTypes::bitand_agg> {
+struct casted_aggfunc<int64_t, T_in, DType, Bodo_FTypes::bitand_agg> {
     /**
      * Applies BITAND_AGG for *floating point* inputs.
      *
@@ -829,9 +830,9 @@ struct casted_aggfunc<int64_t, T_in, dtype, Bodo_FTypes::bitand_agg> {
 
 // bitand_agg
 
-template <typename T_out, typename T_in, int dtype>
+template <typename T_out, typename T_in, Bodo_CTypes::CTypeEnum DType>
     requires std::integral<T_in> && std::same_as<T_in, T_out>
-struct casted_aggfunc<T_out, T_in, dtype, Bodo_FTypes::bitxor_agg> {
+struct casted_aggfunc<T_out, T_in, DType, Bodo_FTypes::bitxor_agg> {
     /**
      * Applies BITXOR_AGG for *integer* inputs.
      * For integers, T_out and T_in should be the same dtype.
@@ -842,9 +843,9 @@ struct casted_aggfunc<T_out, T_in, dtype, Bodo_FTypes::bitxor_agg> {
     static void apply(T_out& v1, T_in& v2) { v1 ^= v2; }
 };
 
-template <typename T_in, int dtype>
+template <typename T_in, Bodo_CTypes::CTypeEnum DType>
     requires std::floating_point<T_in>
-struct casted_aggfunc<int64_t, T_in, dtype, Bodo_FTypes::bitxor_agg> {
+struct casted_aggfunc<int64_t, T_in, DType, Bodo_FTypes::bitxor_agg> {
     /**
      * Applies BITXOR_AGG for *floating point* inputs.
      *

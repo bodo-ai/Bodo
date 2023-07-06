@@ -478,8 +478,8 @@ struct local_global_stat_nan {
     Depending on numpy/nullable-int-bool case a different also is used.
     This is only for non-decimal arrays.
  */
-template <class T, int dtype>
-    requires(!decimal<dtype>)
+template <class T, Bodo_CTypes::CTypeEnum DType>
+    requires(!decimal<DType>)
 inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
                                        std::shared_ptr<array_info> arr,
                                        local_global_stat_nan const &e_stat) {
@@ -491,7 +491,7 @@ inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
         if (arr->arr_type == bodo_array_type::NUMPY) {
             for (size_t i_row = 0; i_row < arr->length; i_row++) {
                 T eVal = arr->at<T>(i_row);
-                bool isna = isnan_alltype<T, dtype>(eVal);
+                bool isna = isnan_alltype<T, DType>(eVal);
                 if (!isna) {
                     my_array.emplace_back(eVal);
                 }
@@ -519,8 +519,8 @@ inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
    input. But: 1) This would be more complex code 2) Pandas uses double just as
    well.
  */
-template <class T, int dtype>
-    requires decimal<dtype>
+template <class T, Bodo_CTypes::CTypeEnum DType>
+    requires decimal<DType>
 inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
                                        std::shared_ptr<array_info> arr,
                                        local_global_stat_nan const &e_stat) {
@@ -564,7 +564,7 @@ T get_nth(std::vector<T, Alloc> my_array, int64_t k, bool parallel) {
     1) The nullable_int_bool case (which covers decimal)
     2) the case of integer/float is covered by the isnan_alltype function
  */
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 std::pair<int64_t, int64_t> nb_entries_local(std::shared_ptr<array_info> arr) {
     int64_t nb_ok = 0, nb_miss = 0;
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -580,7 +580,7 @@ std::pair<int64_t, int64_t> nb_entries_local(std::shared_ptr<array_info> arr) {
     if (arr->arr_type == bodo_array_type::NUMPY) {
         for (size_t i_row = 0; i_row < arr->length; i_row++) {
             T eVal = arr->at<T>(i_row);
-            bool isna = isnan_alltype<T, dtype>(eVal);
+            bool isna = isnan_alltype<T, DType>(eVal);
             if (isna) {
                 nb_miss++;
             } else {
@@ -600,10 +600,10 @@ std::pair<int64_t, int64_t> nb_entries_local(std::shared_ptr<array_info> arr) {
     First compute the local statistical information.
     Then use MPI_Allreduce to agglomerate them
  */
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 local_global_stat_nan nb_entries_global(std::shared_ptr<array_info> arr,
                                         bool parallel) {
-    std::pair<int64_t, int64_t> pair = nb_entries_local<T, dtype>(arr);
+    std::pair<int64_t, int64_t> pair = nb_entries_local<T, DType>(arr);
     if (!parallel) {
         return {pair.first, pair.second, pair.first, pair.second};
     }
@@ -656,23 +656,23 @@ void median_series_computation_eff(double *res, std::vector<T, Alloc> my_array,
    entries (templatized code for decimal/non-decimal) Third step is to compute
    the median from the list of non-nan entries with two cases to consider.
  */
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 void median_series_computation_T(double *res, std::shared_ptr<array_info> arr,
                                  bool parallel, bool skipna) {
-    local_global_stat_nan e_stat = nb_entries_global<T, dtype>(arr, parallel);
+    local_global_stat_nan e_stat = nb_entries_global<T, DType>(arr, parallel);
     if ((e_stat.glob_nb_miss > 0 && !skipna) || e_stat.glob_nb_ok == 0) {
         *res = std::nan("");
         return;
     }
     bodo::vector<T> my_array;
-    collecting_non_nan_entries<T, dtype>(my_array, arr, e_stat);
+    collecting_non_nan_entries<T, DType>(my_array, arr, e_stat);
     int64_t glob_nb_ok = e_stat.glob_nb_ok;
-    if (dtype == Bodo_CTypes::DECIMAL)
+    if (DType == Bodo_CTypes::DECIMAL)
         median_series_computation_eff<T, Bodo_CTypes::FLOAT64,
                                       bodo::STLBufferPoolAllocator<T>>(
             res, my_array, parallel, glob_nb_ok);
     else
-        median_series_computation_eff<T, dtype,
+        median_series_computation_eff<T, DType,
                                       bodo::STLBufferPoolAllocator<T>>(
             res, my_array, parallel, glob_nb_ok);
 }
@@ -1112,7 +1112,7 @@ void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
  * @param parallel whether this is ocurring across multiple ranks
  * @return the approximate percentile value as a double
  */
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 double approx_percentile_T(std::shared_ptr<array_info> arr, double percentile,
                            bool parallel) {
     /* TODO: investigate adjusting the hyperparameters for speed, memory and
@@ -1124,13 +1124,13 @@ double approx_percentile_T(std::shared_ptr<array_info> arr, double percentile,
         const uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
         for (uint64_t i = 0; i < arr->length; i++) {
             if (GetBit(null_bitmask, i)) {
-                double val_double = to_double<T, dtype>(getv<T>(arr, i));
+                double val_double = to_double<T, DType>(getv<T>(arr, i));
                 td.NanAdd(val_double);
             }
         }
     } else {
         for (uint64_t i = 0; i < arr->length; i++) {
-            double val_double = to_double<T, dtype>(getv<T>(arr, i));
+            double val_double = to_double<T, DType>(getv<T>(arr, i));
             td.NanAdd(val_double);
         }
     }

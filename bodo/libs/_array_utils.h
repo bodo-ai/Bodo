@@ -137,16 +137,73 @@ DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
 
 // ------------------------------------------------
 
+template <Bodo_CTypes::CTypeEnum DType>
+concept datetime_timedelta =
+    (DType == Bodo_CTypes::DATETIME) || (DType == Bodo_CTypes::TIMEDELTA);
+
+template <Bodo_CTypes::CTypeEnum DType>
+concept decimal = DType == Bodo_CTypes::DECIMAL;
+
+template <Bodo_CTypes::CTypeEnum DType>
+concept float_dtype =
+    (DType == Bodo_CTypes::FLOAT32) || (DType == Bodo_CTypes::FLOAT64);
+
+template <Bodo_CTypes::CTypeEnum DType>
+concept bool_dtype = DType == Bodo_CTypes::_BOOL;
+
+// ------------------------------------------------
+
 // select dtypes that can have sentinel nulls
 template <Bodo_CTypes::CTypeEnum DType>
-concept NullSentinelDtype =
-    ((DType == Bodo_CTypes::FLOAT32) || (DType == Bodo_CTypes::FLOAT64) ||
-     (DType == Bodo_CTypes::DATETIME) || (DType == Bodo_CTypes::TIMEDELTA));
+concept NullSentinelDtype = (float_dtype<DType> || datetime_timedelta<DType>);
 
 // select dtypes that can have sentinel NAs in SQL which
 // represent NULL.
 template <Bodo_CTypes::CTypeEnum DType>
 concept SQLNASentinelDtype = DType == Bodo_CTypes::TIMEDELTA;
+
+/**
+ * @brief Returns a NA value for the corresponding type. Used for
+ * dtypes that do not have a value for NA.
+ *
+ * For comparisons, use isnan_alltype instead!
+ *
+ * @return Nothing, throws a runtime error.
+ */
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+constexpr inline T nan_val() {
+    throw std::runtime_error(
+        "_array_utils.h::nan_val: No NA val exists for this type");
+}
+
+/**
+ * @brief Returns a NA value for the corresponding type. Used for
+ * dtypes that use a special value (e.g. the smallest integer)
+ * as a sentinal value for NA.
+ *
+ * For comparisons, use isnan_alltype instead!
+ *
+ * @return The sentinel value that stands in for NA (or specifically NaT)
+ */
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+    requires datetime_timedelta<DType>
+constexpr inline T nan_val() {
+    return std::numeric_limits<T>::min();
+}
+
+/**
+ * @brief Returns a NA value for the corresponding type. Used for
+ * dtypes that have a real NaN value.
+ *
+ * For comparisons, use isnan_alltype instead!
+ *
+ * @return The NA value from the corresponding dtype.
+ */
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+    requires(float_dtype<DType> || decimal<DType>)
+constexpr inline T nan_val() {
+    return std::numeric_limits<T>::quiet_NaN();
+}
 
 // ------------------------------------------------
 
@@ -393,41 +450,6 @@ inline bool TestEqualJoin(const std::shared_ptr<const table_info>& table1,
     return true;
 };
 
-// is_datetime_timedelta
-
-template <int dtype>
-struct is_datetime_timedelta {
-    static const bool value = false;
-};
-
-template <>
-struct is_datetime_timedelta<Bodo_CTypes::DATETIME> {
-    static const bool value = true;
-};
-
-template <>
-struct is_datetime_timedelta<Bodo_CTypes::TIMEDELTA> {
-    static const bool value = true;
-};
-
-template <int dtype>
-concept datetime_timedelta = is_datetime_timedelta<dtype>::value;
-
-// is_decimal
-
-template <int dtype>
-struct is_decimal {
-    static const bool value = false;
-};
-
-template <>
-struct is_decimal<Bodo_CTypes::DECIMAL> {
-    static const bool value = true;
-};
-
-template <int dtype>
-concept decimal = is_decimal<dtype>::value;
-
 template <typename T, int dtype>
     requires std::integral<T>
 inline bool isnan_categorical(T const& val) {
@@ -481,19 +503,19 @@ inline bool isnan_categorical_ptr(int dtype, char* ptr) {
     }
 }
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
     requires std::floating_point<T>
 constexpr inline bool isnan_alltype(T const& val) {
     return isnan(val);
 }
 
-template <typename T, int dtype>
-    requires(!std::floating_point<T>) && datetime_timedelta<dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+    requires datetime_timedelta<DType>
 constexpr inline bool isnan_alltype(T const& val) {
-    return val == std::numeric_limits<T>::min();
+    return val == nan_val<T, DType>();
 }
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 constexpr inline bool isnan_alltype(T const& val) {
     return false;
 }
@@ -1030,15 +1052,220 @@ inline void restore_col_order(
  * @param val The value to convert
  * @return Val as a double.
  */
-template <typename T, int dtype>
-    requires decimal<dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
+    requires decimal<DType>
 inline double to_double(T const& val) {
     return decimal_to_double(val);
 }
 
-template <typename T, int dtype>
+template <typename T, Bodo_CTypes::CTypeEnum DType>
 inline double to_double(T const& val) {
     return static_cast<double>(val);
+}
+
+// Several concepts and utilities used for arr_type/dtype agnostic array
+// interactions.
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept numpy_array = ArrType == bodo_array_type::arr_type_enum::NUMPY;
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept nullable_array =
+    ArrType == bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL;
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept string_array = ArrType == bodo_array_type::arr_type_enum::STRING;
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept dict_array = ArrType == bodo_array_type::arr_type_enum::DICT;
+
+/**
+ * @brief Retrieves an item from an array.
+ *
+ * @param[in] arr - The array to extract the value from.
+ * @param[in] idx - Index of item to extract.
+ *
+ * @return The item at the given index.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+inline T get_arr_item(array_info& arr, int64_t idx) {
+    return ((T*)arr.data1())[idx];
+}
+
+/**
+ * @brief Retrieves an item from an array.
+ *
+ * Used for nullable arrays of booleans.
+ *
+ * @param[in] arr - The array to extract the value from.
+ * @param[in] idx - Index of item to extract.
+ *
+ * @return The item at the given index.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires(nullable_array<ArrType> && bool_dtype<DType>)
+inline T get_arr_item(array_info& arr, int64_t idx) {
+    return GetBit((uint8_t*)arr.data1(), idx);
+}
+
+/**
+ * Check if an element of an array is non-null.
+ *
+ * @param[in] arr: Reference to array to check for nulls.
+ * @param[in] idx: Index of element to check for nulls.
+ *
+ * @return True if the array at the requested index is non-null.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+inline bool non_null_at(array_info& arr, size_t idx) {
+    return arr.get_null_bit(idx);
+}
+
+/**
+ * Check if element of an array is non-null
+ *
+ * Used for general numpy arrays, which never have nulls.
+ *
+ * @param[in] arr: Reference to array to check for nulls.
+ * @param[in] idx: Index of element to check for nulls.
+ *
+ * @return True always, since numpy arrays without sentinels never have nulls
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires numpy_array<ArrType>
+inline bool non_null_at(array_info& arr, size_t idx) {
+    return true;
+}
+
+/**
+ * Check if element of an array is non-null
+ *
+ * Used for numpy arrays of datetime or timedelta, which have sentinels for NaT.
+ *
+ * This (and other helpers) needs to be changed when nullable datetime/timedelta arrays are implemented.
+ *
+ * @param[in] arr: Reference to array to check for nulls.
+ * @param[in] idx: Index of element to check for nulls.
+ *
+ * @return True if the array at the requested index contains a sentinel value
+ * not corresponding to null
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires(numpy_array<ArrType> && datetime_timedelta<DType>)
+inline bool non_null_at(array_info& arr, size_t idx) {
+    return !isnan_alltype<T, DType>(get_arr_item<ArrType, T, DType>(arr, idx));
+}
+
+/**
+ * Check if an element of an array is null.
+ *
+ * @param[in] arr: Reference to array to check for nulls.
+ * @param[in] idx: Index of element to check for nulls.
+ *
+ * @return True if the array at the requested index is null.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+inline bool is_null_at(array_info& arr, size_t idx) {
+    return !arr.get_null_bit(idx);
+}
+
+/**
+ * Check if element of an array is null
+ *
+ * Used for general numpy arrays, which never have nulls.
+ *
+ * @param[in] arr: Reference to array to check for nulls.
+ * @param[in] idx: Index of element to check for nulls.
+ *
+ * @return False always, since numpy arrays without sentinels never have nulls
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires numpy_array<ArrType>
+inline bool is_null_at(array_info& arr, size_t idx) {
+    return false;
+}
+
+/**
+ * Check if element of an array is null
+ *
+ * Used for numpy arrays of datetime or timedelta, which have sentinels for NaT.
+ *
+ * This (and other helpers) needs to be changed when nullable datetime/timedelta arrays are implemented.
+ *
+ * @param[in] arr: Reference to array to check for nulls.
+ * @param[in] idx: Index of element to check for nulls.
+ *
+ * @return True if the array at the requested index contains a sentinel value
+ * corresponding to null
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires(numpy_array<ArrType> && datetime_timedelta<DType>)
+inline bool is_null_at(array_info& arr, size_t idx) {
+    return isnan_alltype<T, DType>(get_arr_item<ArrType, T, DType>(arr, idx));
+}
+
+/**
+ * Sets the null bit at the given index to true, indicating that the array
+ * at the specified location is non-null. Used for nullable arrays.
+ *
+ * @param[in,out] arr: The array to operate on.
+ * @param[in] idx: Index being set to non-null.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+inline void set_non_null(array_info& arr, size_t idx) {
+    arr.set_null_bit(idx, true);
+}
+
+/**
+ * Sets the null bit at the given index to true, indicating that the array
+ * at the specified location is non-null. Used for numpy arrays.
+ *
+ * @param[in,out] arr: The array to operate on.
+ * @param[in] idx: Index being set to non-null.
+ *
+ * Note: this function does nothing because there is no null bitmask to alter
+ * in a numpy array.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires numpy_array<ArrType>
+inline void set_non_null(array_info& arr, size_t idx) {}
+
+/**
+ * Sets an item in an array. Used for nullable arrays (except for booleans),
+ * or numpy arrays.
+ *
+ * @param[in,out] arr - The array to set the item in.
+ * @param[in] idx - The index of the item to set.
+ * @param[in] val - The value to set the item to.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+inline void set_arr_item(array_info& arr, size_t idx, T val) {
+    ((T*)arr.data1())[idx] = val;
+}
+
+/**
+ * Sets an item in an array. Used for nullable arrays of booleans
+ *
+ * @param[in,out] arr - The array to set the item in.
+ * @param[in] idx - The index of the item to set.
+ * @param[in] val - The value to set the item to.
+ */
+template <bodo_array_type::arr_type_enum ArrType, typename T,
+          Bodo_CTypes::CTypeEnum DType>
+    requires(nullable_array<ArrType> && bool_dtype<DType>)
+inline void set_arr_item(array_info& arr, size_t idx, T val) {
+    SetBitTo((uint8_t*)arr.data1(), idx, val);
 }
 
 #endif  // _ARRAY_UTILS_H_INCLUDED
