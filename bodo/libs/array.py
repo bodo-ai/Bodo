@@ -2119,9 +2119,9 @@ def delete_shuffle_info(typingctx, shuffle_info_t=None):
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="delete_shuffle_info"
         )
-        return builder.call(fn_tp, args)
+        builder.call(fn_tp, args)
 
-    return types.void(shuffle_info_t), codegen
+    return types.none(shuffle_info_t), codegen
 
 
 @intrinsic
