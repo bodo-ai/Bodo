@@ -47,7 +47,7 @@ abstract class Expr {
         override fun emit(): String {
             val args = sequenceOf(
                 this.args.asSequence().map { it.emit() },
-                this.namedArgs.asSequence().map { (name, value) -> "$name = ${value.emit()}" }
+                this.namedArgs.asSequence().map { (name, value) -> "$name=${value.emit()}" }
             ).flatten().joinToString(separator = ", ")
             return "${callee.emit()}(${args})"
         }
@@ -350,6 +350,9 @@ abstract class Expr {
                 "False"
             }
     }
+
+    object True : DelegateExpr(BooleanLiteral(true))
+    object False : DelegateExpr(BooleanLiteral(false))
 
     /**
      * Represents an Integer Literal.

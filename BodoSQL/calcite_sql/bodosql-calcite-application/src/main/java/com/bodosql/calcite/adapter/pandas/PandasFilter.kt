@@ -1,9 +1,8 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.adapter.pandas.window.WindowAggregate
 import com.bodosql.calcite.application.ExprTypeVisitor.isScalar
-import com.bodosql.calcite.ir.BodoSQLKernel
-import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.*
 import com.bodosql.calcite.plan.Cost
 import com.bodosql.calcite.plan.makeCost
 import com.bodosql.calcite.traits.BatchingProperty
@@ -59,53 +58,41 @@ class PandasFilter(
     }
 
     override fun emit(implementor: PandasRel.Implementor): Dataframe {
-        return if (isStreaming()) {
-            emitStreaming(implementor)
+        // Choose the build implementation.
+        // TODO(jsternberg): Go over this interface again. It feels to me
+        // like the implementor could just choose the correct version
+        // for us rather than having us check this condition ourselves.
+        val implement = if (isStreaming()) {
+            implementor::buildStreaming
         } else {
-            emitSingleBatch(implementor)
+            implementor::build
+        }
+
+        // Visit the input for this operation.
+        val input = implementor.visitChild(input, 0)
+        return implement { ctx ->
+            // Extract windows from the condition and emit the code for them.
+            val (windowAggregate, condition) = extractWindows(cluster, input, this.condition)
+            val localRefs = windowAggregate.emit(ctx)
+
+            // Emit the code for the condition.
+            emit(ctx, input, condition, localRefs)
         }
     }
 
-    fun emitSingleBatch(implementor: PandasRel.Implementor): Dataframe {
-        val input = implementor.visitChild(input, 0)
-        return implementor.build { ctx ->
-            val translator = ctx.rexTranslator(input)
-            val condition = this.condition.accept(translator).let { filter ->
-                if (isScalarCondition()) {
-                    // If the output of this filter is a scalar, we need to
-                    // coerce it to an array value for the filter operation.
-                    coerceScalar(input, filter)
-                } else {
-                    filter
-                }
+    private fun emit(ctx: PandasRel.BuildContext, input: Dataframe, condition: RexNode, localRefs: List<Variable>): Dataframe {
+        val translator = ctx.rexTranslator(input, localRefs)
+        val conditionExpr = condition.accept(translator).let { filter ->
+            if (isScalarCondition()) {
+                // If the output of this filter is a scalar, we need to
+                // coerce it to an array value for the filter operation.
+                coerceScalar(input, filter)
+            } else {
+                filter
             }
-            // Generate the filter df1[df2] operation and assign to the destination.
-            ctx.returns(Expr.GetItem(input, condition))
         }
-    }
-
-    fun emitStreaming(implementor: PandasRel.Implementor): Dataframe {
-        val input = implementor.visitChild(input, 0)
-        // TODO: Move to a wrapper function to avoid the timerInfo calls.
-        // This requires more information about the high level design of the streaming
-        // operators since there are several parts (e.g. state, multiple loop sections, etc.)
-        // At this time it seems like it would be too much work to have a clean interface.
-        // There may be a need to pass in several lambdas, so other changes may be needed to avoid
-        // constant rewriting.
-        return implementor.buildStreaming { ctx ->
-            val translator = ctx.rexTranslator(input)
-            val condition = this.condition.accept(translator).let { filter ->
-                if (isScalarCondition()) {
-                    // If the output of this filter is a scalar, we need to
-                    // coerce it to an array value for the filter operation.
-                    coerceScalar(input, filter)
-                } else {
-                    filter
-                }
-            }
-            // Generate the filter df1[df2] operation and assign to the destination.
-            ctx.returns(Expr.GetItem(input, condition))
-        }
+        // Generate the filter df1[df2] operation and assign to the destination.
+        return ctx.returns(Expr.GetItem(input, conditionExpr))
     }
 
     /**

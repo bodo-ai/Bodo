@@ -4,6 +4,7 @@ import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.ir.Dataframe
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Module
+import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.plan.RelOptUtil
@@ -74,9 +75,21 @@ interface PandasRel : RelNode {
         fun builder(): Module.Builder
 
         /**
+         * Lowers an expression into a global variable that can be retrieved using
+         * the returned [Variable].
+         */
+        fun lowerAsGlobal(expression: Expr): Variable
+
+        /**
          * Returns a PandasToRexTranslator that works in this build context.
          */
         fun rexTranslator(input: Dataframe): RexToPandasTranslator
+
+        /**
+         * Returns a PandasToRexTranslator that works in this build context
+         * and is initialized with the given local refs.
+         */
+        fun rexTranslator(input: Dataframe, localRefs: List<Expr>): RexToPandasTranslator
 
         /**
          * Creates an assignment to the destination dataframe with the
