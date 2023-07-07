@@ -102,7 +102,7 @@ public class PandasGenTest {
 
     RelationalAlgebraGenerator generator =
         new RelationalAlgebraGenerator(
-            schema, paramTableName, plannerChoice, 0, BatchingProperty.defaultBatchSize);
+            schema, paramTableName, plannerChoice, 0, BatchingProperty.defaultBatchSize, false);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = getRelationalAlgebraString(generator, sql, false);

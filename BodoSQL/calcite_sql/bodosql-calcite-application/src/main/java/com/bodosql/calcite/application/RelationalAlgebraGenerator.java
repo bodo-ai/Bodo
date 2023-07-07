@@ -92,6 +92,9 @@ public class RelationalAlgebraGenerator {
   /** The batch size used for streaming. This is configurable for testing purposes. */
   private final int streamingBatchSize;
 
+  /** Enable/Disable groupby streaming. This is configurable for testing purposes */
+  public static boolean enableGroupbyStreaming;
+
   /**
    * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
    * SQL queries can be executed within its context.
@@ -159,7 +162,8 @@ public class RelationalAlgebraGenerator {
       String namedParamTableName,
       int plannerType,
       int verboseLevel,
-      int streamingBatchSize) {
+      int streamingBatchSize,
+      boolean enableGroupbyStreaming) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -177,6 +181,7 @@ public class RelationalAlgebraGenerator {
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
+    this.enableGroupbyStreaming = enableGroupbyStreaming;
   }
 
   public static final int HEURISTIC_PLANNER = 1;
@@ -198,7 +203,8 @@ public class RelationalAlgebraGenerator {
       // Something like this can be replaced with a more formal API like GRPC and protobuf.
       int plannerType,
       int verboseLevel,
-      int streamingBatchSize) {
+      int streamingBatchSize,
+      boolean enableGroupbyStreaming) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -255,6 +261,7 @@ public class RelationalAlgebraGenerator {
         new BodoSQLRelDataTypeSystem(tzInfo, weekStart, weekOfYearPolicy);
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, namedParamTableName, typeSystem);
+    this.enableGroupbyStreaming = enableGroupbyStreaming;
   }
 
   /**
