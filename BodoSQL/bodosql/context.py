@@ -424,6 +424,8 @@ def compute_df_types(df_list, is_bodo_type):
                         # is_table_input
                         True,
                         False,
+                        # downcast_decimal_to_double
+                        False,
                     )
                     # Future proof against additional return values that are unused
                     # by BodoSQL by returning a tuple.
