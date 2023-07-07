@@ -3,7 +3,7 @@
 This file is mostly wrappers for C++ implementations.
 """
 from functools import cached_property
-from typing import List
+from typing import Dict, List, Tuple
 
 import llvmlite.binding as ll
 import numba
@@ -52,7 +52,7 @@ class GroupbyStateType(types.Type):
         self.key_inds = key_inds
         self.ftypes = ftypes
         self.f_in_offsets = f_in_offsets
-        self.f_in_cols = f_in_cols
+        self._f_in_cols = f_in_cols
         self.build_table_type = build_table_type
         super().__init__(
             f"GroupbyStateType(key_inds={key_inds}, ftypes={ftypes}, f_in_offsets={f_in_offsets}, f_in_cols={f_in_cols}, build_table={build_table_type})"
@@ -71,6 +71,29 @@ class GroupbyStateType(types.Type):
     @property
     def n_keys(self):
         return len(self.key_inds)
+
+    @cached_property
+    def _col_reorder_map(self) -> Dict[int, int]:
+        """
+        Generate a mapping to the input components from
+        the Python types to the runtime C++ input type.
+
+        Returns:
+            Dict[int, int]: A dictionary containing the column remapping.
+        """
+        return {idx: i for i, idx in enumerate(self.build_indices)}
+
+    @property
+    def f_in_cols(self) -> Tuple[int]:
+        """Recompute _f_in_cols after reordering the columns to put
+        the keys in the front.
+
+        Returns:
+            Tuple[int]: A tuple with the _f_in_cols after remapping
+        """
+        if self.build_table_type == types.unknown:
+            return self._f_in_cols
+        return tuple([self._col_reorder_map[i] for i in self._f_in_cols])
 
     @cached_property
     def key_types(self) -> List[types.ArrayCompatible]:
@@ -253,8 +276,10 @@ class GroupbyStateType(types.Type):
             assert (
                 self.f_in_offsets[i + 1] == self.f_in_offsets[i] + 1
             ), "only functions with single input column supported in streaming groupby currently"
+            # Note: Use _f_in_cols because we need the original column location before reordering
+            # for C++.
             in_type = self.build_table_type.arr_types[
-                self.f_in_cols[self.f_in_offsets[i]]
+                self._f_in_cols[self.f_in_offsets[i]]
             ]
             out_type, err_msg = bodo.hiframes.pd_groupby_ext.get_groupby_output_dtype(
                 in_type, bodo.ir.aggregate.supported_agg_funcs[f_type]
@@ -495,21 +520,9 @@ def groupby_produce_output_batch(groupby_state):
     if out_table_type == types.unknown:
         out_cols_arr = np.array([], dtype=np.int64)
     else:
-        output_cols = []
-        key_map = {idx: i for i, idx in enumerate(groupby_state.key_inds)}
-        data_offset = groupby_state.n_keys
+        # TODO[BSE-645]: Support pruning output columns.
         num_cols = len(out_table_type.arr_types)
-
-        for i in range(num_cols):
-            if i in key_map:
-                physical_index = key_map[i]
-            else:
-                physical_index = data_offset
-                data_offset += 1
-
-            output_cols.append(physical_index)
-
-        out_cols_arr = np.array(output_cols, dtype=np.int64)
+        out_cols_arr = np.array(range(num_cols), dtype=np.int64)
 
     def impl(
         groupby_state,
