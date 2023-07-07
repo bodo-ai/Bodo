@@ -1,8 +1,7 @@
 package com.bodosql.calcite.adapter.pandas
 
-import com.bodosql.calcite.application.PandasCodeGenVisitor
 import com.bodosql.calcite.ir.Dataframe
-import com.bodosql.calcite.ir.Module
+import com.bodosql.calcite.traits.BatchingProperty
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -22,6 +21,8 @@ class PandasAggregate(
 
     init {
         assert(convention == PandasRel.CONVENTION)
+        // Require streaming if we have enabled streaming.
+        assert(traitSet.containsIfApplicable(BatchingProperty.STREAMING))
     }
 
     override fun copy(traitSet: RelTraitSet, input: RelNode, groupSet: ImmutableBitSet, groupSets: List<ImmutableBitSet>?, aggCalls: List<AggregateCall>): PandasAggregate {

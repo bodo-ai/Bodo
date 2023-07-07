@@ -326,3 +326,5 @@ bodosql_use_streaming_plan = False
 # the streaming plan in BodoSQL on the existing unit tests that may only
 # have one batch worth of data.
 bodosql_streaming_batch_size = 4096
+# Flag to track if we should enable groupby streaming in BodoSQL when the streaming plan is enabled
+enable_groupby_streaming = False

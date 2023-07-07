@@ -5,6 +5,9 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generate
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeNoGroupBy;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeWithGroupBy;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateApplyCodeWithGroupBy;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyFtypes;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyKeyIndices;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyOffsetAndCols;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.generateJoinCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.generateLiteralCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.generateLogicalValuesCode;
@@ -1196,6 +1199,19 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node LogicalAggregate node to be visited
    */
   public void visitLogicalAggregate(PandasAggregate node) {
+    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
+      visitStreamingLogicalAggregate(node);
+    } else {
+      visitSingleBatchedLogicalAggregate(node);
+    }
+  }
+
+  /**
+   * Visitor for Aggregate without streaming.
+   *
+   * @param node aggregate node being visited
+   */
+  private void visitSingleBatchedLogicalAggregate(PandasAggregate node) {
     final List<Integer> groupingVariables = node.getGroupSet().asList();
     final List<ImmutableBitSet> groups = node.getGroupSets();
 
@@ -1339,6 +1355,109 @@ public class PandasCodeGenVisitor extends RelVisitor {
             varGenStack.push(finalOutVar);
           });
     }
+  }
+
+  /**
+   * Visitor for Aggregate with streaming.
+   *
+   * @param node aggregate node being visited
+   */
+  private void visitStreamingLogicalAggregate(PandasAggregate node) {
+    // Visit the input node
+    this.visit(node.getInput(), 0, node);
+    Variable buildDf = varGenStack.pop();
+    // Create the state var.
+    // TODO: Add streaming timer support
+    Variable groupbyStateVar = genGenericTempVar();
+    Variable keyIndices = getStreamingGroupbyKeyIndices(node.getGroupSet(), this);
+    Pair<Variable, Variable> offsetAndCols = getStreamingGroupbyOffsetAndCols(node.getAggCallList(), this);
+    Variable offset = offsetAndCols.left;
+    Variable cols = offsetAndCols.right;
+    Variable ftypes = getStreamingGroupbyFtypes(node.getAggCallList(), this);
+    Expr.Call stateCall =
+        new Expr.Call(
+            "bodo.libs.stream_groupby.init_groupby_state",
+            List.of(
+                keyIndices,
+                ftypes,
+                offset,
+                cols),
+            List.of()
+        );
+    Op.Assign groupbyInit = new Op.Assign(groupbyStateVar, stateCall);
+    // Fetch the streaming pipeline
+    StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
+    inputPipeline.addInitialization(groupbyInit);
+    // Groupby needs the isLast to be global before calling the build side change.
+    // TODO: [BSE-712]This is reused several places, create a helper function for this
+    inputPipeline.ensureExitCondSynchronized();
+    Variable batchExitCond = inputPipeline.getExitCond();
+    Variable buildTable = genTableVar();
+    Expr.Call buildDfData =
+        new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(buildDf));
+    int numBuildCols = node.getRowType().getFieldCount();
+    List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
+    Variable buildColNums = lowerAsMetaType(new Expr.Tuple(buildIndices));
+    // TODO: [BSE-712]This is reused several places, create a helper function for this
+    Expr.Call buildTableCall =
+        new Expr.Call(
+            "bodo.hiframes.table.logical_table_to_table",
+            buildDfData,
+            new Expr.Tuple(List.of()),
+            buildColNums,
+            new Expr.IntegerLiteral(numBuildCols));
+    generatedCode.add(new Assign(buildTable, buildTableCall));
+    Expr.Call batchCall =
+        new Expr.Call(
+            "bodo.libs.stream_groupby.groupby_build_consume_batch",
+            List.of(groupbyStateVar, buildTable, batchExitCond));
+    generatedCode.add(new Op.Stmt(batchCall));
+    // Finalize and add the batch pipeline.
+    generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
+
+    // Create a new pipeline
+    Variable newFlag = genGenericTempVar();
+    generatedCode.startStreamingPipelineFrame(newFlag);
+    StreamingPipelineFrame outputPipeline = generatedCode.getCurrentStreamingPipeline();
+    // Add the output side
+    Variable outTable = genTableVar();
+    Expr.Call outputCall =
+        new Expr.Call(
+            "bodo.libs.stream_groupby.groupby_produce_output_batch",
+            List.of(groupbyStateVar)
+        );
+    generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
+    // Generate an index.
+    Variable indexVar = genIndexVar();
+    Expr.Call lenCall = new Expr.Call("len", List.of(outTable));
+    Expr.IntegerLiteral zero = new IntegerLiteral(0);
+    Expr.IntegerLiteral one = new IntegerLiteral(1);
+    Expr.Call indexCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_index_ext.init_range_index",
+            List.of(zero, lenCall, one, Expr.None.INSTANCE));
+    generatedCode.add(new Op.Assign(indexVar, indexCall));
+    // Generate a DataFrame
+    Variable outDf = genDfVar();
+    Expr.Tuple tableTuple = new Expr.Tuple(List.of(outTable));
+    // Generate the column names global
+    List<Expr.StringLiteral> colNamesLiteral =
+        stringsToStringLiterals(node.getRowType().getFieldNames());
+    Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
+    Variable colNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
+    Expr.Call initDfCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            List.of(tableTuple, indexVar, colNamesMeta));
+    generatedCode.add(new Op.Assign(outDf, initDfCall));
+
+    // Append the code to delete the state
+    Op.Stmt deleteState =
+        new Op.Stmt(
+            new Expr.Call("bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
+    outputPipeline.addTermination(deleteState);
+    // Add the DF to the stack
+    this.varGenStack.push(outDf);
   }
 
   /**
