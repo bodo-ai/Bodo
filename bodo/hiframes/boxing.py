@@ -346,7 +346,6 @@ _one_to_one_type_to_enum_map = {
     IntDtype(types.uint64): SeriesDtypeEnum.PD_nullable_UInt64.value,
     FloatDtype(types.float32): SeriesDtypeEnum.PD_nullable_Float32.value,
     FloatDtype(types.float64): SeriesDtypeEnum.PD_nullable_Float64.value,
-    TimeType: SeriesDtypeEnum.Time.value,
     bytes_type: SeriesDtypeEnum.BINARY.value,
     string_type: SeriesDtypeEnum.STRING.value,
     bodo.bool_: SeriesDtypeEnum.Bool.value,
