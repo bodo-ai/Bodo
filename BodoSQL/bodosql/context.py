@@ -1111,6 +1111,7 @@ class BodoSQLContext:
                 planner_type,
                 verbose_level,
                 bodo.bodosql_streaming_batch_size,
+                bodo.enable_groupby_streaming,
             )
         generator = RelationalAlgebraGeneratorClass(
             self.schema,
@@ -1118,6 +1119,7 @@ class BodoSQLContext:
             planner_type,
             verbose_level,
             bodo.bodosql_streaming_batch_size,
+            bodo.enable_groupby_streaming,
         )
         return generator
 

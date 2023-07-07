@@ -13,15 +13,18 @@ import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 import static com.bodosql.calcite.application.Utils.Utils.renameColumns;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Op;
 import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
 
 /**
@@ -53,6 +56,72 @@ public class AggCodeGen {
   // tuple
   // of arguments
   static HashMap<String, String> equivalentExtendedNamedAggAggregates;
+
+  // !!! IMPORTANT: this is supposed to match the positions in
+  // Bodo_FTypes::FTypeEnum in _groupby_ftypes.h
+  // TODO: [BSE-711] Remove this and refactor init_groupby_state to accept strings
+  static List<String> supportedAggFuncs =
+      Arrays.asList(
+          "no_op",  // needed to ensure that 0 value isn't matched with any function
+          "ngroup",
+          "head",
+          "transform",
+          "size",
+          "shift",
+          "sum",
+          "count",
+          "nunique",
+          "median",
+          "cumsum",
+          "cumprod",
+          "cummin",
+          "cummax",
+          "mean",
+          "min",
+          "max",
+          "prod",
+          "first",
+          "last",
+          "idxmin",
+          "idxmax",
+          "var_pop",
+          "std_pop",
+          "var",
+          "std",
+          "kurtosis",
+          "skew",
+          "boolor_agg",
+          "booland_agg",
+          "boolxor_agg",
+          "bitor_agg",
+          "bitand_agg",
+          "bitxor_agg",
+          "count_if",
+          "listagg",
+          "udf",
+          "gen_udf",
+          "window",
+          "row_number",
+          "min_row_number_filter",
+          "rank",
+          "dense_rank",
+          "percent_rank",
+          "cume_dist",
+          "ntile",
+          "conditional_true_event",
+          "conditional_change_event",
+          "num_funcs",
+          "mean_eval",
+          "var_pop_eval",
+          "std_pop_eval",
+          "var_eval",
+          "std_eval",
+          "kurt_eval",
+          "skew_eval",
+          "boolxor_eval",
+          "idxmin_na_first",
+          "idxmax_na_first",
+          "idx_n_columns");
 
   static {
     equivalentPandasMethodMap = new HashMap<>();
@@ -638,5 +707,86 @@ public class AggCodeGen {
     // in
     // faster runtime performance.
     return new Expr.Raw(concatString.append("], ignore_index=True)").toString());
+  }
+
+  /**
+   * Generate a list that contains the indices of the key columns used for aggregate.
+   *
+   * @param groupSet The join equality information.
+   * @param visitor The visitor used for lowering global variables.
+   * @return A variables that contains the selected indices.
+   */
+  public static Variable getStreamingGroupbyKeyIndices(
+      ImmutableBitSet groupSet, PandasCodeGenVisitor visitor) {
+    List<Expr.IntegerLiteral> indices = new ArrayList<>();
+    for (int i = 0; i < groupSet.size(); i++) {
+      if (groupSet.get(i))
+        indices.add(new Expr.IntegerLiteral(i));
+    }
+    return visitor.lowerAsMetaType(new Expr.Tuple(indices));
+  }
+
+  /**
+   * Generate two lists of integers, the first one is the offset list of each aggregate call,
+   * the second one is the list of indices of all aggregate calls.
+   *
+   * @param aggCalls The list of aggregate calls.
+   * @param visitor The visitor used for lowering global variables.
+   * @return A pair of variables the contains these two lists.
+   */
+  public static Pair<Variable, Variable> getStreamingGroupbyOffsetAndCols(
+      List<AggregateCall> aggCalls, PandasCodeGenVisitor visitor) {
+    List<Expr.IntegerLiteral> offsets = new ArrayList<>();
+    offsets.add(new Expr.IntegerLiteral(0));
+    List<Expr.IntegerLiteral> cols = new ArrayList<>();
+    int length = 0;
+    for (int i = 0; i < aggCalls.size(); i++) {
+      List<Integer> argList = aggCalls.get(i).getArgList();
+      for (int j = 0; j < argList.size(); j++) {
+        cols.add(new Expr.IntegerLiteral(argList.get(j)));
+      }
+      length += argList.size();
+      offsets.add(new Expr.IntegerLiteral(length));
+    }
+    Variable offsetVar = visitor.lowerAsMetaType(new Expr.Tuple(offsets));
+    Variable colsVar = visitor.lowerAsMetaType(new Expr.Tuple(cols));
+    return new Pair<>(offsetVar, colsVar);
+  }
+
+  /**
+   * Generate a list of integer that represents the aggregate function based on
+   * the order in Bodo_FTypes::FTypeEnum in _groupby_ftypes.h
+   *
+   * @param aggCalls The list of aggregate calls.
+   * @param visitor The visitor used for lowering global variables.
+   * @return A variable that contains this integer list
+   */
+  public static Variable getStreamingGroupbyFtypes(
+      List<AggregateCall> aggCalls, PandasCodeGenVisitor visitor) {
+    List<Expr.IntegerLiteral> ftypes = new ArrayList<>();
+    for (int i = 0; i < aggCalls.size(); i++) {
+      SqlKind kind = aggCalls.get(i).getAggregation().getKind();
+      String name = aggCalls.get(i).getAggregation().getName();
+      if (equivalentPandasMethodMap.containsKey(kind)) {
+        name = equivalentPandasMethodMap.get(kind);
+      } else if (equivalentNumpyFuncMap.containsKey(kind)) {
+        name = equivalentNumpyFuncMap.get(kind);
+      } else if (equivalentPandasNameMethodMap.containsKey(name)) {
+        name = equivalentPandasNameMethodMap.get(name);
+      } else if (equivalentNumpyFuncNameMap.containsKey(name)) {
+        name = equivalentNumpyFuncNameMap.get(name);
+      } else if (equivalentHelperFnMap.containsKey(name)) {
+        name = equivalentHelperFnMap.get(name);
+      } else if (equivalentExtendedNamedAggAggregates.containsKey(name)) {
+        name = equivalentExtendedNamedAggAggregates.get(name);
+      } else {
+        name = name.toLowerCase();
+      }
+      int index = supportedAggFuncs.indexOf(name);
+      // assert index != -1 : "Unsupported function: " + aggCalls.get(i).getAggregation().getName();
+      // TODO: [BSE-714] Support ANY_VALUE and SINGLE_VALUE in streaming and add this assert back
+      ftypes.add(new Expr.IntegerLiteral(index));
+    }
+    return visitor.lowerAsMetaType(new Expr.Tuple(ftypes));
   }
 }

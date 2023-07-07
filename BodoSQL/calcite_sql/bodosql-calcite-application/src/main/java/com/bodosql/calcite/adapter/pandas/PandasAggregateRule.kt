@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.pandas
 
+import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
@@ -42,8 +43,21 @@ class PandasAggregateRule private constructor(config: Config) : ConverterRule(co
             return null;
         }
 
-        val traitSet = rel.cluster.traitSet().replace(PandasRel.CONVENTION).replace(BatchingProperty.SINGLE_BATCH)
-        return PandasAggregate(rel.cluster, traitSet, convert(agg.input, traitSet.replace(BatchingProperty.SINGLE_BATCH)),
+        val streamingTrait = getStreamingTrait()
+        val traitSet = rel.cluster.traitSet().replace(PandasRel.CONVENTION).replace(streamingTrait)
+        return PandasAggregate(rel.cluster, traitSet, convert(agg.input, traitSet.replace(streamingTrait)),
             agg.groupSet, agg.groupSets, agg.aggCallList)
+    }
+
+    /**
+     * Determine the streaming Trait for a newly created Groupby.
+     *
+     * TODO: restrict this to the operations that are actually supported.
+     * e.g.: require a groupby (not just select MAX(A) from table)
+     * don't support filters (e.g. the paths that would require groupby.apply)
+     */
+    fun getStreamingTrait(): BatchingProperty {
+        return if (RelationalAlgebraGenerator.enableGroupbyStreaming) BatchingProperty.STREAMING
+        else BatchingProperty.SINGLE_BATCH
     }
 }
