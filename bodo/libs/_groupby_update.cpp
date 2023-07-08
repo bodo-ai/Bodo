@@ -663,6 +663,9 @@ void var_combine(const std::shared_ptr<array_info>& count_col_in,
         // will have the same null bit value so just check 1.
         if (count_col_in->get_null_bit(i)) {
             int64_t group_num = grp_info.row_to_group[i];
+            if (group_num == -1) {
+                continue;
+            }
             uint64_t& count_a = getv<uint64_t>(count_col_out, group_num);
             uint64_t& count_b = getv<uint64_t>(count_col_in, i);
             // TODO: Can I delete this comment + condition
@@ -701,6 +704,9 @@ void boolxor_combine(const std::shared_ptr<array_info>& one_col_in,
     for (size_t i = 0; i < one_col_in->length; i++) {
         if (one_col_in->get_null_bit(i)) {
             int64_t group_num = grp_info.row_to_group[i];
+            if (group_num == -1) {
+                continue;
+            }
 
             // Fetch the input data
             bool one_in = GetBit((uint8_t*)one_col_in->data1(), i);
@@ -735,6 +741,10 @@ void skew_combine(const std::shared_ptr<array_info>& count_col_in,
     for (size_t i = 0; i < count_col_in->length; i++) {
         if (count_col_in->get_null_bit(i)) {
             int64_t group_num = grp_info.row_to_group[i];
+            if (group_num == -1) {
+                continue;
+            }
+
             uint64_t& count_a = getv<uint64_t>(count_col_out, group_num);
             uint64_t& count_b = getv<uint64_t>(count_col_in, i);
             if (count_b == 0) {
@@ -775,6 +785,10 @@ void kurt_combine(const std::shared_ptr<array_info>& count_col_in,
     for (size_t i = 0; i < count_col_in->length; i++) {
         if (count_col_in->get_null_bit(i)) {
             int64_t group_num = grp_info.row_to_group[i];
+            if (group_num == -1) {
+                continue;
+            }
+
             uint64_t& count_a = getv<uint64_t>(count_col_out, group_num);
             uint64_t& count_b = getv<uint64_t>(count_col_in, i);
             if (count_b == 0) {

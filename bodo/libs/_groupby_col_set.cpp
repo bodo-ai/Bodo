@@ -330,7 +330,7 @@ void VarStdColSet::alloc_update_columns(
         aggfunc_output_initialize(col, this->ftype,
                                   use_sql_rules);  // zero initialize
         out_cols.push_back(col);
-        this->update_cols.push_back(col);
+        this->out_col = col;
     }
     std::shared_ptr<array_info> count_col =
         alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
@@ -356,17 +356,10 @@ void VarStdColSet::alloc_update_columns(
 }
 
 void VarStdColSet::update(const std::vector<grouping_info>& grp_infos) {
-    if (!this->combine_step) {
-        std::vector<std::shared_ptr<array_info>> aux_cols = {
-            this->update_cols[1], this->update_cols[2], this->update_cols[3]};
-        do_apply_to_column(this->in_col, this->update_cols[1], aux_cols,
-                           grp_infos[0], this->ftype);
-    } else {
-        std::vector<std::shared_ptr<array_info>> aux_cols = {
-            this->update_cols[0], this->update_cols[1], this->update_cols[2]};
-        do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
-                           grp_infos[0], this->ftype);
-    }
+    std::vector<std::shared_ptr<array_info>> aux_cols = {
+        this->update_cols[0], this->update_cols[1], this->update_cols[2]};
+    do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
+                       grp_infos[0], this->ftype);
 }
 
 void VarStdColSet::alloc_combine_columns(
@@ -378,8 +371,8 @@ void VarStdColSet::alloc_combine_columns(
     // Initialize as ftype to match nullable behavior
     aggfunc_output_initialize(col, this->ftype,
                               use_sql_rules);  // zero initialize
+    this->out_col = col;
     out_cols.push_back(col);
-    this->combine_cols.push_back(col);
     BasicColSet::alloc_combine_columns(num_groups, out_cols);
 }
 
@@ -388,9 +381,9 @@ void VarStdColSet::combine(const grouping_info& grp_info,
     const std::shared_ptr<array_info>& count_col_in = this->update_cols[0];
     const std::shared_ptr<array_info>& mean_col_in = this->update_cols[1];
     const std::shared_ptr<array_info>& m2_col_in = this->update_cols[2];
-    const std::shared_ptr<array_info>& count_col_out = this->combine_cols[1];
-    const std::shared_ptr<array_info>& mean_col_out = this->combine_cols[2];
-    const std::shared_ptr<array_info>& m2_col_out = this->combine_cols[3];
+    const std::shared_ptr<array_info>& count_col_out = this->combine_cols[0];
+    const std::shared_ptr<array_info>& mean_col_out = this->combine_cols[1];
+    const std::shared_ptr<array_info>& m2_col_out = this->combine_cols[2];
     aggfunc_output_initialize(count_col_out, Bodo_FTypes::count, use_sql_rules,
                               init_start_row);
     aggfunc_output_initialize(mean_col_out, Bodo_FTypes::count, use_sql_rules,
@@ -410,29 +403,57 @@ void VarStdColSet::eval(const grouping_info& grp_info) {
     }
 
     std::vector<std::shared_ptr<array_info>> aux_cols = {
-        mycols->at(1), mycols->at(2), mycols->at(3)};
+        mycols->at(0), mycols->at(1), mycols->at(2)};
+
+    // allocate output if not done already (streaming groupby doesn't call
+    // alloc_combine_columns)
+    if (this->out_col == nullptr) {
+        this->out_col = alloc_array(combine_cols[0]->length, 1, 1,
+                                    bodo_array_type::NULLABLE_INT_BOOL,
+                                    Bodo_CTypes::FLOAT64, 0, 0);
+        // Initialize as ftype to match nullable behavior
+        aggfunc_output_initialize(this->out_col, this->ftype,
+                                  use_sql_rules);  // zero initialize
+    }
+
     switch (this->ftype) {
         case Bodo_FTypes::var_pop: {
-            do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+            do_apply_to_column(this->out_col, this->out_col, aux_cols, grp_info,
                                Bodo_FTypes::var_pop_eval);
             break;
         }
         case Bodo_FTypes::std_pop: {
-            do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+            do_apply_to_column(this->out_col, this->out_col, aux_cols, grp_info,
                                Bodo_FTypes::std_pop_eval);
             break;
         }
         case Bodo_FTypes::var: {
-            do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+            do_apply_to_column(this->out_col, this->out_col, aux_cols, grp_info,
                                Bodo_FTypes::var_eval);
             break;
         }
         case Bodo_FTypes::std: {
-            do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
+            do_apply_to_column(this->out_col, this->out_col, aux_cols, grp_info,
                                Bodo_FTypes::std_eval);
             break;
         }
     }
+}
+
+std::tuple<std::vector<bodo_array_type::arr_type_enum>,
+           std::vector<Bodo_CTypes::CTypeEnum>>
+VarStdColSet::getUpdateColumnTypes(
+    const std::vector<bodo_array_type::arr_type_enum>& in_arr_types,
+    const std::vector<Bodo_CTypes::CTypeEnum>& in_dtypes) {
+    // var/std's update columns are always uint64 for count and float64 for
+    // mean and m2 data. See VarStdColSet::alloc_update_columns()
+    return std::tuple(
+        std::vector<bodo_array_type::arr_type_enum>{
+            bodo_array_type::NULLABLE_INT_BOOL,
+            bodo_array_type::NULLABLE_INT_BOOL,
+            bodo_array_type::NULLABLE_INT_BOOL},
+        std::vector<Bodo_CTypes::CTypeEnum>{
+            Bodo_CTypes::UINT64, Bodo_CTypes::FLOAT64, Bodo_CTypes::FLOAT64});
 }
 
 // ############################## Skew ##############################

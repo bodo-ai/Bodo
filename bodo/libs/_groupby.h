@@ -23,6 +23,8 @@
    needed.
  */
 struct grouping_info {
+    // NOTE: row_to_group[i_row] == -1 means that i_row should be ignored (e.g.
+    // due to null keys)
     bodo::vector<int64_t> row_to_group;
     bodo::vector<int64_t> group_to_first_row;
     bodo::vector<int64_t> next_row_in_group;
