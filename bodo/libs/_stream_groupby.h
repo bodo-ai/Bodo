@@ -3,6 +3,7 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
+#include "_chunked_table_builder.h"
 #include "_groupby.h"
 #include "_groupby_col_set.h"
 #include "_groupby_ftypes.h"
@@ -52,6 +53,7 @@ class GroupbyState {
    public:
     const uint64_t n_keys;
     bool parallel;
+    const int64_t output_batch_size;
 
     std::vector<std::shared_ptr<BasicColSet>> col_sets;
 
@@ -99,16 +101,20 @@ class GroupbyState {
     bool accumulate_before_update = false;
     bool req_extended_group_info = false;
 
-    // TODO[BSE-573]: use proper chunked output buffer
-    std::shared_ptr<table_info> out_table = nullptr;
+    // Output buffer
+    // This will be lazily initialized during the end of
+    // the build step to simplify specifying the output column types.
+    // TODO(njriasan): Move to initialization information.
+    std::shared_ptr<ChunkedTableBuilder> output_buffer = nullptr;
 
     GroupbyState(std::vector<int8_t> in_arr_c_types,
                  std::vector<int8_t> in_arr_array_types,
                  std::vector<int32_t> ftypes,
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
-                 bool parallel_)
+                 int64_t output_batch_size_, bool parallel_)
         : n_keys(n_keys_),
+          output_batch_size(output_batch_size_),
           f_in_offsets(std::move(f_in_offsets_)),
           f_in_cols(std::move(f_in_cols_)),
           parallel(parallel_),
@@ -233,5 +239,17 @@ class GroupbyState {
             TableBuildBuffer(build_arr_c_types, build_arr_array_types,
                              std::vector<std::shared_ptr<DictionaryBuilder>>(
                                  build_arr_c_types.size(), nullptr));
+    }
+
+    void InitOutputBuffer(const std::shared_ptr<table_info>& dummy_table) {
+        auto [arr_c_types, arr_array_types] =
+            get_dtypes_arr_types_from_table(dummy_table);
+        // TODO[BSE-566]: Support dict builders
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders(
+            dummy_table->columns.size(), nullptr);
+        this->output_buffer = std::make_shared<ChunkedTableBuilder>(
+            arr_c_types, arr_array_types, dict_builders,
+            /*chunk_size*/ this->output_batch_size,
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
     }
 };

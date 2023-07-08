@@ -332,6 +332,9 @@ def _init_groupby_state(
             parallel,
         ) = args
         n_keys = context.get_constant(types.uint64, output_type.n_keys)
+        output_batch_size = context.get_constant(
+            types.int64, bodo.bodosql_streaming_batch_size
+        )
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -342,6 +345,7 @@ def _init_groupby_state(
                 lir.IntType(32).as_pointer(),
                 lir.IntType(32).as_pointer(),
                 lir.IntType(32),
+                lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(1),
             ],
@@ -358,6 +362,7 @@ def _init_groupby_state(
             f_in_cols,
             n_funcs,
             n_keys,
+            output_batch_size,
             parallel,
         )
         ret = builder.call(fn_tp, input_args)
