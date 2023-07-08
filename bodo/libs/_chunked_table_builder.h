@@ -9,6 +9,9 @@
 // Keep in sync with value in
 // test_stream_join.py::test_long_strings_chunked_table_builder
 #define CHUNKED_TABLE_DEFAULT_STRING_PREALLOCATION 32LL
+// Keep in sync with value in
+// test_stream_join.py::test_long_strings_chunked_table_builder
+#define DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES 2
 
 /**
  * @brief Array Builder for Chunked Table Builder.
@@ -363,7 +366,8 @@ struct ChunkedTableArrayBuilder {
                           const std::span<const int64_t> idxs, size_t idx_start,
                           size_t idx_length) {
         // Copy the offsets
-        offset_t* curr_offsets = (offset_t*)this->data_array->data2() + this->size;
+        offset_t* curr_offsets =
+            (offset_t*)this->data_array->data2() + this->size;
         offset_t* in_offsets = (offset_t*)in_arr->data2();
         for (size_t i = 0; i < idx_length; i++) {
             int64_t row_idx = idxs[i + idx_start];

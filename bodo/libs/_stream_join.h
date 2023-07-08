@@ -9,10 +9,6 @@
 
 using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
 
-// Keep in sync with value in
-// test_stream_join.py::test_long_strings_chunked_table_builder
-#define DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES 2
-
 class JoinPartition;
 struct HashHashJoinTable {
     /**

@@ -385,8 +385,11 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
         for (std::shared_ptr<BasicColSet> col_set : groupby_state->col_sets) {
             col_set->addOutputColumns(out_table->columns);
         }
-        // TODO[BSE-573]: use proper chunked output buffer
-        groupby_state->out_table = out_table;
+        // TODO(njriasan): Move eval computation directly into the output
+        // buffer.
+        groupby_state->InitOutputBuffer(out_table);
+        groupby_state->output_buffer->AppendBatch(out_table);
+        groupby_state->output_buffer->Finalize();
     }
 
     groupby_state->build_iter++;
@@ -466,8 +469,11 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     if (is_last) {
         groupby_state->local_table_buffer.data_table->num_keys =
             groupby_state->n_keys;
-        groupby_state->out_table = get_update_table(
+        std::shared_ptr<table_info> output_table = get_update_table(
             groupby_state, groupby_state->local_table_buffer.data_table);
+        groupby_state->InitOutputBuffer(output_table);
+        groupby_state->output_buffer->AppendBatch(output_table);
+        groupby_state->output_buffer->Finalize();
     }
 
     groupby_state->build_iter++;
@@ -482,9 +488,14 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
  */
 std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
     GroupbyState* groupby_state) {
-    // TODO[BSE-573]: use proper chunked output buffer
-    bool is_last = true;
-    return std::tuple(groupby_state->out_table, is_last);
+    // TODO[BSE-645]: Prune unused columns at this point.
+    // Note: We always finalize the active chunk the build step so we don't
+    // need to finalize here.
+    auto [out_table, chunk_size] = groupby_state->output_buffer->PopChunk();
+    // TODO[BSE-645]: Include total_rows to handle the dead key case
+    // *total_rows = chunk_size;
+    bool is_last = groupby_state->output_buffer->total_remaining == 0;
+    return std::tuple(out_table, is_last);
 }
 
 /**
@@ -542,14 +553,13 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
  * (bodo_array_type ints)
  * @param n_build_arrs number of build table columns
  * @param n_keys number of groupby keys
+ * @param output_batch_size Batch size for reading output.
  * @return GroupbyState* groupby state to return to Python
  */
-GroupbyState* groupby_state_init_py_entry(int8_t* build_arr_c_types,
-                                          int8_t* build_arr_array_types,
-                                          int n_build_arrs, int32_t* ftypes,
-                                          int32_t* f_in_offsets,
-                                          int32_t* f_in_cols, int n_funcs,
-                                          uint64_t n_keys, bool parallel) {
+GroupbyState* groupby_state_init_py_entry(
+    int8_t* build_arr_c_types, int8_t* build_arr_array_types, int n_build_arrs,
+    int32_t* ftypes, int32_t* f_in_offsets, int32_t* f_in_cols, int n_funcs,
+    uint64_t n_keys, int64_t output_batch_size, bool parallel) {
     return new GroupbyState(
         std::vector<int8_t>(build_arr_c_types,
                             build_arr_c_types + n_build_arrs),
@@ -560,7 +570,7 @@ GroupbyState* groupby_state_init_py_entry(int8_t* build_arr_c_types,
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),
 
-        n_keys, parallel);
+        n_keys, output_batch_size, parallel);
 }
 
 /**
