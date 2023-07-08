@@ -785,6 +785,20 @@ struct ChunkedTableBuilder {
     void FinalizeActiveChunk(bool shrink_to_fit = true);
 
     /**
+     * @brief Append a batch of data to the buffer
+     *
+     * @param in_table input table with the new rows
+     * @param append_rows bit vector indicating which rows to append
+     */
+    void AppendBatch(const std::shared_ptr<table_info>& in_table,
+                     const std::vector<bool>& append_rows);
+
+    void AppendBatch(const std::shared_ptr<table_info>& in_table);
+
+    void AppendBatch(const std::shared_ptr<table_info>& in_table,
+                     const std::span<const int64_t> idxs);
+
+    /**
      * @brief Similar to AppendRow, but specifically for
      * Join Output Buffer use case. In join computation, we collect
      * the row indices from the build and probe tables which need
