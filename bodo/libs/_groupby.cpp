@@ -149,6 +149,7 @@ class GroupbyPipeline {
                 req_extended_group_info = true;
                 nunique_count++;
             } else if (ftype == Bodo_FTypes::median ||
+                       ftype == Bodo_FTypes::mode ||
                        ftype == Bodo_FTypes::cumsum ||
                        ftype == Bodo_FTypes::cumprod ||
                        ftype == Bodo_FTypes::cummin ||

@@ -12,55 +12,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
-
-
-def nullable_float_arr_maker(L, to_null, to_nan):
-    """
-    Utility funciton for helping test cases to generate nullable floating
-    point arrays that contain both NULL and NaN. Takes in a list of numbers,
-    a list of indices that should be set to NULL, a list of indices that should
-    be set to NaN, and outputs the corresponding floating point array.
-
-    For example:
-    nullable_float_arr_maker(list(range(10)), [1, 5, 9], [2, 3, 7])
-
-    Outputs the following Series:
-    0     0.0
-    1    <NA>
-    2     NaN
-    3     NaN
-    4     4.0
-    5    <NA>
-    6     6.0
-    7     NaN
-    8     8.0
-    9    <NA>
-    dtype: Float64
-    """
-    S = _nullable_float_arr_maker(L, to_null, to_nan)
-    # Remove the bodo metadata. It improperly assigns
-    # 1D_Var to the series which interferes with the test
-    # functionality. Deleting the metadata sets it back to
-    # the default of REP distribution.
-    del S._bodo_meta
-    return S
-
-
-@bodo.jit(distributed=False)
-def _nullable_float_arr_maker(L, to_null, to_nan):
-    n = len(L)
-    data_arr = np.empty(n, np.float64)
-    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
-    A = bodo.libs.float_arr_ext.init_float_array(data_arr, nulls)
-    for i in range(len(L)):
-        if i in to_null:
-            bodo.libs.array_kernels.setna(A, i)
-        elif i in to_nan:
-            A[i] = np.nan
-        else:
-            A[i] = L[i]
-    return pd.Series(A)
+from bodo.tests.utils import check_func, nullable_float_arr_maker
 
 
 def uniform_distribution(n, seed):
@@ -151,126 +103,104 @@ def test_approx_percentile(data, memory_leak_check):
 
 @pytest.mark.parametrize(
     "use_default",
-    [
-        pytest.param(True, id="with_default"),
-        pytest.param(False, id="no_default")
-    ]
+    [pytest.param(True, id="with_default"), pytest.param(False, id="no_default")],
 )
 @pytest.mark.parametrize(
     "shift, answer",
     [
-        pytest.param(
-            -1,
-            [1, 1, 1, 2, 3, 4, 4, -1, -1],
-            id="negative"
-        ),
-        pytest.param(
-            2,
-            [-1, -1, -1, -1, 0, 1, 2, 2, 3],
-            id="positive"
-        ),
-        pytest.param(
-            0,
-            [0, None, None, 1, 2, 3, None, 4, None],
-            id="zero"
-        ),
-    ]
+        pytest.param(-1, [1, 1, 1, 2, 3, 4, 4, -1, -1], id="negative"),
+        pytest.param(2, [-1, -1, -1, -1, 0, 1, 2, 2, 3], id="positive"),
+        pytest.param(0, [0, None, None, 1, 2, 3, None, 4, None], id="zero"),
+    ],
 )
 @pytest.mark.parametrize(
     "values, dtype, default",
     [
+        pytest.param([0, 1, 2, 3, 4], pd.Int32Dtype(), -1, id="int32"),
         pytest.param(
-            [0, 1, 2, 3, 4],
-            pd.Int32Dtype(),
-            -1,
-            id="int32"
+            [10.0, 3.1415926, -64.0, 125.0, 2.718281828], np.float64, 0.0, id="float64"
         ),
         pytest.param(
-            [10.0, 3.1415926, -64.0, 125.0, 2.718281828],
-            np.float64,
-            0.0,
-            id="float64"
-        ),
-        pytest.param(
-            ["alpha", "beta", "gamma", "delta", "epsilon"],
-            None,
-            "",
-            id="string"
+            ["alpha", "beta", "gamma", "delta", "epsilon"], None, "", id="string"
         ),
         pytest.param(
             [b"romeo", b"juliet", b"othello", b"hamlet", b"viola"],
             None,
             b"",
-            id="binary"
+            id="binary",
         ),
         pytest.param(
-            [True, False, True, False, True],
-            pd.BooleanDtype(),
-            True,
-            id="boolean"
+            [True, False, True, False, True], pd.BooleanDtype(), True, id="boolean"
         ),
         pytest.param(
-            [datetime.date.fromordinal(i) for i in 
-            [736879, 737729, 733133, 680082, 688783]],
+            [
+                datetime.date.fromordinal(i)
+                for i in [736879, 737729, 733133, 680082, 688783]
+            ],
             None,
             datetime.date(1999, 12, 31),
-            id="date"
+            id="date",
         ),
         pytest.param(
-            [bodo.Time(second=i) for i in 
-            [45000, 86399, 21600, 1, 1020]],
+            [bodo.Time(second=i) for i in [45000, 86399, 21600, 1, 1020]],
             None,
             bodo.Time(0, 0, 0),
-            id="time"
+            id="time",
         ),
         pytest.param(
-            [pd.Timestamp("2023-1-1") + pd.Timedelta(hours=i) for i in 
-            [0, -10000, 20000, -30000, 40000]],
+            [
+                pd.Timestamp("2023-1-1") + pd.Timedelta(hours=i)
+                for i in [0, -10000, 20000, -30000, 40000]
+            ],
             None,
             pd.Timestamp("1999-1-1"),
-            id="naive_timestamp"
+            id="naive_timestamp",
         ),
         pytest.param(
-            [pd.Timestamp("2023-1-1", tz="US/Pacific") + pd.Timedelta(hours=i) for i in 
-            [0, 10000, -20000, 30000, -40000]],
+            [
+                pd.Timestamp("2023-1-1", tz="US/Pacific") + pd.Timedelta(hours=i)
+                for i in [0, 10000, -20000, 30000, -40000]
+            ],
             None,
             pd.Timestamp("1999-1-1", tz="US/Pacific"),
-            id="tz_timestamp"
+            id="tz_timestamp",
         ),
-    ]
+    ],
 )
-def test_null_ignoring_shift(values, dtype, shift, default, use_default, answer, memory_leak_check):
+def test_null_ignoring_shift(
+    values, dtype, shift, default, use_default, answer, memory_leak_check
+):
     """Tests null_ignoring_shift on multiple types with various shifts
-       and default values via the following pattern:
-       
-        - Values: a list of five distinct values of the type being tested
-        - Dtype: the datatype to be used when converting to a Series
-        - Default: the default value to provide to the kernel
-        - Shift: how much to shif tby
-        - Answer: a list of length 9 that provides an output pattern corresponding
-          to the input pattern shifted by the amount
+    and default values via the following pattern:
 
-        The pattern (defined below) is [0, None, None, 1, 2, 3, None, 4, None].
-        Suppose our values were ["a", "b", "c", "d", "e"]. Then this would
-        construct the following list:
+     - Values: a list of five distinct values of the type being tested
+     - Dtype: the datatype to be used when converting to a Series
+     - Default: the default value to provide to the kernel
+     - Shift: how much to shif tby
+     - Answer: a list of length 9 that provides an output pattern corresponding
+       to the input pattern shifted by the amount
 
-            ["a", None, None, "b", "c", "d", None, "e", None]
+     The pattern (defined below) is [0, None, None, 1, 2, 3, None, 4, None].
+     Suppose our values were ["a", "b", "c", "d", "e"]. Then this would
+     construct the following list:
 
-        If we shifted by -1 with a default of "" we would get the following:
+         ["a", None, None, "b", "c", "d", None, "e", None]
 
-            ["b", "b", "b", "c", "d", "e", "e", "", ""]
+     If we shifted by -1 with a default of "" we would get the following:
 
-        So the output pattern to replicate this would be as follows:
+         ["b", "b", "b", "c", "d", "e", "e", "", ""]
 
-            [1, 1, 1, 2, 3, 4, 4, -1, -1]
+     So the output pattern to replicate this would be as follows:
 
-        Where the numbers 0 to 4 represent which value from the original list
-        of 5 values is used, and -1 indicates using the default.
+         [1, 1, 1, 2, 3, 4, 4, -1, -1]
 
-        Note: if use_default is False, then None is used instead of the default
-        value provided
+     Where the numbers 0 to 4 represent which value from the original list
+     of 5 values is used, and -1 indicates using the default.
+
+     Note: if use_default is False, then None is used instead of the default
+     value provided
     """
-    
+
     pattern_list = [0, None, None, 1, 2, 3, None, 4, None]
     if not use_default:
         default = None
@@ -288,11 +218,14 @@ def test_null_ignoring_shift(values, dtype, shift, default, use_default, answer,
             output_list.append(default)
         else:
             output_list.append(values[answer[i]])
-    
-    
+
     def impl(S, shift_amt, default_value):
-        return pd.Series(bodo.libs.bodosql_array_kernels.null_ignoring_shift(S, shift_amt, default_value))
-    
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.null_ignoring_shift(
+                S, shift_amt, default_value
+            )
+        )
+
     check_func(
         impl,
         (pd.Series(input_list, dtype=dtype), shift, default),
@@ -478,7 +411,9 @@ def window_refsol(S, lower, upper, func, use_nans=False):
                 result = len(elems)
             elif func == "count(*)":
                 # Does not filter nulls.
-                result = np.clip(i + upper + 1, 0, len(S)) - np.clip(i + lower, 0, len(S))
+                result = np.clip(i + upper + 1, 0, len(S)) - np.clip(
+                    i + lower, 0, len(S)
+                )
             elif func == "count_if":
                 # Summing over booleans will give us the count of true values.
                 result = elems.sum()
@@ -501,6 +436,7 @@ def window_refsol(S, lower, upper, func, use_nans=False):
                     else len(list(filter(lambda x: bool(x), elems))) == 1
                 )
             elif func == "bitor_agg":
+
                 def impl(elems):
                     result = 0
                     for e in elems:
@@ -508,8 +444,10 @@ def window_refsol(S, lower, upper, func, use_nans=False):
                             continue
                         result |= np.int64(e)
                     return result
+
                 result = None if len(elems) == 0 else impl(elems)
             elif func == "bitand_agg":
+
                 def impl(elems):
                     result = np.int64(-1)
                     for e in elems:
@@ -517,8 +455,10 @@ def window_refsol(S, lower, upper, func, use_nans=False):
                             continue
                         result &= np.int64(e)
                     return result
+
                 result = None if len(elems) == 0 else impl(elems)
             elif func == "bitxor_agg":
+
                 def impl(elems):
                     result = 0
                     for e in elems:
@@ -526,6 +466,7 @@ def window_refsol(S, lower, upper, func, use_nans=False):
                             continue
                         result ^= np.int64(e)
                     return result
+
                 result = None if len(elems) == 0 else impl(elems)
             elif use_nans and ("nan" in map(str, elems)):
                 result = np.nan
@@ -976,9 +917,7 @@ def test_windowed_kernels_numeric(
         )
 
     def impl_skew(S, lower, upper):
-        return pd.Series(
-            bodo.libs.bodosql_array_kernels.windowed_skew(S, lower, upper)
-        )
+        return pd.Series(bodo.libs.bodosql_array_kernels.windowed_skew(S, lower, upper))
 
     def impl_kurtosis(S, lower, upper):
         return pd.Series(

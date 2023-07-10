@@ -7,9 +7,7 @@ from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
 
 from bodo import Time
-from bodo.tests.test_bodosql_array_kernels.test_bodosql_window_agg_kernels import (
-    nullable_float_arr_maker,
-)
+from bodo.tests.utils import nullable_float_arr_maker
 
 
 @pytest.mark.tz_aware

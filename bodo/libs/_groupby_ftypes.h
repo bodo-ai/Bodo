@@ -57,39 +57,40 @@ struct Bodo_FTypes {
         bitxor_agg = 33,
         count_if = 34,
         listagg = 35,
-        udf = 36,
-        gen_udf = 37,
-        window = 38,
-        row_number = 39,
-        min_row_number_filter = 40,
-        rank = 41,
-        dense_rank = 42,
-        percent_rank = 43,
-        cume_dist = 44,
-        ntile = 45,
-        conditional_true_event = 46,
-        conditional_change_event = 47,
-        num_funcs = 48,  // num_funcs is used to know how many functions up to
+        mode = 36,
+        udf = 37,
+        gen_udf = 38,
+        window = 39,
+        row_number = 40,
+        min_row_number_filter = 41,
+        rank = 42,
+        dense_rank = 43,
+        percent_rank = 44,
+        cume_dist = 45,
+        ntile = 46,
+        conditional_true_event = 47,
+        conditional_change_event = 48,
+        num_funcs = 49,  // num_funcs is used to know how many functions up to
                          // this point. Below this point are functions that are
                          // defined in the C++ code but not the Python enum.
-        mean_eval = 49,
-        var_pop_eval = 50,
-        std_pop_eval = 51,
-        var_eval = 52,
-        std_eval = 53,
-        kurt_eval = 54,
-        skew_eval = 55,
-        boolxor_eval = 56,
+        mean_eval = 50,
+        var_pop_eval = 51,
+        std_pop_eval = 52,
+        var_eval = 53,
+        std_eval = 54,
+        kurt_eval = 55,
+        skew_eval = 56,
+        boolxor_eval = 57,
         // These are internal operators used by groupby.window
         // when the orderby clause has na values first.
-        idxmin_na_first = 57,
-        idxmax_na_first = 58,
+        idxmin_na_first = 58,
+        idxmax_na_first = 59,
         // This is the operator for when we are generating one
         // of the 4 idx functions to operate over N columns. Each
         // column may have a different function so we cannot defineF
         // more explicit ftypes. This is used only in the min_row_number_filter
         // window function path.
-        idx_n_columns = 59,
+        idx_n_columns = 60,
     };
 };
 

@@ -2,6 +2,7 @@
 """
 Test correctness of SQL aggregation operations with groupby on BodoSQL
 """
+import datetime
 import string
 
 import numpy as np
@@ -1327,6 +1328,68 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
         return result
 
     answer = kurt_skew_refsol(agg_cols)
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "values, dtype",
+    [
+        pytest.param([0, 1, 2, 3], pd.Int32Dtype(), id="int32"),
+        pytest.param(
+            [b"alpha", b"beta", b"gamma", b"delta"],
+            None,
+            id="binary",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            [datetime.date(2023, i, 28 - i) for i in [1, 5, 7, 12]],
+            None,
+            id="date",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_mode(values, dtype, memory_leak_check):
+    """Tests MODE as a groupby aggregation on a subset of datatypes. The
+    full type tests are done in the Python tests.
+
+    Args:
+       values (list): Four distinct values from the input type that are
+       used to build the array. The data will have 4 groups, and each group
+       will use a subset of the scalars from this list of values.
+       dtype (int): Dtype to use when constructing the input column (data)
+       memory_leak_check (): Fixture, see `conftest.py`.
+    """
+    query = "SELECT K, MODE(V) FROM table1 GROUP BY K"
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "K": pd.Series(list("AAAABBBBBCCCCCCCDD")),
+                "V": pd.Series(
+                    [values[0], values[1], values[2], values[1]]
+                    + [None, values[3], values[0], values[0], values[2]]
+                    + [None, values[2], None, values[1], values[2], None, None]
+                    + [None, None],
+                    dtype=dtype,
+                ),
+            }
+        )
+    }
+
+    answer = pd.DataFrame(
+        {
+            0: list("ABCD"),
+            1: pd.Series([values[1], values[0], values[2], None], dtype=dtype),
+        }
+    )
 
     check_query(
         query,

@@ -1146,7 +1146,8 @@ inline bool non_null_at(array_info& arr, size_t idx) {
  *
  * Used for numpy arrays of datetime or timedelta, which have sentinels for NaT.
  *
- * This (and other helpers) needs to be changed when nullable datetime/timedelta arrays are implemented.
+ * This (and other helpers) needs to be changed when nullable datetime/timedelta
+ * arrays are implemented.
  *
  * @param[in] arr: Reference to array to check for nulls.
  * @param[in] idx: Index of element to check for nulls.
@@ -1197,7 +1198,8 @@ inline bool is_null_at(array_info& arr, size_t idx) {
  *
  * Used for numpy arrays of datetime or timedelta, which have sentinels for NaT.
  *
- * This (and other helpers) needs to be changed when nullable datetime/timedelta arrays are implemented.
+ * This (and other helpers) needs to be changed when nullable datetime/timedelta
+ * arrays are implemented.
  *
  * @param[in] arr: Reference to array to check for nulls.
  * @param[in] idx: Index of element to check for nulls.

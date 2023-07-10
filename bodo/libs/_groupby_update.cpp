@@ -7,6 +7,7 @@
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_hashing.h"
+#include "_shuffle.h"
 
 /**
  * The file contains the aggregate functions that are used

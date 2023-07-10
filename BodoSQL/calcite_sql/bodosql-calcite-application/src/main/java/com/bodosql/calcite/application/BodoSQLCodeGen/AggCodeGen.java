@@ -151,6 +151,7 @@ public class AggCodeGen {
 
     equivalentNumpyFuncNameMap.put("VARIANCE_POP", "np.var");
 
+    equivalentPandasNameMethodMap.put("MODE", "mode");
     equivalentPandasNameMethodMap.put("KURTOSIS", "kurtosis");
     equivalentPandasNameMethodMap.put("SKEW", "skew");
     equivalentHelperFnMap.put("BOOLOR_AGG", "boolor_agg");
