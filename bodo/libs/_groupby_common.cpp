@@ -55,7 +55,8 @@ void aggfunc_output_initialize_kernel(
                 ftype == Bodo_FTypes::var_pop ||
                 ftype == Bodo_FTypes::std_pop ||
                 ftype == Bodo_FTypes::kurtosis || ftype == Bodo_FTypes::skew ||
-                ftype == Bodo_FTypes::std || ftype == Bodo_FTypes::median) {
+                ftype == Bodo_FTypes::std || ftype == Bodo_FTypes::median ||
+                ftype == Bodo_FTypes::mode) {
                 // if input is all nulls, max, min, first, last, kurtosis, skew,
                 // boolor_agg, boolxor_agg, booland_agg, or bitor_agg, the
                 // output will be null. We null initialize median, mean, var,
@@ -312,6 +313,8 @@ void aggfunc_output_initialize_kernel(
                     Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
                     return;
             }
+        // MODE has the same numpy initialization rules as MAX
+        case Bodo_FTypes::mode:
         case Bodo_FTypes::max:
             switch (out_col->dtype) {
                 case Bodo_CTypes::_BOOL:
@@ -529,6 +532,11 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum array_type,
             }
             // otherwise, output type should be whatever the input is (dtype =
             // dtype)
+            break;
+        case Bodo_FTypes::mode:
+            // Keep the input dtype and array type
+            out_dtype = dtype;
+            out_array_type = array_type;
             break;
         case Bodo_FTypes::row_number:
         case Bodo_FTypes::rank:

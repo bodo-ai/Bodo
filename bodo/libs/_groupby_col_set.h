@@ -554,6 +554,23 @@ class MedianColSet : public BasicColSet {
 };
 
 /**
+ * @brief ColSet for Mode operations.
+ *
+ */
+class ModeColSet : public BasicColSet {
+   public:
+    ModeColSet(std::shared_ptr<array_info> in_col, bool _is_parallel,
+               bool use_sql_rules);
+
+    virtual ~ModeColSet();
+
+    void update(const std::vector<grouping_info>& grp_infos) override;
+
+   private:
+    bool is_parallel;
+};
+
+/**
  * @brief ColSet for Nunique operations.
  *
  */

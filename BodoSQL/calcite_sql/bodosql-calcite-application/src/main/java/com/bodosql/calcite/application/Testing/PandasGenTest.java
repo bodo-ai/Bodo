@@ -1,8 +1,5 @@
 package com.bodosql.calcite.application.Testing;
 
-import org.apache.calcite.plan.RelOptUtil;
-import org.apache.calcite.rel.RelRoot;
-
 import com.bodosql.calcite.adapter.pandas.PandasUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.schema.LocalSchemaImpl;
@@ -12,6 +9,8 @@ import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
 import com.bodosql.calcite.traits.BatchingProperty;
 import java.util.ArrayList;
+import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.rel.RelRoot;
 
 /** Class for locally testing codegen. */
 public class PandasGenTest {
@@ -119,7 +118,8 @@ public class PandasGenTest {
     System.out.println(generator.getLoweredGlobalVariables() + "\n");
   }
 
-  private static String getRelationalAlgebraString(RelationalAlgebraGenerator generator, String sql, boolean optimizePlan) {
+  private static String getRelationalAlgebraString(
+      RelationalAlgebraGenerator generator, String sql, boolean optimizePlan) {
     try {
       RelRoot root = generator.getRelationalAlgebra(sql, optimizePlan);
       return RelOptUtil.toString(PandasUtilKt.pandasProject(root));

@@ -2518,3 +2518,51 @@ def set_broadcast_join(broadcast: bool):
             del os.environ["BODO_BCAST_JOIN_THRESHOLD"]
         else:
             os.environ["BODO_BCAST_JOIN_THRESHOLD"] = old_threshold
+
+
+def nullable_float_arr_maker(L, to_null, to_nan):
+    """
+    Utility funciton for helping test cases to generate nullable floating
+    point arrays that contain both NULL and NaN. Takes in a list of numbers,
+    a list of indices that should be set to NULL, a list of indices that should
+    be set to NaN, and outputs the corresponding floating point array.
+
+    For example:
+    nullable_float_arr_maker(list(range(10)), [1, 5, 9], [2, 3, 7])
+
+    Outputs the following Series:
+    0     0.0
+    1    <NA>
+    2     NaN
+    3     NaN
+    4     4.0
+    5    <NA>
+    6     6.0
+    7     NaN
+    8     8.0
+    9    <NA>
+    dtype: Float64
+    """
+    S = _nullable_float_arr_maker(L, to_null, to_nan)
+    # Remove the bodo metadata. It improperly assigns
+    # 1D_Var to the series which interferes with the test
+    # functionality. Deleting the metadata sets it back to
+    # the default of REP distribution.
+    del S._bodo_meta
+    return S
+
+
+@bodo.jit(distributed=False)
+def _nullable_float_arr_maker(L, to_null, to_nan):
+    n = len(L)
+    data_arr = np.empty(n, np.float64)
+    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
+    A = bodo.libs.float_arr_ext.init_float_array(data_arr, nulls)
+    for i in range(len(L)):
+        if i in to_null:
+            bodo.libs.array_kernels.setna(A, i)
+        elif i in to_nan:
+            A[i] = np.nan
+        else:
+            A[i] = L[i]
+    return pd.Series(A)

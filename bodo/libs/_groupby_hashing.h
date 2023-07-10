@@ -279,4 +279,52 @@ struct KeyEqualNuniqueComputationString {
     offset_t* in_offsets;
 };
 
+/**
+ * Tools to define a custom hashing scheme for int128 if one does not already
+ * exist.
+ */
+template <typename T>
+concept Hashable = requires(T a) {
+    { std::hash<T>{}(a) } -> std::convertible_to<std::size_t>;
+};
+
+template <typename T>
+concept Int128NotHashable = !Hashable<T> && std::is_same_v<T, __int128_t>;
+
+/**
+ * Function to safely combine two hash outputs into another hash value.
+ * https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L337
+ *
+ * @param[in,out] h1: first input hash value, which is modified in place
+ * to be combined with the second input hash yet still have the properties
+ * of a hash function.
+ * @param[in] h2: second input hash value.
+ */
+inline void hash_combine(size_t& h, size_t k) {
+    const size_t m = 0xc6a4a7935bd1e995;
+    const int r = 47;
+    k *= m;
+    k ^= k >> r;
+    k *= m;
+    h ^= k;
+    h *= m;
+    // Prevent zeros from hashing to zero
+    h += 0xe6546b64;
+}
+
+namespace std {
+template <Int128NotHashable T>
+struct hash<T> {
+    uint32_t operator()(T var) const {
+        // Obtain the hash values of each of the halves of the
+        // 128 bit integer
+        size_t h1 = std::hash<int64_t>{}((int64_t)var);
+        size_t h2 = std::hash<int64_t>{}((int64_t)(var >> 64));
+        // Combine the hashes of the two halves
+        hash_combine(h1, h2);
+        return h1;
+    }
+};
+}  // namespace std
+
 #endif  // _GROUPBY_HASHING_H_INCLUDED

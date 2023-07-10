@@ -242,6 +242,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_groupby_eval.cpp",
     "bodo/libs/_groupby_ftypes.cpp",
     "bodo/libs/_groupby_groups.cpp",
+    "bodo/libs/_groupby_mode.cpp",
     "bodo/libs/_groupby_mpi_exscan.cpp",
     "bodo/libs/_groupby_update.cpp",
     "bodo/libs/_hash_join.cpp",
