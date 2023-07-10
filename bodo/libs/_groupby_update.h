@@ -90,6 +90,23 @@ void median_computation(std::shared_ptr<array_info> arr,
                         grouping_info const& grp_info, bool const& skipna,
                         bool const use_sql_rules);
 
+// MODE
+
+/**
+ * @brief The mode computation function. It uses the symbolic information to
+ * compute the mode results.
+ *
+ * @param[in] arr The input column on which we do the computation.
+ * @param[out] out_arr The output column.
+ * @param[in] grp_info: The grouping information.
+ * @param[in] is_parallel: Is the operation being done in parallel.
+ * @param[in] use_sql_rules: Should allocation use SQL rules.
+ */
+void mode_computation(std::shared_ptr<array_info> arr,
+                      std::shared_ptr<array_info> out_arr,
+                      const grouping_info& grp_info, const bool is_parallel,
+                      const bool use_sql_rules);
+
 // SHIFT
 
 /**

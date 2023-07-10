@@ -5,6 +5,7 @@
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
+#include "_groupby_mode.h"
 #include "_groupby_update.h"
 
 /**
@@ -1193,6 +1194,20 @@ void MedianColSet::update(const std::vector<grouping_info>& grp_infos) {
                        this->skipna, use_sql_rules);
 }
 
+// ############################## Mode ##############################
+
+ModeColSet::ModeColSet(std::shared_ptr<array_info> in_col, bool _is_parallel,
+                       bool use_sql_rules)
+    : BasicColSet(in_col, Bodo_FTypes::mode, false, use_sql_rules),
+      is_parallel(_is_parallel) {}
+
+ModeColSet::~ModeColSet() {}
+
+void ModeColSet::update(const std::vector<grouping_info>& grp_infos) {
+    aggfunc_output_initialize(update_cols[0], ftype, use_sql_rules);
+    mode_computation(this->in_col, this->update_cols[0], grp_infos[0]);
+}
+
 // ############################## NUnique ##############################
 
 NUniqueColSet::NUniqueColSet(std::shared_ptr<array_info> in_col, bool _dropna,
@@ -1478,6 +1493,9 @@ std::unique_ptr<BasicColSet> makeColSet(
             break;
         case Bodo_FTypes::median:
             colset = new MedianColSet(in_cols[0], skipna, use_sql_rules);
+            break;
+        case Bodo_FTypes::mode:
+            colset = new ModeColSet(in_cols[0], is_parallel, use_sql_rules);
             break;
         case Bodo_FTypes::nunique:
             colset =

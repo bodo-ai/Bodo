@@ -377,6 +377,8 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             None,
             f"For {func_name}, only columns of type integer, float, Decimal, or boolean type are allowed",
         )
+    elif func_name == "mode":
+        return arr_type, "ok"
     elif func_name in {"bitor_agg", "bitand_agg", "bitxor_agg"}:
         if isinstance(in_dtype, types.Integer):
             return to_nullable_type(dtype_to_array_type(in_dtype)), "ok"

@@ -281,6 +281,7 @@ supported_agg_funcs = [
     "bitxor_agg",
     "count_if",
     "listagg",
+    "mode",
     "udf",
     "gen_udf",
     "window",
@@ -402,6 +403,13 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.fname = func_name
         func.ncols_pre_shuffle = 5
         func.ncols_post_shuffle = 6
+        return func
+    elif func_name == "mode":
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.fname = func_name
+        func.ncols_pre_shuffle = 1
+        func.ncols_post_shuffle = 1
         return func
     elif func_name in {"boolxor_agg"}:
         func = pytypes.SimpleNamespace()
@@ -2005,7 +2013,7 @@ def gen_top_level_agg_func(
         w_args = []
         n_args = 0
         n_cols = 0
-        if func.ftype in {"median", "nunique", "ngroup", "listagg"}:
+        if func.ftype in {"median", "nunique", "ngroup", "listagg", "mode"}:
             # these operations require shuffle at the beginning, so a
             # local aggregation followed by combine is not necessary
             do_combine = False
