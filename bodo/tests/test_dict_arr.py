@@ -292,7 +292,7 @@ def test_cmp_opt(dict_arr_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_int_convert_opt(memory_leak_check):
-    """test optimizaton of integer conversion for dict array"""
+    """test optimization of integer conversion for dict array"""
 
     def impl(A):
         return pd.Series(A).astype("Int32")

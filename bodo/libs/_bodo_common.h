@@ -1078,6 +1078,7 @@ PyMODINIT_FUNC PyInit_csv_cpp(void);
 PyMODINIT_FUNC PyInit_json_cpp(void);
 PyMODINIT_FUNC PyInit_stream_join_cpp(void);
 PyMODINIT_FUNC PyInit_stream_groupby_cpp(void);
+PyMODINIT_FUNC PyInit_stream_dict_encoding_cpp(void);
 }  // extern "C"
 
 #endif /* BODO_COMMON_H_INCLUDED_ */
