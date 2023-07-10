@@ -160,19 +160,15 @@ def init_dict_arr(
         dict_arr.has_global_dictionary = glob_dict
         dict_arr.has_deduped_local_dictionary = unique_dict
         if generate_id:
-            fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64)])
-            fn_tp = cgutils.get_or_insert_function(
-                builder.module, fnty, name="generate_dict_id"
-            )
             # Fetch the length of the data.
             # TODO: Is this too much compilation?
             len_sig = signature(types.int64, sig.args[0])
             nitems = context.compile_internal(
                 builder, lambda a: len(a), len_sig, [data]
             )
-            id_args = [nitems]
-            new_dict_id = builder.call(fn_tp, id_args)
-            bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+            new_dict_id = generate_dict_id_codegen(
+                context, builder, signature(types.int64, types.int64), [nitems]
+            )
             dict_arr.dict_id = new_dict_id
         else:
             dict_arr.dict_id = dict_id
@@ -186,6 +182,36 @@ def init_dict_arr(
     ret_typ = DictionaryArrayType(data_t)
     sig = ret_typ(data_t, indices_t, types.bool_, types.bool_, dict_id_if_present_t)
     return sig, codegen
+
+
+def generate_dict_id_codegen(context, builder, sig, args):
+    """Codegen function for generate_dict_id. This is exposed directly
+    to enable inlining into other intrinsics.
+    """
+    (nitems,) = args
+    fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64)])
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, fnty, name="generate_dict_id"
+    )
+    id_args = [nitems]
+    new_dict_id = builder.call(fn_tp, id_args)
+    return new_dict_id
+
+
+@intrinsic
+def generate_dict_id(typingctx, length_t):
+    """Generate a new id for a dictionary with the
+    given length. This is exposed directly for APIs that can use
+    caching.
+
+    Args:
+        length_t (types.int64): The length of the array.
+
+    Returns:
+        types.int64: The new dict id.
+    """
+    assert length_t == types.int64, "Length must be types.int64"
+    return types.int64(length_t), generate_dict_id_codegen
 
 
 @typeof_impl.register(pa.DictionaryArray)
@@ -262,12 +288,9 @@ def unbox_dict_arr(typ, val, c):
     nitems_obj = c.pyapi.call_method(np_str_arr_obj, "__len__", [])
     nitems = c.unbox(types.int64, nitems_obj).value
     # Generate a new id for this dictionary
-    fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64)])
-    fn_tp = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="generate_dict_id"
+    new_dict_id = generate_dict_id_codegen(
+        c.context, c.builder, signature(types.int64, types.int64), [nitems]
     )
-    id_args = [nitems]
-    new_dict_id = c.builder.call(fn_tp, id_args)
     dict_arr.dict_id = new_dict_id
 
     c.pyapi.decref(data_obj)
@@ -448,7 +471,6 @@ def lower_constant_dict_arr(context, builder, typ, pyval):
 def dict_arr_getitem(A, ind):
     if not isinstance(A, DictionaryArrayType):
         return
-
     if isinstance(ind, types.Integer):
 
         def dict_arr_getitem_impl(A, ind):  # pragma: no cover

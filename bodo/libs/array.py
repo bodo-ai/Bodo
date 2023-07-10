@@ -200,7 +200,7 @@ def lower_array_type(context, builder, fromty, toty, val):  # pragma: no cover
 
 
 @intrinsic
-def array_to_info(typingctx, arr_type_t=None):
+def array_to_info(typingctx, arr_type_t):
     """convert array to array info wrapper to pass to C++"""
     return array_info_type(arr_type_t), array_to_info_codegen
 
@@ -1347,11 +1347,7 @@ def _gen_info_to_string_array(context, builder, arr_type, info_ptr):
 @intrinsic
 def info_to_array(typingctx, info_type, array_type):
     """convert array info wrapper from C++ to regular array object"""
-    arr_type = (
-        array_type.instance_type
-        if isinstance(array_type, types.TypeRef)
-        else array_type
-    )
+    arr_type = unwrap_typeref(array_type)
     assert info_type == array_info_type, "info_to_array: expected info type"
     return arr_type(info_type, array_type), info_to_array_codegen
 

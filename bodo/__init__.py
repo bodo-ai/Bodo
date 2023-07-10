@@ -177,6 +177,7 @@ import bodo.libs.distributed_api
 import bodo.libs.timsort
 import bodo.libs.stream_join
 import bodo.libs.stream_groupby
+import bodo.libs.stream_dict_encoding
 
 import bodo.io
 

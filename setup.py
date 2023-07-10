@@ -262,6 +262,7 @@ ext_metadata["sources"] += [
     "bodo/libs/_table_builder.cpp",
     "bodo/libs/_chunked_table_builder.cpp",
     "bodo/libs/_operator_pool.cpp",
+    "bodo/libs/_stream_dict_encoding.cpp",
 ]
 ext_metadata["depends"] += [
     "bodo/io/_bodo_file_reader.h",

@@ -939,6 +939,7 @@ PyMODINIT_FUNC PyInit_ext(void) {
     SetAttrStringFromPyInit(m, json_cpp);
     SetAttrStringFromPyInit(m, stream_join_cpp);
     SetAttrStringFromPyInit(m, stream_groupby_cpp);
+    SetAttrStringFromPyInit(m, stream_dict_encoding_cpp);
 
     return m;
 }
