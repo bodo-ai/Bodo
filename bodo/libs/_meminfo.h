@@ -70,7 +70,8 @@ inline size_t NRT_MemSys_get_stats_mi_free() {
 struct MemInfo {
     int64_t refct;
     NRT_dtor_function dtor;
-    void *dtor_info;
+    void *dtor_info; /* Used for storing pointer to the BufferPool that was used
+                        for allocating the data */
     void *data;
     size_t size; /* only used for memory allocated through the buffer pool */
     void *external_allocator;
@@ -167,10 +168,11 @@ inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
  * @param mi MemInfo for which the data is being allocated. This is required
  * since we need to point the "Swip" in the BufferPool to point to the
  * data pointer in the MemInfo (for safe evictions).
+ * @param pool IBufferPool to use for the allocation.
  */
 inline void buffer_pool_aligned_data_alloc(size_t size, unsigned align,
-                                           NRT_MemInfo *mi) {
-    std::shared_ptr<bodo::BufferPool> pool = bodo::BufferPool::Default();
+                                           NRT_MemInfo *mi,
+                                           bodo::IBufferPool *const pool) {
     if (align && ((align > ::arrow::kDefaultBufferAlignment) ||
                   ((align & (align - 1)) != 0))) {
         // TODO Add compiler hint to mark this as an unlikely branch.
@@ -202,9 +204,10 @@ inline void buffer_pool_aligned_data_alloc(size_t size, unsigned align,
  * size stored in the MemInfo struct. The actual allocation (from a BufferPool
  * perspective) might have been larger, but the BufferPool will handle it
  * correctly.
+ * @param pool IBufferPool to deallocate through.
  */
-inline void buffer_pool_aligned_data_free(void *ptr, size_t size) {
-    std::shared_ptr<bodo::BufferPool> pool = bodo::BufferPool::Default();
+inline void buffer_pool_aligned_data_free(void *ptr, size_t size,
+                                          bodo::IBufferPool *const pool) {
     pool->Free(static_cast<uint8_t *>(ptr), size);
     NRT_MemSys::instance()->stats_free++;
 }
@@ -213,25 +216,13 @@ inline void buffer_pool_aligned_data_free(void *ptr, size_t size) {
 
 /// @brief Destructor for Meminfo (and underlying data) allocated
 /// through NRT_MemInfo_alloc_common.
-inline void nrt_internal_custom_dtor(void *ptr, size_t size,
-                                     void *custom_dtor) {
-    // Get a pointer (if there is one) to the custom destructor
-    // provided during MemInfo creation. This is used for cases such as
-    // array-item arrays, etc.
-    NRT_dtor_function dtor = (NRT_dtor_function)custom_dtor;
-
-    // If a customer dtor is provided (e.g. in case of array-item arrays), call
-    // that first.
-    if (dtor) {
-        dtor(ptr, size, NULL);
-    }
-
+inline void nrt_internal_custom_dtor(void *ptr, size_t size, void *pool) {
     // Add debug markers to indicate dead memory.
     // XXX Move this to the BufferPool to centralize the logic?
     memset(ptr, 0xDE, MIN(size, 256));
 
     // Free the data buffer
-    buffer_pool_aligned_data_free(ptr, size);
+    buffer_pool_aligned_data_free(ptr, size, (bodo::IBufferPool *)pool);
 }
 
 /**
@@ -243,18 +234,18 @@ inline void nrt_internal_custom_dtor(void *ptr, size_t size,
  * @param size Number of bytes to allocate
  * @param align Byte-alignment for the allocated data. Set to 0
  *  in case there are no alignment restrictions.
- * @param dtor Custom destructor.
+ * @param pool IBufferPool to allocate underlying data buffer through.
  * @return NRT_MemInfo* Pointer to fully initialized MemInfo struct.
  */
 inline NRT_MemInfo *NRT_MemInfo_alloc_common(size_t size, unsigned align,
-                                             NRT_dtor_function dtor) {
+                                             bodo::IBufferPool *const pool) {
     // Allocate the MemInfo object using standard allocator.
     NRT_MemInfo *mi = NRT_MemInfo_allocate();
 
     // Allocate the data buffer using the bodo::BufferPool and assign it to
     // mi->data. This will also store a pointer to mi->data in the
     // bodo::BufferPool for eviction purposes later.
-    buffer_pool_aligned_data_alloc(size, align, mi);
+    buffer_pool_aligned_data_alloc(size, align, mi, pool);
 
     // Add debug markers.
     // See notes here about why these memory markers are useful:
@@ -266,32 +257,35 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_common(size_t size, unsigned align,
     // Initialize the MemInfo object. We assign our custom
     // destructor (nrt_internal_custom_dtor) which will be used
     // to destroy the data buffer when destroying the MemInfo struct
-    // (e.g. see NRT_MemInfo_call_dtor).
-    NRT_MemInfo_init(mi, mi->data, size, nrt_internal_custom_dtor, (void *)dtor,
+    // (e.g. see NRT_MemInfo_call_dtor). We store a pointer to the
+    // pool in 'dtor_info', which nrt_internal_custom_dtor will then
+    // use during deallocation.
+    NRT_MemInfo_init(mi, mi->data, size, nrt_internal_custom_dtor, (void *)pool,
                      NULL);
     return mi;
 }
 
 /* ---------- MemInfo + Data Allocation functions ----------- */
 
-/// @brief Allocate MemInfo and data with a custom destructor (no alignment
-/// constraints).
-inline NRT_MemInfo *NRT_MemInfo_alloc_dtor_safe(size_t size,
-                                                NRT_dtor_function dtor) {
-    return NRT_MemInfo_alloc_common(size, 0, dtor);
-}
-
-/// @brief Allocate MemInfo and data without a custom destructor (no alignment
-/// constraints).
+/// @brief Allocate MemInfo and data without a custom pool and without any
+/// alignment constraints).
 inline NRT_MemInfo *NRT_MemInfo_alloc_safe(size_t size) {
-    return NRT_MemInfo_alloc_common(size, 0, nullptr);
+    return NRT_MemInfo_alloc_common(size, 0, bodo::BufferPool::DefaultPtr());
 }
 
-/// @brief Allocate MemInfo and data without a custom destructor, aligned as per
+/// @brief Allocate MemInfo and data without a custom pool, aligned as per
 /// 'align'.
 inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size,
                                                    unsigned align) {
-    return NRT_MemInfo_alloc_common(size, align, nullptr);
+    return NRT_MemInfo_alloc_common(size, align,
+                                    bodo::BufferPool::DefaultPtr());
+}
+
+/// @brief Allocate MemInfo and data through a custom pool, aligned
+/// as per 'align'.
+inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned_pool(
+    size_t size, unsigned align, bodo::IBufferPool *const pool) {
+    return NRT_MemInfo_alloc_common(size, align, pool);
 }
 
 /* ---------------------------------------------------------- */

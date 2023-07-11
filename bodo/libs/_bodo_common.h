@@ -92,9 +92,16 @@ typedef uint64_t offset_t;
 #define OFFSET_BITWIDTH 64
 #define Bodo_CType_offset Bodo_CTypes::CTypeEnum::UINT64
 
-std::unique_ptr<BodoBuffer> AllocateBodoBuffer(const int64_t size);
-std::unique_ptr<BodoBuffer> AllocateBodoBuffer(const int64_t length,
-                                               Bodo_CTypes::CTypeEnum typ_enum);
+std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
+    const int64_t size,
+    bodo::IBufferPool* const = bodo::BufferPool::DefaultPtr(),
+    const std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
+    const int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const = bodo::BufferPool::DefaultPtr(),
+    const std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
     if (typ == Bodo_CTypes::UINT8)
@@ -621,26 +628,35 @@ struct array_info {
  */
 std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> info);
 
-std::unique_ptr<array_info> alloc_array(int64_t length, int64_t n_sub_elems,
-                                        int64_t n_sub_sub_elems,
-                                        bodo_array_type::arr_type_enum arr_type,
-                                        Bodo_CTypes::CTypeEnum dtype,
-                                        int64_t extra_null_bytes,
-                                        int64_t num_categories);
+std::unique_ptr<array_info> alloc_array(
+    int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
+    bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
+    int64_t extra_null_bytes, int64_t num_categories,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
-std::unique_ptr<array_info> alloc_numpy(int64_t length,
-                                        Bodo_CTypes::CTypeEnum typ_enum);
+std::unique_ptr<array_info> alloc_numpy(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 std::unique_ptr<array_info> alloc_array_item(int64_t n_arrays,
                                              int64_t n_total_items,
                                              Bodo_CTypes::CTypeEnum dtype);
-std::unique_ptr<array_info> alloc_categorical(int64_t length,
-                                              Bodo_CTypes::CTypeEnum typ_enum,
-                                              int64_t num_categories);
+std::unique_ptr<array_info> alloc_categorical(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t num_categories,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 std::unique_ptr<array_info> alloc_nullable_array(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
-    int64_t extra_null_bytes = 0);
+    int64_t extra_null_bytes = 0,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes);
@@ -648,23 +664,34 @@ std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
 std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes);
 
-std::unique_ptr<array_info> alloc_string_array(Bodo_CTypes::CTypeEnum typ_enum,
-                                               int64_t length, int64_t n_chars,
-                                               int64_t extra_null_bytes = 0);
+std::unique_ptr<array_info> alloc_string_array(
+    Bodo_CTypes::CTypeEnum typ_enum, int64_t length, int64_t n_chars,
+    int64_t extra_null_bytes = 0,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 std::unique_ptr<array_info> alloc_list_string_array(
     int64_t n_lists, std::shared_ptr<array_info> string_arr,
-    int64_t extra_null_bytes);
+    int64_t extra_null_bytes,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
-std::unique_ptr<array_info> alloc_list_string_array(int64_t n_lists,
-                                                    int64_t n_strings,
-                                                    int64_t n_chars,
-                                                    int64_t extra_null_bytes);
+std::unique_ptr<array_info> alloc_list_string_array(
+    int64_t n_lists, int64_t n_strings, int64_t n_chars,
+    int64_t extra_null_bytes,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
     bool has_global_dictionary, bool has_deduped_local_dictionary,
-    int64_t dict_id = -1);
+    int64_t dict_id = -1,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /**
  * @brief Create a string array from
@@ -934,10 +961,6 @@ struct str_arr_split_view_payload {
 
 numpy_arr_payload allocate_numpy_payload(int64_t length,
                                          Bodo_CTypes::CTypeEnum typ_enum);
-
-void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
-                           void* in);
-NRT_MemInfo* alloc_array_item_arr_meminfo();
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
 

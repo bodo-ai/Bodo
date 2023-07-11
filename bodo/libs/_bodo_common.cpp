@@ -193,44 +193,58 @@ std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
     return arrow_arr;
 }
 
-std::unique_ptr<BodoBuffer> AllocateBodoBuffer(const int64_t size) {
-    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
+std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
+    const int64_t size, bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    NRT_MemInfo* meminfo =
+        NRT_MemInfo_alloc_safe_aligned_pool(size, ALIGNMENT, pool);
     return std::make_unique<BodoBuffer>((uint8_t*)meminfo->data, size, meminfo,
-                                        false);
+                                        false, pool, std::move(mm));
 }
 
 std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
-    const int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
+    const int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t itemsize = numpy_item_size[typ_enum];
     int64_t size = length * itemsize;
-    return AllocateBodoBuffer(size);
+    return AllocateBodoBuffer(size, pool, std::move(mm));
 }
 
-std::unique_ptr<array_info> alloc_numpy(int64_t length,
-                                        Bodo_CTypes::CTypeEnum typ_enum) {
+std::unique_ptr<array_info> alloc_numpy(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t size = length * numpy_item_size[typ_enum];
-    std::unique_ptr<BodoBuffer> buffer = AllocateBodoBuffer(size);
+    std::unique_ptr<BodoBuffer> buffer =
+        AllocateBodoBuffer(size, pool, std::move(mm));
     return std::make_unique<array_info>(
         bodo_array_type::NUMPY, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer)}));
 }
 
 std::unique_ptr<array_info> alloc_interval_array(
-    int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t size = length * numpy_item_size[typ_enum];
-    std::unique_ptr<BodoBuffer> left_buffer = AllocateBodoBuffer(size);
-    std::unique_ptr<BodoBuffer> right_buffer = AllocateBodoBuffer(size);
+    std::unique_ptr<BodoBuffer> left_buffer =
+        AllocateBodoBuffer(size, pool, mm);
+    std::unique_ptr<BodoBuffer> right_buffer =
+        AllocateBodoBuffer(size, pool, std::move(mm));
     return std::make_unique<array_info>(
         bodo_array_type::INTERVAL, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {std::move(left_buffer), std::move(right_buffer)}));
 }
 
-std::unique_ptr<array_info> alloc_categorical(int64_t length,
-                                              Bodo_CTypes::CTypeEnum typ_enum,
-                                              int64_t num_categories) {
+std::unique_ptr<array_info> alloc_categorical(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t num_categories,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t size = length * numpy_item_size[typ_enum];
-    std::unique_ptr<BodoBuffer> buffer = AllocateBodoBuffer(size);
+    std::unique_ptr<BodoBuffer> buffer =
+        AllocateBodoBuffer(size, pool, std::move(mm));
     return std::make_unique<array_info>(
         bodo_array_type::CATEGORICAL, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer)}),
@@ -238,7 +252,9 @@ std::unique_ptr<array_info> alloc_categorical(int64_t length,
 }
 
 std::unique_ptr<array_info> alloc_nullable_array(
-    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes) {
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     int64_t size;
     if (typ_enum == Bodo_CTypes::_BOOL) {
@@ -250,9 +266,9 @@ std::unique_ptr<array_info> alloc_nullable_array(
     } else {
         size = length * numpy_item_size[typ_enum];
     }
-    std::unique_ptr<BodoBuffer> buffer = AllocateBodoBuffer(size);
+    std::unique_ptr<BodoBuffer> buffer = AllocateBodoBuffer(size, pool, mm);
     std::unique_ptr<BodoBuffer> buffer_bitmask =
-        AllocateBodoBuffer(n_bytes * sizeof(uint8_t));
+        AllocateBodoBuffer(n_bytes * sizeof(uint8_t), pool, std::move(mm));
     return std::make_unique<array_info>(
         bodo_array_type::NULLABLE_INT_BOOL, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>(
@@ -284,17 +300,18 @@ std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
     return arr;
 }
 
-std::unique_ptr<array_info> alloc_string_array(Bodo_CTypes::CTypeEnum typ_enum,
-                                               int64_t length, int64_t n_chars,
-                                               int64_t extra_null_bytes) {
+std::unique_ptr<array_info> alloc_string_array(
+    Bodo_CTypes::CTypeEnum typ_enum, int64_t length, int64_t n_chars,
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     // allocate data/offsets/null_bitmap arrays
     std::unique_ptr<BodoBuffer> data_buffer =
-        AllocateBodoBuffer(n_chars, Bodo_CTypes::UINT8);
+        AllocateBodoBuffer(n_chars, Bodo_CTypes::UINT8, pool, mm);
     std::unique_ptr<BodoBuffer> offsets_buffer =
-        AllocateBodoBuffer(length + 1, Bodo_CType_offset);
+        AllocateBodoBuffer(length + 1, Bodo_CType_offset, pool, mm);
     int64_t n_bytes = (int64_t)((length + 7) / 8) + extra_null_bytes;
     std::unique_ptr<BodoBuffer> null_bitmap_buffer =
-        AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8);
+        AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
     // setting all to non-null to avoid unexpected issues
     memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
 
@@ -313,13 +330,14 @@ std::unique_ptr<array_info> alloc_string_array(Bodo_CTypes::CTypeEnum typ_enum,
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
     bool has_global_dictionary, bool has_deduped_local_dictionary,
-    int64_t dict_id) {
+    int64_t dict_id, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     // dictionary
     std::shared_ptr<array_info> dict_data_arr = alloc_string_array(
-        Bodo_CTypes::CTypeEnum::STRING, n_keys, n_chars_keys, 0);
+        Bodo_CTypes::CTypeEnum::STRING, n_keys, n_chars_keys, 0, pool, mm);
     // indices
-    std::shared_ptr<array_info> indices_data_arr =
-        alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
+    std::shared_ptr<array_info> indices_data_arr = alloc_nullable_array(
+        length, Bodo_CTypes::INT32, 0, pool, std::move(mm));
 
     if (dict_id < 0) {
         dict_id = generate_dict_id(n_keys);
@@ -459,49 +477,15 @@ NRT_MemInfo* alloc_meminfo(int64_t length) {
     return NRT_MemInfo_alloc_safe(length);
 }
 
-/**
- * @brief destructor for array(item) array meminfo. Decrefs the underlying data,
- * offsets and null_bitmap arrays.
- *
- * Note: duplicate of dtor_array_item_array but with array_item_arr_payload
- * TODO: refactor
- *
- * @param payload array(item) array meminfo payload
- * @param size payload size (ignored)
- * @param in extra info (ignored)
- */
-void dtor_array_item_arr(array_item_arr_payload* payload, int64_t size,
-                         void* in) {
-    if (payload->data->refct != -1) {
-        payload->data->refct--;
-    }
-    if (payload->data->refct == 0) {
-        NRT_MemInfo_call_dtor(payload->data);
-    }
-
-    if (payload->offsets.meminfo->refct != -1) {
-        payload->offsets.meminfo->refct--;
-    }
-    if (payload->offsets.meminfo->refct == 0) {
-        NRT_MemInfo_call_dtor(payload->offsets.meminfo);
-    }
-
-    if (payload->null_bitmap.meminfo->refct != -1) {
-        payload->null_bitmap.meminfo->refct--;
-    }
-    if (payload->null_bitmap.meminfo->refct == 0) {
-        NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
-    }
-}
-
 std::unique_ptr<array_info> alloc_list_string_array(
     int64_t length, std::shared_ptr<array_info> string_arr,
-    int64_t extra_null_bytes) {
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     std::unique_ptr<BodoBuffer> offsets_buffer =
-        AllocateBodoBuffer(length + 1, Bodo_CType_offset);
+        AllocateBodoBuffer(length + 1, Bodo_CType_offset, pool, mm);
     int64_t n_bytes = (int64_t)((length + 7) / 8) + extra_null_bytes;
     std::unique_ptr<BodoBuffer> null_bitmap_buffer =
-        AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8);
+        AllocateBodoBuffer(n_bytes, Bodo_CTypes::UINT8, pool, std::move(mm));
     // setting all to non-null to avoid unexpected issues
     memset(null_bitmap_buffer->mutable_data(), 0xff, n_bytes);
 
@@ -517,16 +501,17 @@ std::unique_ptr<array_info> alloc_list_string_array(
         std::vector<std::shared_ptr<array_info>>({string_arr}));
 }
 
-std::unique_ptr<array_info> alloc_list_string_array(int64_t n_lists,
-                                                    int64_t n_strings,
-                                                    int64_t n_chars,
-                                                    int64_t extra_null_bytes) {
+std::unique_ptr<array_info> alloc_list_string_array(
+    int64_t n_lists, int64_t n_strings, int64_t n_chars,
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     // allocate string data array
     std::shared_ptr<array_info> data_arr = alloc_array(
         n_strings, n_chars, -1, bodo_array_type::arr_type_enum::STRING,
-        Bodo_CTypes::UINT8, extra_null_bytes, 0);
+        Bodo_CTypes::UINT8, extra_null_bytes, 0, pool, mm);
 
-    return alloc_list_string_array(n_lists, data_arr, extra_null_bytes);
+    return alloc_list_string_array(n_lists, data_arr, extra_null_bytes, pool,
+                                   std::move(mm));
 }
 
 /**
@@ -562,49 +547,6 @@ void decref_numpy_payload(numpy_arr_payload arr) {
 }
 
 /**
- * @brief destructor for array(item) array meminfo. Decrefs the underlying data,
- * offsets and null_bitmap arrays.
- *
- * @param payload array(item) array meminfo payload
- * @param size payload size (ignored)
- * @param in extra info (ignored)
- */
-void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
-                           void* in) {
-    if (payload->data.meminfo->refct != -1) {
-        payload->data.meminfo->refct--;
-    }
-    if (payload->data.meminfo->refct == 0) {
-        NRT_MemInfo_call_dtor(payload->data.meminfo);
-    }
-
-    if (payload->offsets.meminfo->refct != -1) {
-        payload->offsets.meminfo->refct--;
-    }
-    if (payload->offsets.meminfo->refct == 0) {
-        NRT_MemInfo_call_dtor(payload->offsets.meminfo);
-    }
-
-    if (payload->null_bitmap.meminfo->refct != -1) {
-        payload->null_bitmap.meminfo->refct--;
-    }
-    if (payload->null_bitmap.meminfo->refct == 0) {
-        NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
-    }
-}
-
-/**
- * @brief create a meminfo for array(item) array
- *
- * @return NRT_MemInfo*
- */
-NRT_MemInfo* alloc_array_item_arr_meminfo() {
-    return NRT_MemInfo_alloc_dtor_safe(
-        sizeof(array_item_arr_numpy_payload),
-        (NRT_dtor_function)dtor_array_item_array);
-}
-
-/**
  * The allocations array function for the function.
  *
  * In the case of NUMPY/CATEGORICAL or NULLABLE_INT_BOOL,
@@ -623,36 +565,39 @@ NRT_MemInfo* alloc_array_item_arr_meminfo() {
  * -- n_sub_sub_elems is the total number of characters for
  *    the keys in the dictionary
  */
-std::unique_ptr<array_info> alloc_array(int64_t length, int64_t n_sub_elems,
-                                        int64_t n_sub_sub_elems,
-                                        bodo_array_type::arr_type_enum arr_type,
-                                        Bodo_CTypes::CTypeEnum dtype,
-                                        int64_t extra_null_bytes,
-                                        int64_t num_categories) {
+std::unique_ptr<array_info> alloc_array(
+    int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
+    bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
+    int64_t extra_null_bytes, int64_t num_categories,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     switch (arr_type) {
         case bodo_array_type::LIST_STRING:
             return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                           extra_null_bytes);
+                                           extra_null_bytes, pool,
+                                           std::move(mm));
 
         case bodo_array_type::STRING:
             return alloc_string_array(dtype, length, n_sub_elems,
-                                      extra_null_bytes);
+                                      extra_null_bytes, pool, std::move(mm));
 
         case bodo_array_type::NULLABLE_INT_BOOL:
-            return alloc_nullable_array(length, dtype, extra_null_bytes);
+            return alloc_nullable_array(length, dtype, extra_null_bytes, pool,
+                                        std::move(mm));
 
         case bodo_array_type::INTERVAL:
-            return alloc_interval_array(length, dtype);
+            return alloc_interval_array(length, dtype, pool, std::move(mm));
 
         case bodo_array_type::NUMPY:
-            return alloc_numpy(length, dtype);
+            return alloc_numpy(length, dtype, pool, std::move(mm));
 
         case bodo_array_type::CATEGORICAL:
-            return alloc_categorical(length, dtype, num_categories);
+            return alloc_categorical(length, dtype, num_categories, pool,
+                                     std::move(mm));
 
         case bodo_array_type::DICT:
             return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                           false, false);
+                                           false, false, -1, pool,
+                                           std::move(mm));
         default:
             throw std::runtime_error("Type not covered in alloc_array");
     }

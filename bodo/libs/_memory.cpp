@@ -1349,7 +1349,12 @@ uint64_t BufferPool::GetSmallestSizeClassSize() const {
 
 /// Helper Functions for using BufferPool in Arrow
 
-::arrow::compute::ExecContext* buffer_exec_context() {
+::arrow::compute::ExecContext* buffer_exec_context(bodo::IBufferPool* pool) {
+    using arrow::compute::ExecContext;
+    return new ExecContext(pool);
+}
+
+::arrow::compute::ExecContext* default_buffer_exec_context() {
     using arrow::compute::ExecContext;
 
     static auto ctx_ =
@@ -1357,14 +1362,25 @@ uint64_t BufferPool::GetSmallestSizeClassSize() const {
     return ctx_.get();
 }
 
-::arrow::io::IOContext buffer_io_context() {
+::arrow::io::IOContext buffer_io_context(bodo::IBufferPool* pool) {
+    using arrow::io::IOContext;
+
+    return IOContext(pool);
+}
+
+::arrow::io::IOContext default_buffer_io_context() {
     using arrow::io::IOContext;
 
     static IOContext ctx_(bodo::BufferPool::DefaultPtr());
     return ctx_;
 }
 
-std::shared_ptr<::arrow::MemoryManager> buffer_memory_manager() {
+std::shared_ptr<::arrow::MemoryManager> buffer_memory_manager(
+    bodo::IBufferPool* pool) {
+    return arrow::CPUDevice::memory_manager(pool);
+}
+
+std::shared_ptr<::arrow::MemoryManager> default_buffer_memory_manager() {
     static auto mm_ =
         arrow::CPUDevice::memory_manager(bodo::BufferPool::DefaultPtr());
     return mm_;
