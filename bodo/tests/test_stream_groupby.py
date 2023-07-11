@@ -16,7 +16,7 @@ from bodo.tests.utils import check_func
 
 
 @pytest.mark.parametrize(
-    "func_name", ["sum", "median", "mean", "nunique", "var", "std"]
+    "func_name", ["sum", "median", "mean", "nunique", "var", "std", "kurtosis"]
 )
 def test_groupby_basic(func_name, memory_leak_check):
     """
@@ -77,7 +77,8 @@ def test_groupby_basic(func_name, memory_leak_check):
             "B": [1, 3, 5, 11, 1, 3, 5, 3],
         }
     )
-    expected_df = df.groupby("A", as_index=False).agg(func_name)
+    py_func = pd.Series.kurt if func_name == "kurtosis" else func_name
+    expected_df = df.groupby("A", as_index=False).agg(py_func)
 
     check_func(
         test_groupby,
