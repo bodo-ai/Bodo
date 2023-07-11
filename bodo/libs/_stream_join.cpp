@@ -201,15 +201,11 @@ void JoinPartition::BuildHashTable() {
 
 void JoinPartition::ReserveBuildTable(
     const std::shared_ptr<table_info>& in_table) {
-    this->build_table_join_hashes.reserve(this->build_table_join_hashes.size() +
-                                          in_table->nrows());
     this->build_table_buffer.ReserveTable(in_table);
 }
 
 void JoinPartition::ReserveProbeTable(
     const std::shared_ptr<table_info>& in_table) {
-    this->probe_table_buffer_join_hashes.reserve(
-        this->probe_table_buffer_join_hashes.size() + in_table->nrows());
     this->probe_table_buffer.ReserveTable(in_table);
 }
 
