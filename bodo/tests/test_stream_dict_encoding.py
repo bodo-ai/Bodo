@@ -35,6 +35,7 @@ def test_basic_caching(memory_leak_check):
                     dict_encoding_state,
                     func_id,
                     section._dict_id,
+                    bodo.string_array_type,
                 )
             else:
                 # Cache miss
@@ -98,6 +99,7 @@ def test_multi_dictionary(memory_leak_check):
                         dict_encoding_state,
                         func_id,
                         section._dict_id,
+                        bodo.string_array_type,
                     )
                 else:
                     # Cache miss
@@ -179,6 +181,7 @@ def test_multi_function(memory_leak_check):
                     dict_encoding_state,
                     func_id1,
                     section._dict_id,
+                    bodo.string_array_type,
                 )
             else:
                 # Cache miss
@@ -208,6 +211,7 @@ def test_multi_function(memory_leak_check):
                     dict_encoding_state,
                     func_id2,
                     out_arr1._dict_id,
+                    bodo.string_array_type,
                 )
             else:
                 # Cache miss
@@ -243,7 +247,55 @@ def test_multi_function(memory_leak_check):
     check_func(
         impl,
         (pd.Series(arr),),
-        only_seq=True,
         py_output=py_output,
+        only_seq=True,
+        use_dict_encoded_strings=True,
+    )
+
+
+def test_coalesce(memory_leak_check):
+    """
+    Tests that coalesce works when supplying a dictionary inputs and caching.
+    """
+    func_id = 1
+    slice_size = 3
+
+    def impl(S1, S2):
+        arr1 = bodo.hiframes.pd_series_ext.get_series_data(S1)
+        arr2 = bodo.hiframes.pd_series_ext.get_series_data(S2)
+        dict_encoding_state = bodo.libs.stream_dict_encoding.init_dict_encoding_state()
+        finished = False
+        batch_num = 0
+        arr_size = len(arr1)
+        batches = []
+        # Detect cache hits by measuring how many new ids we generated.
+        start_id = bodo.libs.dict_arr_ext.generate_dict_id(1000)
+        while not finished:
+            section1 = arr1[batch_num * slice_size : (batch_num + 1) * slice_size]
+            section2 = arr2[batch_num * slice_size : (batch_num + 1) * slice_size]
+            finished = ((batch_num + 1) * slice_size) >= arr_size
+            out_batch = bodo.libs.bodosql_array_kernels.coalesce(
+                (section1, section2), dict_encoding_state, func_id
+            )
+            batches.append(out_batch)
+            batch_num += 1
+        end_id = bodo.libs.dict_arr_ext.generate_dict_id(1000)
+        num_ids = (end_id - start_id) - 1
+        bodo.libs.stream_dict_encoding.delete_dict_encoding_state(dict_encoding_state)
+        out_arr = bodo.libs.array_kernels.concat(batches)
+        return out_arr, num_ids
+
+    arr1 = pd.array(["Hierq", "owerew", None, "Help", None, "HELP", "cons"] * 2)
+    arr2 = pd.array(["Hieq", None, None, "HelP", "heLp", "HELP", None] * 2)
+    py_output = (
+        pd.array([arr2[i] if pd.isna(arr1[i]) else arr1[i] for i in range(len(arr1))]),
+        1,
+    )
+    # Only test sequential because it simplifies the test logic with pd.concat.
+    check_func(
+        impl,
+        (pd.Series(arr1), pd.Series(arr2)),
+        py_output=py_output,
+        only_seq=True,
         use_dict_encoded_strings=True,
     )
