@@ -15,19 +15,20 @@ from bodo.utils.typing import (
     get_common_scalar_dtype,
     get_overload_const_list,
     is_overload_constant_list,
+    is_overload_none,
     is_str_arr_type,
     raise_bodo_error,
 )
 from bodo.utils.utils import is_array_typ
 
 
-def coalesce(A):  # pragma: no cover
+def coalesce(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     # Dummy function used for overload
     return
 
 
 @overload(coalesce)
-def overload_coalesce(A):
+def overload_coalesce(A, dict_encoding_state=None, func_id=-1):
     """Handles cases where COALESCE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if not isinstance(A, (types.Tuple, types.UniTuple)):
@@ -40,19 +41,19 @@ def overload_coalesce(A):
             # leak as the dict-encoding result will be cast to a regular string array.
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.coalesce",
-                ["A"],
+                ["A", "dict_encoding_state=None", "func_id=-1"],
                 0,
                 container_arg=i,
                 container_length=len(A),
             )
 
-    def impl(A):  # pragma: no cover
-        return coalesce_util(A)
+    def impl(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
+        return coalesce_util(A, dict_encoding_state, func_id)
 
     return impl
 
 
-def coalesce_util(A):  # pragma: no cover
+def coalesce_util(A, dict_encoding_state=None, func_id=-1):  # pragma: no cover
     # Dummy function used for overload
     return
 
@@ -130,7 +131,7 @@ def detect_coalesce_casting(arg_types, arg_names):
 
 
 @overload(coalesce_util, no_unliteral=True)
-def overload_coalesce_util(A):
+def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
     """A dedicated kernel for the SQL function COALESCE which takes in array of
        1+ columns/scalars and returns the first value from each row that is
        not NULL.
@@ -302,8 +303,23 @@ def overload_coalesce_util(A):
     suffix_code = None
     if dict_encode_data:
         dead_offset = 0
-        suffix_code = "dict_data = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strings, num_chars)\n"
-        suffix_code += "curr_index = 0\n"
+        suffix_code = ""
+        if not (is_overload_none(dict_encoding_state)):
+            # If we have a valid dict_encoding_state we can avoid computing the new dictionary.
+            arr_ids = ", ".join([f"A{i}._dict_id" for i in range(len(A))])
+            suffix_code += f"dict_ids = [{arr_ids}]\n"
+            suffix_code += "if bodo.libs.stream_dict_encoding.state_contains_multi_input_dict_array(dict_encoding_state, func_id, dict_ids):\n"
+            suffix_code += "  dict_data, new_dict_id = bodo.libs.stream_dict_encoding.get_array_multi_input(\n"
+            suffix_code += (
+                "    dict_encoding_state, func_id, dict_ids, bodo.string_array_type\n"
+            )
+            suffix_code += "  )\n"
+            suffix_code += "else:\n"
+            indent = "  "
+        else:
+            indent = ""
+        suffix_code += f"{indent}dict_data = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strings, num_chars)\n"
+        suffix_code += f"{indent}curr_index = 0\n"
         # Track if the output dictionary is global. Even though it is not unique it may
         # still be the same on all ranks if the component dictionaries were all global.
         # Note: If there are any scalars they will be the same on all ranks so that is
@@ -313,25 +329,37 @@ def overload_coalesce_util(A):
                 dead_offset += 1
             elif arg_types[i - dead_offset] != bodo.string_type:
                 # Copy the old dictionary into the new dictionary
-                suffix_code += f"section_len = len(old_data{i - dead_offset})\n"
+                suffix_code += f"{indent}section_len = len(old_data{i - dead_offset})\n"
                 # TODO: Add a kernel to copy everything at once?
-                suffix_code += f"for l in range(section_len):\n"
-                suffix_code += f"    bodo.libs.str_arr_ext.get_str_arr_item_copy(dict_data, curr_index + l, old_data{i - dead_offset}, l)\n"
-                suffix_code += f"curr_index += section_len\n"
+                suffix_code += f"{indent}for l in range(section_len):\n"
+                suffix_code += f"{indent}    bodo.libs.str_arr_ext.get_str_arr_item_copy(dict_data, curr_index + l, old_data{i - dead_offset}, l)\n"
+                suffix_code += f"{indent}curr_index += section_len\n"
             else:
                 # Just store the scalar.
-                suffix_code += f"dict_data[curr_index] = A{i}\n"
+                suffix_code += f"{indent}dict_data[curr_index] = A{i}\n"
                 # This should be unnecessary but update the index
-                suffix_code += f"curr_index += 1\n"
+                suffix_code += f"{indent}curr_index += 1\n"
+        suffix_code += f"{indent}new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(num_strings)\n"
+        # Update the cache.
+        if not (is_overload_none(dict_encoding_state)):
+            suffix_code += "  bodo.libs.stream_dict_encoding.set_array_multi_input(\n"
+            suffix_code += (
+                "    dict_encoding_state, func_id, dict_ids, dict_data, new_dict_id\n"
+            )
+            suffix_code += "  )\n"
+
         # Wrap the output into an actual dictionary encoded array.
         # Note: We cannot assume it is unique even if each component were unique.
-        suffix_code += "duplicated_res = bodo.libs.dict_arr_ext.init_dict_arr(dict_data, res, is_dict_global, False, None)\n"
-        # Drop any duplicates and update the dictionary
-        suffix_code += "res = bodo.libs.array.drop_duplicates_local_dictionary(duplicated_res, False)\n"
+        suffix_code += "duplicated_res = bodo.libs.dict_arr_ext.init_dict_arr(dict_data, res, is_dict_global, False, new_dict_id)\n"
+        # Drop any duplicates and update the dictionary if and only if we aren't caching
+        if not (is_overload_none(dict_encoding_state)):
+            suffix_code += "res = duplicated_res\n"
+        else:
+            suffix_code += "res = bodo.libs.array.drop_duplicates_local_dictionary(duplicated_res, False)\n"
 
     # Create the mapping from each local variable to the corresponding element in the array
     # of columns/scalars
-    arg_string = "A"
+    arg_string = "A, dict_encoding_state=None, func_id=-1"
     arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A)) if i not in dead_cols}
 
     if dict_encode_data:

@@ -7,6 +7,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core import types
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
@@ -200,6 +201,9 @@ def test_coalesce_str_array_optimized(memory_leak_check):
     dispatcher, used_sig = find_nested_dispatcher_and_args(
         bodo_func, arg_typs, ("coalesce", "bodo.libs.bodosql_array_kernels")
     )
+    # Note: infrastructure doesn't handle defaults, so we need to manually add this to
+    # the signature
+    used_sig = used_sig + (types.none, types.int64)
     # Find the coalesce_util dispatcher in the IR
     dispatcher, used_sig = find_nested_dispatcher_and_args(
         dispatcher,
