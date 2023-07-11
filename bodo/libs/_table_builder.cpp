@@ -240,9 +240,11 @@ void ArrayBuildBuffer::Reset() {
 TableBuildBuffer::TableBuildBuffer(
     const std::vector<int8_t>& arr_c_types,
     const std::vector<int8_t>& arr_array_types,
-    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders) {
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     // allocate empty initial table with provided data types
-    this->data_table = alloc_table(arr_c_types, arr_array_types);
+    this->data_table =
+        alloc_table(arr_c_types, arr_array_types, pool, std::move(mm));
 
     // initialize array buffer wrappers
     for (size_t i = 0; i < arr_c_types.size(); i++) {
@@ -620,7 +622,8 @@ void TableBuildBuffer::Reset() {
 
 std::shared_ptr<table_info> alloc_table(
     const std::vector<int8_t>& arr_c_types,
-    const std::vector<int8_t>& arr_array_types) {
+    const std::vector<int8_t>& arr_array_types, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> arrays;
 
     for (size_t i = 0; i < arr_c_types.size(); i++) {
@@ -628,7 +631,7 @@ std::shared_ptr<table_info> alloc_table(
             (bodo_array_type::arr_type_enum)arr_array_types[i];
         Bodo_CTypes::CTypeEnum dtype = (Bodo_CTypes::CTypeEnum)arr_c_types[i];
 
-        arrays.push_back(alloc_array(0, 0, 0, arr_type, dtype, 0, 0));
+        arrays.push_back(alloc_array(0, 0, 0, arr_type, dtype, 0, 0, pool, mm));
     }
     return std::make_shared<table_info>(arrays);
 }

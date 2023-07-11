@@ -982,21 +982,49 @@ using unordered_multimap =
 
 /**
  * @brief Construct an Arrow ExecContext for Compute Functions using the
- * underlying Bodo BufferPool.
+ * specified 'pool'.
+ *
+ * @param pool Pool to create an ExecContext for.
+ * @return ::arrow::compute::ExecContext*
  */
-::arrow::compute::ExecContext* buffer_exec_context();
+::arrow::compute::ExecContext* buffer_exec_context(bodo::IBufferPool* pool);
+
+/**
+ * @brief Construct an Arrow ExecContext for Compute Functions using the
+ * default Bodo BufferPool.
+ */
+::arrow::compute::ExecContext* default_buffer_exec_context();
 
 /**
  * @brief Construct an Arrow IOContext for IO Operations using the
- * underlying Bodo BufferPool.
+ * specified 'pool'.
+ *
+ * @param pool Pool to create the IOContext for.
+ * @return ::arrow::io::IOContext
  */
-::arrow::io::IOContext buffer_io_context();
+::arrow::io::IOContext buffer_io_context(bodo::IBufferPool* pool);
+
+/**
+ * @brief Construct an Arrow IOContext for IO Operations using the
+ * default Bodo BufferPool.
+ */
+::arrow::io::IOContext default_buffer_io_context();
 
 /**
  * @brief Construct an Arrow MemoryManager that allocates using the
- * underlying Bodo BufferPool.
+ * specified 'pool'.
+ *
+ * @param pool Pool to create the MemoryManager for.
+ * @return std::shared_ptr<::arrow::MemoryManager>
  */
-std::shared_ptr<::arrow::MemoryManager> buffer_memory_manager();
+std::shared_ptr<::arrow::MemoryManager> buffer_memory_manager(
+    bodo::IBufferPool* pool);
+
+/**
+ * @brief Construct an Arrow MemoryManager that allocates using the
+ * default Bodo BufferPool.
+ */
+std::shared_ptr<::arrow::MemoryManager> default_buffer_memory_manager();
 
 }  // namespace bodo
 

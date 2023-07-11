@@ -479,7 +479,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                 ::arrow::Result<std::shared_ptr<::arrow::Array>> res =
                     arrow::compute::Cast(*chunk, arrow::large_utf8(),
                                          arrow::compute::CastOptions::Safe(),
-                                         bodo::buffer_exec_context());
+                                         bodo::default_buffer_exec_context());
                 std::shared_ptr<arrow::Array> casted_arr;
                 CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
                 arrays.push_back(std::move(casted_arr));
@@ -491,7 +491,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                 ::arrow::Result<std::shared_ptr<::arrow::Array>> res =
                     arrow::compute::Cast(*chunk, arrow::large_binary(),
                                          arrow::compute::CastOptions::Safe(),
-                                         bodo::buffer_exec_context());
+                                         bodo::default_buffer_exec_context());
                 std::shared_ptr<arrow::Array> casted_arr;
                 CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
                 arrays.push_back(std::move(casted_arr));
@@ -1252,7 +1252,7 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
 
                 auto res = arrow::compute::Cast(
                     col, exp_type, arrow::compute::CastOptions::Safe(),
-                    bodo::buffer_exec_context());
+                    bodo::default_buffer_exec_context());
                 // TODO: Use fmt::format or std::format on C++23
                 CHECK_ARROW(res.status(),
                             "Failed to safely cast from " +
@@ -1271,8 +1271,8 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
                 auto opt = arrow::compute::CastOptions::Safe();
                 opt.allow_decimal_truncate = true;
 
-                auto res = arrow::compute::Cast(col, exp_type, opt,
-                                                bodo::buffer_exec_context());
+                auto res = arrow::compute::Cast(
+                    col, exp_type, opt, bodo::default_buffer_exec_context());
                 CHECK_ARROW(res.status(), "Failed to downcast from " +
                                               col->type()->ToString() + " to " +
                                               exp_type->ToString());
