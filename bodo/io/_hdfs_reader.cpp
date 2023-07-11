@@ -80,9 +80,9 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
     options.ConfigureReplication(0);
     options.ConfigureBufferSize(0);
     options.ConfigureBlockSize(0);
-    hdfs_fs =
-        arrow::fs::HadoopFileSystem::Make(options, bodo::buffer_io_context())
-            .ValueOrDie();
+    hdfs_fs = arrow::fs::HadoopFileSystem::Make(
+                  options, bodo::default_buffer_io_context())
+                  .ValueOrDie();
 
     is_hdfs_initialized = true;
     return hdfs_fs;
@@ -124,8 +124,8 @@ class HdfsFileReader : public SingleFileReader {
 
         fs = get_hdfs_fs(fname);
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
-            ::arrow::fs::FileSystemFromUri(fname, bodo::buffer_io_context(),
-                                           &path);
+            ::arrow::fs::FileSystemFromUri(
+                fname, bodo::default_buffer_io_context(), &path);
         // open file
         result = fs->OpenInputFile(path);
         CHECK_ARROW_AND_ASSIGN(result, "HdfsFileSystem::OpenInputFile",

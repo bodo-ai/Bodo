@@ -19,11 +19,25 @@
  */
 class BodoBuffer : public arrow::ResizableBuffer {
    public:
+    /**
+     * @brief Construct a new Bodo Buffer
+     *
+     * @param data Pointer to data buffer
+     * @param size Size of the buffer
+     * @param meminfo_ MemInfo object which manages the underlying data buffer
+     * @param incref Whether to incref (default: true)
+     * @param pool Pool that was used for allocating the data buffer. The same
+     * pool should be used for resizing the buffer in the future.
+     * @param mm Memory manager associated with the pool.
+     */
     BodoBuffer(uint8_t *data, const int64_t size, NRT_MemInfo *meminfo_,
-               bool incref = true)
-        : ResizableBuffer(data, size, bodo::buffer_memory_manager()),
+               bool incref = true,
+               bodo::IBufferPool *const pool = bodo::BufferPool::DefaultPtr(),
+               std::shared_ptr<::arrow::MemoryManager> mm =
+                   bodo::default_buffer_memory_manager())
+        : ResizableBuffer(data, size, std::move(mm)),
           meminfo(meminfo_),
-          pool_(bodo::BufferPool::DefaultPtr()) {
+          pool_(pool) {
         if (incref) {
             incref_meminfo(meminfo);
         }

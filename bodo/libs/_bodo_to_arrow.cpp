@@ -507,9 +507,9 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         const size_t siztype = numpy_item_size[array->dtype];
         int64_t in_num_bytes = array->length * siztype;
         std::shared_ptr<arrow::Buffer> out_buffer =
-            std::make_shared<arrow::Buffer>((uint8_t *)array->data1(),
-                                            in_num_bytes,
-                                            bodo::buffer_memory_manager());
+            std::make_shared<arrow::Buffer>(
+                (uint8_t *)array->data1(), in_num_bytes,
+                bodo::default_buffer_memory_manager());
 
         // set arrow bit mask using category index values (-1 for nulls)
         int64_t null_count_ = 0;
@@ -939,9 +939,10 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
         // layout
         case arrow::Type::STRING: {
             static_assert(OFFSET_BITWIDTH == 64);
-            auto res = arrow::compute::Cast(*arrow_arr, arrow::large_utf8(),
-                                            arrow::compute::CastOptions::Safe(),
-                                            bodo::buffer_exec_context());
+            auto res =
+                arrow::compute::Cast(*arrow_arr, arrow::large_utf8(),
+                                     arrow::compute::CastOptions::Safe(),
+                                     bodo::default_buffer_exec_context());
             std::shared_ptr<arrow::Array> casted_arr;
             CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
             return arrow_string_binary_array_to_bodo(
@@ -973,7 +974,7 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             auto res = arrow::compute::Cast(
                 *arrow_arr, arrow::large_list(arrow_arr->type()->field(0)),
                 arrow::compute::CastOptions::Safe(),
-                bodo::buffer_exec_context());
+                bodo::default_buffer_exec_context());
             std::shared_ptr<arrow::Array> casted_arr;
             CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
             return arrow_list_array_to_bodo(

@@ -657,11 +657,17 @@ struct TableBuildBuffer {
      * @param dict_builders DictBuilders for the columns.
      * Element corresponding to a column must be provided in the
      * DICT array case and should be nullptr otherwise.
+     * @param pool IBufferPool to use for allocating the underlying data
+     * buffers.
+     * @param mm MemoryManager for the 'pool'.
      */
     TableBuildBuffer(
         const std::vector<int8_t>& arr_c_types,
         const std::vector<int8_t>& arr_array_types,
-        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders);
+        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
 
     /**
      * @brief Append a batch of data to the buffer, assuming
@@ -741,11 +747,17 @@ struct TableBuildBuffer {
  * @param arr_c_types vector of ints for column dtypes (in Bodo_CTypes format)
  * @param arr_array_types vector of ints for colmun array types (in
  * bodo_array_type format)
+ * @param pool IBufferPool to use for allocating the underlying data
+ * buffers.
+ * @param mm MemoryManager for the 'pool'.
  * @return std::shared_ptr<table_info> allocated table
  */
 std::shared_ptr<table_info> alloc_table(
     const std::vector<int8_t>& arr_c_types,
-    const std::vector<int8_t>& arr_array_types);
+    const std::vector<int8_t>& arr_array_types,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /**
  * @brief Allocate an empty table with the same schema

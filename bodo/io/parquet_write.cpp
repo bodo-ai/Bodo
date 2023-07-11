@@ -294,7 +294,7 @@ int64_t pq_write(
                 auto res =
                     arrow::compute::Cast(*columns[i].get(), arrow_type,
                                          arrow::compute::CastOptions::Safe(),
-                                         bodo::buffer_exec_context());
+                                         bodo::default_buffer_exec_context());
 
                 if (!res.ok()) {
                     std::string err_msg =
