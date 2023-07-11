@@ -32,7 +32,7 @@ def verify_dict_encoded_in_impl(impl, args):
         bodo_func, arg_typs, ("is_in", "bodo.libs.bodosql_array_kernels")
     )
 
-    # Note: infrastructure doesn't handel defaults, so we need to manually add this to
+    # Note: infrastructure doesn't handle defaults, so we need to manually add this to
     # the signature
     used_sig = used_sig + (bodo.bool_,)
     # Find the is_in_util dispatcher in the IR
@@ -145,7 +145,6 @@ def verify_dict_encoded_in_impl(impl, args):
     ],
 )
 def test_is_in_string_int(memory_leak_check, args):
-
     arr, search_vals = args
 
     def impl(arr, search_vals):
@@ -230,7 +229,6 @@ def test_is_in_string_int(memory_leak_check, args):
     ],
 )
 def test_is_in_dict_enc_string(memory_leak_check, args):
-
     arr, search_vals = args
 
     def impl(arr, search_vals):
@@ -260,7 +258,6 @@ def test_is_in_dict_enc_string(memory_leak_check, args):
 
 @pytest.mark.slow
 def test_is_in_option(memory_leak_check):
-
     search_vals = pd.array([1, 2, 3])
     input_arr = 1
 
@@ -275,7 +272,6 @@ def test_is_in_option(memory_leak_check):
 
 
 def test_is_in_distribution_handling(memory_leak_check):
-
     # Case 1: DIST DIST -> DIST, is_parallel=True
     # Case 2: REP  REP  -> REP, is_parallel=False
     # Case 3: DIST REP  -> DIST, is_parallel=False
