@@ -80,6 +80,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -523,11 +524,11 @@ public class RexToPandasTranslator implements RexVisitor<Expr> {
    */
   private static class CaseInputFinder extends RexShuttle {
     private final ArrayList<RexSlot> refs;
-    private final ArrayList<String> namedParams;
+    private final Set<String> namedParams;
 
     public CaseInputFinder() {
       refs = new ArrayList<>();
-      namedParams = new ArrayList<>();
+      namedParams = new HashSet<>();
     }
 
     public List<RexSlot> getRefs() {
