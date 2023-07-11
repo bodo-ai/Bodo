@@ -58,6 +58,11 @@ class Cost private constructor(
      */
     val value = cost ?: (cpu + io + mem)
 
+    /**
+     * Visually shows the cost value as a formatted string.
+     */
+    val valueString: String get() = df(value)
+
     override fun equals(other: RelOptCost): Boolean {
         return if (other is Cost) {
             return rows == other.rows &&
@@ -129,9 +134,15 @@ class Cost private constructor(
         "{${df(rows)} rows, ${df(cpu)} cpu, ${df(io)} io, ${df(mem)} mem}".format(rows, cpu, io, mem)
 
     companion object {
-        private val DECIMAL_FORMAT = DecimalFormat("#.###")
+        private val DECIMAL_FORMAT = DecimalFormat("##0.###E0")
 
-        private fun df(decimal: Double): String = DECIMAL_FORMAT.format(decimal)
+        private fun df(decimal: Double): String = DECIMAL_FORMAT
+            // Format in engineering notation (exponent is always a multiple of thousands).
+            .format(decimal)
+            // Remove extraneous E0.
+            .replace("E0", "")
+            // E to e because I find it easier to read.
+            .replace("E", "e")
 
         @JvmField
         val INFINITY: Cost = Cost(0.0, 0.0, 0.0, 0.0, Double.POSITIVE_INFINITY)
