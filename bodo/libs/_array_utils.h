@@ -755,7 +755,7 @@ void DEBUG_PrintColumn(std::ostream& os, const std::shared_ptr<array_info> arr);
 
 /** The DEBUG_PrintSetOfColumn is printing the contents of the table to
  * the output stream.
- * All cases are supported (NUMPY, SRING, NULLABLE_INT_BOOL) as well as
+ * All cases are supported (NUMPY, STRING, NULLABLE_INT_BOOL) as well as
  * all integer and floating types.
  *
  * The number of rows in the columns do not have to be the same.
@@ -766,6 +766,12 @@ void DEBUG_PrintColumn(std::ostream& os, const std::shared_ptr<array_info> arr);
  */
 void DEBUG_PrintSetOfColumn(
     std::ostream& os, std::vector<std::shared_ptr<array_info>> const& ListArr);
+
+/**
+ * @brief Print the contents of a table to the output stream.
+ * See DEBUG_PrintSetOfColumn for more details
+ */
+void DEBUG_PrintTable(std::ostream& os, table_info* table);
 
 /**
  * @brief Print the contents of a table to the output stream.
