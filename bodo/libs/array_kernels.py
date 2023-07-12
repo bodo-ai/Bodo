@@ -116,7 +116,14 @@ def overload_isna(arr, i):
 
     # masked Integer array, boolean array
     if isinstance(
-        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
+        arr,
+        (
+            IntegerArrayType,
+            FloatingArrayType,
+            DecimalArrayType,
+            TimeArrayType,
+            DatetimeArrayType,
+        ),
     ) or arr in (
         boolean_array_type,
         datetime_date_array_type,
@@ -2838,6 +2845,14 @@ def ffill_bfill_overload(A, method, parallel=False):
 
     _dtype = element_type(A)
 
+    global_vars = {
+        "bodo": bodo,
+        "numba": numba,
+        "pd": pd,
+        "null_border_icomm": null_border_icomm,
+        "decode_if_dict_array": decode_if_dict_array,
+    }
+
     # This function assumes _dtype error checking is done by calling function.
     if _dtype == types.unicode_type:
         null_value = '""'
@@ -2851,6 +2866,9 @@ def ffill_bfill_overload(A, method, parallel=False):
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_timedelta(0))"
         )
+    elif _dtype == bodo.pd_datetime_tz_naive_type:  # pragma: no cover
+        null_value = "NOT_A_TIME"
+        global_vars["NOT_A_TIME"] = pd.Timestamp("NaT")
     else:
         null_value = "0"
 
@@ -2894,13 +2912,7 @@ def ffill_bfill_overload(A, method, parallel=False):
     local_vars = {}
     exec(
         func_text,
-        {
-            "bodo": bodo,
-            "numba": numba,
-            "pd": pd,
-            "null_border_icomm": null_border_icomm,
-            "decode_if_dict_array": decode_if_dict_array,
-        },
+        global_vars,
         local_vars,
     )
     impl = local_vars["impl"]
@@ -3947,7 +3959,7 @@ def _overload_nan_argmin(arr):
     # We check just the dtype because the previous function ensures
     # we are operating on 1D arrays
     if (
-        isinstance(arr, (IntegerArrayType, FloatingArrayType))
+        isinstance(arr, (IntegerArrayType, FloatingArrayType, DatetimeArrayType))
         or arr in [boolean_array_type, datetime_date_array_type]
         or arr.dtype == bodo.timedelta64ns
         # Recent Numpy versions treat NA as min while pandas
@@ -4008,7 +4020,7 @@ def _overload_nan_argmax(arr):
     # we are operating on 1D arrays
 
     if (
-        isinstance(arr, (IntegerArrayType, FloatingArrayType))
+        isinstance(arr, (IntegerArrayType, FloatingArrayType, DatetimeArrayType))
         or arr in [boolean_array_type, datetime_date_array_type]
         or arr.dtype == bodo.timedelta64ns
         # Recent Numpy versions treat NA as max while pandas

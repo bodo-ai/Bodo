@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numba
 import numba.cpython.unicode
+import numba.types
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -57,10 +58,14 @@ FileSchema = Tuple[List[str], List, Index, List[int], List, List, List, pa.Schem
 
 
 def is_timedelta_type(in_type):
-    return in_type in [
-        bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type,
-        bodo.hiframes.datetime_date_ext.datetime_timedelta_type,
-    ]
+    return (
+        in_type
+        in [
+            bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type,
+            bodo.hiframes.datetime_date_ext.datetime_timedelta_type,
+        ]
+        or in_type == bodo.timedelta64ns
+    )
 
 
 def is_dtype_nullable(in_dtype):
@@ -1483,6 +1488,9 @@ def dtype_to_array_type(dtype, convert_nullable=False):
     if dtype == bodo.datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
 
+    if isinstance(dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        return bodo.libs.pd_datetime_arr_ext.DatetimeArrayType(dtype.tz)
+
     if isinstance(dtype, bodo.TimeType):
         return bodo.hiframes.time_ext.TimeArrayType(dtype.precision)
 
@@ -1764,18 +1772,25 @@ def get_common_scalar_dtype(scalar_types):
 
     # Timestamp/dt64 can be used interchangeably
     # TODO: Should datetime.datetime also be included?
-    if scalar_types[0] in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type):
-        for typ in scalar_types[1:]:
-            if typ not in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type):
-                return (None, False)
-        return (bodo.datetime64ns, True)
+    if all(
+        t
+        in (
+            bodo.datetime64ns,
+            bodo.pd_timestamp_tz_naive_type,
+            bodo.pd_datetime_tz_naive_type,
+        )
+        for t in scalar_types
+    ):
+        return (bodo.pd_datetime_tz_naive_type, True)
 
-    # Timedelta/td64 can be used interchangeably
-    # TODO: Should datetime.timedelta also be included?
-    if scalar_types[0] in (bodo.timedelta64ns, bodo.pd_timedelta_type):
-        for typ in scalar_types[1:]:
-            if scalar_types[0] not in (bodo.timedelta64ns, bodo.pd_timedelta_type):
-                return (None, False)
+    if all(
+        t
+        in (
+            bodo.timedelta64ns,
+            bodo.pd_timedelta_type,
+        )
+        for t in scalar_types
+    ):
         return (bodo.timedelta64ns, True)
 
     # If one of the types is Decimal128Type, then all values must be integers/floats

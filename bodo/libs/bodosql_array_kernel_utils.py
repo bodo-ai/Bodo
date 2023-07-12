@@ -926,9 +926,11 @@ def is_valid_tz_naive_datetime_arg(arg):
     Returns:
         bool: Is this type one of the tz-naive datetime types.
     """
-    return arg in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type) or (
-        bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.datetime64ns
-    )
+    return arg in (
+        bodo.datetime64ns,
+        bodo.pd_timestamp_tz_naive_type,
+        bodo.pd_datetime_tz_naive_type,
+    ) or (bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.datetime64ns)
 
 
 def is_valid_tz_aware_datetime_arg(arg):

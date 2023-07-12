@@ -1,11 +1,12 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Checks for functionality on DataFrames containing timezone values.
 """
+import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.timezone_common import representative_tz  # noqa
+from bodo.tests.timezone_common import representative_tz_or_none  # noqa
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 
@@ -72,7 +73,7 @@ def test_pd_concat_df(memory_leak_check):
     )
 
 
-def test_df_dtypes(memory_leak_check, representative_tz):
+def test_df_dtypes(memory_leak_check, representative_tz_or_none):
     """
     Tests support for DataFrames.dtypes with various timezone types.
     """
@@ -83,7 +84,7 @@ def test_df_dtypes(memory_leak_check, representative_tz):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz_or_none
             ).to_series(),
             "B": [1.2, 1.5, 1.6] * 10,
         }
@@ -91,7 +92,7 @@ def test_df_dtypes(memory_leak_check, representative_tz):
     check_func(impl, (df,), only_seq=True)
 
 
-def test_df_dtypes_astype(memory_leak_check, representative_tz):
+def test_df_dtypes_astype(memory_leak_check, representative_tz_or_none):
     """
     Tests support for astype using DataFrames.dtypes and casting to the same
     type. This is meant to emulate when the tz-aware type is unchanged but other
@@ -104,7 +105,7 @@ def test_df_dtypes_astype(memory_leak_check, representative_tz):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz_or_none
             ).to_series(),
             "B": [1.2, 1.5, 1.6] * 10,
         }
@@ -194,3 +195,24 @@ def test_tz_dataframe_unsupported(memory_leak_check):
         match=".*Timezone-aware columns not yet supported.*",
     ):
         bodo.jit(impl)(tz_df)
+
+
+def test_tz_aware_unsupported(memory_leak_check):
+    """Test that a tz-naive values cannot be assigned to tz-aware series"""
+
+    def impl(df, value):
+        df[0] = value
+
+    with pytest.raises(
+        BodoError,
+        match=".*setitem with DatetimeArrayType requires a Timestamp value or DatetimeArrayType.*",
+    ):
+        bodo.jit(impl)(
+            pd.date_range(
+                start="1/1/2022",
+                freq="16D5H",
+                periods=30,
+                tz="Poland",
+            ).to_series(),
+            np.datetime64("2023-01-01"),
+        )
