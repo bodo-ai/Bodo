@@ -129,3 +129,5 @@ BodoSQL/test-output.xml
 
 # development documentation builds
 BodoSQL/dev_docs/_build
+
+.env

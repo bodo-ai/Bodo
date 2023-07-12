@@ -90,39 +90,41 @@ SCALE_TO_UNIT_PRECISION: Dict[int, Literal["s", "ms", "us", "ns"]] = {
     6: "us",
     9: "ns",
 }
-TYPE_CODE_TO_ARROW_TYPE: List[Callable[["ResultMetadata", str], pa.DataType]] = [
+TYPE_CODE_TO_ARROW_TYPE: List[Callable[["ResultMetadata", str, bool], pa.DataType]] = [
     # Number / Int - Always Signed
-    lambda m, _: pa.decimal128(m.precision, m.scale),
+    lambda m, _, is_select_q: (
+        pa.decimal128(m.precision, m.scale) if is_select_q else pa.int64()
+    ),
     # Float / Double
-    lambda _, __: pa.float64(),
+    lambda _, __, ___: pa.float64(),
     # String
-    lambda _, __: pa.string(),
+    lambda _, __, ___: pa.string(),
     # Dates - Snowflake stores in days (aka 32-bit)
-    lambda _, __: pa.date32(),
+    lambda _, __, ___: pa.date32(),
     # Timestamp - Seems to be unused?
-    lambda _, __: pa.time64("ns"),
+    lambda _, __, ___: pa.time64("ns"),
     # Variant / Union Type
-    lambda _, __: pa.string(),
+    lambda _, __, ___: pa.string(),
     # Timestamp stored in UTC - TIMESTAMP_LTZ
-    lambda m, tz: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale], tz=tz),
+    lambda m, tz, _: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale], tz=tz),
     # Timestamp with a timezone offset per item - TIMESTAMP_TZ
-    lambda m, tz: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale], tz=tz),
+    lambda m, tz, _: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale], tz=tz),
     # Timestamp without a timezone - TIMESTAMP_NTZ
-    lambda m, _: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale]),
+    lambda m, _, __: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale]),
     # Object / Struct - Connector doesn't support pa.struct
-    lambda _, __: pa.string(),
+    lambda _, __, ___: pa.string(),
     # Array - Connector doesn't support pa.list
-    lambda _, __: pa.string(),
+    lambda _, __, ___: pa.string(),
     # Binary
-    lambda _, __: pa.binary(),
+    lambda _, __, ___: pa.binary(),
     # Time
-    lambda m, _: (
+    lambda m, _, __: (
         {0: pa.time32("s"), 3: pa.time32("ms"), 6: pa.time64("us"), 9: pa.time64("ns")}
     )[m.scale],
     # Boolean
-    lambda _, __: pa.bool_(),
+    lambda _, __, ___: pa.bool_(),
     # Geographic - No Core Arrow Equivalent
-    lambda _, __: pa.string(),
+    lambda _, __, ___: pa.string(),
 ]
 INT_BITSIZE_TO_ARROW_DATATYPE = {
     1: pa.int8(),
@@ -510,7 +512,9 @@ def get_schema_from_metadata(
     ] = []  # Should we check dictionary encoding for this type.
     col_idxs_to_check: List[int] = []  # Index of columns to get typeof metadata
     for i, field_meta in enumerate(query_field_metadata):
-        dtype = TYPE_CODE_TO_ARROW_TYPE[field_meta.type_code](field_meta, tz)
+        dtype = TYPE_CODE_TO_ARROW_TYPE[field_meta.type_code](
+            field_meta, tz, is_select_query
+        )
         arrow_fields.append(pa.field(field_meta.name, dtype, field_meta.is_nullable))
         # Only check dictionary encoding for STRING columns, not other columns
         # that we load as strings.
@@ -1040,6 +1044,11 @@ def get_dataset(
         if not is_independent:
             num_rows, batches, schema = comm.bcast((num_rows, batches, schema))
 
+    # Fix for a Memory Leak in Streaming with CREATE TABLE LIKE or LIMIT 0
+    # TODO: Using HPy in C++ should make this unnecessary
+    if num_rows == 0:
+        batches = []
+
     ds = SnowflakeDataset(batches, schema, conn)
     ev.finalize()
     return ds, num_rows
@@ -1050,7 +1059,7 @@ def create_internal_stage(
     cursor: "SnowflakeCursor", is_temporary: bool = False
 ) -> str:  # pragma: no cover
     """Create an internal stage within Snowflake. If `is_temporary=False`,
-    the named stage must be dropped manualy in `drop_internal_stage()`
+    the named stage must be dropped manually in `drop_internal_stage()`
 
     Args
         cursor: Snowflake connection cursor

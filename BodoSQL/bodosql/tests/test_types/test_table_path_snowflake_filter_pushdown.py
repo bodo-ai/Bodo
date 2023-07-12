@@ -6,6 +6,7 @@ import io
 
 import bodosql
 import pandas as pd
+import pytest
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -23,6 +24,10 @@ from bodo.tests.utils import (
 pytestmark = pytest_snowflake
 
 
+@pytest.mark.skipif(
+    bodo.bodosql_use_streaming_plan,
+    reason="Limit Pushdown with Streaming & TablePath Snowflake Tables is Not Supported",
+)
 def test_simple_filter_pushdown(memory_leak_check):
     def impl1(table_name):
         bc = bodosql.BodoSQLContext(
@@ -49,18 +54,19 @@ def test_simple_filter_pushdown(memory_leak_check):
     )
     # Names won't match because BodoSQL keep names uppercase.
     py_output.columns = ["L_SUPPKEY"]
-    # Set check_dtype=False because BodoSQL loads columns with the actual Snowflake type
-    check_func(
-        impl1,
-        (table_name,),
-        py_output=py_output,
-        reset_index=True,
-        check_dtype=False,
-    )
+
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        bodo.jit(impl1)(table_name)
+        # Set check_dtype=False because BodoSQL loads columns with the actual Snowflake type
+        check_func(
+            impl1,
+            (table_name,),
+            py_output=py_output,
+            reset_index=True,
+            check_dtype=False,
+        )
+
         # Check for pruned columns
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
         # Check for filter pushdown
@@ -70,19 +76,20 @@ def test_simple_filter_pushdown(memory_leak_check):
         f"SELECT l_suppkey from {table_name} where l_shipmode LIKE 'AIR%%' OR l_orderkey = 32",
         conn_str,
     )
-    # Set check_dtype=False because BodoSQL loads columns with the actual Snowflake type
-    check_func(
-        impl2,
-        (table_name,),
-        py_output=py_output,
-        reset_index=True,
-        check_dtype=False,
-        sort_output=True,
-    )
+
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        bodo.jit(impl2)(table_name)
+        # Set check_dtype=False because BodoSQL loads columns with the actual Snowflake type
+        check_func(
+            impl2,
+            (table_name,),
+            py_output=py_output,
+            reset_index=True,
+            check_dtype=False,
+            sort_output=True,
+        )
+
         # Check for pruned columns
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
         # Check for filter pushdown
@@ -98,9 +105,7 @@ def test_zero_columns_pruning(memory_leak_check):
         bc = bodosql.BodoSQLContext(
             {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
         )
-        return bc.sql(
-            "SELECT COUNT(*) as cnt from sql_table",
-        )
+        return bc.sql("SELECT COUNT(*) as cnt from sql_table")
 
     table_name = "lineitem"
     db = "SNOWFLAKE_SAMPLE_DATA"
@@ -114,14 +119,19 @@ def test_zero_columns_pruning(memory_leak_check):
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        bodo.jit()(impl)(table_name, conn_str)
+        check_func(
+            impl,
+            (table_name, conn_str),
+            py_output=py_output,
+            is_out_distributed=False,
+        )
         check_logger_msg(stream, "Columns loaded []")
 
-    check_func(
-        impl, (table_name, conn_str), py_output=py_output, is_out_distributed=False
-    )
 
-
+@pytest.mark.skipif(
+    bodo.bodosql_use_streaming_plan,
+    reason="Limit Pushdown with Streaming & TablePath Snowflake Tables is Not Supported",
+)
 def test_snowflake_limit_pushdown(memory_leak_check):
     """
     Test limit pushdown with loading from a Snowflake table.
@@ -160,6 +170,10 @@ def test_snowflake_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
+@pytest.mark.skipif(
+    bodo.bodosql_use_streaming_plan,
+    reason="In Pushdown with Streaming & TablePath Snowflake Tables is Not Supported",
+)
 def test_snowflake_in_pushdown(memory_leak_check):
     """
     Test in pushdown with loading from a Snowflake table.
@@ -182,19 +196,18 @@ def test_snowflake_in_pushdown(memory_leak_check):
         f"select mycol from {table_name} WHERE mycol in ('A', 'B', 'C')",
         conn_str,
     )
-    check_func(
-        impl,
-        (table_name, conn_str),
-        py_output=py_output,
-        reset_index=True,
-        check_dtype=False,
-    )
 
     # make sure filter + limit pushdown worked
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
-        bodo_func(table_name, conn_str)
+        check_func(
+            impl,
+            (table_name, conn_str),
+            py_output=py_output,
+            reset_index=True,
+            check_dtype=False,
+        )
+
         check_logger_msg(stream, "Columns loaded ['mycol']")
         check_logger_msg(stream, "Filter pushdown successfully performed")

@@ -3181,7 +3181,7 @@ def _get_sql_types_arr_colnames(
     loc,
     is_table_input: bool,
     is_independent: bool,
-    downcast_decimal_to_double: bool,
+    downcast_decimal_to_double: bool = False,
 ):
     """
     Wrapper function to determine the db_type, column names,
