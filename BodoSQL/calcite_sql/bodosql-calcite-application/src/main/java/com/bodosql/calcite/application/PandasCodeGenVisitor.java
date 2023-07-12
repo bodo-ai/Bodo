@@ -65,13 +65,11 @@ import com.bodosql.calcite.table.LocalTableImpl;
 import com.bodosql.calcite.traits.BatchingProperty;
 import com.bodosql.calcite.traits.CombineStreamsExchange;
 import com.bodosql.calcite.traits.SeparateStreamExchange;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Stack;
-import java.util.TreeMap;
 import java.util.function.Supplier;
 import kotlin.jvm.functions.Function1;
 import org.apache.calcite.prepare.RelOptTableImpl;
@@ -1370,20 +1368,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // TODO: Add streaming timer support
     Variable groupbyStateVar = genGenericTempVar();
     Variable keyIndices = getStreamingGroupbyKeyIndices(node.getGroupSet(), this);
-    Pair<Variable, Variable> offsetAndCols = getStreamingGroupbyOffsetAndCols(node.getAggCallList(), this);
+    Pair<Variable, Variable> offsetAndCols =
+        getStreamingGroupbyOffsetAndCols(node.getAggCallList(), this);
     Variable offset = offsetAndCols.left;
     Variable cols = offsetAndCols.right;
     Variable ftypes = getStreamingGroupbyFtypes(node.getAggCallList(), this);
     Expr.Call stateCall =
         new Expr.Call(
             "bodo.libs.stream_groupby.init_groupby_state",
-            List.of(
-                keyIndices,
-                ftypes,
-                offset,
-                cols),
-            List.of()
-        );
+            List.of(keyIndices, ftypes, offset, cols),
+            List.of());
     Op.Assign groupbyInit = new Op.Assign(groupbyStateVar, stateCall);
     // Fetch the streaming pipeline
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
@@ -1423,9 +1417,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable outTable = genTableVar();
     Expr.Call outputCall =
         new Expr.Call(
-            "bodo.libs.stream_groupby.groupby_produce_output_batch",
-            List.of(groupbyStateVar)
-        );
+            "bodo.libs.stream_groupby.groupby_produce_output_batch", List.of(groupbyStateVar));
     generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
     // Generate an index.
     Variable indexVar = genIndexVar();
@@ -1454,7 +1446,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Append the code to delete the state
     Op.Stmt deleteState =
         new Op.Stmt(
-            new Expr.Call("bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
+            new Expr.Call(
+                "bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
     outputPipeline.addTermination(deleteState);
     // Add the DF to the stack
     this.varGenStack.push(outDf);
@@ -1705,6 +1698,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.generatedCode.add(new Op.Assign(outVar, init_dataframe_call));
     timerInfo.insertLoopOperationEndTimer();
     timerInfo.terminateTimer();
+
+    // Delete the reader state at end of loop
+    Op.Stmt deleteState =
+        new Op.Stmt(new Expr.Call("bodo.io.arrow_reader.arrow_reader_del", List.of(readerVar)));
+    currentPipeline.addTermination(deleteState);
 
     return outVar;
   }
@@ -2081,8 +2079,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     return new RexToPandasTranslator(this, this.generatedCode, this.typeSystem, nodeId, input);
   }
 
-  private RexToPandasTranslator getRexTranslator(int nodeId, Dataframe input, List<? extends Expr> localRefs) {
-    return new RexToPandasTranslator(this, this.generatedCode, this.typeSystem, nodeId, input, localRefs);
+  private RexToPandasTranslator getRexTranslator(
+      int nodeId, Dataframe input, List<? extends Expr> localRefs) {
+    return new RexToPandasTranslator(
+        this, this.generatedCode, this.typeSystem, nodeId, input, localRefs);
   }
 
   private class Implementor implements PandasRel.Implementor {
@@ -2181,7 +2181,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     @NotNull
     @Override
-    public RexToPandasTranslator rexTranslator(@NotNull final Dataframe input, @NotNull final List<? extends Expr> localRefs) {
+    public RexToPandasTranslator rexTranslator(
+        @NotNull final Dataframe input, @NotNull final List<? extends Expr> localRefs) {
       return getRexTranslator(node.getId(), input, localRefs);
     }
 

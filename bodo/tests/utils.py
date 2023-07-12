@@ -193,9 +193,9 @@ def check_func(
     - check_categorical: Argument to pass to Pandas assert_frame_equals. We use this if we want to disable
     the check_dtype with a categorical input (as otherwise it will still raise an error).
     - atol: Argument to pass to Pandas assert equals functions. This argument will be used if
-    floating point percision can vary due to differences in underlying floating point libraries.
+    floating point precision can vary due to differences in underlying floating point libraries.
     - rtol: Argument to pass to Pandas assert equals functions. This argument will be used if
-    floating point percision can vary due to differences in underlying floating point libraries.
+    floating point precision can vary due to differences in underlying floating point libraries.
     - use_table_format: flag for loading dataframes in table format for testing.
     If None, tests both formats if input arguments have dataframes.
     - use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded

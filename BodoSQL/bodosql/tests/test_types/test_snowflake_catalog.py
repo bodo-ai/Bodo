@@ -59,7 +59,7 @@ pytestmark = pytest_snowflake
 )
 def dummy_snowflake_catalogs(request):
     """
-    List of table paths that should be suppported.
+    List of table paths that should be supported.
     None of these actually point to valid data
     """
     return request.param
@@ -464,30 +464,31 @@ def test_snowflake_catalog_default(
 def test_snowflake_catalog_read_tpch(
     snowflake_sample_data_snowflake_catalog, memory_leak_check
 ):
-    tpch_query = """select
-                      n_name,
-                      sum(l_extendedprice * (1 - l_discount)) as revenue
-                    from
-                      tpch_sf1.customer,
-                      tpch_sf1.orders,
-                      tpch_sf1.lineitem,
-                      tpch_sf1.supplier,
-                      tpch_sf1.nation,
-                      tpch_sf1.region
-                    where
-                      c_custkey = o_custkey
-                      and l_orderkey = o_orderkey
-                      and l_suppkey = s_suppkey
-                      and c_nationkey = s_nationkey
-                      and s_nationkey = n_nationkey
-                      and n_regionkey = r_regionkey
-                      and r_name = 'ASIA'
-                      and o_orderdate >= '1994-01-01'
-                      and o_orderdate < '1995-01-01'
-                    group by
-                      n_name
-                    order by
-                      revenue desc
+    tpch_query = """\
+        select
+            n_name,
+            sum(l_extendedprice * (1 - l_discount)) as revenue
+        from
+            tpch_sf1.customer,
+            tpch_sf1.orders,
+            tpch_sf1.lineitem,
+            tpch_sf1.supplier,
+            tpch_sf1.nation,
+            tpch_sf1.region
+        where
+            c_custkey = o_custkey
+            and l_orderkey = o_orderkey
+            and l_suppkey = s_suppkey
+            and c_nationkey = s_nationkey
+            and s_nationkey = n_nationkey
+            and n_regionkey = r_regionkey
+            and r_name = 'ASIA'
+            and o_orderdate >= '1994-01-01'
+            and o_orderdate < '1995-01-01'
+        group by
+            n_name
+        order by
+            revenue desc
     """
 
     def impl(bc):
@@ -876,7 +877,7 @@ def test_default_table_type(
         if bodo.get_rank() == 0:
             table_type = pd.read_sql(
                 f"SHOW TABLES LIKE '{table_name}' in SCHEMA IDENTIFIER('{db}.{schema}')",
-                conn_str,
+                conn_str,  # type: ignore
             )["kind"][0]
 
         table_type = comm.bcast(table_type)
@@ -1080,7 +1081,7 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
         if bodo.get_rank() == 0:
             output_table_type = pd.read_sql(
                 f"SHOW TABLES LIKE '{table_name}' in SCHEMA IDENTIFIER('{db}.{schema}')",
-                conn_str,
+                conn_str,  # type: ignore
             )["kind"][0]
 
         output_table_type = comm.bcast(output_table_type)
@@ -1137,7 +1138,7 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
     # Write to Snowflake
     insert_table = table_name if use_default_schema else f"{schema}.{table_name}"
     succsess_query = f"CREATE TABLE IF NOT EXISTS {insert_table} AS Select 'literal' as column1, A + 1 as column2, '2023-02-21'::date as column3 from __bodolocal__.table1"
-    # This should succseed, since the table does not exist
+    # This should succeed, since the table does not exist
 
     exception_occurred_in_test_body = False
     try:
@@ -1485,7 +1486,6 @@ def test_snowflake_catalog_create_table_tpch(
         p_partkey
     """
 
-    comm = MPI.COMM_WORLD
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     conn_str = get_snowflake_connection_string(db, schema)
@@ -1531,7 +1531,6 @@ def test_snowflake_catalog_create_table_tpch(
         # so we can reuse the check_func infrastructure.
         return 5
 
-    try_body_threw_error = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
         check_func(
@@ -1564,25 +1563,23 @@ def test_snowflake_catalog_create_table_tpch(
         expected_output.columns = expected_output.columns.str.upper()
         assert_tables_equal(output_df, expected_output, check_dtype=False)
     except Exception as e:
-        try_body_threw_error = True
-        raise e
-    finally:
-        # Drop the table. In the case that the try body throws an error,
-        # we may not have succseeded in creating the table. Therefore, we
+        # In the case that the try body throws an error,
+        # we may not have succeeded in creating the table. Therefore, we
         # need to try to drop the table, but we don't want to mask the
         # original error, so we use a try/except block.
-        if try_body_threw_error:
-            try:
-                drop_snowflake_table(table_name, db, schema)
-            except:
-                pass
-        else:
+        try:
             drop_snowflake_table(table_name, db, schema)
+        except Exception:
+            pass
+        raise e
+    else:
+        # Drop the table.
+        drop_snowflake_table(table_name, db, schema)
 
 
 def test_snowflake_catalog_create_table_orderby_with():
     """
-    Test Snowflake CREATE TABLE, for a specific edgecase found with handling WITH and
+    Test Snowflake CREATE TABLE, for a specific edge-case found with handling WITH and
     ORDER BY clauses simultaneously.
     """
 
@@ -1591,11 +1588,11 @@ def test_snowflake_catalog_create_table_orderby_with():
         select 'foo' as p_partkey from (VALUES (1, 2, 3))
     )
     select
-                       p_partkey
-                     from
-                       part_two
-                     order by
-                       p_partkey
+        p_partkey
+    from
+        part_two
+    order by
+        p_partkey
     """
 
     ctas_query = f"CREATE OR REPLACE TABLE WILL_THROW_ERROR AS (\n" + base_query + ")"
@@ -1727,7 +1724,7 @@ def test_snowflake_catalog_table_priority(args, memory_leak_check):
         default_database.PUBLIC.(table_identifier)
         __bodo_local__.(table_identifier)
 
-    To test this, we have several tablenames that are present across the different
+    To test this, we have several table names that are present across the different
     locations (PUBLIC, TEST_DB, and __bodo_local__),
     and we test that the correct table is selected in each case.
     """
@@ -1959,7 +1956,7 @@ def test_snowflake_catalog_create_table_like(
     10       L_SHIPDATE          DATE  COLUMN     Y    None  ...          N  None       None    None        None
     ...
 
-    Actuall:
+    Actual:
                    name               type    kind null?  ... check expression comment policy name
     7             L_TAX              FLOAT  COLUMN     Y  ...  None       None    None        None
     8      L_RETURNFLAG  VARCHAR(16777216)  COLUMN     Y  ...  None       None    None        None
@@ -1969,7 +1966,7 @@ def test_snowflake_catalog_create_table_like(
 
     In order to properly implement this, we would likely need to push the query directly to Snowflake.
     However, I'm going to leave this to a followup issue, since this will likely be easier post
-    Jonathan's refactor to the volcanno planner:
+    Jonathan's refactor to the volcano planner:
     https://bodo.atlassian.net/browse/BE-4578
 
     """
@@ -1994,7 +1991,6 @@ def test_snowflake_catalog_create_table_like(
         # so we can reuse the check_func infrastructure.
         return 5
 
-    try_body_threw_error = False
     try:
         # Only test with only_1D=True so we only create the table once.
         check_func(impl, (bc, query), only_1D=True, py_output=5)
@@ -2019,17 +2015,14 @@ def test_snowflake_catalog_create_table_like(
         expected_output.columns = expected_output.columns.str.upper()
         assert_tables_equal(output_df, expected_output)
     except Exception as e:
-        try_body_threw_error = True
-        raise e
-    finally:
         # Drop the table. In the case that the try body throws an error,
-        # we may not have succseeded in creating the table. Therefore, we
+        # we may not have succeeded in creating the table. Therefore, we
         # need to try to drop the table, but we don't want to mask the
         # original error, so we use a try/except block.
-        if try_body_threw_error:
-            try:
-                drop_snowflake_table(output_table_name, db, schema)
-            except:
-                pass
-        else:
+        try:
             drop_snowflake_table(output_table_name, db, schema)
+        except Exception:
+            pass
+        raise e
+    else:
+        drop_snowflake_table(output_table_name, db, schema)

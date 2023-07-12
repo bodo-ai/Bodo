@@ -155,7 +155,7 @@ class SnowflakeReader : public ArrowReader {
         sf_conn = PyObject_GetAttrString(ds, "conn");
         if (sf_conn == NULL) {
             throw std::runtime_error(
-                "Could not retrieve conn attribute of snowflake dataset");
+                "Could not retrieve conn attribute of Snowflake dataset");
         }
 
         // all_pieces = ds.pieces

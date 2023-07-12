@@ -31,6 +31,7 @@ from bodo.io.snowflake import (
 from bodo.libs.array import (
     array_to_info,
     concat_tables_cpp,
+    delete_table,
     py_table_to_cpp_table,
     table_type,
 )
@@ -494,9 +495,11 @@ def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
         "        out_table_len = len(bodo.libs.array.array_from_cpp_table(out_table, 0, col_types_arr[0]))\n"
         "        ev_sf_write_concat.add_attribute('out_table_len', out_table_len)\n"
         "        ev_sf_write_concat.finalize()\n"
-        "        if out_table_len > 0:\n"
-        # Note: writer['stage_path'] already has trailing slash
+        "        if out_table_len <= 0:\n"
+        "            delete_table(out_table)\n"
+        "        else:\n"
         "            ev_upload_df = tracing.Event('upload_df', is_parallel=False)\n"
+        # Note: writer['stage_path'] already has trailing slash
         '            chunk_path = f\'{writer["stage_path"]}{writer["copy_into_dir"]}/file{writer["chunk_count"]}_rank{bodo.get_rank()}_{bodo.io.helpers.uuid4_helper()}.parquet\'\n'
         # To escape backslashes, we want to replace ( \ ) with ( \\ ), so the func_text
         # should contain the string literals ( \\ ) and ( \\\\ ). To add these to func_text,
@@ -693,6 +696,7 @@ def snowflake_writer_append_df(writer, df, is_last):  # pragma: no cover
         "tracing": tracing,
         "unicode_to_utf8": unicode_to_utf8,
         "begin_write_transaction": begin_write_transaction,
+        "delete_table": delete_table,
     }
 
     l = {}
