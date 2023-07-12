@@ -263,7 +263,6 @@ class HeterSeriesAttribute(OverloadedKeyAttributeTemplate):
         if isinstance(S.index, HeterogeneousIndexType) and is_overload_constant_tuple(
             S.index.data
         ):
-
             indices = get_overload_const_tuple(S.index.data)
             if attr in indices:
                 arr_ind = indices.index(attr)
@@ -602,7 +601,6 @@ def cast_series(context, builder, fromty, toty, val):
         and isinstance(fromty.index, bodo.hiframes.pd_index_ext.RangeIndexType)
         and isinstance(toty.index, bodo.hiframes.pd_index_ext.NumericIndexType)
     ):
-
         series_payload = get_series_payload(context, builder, fromty, val)
         new_index = context.cast(
             builder, series_payload.index, fromty.index, toty.index
@@ -1058,10 +1056,9 @@ def pd_series_overload(
                 _arr_dtype = bodo.FloatingArrayType(nb_dtype.dtype)
             elif nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
                 _arr_dtype = bodo.boolean_array_type
-            elif isinstance(nb_dtype, types.Number) or nb_dtype in [
-                bodo.datetime64ns,
-                bodo.timedelta64ns,
-            ]:
+            elif nb_dtype == bodo.datetime64ns:  # pragma: no cover
+                _arr_dtype = bodo.pd_datetime_tz_naive_type
+            elif isinstance(nb_dtype, types.Number) or nb_dtype == bodo.timedelta64ns:
                 _arr_dtype = types.Array(nb_dtype, 1, "C")
             else:
                 raise BodoError("pd.Series with dtype: {dtype} not currently supported")

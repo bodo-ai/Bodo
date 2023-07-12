@@ -32,6 +32,7 @@ from numba.np.arrayobj import get_itemsize, make_array, populate_array
 from numba.np.numpy_support import as_dtype
 
 import bodo
+from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.ir.filter import supported_funcs_map
 from bodo.libs.binary_arr_ext import bytes_type
@@ -172,6 +173,9 @@ def numba_to_c_type(t):
 
     if isinstance(t, PandasDatetimeTZDtype):
         return CTypeEnum.Datetime.value
+
+    if isinstance(t, PandasTimestampType):  # pragma: no cover
+        return CTypeEnum.Int64.value
 
     if isinstance(t, bodo.hiframes.time_ext.TimeType):
         return CTypeEnum.Time.value
