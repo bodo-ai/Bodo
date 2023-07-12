@@ -1440,6 +1440,18 @@ def test_df_fillna_type_mismatch_failure():
         ),
         pd.DataFrame(
             {
+                "A": pd.Series(
+                    [np.nan, np.nan, 1e16, 3e17, np.nan, 1e18, 500, np.nan] * 3,
+                    dtype="datetime64[ns]",
+                ),
+                "B": pd.Series(
+                    [np.nan, 3e17, 5e17, np.nan, np.nan, 1e18, 500, np.nan] * 3,
+                    dtype="timedelta64[ns]",
+                ),
+            }
+        ),
+        pd.DataFrame(
+            {
                 "A": pd.Series([None] * 10 + ["a"], dtype="string"),
                 "B": pd.Series([1] + [None] * 10, dtype="Int16"),
                 "C": pd.Series([np.nan] * 5 + [1.1] + [np.nan] * 5, dtype="float32"),

@@ -66,6 +66,8 @@ class PandasDatetimeTZDtype(types.Type):
         super(PandasDatetimeTZDtype, self).__init__(name=f"PandasDatetimeTZDtype[{tz}]")
 
 
+pd_datetime_tz_naive_type = PandasDatetimeTZDtype(None)
+
 register_model(PandasDatetimeTZDtype)(models.OpaqueModel)
 
 
@@ -305,23 +307,30 @@ def box_pd_datetime_array(typ, val, c):
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
 
     if tz_arg_obj is not None:
-        tz_obj = c.pyapi.call_method(
+        dtype_obj = c.pyapi.call_method(
             pd_class_obj, "DatetimeTZDtype", (unit_str_obj, tz_arg_obj)
         )
         c.pyapi.decref(tz_arg_obj)
     else:
-        tz_obj = c.pyapi.make_none()
-
+        dtype_str = c.context.get_constant_generic(
+            c.builder, types.unicode_type, "datetime64[ns]"
+        )
+        dtype_obj = c.pyapi.from_native_value(
+            types.unicode_type, dtype_str, c.env_manager
+        )
+        c.pyapi.incref(dtype_obj)
     # Get the constructor
     pd_array_class_obj = c.pyapi.object_getattr_string(pd_class_obj, "arrays")
 
     # Call the constructor.
     # The null bitmap is ignored at this stage because the corresponding entry in the DatetimeArray is also NaT
-    res = c.pyapi.call_method(pd_array_class_obj, "DatetimeArray", (np_arr_obj, tz_obj))
+    res = c.pyapi.call_method(
+        pd_array_class_obj, "DatetimeArray", (np_arr_obj, dtype_obj)
+    )
 
     c.pyapi.decref(np_arr_obj)
     c.pyapi.decref(unit_str_obj)
-    c.pyapi.decref(tz_obj)
+    c.pyapi.decref(dtype_obj)
     c.pyapi.decref(pd_class_obj)
     c.pyapi.decref(pd_array_class_obj)
     # decref() should be called on native value
@@ -442,12 +451,22 @@ def overload_pd_datetime_tz_convert(A):
 @overload_attribute(DatetimeArrayType, "dtype", no_unliteral=True)
 def overload_pd_datetime_dtype(A):
     tz = A.tz
-    dtype = pd.DatetimeTZDtype("ns", tz)
 
-    def impl(A):  # pragma: no cover
-        return dtype
+    # Replicate pandas behavior, which returns numpy's datetime64[ns] when tz is None
+    # Note that getitem still returns PandasTimestampTypes
+    if A.tz is None:
 
-    return impl
+        def impl(A):  # pragma: no cover
+            return bodo.datetime64ns
+
+        return impl
+    else:
+        dtype = pd.DatetimeTZDtype("ns", tz)
+
+        def impl(A):  # pragma: no cover
+            return dtype
+
+        return impl
 
 
 @overload(operator.getitem, no_unliteral=True)
@@ -504,6 +523,28 @@ def overload_getitem(A, ind):
     )  # pragma: no cover
 
 
+def timestamp_to_dt64(val):
+    return val
+
+
+@overload(timestamp_to_dt64)
+def overload_timestamp_to_dt64(val):
+    if isinstance(val, bodo.PandasTimestampType):
+
+        def impl(val):  # pragma: no cover
+            return bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+
+        return impl
+    elif val == bodo.datetime64ns:  # pragma: no cover
+
+        def impl(val):  # pragma: no cover
+            return val
+
+        return impl
+    else:
+        raise BodoError("timestamp_to_dt64 requires a timestamp")
+
+
 @overload(operator.setitem, no_unliteral=True)
 def overload_setitem(A, ind, val):
     if not isinstance(A, DatetimeArrayType):
@@ -512,32 +553,51 @@ def overload_setitem(A, ind, val):
 
     # Check the possible values
     if not (
-        isinstance(val, DatetimeArrayType) or isinstance(val, bodo.PandasTimestampType)
+        isinstance(val, DatetimeArrayType)
+        or isinstance(val, bodo.PandasTimestampType)
+        or val == bodo.datetime64ns
     ):  # pragma: no cover
         raise BodoError(
             "operator.setitem with DatetimeArrayType requires a Timestamp value or DatetimeArrayType"
         )
 
-    # Ensure the timezones match
-    if val.tz != tz:  # pragma: no cover
+    # Ensure the timezones match, and that, if a datetime 64, we have no time zone
+    if (
+        not isinstance(val, numba.core.types.scalars.NPDatetime) and val.tz != tz
+    ):  # pragma: no cover
         raise BodoError(
             "operator.setitem with DatetimeArrayType requires the Array and values to set to share a timezone"
         )
+    elif isinstance(val, numba.core.types.scalars.NPDatetime) and tz is not None:
+        raise BodoError(
+            "operator.setitem with tz-aware DatetimeArrayType requires timezone-aware values"
+        )
 
     if isinstance(ind, types.Integer):
-        if not isinstance(val, bodo.PandasTimestampType):  # pragma: no cover
+        if isinstance(val, bodo.PandasTimestampType):
+
+            def impl(A, ind, val):  # pragma: no cover
+                dt64_val = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+                A._data[ind] = dt64_val
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    A._null_bitmap, ind, 0 if np.isnat(dt64_val) else 1
+                )
+
+            return impl
+        elif isinstance(val, numba.core.types.scalars.NPDatetime):
+
+            def impl(A, ind, val):  # pragma: no cover
+                dt64_val = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val)
+                A._data[ind] = dt64_val
+                bodo.libs.int_arr_ext.set_bit_to_arr(
+                    A._null_bitmap, ind, 0 if np.isnat(dt64_val) else 1
+                )
+
+            return impl
+        else:  # pragma: no cover
             raise BodoError(
                 "operator.setitem with DatetimeArrayType requires a Timestamp value"
             )
-
-        def impl(A, ind, val):  # pragma: no cover
-            dt64_val = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
-            A._data[ind] = dt64_val
-            bodo.libs.int_arr_ext.set_bit_to_arr(
-                A._null_bitmap, ind, 0 if np.isnat(dt64_val) else 1
-            )
-
-        return impl
 
     # array of int indices
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
@@ -556,7 +616,7 @@ def overload_setitem(A, ind, val):
         else:
             # Scalar case
             def impl_scalar(A, ind, val):  # pragma: no cover
-                value = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+                value = timestamp_to_dt64(val)
                 n = len(ind)
                 valid = 0 if np.isnat(value) else 1
                 for i in range(n):
@@ -586,7 +646,7 @@ def overload_setitem(A, ind, val):
         else:
             # Scalar case
             def impl_scalar(A, ind, val):  # pragma: no cover
-                value = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+                value = timestamp_to_dt64(val)
                 ind = bodo.utils.conversion.coerce_to_array(ind)
                 n = len(ind)
                 valid = 0 if np.isnat(value) else 1
@@ -621,7 +681,7 @@ def overload_setitem(A, ind, val):
         else:
             # Scalar case
             def impl_scalar(A, ind, val):  # pragma: no cover
-                value = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+                value = timestamp_to_dt64(val)
                 slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
                 valid = 0 if np.isnat(value) else 1
                 for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
