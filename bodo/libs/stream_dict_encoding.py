@@ -51,6 +51,10 @@ ll.add_symbol(
     stream_dict_encoding_cpp.set_array_multi_input_py_entry,
 )
 ll.add_symbol(
+    "get_state_num_set_calls",
+    stream_dict_encoding_cpp.get_state_num_set_calls,
+)
+ll.add_symbol(
     "delete_dict_encoding_state", stream_dict_encoding_cpp.delete_dict_encoding_state
 )
 
@@ -360,6 +364,23 @@ def _set_array_multi_input(
     sig = types.void(
         dict_encoding_state, types.int64, cache_dict_ids, arr_info, types.int64
     )
+    return sig, codegen
+
+
+@intrinsic
+def get_state_num_set_calls(typingctx, dict_encoding_state):
+    """Get the number of times set was called on the dictionary encoding state."""
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(8).as_pointer()])
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_state_num_set_calls"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.int64(dict_encoding_state)
     return sig, codegen
 
 

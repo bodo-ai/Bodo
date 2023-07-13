@@ -327,12 +327,16 @@ convert_sql_pattern_to_python_runtime = register_jitable(
 )
 
 
-def like_kernel(arr, pattern, escape, case_insensitive):  # pragma: no cover
+def like_kernel(
+    arr, pattern, escape, case_insensitive, dict_encoding_state=None, func_id=-1
+):  # pragma: no cover
     pass
 
 
 @overload(like_kernel, no_unliteral=True)
-def overload_like_kernel(arr, pattern, escape, case_insensitive):
+def overload_like_kernel(
+    arr, pattern, escape, case_insensitive, dict_encoding_state=None, func_id=-1
+):
     """BodoSQL array kernel to implement the SQL like and ilike
     operations.
 
@@ -355,7 +359,14 @@ def overload_like_kernel(arr, pattern, escape, case_insensitive):
         if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
                 f"bodo.libs.bodosql_array_kernels.like_kernel",
-                ["arr", "pattern", "escape", "case_insensitive"],
+                [
+                    "arr",
+                    "pattern",
+                    "escape",
+                    "case_insensitive",
+                    "dict_encoding_state=None",
+                    "func_id=-1",
+                ],
                 i,
             )
 
@@ -363,36 +374,46 @@ def overload_like_kernel(arr, pattern, escape, case_insensitive):
         # Take an optimized path if the pattern and escape are both literals.
         # If either one is not a literal then we cannot compute the pattern
         # at compile time.
-        def impl(arr, pattern, escape, case_insensitive):  # pragma: no cover
+        def impl(
+            arr, pattern, escape, case_insensitive, dict_encoding_state=None, func_id=-1
+        ):  # pragma: no cover
             return like_kernel_const_pattern_util(
-                arr, pattern, escape, case_insensitive
+                arr, pattern, escape, case_insensitive, dict_encoding_state, func_id
             )
 
     elif bodo.utils.utils.is_array_typ(pattern, True) or bodo.utils.utils.is_array_typ(
         escape, True
     ):
 
-        def impl(arr, pattern, escape, case_insensitive):  # pragma: no cover
+        def impl(
+            arr, pattern, escape, case_insensitive, dict_encoding_state=None, func_id=-1
+        ):  # pragma: no cover
+            # Note: We don't include dict_encoding_state or func_id because we don't have a way
+            # to cache the data yet.
             return like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive)
 
     else:
 
-        def impl(arr, pattern, escape, case_insensitive):  # pragma: no cover
+        def impl(
+            arr, pattern, escape, case_insensitive, dict_encoding_state=None, func_id=-1
+        ):  # pragma: no cover
             return like_kernel_scalar_pattern_util(
-                arr, pattern, escape, case_insensitive
+                arr, pattern, escape, case_insensitive, dict_encoding_state, func_id
             )
 
     return impl
 
 
 def like_kernel_const_pattern_util(
-    arr, pattern, escape, case_insensitive
+    arr, pattern, escape, case_insensitive, dict_encoding_state=None, func_id=-1
 ):  # pragma: no cover
     pass
 
 
 @overload(like_kernel_const_pattern_util, no_unliteral=True)
-def overload_like_kernel_const_pattern_util(arr, pattern, escape, case_insensitive):
+def overload_like_kernel_const_pattern_util(
+    arr, pattern, escape, case_insensitive, dict_encoding_state, func_id
+):
     """Implementation of the SQL like and ilike kernels with both the pattern and escape
     are constant strings. In this case the pattern is computed at compile time and
     the generated code is optimized based on the pattern
@@ -426,10 +447,17 @@ def overload_like_kernel_const_pattern_util(arr, pattern, escape, case_insensiti
         raise_bodo_error("like_kernel(): 'case_insensitive' must be a constant boolean")
     is_case_insensitive = get_overload_const_bool(case_insensitive)
 
-    arg_names = ["arr", "pattern", "escape", "case_insensitive"]
-    arg_types = [arr, pattern, escape, case_insensitive]
+    arg_names = [
+        "arr",
+        "pattern",
+        "escape",
+        "case_insensitive",
+        "dict_encoding_state",
+        "func_id",
+    ]
+    arg_types = [arr, pattern, escape, case_insensitive, dict_encoding_state, func_id]
     # By definition only the array can contain nulls.
-    propagate_null = [True, False, False, False]
+    propagate_null = [True, False, False, False, False, False]
     out_dtype = bodo.boolean_array_type
     # Some paths have prefix and/or need extra globals
     prefix_code = None
@@ -467,6 +495,8 @@ def overload_like_kernel_const_pattern_util(arr, pattern, escape, case_insensiti
             else:
                 scalar_text += "res[i] = python_pattern in arg0\n"
 
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -475,6 +505,9 @@ def overload_like_kernel_const_pattern_util(arr, pattern, escape, case_insensiti
         out_dtype,
         prefix_code=prefix_code,
         extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
@@ -634,13 +667,15 @@ def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive
 
 
 def like_kernel_scalar_pattern_util(
-    arr, pattern, escape, case_insensitive
+    arr, pattern, escape, case_insensitive, dict_encoding_state=None, func_id=-1
 ):  # pragma: no cover
     pass
 
 
 @overload(like_kernel_scalar_pattern_util, no_unliteral=True)
-def overload_like_kernel_scalar_pattern_util(arr, pattern, escape, case_insensitive):
+def overload_like_kernel_scalar_pattern_util(
+    arr, pattern, escape, case_insensitive, dict_encoding_state, func_id
+):
     """Implementation of the SQL like and ilike kernels where both the pattern and the escape
     are scalars. In this case the pattern must be computed on each iteration of the loop
     at runtime.
@@ -662,10 +697,17 @@ def overload_like_kernel_scalar_pattern_util(arr, pattern, escape, case_insensit
         raise_bodo_error("like_kernel(): 'case_insensitive' must be a constant boolean")
     is_case_insensitive = get_overload_const_bool(case_insensitive)
 
-    arg_names = ["arr", "pattern", "escape", "case_insensitive"]
-    arg_types = [arr, pattern, escape, case_insensitive]
+    arg_names = [
+        "arr",
+        "pattern",
+        "escape",
+        "case_insensitive",
+        "dict_encoding_state",
+        "func_id",
+    ]
+    arg_types = [arr, pattern, escape, case_insensitive, dict_encoding_state, func_id]
     # By definition case_insensitive cannot be null.
-    propagate_null = [True, True, True, False]
+    propagate_null = [True, True, True, False, False, False]
     out_dtype = bodo.boolean_array_type
     extra_globals = {
         "convert_sql_pattern": convert_sql_pattern_to_python_runtime,
@@ -707,6 +749,9 @@ def overload_like_kernel_scalar_pattern_util(arr, pattern, escape, case_insensit
         scalar_text += "  res[i] = arg0.endswith(python_pattern)\n"
         scalar_text += "else:\n"
         scalar_text += "  res[i] = python_pattern in arg0\n"
+
+    use_dict_caching = not is_overload_none(dict_encoding_state)
+
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -715,6 +760,9 @@ def overload_like_kernel_scalar_pattern_util(arr, pattern, escape, case_insensit
         out_dtype,
         prefix_code=prefix_code,
         extra_globals=extra_globals,
+        # Add support for dict encoding caching with streaming.
+        dict_encoding_state_name="dict_encoding_state" if use_dict_caching else None,
+        func_id_name="func_id" if use_dict_caching else None,
     )
 
 
