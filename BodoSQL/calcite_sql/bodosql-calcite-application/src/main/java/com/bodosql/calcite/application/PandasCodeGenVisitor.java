@@ -1383,24 +1383,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
     inputPipeline.addInitialization(groupbyInit);
     // Groupby needs the isLast to be global before calling the build side change.
-    // TODO: [BSE-712]This is reused several places, create a helper function for this
     inputPipeline.ensureExitCondSynchronized();
     Variable batchExitCond = inputPipeline.getExitCond();
     Variable buildTable = genTableVar();
-    Expr.Call buildDfData =
-        new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(buildDf));
+    Expr.Call buildDfData = getDfData(buildDf);
     int numBuildCols = node.getRowType().getFieldCount();
     List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
-    Variable buildColNums = lowerAsMetaType(new Expr.Tuple(buildIndices));
-    // TODO: [BSE-712]This is reused several places, create a helper function for this
-    Expr.Call buildTableCall =
-        new Expr.Call(
-            "bodo.hiframes.table.logical_table_to_table",
-            buildDfData,
-            new Expr.Tuple(List.of()),
-            buildColNums,
-            new Expr.IntegerLiteral(numBuildCols));
-    generatedCode.add(new Assign(buildTable, buildTableCall));
+    generateStreamingTableCode(buildIndices, buildDfData, numBuildCols, buildTable);
     Expr.Call batchCall =
         new Expr.Call(
             "bodo.libs.stream_groupby.groupby_build_consume_batch",
@@ -1422,26 +1411,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate an index.
     Variable indexVar = genIndexVar();
     Expr.Call lenCall = new Expr.Call("len", List.of(outTable));
-    Expr.IntegerLiteral zero = new IntegerLiteral(0);
-    Expr.IntegerLiteral one = new IntegerLiteral(1);
-    Expr.Call indexCall =
-        new Expr.Call(
-            "bodo.hiframes.pd_index_ext.init_range_index",
-            List.of(zero, lenCall, one, Expr.None.INSTANCE));
-    generatedCode.add(new Op.Assign(indexVar, indexCall));
+    generateRangeIndexCode(lenCall, indexVar);
     // Generate a DataFrame
     Variable outDf = genDfVar();
-    Expr.Tuple tableTuple = new Expr.Tuple(List.of(outTable));
     // Generate the column names global
     List<Expr.StringLiteral> colNamesLiteral =
         stringsToStringLiterals(node.getRowType().getFieldNames());
-    Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
-    Variable colNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
-    Expr.Call initDfCall =
-        new Expr.Call(
-            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
-            List.of(tableTuple, indexVar, colNamesMeta));
-    generatedCode.add(new Op.Assign(outDf, initDfCall));
+    generateInitOutputDfCode(colNamesLiteral, outTable, indexVar, outDf);
 
     // Append the code to delete the state
     Op.Stmt deleteState =
@@ -1666,36 +1642,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
         new Call("bodo.io.arrow_reader.read_arrow_next", List.of(readerVar), List.of());
     this.generatedCode.add(new Op.TupleAssign(List.of(dfChunkVar, flagVar), read_arrow_next_call));
 
-    Expr df_len = new Call("len", dfChunkVar);
+    Expr.Call df_len = new Call("len", dfChunkVar);
 
-    Variable idx_var = genGenericTempVar();
+    Variable idx_var = genIndexVar();
 
-    List<Expr> argsList =
-        List.of(new Expr.IntegerLiteral(0), df_len, new Expr.IntegerLiteral(1), Expr.None.INSTANCE);
+    generateRangeIndexCode(df_len, idx_var);
 
-    Call init_range_index_call =
-        new Call("bodo.hiframes.pd_index_ext.init_range_index", argsList, List.of());
-
-    this.generatedCode.add(new Op.Assign(idx_var, init_range_index_call));
-
-    Expr tableTuple = new Expr.Tuple(List.of(dfChunkVar));
-
-    List<Expr> columnNamesExpr = new ArrayList<>();
+    List<Expr.StringLiteral> colNamesLiteral = new ArrayList<>();
     for (int i = 0; i < columnNames.size(); i++) {
-      columnNamesExpr.add(new Expr.StringLiteral(columnNames.get(i)));
+      colNamesLiteral.add(new Expr.StringLiteral(columnNames.get(i)));
     }
-    Expr.Tuple TupleExpr = new Expr.Tuple(columnNamesExpr);
-
-    Expr colNamesMetaExpr = this.lowerAsColNamesMetaType(TupleExpr);
-
-    Call init_dataframe_call =
-        new Call(
-            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
-            List.of(tableTuple, idx_var, colNamesMetaExpr),
-            List.of());
-
     Variable outVar = this.genDfVar();
-    this.generatedCode.add(new Op.Assign(outVar, init_dataframe_call));
+    generateInitOutputDfCode(colNamesLiteral, dfChunkVar, idx_var, outVar);
     timerInfo.insertLoopOperationEndTimer();
     timerInfo.terminateTimer();
 
@@ -1868,19 +1826,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     Variable batchExitCond = batchPipeline.getExitCond();
     // Fetch the underlying table for the join.
     Variable buildTable = genTableVar();
-    Expr.Call buildDfData =
-        new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(buildDf));
+    Expr.Call buildDfData = getDfData(buildDf);
     int numBuildCols = node.getLeft().getRowType().getFieldCount();
     List<Expr.IntegerLiteral> buildIndices = integerLiteralArange(numBuildCols);
-    Variable buildColNums = lowerAsMetaType(new Expr.Tuple(buildIndices));
-    Expr.Call buildTableCall =
-        new Expr.Call(
-            "bodo.hiframes.table.logical_table_to_table",
-            buildDfData,
-            new Expr.Tuple(List.of()),
-            buildColNums,
-            new Expr.IntegerLiteral(numBuildCols));
-    generatedCode.add(new Assign(buildTable, buildTableCall));
+    generateStreamingTableCode(buildIndices, buildDfData, numBuildCols, buildTable);
     Expr.Call batchCall =
         new Expr.Call(
             "bodo.libs.stream_join.join_build_consume_batch",
@@ -1905,19 +1854,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     probePipeline.endSection(newFlag);
     // Fetch the underlying table for the join.
     Variable probeTable = genTableVar();
-    Expr.Call probeDfData =
-        new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(probeDf));
+    Expr.Call probeDfData = getDfData(probeDf);
     int numProbeCols = node.getRight().getRowType().getFieldCount();
     List<Expr.IntegerLiteral> probeIndices = integerLiteralArange(numProbeCols);
-    Variable leftColNums = lowerAsMetaType(new Expr.Tuple(probeIndices));
-    Expr.Call probeTableCall =
-        new Expr.Call(
-            "bodo.hiframes.table.logical_table_to_table",
-            probeDfData,
-            new Expr.Tuple(List.of()),
-            leftColNums,
-            new Expr.IntegerLiteral(numProbeCols));
-    generatedCode.add(new Assign(probeTable, probeTableCall));
+    generateStreamingTableCode(probeIndices, probeDfData, numProbeCols, probeTable);
     // Add the probe side
     Variable outTable = genTableVar();
     Expr.Call probeCall =
@@ -1926,28 +1866,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
             List.of(joinStateVar, probeTable, oldFlag));
     generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), probeCall));
     // Generate an index.
-    Variable indexVar = genIndexVar();
     Expr.Call lenCall = new Expr.Call("len", List.of(outTable));
-    Expr.IntegerLiteral zero = new IntegerLiteral(0);
-    Expr.IntegerLiteral one = new IntegerLiteral(1);
-    Expr.Call indexCall =
-        new Expr.Call(
-            "bodo.hiframes.pd_index_ext.init_range_index",
-            List.of(zero, lenCall, one, Expr.None.INSTANCE));
-    generatedCode.add(new Op.Assign(indexVar, indexCall));
+    Variable indexVar = genIndexVar();
+    generateRangeIndexCode(lenCall, indexVar);
     // Generate a DataFrame
     Variable outDf = genDfVar();
-    Expr.Tuple tableTuple = new Expr.Tuple(List.of(outTable));
     // Generate the column names global
     List<Expr.StringLiteral> colNamesLiteral =
         stringsToStringLiterals(node.getRowType().getFieldNames());
-    Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
-    Variable colNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
-    Expr.Call initDfCall =
-        new Expr.Call(
-            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
-            List.of(tableTuple, indexVar, colNamesMeta));
-    generatedCode.add(new Op.Assign(outDf, initDfCall));
+    generateInitOutputDfCode(colNamesLiteral, outTable, indexVar, outDf);
     timerInfo.insertLoopOperationEndTimer();
     // Append the code to delete the state
     Op.Stmt deleteState =
@@ -1956,6 +1883,78 @@ public class PandasCodeGenVisitor extends RelVisitor {
     probePipeline.addTermination(deleteState);
     // Add the DF to the stack
     this.varGenStack.push(outDf);
+  }
+
+  /**
+   * Helper function for getting data from a dataframe
+   *
+   * @param dataframe the dataframe to retrieve data
+   */
+  private Expr.Call getDfData(Variable dataframe) {
+    return new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(dataframe));
+  }
+
+  /**
+   * Helper function for generating table code for streaming
+   *
+   * @param indices indices of table
+   * @param dfData dataframe data
+   * @param tableCols number of logical input columns in input table
+   * @param table variable of the table
+   */
+  private void generateStreamingTableCode(
+      List<Expr.IntegerLiteral> indices,
+      Expr.Call dfData,
+      int tableCols,
+      Variable table) {
+    Variable colNums = lowerAsMetaType(new Expr.Tuple(indices));
+    Expr.Call probeTableCall =
+        new Expr.Call(
+            "bodo.hiframes.table.logical_table_to_table",
+            dfData,
+            new Expr.Tuple(List.of()),
+            colNums,
+            new Expr.IntegerLiteral(tableCols));
+    generatedCode.add(new Assign(table, probeTableCall));
+  }
+
+  /**
+   * Helper function for generating range index code for streaming
+   *
+   * @param lenCall length of the range
+   * @param indexVar index variable
+   */
+  private void generateRangeIndexCode(Expr.Call lenCall, Variable indexVar) {
+    Expr.IntegerLiteral zero = new IntegerLiteral(0);
+    Expr.IntegerLiteral one = new IntegerLiteral(1);
+    Expr.Call indexCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_index_ext.init_range_index",
+            List.of(zero, lenCall, one, Expr.None.INSTANCE));
+    generatedCode.add(new Op.Assign(indexVar, indexCall));
+  }
+
+  /**
+   * Helper function for generating output dataframe code for streaming
+   *
+   * @param colNamesLiteral A list of column name strings
+   * @param outTable output table
+   * @param indexVar index variable
+   * @param outDf output dataframe
+   */
+  private void generateInitOutputDfCode(
+      List<Expr.StringLiteral> colNamesLiteral,
+      Variable outTable,
+      Variable indexVar,
+      Variable outDf) {
+    Expr.Tuple tableTuple = new Expr.Tuple(List.of(outTable));
+    Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
+    Variable colNamesMeta = lowerAsColNamesMetaType(colNamesTuple);
+    Expr.Call initDfCall =
+        new Expr.Call(
+            "bodo.hiframes.pd_dataframe_ext.init_dataframe",
+            List.of(tableTuple, indexVar, colNamesMeta));
+    generatedCode.add(new Op.Assign(outDf, initDfCall));
   }
 
   /**
