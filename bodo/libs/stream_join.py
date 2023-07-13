@@ -813,6 +813,9 @@ def _init_join_state(
         output_batch_size = context.get_constant(
             types.int64, bodo.bodosql_streaming_batch_size
         )
+        shuffle_sync_iter = context.get_constant(
+            types.uint64, bodo.stream_loop_sync_iters
+        )
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -828,6 +831,7 @@ def _init_join_state(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(1),
+                lir.IntType(64),
                 lir.IntType(64),
             ],
         )
@@ -848,6 +852,7 @@ def _init_join_state(
             build_parallel,
             probe_parallel,
             output_batch_size,
+            shuffle_sync_iter,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)

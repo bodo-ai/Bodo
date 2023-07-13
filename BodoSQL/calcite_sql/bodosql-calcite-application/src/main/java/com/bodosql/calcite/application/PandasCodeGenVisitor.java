@@ -239,6 +239,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
+   * Generate a new iter variable for step by step pandas codegen
+   *
+   * @return variable
+   */
+  public Variable genIterVar() {
+    return generatedCode.getSymbolTable().genIterVar();
+  }
+
+  /**
    * Generate the new temporary variable for step by step pandas codegen.
    *
    * @return variable
@@ -467,7 +476,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Create the variable that "drives" the loop
     Variable exitCond = genFinishedStreamingFlag();
-    generatedCode.startStreamingPipelineFrame(exitCond);
+    Variable iterVar = genIterVar();
+    generatedCode.startStreamingPipelineFrame(exitCond, iterVar);
     StreamingPipelineFrame streamingInfo = generatedCode.getCurrentStreamingPipeline();
     // Initialize the iteration.
     Variable iteratorNumber = genGenericTempVar();
@@ -1400,7 +1410,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Create a new pipeline
     Variable newFlag = genGenericTempVar();
-    generatedCode.startStreamingPipelineFrame(newFlag);
+    Variable iterVar = genIterVar();
+    generatedCode.startStreamingPipelineFrame(newFlag, iterVar);
     StreamingPipelineFrame outputPipeline = generatedCode.getCurrentStreamingPipeline();
     // Add the output side
     Variable outTable = genTableVar();
@@ -1609,8 +1620,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public Variable initStreamingIoLoop(PandasRel node, Expr readCode, List<String> columnNames) {
 
     Variable flagVar = genFinishedStreamingFlag();
+    Variable iterVar = genIterVar();
     // start the streaming pipeline
-    this.generatedCode.startStreamingPipelineFrame(flagVar);
+    this.generatedCode.startStreamingPipelineFrame(flagVar, iterVar);
 
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
@@ -1848,6 +1860,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     timerInfo.insertLoopOperationStartTimer();
     Variable probeDf = varGenStack.pop();
     StreamingPipelineFrame probePipeline = generatedCode.getCurrentStreamingPipeline();
+
     Variable oldFlag = probePipeline.getExitCond();
     // Change the probe condition
     Variable newFlag = genGenericTempVar();
@@ -1891,7 +1904,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param dataframe the dataframe to retrieve data
    */
   private Expr.Call getDfData(Variable dataframe) {
-    return new Expr.Call("bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(dataframe));
+    return new Expr.Call(
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data", List.of(dataframe));
   }
 
   /**
@@ -1903,10 +1917,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param table variable of the table
    */
   private void generateStreamingTableCode(
-      List<Expr.IntegerLiteral> indices,
-      Expr.Call dfData,
-      int tableCols,
-      Variable table) {
+      List<Expr.IntegerLiteral> indices, Expr.Call dfData, int tableCols, Variable table) {
     Variable colNums = lowerAsMetaType(new Expr.Tuple(indices));
     Expr.Call probeTableCall =
         new Expr.Call(

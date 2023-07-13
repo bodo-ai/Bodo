@@ -327,7 +327,8 @@ void groupby_build_consume_batch(GroupbyState* groupby_state,
 
     if (shuffle_this_iter(groupby_state->parallel, is_last,
                           groupby_state->shuffle_table_buffer.data_table,
-                          groupby_state->build_iter)) {
+                          groupby_state->build_iter,
+                          groupby_state->shuffle_sync_iter)) {
         // shuffle data of other ranks
         std::shared_ptr<table_info> shuffle_table =
             groupby_state->shuffle_table_buffer.data_table;
@@ -443,7 +444,8 @@ void groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     // shuffle data of other ranks and append received data to local buffer
     if (shuffle_this_iter(groupby_state->parallel, is_last,
                           groupby_state->shuffle_table_buffer.data_table,
-                          groupby_state->build_iter)) {
+                          groupby_state->build_iter,
+                          groupby_state->shuffle_sync_iter)) {
         std::shared_ptr<table_info> shuffle_table =
             groupby_state->shuffle_table_buffer.data_table;
 
@@ -563,7 +565,8 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
 GroupbyState* groupby_state_init_py_entry(
     int8_t* build_arr_c_types, int8_t* build_arr_array_types, int n_build_arrs,
     int32_t* ftypes, int32_t* f_in_offsets, int32_t* f_in_cols, int n_funcs,
-    uint64_t n_keys, int64_t output_batch_size, bool parallel) {
+    uint64_t n_keys, int64_t output_batch_size, bool parallel,
+    uint64_t shuffle_sync_iters) {
     return new GroupbyState(
         std::vector<int8_t>(build_arr_c_types,
                             build_arr_c_types + n_build_arrs),
@@ -574,7 +577,7 @@ GroupbyState* groupby_state_init_py_entry(
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),
 
-        n_keys, output_batch_size, parallel);
+        n_keys, output_batch_size, parallel, shuffle_sync_iters);
 }
 
 /**

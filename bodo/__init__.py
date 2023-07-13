@@ -329,3 +329,5 @@ bodosql_use_streaming_plan = False
 bodosql_streaming_batch_size = 4096
 # Flag to track if we should enable groupby streaming in BodoSQL when the streaming plan is enabled
 enable_groupby_streaming = False
+# How many iterations to run a streaming loop for before synchronizing
+stream_loop_sync_iters = int(os.environ.get("BODO_STREAM_LOOP_SYNC_ITERS", 100))
