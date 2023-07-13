@@ -16,8 +16,6 @@
 #include "simd-block-fixed-fpp.h"
 #include "tracing.h"
 
-#define ALIGNMENT 64  // preferred alignment for AVX512
-
 // Convenience macros from
 // https://github.com/numba/numba/blob/main/numba/_pymodule.h
 #define MOD_DEF(ob, name, doc, methods)                                     \
@@ -47,7 +45,158 @@ inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
     PyErr_SetString(type, message);
 }
 
-class BodoBuffer;
+// --------- MemInfo Helper Functions --------- //
+NRT_MemInfo* alloc_meminfo(int64_t length);
+
+/**
+ * decref meminfo refcount
+ */
+void decref_meminfo(MemInfo* meminfo);
+
+/**
+ * incref meminfo refcount
+ */
+void incref_meminfo(MemInfo* meminfo);
+
+// --------- BodoBuffer Definition --------- //
+
+/**
+ * @brief Arrow buffer that holds a reference to a Bodo meminfo and
+ * decrefs/deallocates if necessary to Bodo's BufferPool.
+ * Alternative to Arrow's PoolBuffer:
+ * https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/memory_pool.cc#L838
+ */
+class BodoBuffer : public arrow::ResizableBuffer {
+   public:
+    /**
+     * @brief Construct a new Bodo Buffer
+     *
+     * @param data Pointer to data buffer
+     * @param size Size of the buffer
+     * @param meminfo_ MemInfo object which manages the underlying data buffer
+     * @param incref Whether to incref (default: true)
+     * @param pool Pool that was used for allocating the data buffer. The same
+     * pool should be used for resizing the buffer in the future.
+     * @param mm Memory manager associated with the pool.
+     */
+    BodoBuffer(uint8_t* data, const int64_t size, NRT_MemInfo* meminfo_,
+               bool incref = true,
+               bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+               std::shared_ptr<::arrow::MemoryManager> mm =
+                   bodo::default_buffer_memory_manager())
+        : ResizableBuffer(data, size, std::move(mm)),
+          meminfo(meminfo_),
+          pool_(pool) {
+        if (incref) {
+            incref_meminfo(meminfo);
+        }
+    }
+
+    ~BodoBuffer() override {
+        // Adapted from:
+        // https://github.com/apache/arrow/blob/5b2fbade23eda9bc95b1e3854b19efff177cd0bd/cpp/src/arrow/memory_pool.cc#L844
+        uint8_t* ptr = mutable_data();
+        // TODO(ehsan): add global_state.is_finalizing() check to match Arrow
+        if (ptr) {
+            decref_meminfo(meminfo);
+        }
+    }
+
+    NRT_MemInfo* getMeminfo() { return meminfo; }
+
+    /**
+     * @brief Ensure that buffer can accommodate specified total number of bytes
+     * without re-allocation.
+     *
+     * Copied from Arrow's PoolBuffer since it is not exposed to use as base
+     * class:
+     * https://github.com/apache/arrow/blob/apache-arrow-11.0.0/cpp/src/arrow/memory_pool.cc
+     * Bodo change: alignment is not passed to alloc calls which defaults to
+     * 64-byte. Meminfo attributes are also updated.
+     *
+     * @param capacity minimum total capacity required in bytes
+     * @return arrow::Status
+     */
+    arrow::Status Reserve(const int64_t capacity) override {
+        if (capacity < 0) {
+            return arrow::Status::Invalid("Negative buffer capacity: ",
+                                          capacity);
+        }
+        if (!data_ || capacity > capacity_) {
+            int64_t new_capacity =
+                arrow::bit_util::RoundUpToMultipleOf64(capacity);
+            if (data_) {
+                // NOTE: meminfo->data needs to be passed to buffer pool manager
+                // since it stores swips
+                RETURN_NOT_OK(pool_->Reallocate(capacity_, new_capacity,
+                                                (uint8_t**)&(meminfo->data)));
+            } else {
+                RETURN_NOT_OK(
+                    pool_->Allocate(new_capacity, (uint8_t**)&(meminfo->data)));
+            }
+            data_ = (uint8_t*)meminfo->data;
+            capacity_ = new_capacity;
+            // Updating size is necessary since used by the buffer pool manager
+            // for freeing.
+            meminfo->size = new_capacity;
+        }
+        return arrow::Status::OK();
+    }
+
+    /**
+     * @brief Make sure there is enough capacity and resize the buffer.
+     * If shrink_to_fit=true and new_size is smaller than existing size, updates
+     * capacity to the nearest multiple of 64 bytes.
+     *
+     * Copied from Arrow's PoolBuffer since it is not exposed to use as base
+     * class:
+     * https://github.com/apache/arrow/blob/apache-arrow-11.0.0/cpp/src/arrow/memory_pool.cc
+     * Bodo change: alignment is not passed to alloc calls which defaults to
+     * 64-byte. Meminfo attributes are also updated.
+     *
+     * @param new_size New size of the buffer
+     * @param shrink_to_fit if new size is smaller than the existing size,
+     * reallocate to fit.
+     * @return arrow::Status
+     */
+    arrow::Status Resize(const int64_t new_size,
+                         bool shrink_to_fit = true) override {
+        if (ARROW_PREDICT_FALSE(new_size < 0)) {
+            return arrow::Status::Invalid("Negative buffer resize: ", new_size);
+        }
+        if (data_ && shrink_to_fit && new_size <= size_) {
+            // Buffer is non-null and is not growing, so shrink to the requested
+            // size without excess space.
+            int64_t new_capacity =
+                arrow::bit_util::RoundUpToMultipleOf64(new_size);
+            if (capacity_ != new_capacity) {
+                // Buffer hasn't got yet the requested size.
+                RETURN_NOT_OK(pool_->Reallocate(capacity_, new_capacity,
+                                                (uint8_t**)&(meminfo->data)));
+                data_ = (uint8_t*)meminfo->data;
+                capacity_ = new_capacity;
+                // Updating size is necessary since used by the buffer pool
+                // manager for freeing.
+                meminfo->size = new_capacity;
+            }
+        } else {
+            RETURN_NOT_OK(Reserve(new_size));
+        }
+        size_ = new_size;
+
+        return arrow::Status::OK();
+    }
+
+    /// @brief Wrapper for Pinning Buffers
+    inline void pin() { NRT_MemInfo_Pin(this->meminfo); }
+
+    /// @brief Wrapper for Unpinning Buffers
+    inline void unpin() { NRT_MemInfo_Unpin(this->meminfo); }
+
+   private:
+    NRT_MemInfo* meminfo;
+    arrow::MemoryPool* pool_;
+};
 
 // get memory alloc/free info from _meminfo.h
 size_t get_stats_alloc();
@@ -78,8 +227,8 @@ struct Bodo_CTypes {
         TIMEDELTA = 16,
         INT128 = 17,
         LIST_STRING = 18,
-        LIST = 19,    // for nested datastructures, maps to Arrow List
-        STRUCT = 20,  // for nested datastructures, maps to Arrow Struct
+        LIST = 19,    // for nested data structures, maps to Arrow List
+        STRUCT = 20,  // for nested data structures, maps to Arrow Struct
         BINARY = 21,
         _numtypes
     };
@@ -147,7 +296,7 @@ inline bool is_numerical(Bodo_CTypes::CTypeEnum typ) {
 
 /** Getting the expression of a T value as a vector of characters
  *
- * The template paramter is T.
+ * The template parameter is T.
  * @param val the value in the type T.
  * @return the vector of characters on output
  */
@@ -557,6 +706,38 @@ struct array_info {
         SetBitTo((uint8_t*)null_bitmask(), idx, bit);
     }
 
+    void pin() {
+        switch (arr_type) {
+            case bodo_array_type::DICT:
+            case bodo_array_type::LIST_STRING:
+                for (auto& arr : this->child_arrays) {
+                    arr->pin();
+                }
+                break;
+            default:
+                for (auto& buffer : this->buffers) {
+                    buffer->pin();
+                }
+                break;
+        }
+    }
+
+    void unpin() {
+        switch (arr_type) {
+            case bodo_array_type::DICT:
+            case bodo_array_type::LIST_STRING:
+                for (auto& arr : this->child_arrays) {
+                    arr->unpin();
+                }
+                break;
+            default:
+                for (auto& buffer : this->buffers) {
+                    buffer->unpin();
+                }
+                break;
+        }
+    }
+
     /**
      * @brief Can a given a array contain NA values.
      * Currently this decides solely based on type but
@@ -852,6 +1033,18 @@ struct table_info {
     const std::shared_ptr<array_info> operator[](size_t idx) const {
         return columns[idx];
     }
+
+    void pin() {
+        for (auto& col : columns) {
+            col->pin();
+        }
+    }
+
+    void unpin() {
+        for (auto& col : columns) {
+            col->unpin();
+        }
+    }
 };
 
 /**
@@ -887,7 +1080,7 @@ void clear_all_cols_if_last_table_ref(std::shared_ptr<table_info> const& table);
  */
 int64_t table_local_memory_size(std::shared_ptr<table_info> table);
 
-/* Compute the total memory of the table accross all processors.
+/* Compute the total memory of the table across all processors.
  *
  * @param table : The input table
  * @return the total size of the table all over the processors
@@ -899,8 +1092,6 @@ void bodo_common_init();
 
 std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> arr);
 
-NRT_MemInfo* alloc_meminfo(int64_t length);
-
 /**
  * Free underlying array of array_info pointer and delete the pointer
  */
@@ -910,16 +1101,6 @@ void delete_info(array_info* arr);
  * delete table pointer and its column array_info pointers (but not the arrays).
  */
 void delete_table(table_info* table);
-
-/**
- * decref meminfo refcount
- */
-void decref_meminfo(MemInfo* meminfo);
-
-/**
- * incref meminfo refcount
- */
-void incref_meminfo(MemInfo* meminfo);
 
 extern "C" {
 
