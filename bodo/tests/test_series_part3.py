@@ -8,8 +8,10 @@ import pytest
 import bodo
 from bodo.tests.series_common import numeric_series_val  # noqa
 from bodo.tests.test_parfor_optimizations import _check_num_parfors
-from bodo.tests.utils import ParforTestPipeline, check_func
+from bodo.tests.utils import ParforTestPipeline, check_func, pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 @pytest.mark.slow

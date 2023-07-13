@@ -14,9 +14,12 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     check_func,
+    pytest_pandas,
     reduce_sum,
 )
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 _pivot_df1 = pd.DataFrame(
     {
@@ -525,6 +528,7 @@ def test_pivot_basic(df, memory_leak_check):
     """
     Checks basic support for DataFrame.pivot on various datatypes.
     """
+
     # Test pivot unboxing
     def impl1(df):
         return df.pivot(index="A", columns="B", values="C")

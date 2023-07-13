@@ -7,8 +7,10 @@ import pytest
 
 import bodo
 from bodo.tests.timezone_common import representative_tz_or_none  # noqa
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 def test_pd_concat_df(memory_leak_check):

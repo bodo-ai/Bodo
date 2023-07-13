@@ -23,9 +23,12 @@ from bodo.tests.utils import (
     _test_equal,
     check_func,
     is_bool_object_series,
+    pytest_pandas,
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_call_assign
+
+pytestmark = pytest_pandas
 
 
 # TODO: integer Null and other Nulls

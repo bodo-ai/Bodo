@@ -14,7 +14,9 @@ from sklearn.preprocessing import RobustScaler
 
 import bodo
 from bodo.tests.test_sklearn_part3 import gen_sklearn_scalers_random_data
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.tests.utils import _get_dist_arg, check_func, pytest_ml
+
+pytestmark = pytest_ml
 
 # ---------------------RobustScaler Tests, part 1--------------------
 

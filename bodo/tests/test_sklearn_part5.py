@@ -12,7 +12,9 @@ from sklearn.preprocessing import RobustScaler
 
 from bodo.tests.test_sklearn_part3 import gen_sklearn_scalers_random_data
 from bodo.tests.test_sklearn_part4 import robust_scalar_data  # pragma: no cover
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_ml
+
+pytestmark = pytest_ml
 
 # ---------------------RobustScaler Tests, part 2--------------------
 
@@ -97,7 +99,6 @@ def test_robust_scaler_bool_attrs(bool_val, memory_leak_check):
 
 
 def test_robust_scaler_array_and_quantile_range_attrs(memory_leak_check):
-
     data = gen_sklearn_scalers_random_data(20, 3)
 
     def impl_center_(X):

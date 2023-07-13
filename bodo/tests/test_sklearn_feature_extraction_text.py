@@ -7,7 +7,9 @@ from sklearn.feature_extraction.text import CountVectorizer, HashingVectorizer
 from sklearn.utils._testing import assert_almost_equal
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.tests.utils import _get_dist_arg, check_func, pytest_ml
+
+pytestmark = pytest_ml
 
 # ---------------------- CountVectorizer tests ----------------------
 

@@ -6,7 +6,9 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import _test_equal, check_func
+from bodo.tests.utils import _test_equal, check_func, pytest_pandas
+
+pytestmark = pytest_pandas
 
 
 @pytest.fixture(
@@ -525,7 +527,6 @@ def test_cat(test_unicode, sep, memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.parametrize("case", [True, False])
 def test_re_syntax(case, memory_leak_check):
-
     # Test special characters and quantifiers
     def test_impl(S):
         return S.str.contains(r"[a-z]+", regex=True, case=case)
@@ -744,6 +745,7 @@ def test_extract_noexpand(test_unicode, memory_leak_check):
 # TODO: Add memory_leak_check when problem are resolved.
 def test_extractall():
     """Test Series.str.extractall() with various input cases"""
+
     # ascii input with non-string index, single named group
     def test_impl1(S):
         return S.str.extractall(r"(?P<BBB>[abd]+)\d+")

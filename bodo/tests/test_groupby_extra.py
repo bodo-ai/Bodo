@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_pandas
+
+pytestmark = pytest_pandas
 
 
 @pytest.fixture(

@@ -24,9 +24,12 @@ from bodo.tests.utils import (
     count_parfor_OneDs,
     gen_random_string_binary_array,
     is_bool_object_series,
+    pytest_pandas,
 )
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_call_assign
+
+pytestmark = pytest_pandas
 
 
 @pytest.fixture(params=[1, -3, 20, 0, 1000])

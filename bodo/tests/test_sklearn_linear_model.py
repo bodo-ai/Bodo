@@ -17,7 +17,9 @@ from sklearn.metrics import precision_score, r2_score
 from sklearn.preprocessing import StandardScaler
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_ml
+
+pytestmark = pytest_ml
 
 
 # ---------------------- SGDClassifer tests ----------------------
@@ -162,7 +164,6 @@ def test_sgdc_lr(memory_leak_check):
 
 
 def test_sgdc_predict_proba_log_proba(memory_leak_check):
-
     splitN = 500
     n_samples = 1000
     n_features = 50
@@ -672,7 +673,6 @@ def test_logistic_regression(memory_leak_check):
 
 
 def test_logistic_regression_predict_proba_log_proba(memory_leak_check):
-
     splitN = 500
     n_samples = 1000
     n_features = 50

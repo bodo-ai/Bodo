@@ -7,7 +7,9 @@ import pytest
 import scipy.sparse
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_ml
+
+pytestmark = pytest_ml
 
 
 @pytest.fixture(

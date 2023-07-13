@@ -7,8 +7,10 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func, gen_nonascii_list
+from bodo.tests.utils import check_func, gen_nonascii_list, pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 @pytest.mark.slow
@@ -284,6 +286,7 @@ def test_getitem_slice(cat_arr_value, memory_leak_check):
 @pytest.mark.slow
 def test_cmp(memory_leak_check):
     """test eq/ne comparison of Categorical array and value"""
+
     # literal value
     def impl1(A):
         return A == 1

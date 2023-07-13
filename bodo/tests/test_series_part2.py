@@ -20,8 +20,11 @@ from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
     is_bool_object_series,
+    pytest_pandas,
 )
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 @pytest.mark.parametrize(

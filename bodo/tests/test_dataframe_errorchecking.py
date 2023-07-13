@@ -8,7 +8,10 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_pandas
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_pandas
 
 
 @pytest.fixture(params=bodo.hiframes.pd_dataframe_ext.dataframe_unsupported)
@@ -994,7 +997,6 @@ def test_concat_const_args(memory_leak_check):
 
 
 def test_df_getitem_non_const_columname_error(memory_leak_check):
-
     g = bodo.jit(lambda a: a)
 
     @bodo.jit

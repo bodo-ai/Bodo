@@ -6,6 +6,7 @@ import io
 import os
 import random
 import string
+import subprocess
 import time
 import types as pytypes
 import warnings
@@ -2423,6 +2424,32 @@ def compose_decos(decos):
     return composition
 
 
+def check_for_compiler_file_changes():
+    """
+    Function that returns if any of the files critical to the compiler pipeline were
+    altered. If this is True, then a larger subset of tests will be run on CI.
+    """
+    res = subprocess.run(["git", "diff", "--name-only", "develop"], capture_output=True)
+    files = res.stdout.decode("utf-8").strip().split("\n")
+    core_compiler_files = {
+        "bodo/transforms/distributed_pass.py",
+        "bodo/transforms/dataframe_pass.py",
+        "bodo/transforms/series_pass.py",
+        "bodo/transforms/table_column_del_pass.py",
+        "bodo/transforms/typing_pass.py",
+        "bodo/transforms/untyped_pass.py",
+        "bodo/utils/transform.py",
+        "bodo/utils/typing.py",
+    }
+    for filename in files:
+        if filename in core_compiler_files:
+            return True
+    return False
+
+
+compiler_files_were_changed = check_for_compiler_file_changes()
+
+
 # Determine if we are re-running a test due to a flaky failure.
 pytest_snowflake_is_rerunning = False
 
@@ -2460,6 +2487,40 @@ pytest_snowflake = [
     ),
     pytest.mark.flaky(rerun_filter=_pytest_snowflake_rerun_filter),
 ]
+
+# This is for use as a decorator for a single test function.
+# (@pytest_mark_pandas)
+pytest_mark_pandas = compose_decos(
+    (
+        pytest.mark.skipif(
+            not (
+                compiler_files_were_changed
+                or "AGENT_NAME" in os.environ
+                or os.environ.get("NUMBA_DEVELOPER_MODE", False)
+            ),
+            reason="only runs in Azure Pipelines unless compiler files were changed",
+        ),
+        pytest.mark.pandas,
+    )
+)
+
+# This is for marking an entire test file
+# (pytestmark = pytest_pandas)
+pytest_pandas = [
+    pytest.mark.skipif(
+        not (
+            compiler_files_were_changed
+            or "AGENT_NAME" in os.environ
+            or os.environ.get("NUMBA_DEVELOPER_MODE", False)
+        ),
+        reason="only runs in Azure Pipelines unless compiler files were changed",
+    ),
+    pytest.mark.pandas,
+]
+
+# This is for marking an entire test file
+# (pytestmark = pytest_ml)
+pytest_ml = [pytest.mark.ml]
 
 
 @contextmanager
