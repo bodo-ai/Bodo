@@ -1064,7 +1064,8 @@ void coherent_hash_array(std::unique_ptr<uint32_t[]>& out_hashes,
                          std::shared_ptr<array_info> ref_array, size_t n_rows,
                          const uint32_t seed, bool is_parallel = true) {
     if ((array->arr_type == bodo_array_type::DICT) &&
-        !is_matching_dictionary(array, ref_array)) {
+        !is_matching_dictionary(array->child_arrays[0],
+                                ref_array->child_arrays[0])) {
         // This implementation of coherent_hash_array hashes data based on
         // the values in the indices array. To do this, we make and enforce
         // a few assumptions
@@ -1710,7 +1711,7 @@ void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
     // to get the length of the dictionary.
     size_t n_strings = next_index - 1;
     std::shared_ptr<array_info> new_dict =
-        alloc_string_array(Bodo_CTypes::STRING, n_strings, n_chars, 0);
+        alloc_string_array(Bodo_CTypes::STRING, n_strings, n_chars);
     offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2();
 
     // Initialize the offset and string index to the end of the base dictionary
@@ -1754,10 +1755,9 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
     std::vector<bool> is_parallel = {arr1_is_parallel, arr2_is_parallel};
     ensure_dicts_can_unify(arrs, is_parallel);
 
-    // TODO(njriasan): Update this check to include || ids are the same.
-    // This requires making the same check everywhere most likely.
-    if (arr1->child_arrays[0] == arr2->child_arrays[0])
+    if (is_matching_dictionary(arr1->child_arrays[0], arr2->child_arrays[0])) {
         return;  // dictionaries are the same
+    }
 
     // Note we insert the dictionaries in order (arr1 then arr2). Since we have
     // ensured there are no duplicates this means that only the indices in arr2
@@ -1835,7 +1835,7 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
     arr2_hashes.reset();
 
     std::shared_ptr<array_info> new_dict =
-        alloc_string_array(Bodo_CTypes::STRING, n_strings, n_chars, 0);
+        alloc_string_array(Bodo_CTypes::STRING, n_strings, n_chars);
     offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2();
 
     // Initialize the offset and string index to the end of arr1's dictionary
@@ -1860,10 +1860,6 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
 
     // convert old indices to new ones for arr2
     replace_dict_arr_indices(arr2, arr2_index_map);
-    // Replace the dictionary ids
-    int64_t dict_id = generate_dict_id(new_dict->length);
-    arr1->dict_id = dict_id;
-    arr2->dict_id = dict_id;
 }
 
 // CACHE FOR LIKE KERNEL DICT-ENCODING CASE

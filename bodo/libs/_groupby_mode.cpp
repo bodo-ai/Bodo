@@ -173,15 +173,14 @@ void mode_operation_strings(std::shared_ptr<array_info> arr,
     // of the indices within each group
     std::shared_ptr<array_info> out_indices =
         alloc_array(num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-                    Bodo_CTypes::INT32, 0, 0);
+                    Bodo_CTypes::INT32);
     mode_operation<bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT32>(
         indices, out_indices, grp_info);
     // Create a new dictionary encoded array using the indices derived
     // from the mode computation
     std::shared_ptr<array_info> new_out_arr = create_dict_string_array(
         arr->child_arrays[0], out_indices, arr->has_global_dictionary,
-        arr->has_deduped_local_dictionary, arr->has_sorted_dictionary,
-        arr->dict_id);
+        arr->has_deduped_local_dictionary, arr->has_sorted_dictionary);
     *out_arr = std::move(*new_out_arr);
 }
 

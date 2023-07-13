@@ -54,7 +54,7 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import synchronize_error_njit
 
-ll.add_symbol("generate_dict_id", stream_join_cpp.generate_dict_id)
+ll.add_symbol("generate_array_id", stream_join_cpp.generate_array_id)
 
 
 # we use nullable int32 for dictionary indices to match Arrow for faster and easier IO.
@@ -191,7 +191,7 @@ def generate_dict_id_codegen(context, builder, sig, args):
     (nitems,) = args
     fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(64)])
     fn_tp = cgutils.get_or_insert_function(
-        builder.module, fnty, name="generate_dict_id"
+        builder.module, fnty, name="generate_array_id"
     )
     id_args = [nitems]
     new_dict_id = builder.call(fn_tp, id_args)

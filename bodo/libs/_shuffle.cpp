@@ -777,9 +777,6 @@ void update_local_dictionary_remove_duplicates(
             }
         }
     }
-    // Update the dict id since dictionary values changed
-    int64_t dict_id = generate_dict_id(global_dictionary->length);
-    dict_array->dict_id = dict_id;
 }
 
 void drop_duplicates_local_dictionary(std::shared_ptr<array_info> dict_array,
@@ -1540,10 +1537,10 @@ std::shared_ptr<table_info> shuffle_table_kernel(
                                     send_count_sub_sub.end(), int64_t(0));
             std::shared_ptr<array_info> send_arr = alloc_array(
                 n_rows_send, n_sub_elems, n_sub_sub_elems, in_arr->arr_type,
-                in_arr->dtype, 2 * n_pes, in_arr->num_categories);
+                in_arr->dtype, -1, 2 * n_pes, in_arr->num_categories);
             out_arr = alloc_array(total_recv, n_sub_recvs[i],
                                   n_sub_sub_recvs[i], in_arr->arr_type,
-                                  in_arr->dtype, 0, in_arr->num_categories);
+                                  in_arr->dtype, -1, 0, in_arr->num_categories);
             fill_send_array(send_arr, in_arr, comm_info.send_disp,
                             comm_info.send_disp_sub[i],
                             comm_info.send_disp_sub_sub[i],
@@ -1581,7 +1578,7 @@ std::shared_ptr<table_info> shuffle_table_kernel(
             std::shared_ptr<array_info> out_dict_arr = create_dict_string_array(
                 in_arr->child_arrays[0], out_arr, in_arr->has_global_dictionary,
                 in_arr->has_deduped_local_dictionary,
-                in_arr->has_sorted_dictionary, in_arr->dict_id);
+                in_arr->has_sorted_dictionary);
             out_arr = out_dict_arr;
         }
         in_arr.reset();
@@ -1678,7 +1675,7 @@ std::shared_ptr<array_info> reverse_shuffle_data_array(
     size_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
                                         comm_info.send_count.end(), size_t(0));
     std::shared_ptr<array_info> out_arr =
-        alloc_array(n_rows_ret, 0, 0, in_arr->arr_type, in_arr->dtype, 0,
+        alloc_array(n_rows_ret, 0, 0, in_arr->arr_type, in_arr->dtype, -1, 0,
                     in_arr->num_categories);
     reverse_shuffle_preallocated_data_array(in_arr, out_arr, hashes, comm_info);
     return out_arr;
@@ -1710,7 +1707,7 @@ std::shared_ptr<array_info> reverse_shuffle_string_array(
         comm_info.send_count.begin(), comm_info.send_count.end(), int64_t(0));
     std::shared_ptr<array_info> out_arr =
         alloc_array(n_rows_ret, n_count_sub, 0, in_arr->arr_type, in_arr->dtype,
-                    0, in_arr->num_categories);
+                    -1, 0, in_arr->num_categories);
     int64_t in_len = in_arr->length;
     int64_t out_len = out_arr->length;
     // 3: the offsets
@@ -1838,7 +1835,7 @@ std::shared_ptr<array_info> reverse_shuffle_list_string_array(
         send_disp_sub_sub[n_pes - 1] + send_count_sub_sub[n_pes - 1];
     std::shared_ptr<array_info> out_arr =
         alloc_array(n_rows_ret, n_count_sub, n_count_sub_sub, in_arr->arr_type,
-                    in_arr->dtype, 0, in_arr->num_categories);
+                    in_arr->dtype, -1, 0, in_arr->num_categories);
     int64_t in_len = in_arr->length;
     int64_t out_len = out_arr->length;
     // 4: the string offsets
@@ -2028,7 +2025,7 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
             std::shared_ptr<array_info> out_dict_arr = create_dict_string_array(
                 in_arr->child_arrays[0], out_arr, in_arr->has_global_dictionary,
                 in_arr->has_deduped_local_dictionary,
-                in_arr->has_sorted_dictionary, in_arr->dict_id);
+                in_arr->has_sorted_dictionary);
             out_arr = out_dict_arr;
         }
         in_arr.reset();
@@ -2527,7 +2524,7 @@ std::shared_ptr<table_info> broadcast_table(
             if (myrank == mpi_root) {
                 out_arr = copy_array(in_arr);
             } else {
-                out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype, 0, 0);
+                out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype);
             }
             out_arr->precision = precision;
             uint64_t bcast_size;
@@ -2547,7 +2544,7 @@ std::shared_ptr<table_info> broadcast_table(
             if (myrank == mpi_root) {
                 out_arr = copy_array(in_arr);
             } else {
-                out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype, 0, 0);
+                out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype);
             }
             MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, mpi_root,
                       MPI_COMM_WORLD);
@@ -2561,7 +2558,7 @@ std::shared_ptr<table_info> broadcast_table(
                 out_arr = copy_array(in_arr);
             else
                 out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
-                                      arr_type, dtype, 0, num_categories);
+                                      arr_type, dtype, -1, 0, num_categories);
             MPI_Bcast(out_arr->data1(), n_sub_elems, mpi_typ8, mpi_root,
                       MPI_COMM_WORLD);
             MPI_Bcast(out_arr->data2(), n_rows, mpi_typ_offset, mpi_root,
@@ -2574,7 +2571,7 @@ std::shared_ptr<table_info> broadcast_table(
                 out_arr = copy_array(in_arr);
             else
                 out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
-                                      arr_type, dtype, 0, num_categories);
+                                      arr_type, dtype, -1, 0, num_categories);
             MPI_Bcast(out_arr->data1(), n_sub_sub_elems, mpi_typ8, mpi_root,
                       MPI_COMM_WORLD);
             MPI_Bcast(out_arr->data2(), n_sub_elems, mpi_typ_offset, mpi_root,
@@ -2609,7 +2606,7 @@ std::shared_ptr<table_info> broadcast_table(
             out_arr = create_dict_string_array(
                 dict_arr, out_arr, ref_arr->has_global_dictionary,
                 ref_arr->has_deduped_local_dictionary,
-                ref_arr->has_sorted_dictionary, ref_arr->dict_id);
+                ref_arr->has_sorted_dictionary);
         }
         in_arr.reset();
         out_arrs.push_back(out_arr);
@@ -3065,7 +3062,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                                MPI_COMM_WORLD, all_gather);
                 if (myrank == mpi_root || all_gather) {
                     out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype,
-                                          0, num_categories);
+                                          -1, 0, num_categories);
                     uint8_t* data_arr_o = (uint8_t*)out_arr->data1();
                     copy_gathered_null_bytes(data_arr_o, tmp_data_bytes,
                                              recv_count_bytes, rows_counts);
@@ -3075,7 +3072,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                 char* data1_ptr = NULL;
                 if (myrank == mpi_root || all_gather) {
                     out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype,
-                                          0, num_categories);
+                                          -1, 0, num_categories);
                     data1_ptr = out_arr->data1();
                 }
                 MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
@@ -3093,8 +3090,8 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
             char* data1_ptr = NULL;
             char* data2_ptr = NULL;
             if (myrank == mpi_root || all_gather) {
-                out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, 0,
-                                      num_categories);
+                out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, -1,
+                                      0, num_categories);
                 data1_ptr = out_arr->data1();
                 data2_ptr = out_arr->data2();
             }
@@ -3119,7 +3116,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
             char* data1_ptr = NULL;
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, n_chars_tot, -1, arr_type,
-                                      dtype, 0, num_categories);
+                                      dtype, -1, 0, num_categories);
                 data1_ptr = out_arr->data1();
             }
             std::vector<int> char_disps(n_pes), char_counts(n_pes);
@@ -3188,8 +3185,8 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
             char* data1_ptr = NULL;
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, n_sub_elems_tot,
-                                      n_sub_sub_elems_tot, arr_type, dtype, 0,
-                                      num_categories);
+                                      n_sub_sub_elems_tot, arr_type, dtype, -1,
+                                      0, num_categories);
                 data1_ptr = out_arr->data1();
                 uint8_t* sub_null_bitmask_o =
                     (uint8_t*)out_arr->sub_null_bitmask();
@@ -3302,7 +3299,7 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                     in_arr->child_arrays[0], out_arr,
                     in_arr->has_global_dictionary,
                     in_arr->has_deduped_local_dictionary,
-                    in_arr->has_sorted_dictionary, in_arr->dict_id);
+                    in_arr->has_sorted_dictionary);
             }  // else out_arr is already NULL, so doesn't need to be
                // handled
         }

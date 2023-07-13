@@ -126,7 +126,7 @@ void array_isin_py_entry(array_info* p_out_arr, array_info* p_in_arr,
         // Creation of the output array.
         int64_t len = shuf_table_in_arr->columns[0]->length;
         std::shared_ptr<array_info> shuf_out_arr =
-            alloc_array(len, -1, -1, out_arr->arr_type, out_arr->dtype, 0,
+            alloc_array(len, -1, -1, out_arr->arr_type, out_arr->dtype, -1, 0,
                         out_arr->num_categories);
         // Calling isin on the shuffled info
         array_isin_kernel(shuf_out_arr, shuf_table_in_arr->columns[0],
@@ -2262,7 +2262,7 @@ std::shared_ptr<array_info> get_replace_regex_slice(
     // may insert a null terminator
     // TODO: Can this ever be Binary?
     std::shared_ptr<array_info> out_arr =
-        alloc_string_array(Bodo_CTypes::STRING, out_arr_len, num_chars, 0);
+        alloc_string_array(Bodo_CTypes::STRING, out_arr_len, num_chars);
     offset_t* const out_data2 = reinterpret_cast<offset_t*>(out_arr->data2());
     // Initialize the first offset to 0
     out_data2[0] = 0;

@@ -608,7 +608,7 @@ void alloc_init_keys(
             key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             new_key_col =
                 alloc_array(num_groups, 1, 1, key_col->arr_type, key_col->dtype,
-                            0, key_col->num_categories);
+                            -1, 0, key_col->num_categories);
             if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                 key_col->dtype == Bodo_CTypes::_BOOL) {
                 // Nullable booleans store 1 bit per boolean
@@ -638,9 +638,8 @@ void alloc_init_keys(
         }
         if (key_col->arr_type == bodo_array_type::DICT) {
             array_info* key_indices = (key_col->child_arrays[1]).get();
-            std::shared_ptr<array_info> new_key_indices =
-                alloc_array(num_groups, -1, -1, key_indices->arr_type,
-                            key_indices->dtype, 0, 0);
+            std::shared_ptr<array_info> new_key_indices = alloc_array(
+                num_groups, -1, -1, key_indices->arr_type, key_indices->dtype);
             for (size_t j = 0; j < num_groups; j++) {
                 std::tie(key_col, key_row) =
                     find_key_for_group(j, from_tables, i, grp_infos);
@@ -655,7 +654,7 @@ void alloc_init_keys(
                 key_col->child_arrays[0], new_key_indices,
                 key_col->has_global_dictionary,
                 key_col->has_deduped_local_dictionary,
-                key_col->has_sorted_dictionary, key_col->dict_id);
+                key_col->has_sorted_dictionary);
         }
         if (key_col->arr_type == bodo_array_type::STRING) {
             // new key col will have num_groups rows containing the
@@ -671,7 +670,7 @@ void alloc_init_keys(
             }
             new_key_col =
                 alloc_array(num_groups, n_chars, 1, key_col->arr_type,
-                            key_col->dtype, 0, key_col->num_categories);
+                            key_col->dtype, -1, 0, key_col->num_categories);
 
             offset_t* out_offsets = (offset_t*)new_key_col->data2();
             offset_t pos = 0;
@@ -711,7 +710,7 @@ void alloc_init_keys(
             }
             new_key_col =
                 alloc_array(num_groups, n_strings, n_chars, key_col->arr_type,
-                            key_col->dtype, 0, key_col->num_categories);
+                            key_col->dtype, -1, 0, key_col->num_categories);
             uint8_t* in_sub_null_bitmask =
                 (uint8_t*)key_col->sub_null_bitmask();
             uint8_t* out_sub_null_bitmask =

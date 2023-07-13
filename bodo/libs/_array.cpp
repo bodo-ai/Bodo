@@ -97,6 +97,9 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                                    int32_t has_global_dictionary,
                                    int32_t has_deduped_local_dictionary,
                                    int64_t dict_id) {
+    // Update the id for the string array
+    // TODO(njriasan): Should we move this to string_array_to_info?
+    str_arr->array_id = dict_id;
     // For now has_sorted_dictionary is only available and exposed in the C++
     // struct, so we set it to false
 
@@ -105,7 +108,7 @@ array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                           indices_arr->length, {},
                           {std::shared_ptr<array_info>(str_arr),
                            std::shared_ptr<array_info>(indices_arr)},
-                          0, 0, 0, dict_id, bool(has_global_dictionary),
+                          0, 0, 0, -1, bool(has_global_dictionary),
                           bool(has_deduped_local_dictionary), false);
 }
 
@@ -120,7 +123,9 @@ int32_t get_has_deduped_local_dictionary(array_info* dict_arr) {
 }
 
 // Raw pointer since called from Python
-int64_t get_dict_id(array_info* dict_arr) { return dict_arr->dict_id; }
+int64_t get_dict_id(array_info* dict_arr) {
+    return dict_arr->child_arrays[0]->array_id;
+}
 
 array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                 NRT_MemInfo* meminfo) {
@@ -501,8 +506,8 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
     *length = n;
     if (n == 0) {
         // empty sequence, this is not an error, need to set size
-        std::shared_ptr<array_info> out_arr = alloc_array(
-            0, 0, -1, bodo_array_type::STRING, Bodo_CTypes::STRING, 0, 0);
+        std::shared_ptr<array_info> out_arr =
+            alloc_array(0, 0, -1, bodo_array_type::STRING, Bodo_CTypes::STRING);
         info_to_string_array(out_arr.get(), length, out_n_chars, data_arr,
                              offsets_arr, null_bitmap_arr);
         return;

@@ -32,16 +32,13 @@ struct DictionaryBuilder {
     // whether or not we maintain 'dict_hashes'.
     const bool is_key;
 
-    // Current id for the dictionary.
-    int64_t dict_id;
-
     // Caching information for UnifyDictionaryArray. Snowflake Batches
     // should follow a pattern where several input batches in a row all use
     // the same dictionary. When we encounter a new array we will
     // cache the transpose information to limit the compute per batch.
     // We will only store 1 element because we expect we will never encounter
     // that dictionary again once we have finished using it.
-    int64_t cached_dict_id = -1;
+    int64_t cached_array_id = -1;
     std::vector<dict_indices_t> cached_transpose_map;
 
     /**
@@ -53,9 +50,8 @@ struct DictionaryBuilder {
      * decided whether we will compute and maintain the hashes for
      * the values in this dictionary.
      */
-    DictionaryBuilder(std::shared_ptr<array_info> dict, bool is_key_,
-                      int64_t dict_id_)
-        : is_key(is_key_), dict_id(dict_id_) {
+    DictionaryBuilder(std::shared_ptr<array_info> dict, bool is_key_)
+        : is_key(is_key_) {
         this->dict_buff = std::make_shared<ArrayBuildBuffer>(dict);
         this->dict_hashes = std::make_shared<bodo::vector<uint32_t>>();
         this->dict_str_to_ind = std::make_shared<std::unordered_map<

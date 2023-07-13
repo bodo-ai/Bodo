@@ -314,9 +314,12 @@ struct array_info {
     int32_t precision;        // for array of decimals and times
     int32_t scale;            // for array of decimals
     uint64_t num_categories;  // for categorical arrays
-    // ID used to identify matching dictionaries for dict-encoded
-    // arrays.
-    int64_t dict_id;
+    // ID used to identify matching equivalent dictionaries.
+    // Currently only used by string arrays that are the dictionaries
+    // inside dictionary encoded arrays. It cannot be placed in the dictionary
+    // array itself because dictionary builders just work with the string array
+    // and we need data to be consistent.
+    int64_t array_id;
     bool has_global_dictionary;         // for dict-encoded arrays
     bool has_deduped_local_dictionary;  // for dict-encoded arrays
     bool has_sorted_dictionary;         // for dict-encoded arrays
@@ -333,7 +336,7 @@ struct array_info {
                std::vector<std::shared_ptr<BodoBuffer>> _buffers,
                std::vector<std::shared_ptr<array_info>> _child_arrays = {},
                int32_t _precision = 0, int32_t _scale = 0,
-               int64_t _num_categories = 0, int64_t _dict_id = -1,
+               int64_t _num_categories = 0, int64_t _array_id = -1,
                bool _has_global_dictionary = false,
                bool _has_deduped_local_dictionary = false,
                bool _has_sorted_dictionary = false, int64_t _offset = 0,
@@ -344,7 +347,7 @@ struct array_info {
           precision(_precision),
           scale(_scale),
           num_categories(_num_categories),
-          dict_id(_dict_id),
+          array_id(_array_id),
           has_global_dictionary(_has_global_dictionary),
           has_deduped_local_dictionary(_has_deduped_local_dictionary),
           has_sorted_dictionary(_has_sorted_dictionary),
@@ -631,7 +634,8 @@ std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> info);
 std::unique_ptr<array_info> alloc_array(
     int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
     bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
-    int64_t extra_null_bytes, int64_t num_categories,
+    int64_t array_id = -1, int64_t extra_null_bytes = 0,
+    int64_t num_categories = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -666,7 +670,7 @@ std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
 
 std::unique_ptr<array_info> alloc_string_array(
     Bodo_CTypes::CTypeEnum typ_enum, int64_t length, int64_t n_chars,
-    int64_t extra_null_bytes = 0,
+    int64_t array_id = -1, int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -688,7 +692,6 @@ std::unique_ptr<array_info> alloc_list_string_array(
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
     bool has_global_dictionary, bool has_deduped_local_dictionary,
-    int64_t dict_id = -1,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
@@ -700,12 +703,14 @@ std::unique_ptr<array_info> alloc_dict_string_array(
  * @param typ_enum The dtype (String or Binary).
  * @param null_bitmap The null bitmap for the array.
  * @param list_string The vector of strings.
+ * @param array_id The id for identifying this array. This is used when creating
+ * dictionaries.
  * @return std::shared_ptr<array_info> A string type array info constructed from
  * the vector of strings.
  */
 std::unique_ptr<array_info> create_string_array(
     Bodo_CTypes::CTypeEnum typ_enum, bodo::vector<uint8_t> const& null_bitmap,
-    bodo::vector<std::string> const& list_string);
+    bodo::vector<std::string> const& list_string, int64_t array_id = -1);
 
 /**
  * @brief Create an array of list of strings,
@@ -734,14 +739,13 @@ std::unique_ptr<array_info> create_list_string_array(
  * @param has_deduped_local_dictionary Can dict_arr contain
  * duplicates on this rank?
  * @param has_sorted_dictionary Is dict_arr sorted on this rank?
- * @param dict_id Identifier for 2 dictionaries being equivalent.
  * @return std::shared_ptr<array_info> The dictionary array.
  */
 std::unique_ptr<array_info> create_dict_string_array(
     std::shared_ptr<array_info> dict_arr,
     std::shared_ptr<array_info> indices_arr, bool has_global_dictionary = false,
     bool has_deduped_local_dictionary = false,
-    bool has_sorted_dictionary = false, int64_t dict_id = -1);
+    bool has_sorted_dictionary = false);
 
 /* The "get-value" functionality for array_info.
    This is the equivalent of at functionality.
@@ -976,12 +980,12 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
  * id.
  * @return int64_t The new id that is generated.
  */
-int64_t generate_dict_id(int64_t length);
+int64_t generate_array_id(int64_t length);
 
 /**
  * @brief Determine if two dictionaries are equivalent. The two dictionaries are
  * equivalent if either they have the same exact child array or the dictionary
- * ids are the same. There is also support for a special case when the dict_id
+ * ids are the same. There is also support for a special case when the array_id
  * == 0, which means a dictionary is empty. Since there are no valid indices
  * every dictionary matches. This is mostly relevant for initialization when
  * "building" a dictionary.
@@ -993,12 +997,11 @@ int64_t generate_dict_id(int64_t length);
 static inline bool is_matching_dictionary(
     const std::shared_ptr<array_info>& arr1,
     const std::shared_ptr<array_info>& arr2) {
-    bool arr1_valid_id = arr1->dict_id >= 0;
-    bool arr2_valid_id = arr2->dict_id >= 0;
-    return (arr1->child_arrays[0] == arr2->child_arrays[0]) ||
-           (arr1_valid_id && arr2_valid_id &&
-            (arr1->dict_id == 0 || arr2->dict_id == 0 ||
-             (arr1->dict_id == arr2->dict_id)));
+    bool arr1_valid_id = arr1->array_id >= 0;
+    bool arr2_valid_id = arr2->array_id >= 0;
+    return (arr1 == arr2) || (arr1_valid_id && arr2_valid_id &&
+                              (arr1->array_id == 0 || arr2->array_id == 0 ||
+                               (arr1->array_id == arr2->array_id)));
 }
 
 /**

@@ -2373,7 +2373,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
         tracing::Event ev_indicator("create_indicator", parallel_trace);
         std::shared_ptr<array_info> indicator_col =
             alloc_array(num_rows, -1, -1, bodo_array_type::CATEGORICAL,
-                        Bodo_CTypes::INT8, 0, 3);
+                        Bodo_CTypes::INT8, -1, 0, 3);
         for (size_t rownum = 0; rownum < num_rows; rownum++) {
             // Determine the source of each row. At most 1 value can be -1.
             // Whichever value is -1, other table is the source of the row.

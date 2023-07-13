@@ -76,7 +76,7 @@ void copy_string_values_transform(std::shared_ptr<array_info> update_col,
             idx = grp_info.next_row_in_group[idx];
         }
     }
-    out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
+    out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype);
     offset_t* out_offsets = (offset_t*)out_arr->data2();
     char* out_data1 = out_arr->data1();
     // keep track of output array position
