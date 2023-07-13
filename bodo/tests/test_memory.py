@@ -2,6 +2,8 @@ import math
 import mmap
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pyarrow.lib
 import pytest
@@ -14,10 +16,12 @@ from bodo.libs.memory import (
     OperatorBufferPool,
     SizeClass,
     StorageOptions,
+    default_buffer_pool,
     get_arrow_memory_pool_wrapper_for_buffer_pool,
     set_default_buffer_pool_as_arrow_memory_pool,
 )
 from bodo.tests.utils import temp_env_override
+from bodo.utils.typing import BodoWarning
 
 # Python doesn't always raise exceptions, particularly
 # when raised inside of `del` statements and sometimes
@@ -2924,3 +2928,50 @@ def test_operator_pool_reallocate_edge_cases():
 
     del op_pool
     del pool
+
+
+def test_array_unpinned():
+    """
+    Test that arrays can be unpinned and are indicated so in
+    the BufferPool
+    """
+
+    @bodo.jit(returns_maybe_distributed=False)
+    def impl():
+        # Get initial statistics
+        initial_allocated = 0
+        initial_pinned = 0
+        with bodo.objmode(initial_allocated="int64", initial_pinned="int64"):
+            pool = default_buffer_pool()
+            initial_allocated = pool.bytes_allocated()
+            initial_pinned = pool.bytes_pinned()
+
+        # Perform a Dataframe / Table Allocation
+        # Seems to use int64 automatically
+        df = pd.DataFrame({"A": np.arange(8000)})
+
+        # Check Metrics before Unpinning
+        passed_checks = True
+        with bodo.objmode(passed_checks="boolean"):
+            pool = default_buffer_pool()
+            passed_checks = (
+                pool.bytes_allocated() - initial_allocated
+            ) == 64 * 1024 and (pool.bytes_pinned() - initial_pinned) == 64 * 1024
+        if not passed_checks:
+            return False
+
+        arr_info = bodo.libs.array.array_to_info(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0)
+        )
+        bodo.libs.array._array_info_unpin(arr_info)
+
+        # Check Metrics after Unpinning
+        with bodo.objmode(passed_checks="boolean"):
+            pool = default_buffer_pool()
+            passed_checks = (
+                pool.bytes_allocated() - initial_allocated
+            ) == 64 * 1024 and (pool.bytes_pinned() - initial_pinned) == 0
+        return passed_checks
+
+    with pytest.warns(BodoWarning, match="No parallelism found for function 'impl'"):
+        assert impl()

@@ -91,6 +91,7 @@ ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info", array_ext.delete_info)
+ll.add_symbol("array_info_unpin", array_ext.array_info_unpin)
 ll.add_symbol("delete_table", array_ext.delete_table)
 ll.add_symbol("shuffle_table_py_entrypt", array_ext.shuffle_table_py_entrypt)
 ll.add_symbol("get_shuffle_info", array_ext.get_shuffle_info)
@@ -3235,3 +3236,10 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     raise BodoError(
         f"General Join Conditions with '{col_array_dtype}' column type not supported"
     )
+
+
+# ----------- Export Array and Table Info Unpin for Testing -----------------
+
+_array_info_unpin = types.ExternalFunction(
+    "array_info_unpin", types.void(array_info_type)
+)

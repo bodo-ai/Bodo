@@ -9,6 +9,8 @@
 #include <iostream>
 #include "_memory.h"
 
+#define ALIGNMENT 64  // preferred alignment for AVX512
+
 // ******** copied from Numba
 // NRT = NumbaRunTime
 // Related to managing memory between Numba and C++.
@@ -289,5 +291,17 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned_pool(
 }
 
 /* ---------------------------------------------------------- */
+
+inline void NRT_MemInfo_Pin(NRT_MemInfo *mi) {
+    auto pool = reinterpret_cast<bodo::IBufferPool *>(mi->dtor_info);
+    auto status = pool->Pin(reinterpret_cast<uint8_t **>(&(mi->data)), mi->size,
+                            ALIGNMENT);
+    CHECK_ARROW_MEM(status, "Failed to Pin MemInfo Object");
+}
+
+inline void NRT_MemInfo_Unpin(NRT_MemInfo *mi) {
+    auto pool = reinterpret_cast<bodo::IBufferPool *>(mi->dtor_info);
+    pool->Unpin(reinterpret_cast<uint8_t *>(mi->data), mi->size, ALIGNMENT);
+}
 
 #endif  // #ifndef BODO_MEMINFO_INCLUDED
